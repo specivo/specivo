@@ -12,7 +12,11 @@ COPY pyproject.toml uv.lock ./
 COPY . .
 
 # Install dependencies + the specivo package itself (no dev deps).
-RUN uv sync --frozen --no-dev
+# Remove pip from base image (CVE-2025-8869, CVE-2026-1703) — we use uv.
+RUN uv sync --frozen --no-dev \
+    && pip3 uninstall -y pip 2>/dev/null; \
+    rm -rf /usr/lib/python3.12/ensurepip \
+           /usr/local/lib/python3.12/site-packages/pip*
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Entrypoint: wait for DB, migrate, seed, bootstrap admin, then exec CMD.
