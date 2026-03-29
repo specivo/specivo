@@ -1,5 +1,8 @@
 FROM python:3.12-alpine
 
+# Patch base image packages (zlib CVE-2026-22184, CVE-2026-27171)
+RUN apk upgrade --no-cache
+
 WORKDIR /app
 
 # Install uv for fast, reproducible dependency resolution.
