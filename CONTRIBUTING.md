@@ -15,29 +15,23 @@ Specivo uses a dual-licensing model: the core is AGPL v3, and enterprise feature
 
 ## Development setup
 
-Requires: Python 3.12+, [uv](https://docs.astral.sh/uv/), Docker (for PostgreSQL + Redis).
-
 ```bash
-# Clone and install dependencies
+# Clone and install
 git clone https://github.com/specivo/specivo.git
 cd specivo
 make install
 
-# Start test database (PostgreSQL + Redis)
+# Start test database
 make test-db-up
-
-# Run migrations and seed default data (roles, statuses, etc.)
-make migrate
-make seed
 
 # Run tests
 make test
 
-# Lint (ruff + mypy)
+# Lint
 make lint
 ```
 
-See [README.md](README.md) for full setup instructions including production deployment.
+See [README.md](README.md) for more details.
 
 ## Code style
 
