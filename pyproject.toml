@@ -1,6 +1,6 @@
 [project]
 name = "specivo"
-version = "0.1.2"
+version = "0.1.3"
 description = "Your team's knowledge, finally findable. Self-hosted project tracking, wiki, and search that understands what you wrote."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
