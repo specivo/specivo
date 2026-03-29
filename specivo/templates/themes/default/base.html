@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Specivo{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='img/favicon.svg') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='vendor/bootstrap.5.3.6.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', path='css/' + versioned['specivo.css']) }}">
+  {% block plugin_css %}
+  {% for css_url in plugin_css_files %}
+  <link rel="stylesheet" href="{{ css_url }}">
+  {% endfor %}
+  {% endblock %}
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <div class="app-layout">
+    {% include "components/sidebar.html" %}
+    {% include "components/header.html" %}
+    <main class="main-content">
+      {% block content %}{% endblock %}
+      <footer class="app-footer">
+        Powered by <a href="https://specivo.io/" target="_blank">Specivo</a>
+      </footer>
+    </main>
+  </div>
+  <script src="{{ url_for('static', path='js/' + versioned['specivo.js']) }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/alpine.3.14.min.js') }}" defer></script>
+  <script src="{{ url_for('static', path='vendor/htmx.2.0.min.js') }}"></script>
+  <script src="{{ url_for('static', path='vendor/bootstrap.bundle.5.3.6.min.js') }}"></script>
+  {% block plugin_js %}
+  {% for js_url in plugin_js_files %}
+  <script src="{{ js_url }}"></script>
+  {% endfor %}
+  {% endblock %}
+  {% block chart_js %}{% endblock %}
+  {% block scripts %}{% endblock %}
+  <script>
+    function setFont(btn, cls) {
+      document.documentElement.classList.remove('font-md', 'font-lg');
+      if (cls) document.documentElement.classList.add(cls);
+      document.querySelectorAll('.font-toggle button').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    }
+  </script>
+</body>
+</html>

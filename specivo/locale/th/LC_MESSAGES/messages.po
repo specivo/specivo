@@ -1,0 +1,398 @@
+# Thai translations for Specivo.
+# Copyright (C) 2026 Specivo
+# This file is distributed under the same license as the Specivo project.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Specivo 0.14.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-03-28 11:01+0300\n"
+"PO-Revision-Date: 2026-03-28 12:00+0700\n"
+"Last-Translator: Specivo Team\n"
+"Language: th\n"
+"Language-Team: th\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: specivo/core/notification_templates.py:15
+#, python-brace-format
+msgid "[{issue_key}] Assigned to you: {issue_subject}"
+msgstr "[{issue_key}] มอบหมายให้คุณ: {issue_subject}"
+
+#: specivo/core/notification_templates.py:16
+#, python-brace-format
+msgid "[{issue_key}] Assigned to you by {actor_name}"
+msgstr "[{issue_key}] มอบหมายให้คุณโดย {actor_name}"
+
+#: specivo/core/notification_templates.py:19
+#, python-brace-format
+msgid "[{issue_key}] Updated: {issue_subject}"
+msgstr "[{issue_key}] อัปเดต: {issue_subject}"
+
+#: specivo/core/notification_templates.py:20
+#, python-brace-format
+msgid "[{issue_key}] Updated by {actor_name}"
+msgstr "[{issue_key}] อัปเดตโดย {actor_name}"
+
+#: specivo/core/notification_templates.py:23
+#, python-brace-format
+msgid "[{issue_key}] New comment: {issue_subject}"
+msgstr "[{issue_key}] ความคิดเห็นใหม่: {issue_subject}"
+
+#: specivo/core/notification_templates.py:24
+#, python-brace-format
+msgid "[{issue_key}] {actor_name} commented"
+msgstr "[{issue_key}] {actor_name} แสดงความคิดเห็น"
+
+#: specivo/services/api_key_service.py:54
+#: specivo/services/api_key_service.py:62
+msgid "Client IP not allowed by key allowlist"
+msgstr "IP ของคุณไม่อยู่ในรายการที่อนุญาตของ API key"
+
+#: specivo/services/api_key_service.py:120
+#, python-brace-format
+msgid "API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited keys."
+msgstr "ถึงขีดจำกัด API key แล้ว ({limit}) อัปเกรดเป็น Specivo Pro เพื่อใช้งานไม่จำกัด"
+
+#: specivo/services/api_key_service.py:170
+#: specivo/services/api_key_service.py:200
+msgid "Invalid API key"
+msgstr "API key ไม่ถูกต้อง"
+
+#: specivo/services/api_key_service.py:177
+msgid "API key is inactive"
+msgstr "API key ถูกปิดใช้งานแล้ว"
+
+#: specivo/services/api_key_service.py:184
+msgid "API key has expired"
+msgstr "API key หมดอายุแล้ว"
+
+#: specivo/services/api_key_service.py:236
+#: specivo/services/api_key_service.py:254
+msgid "API key not found"
+msgstr "ไม่พบ API key"
+
+#: specivo/services/auth_service.py:126 specivo/services/auth_service.py:163
+msgid "Invalid login or password"
+msgstr "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
+
+#: specivo/services/auth_service.py:134
+msgid "Email address not verified"
+msgstr "อีเมลยังไม่ได้รับการยืนยัน"
+
+#: specivo/services/auth_service.py:140
+msgid "Account has been deactivated"
+msgstr "บัญชีถูกปิดใช้งานแล้ว"
+
+#: specivo/services/auth_service.py:148
+msgid "Account is temporarily locked due to too many failed login attempts"
+msgstr "บัญชีถูกล็อกชั่วคราวเนื่องจากเข้าสู่ระบบผิดพลาดหลายครั้ง"
+
+#: specivo/services/auth_service.py:182
+msgid "Account is locked. Contact an administrator."
+msgstr "บัญชีถูกล็อก กรุณาติดต่อผู้ดูแลระบบ"
+
+#: specivo/services/auth_service.py:222 specivo/services/auth_service.py:232
+#: specivo/services/auth_service.py:245
+msgid "Refresh token expired or revoked"
+msgstr "โทเค็นรีเฟรชหมดอายุหรือถูกเพิกถอน"
+
+#: specivo/services/auth_service.py:322
+msgid "Session not found"
+msgstr "ไม่พบเซสชัน"
+
+#: specivo/services/issue_service.py:80
+msgid "No issue statuses found; run seed data first"
+msgstr "ไม่พบสถานะของงาน กรุณารัน seed data ก่อน"
+
+#: specivo/services/issue_service.py:101
+msgid "No issue priorities found; run seed data first"
+msgstr "ไม่พบระดับความสำคัญของงาน กรุณารัน seed data ก่อน"
+
+#: specivo/services/issue_service.py:475
+msgid "Issue was modified by another request. Reload and retry."
+msgstr "งานถูกแก้ไขโดยคำขออื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง"
+
+#: specivo/services/journal_service.py:185
+msgid "Cannot reply to a journal on a different issue"
+msgstr "ไม่สามารถตอบกลับความคิดเห็นในงานอื่นได้"
+
+#: specivo/services/journal_service.py:187
+msgid "Cannot reply to a reply (only 1-level threading is supported)"
+msgstr "ไม่สามารถตอบกลับซ้อนได้ (รองรับแค่ 1 ระดับ)"
+
+#: specivo/services/journal_service.py:242
+msgid "Feature 'threaded_comments' is not available. Thread resolution requires Specivo Pro."
+msgstr "ฟีเจอร์ 'ความคิดเห็นแบบเธรด' ยังไม่พร้อมใช้งาน การจัดการเธรดต้องใช้ Specivo Pro"
+
+#: specivo/services/workflow_service.py:197
+msgid "No project roles found for user"
+msgstr "ไม่พบบทบาทในโปรเจกต์สำหรับผู้ใช้นี้"
+
+#: specivo/services/workflow_service.py:207
+#, python-brace-format
+msgid "Transition from status {old} to {new} is not allowed"
+msgstr "ไม่อนุญาตให้เปลี่ยนสถานะจาก {old} เป็น {new}"
+
+#: specivo/services/workflow_service.py:252
+#, python-brace-format
+msgid "Field '{field}' is required for this status"
+msgstr "ฟิลด์ '{field}' จำเป็นสำหรับสถานะนี้"
+
+#: specivo/services/workflow_service.py:262
+#, python-brace-format
+msgid "Field '{field}' is read-only for this status"
+msgstr "ฟิลด์ '{field}' เป็นแบบอ่านอย่างเดียวสำหรับสถานะนี้"
+
+#: specivo/services/workflow_service.py:320
+msgid "Duplicate workflow transition"
+msgstr "การเปลี่ยนสถานะซ้ำ"
+
+#: specivo/services/workflow_service.py:333
+msgid "Workflow transition not found"
+msgstr "ไม่พบการเปลี่ยนสถานะ"
+
+#: specivo/services/workflow_service.py:401
+msgid "Duplicate workflow field rule"
+msgstr "กฎฟิลด์ซ้ำ"
+
+#: specivo/services/workflow_service.py:413
+msgid "Workflow field rule not found"
+msgstr "ไม่พบกฎฟิลด์"
+
+#: specivo/templates/themes/default/components/header.html:4
+msgid "Search issues, wiki, projects..."
+msgstr "ค้นหางาน วิกิ โปรเจกต์..."
+
+#: specivo/templates/themes/default/components/header.html:9
+msgid "Font size"
+msgstr "ขนาดตัวอักษร"
+
+#: specivo/templates/themes/default/components/header.html:27
+#: specivo/templates/themes/default/components/sidebar.html:40
+msgid "Time Tracking"
+msgstr "บันทึกเวลา"
+
+#: specivo/templates/themes/default/components/header.html:28
+msgid "Timer running"
+msgstr "จับเวลาอยู่"
+
+#: specivo/templates/themes/default/components/header.html:38
+msgid "Stop & Log"
+msgstr "หยุดและบันทึก"
+
+#: specivo/templates/themes/default/components/header.html:39
+msgid "Discard"
+msgstr "ยกเลิก"
+
+#: specivo/templates/themes/default/components/header.html:55
+msgid "Notifications"
+msgstr "การแจ้งเตือน"
+
+#: specivo/templates/themes/default/components/header.html:56
+msgid "Mark all read"
+msgstr "อ่านทั้งหมดแล้ว"
+
+#: specivo/templates/themes/default/components/header.html:70
+msgid "No notifications"
+msgstr "ไม่มีการแจ้งเตือน"
+
+#: specivo/templates/themes/default/components/header.html:74
+msgid "View all notifications"
+msgstr "ดูการแจ้งเตือนทั้งหมด"
+
+#: specivo/templates/themes/default/components/sidebar.html:14
+#: specivo/templates/themes/default/pages/dashboard.html:3
+msgid "Dashboard"
+msgstr "แดชบอร์ด"
+
+#: specivo/templates/themes/default/components/sidebar.html:18
+#: specivo/templates/themes/default/components/sidebar.html:53
+#: specivo/templates/themes/default/pages/dashboard.html:129
+msgid "Projects"
+msgstr "โปรเจกต์"
+
+#: specivo/templates/themes/default/components/sidebar.html:27
+msgid "Issues"
+msgstr "งาน"
+
+#: specivo/templates/themes/default/components/sidebar.html:32
+msgid "Wiki"
+msgstr "วิกิ"
+
+#: specivo/templates/themes/default/components/sidebar.html:36
+msgid "Roadmap"
+msgstr "แผนงาน"
+
+#: specivo/templates/themes/default/components/sidebar.html:44
+msgid "Search"
+msgstr "ค้นหา"
+
+#: specivo/templates/themes/default/components/sidebar.html:48
+msgid "Settings"
+msgstr "ตั้งค่า"
+
+#: specivo/templates/themes/default/components/sidebar.html:65
+msgid "AI & Agents"
+msgstr "AI และเอเจนต์"
+
+#: specivo/templates/themes/default/components/sidebar.html:68
+msgid "Agent Sessions"
+msgstr "เซสชันเอเจนต์"
+
+#: specivo/templates/themes/default/components/sidebar.html:73
+msgid "Cost Tracking"
+msgstr "ติดตามค่าใช้จ่าย"
+
+#: specivo/templates/themes/default/components/sidebar.html:80
+msgid "Security"
+msgstr "ความปลอดภัย"
+
+#: specivo/templates/themes/default/components/sidebar.html:84
+msgid "Agent Policies"
+msgstr "นโยบายเอเจนต์"
+
+#: specivo/templates/themes/default/components/sidebar.html:90
+msgid "Credentials"
+msgstr "ข้อมูลรับรอง"
+
+#: specivo/templates/themes/default/components/sidebar.html:96
+msgid "Audit Log"
+msgstr "บันทึกการตรวจสอบ"
+
+#: specivo/templates/themes/default/components/sidebar.html:111
+msgid "Admin"
+msgstr "จัดการระบบ"
+
+#: specivo/templates/themes/default/pages/dashboard.html:8
+msgid "Overview"
+msgstr "ภาพรวม"
+
+#: specivo/templates/themes/default/pages/dashboard.html:16
+msgid "ALL SYSTEMS OPERATIONAL"
+msgstr "ระบบทั้งหมดทำงานปกติ"
+
+#: specivo/templates/themes/default/pages/dashboard.html:19
+msgid "project"
+msgstr "โปรเจกต์"
+
+#: specivo/templates/themes/default/pages/dashboard.html:19
+msgid "projects"
+msgstr "โปรเจกต์"
+
+#: specivo/templates/themes/default/pages/dashboard.html:20
+msgid "unread notification"
+msgstr "การแจ้งเตือนที่ยังไม่ได้อ่าน"
+
+#: specivo/templates/themes/default/pages/dashboard.html:20
+msgid "unread notifications"
+msgstr "การแจ้งเตือนที่ยังไม่ได้อ่าน"
+
+#: specivo/templates/themes/default/pages/dashboard.html:33
+msgid "Active Agents"
+msgstr "เอเจนต์ที่กำลังทำงาน"
+
+#: specivo/templates/themes/default/pages/dashboard.html:46
+msgid "No active agents."
+msgstr "ไม่มีเอเจนต์ที่กำลังทำงาน"
+
+#: specivo/templates/themes/default/pages/dashboard.html:54
+msgid "My Open Issues"
+msgstr "งานของฉันที่ยังเปิดอยู่"
+
+#: specivo/templates/themes/default/pages/dashboard.html:55
+msgid "View all"
+msgstr "ดูทั้งหมด"
+
+#: specivo/templates/themes/default/pages/dashboard.html:62
+msgid "Key"
+msgstr "รหัส"
+
+#: specivo/templates/themes/default/pages/dashboard.html:63
+msgid "Subject"
+msgstr "หัวข้อ"
+
+#: specivo/templates/themes/default/pages/dashboard.html:64
+msgid "Status"
+msgstr "สถานะ"
+
+#: specivo/templates/themes/default/pages/dashboard.html:65
+msgid "Tracker"
+msgstr "ประเภท"
+
+#: specivo/templates/themes/default/pages/dashboard.html:66
+msgid "Project"
+msgstr "โปรเจกต์"
+
+#: specivo/templates/themes/default/pages/dashboard.html:83
+msgid "No open issues assigned to you."
+msgstr "ไม่มีงานที่มอบหมายให้คุณ"
+
+#: specivo/templates/themes/default/pages/dashboard.html:95
+msgid "Today's AI Spend"
+msgstr "ค่าใช้จ่าย AI วันนี้"
+
+#: specivo/templates/themes/default/pages/dashboard.html:103
+msgid "Release Tracking"
+msgstr "ติดตามเวอร์ชัน"
+
+#: specivo/templates/themes/default/pages/dashboard.html:121
+msgid "No active releases."
+msgstr "ไม่มีเวอร์ชันที่กำลังดำเนินการ"
+
+#: specivo/templates/themes/default/pages/dashboard.html:139
+msgid "No projects yet."
+msgstr "ยังไม่มีโปรเจกต์"
+
+#: specivo/templates/themes/default/pages/auth/login.html:3
+#: specivo/templates/themes/default/pages/auth/login.html:87
+#: specivo/templates/themes/default/pages/auth/login.html:88
+msgid "Sign in"
+msgstr "เข้าสู่ระบบ"
+
+#: specivo/templates/themes/default/pages/auth/login.html:29
+msgid "Invalid credentials"
+msgstr "ข้อมูลเข้าสู่ระบบไม่ถูกต้อง"
+
+#: specivo/templates/themes/default/pages/auth/login.html:32
+msgid "Unable to connect. Please try again."
+msgstr "ไม่สามารถเชื่อมต่อได้ กรุณาลองอีกครั้ง"
+
+#: specivo/templates/themes/default/pages/auth/login.html:45
+msgid "Your work. Your knowledge. Your infrastructure."
+msgstr "งานของคุณ ความรู้ของคุณ โครงสร้างพื้นฐานของคุณ"
+
+#: specivo/templates/themes/default/pages/auth/login.html:56
+msgid "Username or email"
+msgstr "ชื่อผู้ใช้หรืออีเมล"
+
+#: specivo/templates/themes/default/pages/auth/login.html:61
+msgid "you@example.com"
+msgstr "you@example.com"
+
+#: specivo/templates/themes/default/pages/auth/login.html:68
+msgid "Password"
+msgstr "รหัสผ่าน"
+
+#: specivo/templates/themes/default/pages/auth/login.html:73
+msgid "Enter your password"
+msgstr "กรอกรหัสผ่าน"
+
+#: specivo/templates/themes/default/pages/auth/login.html:80
+msgid "Remember me"
+msgstr "จดจำฉัน"
+
+#: specivo/templates/themes/default/pages/auth/login.html:87
+msgid "Signing in..."
+msgstr "กำลังเข้าสู่ระบบ..."
+
+#: specivo/templates/themes/default/pages/auth/login.html:93
+msgid "Need an account?"
+msgstr "ยังไม่มีบัญชี?"
+
+#: specivo/templates/themes/default/pages/auth/login.html:93
+msgid "Contact your administrator"
+msgstr "ติดต่อผู้ดูแลระบบ"

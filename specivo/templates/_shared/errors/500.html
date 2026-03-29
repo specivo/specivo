@@ -1,0 +1,10 @@
+{% extends "base_standalone.html" %}
+{% block title %}500 - Internal Error{% endblock %}
+{% block content %}
+<div class="error-page">
+  <div class="error-code">500</div>
+  <div class="error-title">Something went wrong</div>
+  <div class="error-message">An unexpected error occurred. Please try again later.</div>
+  <a href="/" class="btn btn-primary">Back to Dashboard</a>
+</div>
+{% endblock %}

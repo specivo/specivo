@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
+
+{% block title %}{{ issue.display_key }} - {{ issue.subject }} - Specivo{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
+  {"label": issue.display_key}
+]) }}
+
+<div class="issue-detail-layout">
+  {# Main content #}
+  <div>
+    <div class="issue-header">
+      <div class="issue-key-line">
+        <span class="key">{{ issue.display_key }}</span>
+        {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
+        {{ status_badge(issue.status.name if issue.status else '') }}
+      </div>
+      <h1 class="issue-title">{{ issue.subject }}</h1>
+    </div>
+
+    {% if issue.description %}
+    <div class="description-card">
+      {{ issue.description | safe }}
+    </div>
+    {% endif %}
+
+    {# Activity tabs #}
+    <div class="activity-tabs">
+      <div class="activity-tab active">Activity <span class="tab-count">{{ journals | length if journals is defined else 0 }}</span></div>
+      <div class="activity-tab">Time</div>
+      <div class="activity-tab">Relations</div>
+      <div class="activity-tab">Attachments</div>
+    </div>
+
+    {# Activity content #}
+    <div id="issue-activity"
+         hx-get="/partials/issues/{{ issue.display_key }}/activity"
+         hx-trigger="none"
+         hx-swap="innerHTML">
+      {% include "pages/issues/_activity.html" %}
+    </div>
+
+    {# Comment form #}
+    <div class="comment-form" x-data="commentForm({ displayKey: {{ issue.display_key | tojson }} })">
+      <textarea x-model="notes" placeholder="Write a comment (Markdown supported)..."></textarea>
+      <div class="comment-form-footer">
+        <span class="hint">Markdown supported</span>
+        <button class="btn btn-primary"
+                :disabled="submitting || !notes.trim()"
+                @click="submit()">
+          Comment
+        </button>
+      </div>
+    </div>
+
+    {# Pro: reaction picker, additional plugins #}
+    {% block issue_detail_plugins %}{% endblock %}
+  </div>
+
+  {# Sidebar #}
+  <div id="issue-sidebar">
+    {% include "pages/issues/_sidebar.html" %}
+  </div>
+</div>
+{% endblock %}

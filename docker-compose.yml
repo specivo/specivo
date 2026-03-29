@@ -1,0 +1,95 @@
+services:
+  nginx:
+    image: nginx:1-alpine
+    ports:
+      - "${SPECIVO_PORT:-9933}:80"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${SPECIVO_DATA_DIR:-./specivo-data}/logs/nginx:/var/log/nginx
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api:
+    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    env_file:
+      - .env
+      - path: .env.local
+        required: false
+    volumes:
+      - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  celery-worker:
+    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    command: celery -A specivo.tasks worker --loglevel=info
+    entrypoint: []
+    env_file:
+      - .env
+      - path: .env.local
+        required: false
+    volumes:
+      - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  celery-beat:
+    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    command: celery -A specivo.tasks beat --loglevel=info
+    entrypoint: []
+    env_file:
+      - .env
+      - path: .env.local
+        required: false
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: pgvector/pgvector:pg18
+    profiles: [bundled-db]
+    volumes:
+      - ${SPECIVO_DATA_DIR:-./specivo-data}/postgresql:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-specivo}
+      POSTGRES_USER: ${POSTGRES_USER:-specivo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-specivo}
+    command: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-specivo} -d ${POSTGRES_DB:-specivo}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    profiles: [bundled-redis]
+    command: redis-server --appendonly yes
+    volumes:
+      - ${SPECIVO_DATA_DIR:-./specivo-data}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped

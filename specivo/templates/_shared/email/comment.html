@@ -1,0 +1,5 @@
+{% extends "email/base_email.html" %}
+{% block content %}
+<p>{{ actor_name }} commented on <strong>{{ issue_key }}</strong>:</p>
+<blockquote>{{ comment_text }}</blockquote>
+{% endblock %}

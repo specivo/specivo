@@ -1,0 +1,85 @@
+<header class="header">
+  <div class="header-search">
+    <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    <input type="text" placeholder="{{ _('Search issues, wiki, projects...') }}" id="global-search">
+    <kbd>&#8984;K</kbd>
+  </div>
+
+  <div class="header-actions">
+    <div class="font-toggle" title="{% trans %}Font size{% endtrans %}">
+      <button class="active" onclick="setFont(this,'');" style="font-size:12px">A</button>
+      <button onclick="setFont(this,'font-md');" style="font-size:15px">A</button>
+      <button onclick="setFont(this,'font-lg');" style="font-size:18px">A</button>
+    </div>
+
+    {% if has_feature("active_timer") %}
+    {% if active_timer is defined and active_timer %}
+    <div class="dropdown">
+      <div class="header-timer" data-bs-toggle="dropdown" data-bs-auto-close="outside" style="cursor:pointer">
+        <span class="timer-dot"></span>
+        <span>{{ active_timer.issue_key }}</span>
+        <span class="timer-elapsed" id="timerDisplay">{{ active_timer.elapsed }}</span>
+      </div>
+      <div class="dropdown-menu dropdown-menu-end timer-dropdown">
+        <div class="timer-dropdown-header">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--sp-accent)"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <div>
+            <div style="font-weight:600;font-size:var(--sp-font-size-sm);color:var(--sp-text-primary)">{% trans %}Time Tracking{% endtrans %}</div>
+            <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted)">{% trans %}Timer running{% endtrans %}</div>
+          </div>
+        </div>
+        <div class="timer-dropdown-body">
+          <div class="timer-issue-line">
+            <a href="#" style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-sm);color:var(--sp-text-link);font-weight:500">{{ active_timer.issue_key }}</a>
+            <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary)">{{ active_timer.subject }}</span>
+          </div>
+          <div class="timer-big-display" id="timerBigDisplay">{{ active_timer.elapsed }}</div>
+          <div class="timer-actions">
+            <button class="btn btn-primary" style="flex:1"><svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> {% trans %}Stop & Log{% endtrans %}</button>
+            <button class="btn btn-ghost" style="color:var(--sp-danger)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 6L6 18M6 6l12 12"/></svg> {% trans %}Discard{% endtrans %}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <div class="dropdown">
+      <div class="header-icon-btn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        {% if unread_count is defined and unread_count %}<span class="notif-badge">{{ unread_count }}</span>{% endif %}
+      </div>
+      <div class="dropdown-menu dropdown-menu-end notif-dropdown">
+        <div class="notif-header">
+          <span class="notif-title">{% trans %}Notifications{% endtrans %}</span>
+          <button class="notif-mark-all">{% trans %}Mark all read{% endtrans %}</button>
+        </div>
+        <div class="notif-list">
+          {% if notifications is defined and notifications %}
+            {% for n in notifications[:5] %}
+            <div class="notif-item{% if not n.read %} unread{% endif %}">
+              <div class="avatar-sm" style="width:28px;height:28px;font-size:10px">{{ n.actor_initials if n.actor_initials is defined else '?' }}</div>
+              <div class="notif-body">
+                <div class="notif-text">{{ n.text | safe }}</div>
+                <div class="notif-meta">{{ n.time_ago }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);font-size:var(--sp-font-size-sm);">{% trans %}No notifications{% endtrans %}</div>
+          {% endif %}
+        </div>
+        <div class="notif-footer">
+          <a href="/notifications">{% trans %}View all notifications{% endtrans %}</a>
+        </div>
+      </div>
+    </div>
+
+    {% if user is defined and user %}
+    <div class="header-user">
+      <div class="header-user-avatar">{{ user.login[:2] | upper if user.login else '?' }}</div>
+      <span class="header-user-name">{{ user.firstname if user.firstname else user.login }}</span>
+    </div>
+    {% endif %}
+  </div>
+</header>

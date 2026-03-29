@@ -1,0 +1,34 @@
+"""Named constants used across the application.
+
+Single source of truth -- import from here, never duplicate values.
+"""
+
+# Authentication
+API_KEY_PREFIX = "spv_"
+JWT_ALGORITHM = "HS256"
+API_KEY_ENTROPY_BYTES = 32
+REFRESH_TOKEN_ENTROPY_BYTES = 32
+CREDENTIAL_TOKEN_ENTROPY_BYTES = 48
+
+# Pagination
+DEFAULT_PAGE_LIMIT = 25
+MAX_PAGE_LIMIT = 200
+
+# Search
+RRF_K = 60
+SEARCH_SNIPPET_MAX_CHARS = 200
+SEARCH_HYBRID_PREFETCH_LIMIT = 100
+SEARCH_FTS_HEADLINE_OPTIONS = "MaxWords=35, MinWords=15, StartSel=<mark>, StopSel=</mark>"
+
+# Hierarchy
+MAX_HIERARCHY_DEPTH = 10
+
+# Webhooks
+WEBHOOK_RESPONSE_MAX_BYTES = 4096
+
+# Celery tasks
+CELERY_MAX_RETRIES = 3
+CELERY_RETRY_DELAY_EMAIL = 60
+CELERY_RETRY_DELAY_WEBHOOK = 30
+CELERY_RETRY_DELAY_EMBEDDING = 30
+CELERY_RETRY_DELAY_LINK_GRAPH = 15

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Wiki - {{ project.name }} - Specivo{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/projects/{{ project.key }}">{{ project.name }}</a>
+  <span class="sep">/</span>
+  <span class="current">Wiki</span>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
+  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">Wiki</h1>
+  <a href="/projects/{{ project.key }}/wiki/new" class="btn btn-primary">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
+    New Page
+  </a>
+</div>
+
+{% if pages %}
+<div class="card" style="padding: var(--sp-space-lg);" x-data="{ expanded: {} }">
+  {% macro render_tree(parent_id) %}
+    {% if page_tree.get(parent_id) %}
+      <ul style="list-style: none; padding-left: {{ '0' if parent_id is none else 'var(--sp-space-lg)' }}; margin: 0;">
+        {% for p in page_tree[parent_id] %}
+        <li style="margin-bottom: var(--sp-space-xs);">
+          <div style="display: flex; align-items: center; gap: var(--sp-space-sm); padding: var(--sp-space-xs) var(--sp-space-sm); border-radius: var(--sp-radius, 4px);">
+            {% if page_tree.get(p.id) %}
+            <button @click="expanded[{{ p.id }}] = !expanded[{{ p.id }}]" style="background: none; border: none; cursor: pointer; padding: 0; color: var(--sp-text-muted);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" :style="expanded[{{ p.id }}] ? 'transform: rotate(90deg)' : ''"><path d="M9 18l6-6-6-6"/></svg>
+            </button>
+            {% else %}
+            <span style="width: 14px;"></span>
+            {% endif %}
+            <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}" style="text-decoration: none; color: inherit; flex: 1;">
+              <span style="font-weight: 500;">{{ p.title }}</span>
+            </a>
+            <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">
+              {{ p.updated_at.strftime('%Y-%m-%d') if p.updated_at else '' }}
+            </span>
+          </div>
+          {% if page_tree.get(p.id) %}
+          <div x-show="expanded[{{ p.id }}]" x-cloak>
+            {{ render_tree(p.id) }}
+          </div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endmacro %}
+  {{ render_tree(None) }}
+</div>
+{% else %}
+<div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
+  No wiki pages yet. Create one to get started.
+</div>
+{% endif %}
+{% endblock %}

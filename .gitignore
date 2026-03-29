@@ -4,38 +4,46 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-*.egg
 .eggs/
 
-# Virtual environments
+# Virtual environments (uv creates .venv/)
 .venv/
 venv/
-env/
 
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-*~
 
-# Environment
+# Environment secrets (never commit)
 .env
 .env.local
-.env.production
 
-# Docker
-docker-compose.override.yml
+# Data (persistent, not committed)
+data/
+specivo-data/
+specivo-dev-data/
+.bootstrap.json
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
 
 # OS
 .DS_Store
 Thumbs.db
-
-# Testing
-.coverage
-htmlcov/
-.pytest_cache/
+.venv/
+__pycache__/
+*.egg-info/
 .mypy_cache/
-
-# Alembic
-alembic/versions/*.pyc
+.ruff_cache/
+.pytest_cache/
+data/
+specivo-data/
+htmlcov/
+specivo/static/models/
+specivo/static/css/specivo.*.css
+specivo/static/js/specivo.*.js

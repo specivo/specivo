@@ -1,0 +1,108 @@
+{# ============================================================
+   SPECIVO — Jinja2 Macros for reusable UI components
+   ============================================================ #}
+
+{# --- Breadcrumbs ---
+   Usage: {{ breadcrumbs([{"label": "Projects", "url": "/projects"}, {"label": "ACME"}]) }}
+#}
+{% macro breadcrumbs(items) %}
+<div class="breadcrumbs">
+  {% for item in items %}
+    {% if not loop.last %}
+      <a href="{{ item.url }}">{{ item.label }}</a><span class="sep">/</span>
+    {% else %}
+      <span class="current">{{ item.label }}</span>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endmacro %}
+
+{# --- Status Badge ---
+   Usage: {{ status_badge("In Progress") }}
+#}
+{% macro status_badge(name) %}
+{% set slug = name | lower | replace(' ', '-') %}
+<span class="badge-status {{ slug }}">{{ name }}</span>
+{% endmacro %}
+
+{# --- Priority Badge ---
+   Usage: {{ priority_badge("High") }}
+#}
+{% macro priority_badge(name) %}
+{% set slug = name | lower | replace(' ', '-') %}
+<span class="badge-priority {{ slug }}" title="{{ name }}"></span>
+{% endmacro %}
+
+{# --- Tracker Badge ---
+   Usage: {{ tracker_badge("Bug") }}
+#}
+{% macro tracker_badge(name) %}
+{% set slug = name | lower | replace(' ', '-') %}
+<span class="badge-tracker {{ slug }}">{{ name }}</span>
+{% endmacro %}
+
+{# --- Avatar ---
+   Usage: {{ avatar("John D", size="sm") }}
+   Sizes: xs, sm, md, lg
+#}
+{% macro avatar(name, size='sm') %}
+{% set initials = name.split()[:2] | map('first') | join('') | upper if name else '?' %}
+<span class="avatar-{{ size }}">{{ initials }}</span>
+{% endmacro %}
+
+{# --- Pagination ---
+   Usage: {{ pagination(total=120, offset=20, limit=25, base_url="/issues") }}
+#}
+{% macro pagination(total, offset, limit, base_url) %}
+{% set current_page = (offset // limit) + 1 %}
+{% set total_pages = ((total - 1) // limit) + 1 if total > 0 else 1 %}
+{% if total_pages > 1 %}
+<div class="pagination">
+  {% if current_page > 1 %}
+    <a href="{{ base_url }}?offset={{ (current_page - 2) * limit }}&limit={{ limit }}">&laquo;</a>
+  {% else %}
+    <span class="disabled">&laquo;</span>
+  {% endif %}
+
+  {% for page in range(1, total_pages + 1) %}
+    {% if page == current_page %}
+      <span class="active">{{ page }}</span>
+    {% elif page <= 2 or page >= total_pages - 1 or (page >= current_page - 2 and page <= current_page + 2) %}
+      <a href="{{ base_url }}?offset={{ (page - 1) * limit }}&limit={{ limit }}">{{ page }}</a>
+    {% elif page == 3 or page == total_pages - 2 %}
+      <span class="disabled">...</span>
+    {% endif %}
+  {% endfor %}
+
+  {% if current_page < total_pages %}
+    <a href="{{ base_url }}?offset={{ current_page * limit }}&limit={{ limit }}">&raquo;</a>
+  {% else %}
+    <span class="disabled">&raquo;</span>
+  {% endif %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{# --- Flash messages ---
+   Usage: {{ flash_messages(messages) }}
+   messages is a list of {"type": "success|error|warning|info", "text": "..."}
+#}
+{% macro flash_messages(messages) %}
+{% if messages %}
+  {% for msg in messages %}
+  <div class="flash flash-{{ msg.type }}">{{ msg.text }}</div>
+  {% endfor %}
+{% endif %}
+{% endmacro %}
+
+{# --- Empty state ---
+   Usage: {{ empty_state("No issues found", "Create your first issue to get started.") }}
+#}
+{% macro empty_state(title, description="") %}
+<div style="text-align: center; padding: var(--sp-space-3xl) var(--sp-space-xl); color: var(--sp-text-muted);">
+  <div style="font-size: var(--sp-font-size-lg); font-weight: 600; color: var(--sp-text-secondary); margin-bottom: var(--sp-space-sm);">{{ title }}</div>
+  {% if description %}
+  <div style="font-size: var(--sp-font-size-sm);">{{ description }}</div>
+  {% endif %}
+</div>
+{% endmacro %}

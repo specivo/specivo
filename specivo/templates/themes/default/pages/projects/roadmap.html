@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}Roadmap - {{ project.name }} - Specivo{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Roadmap"}
+]) }}
+
+<div class="page-header">
+  <h1>Roadmap</h1>
+  <div class="page-header-actions">
+    <div class="filter-tabs">
+      <a href="/projects/{{ project.key }}/roadmap?show=open"
+         class="filter-tab{{ ' active' if show is not defined or show == 'open' else '' }}">Open</a>
+      <a href="/projects/{{ project.key }}/roadmap?show=all"
+         class="filter-tab{{ ' active' if show is defined and show == 'all' else '' }}">All</a>
+    </div>
+  </div>
+</div>
+
+{% if entries is defined and entries %}
+<div style="display:flex;flex-direction:column;gap:var(--sp-space-lg);">
+  {% for entry in entries %}
+  <div class="card version-card {{ 'accent-gold' if entry.version.status == 'open' else 'accent-green' }}" x-data="{ expanded: false }">
+    <div class="version-header" @click="expanded = !expanded">
+      <h2>{{ entry.version.name }}</h2>
+      <div class="version-meta">
+        <span class="version-badge {{ 'open' if entry.version.status == 'open' else 'vclosed' }}">{{ entry.version.status }}</span>
+        {% if entry.version.effective_date %}
+        <span>Due: {{ entry.version.effective_date }}</span>
+        {% endif %}
+        {% if entry.version.description %}
+        <span>{{ entry.version.description }}</span>
+        {% endif %}
+      </div>
+
+      {# Progress bar #}
+      <div class="version-progress">
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill {{ 'gold' if entry.version.status == 'open' else 'green' }}" style="width:{{ entry.progress_percent }}%"></div>
+        </div>
+        <span class="progress-label">{{ entry.progress_percent }}%</span>
+      </div>
+
+      <div class="version-counts">
+        <span class="count-open">{{ entry.open_count }} open</span>
+        <span class="count-closed">{{ entry.closed_count }} closed</span>
+      </div>
+    </div>
+
+    {% if entry.total > 0 %}
+    <div class="version-issues" x-show="expanded" x-cloak>
+      <p style="padding:var(--sp-space-lg) var(--sp-space-xl);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
+        View issues on the <a href="/projects/{{ project.key }}/issues?fixed_version_id={{ entry.version.id }}">issues page</a>.
+      </p>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+  No versions found for this project. Create versions to track your roadmap.
+</div>
+{% endif %}
+{% endblock %}

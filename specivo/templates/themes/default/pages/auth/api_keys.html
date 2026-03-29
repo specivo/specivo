@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}API Keys - Specivo{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <span class="current">API Keys</span>
+</div>
+
+<div x-data="apiKeyManager">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
+    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">API Keys</h1>
+    <button class="btn btn-primary" @click="showCreate = !showCreate; newKey = null;">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      New API Key
+    </button>
+  </div>
+
+  <!-- New key created: show raw key -->
+  <template x-if="newKey">
+    <div class="flash flash-success" style="margin-bottom: var(--sp-space-lg);">
+      <div style="flex: 1;">
+        <strong>API key created.</strong> Copy it now — you will not see it again.
+        <div style="margin-top: var(--sp-space-sm); display: flex; align-items: center; gap: var(--sp-space-sm);">
+          <code style="
+            flex: 1;
+            padding: var(--sp-space-sm) var(--sp-space-md);
+            background: var(--sp-bg-input);
+            border: 1px solid var(--sp-border);
+            border-radius: var(--sp-border-radius);
+            font-family: var(--sp-font-mono);
+            font-size: var(--sp-font-size-sm);
+            word-break: break-all;
+          " x-text="newKey"></code>
+          <button class="btn-sm" @click="copyKey()" x-text="copied ? 'Copied!' : 'Copy'"></button>
+        </div>
+      </div>
+      <button class="btn-sm" @click="dismissNewKey()" style="align-self: start;">Dismiss</button>
+    </div>
+  </template>
+
+  <!-- Create form (inline) -->
+  <div x-show="showCreate && !newKey" x-transition class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-lg);">
+    <form @submit.prevent="createKey()">
+      <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+        <label class="form-label" for="key-name">Key name</label>
+        <input
+          id="key-name"
+          class="form-input"
+          type="text"
+          placeholder="e.g. CI/CD pipeline"
+          x-model="newKeyName"
+          required
+          style="max-width: 400px;"
+        >
+      </div>
+      <div x-show="error" class="flash flash-error" style="margin-bottom: var(--sp-space-md);" x-text="error"></div>
+      <div style="display: flex; gap: var(--sp-space-sm);">
+        <button class="btn btn-primary" type="submit" :disabled="loading" x-text="loading ? 'Creating...' : 'Create key'"></button>
+        <button class="btn btn-ghost" type="button" @click="showCreate = false; error = '';">Cancel</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Keys table -->
+  <div class="card">
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Key prefix</th>
+          <th>Created</th>
+          <th>Last used</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="keys.length === 0">
+          <tr>
+            <td colspan="6" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">
+              No API keys yet. Create one to get started.
+            </td>
+          </tr>
+        </template>
+        <template x-for="key in keys" :key="key.id">
+          <tr>
+            <td style="font-weight: 500;" x-text="key.name"></td>
+            <td>
+              <code style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs);" x-text="key.key_prefix + '...'"></code>
+            </td>
+            <td x-text="formatDate(key.created_at)"></td>
+            <td x-text="formatDate(key.last_used_at)"></td>
+            <td>
+              <span
+                class="badge-status"
+                :class="key.is_active ? 'in-progress' : 'closed'"
+                x-text="key.is_active ? 'Active' : 'Inactive'"
+              ></span>
+            </td>
+            <td style="display: flex; gap: var(--sp-space-xs);">
+              <button
+                class="btn-sm"
+                @click="toggleKey(key.id, key.is_active)"
+                x-text="key.is_active ? 'Deactivate' : 'Activate'"
+              ></button>
+              <button
+                class="btn-sm danger"
+                @click="deleteKey(key.id)"
+              >Delete</button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}

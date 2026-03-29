@@ -1,0 +1,53 @@
+# Development overlay: build from source with hot-reload.
+#
+# Usage:
+#   make dev-up
+#   # or manually:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
+services:
+  api:
+    build: .
+    image: specivo/specivo:dev
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./specivo:/app/specivo
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://specivo:specivo@db:5432/specivo_dev"
+      REDIS_URL: "redis://redis:6379/0"
+      PYTHONPATH: "/app"
+    command: uvicorn specivo.main:app --host 0.0.0.0 --port 8000 --reload
+
+  celery-worker:
+    build: .
+    image: specivo/specivo:dev
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://specivo:specivo@db:5432/specivo_dev"
+      REDIS_URL: "redis://redis:6379/0"
+      PYTHONPATH: "/app"
+
+  celery-beat:
+    build: .
+    image: specivo/specivo:dev
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://specivo:specivo@db:5432/specivo_dev"
+      REDIS_URL: "redis://redis:6379/0"
+      PYTHONPATH: "/app"
+
+  db:
+    volumes:
+      - ./specivo-dev-data/postgresql:/var/lib/postgresql
+    environment:
+      POSTGRES_DB: specivo_dev
+
+  redis:
+    volumes:
+      - ./specivo-dev-data/redis:/data
+
+  mailhog:
+    image: mailhog/mailhog
+    profiles: [mailhog]
+    ports:
+      - "${SPECIVO_MAIL_PORT:-8025}:8025"
+    restart: unless-stopped

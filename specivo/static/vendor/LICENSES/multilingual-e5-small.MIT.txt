@@ -1,0 +1,7 @@
+multilingual-e5-small
+Copyright 2023 Microsoft Corporation (intfloat)
+Licensed under MIT License
+https://huggingface.co/intfloat/multilingual-e5-small
+
+118M parameters, 384 dimensions, 100 languages.
+ONNX format for CPU inference.

@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}{{ 'Edit ' ~ issue.display_key if mode == 'edit' else 'New Issue' }} - {{ project.name }} - Specivo{% endblock %}
+
+{% block content %}
+{% if mode == 'edit' %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
+  {"label": issue.display_key, "url": "/projects/" ~ project.key ~ "/issues/" ~ issue.display_key},
+  {"label": "Edit"}
+]) }}
+{% else %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
+  {"label": "New Issue"}
+]) }}
+{% endif %}
+
+<h1 class="page-title">{% if mode == 'edit' %}Edit {{ issue.display_key }}{% else %}New Issue{% endif %}</h1>
+
+<div class="form-card"
+     x-data="issueForm({
+       subject: {{ (issue.subject if issue else '') | tojson }},
+       tracker_id: {{ issue.tracker_id if issue else (trackers[0].id if trackers else 0) }},
+       description: {{ (issue.description if issue and issue.description else '') | tojson }},
+       status_id: {{ issue.status_id if issue else 0 }},
+       priority_id: {{ issue.priority_id if issue else 0 }},
+       assigned_to_id: {{ issue.assigned_to_id if issue and issue.assigned_to_id else 'null' }},
+       start_date: {{ (issue.start_date.isoformat() if issue and issue.start_date else '') | tojson }},
+       due_date: {{ (issue.due_date.isoformat() if issue and issue.due_date else '') | tojson }},
+       estimated_hours: {{ (issue.estimated_hours | string if issue and issue.estimated_hours else '') | tojson }},
+       done_ratio: {{ issue.done_ratio if issue else 0 }},
+       is_private: {{ 'true' if issue and issue.is_private else 'false' }},
+       mode: {{ mode | tojson }},
+       projectKey: {{ project.key | tojson }},
+       displayKey: {{ (issue.display_key if issue else '') | tojson }},
+       lockVersion: {{ issue.lock_version if issue else 0 }}
+     })">
+
+  <form onsubmit="return false;">
+    {# Subject #}
+    <div class="form-group">
+      <label class="modal-label" for="subject">Subject</label>
+      <input type="text" id="subject" class="input-subject" x-model="subject" placeholder="Brief summary of the issue..." autofocus>
+    </div>
+
+    {# Tracker #}
+    <div class="form-group">
+      <label class="modal-label" for="tracker">Tracker</label>
+      <select id="tracker" class="modal-input" x-model.number="tracker_id">
+        {% for t in trackers %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# Description #}
+    <div class="form-group">
+      <label class="modal-label" for="description">Description</label>
+      <textarea id="description" class="input-description" x-model="description" placeholder="Describe the issue in detail..."></textarea>
+      <div class="form-hint">Supports Markdown. Use @username to mention team members.</div>
+    </div>
+
+    <div class="form-divider"></div>
+
+    {# Two-column fields #}
+    <div class="form-row">
+      <div>
+        {% if mode == 'edit' %}
+        <div class="form-group">
+          <label class="modal-label" for="status">Status</label>
+          <select id="status" class="modal-input" x-model.number="status_id">
+            {% for s in statuses %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+        <div class="form-group">
+          <label class="modal-label" for="priority">Priority</label>
+          <select id="priority" class="modal-input" x-model.number="priority_id">
+            <option value="0">-- Default --</option>
+            {% for p in priorities %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="modal-label" for="assignee">Assignee</label>
+          <select id="assignee" class="modal-input" x-model="assigned_to_id">
+            <option value="">Unassigned</option>
+            {% for m in members %}
+            <option value="{{ m.user_id if m.user_id is defined else m.id }}">{{ m.user.login if m.user is defined else m.login }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div>
+        <div class="form-group">
+          <label class="modal-label" for="start_date">Start Date</label>
+          <input type="date" id="start_date" class="modal-input" x-model="start_date">
+        </div>
+        <div class="form-group">
+          <label class="modal-label" for="due_date">Due Date</label>
+          <input type="date" id="due_date" class="modal-input" x-model="due_date">
+        </div>
+        <div class="form-group">
+          <label class="modal-label" for="estimated_hours">Estimated Hours</label>
+          <input type="number" id="estimated_hours" class="modal-input" x-model="estimated_hours" min="0" step="0.25" style="font-family:var(--sp-font-mono)">
+        </div>
+      </div>
+    </div>
+
+    {# Actions #}
+    <div class="form-actions">
+      <button class="btn btn-primary"
+              :disabled="submitting || !subject.trim()"
+              @click="submitForm()">
+        {% if mode == 'edit' %}Save{% else %}Create Issue{% endif %}
+      </button>
+      <a href="/projects/{{ project.key }}/issues{% if mode == 'edit' %}/{{ issue.display_key }}{% endif %}"
+         class="cancel-link">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

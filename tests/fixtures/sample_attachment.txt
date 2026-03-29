@@ -1,0 +1,3 @@
+This is a sample text file for attachment upload tests.
+It contains multiple lines to verify file handling.
+Line 3 of the test attachment.

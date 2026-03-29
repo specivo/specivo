@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+
+{% block title %}Agent Groups - Admin - Specivo{% endblock %}
+
+{% block content %}
+{% if has_feature("agent_groups") %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span class="current">Agent Groups</span>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
+  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">Agent Groups</h1>
+</div>
+
+{% if groups %}
+<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--sp-space-lg);">
+  {% for group in groups %}
+  <div class="card" style="padding: var(--sp-space-lg); border-left: 4px solid var(--sp-accent);">
+    <h3 style="font-weight: 600; margin: 0 0 var(--sp-space-sm) 0;">{{ group.name }}</h3>
+    {% if group.description %}
+    <p style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); margin: 0 0 var(--sp-space-md) 0;">{{ group.description }}</p>
+    {% endif %}
+    <div style="display: flex; gap: var(--sp-space-sm);">
+      <a href="/admin/agent-groups/{{ group.id }}" class="btn btn-secondary" style="font-size: var(--sp-font-size-xs);">Manage</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
+  No agent groups configured. Create one to manage agent access policies.
+</div>
+{% endif %}
+{% else %}
+<div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
+  This feature requires the Pro or Enterprise tier.
+</div>
+{% endif %}
+{% endblock %}

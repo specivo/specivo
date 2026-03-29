@@ -1,0 +1,15 @@
+.git
+.venv
+.env.local
+specivo-data/
+specivo-dev-data/
+data/
+tests/
+*.pyc
+__pycache__
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.claude
+nginx/
+scripts/configure.py

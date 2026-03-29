@@ -1,0 +1,89 @@
+[project]
+name = "specivo"
+version = "0.1.0"
+description = "Your team's knowledge, finally findable. Self-hosted project tracking, wiki, and search that understands what you wrote."
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+requires-python = ">=3.12"
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "PyJWT>=2.10",
+    "python-multipart>=0.0.18",
+    "httpx>=0.28",
+    "celery[redis]>=5.4",
+    "redis>=5.2",
+    "bcrypt>=5.0.0",
+    "jsonschema>=4.26.0",
+    "mcp[cli]>=1.9",
+    "pgvector>=0.4.2",
+    "jinja2>=3.1.6",
+    "babel>=2.16",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "factory-boy>=3.3",
+    "ruff>=0.8",
+    "mypy>=1.13",
+]
+
+[tool.setuptools.packages.find]
+include = ["specivo*"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+    "pytest-xdist>=3.8.0",
+    "types-jsonschema>=4.26.0.20260324",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+markers = [
+    "unit: Pure logic tests (no database)",
+    "integration: API endpoint tests (requires database)",
+    "service: Service layer tests (requires database)",
+    "slow: Tests that take >5 seconds",
+    "pro: Tests for Pro tier features",
+    "enterprise: Tests for Enterprise tier features",
+    "serial: Tests that cannot run under xdist (shared state like Redis rate limits)",
+]
+addopts = "-v --tb=short --strict-markers -n auto --dist worksteal"
+filterwarnings = [
+    "ignore::DeprecationWarning:httpx",
+    "ignore::DeprecationWarning:asyncpg",
+    "ignore::pytest.PytestUnraisableExceptionWarning",
+    "ignore::sqlalchemy.exc.SAWarning",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["F841", "N806"]  # Unused variables and PascalCase locals are common in test setup
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_return_any = true
+warn_unused_configs = true

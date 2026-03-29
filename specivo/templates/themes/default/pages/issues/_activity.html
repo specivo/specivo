@@ -1,0 +1,43 @@
+{% from "components/macros.html" import avatar %}
+
+{% if journals %}
+<div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
+  {% for journal in journals %}
+  <div class="card" style="padding: var(--sp-space-md); {{ 'margin-left: var(--sp-space-xl);' if journal.reply_to_id else '' }}">
+    <div style="display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm);">
+      {{ avatar(journal.user.login if journal.user else '?', size='sm') }}
+      <span style="font-weight: 600; font-size: var(--sp-font-size-sm);">{{ journal.user.login if journal.user else 'Unknown' }}</span>
+      {% if journal.api_key_id %}
+      <span class="badge-status" style="font-size: var(--sp-font-size-xs);">agent</span>
+      {% endif %}
+      <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-xs);">#{{ journal.sequence }}</span>
+      <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-xs); margin-left: auto;">
+        {{ journal.created_at.strftime('%Y-%m-%d %H:%M') if journal.created_at else '' }}
+      </span>
+    </div>
+
+    {# Field changes #}
+    {% if journal.details %}
+    <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-bottom: var(--sp-space-sm);">
+      {% for detail in journal.details %}
+      <div style="margin-bottom: 2px;">
+        <strong>{{ detail.prop_key }}</strong> changed
+        {% if detail.old_value %}from <em>{{ detail.old_value }}</em>{% endif %}
+        {% if detail.new_value %}to <em>{{ detail.new_value }}</em>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {# Comment body #}
+    {% if journal.notes %}
+    <div class="prose" style="font-size: var(--sp-font-size-sm);">{{ journal.notes }}</div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
+  No activity yet.
+</div>
+{% endif %}

@@ -1,0 +1,5 @@
+{% extends "email/base_email.html" %}
+{% block content %}
+<p>Issue <strong>{{ issue_key }}</strong> has been assigned to you by {{ actor_name }}.</p>
+<p><strong>Subject:</strong> {{ issue_subject }}</p>
+{% endblock %}

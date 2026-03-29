@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - Specivo{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <span class="current">Notifications</span>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
+  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">Notifications</h1>
+  {% if unread_count > 0 %}
+  <form method="post" action="/api/v1/notifications/mark-all-read" style="margin: 0;">
+    <button type="submit" class="btn btn-secondary">Mark all read</button>
+  </form>
+  {% endif %}
+</div>
+
+<!-- Filter tabs -->
+<div style="display: flex; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-lg); border-bottom: 2px solid var(--sp-border);">
+  <a href="/my/notifications"
+     class="btn"
+     style="{{ 'border-bottom: 2px solid var(--sp-accent); font-weight: 600;' if not unread_only else 'opacity: 0.6;' }}">
+    All ({{ total }})
+  </a>
+  <a href="/my/notifications?unread_only=true"
+     class="btn"
+     style="{{ 'border-bottom: 2px solid var(--sp-accent); font-weight: 600;' if unread_only else 'opacity: 0.6;' }}">
+    Unread ({{ unread_count }})
+  </a>
+</div>
+
+<!-- Notification list -->
+{% if notifications %}
+<div style="display: flex; flex-direction: column; gap: 1px; background: var(--sp-border); border-radius: var(--sp-radius, 8px); overflow: hidden;">
+  {% for notif in notifications %}
+  <div class="card" style="padding: var(--sp-space-md); border-radius: 0; display: flex; align-items: flex-start; gap: var(--sp-space-md); {{ 'background: var(--sp-bg-secondary);' if not notif.is_read else '' }}">
+    <!-- Type icon -->
+    <div style="flex-shrink: 0; width: 32px; height: 32px; border-radius: 50%; background: var(--sp-bg-tertiary, var(--sp-bg-secondary)); display: flex; align-items: center; justify-content: center;">
+      {% if notif.event_type == 'assignment' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      {% elif notif.event_type == 'comment' %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      {% else %}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      {% endif %}
+    </div>
+    <!-- Content -->
+    <div style="flex: 1; min-width: 0;">
+      <div style="font-weight: {{ '600' if not notif.is_read else '400' }}; margin-bottom: 2px;">
+        {{ notif.title }}
+      </div>
+      {% if notif.body %}
+      <div style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+        {{ notif.body }}
+      </div>
+      {% endif %}
+      <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: 4px;">
+        {{ notif.created_at.strftime('%Y-%m-%d %H:%M') if notif.created_at else '' }}
+      </div>
+    </div>
+    <!-- Read indicator -->
+    {% if not notif.is_read %}
+    <span style="flex-shrink: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--sp-accent); margin-top: 6px;"></span>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Pagination -->
+{% if total > limit %}
+<div style="display: flex; justify-content: center; gap: var(--sp-space-md); margin-top: var(--sp-space-xl);">
+  {% if offset > 0 %}
+  <a href="/my/notifications?offset={{ offset - limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="btn btn-secondary">Previous</a>
+  {% endif %}
+  {% if offset + limit < total %}
+  <a href="/my/notifications?offset={{ offset + limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="btn btn-secondary">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+{% else %}
+<div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
+  No notifications.
+</div>
+{% endif %}
+{% endblock %}

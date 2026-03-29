@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Admin - Specivo{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span class="current">Settings</span>
+</div>
+
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">Settings</h1>
+
+<div class="card" style="padding: var(--sp-space-lg);">
+  {% if settings %}
+  <table style="width: 100%; border-collapse: collapse; font-size: var(--sp-font-size-sm);">
+    <thead>
+      <tr style="border-bottom: 2px solid var(--sp-border, #e5e7eb);">
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Key</th>
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Value</th>
+        <th style="text-align: right; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for key, value in settings.items() %}
+      <tr style="border-bottom: 1px solid var(--sp-border, #e5e7eb);" x-data="{ editing: false, newValue: '{{ value or '' }}' }">
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md); font-family: var(--sp-font-mono, 'JetBrains Mono', monospace); font-weight: 500;">{{ key }}</td>
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md);">
+          <span x-show="!editing">{{ value or '' }}</span>
+          <input x-show="editing" x-model="newValue" class="input" style="font-size: var(--sp-font-size-sm); width: 100%;">
+        </td>
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md); text-align: right;">
+          <button x-show="!editing" @click="editing = true" class="btn btn-secondary" style="font-size: var(--sp-font-size-xs); padding: 2px 8px;">Edit</button>
+          <button x-show="editing" @click="editing = false" class="btn btn-secondary" style="font-size: var(--sp-font-size-xs); padding: 2px 8px;">Cancel</button>
+          <button x-show="editing" @click="editing = false" class="btn btn-primary" style="font-size: var(--sp-font-size-xs); padding: 2px 8px;">Save</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="text-align: center; color: var(--sp-text-muted); padding: var(--sp-space-xl);">No settings configured.</p>
+  {% endif %}
+</div>
+{% endblock %}

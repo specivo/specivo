@@ -1,0 +1,404 @@
+# English translations for PROJECT.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-03-28 11:01+0300\n"
+"PO-Revision-Date: 2026-03-28 10:59+0300\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: specivo/core/notification_templates.py:15
+#, python-brace-format
+msgid "[{issue_key}] Assigned to you: {issue_subject}"
+msgstr ""
+
+#: specivo/core/notification_templates.py:16
+#, python-brace-format
+msgid "[{issue_key}] Assigned to you by {actor_name}"
+msgstr ""
+
+#: specivo/core/notification_templates.py:19
+#, python-brace-format
+msgid "[{issue_key}] Updated: {issue_subject}"
+msgstr ""
+
+#: specivo/core/notification_templates.py:20
+#, python-brace-format
+msgid "[{issue_key}] Updated by {actor_name}"
+msgstr ""
+
+#: specivo/core/notification_templates.py:23
+#, python-brace-format
+msgid "[{issue_key}] New comment: {issue_subject}"
+msgstr ""
+
+#: specivo/core/notification_templates.py:24
+#, python-brace-format
+msgid "[{issue_key}] {actor_name} commented"
+msgstr ""
+
+#: specivo/services/api_key_service.py:54
+#: specivo/services/api_key_service.py:62
+msgid "Client IP not allowed by key allowlist"
+msgstr ""
+
+#: specivo/services/api_key_service.py:120
+#, python-brace-format
+msgid ""
+"API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited "
+"keys."
+msgstr ""
+
+#: specivo/services/api_key_service.py:170
+#: specivo/services/api_key_service.py:200
+msgid "Invalid API key"
+msgstr ""
+
+#: specivo/services/api_key_service.py:177
+msgid "API key is inactive"
+msgstr ""
+
+#: specivo/services/api_key_service.py:184
+msgid "API key has expired"
+msgstr ""
+
+#: specivo/services/api_key_service.py:236
+#: specivo/services/api_key_service.py:254
+msgid "API key not found"
+msgstr ""
+
+#: specivo/services/auth_service.py:126 specivo/services/auth_service.py:163
+msgid "Invalid login or password"
+msgstr ""
+
+#: specivo/services/auth_service.py:134
+msgid "Email address not verified"
+msgstr ""
+
+#: specivo/services/auth_service.py:140
+msgid "Account has been deactivated"
+msgstr ""
+
+#: specivo/services/auth_service.py:148
+msgid "Account is temporarily locked due to too many failed login attempts"
+msgstr ""
+
+#: specivo/services/auth_service.py:182
+msgid "Account is locked. Contact an administrator."
+msgstr ""
+
+#: specivo/services/auth_service.py:222 specivo/services/auth_service.py:232
+#: specivo/services/auth_service.py:245
+msgid "Refresh token expired or revoked"
+msgstr ""
+
+#: specivo/services/auth_service.py:322
+msgid "Session not found"
+msgstr ""
+
+#: specivo/services/issue_service.py:80
+msgid "No issue statuses found; run seed data first"
+msgstr ""
+
+#: specivo/services/issue_service.py:101
+msgid "No issue priorities found; run seed data first"
+msgstr ""
+
+#: specivo/services/issue_service.py:475
+msgid "Issue was modified by another request. Reload and retry."
+msgstr ""
+
+#: specivo/services/journal_service.py:185
+msgid "Cannot reply to a journal on a different issue"
+msgstr ""
+
+#: specivo/services/journal_service.py:187
+msgid "Cannot reply to a reply (only 1-level threading is supported)"
+msgstr ""
+
+#: specivo/services/journal_service.py:242
+msgid ""
+"Feature 'threaded_comments' is not available. Thread resolution requires "
+"Specivo Pro."
+msgstr ""
+
+#: specivo/services/workflow_service.py:197
+msgid "No project roles found for user"
+msgstr ""
+
+#: specivo/services/workflow_service.py:207
+#, python-brace-format
+msgid "Transition from status {old} to {new} is not allowed"
+msgstr ""
+
+#: specivo/services/workflow_service.py:252
+#, python-brace-format
+msgid "Field '{field}' is required for this status"
+msgstr ""
+
+#: specivo/services/workflow_service.py:262
+#, python-brace-format
+msgid "Field '{field}' is read-only for this status"
+msgstr ""
+
+#: specivo/services/workflow_service.py:320
+msgid "Duplicate workflow transition"
+msgstr ""
+
+#: specivo/services/workflow_service.py:333
+msgid "Workflow transition not found"
+msgstr ""
+
+#: specivo/services/workflow_service.py:401
+msgid "Duplicate workflow field rule"
+msgstr ""
+
+#: specivo/services/workflow_service.py:413
+msgid "Workflow field rule not found"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:4
+msgid "Search issues, wiki, projects..."
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:9
+msgid "Font size"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:27
+#: specivo/templates/themes/default/components/sidebar.html:40
+msgid "Time Tracking"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:28
+msgid "Timer running"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:38
+msgid "Stop & Log"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:39
+msgid "Discard"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:55
+msgid "Notifications"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:56
+msgid "Mark all read"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:70
+msgid "No notifications"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:74
+msgid "View all notifications"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:14
+#: specivo/templates/themes/default/pages/dashboard.html:3
+msgid "Dashboard"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:18
+#: specivo/templates/themes/default/components/sidebar.html:53
+#: specivo/templates/themes/default/pages/dashboard.html:129
+msgid "Projects"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:27
+msgid "Issues"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:32
+msgid "Wiki"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:36
+msgid "Roadmap"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:44
+msgid "Search"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:48
+msgid "Settings"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:65
+msgid "AI & Agents"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:68
+msgid "Agent Sessions"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:73
+msgid "Cost Tracking"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:80
+msgid "Security"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:84
+msgid "Agent Policies"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:90
+msgid "Credentials"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:96
+msgid "Audit Log"
+msgstr ""
+
+#: specivo/templates/themes/default/components/sidebar.html:111
+msgid "Admin"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:8
+msgid "Overview"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:16
+msgid "ALL SYSTEMS OPERATIONAL"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:19
+msgid "project"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:19
+msgid "projects"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:20
+msgid "unread notification"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:20
+msgid "unread notifications"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:33
+msgid "Active Agents"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:46
+msgid "No active agents."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:54
+msgid "My Open Issues"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:55
+msgid "View all"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:62
+msgid "Key"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:63
+msgid "Subject"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:64
+msgid "Status"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:65
+msgid "Tracker"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:66
+msgid "Project"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:83
+msgid "No open issues assigned to you."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:95
+msgid "Today's AI Spend"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:103
+msgid "Release Tracking"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:121
+msgid "No active releases."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/dashboard.html:139
+msgid "No projects yet."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:3
+#: specivo/templates/themes/default/pages/auth/login.html:87
+#: specivo/templates/themes/default/pages/auth/login.html:88
+msgid "Sign in"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:29
+msgid "Invalid credentials"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:32
+msgid "Unable to connect. Please try again."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:45
+msgid "Your work. Your knowledge. Your infrastructure."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:56
+msgid "Username or email"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:61
+msgid "you@example.com"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:68
+msgid "Password"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:73
+msgid "Enter your password"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:80
+msgid "Remember me"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:87
+msgid "Signing in..."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:93
+msgid "Need an account?"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/login.html:93
+msgid "Contact your administrator"
+msgstr ""
+

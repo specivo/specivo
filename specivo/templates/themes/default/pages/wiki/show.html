@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}{{ wiki_page.title }} - Wiki - {{ project.name }} - Specivo{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": wiki_page.title}
+]) }}
+
+<div class="wiki-layout">
+  {# Main wiki content #}
+  <div>
+    <div class="wiki-page-header">
+      <div>
+        <h1 class="wiki-page-title">{{ wiki_page.title }}</h1>
+        <div class="wiki-page-meta">
+          {% if content.author %}
+          Last edited by <strong>{{ content.author.display_name or content.author.login }}</strong>
+          {% endif %}
+          {% if content.created_at %}
+          &middot; {{ content.created_at.strftime('%Y-%m-%d %H:%M') }}
+          {% endif %}
+          &middot; Version {{ content.version }}
+        </div>
+      </div>
+      <div class="wiki-page-actions">
+        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history" class="btn btn-ghost">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          History
+        </a>
+        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/edit" class="btn btn-primary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit
+        </a>
+      </div>
+    </div>
+
+    <div class="wiki-version-bar">
+      <span>Version <span class="version-num">{{ content.version }}</span></span>
+      <span>&middot;</span>
+      {% if content.author %}
+      <span>Edited by {{ content.author.display_name or content.author.login }}</span>
+      <span>&middot;</span>
+      {% endif %}
+      {% if content.created_at %}
+      <span>{{ content.created_at.strftime('%b %d, %Y at %H:%M') }}</span>
+      {% endif %}
+      {% if content.comments %}
+      <span>&middot;</span>
+      <span style="font-style:italic">"{{ content.comments }}"</span>
+      {% endif %}
+    </div>
+
+    {# Rendered content #}
+    <div class="wiki-content">
+      {{ content.text | safe }}
+    </div>
+  </div>
+
+  {# Right sidebar #}
+  <div>
+    {# Page tree #}
+    {% if pages is defined and pages %}
+    <div class="wiki-tree-card">
+      <div class="wiki-tree-title">Pages</div>
+      <ul class="wiki-tree">
+        {% for p in pages %}
+        <li>
+          <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}"
+             class="{{ 'active' if p.id == wiki_page.id else '' }}">
+            {{ p.title }}
+          </a>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

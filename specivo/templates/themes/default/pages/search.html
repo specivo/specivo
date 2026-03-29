@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}Search{% if query %} - {{ query }}{% endif %} - Specivo{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": "Search"}
+]) }}
+
+<h1 class="page-title">Search</h1>
+
+{# Search box #}
+<form method="get" action="/search">
+  <div class="search-box">
+    <svg class="search-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+    <input type="text" name="q" value="{{ query }}" placeholder="Search issues and wiki..." autofocus>
+  </div>
+
+  <div class="search-controls">
+    {# Mode toggle #}
+    <div class="mode-toggle">
+      {% for m in ['keyword', 'semantic', 'hybrid'] %}
+      <button type="submit" name="mode" value="{{ m }}" class="mode-toggle-btn{{ ' active' if mode == m else '' }}">{{ m | capitalize }}</button>
+      {% endfor %}
+    </div>
+
+    {# Scope tabs #}
+    <div class="scope-tabs">
+      {% for s in ['all', 'issues', 'wiki'] %}
+      <button type="submit" name="scope" value="{{ s }}" class="scope-tab{{ ' active' if scope == s else '' }}">{{ s | capitalize }}</button>
+      {% endfor %}
+    </div>
+
+    {% if project_key %}
+    <input type="hidden" name="project_key" value="{{ project_key }}">
+    <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">Project: {{ project_key }}</span>
+    {% endif %}
+  </div>
+</form>
+
+{% if query %}
+{# Results header #}
+<div style="margin-bottom:var(--sp-space-md);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
+  {{ total }} result{{ 's' if total != 1 else '' }} for "{{ query }}"
+</div>
+
+{% if results %}
+<div class="search-results">
+  {% for r in results %}
+  <div class="search-result">
+    <div class="result-header">
+      {% if r.result_type == 'issue' %}
+      <svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      {% else %}
+      <svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      {% endif %}
+      <a href="{% if r.result_type == 'issue' %}/projects/{{ r.project_key }}/issues/{{ r.title }}{% else %}/projects/{{ r.project_key }}/wiki/{{ r.subtitle }}{% endif %}" class="result-title">{{ r.title }}</a>
+    </div>
+    {% if r.subtitle %}
+    <div class="result-subtitle">
+      {% if r.project_key %}<span class="project-key">{{ r.project_key }}</span>{% endif %}
+      <span>{{ r.subtitle }}</span>
+      <span class="badge-status" style="font-size:var(--sp-font-size-xs);">{{ r.result_type }}</span>
+    </div>
+    {% endif %}
+    {% if r.snippet %}
+    <p class="result-snippet">{{ r.snippet | safe }}</p>
+    {% endif %}
+    <div class="result-footer">
+      <span class="result-score">Score: {{ '%.3f' | format(r.score) }}</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{# Pagination #}
+{% if total > limit %}
+<div class="search-pagination">
+  {% if offset > 0 %}
+  <a href="/search?q={{ query }}&mode={{ mode }}&scope={{ scope }}&offset={{ offset - limit }}&limit={{ limit }}{% if project_key %}&project_key={{ project_key }}{% endif %}" class="btn btn-ghost">Previous</a>
+  {% endif %}
+  {% if offset + limit < total %}
+  <a href="/search?q={{ query }}&mode={{ mode }}&scope={{ scope }}&offset={{ offset + limit }}&limit={{ limit }}{% if project_key %}&project_key={{ project_key }}{% endif %}" class="btn btn-ghost">Next</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+  No results found for "{{ query }}". Try different keywords or search mode.
+</div>
+{% endif %}
+
+{% else %}
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+  Enter a search query to find issues and wiki pages.
+</div>
+{% endif %}
+{% endblock %}

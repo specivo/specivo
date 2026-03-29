@@ -1,0 +1,4 @@
+Observable Plot
+Copyright 2020-2024 Observable, Inc.
+Licensed under ISC License
+https://github.com/observablehq/plot/blob/main/LICENSE

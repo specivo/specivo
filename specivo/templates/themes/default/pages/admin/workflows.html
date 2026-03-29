@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block title %}Workflows - Admin - Specivo{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span class="current">Workflows</span>
+</div>
+
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">Workflow Transitions</h1>
+
+<div class="card" style="padding: var(--sp-space-lg);" x-data="workflowEditor()" x-init="init()">
+  <!-- Selectors -->
+  <div style="display: flex; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); flex-wrap: wrap;">
+    <div>
+      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Tracker</label>
+      <select x-model="selectedTracker" @change="loadTransitions()" class="input" style="font-size: var(--sp-font-size-sm);">
+        <option value="">Select tracker...</option>
+        {% for t in trackers %}
+        <option value="{{ t.id }}">{{ t.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Role</label>
+      <select x-model="selectedRole" @change="loadTransitions()" class="input" style="font-size: var(--sp-font-size-sm);">
+        <option value="">Select role...</option>
+        {% for r in roles %}
+        <option value="{{ r.id }}">{{ r.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <!-- Transition matrix -->
+  <div x-show="selectedTracker && selectedRole" style="overflow-x: auto;">
+    <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md);">
+      Check the boxes to allow transitions from row status to column status.
+    </p>
+    <table style="width: 100%; border-collapse: collapse; font-size: var(--sp-font-size-sm);">
+      <thead>
+        <tr>
+          <th style="text-align: left; padding: var(--sp-space-sm); border-bottom: 2px solid var(--sp-border, #e5e7eb); color: var(--sp-text-muted);">From \ To</th>
+          {% for s in statuses %}
+          <th style="text-align: center; padding: var(--sp-space-sm); border-bottom: 2px solid var(--sp-border, #e5e7eb); color: var(--sp-text-muted); font-size: var(--sp-font-size-xs);">{{ s.name }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for from_s in statuses %}
+        <tr style="border-bottom: 1px solid var(--sp-border, #e5e7eb);">
+          <td style="padding: var(--sp-space-sm); font-weight: 500;">{{ from_s.name }}</td>
+          {% for to_s in statuses %}
+          <td style="text-align: center; padding: var(--sp-space-sm);">
+            {% if from_s.id != to_s.id %}
+            <input type="checkbox"
+                   :checked="isAllowed({{ from_s.id }}, {{ to_s.id }})"
+                   @change="toggleTransition({{ from_s.id }}, {{ to_s.id }}, $event.target.checked)">
+            {% else %}
+            <span style="color: var(--sp-text-muted);">-</span>
+            {% endif %}
+          </td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div x-show="!selectedTracker || !selectedRole" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
+    Select a tracker and role to manage workflow transitions.
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function workflowEditor() {
+  return {
+    selectedTracker: '',
+    selectedRole: '',
+    transitions: [],
+    init() {},
+    async loadTransitions() {
+      if (!this.selectedTracker || !this.selectedRole) return;
+      try {
+        const resp = await fetch(`/api/v1/admin/workflows/transitions?tracker_id=${this.selectedTracker}&role_id=${this.selectedRole}`);
+        if (resp.ok) {
+          this.transitions = await resp.json();
+        }
+      } catch (e) {}
+    },
+    isAllowed(fromId, toId) {
+      return this.transitions.some(t => t.old_status_id === fromId && t.new_status_id === toId);
+    },
+    async toggleTransition(fromId, toId, checked) {
+      // Managed via API — placeholder for full implementation
+    }
+  };
+}
+</script>
+{% endblock %}

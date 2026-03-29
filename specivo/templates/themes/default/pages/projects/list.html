@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}Projects - Specivo{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": "Projects"}
+]) }}
+
+<div class="page-header">
+  <h1>Projects</h1>
+  {% if user is defined and user and user.is_admin %}
+  <div class="page-header-actions">
+    <a href="#" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
+      New Project
+    </a>
+  </div>
+  {% endif %}
+</div>
+
+{% if projects %}
+<div class="project-grid">
+  {% for item in projects %}
+  {% set p = item.project if item.project is defined else item %}
+  <a href="/projects/{{ p.key }}" class="card project-card gold" style="display:block;text-decoration:none;color:inherit;">
+    <div class="project-card-header">
+      <div class="project-card-name">
+        {{ p.name }}
+        <span class="project-card-key">{{ p.key }}</span>
+      </div>
+      <span class="project-card-status {{ 'active' if (item.status_label if item.status_label is defined else 'active') == 'active' else 'archived' }}">{{ item.status_label if item.status_label is defined else 'Active' }}</span>
+    </div>
+    {% if p.description %}
+    <div class="project-card-desc">{{ p.description }}</div>
+    {% endif %}
+    <div class="project-card-footer">
+      <span>{{ p.identifier if p.identifier is defined else '' }}</span>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+  No projects yet. {% if user is defined and user and user.is_admin %}Create one to get started.{% endif %}
+</div>
+{% endif %}
+{% endblock %}

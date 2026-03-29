@@ -1,0 +1,4 @@
+htmx
+Copyright 2020 Big Sky Software
+Licensed under BSD 2-Clause License
+https://github.com/bigskysoftware/htmx/blob/master/LICENSE

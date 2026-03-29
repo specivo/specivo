@@ -1,0 +1,4 @@
+Source Serif 4
+Copyright 2014-2024 Adobe (http://www.adobe.com/)
+Licensed under SIL Open Font License, Version 1.1
+https://github.com/adobe-fonts/source-serif

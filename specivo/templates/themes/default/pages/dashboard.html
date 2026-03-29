@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Dashboard{% endtrans %} - Specivo{% endblock %}
+
+{% block content %}
+{# Dashboard Picker Tabs #}
+<div class="filter-tabs animate-in">
+  <a class="filter-tab active" href="/">{% trans %}Overview{% endtrans %}</a>
+</div>
+
+{# System Status Banner #}
+<div class="status-banner animate-in">
+  <div class="status-banner-left">
+    <div class="status-banner-indicator">
+      <span class="dot"></span>
+      {% trans %}ALL SYSTEMS OPERATIONAL{% endtrans %}
+    </div>
+    <div class="status-banner-stats">
+      {{ total_projects if total_projects is defined else 0 }} {{ _('project') if (total_projects | default(0)) == 1 else _('projects') }}
+      &middot; {{ unread_count if unread_count is defined else 0 }} {{ _('unread notification') if (unread_count | default(0)) == 1 else _('unread notifications') }}
+    </div>
+  </div>
+</div>
+
+<div class="dash-grid">
+  {# Left column #}
+  <div style="display:flex; flex-direction:column; gap:var(--sp-space-xl);">
+
+    {# Active Agents — gated on agent_groups feature #}
+    {% if has_feature("agent_groups") %}
+    <div class="card accent-teal animate-in">
+      <div class="card-header">
+        <h2>{% trans %}Active Agents{% endtrans %}</h2>
+      </div>
+      {% if agents is defined and agents %}
+        {% for agent in agents %}
+        <div class="agent-row">
+          <span class="agent-dot {{ 'green' if agent.status == 'active' else ('red' if agent.status == 'killed' else 'amber') }}"></span>
+          <span class="agent-name">{{ agent.name }}</span>
+          <span class="agent-info">{{ agent.info }}</span>
+          {% if agent.model %}<span class="agent-model">{{ agent.model }}</span>{% endif %}
+          {% if agent.elapsed %}<span class="agent-elapsed">{{ agent.elapsed }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      {% else %}
+        <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">{% trans %}No active agents.{% endtrans %}</div>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {# My Open Issues #}
+    <div class="card animate-in">
+      <div class="card-header">
+        <h2>{% trans %}My Open Issues{% endtrans %}</h2>
+        <a href="/projects">{% trans %}View all{% endtrans %} &rarr;</a>
+      </div>
+      {% if my_issues is defined and my_issues %}
+      <table class="issue-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>{% trans %}Key{% endtrans %}</th>
+            <th>{% trans %}Subject{% endtrans %}</th>
+            <th>{% trans %}Status{% endtrans %}</th>
+            <th>{% trans %}Tracker{% endtrans %}</th>
+            <th>{% trans %}Project{% endtrans %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for issue in my_issues %}
+          <tr>
+            <td><span class="badge-priority {{ issue.priority.name | lower | replace(' ', '-') if issue.priority else 'normal' }}"></span></td>
+            <td><a class="issue-key" href="/projects/{{ issue.project_key }}/issues/{{ issue.display_key }}">{{ issue.display_key }}</a></td>
+            <td class="issue-subject">{{ issue.subject }}</td>
+            <td><span class="badge-status {{ issue.status.name | lower | replace(' ', '-') if issue.status else '' }}">{{ issue.status.name if issue.status else '' }}</span></td>
+            <td><span class="badge-tracker {{ issue.tracker.name | lower if issue.tracker else '' }}">{{ issue.tracker.name if issue.tracker else '' }}</span></td>
+            <td style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">{{ issue.project_name if issue.project_name is defined else '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+        <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">{% trans %}No open issues assigned to you.{% endtrans %}</div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  {# Right column #}
+  <div style="display:flex; flex-direction:column; gap:var(--sp-space-xl);">
+
+    {# Today's AI Spend — Pro feature #}
+    {% if has_feature("agent_cost_tracking") %}
+    <div class="card accent-amber animate-in" style="padding:var(--sp-space-lg);">
+      <div style="font-size:var(--sp-font-size-sm);font-weight:600;color:var(--sp-text-primary);margin-bottom:var(--sp-space-sm);">{% trans %}Today's AI Spend{% endtrans %}</div>
+      <div class="spend-big">${{ ai_spend_today if ai_spend_today is defined else '0.00' }}</div>
+    </div>
+    {% endif %}
+
+    {# Release Tracking #}
+    <div class="card animate-in" style="border-left:3px solid #7C3AED;">
+      <div class="card-header">
+        <h2>{% trans %}Release Tracking{% endtrans %}</h2>
+      </div>
+      <div style="padding:0 var(--sp-space-lg) var(--sp-space-lg);">
+        {% if active_versions is defined and active_versions %}
+          {% for v in active_versions %}
+          <div style="margin-bottom:var(--sp-space-md);">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-space-xs);">
+              <span style="font-weight:600;font-size:var(--sp-font-size-sm);">{{ v.name }}</span>
+              <span class="badge-status {{ 'in-progress' if v.status == 'open' else 'closed' }}" style="font-size:var(--sp-font-size-xs);">{{ v.status }}</span>
+            </div>
+            {% if v.progress_percent is defined %}
+            <div style="height:6px;background:var(--sp-bg-input);border-radius:3px;overflow:hidden;">
+              <div style="height:100%;width:{{ v.progress_percent }}%;background:#7C3AED;border-radius:3px;"></div>
+            </div>
+            {% endif %}
+          </div>
+          {% endfor %}
+        {% else %}
+          <div style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">{% trans %}No active releases.{% endtrans %}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Projects (compact) #}
+    <div class="card animate-in">
+      <div class="card-header">
+        <h2>{% trans %}Projects{% endtrans %}</h2>
+      </div>
+      {% if projects is defined and projects %}
+        {% for p in projects %}
+        <a href="/projects/{{ p.key }}" class="project-compact" style="text-decoration:none;color:inherit;">
+          <span class="key">{{ p.key }}</span>
+          <span class="name">{{ p.name }}</span>
+        </a>
+        {% endfor %}
+      {% else %}
+        <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">{% trans %}No projects yet.{% endtrans %}</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+{# Pro/Enterprise dashboard widgets #}
+{% block dashboard_plugins %}{% endblock %}
+{% endblock %}

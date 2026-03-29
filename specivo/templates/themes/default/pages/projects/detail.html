@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - Specivo{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/projects">Projects</a>
+  <span class="sep">/</span>
+  <span class="current">{{ project.name }}</span>
+</div>
+
+<div style="margin-bottom: var(--sp-space-lg);">
+  <div style="display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-xs);">
+    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin: 0;">{{ project.name }}</h1>
+    <span class="badge-status" style="font-size: var(--sp-font-size-xs);">{{ project.key }}</span>
+    <span class="badge-status {{ 'in-progress' if status_label == 'active' else 'closed' }}" style="font-size: var(--sp-font-size-xs);">{{ status_label }}</span>
+  </div>
+  {% if project.description %}
+  <p style="color: var(--sp-text-muted); margin: var(--sp-space-sm) 0 0 0;">{{ project.description }}</p>
+  {% endif %}
+</div>
+
+<!-- Sub-nav tabs -->
+<div style="display: flex; gap: var(--sp-space-md); border-bottom: 1px solid var(--sp-border); margin-bottom: var(--sp-space-xl); padding-bottom: 0;">
+  <a href="/projects/{{ project.key }}" style="padding: var(--sp-space-sm) var(--sp-space-md); text-decoration: none; font-weight: 500; border-bottom: 2px solid var(--sp-accent); color: var(--sp-text);">Overview</a>
+  {% if modules.get('issue_tracking', false) %}
+  <a href="/projects/{{ project.key }}/issues" style="padding: var(--sp-space-sm) var(--sp-space-md); text-decoration: none; color: var(--sp-text-muted);">Issues</a>
+  {% endif %}
+  {% if modules.get('wiki', false) %}
+  <a href="/projects/{{ project.key }}/wiki" style="padding: var(--sp-space-sm) var(--sp-space-md); text-decoration: none; color: var(--sp-text-muted);">Wiki</a>
+  {% endif %}
+  <a href="/projects/{{ project.key }}/roadmap" style="padding: var(--sp-space-sm) var(--sp-space-md); text-decoration: none; color: var(--sp-text-muted);">Roadmap</a>
+  {% if modules.get('time_tracking', false) %}
+  <a href="/projects/{{ project.key }}/time" style="padding: var(--sp-space-sm) var(--sp-space-md); text-decoration: none; color: var(--sp-text-muted);">Time</a>
+  {% endif %}
+  {% if user.is_admin %}
+  <a href="/projects/{{ project.key }}/settings" style="padding: var(--sp-space-sm) var(--sp-space-md); text-decoration: none; color: var(--sp-text-muted);">Settings</a>
+  {% endif %}
+</div>
+
+<!-- Overview content -->
+<div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--sp-space-xl);">
+  <!-- Left column: recent activity -->
+  <div>
+    <div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-lg);">
+      <h3 style="font-family: var(--sp-font-display); font-weight: 600; margin: 0 0 var(--sp-space-md) 0;">Project Info</h3>
+      <table style="width: 100%; font-size: var(--sp-font-size-sm);">
+        <tr>
+          <td style="padding: var(--sp-space-xs) 0; color: var(--sp-text-muted); width: 120px;">Identifier</td>
+          <td style="padding: var(--sp-space-xs) 0;"><code>{{ project.identifier }}</code></td>
+        </tr>
+        <tr>
+          <td style="padding: var(--sp-space-xs) 0; color: var(--sp-text-muted);">Key</td>
+          <td style="padding: var(--sp-space-xs) 0;"><code>{{ project.key }}</code></td>
+        </tr>
+        <tr>
+          <td style="padding: var(--sp-space-xs) 0; color: var(--sp-text-muted);">Visibility</td>
+          <td style="padding: var(--sp-space-xs) 0;">{{ "Public" if project.is_public else "Private" }}</td>
+        </tr>
+        <tr>
+          <td style="padding: var(--sp-space-xs) 0; color: var(--sp-text-muted);">Issues</td>
+          <td style="padding: var(--sp-space-xs) 0;">{{ project.issue_sequence }} created</td>
+        </tr>
+      </table>
+    </div>
+
+    <div class="card" style="padding: var(--sp-space-lg);">
+      <h3 style="font-family: var(--sp-font-display); font-weight: 600; margin: 0 0 var(--sp-space-md) 0;">Enabled Modules</h3>
+      <div style="display: flex; gap: var(--sp-space-sm); flex-wrap: wrap;">
+        {% for mod_name, mod_enabled in modules.items() %}
+        {% if mod_enabled %}
+        <span class="badge-status in-progress" style="font-size: var(--sp-font-size-xs);">{{ mod_name | replace('_', ' ') | title }}</span>
+        {% endif %}
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right column: members -->
+  <div>
+    <div class="card" style="padding: var(--sp-space-lg);">
+      <h3 style="font-family: var(--sp-font-display); font-weight: 600; margin: 0 0 var(--sp-space-md) 0;">Members</h3>
+      {% if members %}
+      <div style="display: flex; flex-direction: column; gap: var(--sp-space-sm);">
+        {% for m in members %}
+        <div style="display: flex; align-items: center; gap: var(--sp-space-sm);">
+          <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--sp-accent-bg); color: var(--sp-accent); display: flex; align-items: center; justify-content: center; font-size: var(--sp-font-size-xs); font-weight: 600;">{{ m.login[:2] | upper }}</div>
+          <div>
+            <span style="font-size: var(--sp-font-size-sm); font-weight: 500;">{{ m.display_name }}</span>
+            {% for role in m.roles %}
+            <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-left: var(--sp-space-xs);">{{ role }}</span>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); margin: 0;">No members yet.</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

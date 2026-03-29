@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}History: {{ wiki_page.title }} - Wiki - {{ project.name }} - Specivo{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
+  {"label": "History"}
+]) }}
+
+<div class="history-page-header">
+  <h1 class="history-page-title">History: {{ wiki_page.title }}</h1>
+  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}" class="btn btn-ghost">Back to page</a>
+</div>
+
+<div class="compare-toolbar">
+  <span class="compare-hint">Select two versions to compare</span>
+  <button class="btn btn-compare" id="btn-compare">Compare Selected</button>
+</div>
+
+{% if versions %}
+<table class="version-table">
+  <thead>
+    <tr>
+      <th></th>
+      <th>Version</th>
+      <th>Author</th>
+      <th>Date</th>
+      <th>Comment</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for v in versions %}
+    <tr>
+      <td style="text-align:center"><input type="checkbox" class="version-check" value="{{ v.version }}"></td>
+      <td>
+        <span class="version-num">#{{ v.version }}</span>
+        {% if loop.first %}<span class="version-current-badge">Current</span>{% endif %}
+      </td>
+      <td>
+        <div class="version-author">
+          <span class="avatar-sm" style="width:24px;height:24px;font-size:9px">{{ (v.author.display_name or v.author.login)[:2] | upper if v.author else '?' }}</span>
+          <span class="version-author-name">{{ v.author.display_name or v.author.login if v.author else 'Unknown' }}</span>
+        </div>
+      </td>
+      <td><span class="version-date">{{ v.created_at.strftime('%b %d, %Y %H:%M') if v.created_at else '' }}</span></td>
+      <td><span class="version-comment">{{ v.comments or '' }}</span></td>
+      <td>
+        <div class="version-actions">
+          <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}?version={{ v.version }}">View</a>
+          {% if not loop.first %}
+          <a href="#" class="restore-link">Restore</a>
+          {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+  No version history available.
+</div>
+{% endif %}
+{% endblock %}

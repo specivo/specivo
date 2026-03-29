@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Kill Switch - Admin - Specivo{% endblock %}
+
+{% block content %}
+{% if has_feature("kill_switch") %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/admin">Admin</a>
+  <span class="sep">/</span>
+  <span class="current">Kill Switch</span>
+</div>
+
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">Kill Switch</h1>
+
+<!-- Emergency actions -->
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); border-left: 4px solid #ef4444;">
+  <h2 style="font-size: var(--sp-font-size-lg); font-weight: 600; margin: 0 0 var(--sp-space-md) 0; color: #ef4444;">Emergency Actions</h2>
+  <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin: 0 0 var(--sp-space-lg) 0;">
+    These actions immediately revoke agent access. Use with caution.
+  </p>
+  <div style="display: flex; gap: var(--sp-space-md); flex-wrap: wrap;" x-data="{ confirm: '' }">
+    <button class="btn" style="background: #f59e0b; color: white; border: none;"
+            @click="if(window.confirm('Kill specific agent? Enter agent user ID in next prompt.')) { confirm = 'agent'; }">
+      Kill Agent
+    </button>
+    <button class="btn" style="background: #ef4444; color: white; border: none;"
+            @click="if(window.confirm('Kill specific system? This will revoke all credentials for the system.')) { confirm = 'system'; }">
+      Kill System
+    </button>
+    <button class="btn" style="background: #991b1b; color: white; border: none; font-weight: 700;"
+            @click="if(window.confirm('KILL ALL AGENTS? This will deactivate ALL service account API keys and revoke ALL credentials. This action cannot be undone.')) { confirm = 'all'; }">
+      Kill All
+    </button>
+  </div>
+</div>
+
+<!-- Kill event log -->
+<h2 style="font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-lg);">Kill Event Log</h2>
+
+{% if events %}
+<div class="card" style="overflow-x: auto;">
+  <table style="width: 100%; border-collapse: collapse; font-size: var(--sp-font-size-sm);">
+    <thead>
+      <tr style="border-bottom: 2px solid var(--sp-border, #e5e7eb);">
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">ID</th>
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Level</th>
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Target</th>
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Triggered By</th>
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Reason</th>
+        <th style="text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-weight: 500;">Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for event in events %}
+      <tr style="border-bottom: 1px solid var(--sp-border, #e5e7eb);">
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md); font-family: var(--sp-font-mono, 'JetBrains Mono', monospace);">{{ event.id }}</td>
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md);">
+          <span class="badge-status" style="font-size: var(--sp-font-size-xs); {{ 'background: #fef2f2; color: #991b1b;' if event.level == 'all' else '' }}">{{ event.level }}</span>
+        </td>
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md);">
+          {% if event.target_type %}{{ event.target_type }}{% if event.target_id %} #{{ event.target_id }}{% endif %}{% else %}-{% endif %}
+        </td>
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md);">{{ event.triggered_by }}</td>
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ event.trigger_reason }}</td>
+        <td style="padding: var(--sp-space-sm) var(--sp-space-md); white-space: nowrap; color: var(--sp-text-muted);">{{ event.created_at }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
+  No kill events recorded.
+</div>
+{% endif %}
+{% else %}
+<div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
+  This feature requires the Pro or Enterprise tier.
+</div>
+{% endif %}
+{% endblock %}

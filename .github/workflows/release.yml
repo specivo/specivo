@@ -1,0 +1,103 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # Run full CI first
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  # Build and push Docker image to Docker Hub
+  build-and-push:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: specivo/specivo
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # Create GitHub Release with offline deployment bundle
+  create-release:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Pull and save Docker image
+        run: |
+          docker pull specivo/specivo:${{ steps.version.outputs.VERSION }}
+          docker save specivo/specivo:${{ steps.version.outputs.VERSION }} \
+            -o specivo-image.tar
+
+      - name: Create offline deployment bundle
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          mkdir bundle
+          cp specivo-image.tar bundle/
+          cp docker-compose.yml bundle/
+          cp .env.example bundle/
+          cp .env.local.example bundle/
+          cp Makefile bundle/
+          cp -r nginx bundle/
+          cp scripts/configure.py bundle/
+          cp scripts/entrypoint.sh bundle/
+          cp docs/INSTALL.md bundle/
+          echo "$VERSION" > bundle/VERSION
+          tar czf specivo-${VERSION}-bundle.tar.gz -C bundle .
+          rm -rf bundle specivo-image.tar
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: specivo-*-bundle.tar.gz
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            **Online (Docker Hub):**
+            ```bash
+            docker pull specivo/specivo:${{ steps.version.outputs.VERSION }}
+            ```
+
+            **Offline / Airgapped:**
+            1. Download `specivo-${{ steps.version.outputs.VERSION }}-bundle.tar.gz` below
+            2. Transfer to your server
+            3. Extract: `tar xzf specivo-*.tar.gz`
+            4. Load image: `docker load < specivo-image.tar`
+            5. Configure: `python3 configure.py`
+            6. Start: `docker compose up -d`
+
+            See [Deployment Guide](https://github.com/specivo/specivo/blob/main/docs/deployment.md) for details.

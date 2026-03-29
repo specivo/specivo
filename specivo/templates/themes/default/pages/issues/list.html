@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar, pagination, empty_state %}
+
+{% block title %}Issues - {{ project.name }} - Specivo{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Issues"}
+]) }}
+
+<div class="page-header">
+  <h1>Issues</h1>
+  <div class="page-header-actions">
+    <a href="/projects/{{ project.key }}/issues/new" class="btn btn-primary">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 5v14M5 12h14"/></svg>
+      New Issue
+    </a>
+  </div>
+</div>
+
+{# Saved filter tabs — Pro feature #}
+{% if has_feature("saved_filters") %}
+{% if saved_filters is defined and saved_filters %}
+<div class="filter-tabs" style="margin-bottom:var(--sp-space-lg);">
+  {% for sf in saved_filters %}
+  <a href="/projects/{{ project.key }}/issues?{{ sf.query_string if sf.query_string else '' }}"
+     class="filter-tab{{ ' active' if sf.active is defined and sf.active else '' }}">
+    {{ sf.name }}
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
+
+{# Filter bar #}
+<form method="get" action="/projects/{{ project.key }}/issues" class="filter-bar">
+  <select name="status" class="filter-select">
+    <option value="open" {{ 'selected' if filters.status == 'open' }}>Open</option>
+    <option value="closed" {{ 'selected' if filters.status == 'closed' }}>Closed</option>
+    <option value="all" {{ 'selected' if filters.status == 'all' }}>All</option>
+  </select>
+
+  <select name="tracker_id" class="filter-select">
+    <option value="">All Trackers</option>
+    {% for t in trackers %}
+    <option value="{{ t.id }}" {{ 'selected' if filters.get('tracker_id') == t.id }}>{{ t.name }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="assigned_to_id" class="filter-select">
+    <option value="">All Assignees</option>
+    {% for m in members %}
+    <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if filters.get('assigned_to_id') == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="priority_id" class="filter-select">
+    <option value="">All Priorities</option>
+    {% for p in priorities %}
+    <option value="{{ p.id }}" {{ 'selected' if filters.get('priority_id') == p.id }}>{{ p.name }}</option>
+    {% endfor %}
+  </select>
+
+  <button type="submit" class="btn btn-ghost">Apply</button>
+
+  <div class="view-toggle">
+    <button type="button" class="view-toggle-btn active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+      List
+    </button>
+    <button type="button" class="view-toggle-btn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Board
+    </button>
+  </div>
+</form>
+
+{# Pro: bulk action toolbar, saved filter tabs #}
+{% block issue_list_toolbar %}{% endblock %}
+
+{% if issues %}
+<div class="card" style="overflow-x:auto;">
+  <table class="issue-table">
+    <thead>
+      <tr>
+        {% if has_feature("bulk_operations") %}<th class="td-checkbox"><input type="checkbox" /></th>{% endif %}
+        <th></th>
+        <th>Key</th>
+        <th>Subject</th>
+        <th>Status</th>
+        <th>Tracker</th>
+        <th>Assignee</th>
+        <th>Updated</th>
+      </tr>
+    </thead>
+    <tbody id="issue-table-body"
+           hx-get="/partials/issues/table?project_key={{ project.key }}"
+           hx-trigger="none"
+           hx-swap="innerHTML">
+      {% include "pages/issues/_table_rows.html" %}
+    </tbody>
+  </table>
+</div>
+
+{{ pagination(total, offset, limit, "/projects/" ~ project.key ~ "/issues") }}
+{% else %}
+{{ empty_state("No issues found", "Create your first issue to get started.") }}
+{% endif %}
+{% endblock %}

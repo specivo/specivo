@@ -1,0 +1,4 @@
+Alpine.js
+Copyright 2019-2024 Caleb Porzio
+Licensed under MIT License
+https://github.com/alpinejs/alpine/blob/main/LICENSE.md

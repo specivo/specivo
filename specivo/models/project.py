@@ -1,0 +1,115 @@
+"""Project, EnabledModule models for the Specivo tracker."""
+
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from specivo.models.base import Base, TimestampMixin
+
+
+class Project(Base, TimestampMixin):
+    """Tracker project.
+
+    ``status`` values:
+    - 1: active
+    - 5: closed
+    - 9: archived
+
+    ``path``: ltree label path, e.g. ``"specivo.tracker"``.  Stored as Text;
+    a GiST index with ltree_ops is added in ``__table_args__`` so PostgreSQL
+    can use ltree operators for ancestor/descendant queries.
+
+    ``key``: uppercase project key (e.g. ``SPV``).  Used as issue prefix:
+    ``SPV-42``.  Constrained to ``^[A-Z][A-Z0-9]{1,9}$`` via CHECK.
+
+    ``issue_sequence``: monotonically-increasing counter for issue numbers
+    within this project.  Updated atomically via UPDATE … RETURNING.
+    """
+
+    __tablename__ = "projects"
+
+    __table_args__ = (
+        # GiST index using ltree_ops so PostgreSQL can use ltree operators
+        Index("ix_projects_path_gist", "path", postgresql_using="gist"),
+        Index("ix_projects_identifier", "identifier"),
+        Index("ix_projects_parent_id", "parent_id"),
+        CheckConstraint(
+            "key ~ '^[A-Z][A-Z0-9]{1,9}$'",
+            name="ck_projects_key_format",
+        ),
+        CheckConstraint(
+            "status IN (1, 5, 9)",
+            name="ck_projects_status",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    # URL slug — lowercase, kebab-case, globally unique
+    identifier: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+
+    # Uppercase project key used as issue prefix (SPV, ACME, …)
+    key: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
+
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("projects.id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+
+    # ltree path stored as text; DB column is ltree type (set in migration)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+
+    inherit_members: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    # 1=active, 5=closed, 9=archived
+    status: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+
+    # Atomic counter for PROJECT-NNN issue numbers
+    issue_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+
+    # Extensible JSONB settings bag
+    settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+
+    def __repr__(self) -> str:
+        return f"<Project id={self.id} key={self.key!r} identifier={self.identifier!r}>"
+
+
+class EnabledModule(Base):
+    """Records which modules are active for a given project.
+
+    Module names: ``"issue_tracking"``, ``"wiki"``, ``"time_tracking"``.
+    """
+
+    __tablename__ = "enabled_modules"
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "name", name="uq_enabled_modules_project_name"),
+        Index("ix_enabled_modules_project_id", "project_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<EnabledModule project_id={self.project_id} name={self.name!r}>"

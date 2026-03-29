@@ -1,0 +1,29 @@
+services:
+  test-db:
+    image: pgvector/pgvector:pg18
+    ports: ["5433:5432"]
+    environment:
+      POSTGRES_DB: specivo_test
+      POSTGRES_USER: specivo
+      POSTGRES_PASSWORD: specivo
+    tmpfs:
+      - /var/lib/postgresql:size=2G
+    shm_size: 256m
+    volumes:
+      - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/01-extensions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U specivo -d specivo_test"]
+      interval: 2s
+      timeout: 1s
+      retries: 15
+      start_period: 3s
+
+  test-redis:
+    image: redis:7-alpine
+    ports: ["6380:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 1s
+      retries: 10
+      start_period: 2s
