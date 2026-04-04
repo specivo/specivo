@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, avatar %}
 
-{% block title %}Projects - Specivo{% endblock %}
+{% block title %}Projects - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -9,37 +9,188 @@
   {"label": "Projects"}
 ]) }}
 
+<div x-data="{ showCreate: false }">
+
 <div class="page-header">
   <h1>Projects</h1>
   {% if user is defined and user and user.is_admin %}
   <div class="page-header-actions">
-    <a href="#" class="btn btn-primary">
+    <button class="sp-btn sp-btn-primary" @click="showCreate = true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
       New Project
-    </a>
+    </button>
   </div>
   {% endif %}
 </div>
 
+{# ======== Create Project Modal ======== #}
+{% if user is defined and user and user.is_admin %}
+<div class="sp-scrim" x-show="showCreate" x-transition.opacity @click="showCreate = false" style="display:none"></div>
+<div class="sp-modal" x-show="showCreate" @click.stop style="display:none"
+     x-data='projectCreateModal({ colors: {{ project_colors | tojson }}, allProjects: {{ all_projects | tojson }} })'>
+    <div class="sp-modal-header">
+      <h2>{% trans %}New Project{% endtrans %}</h2>
+      <button class="sp-modal-close" @click="showCreate = false">&times;</button>
+    </div>
+    <form @submit.prevent="submit()">
+      <div class="sp-modal-body">
+        <div class="form-group" style="margin-bottom:var(--sp-space-lg)">
+          <label class="form-label">{% trans %}Project name{% endtrans %}</label>
+          <input class="form-input" type="text" x-model="name" @input="onNameInput()" required autofocus placeholder="{% trans %}e.g. Backend API{% endtrans %}">
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-space-md);margin-bottom:var(--sp-space-lg)">
+          <div class="form-group">
+            <label class="form-label">{% trans %}Identifier{% endtrans %}</label>
+            <input class="form-input" type="text" x-model="identifier" required placeholder="backend-api">
+          </div>
+          <div class="form-group">
+            <label class="form-label">{% trans %}Project key{% endtrans %}</label>
+            <input class="form-input" type="text" x-model="key" required placeholder="BACK" maxlength="10" style="text-transform:uppercase">
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs);display:block">2-10 uppercase letters/digits</span>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:var(--sp-space-lg)">
+          <label class="form-label">{% trans %}Description{% endtrans %} <span style="color:var(--sp-text-muted);font-weight:normal">({% trans %}optional{% endtrans %})</span></label>
+          <textarea class="form-input" x-model="description" rows="3" placeholder="{% trans %}Brief project description...{% endtrans %}"></textarea>
+        </div>
+
+        <div class="form-group" style="margin-bottom:var(--sp-space-lg)">
+          <label class="form-label">{% trans %}Color{% endtrans %}</label>
+          <div class="color-swatches">
+            <template x-for="c in colors" :key="c">
+              <div class="color-swatch"
+                   :class="{ 'selected': color === c }"
+                   :style="'background:' + c"
+                   @click="color = c"></div>
+            </template>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:var(--sp-space-lg)">
+          <label class="form-label">{% trans %}Parent project{% endtrans %}</label>
+          <select class="form-input" x-model="parentKey">
+            <option value="">{% trans %}(none -- root project){% endtrans %}</option>
+            <template x-for="proj in allProjects" :key="proj.key">
+              <option :value="proj.key" x-text="proj.name + ' (' + proj.key + ')'"></option>
+            </template>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">{% trans %}Modules{% endtrans %}</label>
+          <div style="display:flex;flex-direction:column;gap:var(--sp-space-sm)">
+            <label class="checkbox-row"><input type="checkbox" checked disabled> {% trans %}Issues{% endtrans %}</label>
+            <label class="checkbox-row"><input type="checkbox" x-model="moduleWiki"> {% trans %}Wiki{% endtrans %}</label>
+            <label class="checkbox-row"><input type="checkbox" x-model="moduleTime"> {% trans %}Time tracking{% endtrans %}</label>
+          </div>
+          <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-sm);display:block">{% trans %}You can change this later in project settings.{% endtrans %}</span>
+        </div>
+
+        <div x-show="error" class="flash flash-error" style="margin-top:var(--sp-space-md)" x-text="error"></div>
+      </div>
+      <div class="sp-modal-footer">
+        <button class="sp-btn sp-btn-ghost" type="button" @click="showCreate = false">{% trans %}Cancel{% endtrans %}</button>
+        <button class="sp-btn sp-btn-primary" type="submit" :disabled="saving">{% trans %}Create Project{% endtrans %}</button>
+      </div>
+    </form>
+  </div>
+{% endif %}
+
+</div>
+
+{# ======== Subproject list macro ======== #}
+{% macro render_subprojects(parent_id, children_by_parent) %}
+  {% set children = children_by_parent.get(parent_id, []) %}
+  {% if children %}
+  <div class="subprojects" x-data="{ open: {{ 'true' if children | length <= 5 else 'false' }} }">
+    <div class="subprojects-header" :class="{ 'open': open }" @click="open = !open">
+      <span class="subprojects-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        Subprojects ({{ children | length }})
+      </span>
+    </div>
+    <div class="subproject-list" x-show="open" x-transition>
+      {% for child in children %}
+      {% set cp = child.project if child.project is defined else child %}
+      {% set c_open = child.open_count if child.open_count is defined else 0 %}
+      {% set c_closed = child.closed_count if child.closed_count is defined else 0 %}
+      {% set c_total = c_open + c_closed %}
+      {% set c_pct = ((c_closed / c_total * 100) | round | int) if c_total > 0 else 0 %}
+      <a href="/projects/{{ cp.key }}/" class="subproject-row" style="text-decoration:none">
+        <span class="subproject-key">{{ cp.key }}</span>
+        <span class="subproject-name">{{ cp.name }}</span>
+        <div class="subproject-progress">
+          <div class="subproject-bar"><div class="subproject-bar-fill" style="width:{{ c_pct }}%"></div></div>
+          <span class="subproject-ratio">{{ c_closed }}/{{ c_total }}</span>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+{% endmacro %}
+
+{# ======== Project Cards Grid ======== #}
 {% if projects %}
 <div class="project-grid">
   {% for item in projects %}
   {% set p = item.project if item.project is defined else item %}
-  <a href="/projects/{{ p.key }}" class="card project-card gold" style="display:block;text-decoration:none;color:inherit;">
-    <div class="project-card-header">
-      <div class="project-card-name">
-        {{ p.name }}
-        <span class="project-card-key">{{ p.key }}</span>
+  {% set project_color = p.color or '#c49a3c' %}
+  <div class="card project-card{% if item.status_label == 'archived' %} project-card-archived{% endif %}" style="border-left-color:{{ project_color }}">
+    <a href="/projects/{{ p.key }}/" style="display:block;text-decoration:none;color:inherit;">
+      <div class="project-card-header">
+        <div class="project-card-name">
+          {{ p.name }}
+          <span class="project-card-key">{{ p.key }}</span>
+        </div>
+        <span class="project-card-status {{ item.status_label }}">{{ item.status_label | capitalize }}</span>
       </div>
-      <span class="project-card-status {{ 'active' if (item.status_label if item.status_label is defined else 'active') == 'active' else 'archived' }}">{{ item.status_label if item.status_label is defined else 'Active' }}</span>
-    </div>
-    {% if p.description %}
-    <div class="project-card-desc">{{ p.description }}</div>
-    {% endif %}
+      {% if p.description %}
+      <div class="project-card-desc">{{ p.description }}</div>
+      {% endif %}
+      <div class="project-card-stats">
+        <div class="project-stats-header">
+          <span class="project-stats-title">Issues</span>
+          <span class="project-stats-meta">
+            {{ item.member_count }} member{{ 's' if item.member_count != 1 else '' }}
+            {% if item.wiki_page_count > 0 %}
+            <span>&middot;</span>{{ item.wiki_page_count }} wiki page{{ 's' if item.wiki_page_count != 1 else '' }}
+            {% endif %}
+          </span>
+        </div>
+        <div class="project-card-progress">
+          <div class="project-card-progress-bar" style="width:{{ item.closed_pct }}%;background:{{ project_color }}"></div>
+        </div>
+        <div class="project-stats-breakdown">
+          <strong>{{ item.open_count }}</strong> open<span>&middot;</span><strong>{{ item.closed_count }}</strong> closed
+        </div>
+      </div>
+    </a>
     <div class="project-card-footer">
-      <span>{{ p.identifier if p.identifier is defined else '' }}</span>
+      <div class="project-card-members">
+        {% for m in item.members[:5] %}
+        {{ avatar(m.display_name, size='sm', avatar_url=m.avatar_url or '') }}
+        {% endfor %}
+        {% if item.member_count > 5 %}
+        <span class="more">+{{ item.member_count - 5 }}</span>
+        {% endif %}
+      </div>
+      <div class="module-badges">
+        {% if item.modules.get('issue_tracking') %}
+        <a href="/projects/{{ p.key }}/issues/" class="module-badge enabled" style="text-decoration:none">Issues</a>
+        {% endif %}
+        {% if item.modules.get('wiki') %}
+        <a href="/projects/{{ p.key }}/wiki/" class="module-badge enabled" style="text-decoration:none">Wiki</a>
+        {% endif %}
+        {% if item.modules.get('time_tracking') %}
+        <a href="/projects/{{ p.key }}/time/" class="module-badge enabled" style="text-decoration:none">Time</a>
+        {% endif %}
+      </div>
     </div>
-  </a>
+    {{ render_subprojects(p.id, children_by_parent) }}
+  </div>
   {% endfor %}
 </div>
 {% else %}

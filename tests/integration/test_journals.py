@@ -31,7 +31,7 @@ from tests.factories.user import AdminUserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -56,7 +56,7 @@ async def _create_issue_via_api(
     if description is not None:
         payload["description"] = description
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json=payload,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -153,7 +153,7 @@ async def test_issue_update_creates_journal(
     lock_version = issue_data["lock_version"]
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={"status_id": closed_status.id, "lock_version": lock_version},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -206,7 +206,7 @@ async def test_description_change_stores_full_text(
     lock_version = issue_data["lock_version"]
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={"description": new_desc, "lock_version": lock_version},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -245,7 +245,7 @@ async def test_no_journal_created_for_noop_update(
 
     # Update with the same status_id (no actual change)
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={"status_id": open_status.id, "lock_version": lock_version},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -276,7 +276,7 @@ async def test_multiple_fields_create_one_journal_with_multiple_details(
     lock_version = issue_data["lock_version"]
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={
             "status_id": closed_status.id,
             "subject": "Updated subject",
@@ -322,7 +322,7 @@ async def test_add_comment_creates_notes_only_journal(
     issue_key = issue_data["key"]
 
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/journals",
+        f"/api/v1/issues/{issue_key}/journals/",
         json={"notes": "This is a comment on the issue."},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -360,7 +360,7 @@ async def test_add_comment_sequence_increments(
 
     for i in range(1, 4):
         resp = await client.post(
-            f"/api/v1/issues/{issue_key}/journals",
+            f"/api/v1/issues/{issue_key}/journals/",
             json={"notes": f"Comment {i}"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -392,13 +392,13 @@ async def test_journals_ordered_by_created_at(
 
     for i in range(3):
         await client.post(
-            f"/api/v1/issues/{issue_key}/journals",
+            f"/api/v1/issues/{issue_key}/journals/",
             json={"notes": f"Comment {i}"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=journals",
+        f"/api/v1/issues/{issue_key}/?include=journals",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -432,13 +432,13 @@ async def test_include_journals_on_issue_get(
     issue_key = issue_data["key"]
 
     await client.post(
-        f"/api/v1/issues/{issue_key}/journals",
+        f"/api/v1/issues/{issue_key}/journals/",
         json={"notes": "First comment"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=journals",
+        f"/api/v1/issues/{issue_key}/?include=journals",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -468,7 +468,7 @@ async def test_include_journals_not_requested_returns_none(
     issue_key = issue_data["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -496,13 +496,13 @@ async def test_include_journals_shows_field_changes(
     lock_version = issue_data["lock_version"]
 
     await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={"status_id": closed_status.id, "lock_version": lock_version},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=journals",
+        f"/api/v1/issues/{issue_key}/?include=journals",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text

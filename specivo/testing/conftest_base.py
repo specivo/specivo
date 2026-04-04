@@ -241,7 +241,7 @@ async def auth_client(
         await db_session.flush()
 
         resp = await ac.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/login/",
             json={"login": user.login, "password": TEST_PASSWORD},
         )
         assert resp.status_code == 200, f"auth_client login failed: {resp.text}"
@@ -273,7 +273,7 @@ async def admin_client(
         await db_session.flush()
 
         resp = await ac.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/login/",
             json={"login": user.login, "password": TEST_PASSWORD},
         )
         assert resp.status_code == 200, f"admin_client login failed: {resp.text}"

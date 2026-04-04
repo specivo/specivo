@@ -42,12 +42,16 @@
 {% endmacro %}
 
 {# --- Avatar ---
-   Usage: {{ avatar("John D", size="sm") }}
+   Usage: {{ avatar("John D", size="sm", color="#5B8C5A", avatar_url="/data/avatars/ab/abc.webp") }}
    Sizes: xs, sm, md, lg
 #}
-{% macro avatar(name, size='sm') %}
-{% set initials = name.split()[:2] | map('first') | join('') | upper if name else '?' %}
-<span class="avatar-{{ size }}">{{ initials }}</span>
+{% macro avatar(name, size='sm', color='', avatar_url='') %}
+{% set initials = name[:2] | upper if name else '?' %}
+{% if avatar_url %}
+<img src="{{ avatar_url }}" class="avatar-{{ size }}" style="border-radius:50%;object-fit:cover;" alt="{{ initials }}">
+{% else %}
+<span class="avatar-{{ size }}"{% if color %} style="background:{{ color }}"{% endif %}>{{ initials }}</span>
+{% endif %}
 {% endmacro %}
 
 {# --- Pagination ---
@@ -56,29 +60,38 @@
 {% macro pagination(total, offset, limit, base_url) %}
 {% set current_page = (offset // limit) + 1 %}
 {% set total_pages = ((total - 1) // limit) + 1 if total > 0 else 1 %}
-{% if total_pages > 1 %}
-<div class="pagination">
-  {% if current_page > 1 %}
-    <a href="{{ base_url }}?offset={{ (current_page - 2) * limit }}&limit={{ limit }}">&laquo;</a>
-  {% else %}
-    <span class="disabled">&laquo;</span>
-  {% endif %}
-
-  {% for page in range(1, total_pages + 1) %}
-    {% if page == current_page %}
-      <span class="active">{{ page }}</span>
-    {% elif page <= 2 or page >= total_pages - 1 or (page >= current_page - 2 and page <= current_page + 2) %}
-      <a href="{{ base_url }}?offset={{ (page - 1) * limit }}&limit={{ limit }}">{{ page }}</a>
-    {% elif page == 3 or page == total_pages - 2 %}
-      <span class="disabled">...</span>
+{% if total > 0 %}
+<div class="sp-pagination">
+  <div class="sp-pagination-info">
+    {{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total }}
+  </div>
+  {% if total_pages > 1 %}
+  <div class="sp-pagination-pages">
+    {% if current_page > 1 %}
+      <a href="{{ base_url }}?offset={{ (current_page - 2) * limit }}&limit={{ limit }}" class="sp-page-link">&laquo;</a>
     {% endif %}
-  {% endfor %}
-
-  {% if current_page < total_pages %}
-    <a href="{{ base_url }}?offset={{ current_page * limit }}&limit={{ limit }}">&raquo;</a>
-  {% else %}
-    <span class="disabled">&raquo;</span>
+    {% for page in range(1, total_pages + 1) %}
+      {% if page == current_page %}
+        <span class="sp-page-link active">{{ page }}</span>
+      {% elif page <= 2 or page >= total_pages - 1 or (page >= current_page - 2 and page <= current_page + 2) %}
+        <a href="{{ base_url }}?offset={{ (page - 1) * limit }}&limit={{ limit }}" class="sp-page-link">{{ page }}</a>
+      {% elif page == 3 or page == total_pages - 2 %}
+        <span class="sp-page-link dots">&hellip;</span>
+      {% endif %}
+    {% endfor %}
+    {% if current_page < total_pages %}
+      <a href="{{ base_url }}?offset={{ current_page * limit }}&limit={{ limit }}" class="sp-page-link">&raquo;</a>
+    {% endif %}
+  </div>
   {% endif %}
+  <div class="sp-pagination-size">
+    <label>Show</label>
+    <select data-pagination-limit data-base-url="{{ base_url }}" style="accent-color:var(--sp-accent);">
+      {% for size in [10, 25, 50] %}
+      <option value="{{ size }}" {{ 'selected' if limit == size else '' }}>{{ size }}</option>
+      {% endfor %}
+    </select>
+  </div>
 </div>
 {% endif %}
 {% endmacro %}

@@ -262,7 +262,7 @@ async def _search(
         project = await _project_svc.get_by_key(session, project_key)
         project_id = project.id
 
-    results, total = await _search_svc.search(
+    results, total, _type_counts = await _search_svc.search(
         session, query, user=user, project_id=project_id, scope=scope, limit=limit
     )
     lines = [f"Search results for '{query}' ({total} total):", ""]

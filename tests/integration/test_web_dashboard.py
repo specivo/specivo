@@ -27,7 +27,7 @@ async def test_dashboard_requires_auth(unauth_client: AsyncClient):
     """GET / without auth redirects to /login."""
     resp = await unauth_client.get("/", follow_redirects=False)
     assert resp.status_code == 302
-    assert "/login" in resp.headers["location"]
+    assert "/login/" in resp.headers["location"]
 
 
 # ---------------------------------------------------------------------------
@@ -40,7 +40,7 @@ async def test_notifications_page(auth_client: AsyncClient):
     """GET /my/notifications with auth returns 200 and contains 'Notifications'."""
     token = auth_client.state.token
     resp = await auth_client.get(
-        "/my/notifications",
+        "/my/notifications/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -50,6 +50,6 @@ async def test_notifications_page(auth_client: AsyncClient):
 @pytest.mark.integration
 async def test_notifications_requires_auth(unauth_client: AsyncClient):
     """GET /my/notifications without auth redirects to /login."""
-    resp = await unauth_client.get("/my/notifications", follow_redirects=False)
+    resp = await unauth_client.get("/my/notifications/", follow_redirects=False)
     assert resp.status_code == 302
-    assert "/login" in resp.headers["location"]
+    assert "/login/" in resp.headers["location"]

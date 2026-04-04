@@ -44,7 +44,7 @@ async def test_time_entries_page(
     """GET /projects/{key}/time-entries with auth returns 200."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/time-entries",
+        f"/projects/{_project.key}/time-entries/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -55,11 +55,11 @@ async def test_time_entries_page(
 async def test_time_entries_requires_auth(unauth_client: AsyncClient):
     """GET /projects/{key}/time-entries without auth redirects to /login."""
     resp = await unauth_client.get(
-        "/projects/ANY/time-entries",
+        "/projects/ANY/time-entries/",
         follow_redirects=False,
     )
     assert resp.status_code == 302
-    assert "/login" in resp.headers["location"]
+    assert "/login/" in resp.headers["location"]
 
 
 # ---------------------------------------------------------------------------
@@ -81,7 +81,7 @@ async def test_time_entry_form(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/time-entries/new",
+        f"/projects/{_project.key}/time-entries/new/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200

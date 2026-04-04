@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
@@ -13,6 +14,32 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.models.security_audit import SecurityAuditLog
 
 logger = logging.getLogger(__name__)
+
+
+class AuditEvent(StrEnum):
+    """All valid audit event types stored in SecurityAuditLog.event_type."""
+
+    LOGIN_SUCCESS = "login_success"
+    LOGIN_FAILURE = "login_failure"
+    SEARCH_QUERY = "search_query"
+    MEMBER_CHANGE = "member_change"
+    ACCESS_GRANTED = "access_granted"
+    ACCESS_DENIED = "access_denied"
+    AUTH_FAILURE = "auth_failure"
+    RESOURCE_ACCESS = "resource_access"
+    ATTACHMENT_UPLOADED = "attachment_uploaded"
+    ATTACHMENT_DELETED = "attachment_deleted"
+    ATTACHMENT_UPDATED = "attachment_description_updated"
+    PROJECT_KEY_RENAMED = "project_key_renamed"
+
+
+class MemberAction(StrEnum):
+    """Valid actions for member_change audit events (details.action)."""
+
+    ADDED = "added"
+    REMOVED = "removed"
+    ROLES_CHANGED = "roles_changed"
+    PERMISSION_DENIED = "permission_denied"
 
 
 class SecurityAuditService:
@@ -40,7 +67,7 @@ class SecurityAuditService:
     async def log_event(
         self,
         session: AsyncSession,
-        event_type: str,
+        event_type: str | AuditEvent,
         user_id: int | None = None,
         resource_type: str | None = None,
         resource_id: int | None = None,
@@ -61,8 +88,12 @@ class SecurityAuditService:
         When the enterprise plugin is not loaded (``security_audit_log`` feature
         is not registered), all writes are silently skipped.
         """
+        _valid = {e.value for e in AuditEvent}
+        if str(event_type) not in _valid:
+            raise ValueError(f"Unknown audit event type: {event_type!r}. Use AuditEvent enum.")
+
         event_data = {
-            "event_type": event_type,
+            "event_type": str(event_type),
             "user_id": user_id,
             "resource_type": resource_type,
             "resource_id": resource_id,
@@ -138,7 +169,7 @@ class SecurityAuditService:
             details["resource_id"] = resource_id
         return await self.log_event(
             session=session,
-            event_type="access_granted",
+            event_type=AuditEvent.ACCESS_GRANTED,
             user_id=user_id,
             resource_type=resource,
             resource_id=resource_id,
@@ -174,7 +205,7 @@ class SecurityAuditService:
             details["permission"] = permission
         return await self.log_event(
             session=session,
-            event_type="access_denied",
+            event_type=AuditEvent.ACCESS_DENIED,
             user_id=user_id,
             resource_type=resource,
             resource_id=resource_id,
@@ -199,12 +230,93 @@ class SecurityAuditService:
             merged_details.update(details)
         return await self.log_event(
             session=session,
-            event_type="auth_failure",
+            event_type=AuditEvent.AUTH_FAILURE,
             user_id=None,
             ip_address=ip_address,
             request_id=request_id,
             details=merged_details,
         )
+
+    async def log_login_success(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        request: Request | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> SecurityAuditLog:
+        """Log a successful login. Core feature — always persisted."""
+        info = self._extract_request_info(request)
+        merged: dict[str, Any] = {"method": "password"}
+        if details:
+            merged.update(details)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.LOGIN_SUCCESS,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=merged,
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_login_failure(
+        self,
+        session: AsyncSession,
+        request: Request | None = None,
+        login_hint: str | None = None,
+        reason: str = "invalid_credentials",
+    ) -> SecurityAuditLog:
+        """Log a failed login attempt. Core feature — always persisted."""
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {"reason": reason}
+        if login_hint:
+            details["login_hint"] = login_hint
+        log = SecurityAuditLog(
+            event_type=AuditEvent.LOGIN_FAILURE,
+            user_id=None,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_member_change(
+        self,
+        session: AsyncSession,
+        action: MemberAction,
+        user_id: int,
+        project_id: int,
+        target_user_id: int,
+        target_login: str,
+        roles: list[str] | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a project member change. Core feature — always persisted."""
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {
+            "action": str(action),
+            "target_user_id": target_user_id,
+            "target_login": target_login,
+        }
+        if roles:
+            details["roles"] = roles
+        log = SecurityAuditLog(
+            event_type=AuditEvent.MEMBER_CHANGE,
+            user_id=user_id,
+            project_id=project_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
 
     async def log_search_query(
         self,
@@ -215,9 +327,10 @@ class SecurityAuditService:
         scope: str | None = None,
         filters: dict[str, Any] | None = None,
         result_count: int = 0,
+        type_counts: dict[str, int] | None = None,
         request: Request | None = None,
     ) -> SecurityAuditLog:
-        """Log a search query with its parameters and result count."""
+        """Log a search query. Core feature — always persisted."""
         info = self._extract_request_info(request)
         details: dict[str, Any] = {
             "query": query,
@@ -228,14 +341,19 @@ class SecurityAuditService:
             details["scope"] = scope
         if filters:
             details["filters"] = filters
-        return await self.log_event(
-            session=session,
-            event_type="search_query",
+        if type_counts:
+            details["type_counts"] = type_counts
+        log = SecurityAuditLog(
+            event_type=AuditEvent.SEARCH_QUERY,
             user_id=user_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
+            user_agent=info["user_agent"],
             details=details,
         )
+        session.add(log)
+        await session.flush()
+        return log
 
     async def log_resource_viewed(
         self,
@@ -255,7 +373,7 @@ class SecurityAuditService:
         }
         return await self.log_event(
             session=session,
-            event_type="resource_access",
+            event_type=AuditEvent.RESOURCE_ACCESS,
             user_id=user_id,
             resource_type=resource,
             resource_id=resource_id,

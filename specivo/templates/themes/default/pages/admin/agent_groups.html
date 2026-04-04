@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Agent Groups - Admin - Specivo{% endblock %}
+{% block title %}Agent Groups - Admin - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {% if has_feature("agent_groups") %}
 <div class="breadcrumbs">
   <a href="/">Home</a>
   <span class="sep">/</span>
-  <a href="/admin">Admin</a>
+  <a href="/admin/">Admin</a>
   <span class="sep">/</span>
   <span class="current">Agent Groups</span>
 </div>
@@ -25,7 +25,7 @@
     <p style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); margin: 0 0 var(--sp-space-md) 0;">{{ group.description }}</p>
     {% endif %}
     <div style="display: flex; gap: var(--sp-space-sm);">
-      <a href="/admin/agent-groups/{{ group.id }}" class="btn btn-secondary" style="font-size: var(--sp-font-size-xs);">Manage</a>
+      <a href="/admin/agent-groups/{{ group.id }}/" class="sp-btn sp-btn-ghost" style="font-size: var(--sp-font-size-xs);">Manage</a>
     </div>
   </div>
   {% endfor %}

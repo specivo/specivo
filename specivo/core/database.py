@@ -51,6 +51,12 @@ def get_engine() -> AsyncEngine:
         def _on_connect(dbapi_connection, connection_record):
             dbapi_connection.run_async(_register_ltree_codec)
 
+        # Per-request SQL profiling (only in debug mode)
+        if settings.debug:
+            from specivo.core.middleware import install_sql_debug_hooks
+
+            install_sql_debug_hooks(_engine)
+
     return _engine
 
 

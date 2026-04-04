@@ -46,7 +46,7 @@ async def _make_user(db: AsyncSession, login: str = "linkgraph_user") -> User:
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
@@ -212,11 +212,11 @@ async def test_graph_endpoint_shape(
     """GET /wiki/graph returns nodes and edges with expected shape."""
     # Create pages with cross-links
     await authed_client.post(
-        f"/api/v1/projects/{project.key}/wiki",
+        f"/api/v1/projects/{project.key}/wiki/",
         json={"title": "Alpha", "text": "See [[Beta]]"},
     )
     await authed_client.post(
-        f"/api/v1/projects/{project.key}/wiki",
+        f"/api/v1/projects/{project.key}/wiki/",
         json={"title": "Beta", "text": "Back to [[Alpha]]"},
     )
 
@@ -227,7 +227,7 @@ async def test_graph_endpoint_shape(
         await _link_service.rebuild_page_links(db_session, wiki.id, p.id)
     await db_session.commit()
 
-    resp = await authed_client.get(f"/api/v1/projects/{project.key}/wiki/graph")
+    resp = await authed_client.get(f"/api/v1/projects/{project.key}/wiki/graph/")
     assert resp.status_code == 200, resp.text
     data = resp.json()
 
@@ -259,7 +259,7 @@ async def test_broken_link_flagged_in_graph(
 ):
     """Broken links appear with is_broken=True in the graph endpoint."""
     await authed_client.post(
-        f"/api/v1/projects/{project.key}/wiki",
+        f"/api/v1/projects/{project.key}/wiki/",
         json={"title": "Source", "text": "See [[DoesNotExist]]"},
     )
 
@@ -269,7 +269,7 @@ async def test_broken_link_flagged_in_graph(
         await _link_service.rebuild_page_links(db_session, wiki.id, p.id)
     await db_session.commit()
 
-    resp = await authed_client.get(f"/api/v1/projects/{project.key}/wiki/graph")
+    resp = await authed_client.get(f"/api/v1/projects/{project.key}/wiki/graph/")
     assert resp.status_code == 200, resp.text
     data = resp.json()
 

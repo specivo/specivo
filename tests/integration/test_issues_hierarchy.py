@@ -35,7 +35,7 @@ from tests.factories.user import AdminUserFactory
 
 
 async def _login(client: AsyncClient, login: str) -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": "testpassword"})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": "testpassword"})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -72,7 +72,7 @@ async def _create_issue(
         body["due_date"] = due_date
 
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -89,7 +89,7 @@ async def _patch_issue(
 ) -> dict:
     body = {"lock_version": lock_version, **fields}
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -98,7 +98,7 @@ async def _patch_issue(
 
 
 async def _get_issue(client: AsyncClient, token: str, issue_key: str, include: str | None = None) -> dict:
-    url = f"/api/v1/issues/{issue_key}"
+    url = f"/api/v1/issues/{issue_key}/"
     if include:
         url += f"?include={include}"
     resp = await client.get(url, headers={"Authorization": f"Bearer {token}"})
@@ -458,7 +458,7 @@ async def test_delete_parent_orphans_children(
     parent, child = parent_and_child
 
     resp = await client.delete(
-        f"/api/v1/issues/{parent['key']}",
+        f"/api/v1/issues/{parent['key']}/",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 204
@@ -502,7 +502,7 @@ async def test_cannot_set_parent_to_self(
     )
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={"lock_version": issue["lock_version"], "parent_id": issue["id"]},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -552,7 +552,7 @@ async def test_cannot_create_cycle(
 
     # Now try to make A a child of B — this would create a cycle
     resp = await client.patch(
-        f"/api/v1/issues/{issue_a['key']}",
+        f"/api/v1/issues/{issue_a['key']}/",
         json={"lock_version": issue_a["lock_version"], "parent_id": issue_b["id"]},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -761,7 +761,7 @@ async def test_max_depth_validation(
 
     # Trying to add one more level should fail
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -794,7 +794,7 @@ async def test_create_with_nonexistent_parent_returns_404(
 ) -> None:
     """Creating an issue with a non-existent parent_id returns 404."""
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -830,7 +830,7 @@ async def test_patch_with_nonexistent_parent_returns_404(
     )
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={"lock_version": issue["lock_version"], "parent_id": 999999},
         headers={"Authorization": f"Bearer {token}"},
     )

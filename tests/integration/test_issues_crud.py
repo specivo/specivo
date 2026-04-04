@@ -30,7 +30,7 @@ from tests.factories.user import AdminUserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -115,7 +115,7 @@ async def test_create_issue_returns_display_key(
     priority: IssuePriority,
 ) -> None:
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -154,7 +154,7 @@ async def test_get_issue_by_display_key(
     priority: IssuePriority,
 ) -> None:
     create_resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -167,7 +167,7 @@ async def test_get_issue_by_display_key(
     assert create_resp.status_code == 201
 
     resp = await client.get(
-        "/api/v1/issues/ACME-1",
+        "/api/v1/issues/ACME-1/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -187,7 +187,7 @@ async def test_get_issue_by_numeric_id(
     priority: IssuePriority,
 ) -> None:
     create_resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -201,7 +201,7 @@ async def test_get_issue_by_numeric_id(
     issue_id = create_resp.json()["id"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_id}",
+        f"/api/v1/issues/{issue_id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -220,7 +220,7 @@ async def test_get_issue_not_found(
     priority: IssuePriority,
 ) -> None:
     resp = await client.get(
-        "/api/v1/issues/ACME-999",
+        "/api/v1/issues/ACME-999/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 404
@@ -243,7 +243,7 @@ async def test_update_issue(
     priority: IssuePriority,
 ) -> None:
     create_resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -258,7 +258,7 @@ async def test_update_issue(
     lock_version = create_resp.json()["lock_version"]
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={
             "subject": "Updated subject",
             "status_id": closed_status.id,
@@ -290,7 +290,7 @@ async def test_delete_issue(
     priority: IssuePriority,
 ) -> None:
     create_resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -304,13 +304,13 @@ async def test_delete_issue(
     issue_key = create_resp.json()["key"]
 
     del_resp = await client.delete(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert del_resp.status_code == 204
 
     get_resp = await client.get(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert get_resp.status_code == 404
@@ -332,7 +332,7 @@ async def test_update_with_stale_lock_version_returns_409(
     priority: IssuePriority,
 ) -> None:
     create_resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -348,7 +348,7 @@ async def test_update_with_stale_lock_version_returns_409(
 
     # Submit a stale lock_version (negative or wrong value)
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={
             "subject": "Conflicting update",
             "lock_version": current_lock_version + 99,  # stale
@@ -372,7 +372,7 @@ async def test_409_includes_current_lock_version(
     priority: IssuePriority,
 ) -> None:
     create_resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json={
             "project_key": project.key,
             "tracker_id": tracker.id,
@@ -387,7 +387,7 @@ async def test_409_includes_current_lock_version(
     current_lock_version = create_resp.json()["lock_version"]  # 0
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         json={
             "subject": "Another conflict",
             "lock_version": 999,  # wrong

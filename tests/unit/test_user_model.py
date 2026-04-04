@@ -52,9 +52,10 @@ class TestUserFactory:
         user = UserFactory.build()
         assert user.failed_login_count == 0
 
-    def test_default_preferences_is_empty_dict(self):
+    def test_default_preferences_has_avatar_color(self):
         user = UserFactory.build()
-        assert user.preferences == {}
+        assert isinstance(user.preferences, dict)
+        assert "avatar_color" in user.preferences
 
     def test_password_hash_is_set(self):
         user = UserFactory.build()

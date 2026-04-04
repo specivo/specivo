@@ -21,5 +21,15 @@ celery_app.config_from_object(
         "result_serializer": "json",
         "accept_content": ["json"],
         "timezone": "UTC",
+        "beat_schedule": {
+            "cleanup-expired-tokens": {
+                "task": "specivo.tasks.cleanup.cleanup_expired_tokens",
+                "schedule": 3600,  # every hour
+            },
+            "ensure-audit-partitions": {
+                "task": "specivo.tasks.cleanup.ensure_audit_partitions",
+                "schedule": 86400,  # daily
+            },
+        },
     }
 )

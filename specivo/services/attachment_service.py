@@ -16,7 +16,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.models.attachment import Attachment
 from specivo.models.search import SearchSource
 from specivo.models.user import User
-from specivo.services.security_audit_service import SecurityAuditService
+from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ class AttachmentService:
             project_id = await self._resolve_project_id(session, container_type, container_id)
             await _audit.log_event(
                 session=session,
-                event_type="attachment_uploaded",
+                event_type=AuditEvent.ATTACHMENT_UPLOADED,
                 user_id=author.id,
                 resource_type="Attachment",
                 resource_id=attachment.id,
@@ -254,7 +254,7 @@ class AttachmentService:
             project_id = await self._resolve_project_id(session, att_container_type, att_container_id)
             await _audit.log_event(
                 session=session,
-                event_type="attachment_deleted",
+                event_type=AuditEvent.ATTACHMENT_DELETED,
                 user_id=user.id if user else None,
                 resource_type="Attachment",
                 resource_id=att_id,
@@ -330,7 +330,7 @@ class AttachmentService:
             project_id = await self._resolve_project_id(session, attachment.container_type, attachment.container_id)
             await _audit.log_event(
                 session=session,
-                event_type="attachment_description_updated",
+                event_type=AuditEvent.ATTACHMENT_UPDATED,
                 user_id=user.id,
                 resource_type="Attachment",
                 resource_id=attachment.id,

@@ -8,6 +8,7 @@ import secrets
 from datetime import timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import CREDENTIAL_TOKEN_ENTROPY_BYTES
@@ -44,7 +45,11 @@ class CredentialBrokerService:
             is_active=True,
         )
         session.add(system)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            raise ConflictError(f"External system '{name}' already exists")
         logger.info("Registered external system %d: %s (%s)", system.id, name, system_type)
         return system
 

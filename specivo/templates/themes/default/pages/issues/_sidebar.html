@@ -1,25 +1,44 @@
 {% from "components/macros.html" import status_badge, priority_badge, tracker_badge, avatar %}
 
-<div class="card" style="padding: var(--sp-space-lg);" x-data="issueSidebar({ displayKey: {{ issue.display_key | tojson }}, lockVersion: {{ issue.lock_version }} })">
-  <h3 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-md);">Details</h3>
+{# Sidebar label style helper #}
+{% set lbl = 'font-size: var(--sp-font-size-xs); color: var(--sp-accent); display: block; margin-bottom: var(--sp-space-xs); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;' %}
+{% set sel = 'width: 100%; padding: var(--sp-space-xs) var(--sp-space-sm); border-radius: var(--sp-border-radius); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm); background: var(--sp-bg-surface); color: var(--sp-text-primary);' %}
 
-  <div style="display: flex; flex-direction: column; gap: var(--sp-space-md);">
+{# Card 1: Core Details #}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md); border-left: 3px solid var(--sp-accent);" x-data='issueSidebar({ displayKey: {{ issue.display_key | tojson }}, lockVersion: {{ issue.lock_version }} })'>
+  <div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
+
     {# Status #}
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Status</label>
-      <select style="width: 100%; padding: var(--sp-space-xs); border-radius: var(--sp-radius-sm); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm);"
-              @change="updateField('status_id', parseInt($event.target.value))">
+      <label style="{{ lbl }}">Status</label>
+      <select style="{{ sel }}" @change="updateField('status_id', parseInt($event.target.value))">
         {% for s in statuses %}
         <option value="{{ s.id }}" {{ 'selected' if issue.status_id == s.id }}>{{ s.name }}</option>
         {% endfor %}
       </select>
     </div>
 
+    {# Assignee #}
+    <div>
+      <label style="{{ lbl }}">Assignee</label>
+      {% if issue.assigned_to %}
+      <div style="display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-xs);">
+        {{ avatar(issue.assigned_to.login, size='sm', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
+        <span style="font-size: var(--sp-font-size-sm); font-weight: 500;">{{ issue.assigned_to.display_name or issue.assigned_to.login }}</span>
+      </div>
+      {% endif %}
+      <select style="{{ sel }}" @change="updateField('assigned_to_id', parseInt($event.target.value) || null)">
+        <option value="">-- Unassigned --</option>
+        {% for m in members %}
+        <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if issue.assigned_to_id == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
     {# Priority #}
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Priority</label>
-      <select style="width: 100%; padding: var(--sp-space-xs); border-radius: var(--sp-radius-sm); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm);"
-              @change="updateField('priority_id', parseInt($event.target.value))">
+      <label style="{{ lbl }}">Priority</label>
+      <select style="{{ sel }}" @change="updateField('priority_id', parseInt($event.target.value))">
         {% for p in priorities %}
         <option value="{{ p.id }}" {{ 'selected' if issue.priority_id == p.id }}>{{ p.name }}</option>
         {% endfor %}
@@ -28,70 +47,129 @@
 
     {# Tracker #}
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Tracker</label>
-      <select style="width: 100%; padding: var(--sp-space-xs); border-radius: var(--sp-radius-sm); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm);"
-              @change="updateField('tracker_id', parseInt($event.target.value))">
-        {% for t in trackers %}
-        <option value="{{ t.id }}" {{ 'selected' if issue.tracker_id == t.id }}>{{ t.name }}</option>
-        {% endfor %}
-      </select>
+      <label style="{{ lbl }}">Tracker</label>
+      {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
     </div>
 
-    {# Assignee #}
+    {# Version #}
+    {% if issue.version %}
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Assignee</label>
-      <select style="width: 100%; padding: var(--sp-space-xs); border-radius: var(--sp-radius-sm); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm);"
-              @change="updateField('assigned_to_id', parseInt($event.target.value) || null)">
-        <option value="">-- Unassigned --</option>
-        {% for m in members %}
-        <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if issue.assigned_to_id == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
-        {% endfor %}
-      </select>
+      <label style="{{ lbl }}">Version</label>
+      <span style="font-size: var(--sp-font-size-sm);">{{ issue.version.name }}</span>
     </div>
+    {% endif %}
+  </div>
+</div>
 
-    {# Dates #}
-    <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Start Date</label>
-      <span style="font-size: var(--sp-font-size-sm);">{{ issue.start_date.strftime('%Y-%m-%d') if issue.start_date else '--' }}</span>
-    </div>
-
-    <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Due Date</label>
-      <span style="font-size: var(--sp-font-size-sm);">{{ issue.due_date.strftime('%Y-%m-%d') if issue.due_date else '--' }}</span>
-    </div>
+{# Card 2: Progress & Dates #}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);" x-data='issueSidebar({ displayKey: {{ issue.display_key | tojson }}, lockVersion: {{ issue.lock_version }} })'>
+  <div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
 
     {# Progress #}
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Progress</label>
-      <div style="background: var(--sp-bg-muted, #e5e7eb); border-radius: var(--sp-radius-sm); height: 8px; overflow: hidden;">
-        <div style="background: var(--sp-accent); height: 100%; width: {{ issue.done_ratio }}%; transition: width 0.3s;"></div>
-      </div>
-      <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{{ issue.done_ratio }}%</span>
-    </div>
-
-    {# Estimated hours #}
-    <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Estimated Hours</label>
-      <span style="font-size: var(--sp-font-size-sm);">{{ issue.estimated_hours if issue.estimated_hours else '--' }}</span>
-    </div>
-
-    {# Author #}
-    <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Author</label>
-      <div style="display: flex; align-items: center; gap: var(--sp-space-xs);">
-        {{ avatar(issue.author.login if issue.author else '?', size='xs') }}
-        <span style="font-size: var(--sp-font-size-sm);">{{ issue.author.login if issue.author else 'Unknown' }}</span>
+      <label style="{{ lbl }}">Progress</label>
+      <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
+        <div style="flex:1;background: var(--sp-bg-muted, #e5e7eb); border-radius: var(--sp-radius-sm); height: 8px; overflow: hidden;">
+          <div style="background: var(--sp-accent); height: 100%; width: {{ issue.done_ratio }}%; transition: width 0.3s;"></div>
+        </div>
+        <select style="width: auto; padding: var(--sp-space-xs); border-radius: var(--sp-border-radius); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-xs); background: var(--sp-bg-surface); color: var(--sp-text-primary);"
+                @change="updateField('done_ratio', parseInt($event.target.value))">
+          {% for pct in range(0, 101, 10) %}
+          <option value="{{ pct }}" {{ 'selected' if issue.done_ratio == pct }}>{{ pct }}%</option>
+          {% endfor %}
+        </select>
       </div>
     </div>
 
-    {# Created / Updated #}
+    {# Start Date #}
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Created</label>
-      <span style="font-size: var(--sp-font-size-xs);">{{ issue.created_at.strftime('%Y-%m-%d %H:%M') if issue.created_at else '' }}</span>
+      <label style="{{ lbl }}">Start Date</label>
+      <input type="date" value="{{ issue.start_date.strftime('%Y-%m-%d') if issue.start_date else '' }}"
+             style="{{ sel }}"
+             @change="updateField('start_date', $event.target.value || null)">
     </div>
+
+    {# Due Date #}
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Updated</label>
-      <span style="font-size: var(--sp-font-size-xs);">{{ issue.updated_at.strftime('%Y-%m-%d %H:%M') if issue.updated_at else '' }}</span>
+      <label style="{{ lbl }}">Due Date</label>
+      <input type="date" value="{{ issue.due_date.strftime('%Y-%m-%d') if issue.due_date else '' }}"
+             style="{{ sel }}"
+             @change="updateField('due_date', $event.target.value || null)">
     </div>
+
+    {# Estimated #}
+    <div>
+      <label style="{{ lbl }}">Estimated</label>
+      {% set est_h = (issue.estimated_hours | int) if issue.estimated_hours else '' %}
+      {% set est_m = (((issue.estimated_hours - (issue.estimated_hours | int)) * 60) | round | int) if issue.estimated_hours else '' %}
+      <div style="display:flex;gap:var(--sp-space-xs);align-items:stretch;">
+        <input type="number" min="0" step="1" x-ref="estH" value="{{ est_h }}" placeholder="0"
+               style="width:50px;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);font-family:var(--sp-font-mono);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+        <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);align-self:center;">h</span>
+        <input type="number" min="0" max="59" step="1" x-ref="estM" value="{{ est_m }}" placeholder="0"
+               style="width:50px;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);font-family:var(--sp-font-mono);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+        <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);align-self:center;">m</span>
+        <button style="padding:0 var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-xs);background:var(--sp-bg-surface);color:var(--sp-text-secondary);cursor:pointer;"
+                @click="saveEstimate()">Save</button>
+      </div>
+    </div>
+
+    {# Time Logged #}
+    <div>
+      <label style="{{ lbl }}">Time Logged</label>
+      <span style="font-size: var(--sp-font-size-sm); font-family: var(--sp-font-mono);">{{ '%.1f' | format(time_logged) if time_logged is defined else '0.0' }}h</span>
+    </div>
+  </div>
+</div>
+
+{# Card 3: Watchers & Relations #}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
+  <div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
+
+    {# Watchers #}
+    <div>
+      <label style="{{ lbl }}">Watchers</label>
+      <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-xs);align-items:center;">
+        {% for w in watchers if watchers is defined %}
+        <span class="sp-watcher-chip">
+          {{ avatar(w.login, size='xs', color=w.preferences.avatar_color|default(''), avatar_url=w.avatar_url|default('')) }}
+          {{ w.display_name or w.login }}
+        </span>
+        {% endfor %}
+        <div x-data='watcherToggle({ watching: {{ "true" if is_watching else "false" }}, issueKey: "{{ issue.display_key }}" })'>
+          <span class="sp-watcher-chip" style="cursor:pointer;" @click="toggle()">
+            <span x-text="watching ? 'Unwatch' : '+ Watch'"></span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    {# Relations #}
+    {% if relations is defined and relations %}
+    <div>
+      <label style="{{ lbl }}">Relations</label>
+      <div style="display:flex;flex-direction:column;gap:var(--sp-space-xs);">
+        {% for rel in relations %}
+        <div style="display:flex;align-items:baseline;gap:var(--sp-space-sm);font-size:var(--sp-font-size-sm);">
+          <span style="color:var(--sp-text-muted);min-width:60px;">{{ rel.relation_type | replace('_', ' ') }}</span>
+          <a href="/projects/{{ project.key }}/issues/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
+          {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
+          <span style="color:var(--sp-text-secondary);">{{ rel.issue_to_subject }}</span>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{# Footer: Created / Updated #}
+<div style="padding: 0 var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); line-height: 1.8;">
+  <div title="{{ issue.created_at.strftime('%Y-%m-%d %H:%M') if issue.created_at else '' }}">
+    Created {{ issue.created_at | timeago }}{% if issue.author %} by {{ issue.author.display_name or issue.author.login }}{% endif %}
+  </div>
+  <div title="{{ (last_activity_at or issue.updated_at).strftime('%Y-%m-%d %H:%M') if (last_activity_at or issue.updated_at) else '' }}">
+    Updated {{ (last_activity_at or issue.updated_at) | timeago }}
   </div>
 </div>

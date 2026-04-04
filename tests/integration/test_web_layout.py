@@ -53,7 +53,7 @@ async def test_static_js_specivo_served(unauth_client: AsyncClient):
 @pytest.mark.integration
 async def test_health_still_works(unauth_client: AsyncClient):
     """Regression: health check still returns 200 after web layer added."""
-    resp = await unauth_client.get("/health")
+    resp = await unauth_client.get("/health/")
     assert resp.status_code == 200
     data = resp.json()
     assert data["status"] in ("ok", "degraded")
@@ -62,5 +62,5 @@ async def test_health_still_works(unauth_client: AsyncClient):
 @pytest.mark.integration
 async def test_api_still_works(auth_client: AsyncClient):
     """Regression: API endpoints still work after web layer added."""
-    resp = await auth_client.get("/api/v1/projects")
+    resp = await auth_client.get("/api/v1/projects/")
     assert resp.status_code == 200

@@ -47,7 +47,7 @@ from tests.factories.user import TEST_PASSWORD, AdminUserFactory, UserFactory
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
@@ -74,7 +74,7 @@ async def _create_issue(
     if assigned_to_id is not None:
         body["assigned_to_id"] = assigned_to_id
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -195,7 +195,7 @@ async def test_threaded_comments_work_without_pro(
 
     # Create parent comment
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/journals",
+        f"/api/v1/issues/{issue_key}/journals/",
         json={"notes": "Parent comment"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -204,7 +204,7 @@ async def test_threaded_comments_work_without_pro(
 
     # Create reply -- reply_to_id must be preserved (not silently dropped)
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/journals",
+        f"/api/v1/issues/{issue_key}/journals/",
         json={"notes": "Reply to parent", "reply_to_id": parent_id},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -246,7 +246,7 @@ async def test_resolve_thread_works_without_pro(
 
     # Create a comment to resolve
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/journals",
+        f"/api/v1/issues/{issue_key}/journals/",
         json={"notes": "Discussion to resolve"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -297,7 +297,7 @@ async def test_reactions_endpoint_in_core(
 
     # Create a comment to react to
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/journals",
+        f"/api/v1/issues/{issue_key}/journals/",
         json={"notes": "React to this"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -306,7 +306,7 @@ async def test_reactions_endpoint_in_core(
 
     # POST a reaction -- must NOT be 404
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/journals/{journal_id}/reactions",
+        f"/api/v1/issues/{issue_key}/journals/{journal_id}/reactions/",
         json={"emoji": "+1"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -339,7 +339,7 @@ async def test_bulk_update_endpoint_in_core(
     )
 
     resp = await client.post(
-        "/api/v1/issues/bulk-update",
+        "/api/v1/issues/bulk-update/",
         json={"issue_ids": [issue["id"]], "updates": {"subject": "Bulk updated"}},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -359,7 +359,7 @@ async def test_saved_filters_endpoint_in_core(
     Currently saved-filters router is mounted by ProPlugin only.
     """
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/saved-filters",
+        f"/api/v1/projects/{project.key}/saved-filters/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code != 404, (
@@ -399,7 +399,7 @@ async def test_mentions_work_without_pro(
     # Post a comment mentioning second_user
     with patch("specivo.tasks.notifications.send_notification_email.delay"):
         resp = await client.post(
-            f"/api/v1/issues/{issue_key}/journals",
+            f"/api/v1/issues/{issue_key}/journals/",
             json={"notes": f"Hey @{second_user.login} please review"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -451,7 +451,7 @@ async def test_in_app_notifications_created_without_pro(
 
     with patch("specivo.tasks.notifications.send_notification_email.delay"):
         resp = await client.patch(
-            f"/api/v1/issues/{issue_key}",
+            f"/api/v1/issues/{issue_key}/",
             json={
                 "assigned_to_id": second_user.id,
                 "lock_version": issue["lock_version"],
@@ -480,7 +480,7 @@ async def test_notifications_endpoint_in_core(
 ) -> None:
     """GET /notifications must return non-404 in core-only mode."""
     resp = await client.get(
-        "/api/v1/notifications",
+        "/api/v1/notifications/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code != 404, f"Notifications endpoint returned 404 in core-only mode (got {resp.status_code})"
@@ -496,7 +496,7 @@ async def test_notification_preferences_in_core(
 ) -> None:
     """Notification preferences must be accessible in core-only mode."""
     resp = await client.get(
-        "/api/v1/notification-preferences",
+        "/api/v1/notification-preferences/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, f"Notification preferences returned {resp.status_code} in core-only mode"
@@ -587,7 +587,7 @@ async def test_metadata_validation_requires_enterprise(
         "metadata": {"notes": "no severity field provided"},
     }
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         json=body,
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -619,11 +619,14 @@ async def test_workflow_field_rules_require_enterprise(
     from specivo.models.member import Member, MemberRole
     from specivo.models.role import Role
 
-    # Set up role and membership
-    role = Role(name="Developer", position=1)
-    db_session.add(role)
-    await db_session.commit()
-    await db_session.refresh(role)
+    # Set up role and membership (get-or-create to avoid seed collision)
+    result = await db_session.execute(select(Role).where(Role.name == "Developer"))
+    role = result.scalar_one_or_none()
+    if not role:
+        role = Role(name="Developer", position=1)
+        db_session.add(role)
+        await db_session.commit()
+        await db_session.refresh(role)
 
     member = Member(
         user_id=admin_user.id,
@@ -672,7 +675,7 @@ async def test_workflow_field_rules_require_enterprise(
     # Without enterprise: field rule is ignored -> 200
     # With enterprise: field rule enforced -> 422
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={
             "status_id": in_progress_status.id,
             "lock_version": issue["lock_version"],

@@ -13,8 +13,11 @@ They are mounted by the EnterprisePlugin via ``get_routers()``.
 
 from fastapi import APIRouter
 
+from specivo.api.v1.admin.email import router as admin_email_router
 from specivo.api.v1.admin.embedding_models import router as admin_embedding_models_router
+from specivo.api.v1.admin.projects import router as admin_projects_router
 from specivo.api.v1.admin.settings import router as admin_settings_router
+from specivo.api.v1.admin.users import router as admin_users_router
 from specivo.api.v1.admin.workflows import router as admin_workflows_router
 from specivo.api.v1.agent_sessions import router as agent_sessions_router
 from specivo.api.v1.api_keys import router as api_keys_router
@@ -52,3 +55,6 @@ api_router.include_router(saved_filters_router)
 api_router.include_router(admin_embedding_models_router)
 api_router.include_router(users_router)
 api_router.include_router(agent_sessions_router)
+api_router.include_router(admin_users_router)
+api_router.include_router(admin_projects_router)
+api_router.include_router(admin_email_router)

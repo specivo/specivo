@@ -748,3 +748,163 @@ class IssueService:
         issues = list(result.scalars().all())
 
         return issues, total_count
+
+    async def get_detail_tab_context(
+        self,
+        session: AsyncSession,
+        issue_id: int,
+    ) -> dict[str, Any]:
+        """Load tab-related data for the issue detail page.
+
+        Returns counts (time entries, attachments, relations),
+        time logged sum, time entries list, activities list, and attachments list.
+        """
+        from specivo.models.attachment import Attachment
+        from specivo.models.relation import IssueRelation
+        from specivo.models.time_entry import TimeEntry, TimeEntryActivity
+
+        # Tab counts
+        time_entry_count = (
+            await session.execute(select(func.count()).select_from(TimeEntry).where(TimeEntry.issue_id == issue_id))
+        ).scalar_one()
+
+        attachment_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(Attachment)
+                .where(Attachment.container_type == "Issue", Attachment.container_id == issue_id)
+            )
+        ).scalar_one()
+
+        relation_count = (
+            await session.execute(
+                select(func.count())
+                .select_from(IssueRelation)
+                .where(or_(IssueRelation.issue_from_id == issue_id, IssueRelation.issue_to_id == issue_id))
+            )
+        ).scalar_one()
+
+        # Time logged sum
+        time_logged = (
+            await session.execute(
+                select(func.coalesce(func.sum(TimeEntry.hours), 0)).where(TimeEntry.issue_id == issue_id)
+            )
+        ).scalar_one()
+
+        # Time entries
+        time_entries = list(
+            (
+                await session.execute(
+                    select(TimeEntry)
+                    .where(TimeEntry.issue_id == issue_id)
+                    .options(selectinload(TimeEntry.user), selectinload(TimeEntry.activity))
+                    .order_by(TimeEntry.spent_on.desc(), TimeEntry.id.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Activities for log-time dropdown
+        activities = list(
+            (
+                await session.execute(
+                    select(TimeEntryActivity)
+                    .where(TimeEntryActivity.active.is_(True))
+                    .order_by(TimeEntryActivity.position)
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        # Attachments
+        attachments = list(
+            (
+                await session.execute(
+                    select(Attachment)
+                    .where(Attachment.container_type == "Issue", Attachment.container_id == issue_id)
+                    .options(selectinload(Attachment.author))
+                    .order_by(Attachment.created_at.desc())
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        return {
+            "time_entry_count": time_entry_count,
+            "attachment_count": attachment_count,
+            "relation_count": relation_count,
+            "time_logged": time_logged,
+            "time_entries": time_entries,
+            "activities": activities,
+            "attachments": attachments,
+        }
+
+    async def autocomplete(
+        self,
+        session: AsyncSession,
+        query: str,
+        user: User,
+        limit: int = 10,
+    ) -> list[dict]:
+        """Search issues by key or subject for autocomplete.
+
+        Only returns issues in projects the user has access to.
+        """
+        q = query.strip()
+        if not q:
+            return []
+
+        # Escape LIKE wildcards in user input
+        escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+        # display_key is a Python property (project_key + '-' + sequence_number),
+        # so we construct it as a SQL expression for filtering and selection.
+        display_key_expr = func.concat(Issue.project_key, "-", Issue.sequence_number)
+
+        # Build base query
+        stmt = (
+            select(
+                display_key_expr.label("display_key"),
+                Issue.subject,
+                IssueStatus.name.label("status_name"),
+            )
+            .join(IssueStatus, Issue.status_id == IssueStatus.id)
+            .where(
+                or_(
+                    display_key_expr.ilike(f"%{escaped}%", escape="\\"),
+                    Issue.subject.ilike(f"%{escaped}%", escape="\\"),
+                )
+            )
+            .order_by(Issue.updated_at.desc())
+            .limit(limit)
+        )
+
+        # Filter by accessible projects if not admin
+        if not user.is_admin:
+            from sqlalchemy import and_
+
+            accessible_project_ids = (select(Member.project_id).where(Member.user_id == user.id)).scalar_subquery()
+            stmt = stmt.where(
+                or_(
+                    Issue.project_id.in_(accessible_project_ids),
+                    and_(
+                        Issue.project_id.in_(select(Project.id).where(Project.is_public.is_(True))),
+                        Issue.is_private.is_(False),
+                    ),
+                )
+            )
+
+            # Hide private issues the user doesn't own/isn't assigned to
+            stmt = stmt.where(
+                or_(
+                    Issue.is_private.is_(False),
+                    Issue.author_id == user.id,
+                    Issue.assigned_to_id == user.id,
+                )
+            )
+
+        rows = (await session.execute(stmt)).all()
+        return [{"key": row.display_key, "subject": row.subject, "status": row.status_name} for row in rows]

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar, pagination, empty_state %}
 
-{% block title %}Issues - {{ project.name }} - Specivo{% endblock %}
+{% block title %}Issues - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -13,7 +13,7 @@
 <div class="page-header">
   <h1>Issues</h1>
   <div class="page-header-actions">
-    <a href="/projects/{{ project.key }}/issues/new" class="btn btn-primary">
+    <a href="/projects/{{ project.key }}/issues/new/" class="sp-btn sp-btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 5v14M5 12h14"/></svg>
       New Issue
     </a>
@@ -25,7 +25,7 @@
 {% if saved_filters is defined and saved_filters %}
 <div class="filter-tabs" style="margin-bottom:var(--sp-space-lg);">
   {% for sf in saved_filters %}
-  <a href="/projects/{{ project.key }}/issues?{{ sf.query_string if sf.query_string else '' }}"
+  <a href="/projects/{{ project.key }}/issues/?{{ sf.query_string if sf.query_string else '' }}"
      class="filter-tab{{ ' active' if sf.active is defined and sf.active else '' }}">
     {{ sf.name }}
   </a>
@@ -35,7 +35,7 @@
 {% endif %}
 
 {# Filter bar #}
-<form method="get" action="/projects/{{ project.key }}/issues" class="filter-bar">
+<form method="get" action="/projects/{{ project.key }}/issues/" class="filter-bar">
   <select name="status" class="filter-select">
     <option value="open" {{ 'selected' if filters.status == 'open' }}>Open</option>
     <option value="closed" {{ 'selected' if filters.status == 'closed' }}>Closed</option>
@@ -63,7 +63,7 @@
     {% endfor %}
   </select>
 
-  <button type="submit" class="btn btn-ghost">Apply</button>
+  <button type="submit" class="sp-btn sp-btn-ghost">Apply</button>
 
   <div class="view-toggle">
     <button type="button" class="view-toggle-btn active">
@@ -96,7 +96,7 @@
       </tr>
     </thead>
     <tbody id="issue-table-body"
-           hx-get="/partials/issues/table?project_key={{ project.key }}"
+           hx-get="/partials/issues/table/?project_key={{ project.key }}"
            hx-trigger="none"
            hx-swap="innerHTML">
       {% include "pages/issues/_table_rows.html" %}

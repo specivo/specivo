@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.lookups import IssueStatus, Tracker
@@ -29,7 +30,7 @@ from tests.factories.user import AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -77,6 +78,10 @@ async def tracker(db_session: AsyncSession, new_status: IssueStatus) -> Tracker:
 
 @pytest_asyncio.fixture
 async def developer_role(db_session: AsyncSession) -> Role:
+    result = await db_session.execute(select(Role).where(Role.name == "Developer"))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     role = Role(
         name="Developer",
         position=2,
@@ -130,7 +135,7 @@ async def test_list_transitions(
 
     # Create one transition first
     resp = await client.post(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         json={
             "tracker_id": tracker.id,
             "role_id": developer_role.id,
@@ -143,7 +148,7 @@ async def test_list_transitions(
 
     # List
     resp = await client.get(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         params={"tracker_id": tracker.id},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -167,7 +172,7 @@ async def test_create_transition(
     token = await _login(client, admin_user.login)
 
     resp = await client.post(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         json={
             "tracker_id": tracker.id,
             "role_id": developer_role.id,
@@ -199,7 +204,7 @@ async def test_delete_transition(
 
     # Create
     resp = await client.post(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         json={
             "tracker_id": tracker.id,
             "role_id": developer_role.id,
@@ -213,7 +218,7 @@ async def test_delete_transition(
 
     # Delete
     resp = await client.delete(
-        f"/api/v1/admin/workflows/transitions/{tid}",
+        f"/api/v1/admin/workflows/transitions/{tid}/",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 204
@@ -239,14 +244,14 @@ async def test_create_duplicate_transition(
     }
 
     resp = await client.post(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         json=payload,
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 201
 
     resp = await client.post(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         json=payload,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -269,7 +274,7 @@ async def test_bulk_replace_transitions(
 
     # Create initial transition
     await client.post(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         json={
             "tracker_id": tracker.id,
             "role_id": developer_role.id,
@@ -281,7 +286,7 @@ async def test_bulk_replace_transitions(
 
     # Bulk replace
     resp = await client.put(
-        "/api/v1/admin/workflows/transitions/bulk",
+        "/api/v1/admin/workflows/transitions/bulk/",
         params={"tracker_id": tracker.id, "role_id": developer_role.id},
         json={
             "transitions": [
@@ -297,7 +302,7 @@ async def test_bulk_replace_transitions(
 
     # Verify old transition is gone
     resp = await client.get(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         params={"tracker_id": tracker.id, "role_id": developer_role.id},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -320,7 +325,7 @@ async def test_non_admin_cannot_manage_workflows(
     token = await _login(client, regular_user.login)
 
     resp = await client.get(
-        "/api/v1/admin/workflows/transitions",
+        "/api/v1/admin/workflows/transitions/",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 403
@@ -339,7 +344,7 @@ async def test_create_field_rule(
     token = await _login(client, admin_user.login)
 
     resp = await client.post(
-        "/api/v1/admin/workflows/field-rules",
+        "/api/v1/admin/workflows/field-rules/",
         json={
             "tracker_id": tracker.id,
             "role_id": developer_role.id,
@@ -369,7 +374,7 @@ async def test_delete_field_rule(
 
     # Create
     resp = await client.post(
-        "/api/v1/admin/workflows/field-rules",
+        "/api/v1/admin/workflows/field-rules/",
         json={
             "tracker_id": tracker.id,
             "role_id": developer_role.id,
@@ -384,7 +389,7 @@ async def test_delete_field_rule(
 
     # Delete
     resp = await client.delete(
-        f"/api/v1/admin/workflows/field-rules/{rid}",
+        f"/api/v1/admin/workflows/field-rules/{rid}/",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 204

@@ -32,7 +32,7 @@ from tests.factories.user import AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -47,7 +47,7 @@ async def _create_issue_via_api(
     subject: str,
 ) -> dict:
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json={
             "project_key": project_key,
             "tracker_id": tracker_id,
@@ -76,7 +76,7 @@ async def _upload_file(
     if description is not None:
         data["description"] = description
     resp = await client.post(
-        "/api/v1/attachments",
+        "/api/v1/attachments/",
         files=files,
         data=data,
         headers={"Authorization": f"Bearer {token}"},
@@ -296,7 +296,7 @@ async def test_get_attachment_metadata(
     attachment_id = upload_resp.json()["id"]
 
     resp = await client.get(
-        f"/api/v1/attachments/{attachment_id}",
+        f"/api/v1/attachments/{attachment_id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -340,7 +340,7 @@ async def test_download_attachment(
     attachment_id = upload_resp.json()["id"]
 
     resp = await client.get(
-        f"/api/v1/attachments/{attachment_id}/download",
+        f"/api/v1/attachments/{attachment_id}/download/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -380,7 +380,7 @@ async def test_delete_attachment_by_author(
     attachment_id = upload_resp.json()["id"]
 
     resp = await client.delete(
-        f"/api/v1/attachments/{attachment_id}",
+        f"/api/v1/attachments/{attachment_id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204, resp.text
@@ -422,7 +422,7 @@ async def test_delete_attachment_by_non_author_forbidden(
 
     # second_user tries to delete it
     resp = await client.delete(
-        f"/api/v1/attachments/{attachment_id}",
+        f"/api/v1/attachments/{attachment_id}/",
         headers={"Authorization": f"Bearer {second_token}"},
     )
     assert resp.status_code == 403, resp.text
@@ -469,7 +469,7 @@ async def test_list_attachments_via_include(
     )
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=attachments",
+        f"/api/v1/issues/{issue_key}/?include=attachments",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -500,7 +500,7 @@ async def test_include_attachments_not_requested_returns_none(
     issue_key = issue_data["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text

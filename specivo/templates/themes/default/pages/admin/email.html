@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Email{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Email{% endtrans %}</span>
+</div>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-space-xl);">
+  <h1 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-xl);font-weight:700;">{% trans %}Email{% endtrans %}</h1>
+  {% if smtp.configured %}
+  <span style="display:inline-flex;align-items:center;gap:var(--sp-space-xs);padding:3px 10px;border-radius:20px;font-size:var(--sp-font-size-xs);font-weight:500;background:var(--sp-success-subtle);color:var(--sp-success);">
+    <span style="width:6px;height:6px;border-radius:50%;background:var(--sp-success)"></span>
+    {% trans %}Configured{% endtrans %}
+  </span>
+  {% else %}
+  <span style="display:inline-flex;align-items:center;gap:var(--sp-space-xs);padding:3px 10px;border-radius:20px;font-size:var(--sp-font-size-xs);font-weight:500;background:var(--sp-warning-subtle);color:var(--sp-warning);">
+    <span style="width:6px;height:6px;border-radius:50%;background:var(--sp-warning)"></span>
+    {% trans %}Not configured{% endtrans %}
+  </span>
+  {% endif %}
+</div>
+
+<div style="max-width:640px;">
+
+  {# ── SMTP Configuration (read-only) ── #}
+  <div class="card" style="padding:var(--sp-space-xl);margin-bottom:var(--sp-space-lg);">
+    <h2 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-xs);">{% trans %}SMTP Configuration{% endtrans %}</h2>
+    <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-xl);line-height:1.5;">{% trans %}Email delivery is configured via environment variables. Showing current connection details.{% endtrans %}</p>
+
+    {% if smtp.configured %}
+    <div style="border-bottom:1px solid var(--sp-border);padding:var(--sp-space-md) 0;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);min-width:120px">{% trans %}Server{% endtrans %}</span>
+      <span style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-sm);">{{ smtp.host }}:{{ smtp.port }}</span>
+    </div>
+    <div style="border-bottom:1px solid var(--sp-border);padding:var(--sp-space-md) 0;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);min-width:120px">{% trans %}Username{% endtrans %}</span>
+      <span style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">{{ smtp.user }}</span>
+    </div>
+    <div style="border-bottom:1px solid var(--sp-border);padding:var(--sp-space-md) 0;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);min-width:120px">{% trans %}From address{% endtrans %}</span>
+      <span style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-sm);">{{ smtp['from'] }}</span>
+    </div>
+    <div style="padding:var(--sp-space-md) 0;display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);min-width:120px">{% trans %}TLS{% endtrans %}</span>
+      <span style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-sm);">
+        {% if smtp.tls %}STARTTLS ({% trans %}port{% endtrans %} {{ smtp.port }}){% else %}{% trans %}Disabled{% endtrans %}{% endif %}
+      </span>
+    </div>
+
+    <div style="margin-top:var(--sp-space-lg);font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px;display:inline;vertical-align:-1px;margin-right:4px"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+      {% trans %}To change SMTP settings, update{% endtrans %} <code style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);background:var(--sp-danger-subtle);color:var(--sp-danger);padding:1px 5px;border-radius:3px">.env.local</code> {% trans %}and restart the services.{% endtrans %}
+    </div>
+    {% else %}
+    <div style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+      <p style="margin-bottom:var(--sp-space-sm);">{% trans %}SMTP is not configured.{% endtrans %}</p>
+      <p style="font-size:var(--sp-font-size-sm);">{% trans %}Set{% endtrans %} <code>SMTP_HOST</code>, <code>SMTP_USER</code>, <code>SMTP_PASSWORD</code> {% trans %}environment variables to enable email delivery.{% endtrans %}</p>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ── Send Test Email ── #}
+  <div class="card" style="padding:var(--sp-space-xl);"
+       x-data='{
+         to: "",
+         subject: "Specivo test email",
+         body: "This is a test email from Specivo to verify SMTP configuration.\n\nIf you received this message, email delivery is working correctly.",
+         sending: false,
+         result: null,
+         resultOk: false,
+         async sendTest() {
+           if (!this.to) return;
+           this.sending = true;
+           this.result = null;
+           try {
+             const resp = await fetch("/api/v1/admin/test-email/", {
+               method: "POST",
+               headers: { "Content-Type": "application/json" },
+               body: JSON.stringify({ to: this.to, subject: this.subject, body: this.body })
+             });
+             const data = await resp.json();
+             if (data.ok) {
+               this.result = "Test email sent to " + this.to;
+               this.resultOk = true;
+             } else {
+               this.result = data.error || "Unknown error";
+               this.resultOk = false;
+             }
+           } catch (e) {
+             this.result = "Request failed: " + e.message;
+             this.resultOk = false;
+           } finally {
+             this.sending = false;
+           }
+         }
+       }'>
+    <h2 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-xs);">{% trans %}Send Test Email{% endtrans %}</h2>
+    <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-xl);line-height:1.5;">{% trans %}Verify your SMTP configuration by sending a test message.{% endtrans %}</p>
+
+    <form @submit.prevent="sendTest()">
+      <div style="margin-bottom:var(--sp-space-lg);">
+        <label style="display:block;font-size:var(--sp-font-size-sm);font-weight:500;margin-bottom:var(--sp-space-xs);">{% trans %}To{% endtrans %}</label>
+        <input type="email" class="form-input" x-model="to" required placeholder="recipient@example.com" style="max-width:400px;">
+      </div>
+
+      <div style="margin-bottom:var(--sp-space-lg);">
+        <label style="display:block;font-size:var(--sp-font-size-sm);font-weight:500;margin-bottom:var(--sp-space-xs);">{% trans %}Subject{% endtrans %}</label>
+        <input type="text" class="form-input" x-model="subject" required style="max-width:400px;">
+      </div>
+
+      <div style="margin-bottom:var(--sp-space-lg);">
+        <label style="display:block;font-size:var(--sp-font-size-sm);font-weight:500;margin-bottom:var(--sp-space-xs);">{% trans %}Body{% endtrans %}</label>
+        <textarea class="form-input" x-model="body" required rows="7" style="max-width:500px;resize:vertical;"></textarea>
+      </div>
+
+      <button type="submit" class="sp-btn sp-btn-primary" :disabled="sending || !to">
+        <template x-if="!sending">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        </template>
+        <span x-text="sending ? 'Sending...' : 'Send Test'"></span>
+      </button>
+    </form>
+
+    <div x-show="result" x-cloak
+         style="margin-top:var(--sp-space-xl);padding:var(--sp-space-md) var(--sp-space-lg);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);display:flex;align-items:center;gap:var(--sp-space-sm);"
+         :style="resultOk
+           ? 'background:var(--sp-success-subtle);color:var(--sp-success);border:1px solid rgba(22,163,74,0.15)'
+           : 'background:var(--sp-danger-subtle);color:var(--sp-danger);border:1px solid rgba(220,38,38,0.15)'">
+      <template x-if="resultOk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </template>
+      <template x-if="!resultOk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+      </template>
+      <span x-text="result"></span>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

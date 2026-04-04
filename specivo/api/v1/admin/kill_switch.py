@@ -7,6 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.api.v1.admin import require_admin_api
 from specivo.core.config import get_settings
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, PermissionDeniedError
@@ -19,13 +20,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["admin"])
 _service = KillSwitchService()
-
-
-def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency: raise 403 if the current user is not an admin."""
-    if not current_user.is_admin:
-        raise PermissionDeniedError("Admin access required")
-    return current_user
 
 
 async def _resolve_kill_actor(request: Request, db: AsyncSession = Depends(get_db)) -> str:
@@ -74,7 +68,7 @@ async def _resolve_kill_actor(request: Request, db: AsyncSession = Depends(get_d
 
 
 @router.post(
-    "/admin/kill/agent/{user_id}",
+    "/admin/kill/agent/{user_id}/",
     response_model=KillEventOut,
 )
 async def kill_agent(
@@ -90,7 +84,7 @@ async def kill_agent(
 
 
 @router.post(
-    "/admin/kill/system/{system_id}",
+    "/admin/kill/system/{system_id}/",
     response_model=KillEventOut,
 )
 async def kill_system(
@@ -106,7 +100,7 @@ async def kill_system(
 
 
 @router.post(
-    "/admin/kill/all",
+    "/admin/kill/all/",
     response_model=KillEventOut,
 )
 async def kill_all(
@@ -126,12 +120,12 @@ async def kill_all(
 
 
 @router.post(
-    "/admin/unkill/agent/{user_id}",
+    "/admin/unkill/agent/{user_id}/",
     status_code=status.HTTP_200_OK,
 )
 async def unkill_agent(
     user_id: int,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Reactivate a killed agent — re-enable API keys (admin only)."""
@@ -146,11 +140,11 @@ async def unkill_agent(
 
 
 @router.get(
-    "/admin/kill-events",
+    "/admin/kill-events/",
     response_model=list[KillEventOut],
 )
 async def list_kill_events(
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[KillEventOut]:
     """List all kill events, newest first (admin only)."""

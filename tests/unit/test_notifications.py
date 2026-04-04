@@ -2,7 +2,7 @@
 
 Tests core notification rules:
 - No self-notification (actor never notified for own action)
-- Dedup (user is both watcher and assignee -> one email)
+- Dedup (user is both watcher and assignee -> one dispatch)
 - Default preference is enabled (no preference record -> notify)
 """
 
@@ -12,7 +12,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from specivo.services.notification_service import NotificationService, _NotifPrefs
+from specivo.services.notification_service import NotificationService
+
+pytestmark = pytest.mark.unit
 
 
 def _make_user(user_id: int, email: str = "") -> MagicMock:
@@ -50,11 +52,8 @@ async def test_no_self_notification() -> None:
     actor = _make_user(1, "actor@example.com")
     issue = _make_issue(assigned_to_id=1)  # assigned to actor
 
-    # _get_prefs returns defaults (both enabled)
     with (
-        patch.object(service, "_get_prefs", return_value=_NotifPrefs()),
-        patch.object(service, "_queue_email") as mock_queue,
-        patch.object(service, "create_notification") as mock_create_notif,
+        patch.object(service, "_dispatch_to_channels", new_callable=AsyncMock) as mock_dispatch,
     ):
         await service.notify_assignment(
             session=session,
@@ -64,13 +63,12 @@ async def test_no_self_notification() -> None:
             actor=actor,
         )
         # Actor assigned to self -> no notification
-        mock_queue.assert_not_called()
-        mock_create_notif.assert_not_called()
+        mock_dispatch.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_notification_dedup() -> None:
-    """A user who is both watcher and assignee receives only one email."""
+    """A user who is both watcher and assignee receives only one dispatch."""
     service = NotificationService()
     session = AsyncMock()
 
@@ -90,9 +88,7 @@ async def test_notification_dedup() -> None:
 
     with (
         patch.object(service, "_watcher_service", watcher_svc),
-        patch.object(service, "_get_prefs", return_value=_NotifPrefs()),
-        patch.object(service, "_queue_email") as mock_queue,
-        patch.object(service, "create_notification"),
+        patch.object(service, "_dispatch_to_channels", new_callable=AsyncMock) as mock_dispatch,
     ):
         await service.notify_comment(
             session=session,
@@ -100,14 +96,16 @@ async def test_notification_dedup() -> None:
             journal=MagicMock(),
             actor=actor,
         )
-        # Should only be called once for user 2, not twice
-        emails_sent_to = [call.args[0] for call in mock_queue.call_args_list]
-        assert emails_sent_to.count("both@example.com") == 1
+        # Should only be dispatched once for user 2, not twice
+        calls_for_user_2 = [
+            call for call in mock_dispatch.call_args_list if call.kwargs.get("user") is watcher_and_assignee
+        ]
+        assert len(calls_for_user_2) == 1
 
 
 @pytest.mark.asyncio
 async def test_default_preference_is_enabled() -> None:
-    """When no NotificationPreference record exists, _get_prefs returns both enabled."""
+    """When no NotificationPreference record exists, _get_prefs returns empty dict (all enabled)."""
     service = NotificationService()
     session = AsyncMock()
 
@@ -117,5 +115,6 @@ async def test_default_preference_is_enabled() -> None:
     session.execute = AsyncMock(return_value=mock_result)
 
     prefs = await service._get_prefs(session, user_id=99, project_id=1, event_type="assignment")
-    assert prefs.email_enabled is True
-    assert prefs.in_app_enabled is True
+    assert isinstance(prefs, dict)
+    assert service._is_channel_enabled(prefs, "email") is True
+    assert service._is_channel_enabled(prefs, "in_app") is True

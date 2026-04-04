@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
     bcrypt_rounds: int = 12
+    password_reset_token_expire_hours: int = 24
+    app_url: str = "http://localhost:8030"  # Public base URL for links in emails
 
     # Registration
     registration_mode: str = "open"  # open, invite_only, disabled
@@ -68,7 +70,7 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     app_name: str = "Specivo"
-    version: str = "0.1.0"
+    version: str = "0.1.6"
     api_v1_prefix: str = "/api/v1"
 
     # Stealth mode — secret URL prefix for all routes.
@@ -98,9 +100,23 @@ class Settings(BaseSettings):
     # Kill switch — emergency token for mobile/unauthenticated kill
     kill_token: str = ""
 
+    # Custom themes — directory for user-provided theme overrides.
+    # Relative to app root, inside the data mount. Missing dir is silently ignored.
+    custom_themes_dir: str = "data/themes"
+
+    # Custom error pages — directory for user-provided error page overrides.
+    # Only predefined filenames are loaded: 403.html, 404.html, 500.html.
+    # Relative to app root, inside the data mount. Missing dir is silently ignored.
+    custom_errors_dir: str = "data/errors"
+
     # Attachments
     attachment_upload_dir: str = "data/attachments"
     attachment_max_size_mb: int = 50
+
+    # Avatar photos
+    avatar_upload_dir: str = "data/avatars"
+    avatar_max_size_mb: int = 5
+    avatar_max_dimension: int = 256
 
     # Timer
     timer_max_hours: float = 12.0

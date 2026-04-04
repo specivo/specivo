@@ -23,6 +23,8 @@ class WikiPageCreate(BaseModel):
 class WikiPageUpdate(BaseModel):
     text: str
     lock_version: int  # required for optimistic locking
+    title: str | None = Field(None, min_length=1, max_length=255)
+    parent_slug: str | None = None
     comments: str | None = None
 
 

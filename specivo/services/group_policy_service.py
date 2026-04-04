@@ -6,6 +6,7 @@ import ipaddress
 import logging
 
 from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import ConflictError, NotFoundError
@@ -35,7 +36,11 @@ class GroupPolicyService:
 
         group = AgentGroup(name=name, description=description)
         session.add(group)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            raise ConflictError(f"Agent group '{name}' already exists")
         logger.info("Created agent group %d: %s", group.id, name)
         return group
 
@@ -80,7 +85,11 @@ class GroupPolicyService:
 
         membership = AgentGroupMembership(group_id=group_id, user_id=user_id)
         session.add(membership)
-        await session.flush()
+        try:
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            raise ConflictError("User is already a member of this group")
         logger.info("Added user %d to agent group %d", user_id, group_id)
         return membership
 

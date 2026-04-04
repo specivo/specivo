@@ -100,7 +100,7 @@ def _attachment_out(attachment, author_name: str | None = None) -> AttachmentOut
 
 
 @router.post(
-    "/attachments",
+    "/attachments/",
     response_model=AttachmentOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -148,7 +148,7 @@ async def upload_attachment(
     return _attachment_out(attachment, author_name=current_user.display_name)
 
 
-@router.get("/attachments/{attachment_id}", response_model=AttachmentOut)
+@router.get("/attachments/{attachment_id}/", response_model=AttachmentOut)
 async def get_attachment(
     attachment_id: int,
     current_user: User = Depends(get_current_user),
@@ -160,7 +160,7 @@ async def get_attachment(
     return _attachment_out(attachment)
 
 
-@router.get("/attachments/{attachment_id}/download")
+@router.get("/attachments/{attachment_id}/download/")
 async def download_attachment(
     attachment_id: int,
     current_user: User = Depends(get_current_user),
@@ -182,7 +182,7 @@ async def download_attachment(
     )
 
 
-@router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/attachments/{attachment_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_attachment(
     request: Request,
     attachment_id: int,
@@ -198,7 +198,7 @@ async def delete_attachment(
     await _service.delete(db, attachment, user=current_user, request=request)
 
 
-@router.patch("/attachments/{attachment_id}", response_model=AttachmentOut)
+@router.patch("/attachments/{attachment_id}/", response_model=AttachmentOut)
 async def update_attachment(
     request: Request,
     attachment_id: int,

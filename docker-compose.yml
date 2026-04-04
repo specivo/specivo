@@ -13,10 +13,17 @@ services:
 
   api:
     image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
-      - .env
+      - path: .env
+        required: false
       - path: .env.local
         required: false
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://specivo:specivo@db:5432/specivo}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      SECRET_KEY: "${SECRET_KEY:-dev-insecure-key-change-me-in-production-please}"
     volumes:
       - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
     depends_on:
@@ -38,10 +45,17 @@ services:
     image: specivo/specivo:${SPECIVO_VERSION:-latest}
     command: celery -A specivo.tasks worker --loglevel=info
     entrypoint: []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
-      - .env
+      - path: .env
+        required: false
       - path: .env.local
         required: false
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://specivo:specivo@db:5432/specivo}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      SECRET_KEY: "${SECRET_KEY:-dev-insecure-key-change-me-in-production-please}"
     volumes:
       - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
     depends_on:
@@ -53,10 +67,17 @@ services:
     image: specivo/specivo:${SPECIVO_VERSION:-latest}
     command: celery -A specivo.tasks beat --loglevel=info
     entrypoint: []
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file:
-      - .env
+      - path: .env
+        required: false
       - path: .env.local
         required: false
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://specivo:specivo@db:5432/specivo}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      SECRET_KEY: "${SECRET_KEY:-dev-insecure-key-change-me-in-production-please}"
     depends_on:
       api:
         condition: service_healthy
@@ -64,7 +85,6 @@ services:
 
   db:
     image: pgvector/pgvector:pg18
-    profiles: [bundled-db]
     volumes:
       - ${SPECIVO_DATA_DIR:-./specivo-data}/postgresql:/var/lib/postgresql
     environment:
@@ -82,7 +102,6 @@ services:
 
   redis:
     image: redis:7-alpine
-    profiles: [bundled-redis]
     command: redis-server --appendonly yes
     volumes:
       - ${SPECIVO_DATA_DIR:-./specivo-data}/redis:/data

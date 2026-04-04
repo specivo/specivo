@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.config import get_settings
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
 from specivo.services.chunking_service import ChunkingService
+from specivo.services.local_embedder import get_local_embedder
 from specivo.services.prefix_registry import get_effective_prefix
 
 logger = logging.getLogger(__name__)
@@ -75,7 +76,7 @@ class EmbeddingService:
         model: EmbeddingModel,
         *,
         intent: str = "passage",
-    ) -> list[float]:
+    ) -> list[float] | None:
         """Generate an embedding vector for text using the specified model.
 
         Applies the appropriate prefix based on model config and intent before
@@ -90,6 +91,16 @@ class EmbeddingService:
             A list of floats representing the embedding vector.
         """
         prefixed_text = self._apply_prefix(text, model, intent)
+
+        if model.provider == "local":
+            embedder = get_local_embedder(model.model_name)
+            if not embedder.is_available():
+                logger.warning(
+                    "Local embedding model %r is not available (missing ONNX/tokenizer files)",
+                    model.model_name,
+                )
+                return None  # type: ignore[return-value]
+            return embedder.encode(prefixed_text)
 
         if model.provider == "mock":
             return self._mock_embedding(prefixed_text, model.dimensions)
@@ -288,6 +299,8 @@ class EmbeddingService:
         # Create all embeddings in a single batch
         for chunk, chunk_text in chunk_objects:
             vector = await self.generate_embedding(chunk_text, model)
+            if vector is None:
+                continue
             embedding = ChunkEmbedding(
                 chunk_id=chunk.id,
                 model_id=model.id,
@@ -417,6 +430,9 @@ class EmbeddingService:
 
             for chunk in batch:
                 vector = await self.generate_embedding(chunk.content, model)
+                if vector is None:
+                    last_id = chunk.id
+                    continue
                 embedding = ChunkEmbedding(
                     chunk_id=chunk.id,
                     model_id=model.id,

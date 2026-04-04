@@ -156,6 +156,7 @@ class Journal(Base, TimestampMixin):
     # ------------------------------------------------------------------
 
     user = relationship("User", foreign_keys=[user_id], lazy="raise")
+    resolved_by = relationship("User", foreign_keys=[resolved_by_id], lazy="raise")
     details = relationship(
         "JournalDetail",
         back_populates="journal",

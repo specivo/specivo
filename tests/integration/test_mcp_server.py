@@ -97,9 +97,9 @@ class TestMcpListProjects:
     async def test_list_projects(self, db_session: AsyncSession, admin: User, project: Project):
         from specivo.mcp.tools import _list_projects
 
-        result = await _list_projects(db_session, admin)
-        assert "ACME" in result
-        assert "total" in result.lower() or "1" in result
+        result = await _list_projects(db_session, admin, limit=500)
+        assert project.key in result
+        assert project.name in result
 
 
 class TestMcpCreateIssue:

@@ -49,7 +49,7 @@ async def test_roadmap_page(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/roadmap",
+        f"/projects/{_project.key}/roadmap/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -61,11 +61,11 @@ async def test_roadmap_page(
 async def test_roadmap_requires_auth(unauth_client: AsyncClient):
     """GET /projects/{key}/roadmap without auth redirects to /login."""
     resp = await unauth_client.get(
-        "/projects/ANY/roadmap",
+        "/projects/ANY/roadmap/",
         follow_redirects=False,
     )
     assert resp.status_code == 302
-    assert "/login" in resp.headers["location"]
+    assert "/login/" in resp.headers["location"]
 
 
 @pytest.mark.integration
@@ -77,7 +77,7 @@ async def test_roadmap_empty(
     """GET /projects/{key}/roadmap with no versions shows empty state."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/roadmap",
+        f"/projects/{_project.key}/roadmap/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200

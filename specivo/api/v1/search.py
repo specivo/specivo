@@ -26,13 +26,13 @@ _service = SearchService()
 _audit_service = SecurityAuditService()
 
 
-@router.get("/search", response_model=SearchResponse)
+@router.get("/search/", response_model=SearchResponse)
 async def search(
     request: Request,
     q: str = Query(..., min_length=1, description="Search query"),
     project_key: str | None = Query(None, description="Scope to a specific project"),
     project_keys: str | None = Query(None, description="Comma-separated project keys for multi-project search"),
-    scope: str = Query("all", pattern="^(all|issues|wiki|attachments)$", description="Search scope"),
+    scope: str = Query("all", pattern="^(all|issues|wiki|comments|attachments)$", description="Search scope"),
     mode: str = Query("keyword", pattern="^(keyword|semantic|hybrid)$", description="Search mode"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
     limit: int = Query(25, ge=1, le=100, description="Pagination limit"),
@@ -146,7 +146,7 @@ async def search(
             limit=limit,
         )
     elif mode == "hybrid":
-        items, total_count = await _service.hybrid_search(
+        items, total_count, type_counts = await _service.hybrid_search(
             session=db,
             query=q,
             user=user,
@@ -158,7 +158,7 @@ async def search(
             filters=active_filters,
         )
     else:
-        items, total_count = await _service.search(
+        items, total_count, type_counts = await _service.search(
             session=db,
             query=q,
             user=user,
@@ -187,6 +187,7 @@ async def search(
             scope=scope,
             filters=filter_details,
             result_count=total_count,
+            type_counts=type_counts if mode != "semantic" else None,
             request=request,
         )
     except Exception:

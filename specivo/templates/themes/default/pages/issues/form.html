@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}{{ 'Edit ' ~ issue.display_key if mode == 'edit' else 'New Issue' }} - {{ project.name }} - Specivo{% endblock %}
+{% block title %}{{ 'Edit ' ~ issue.display_key if mode == 'edit' else 'New Issue' }} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {% if mode == 'edit' %}
@@ -24,23 +24,24 @@
 <h1 class="page-title">{% if mode == 'edit' %}Edit {{ issue.display_key }}{% else %}New Issue{% endif %}</h1>
 
 <div class="form-card"
-     x-data="issueForm({
-       subject: {{ (issue.subject if issue else '') | tojson }},
+     x-data='issueForm({
+       subject: {{ (issue.subject if issue else "") | tojson }},
        tracker_id: {{ issue.tracker_id if issue else (trackers[0].id if trackers else 0) }},
-       description: {{ (issue.description if issue and issue.description else '') | tojson }},
-       status_id: {{ issue.status_id if issue else 0 }},
+       description: {{ (issue.description if issue and issue.description else "") | tojson }},
+       status_id: {{ issue.status_id if issue else (statuses[0].id if statuses else 0) }},
        priority_id: {{ issue.priority_id if issue else 0 }},
-       assigned_to_id: {{ issue.assigned_to_id if issue and issue.assigned_to_id else 'null' }},
-       start_date: {{ (issue.start_date.isoformat() if issue and issue.start_date else '') | tojson }},
-       due_date: {{ (issue.due_date.isoformat() if issue and issue.due_date else '') | tojson }},
-       estimated_hours: {{ (issue.estimated_hours | string if issue and issue.estimated_hours else '') | tojson }},
+       assigned_to_id: {{ issue.assigned_to_id if issue and issue.assigned_to_id else "null" }},
+       start_date: {{ (issue.start_date.isoformat() if issue and issue.start_date else "") | tojson }},
+       due_date: {{ (issue.due_date.isoformat() if issue and issue.due_date else "") | tojson }},
+       estimated_hours: {{ (issue.estimated_hours | string if issue and issue.estimated_hours else "") | tojson }},
        done_ratio: {{ issue.done_ratio if issue else 0 }},
-       is_private: {{ 'true' if issue and issue.is_private else 'false' }},
+       is_private: {{ "true" if issue and issue.is_private else "false" }},
+       version_id: {{ issue.version_id if issue and issue.version_id else "null" }},
        mode: {{ mode | tojson }},
        projectKey: {{ project.key | tojson }},
-       displayKey: {{ (issue.display_key if issue else '') | tojson }},
+       displayKey: {{ (issue.display_key if issue else "") | tojson }},
        lockVersion: {{ issue.lock_version if issue else 0 }}
-     })">
+     })'>
 
   <form onsubmit="return false;">
     {# Subject #}
@@ -71,7 +72,6 @@
     {# Two-column fields #}
     <div class="form-row">
       <div>
-        {% if mode == 'edit' %}
         <div class="form-group">
           <label class="modal-label" for="status">Status</label>
           <select id="status" class="modal-input" x-model.number="status_id">
@@ -80,7 +80,6 @@
             {% endfor %}
           </select>
         </div>
-        {% endif %}
         <div class="form-group">
           <label class="modal-label" for="priority">Priority</label>
           <select id="priority" class="modal-input" x-model.number="priority_id">
@@ -102,6 +101,15 @@
       </div>
       <div>
         <div class="form-group">
+          <label class="modal-label" for="version">Version</label>
+          <select id="version" class="modal-input" x-model.number="version_id">
+            <option value="">-- None --</option>
+            {% for v in versions if versions is defined %}
+            <option value="{{ v.id }}">{{ v.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
           <label class="modal-label" for="start_date">Start Date</label>
           <input type="date" id="start_date" class="modal-input" x-model="start_date">
         </div>
@@ -110,20 +118,93 @@
           <input type="date" id="due_date" class="modal-input" x-model="due_date">
         </div>
         <div class="form-group">
-          <label class="modal-label" for="estimated_hours">Estimated Hours</label>
-          <input type="number" id="estimated_hours" class="modal-input" x-model="estimated_hours" min="0" step="0.25" style="font-family:var(--sp-font-mono)">
+          <label class="modal-label">Estimated</label>
+          <div style="display:flex;gap:var(--sp-space-sm);align-items:center;">
+            <input type="number" class="modal-input" x-model="est_hours" min="0" step="1" placeholder="0" style="width:80px;font-family:var(--sp-font-mono);">
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">h</span>
+            <input type="number" class="modal-input" x-model="est_minutes" min="0" max="59" step="1" placeholder="0" style="width:80px;font-family:var(--sp-font-mono);">
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">m</span>
+          </div>
         </div>
       </div>
     </div>
 
+    <div class="form-divider"></div>
+
+    {# Relations #}
+    <div class="form-group">
+      <label class="modal-label">Relations</label>
+      <template x-for="(rel, i) in pendingRelations" :key="i">
+        <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-bottom:var(--sp-space-xs);font-size:var(--sp-font-size-sm);">
+          <span x-text="rel.type_label"></span>
+          <strong x-text="rel.issue_key"></strong>
+          <a @click="pendingRelations.splice(i, 1)" style="color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);">Remove</a>
+        </div>
+      </template>
+      <template x-if="showRelationForm">
+      <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-sm);align-items:end;margin-top:var(--sp-space-xs);">
+        <div style="flex:1;min-width:200px;" x-data='issueAutocomplete({ value: "" })'>
+          <label class="modal-label" style="font-size:var(--sp-font-size-xs);">Related Issue</label>
+          <div style="position:relative;">
+            <input type="text" class="modal-input" x-model="query" @input="search()" @focus="showResults && (showResults = true)" placeholder="Search issues..." autocomplete="off">
+            <div x-show="showResults" x-cloak @click.outside="showResults = false" style="position:absolute;top:100%;left:0;right:0;background:var(--sp-bg-surface);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--sp-shadow-lg);">
+              <template x-for="item in results" :key="item.key">
+                <div @click="select(item); $dispatch('relation-issue-selected', { key: item.key })" style="padding:var(--sp-space-sm) var(--sp-space-md);cursor:pointer;font-size:var(--sp-font-size-sm);border-bottom:1px solid var(--sp-border);" @mouseenter="$el.style.background='var(--sp-bg-input)'" @mouseleave="$el.style.background=''">
+                  <strong x-text="item.key" style="font-family:var(--sp-font-mono);"></strong> <span x-text="item.subject" style="color:var(--sp-text-muted);"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+        <div>
+          <label class="modal-label" style="font-size:var(--sp-font-size-xs);">Type</label>
+          <select class="modal-input" x-model="newRelationType">
+            <option value="relates">Relates to</option>
+            <option value="blocks">Blocks</option>
+            <option value="blocked">Blocked by</option>
+            <option value="duplicates">Duplicates</option>
+            <option value="duplicated">Duplicated by</option>
+            <option value="precedes">Precedes</option>
+            <option value="follows">Follows</option>
+          </select>
+        </div>
+        <button class="sp-btn sp-btn-ghost" type="button" @click="addPendingRelation()" :disabled="!newRelationKey">Add</button>
+      </div>
+      </template>
+      <button class="sp-btn sp-btn-ghost" type="button" x-show="!showRelationForm" @click="showRelationForm = true" style="margin-top:var(--sp-space-xs);">+ Add Relation</button>
+    </div>
+
+    <div class="form-divider"></div>
+
+    {# Attachments #}
+    <div class="form-group">
+      <label class="modal-label">Attachments</label>
+      <div class="drop-zone" @click="$refs.fileInput.click()" @dragover.prevent="dragover = true" @dragleave="dragover = false" @drop.prevent="handleDrop($event)" :class="{ dragover: dragover }">
+        <div class="drop-zone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></div>
+        <div class="drop-zone-text"><strong>Click to upload</strong> or drag and drop</div>
+        <div class="drop-zone-hint">PNG, JPG, PDF, or any file up to 10 MB</div>
+      </div>
+      <input type="file" x-ref="fileInput" multiple style="display:none" @change="addFiles($event.target.files)">
+      <template x-for="(f, i) in files" :key="i">
+        <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-top:var(--sp-space-xs);font-size:var(--sp-font-size-sm);">
+          <span x-text="f.name"></span>
+          <span style="color:var(--sp-text-muted);" x-text="(f.size / 1024).toFixed(1) + ' KB'"></span>
+          <a @click="files.splice(i, 1)" style="color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);">Remove</a>
+        </div>
+      </template>
+    </div>
+
     {# Actions #}
     <div class="form-actions">
-      <button class="btn btn-primary"
+      <button class="sp-btn sp-btn-primary"
               :disabled="submitting || !subject.trim()"
               @click="submitForm()">
         {% if mode == 'edit' %}Save{% else %}Create Issue{% endif %}
       </button>
-      <a href="/projects/{{ project.key }}/issues{% if mode == 'edit' %}/{{ issue.display_key }}{% endif %}"
+      {% if mode != 'edit' %}
+      <button class="sp-btn sp-btn-ghost" :disabled="submitting || !subject.trim()" @click="submitForm(true)">+ Create and Continue</button>
+      {% endif %}
+      <a href="/projects/{{ project.key }}/issues{% if mode == 'edit' %}/{{ issue.display_key }}{% endif %}/"
          class="cancel-link">Cancel</a>
     </div>
   </form>

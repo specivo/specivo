@@ -50,7 +50,7 @@ async def _make_user(db: AsyncSession, login: str = "user_ver_test") -> User:
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -150,7 +150,7 @@ async def test_create_version(
     project: Project,
 ) -> None:
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/versions",
+        f"/api/v1/projects/{project.key}/versions/",
         json={
             "name": "v1.0",
             "description": "First release",
@@ -180,7 +180,7 @@ async def test_list_versions_empty(
     project: Project,
 ) -> None:
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/versions",
+        f"/api/v1/projects/{project.key}/versions/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -228,7 +228,7 @@ async def test_list_versions_ordered_by_effective_date(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/versions",
+        f"/api/v1/projects/{project.key}/versions/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -252,7 +252,7 @@ async def test_get_version(
     version = await _make_version(db_session, project, name="v2.0")
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/versions/{version.id}",
+        f"/api/v1/projects/{project.key}/versions/{version.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -270,7 +270,7 @@ async def test_get_version_not_found(
     project: Project,
 ) -> None:
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/versions/999999",
+        f"/api/v1/projects/{project.key}/versions/999999/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 404, resp.text
@@ -286,7 +286,7 @@ async def test_update_version(
     version = await _make_version(db_session, project, name="v1.0-alpha")
 
     resp = await client.patch(
-        f"/api/v1/projects/{project.key}/versions/{version.id}",
+        f"/api/v1/projects/{project.key}/versions/{version.id}/",
         json={
             "name": "v1.0",
             "status": "locked",
@@ -311,13 +311,13 @@ async def test_delete_version(
     version = await _make_version(db_session, project, name="to-delete")
 
     resp = await client.delete(
-        f"/api/v1/projects/{project.key}/versions/{version.id}",
+        f"/api/v1/projects/{project.key}/versions/{version.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204, resp.text
 
     get_resp = await client.get(
-        f"/api/v1/projects/{project.key}/versions/{version.id}",
+        f"/api/v1/projects/{project.key}/versions/{version.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert get_resp.status_code == 404
@@ -330,7 +330,7 @@ async def test_create_version_requires_auth(
     project: Project,
 ) -> None:
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/versions",
+        f"/api/v1/projects/{project.key}/versions/",
         json={"name": "no-auth"},
     )
     assert resp.status_code == 401
@@ -347,7 +347,7 @@ async def test_create_version_permission_denied_for_non_member(
     token = await _login(client, regular.login)
 
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/versions",
+        f"/api/v1/projects/{project.key}/versions/",
         json={"name": "blocked"},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -397,7 +397,7 @@ async def test_roadmap_empty(
     project: Project,
 ) -> None:
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/roadmap",
+        f"/api/v1/projects/{project.key}/roadmap/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -429,7 +429,7 @@ async def test_roadmap_open_closed_counts(
         seq += 1
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/roadmap",
+        f"/api/v1/projects/{project.key}/roadmap/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -466,7 +466,7 @@ async def test_roadmap_progress_percent(
     await _seed_issue(db_session, project, version, status_closed, tracker, priority, author, seq)
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/roadmap",
+        f"/api/v1/projects/{project.key}/roadmap/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -486,7 +486,7 @@ async def test_roadmap_progress_zero_when_no_issues(
     await _make_version(db_session, project, name="empty-version")
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/roadmap",
+        f"/api/v1/projects/{project.key}/roadmap/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -529,7 +529,7 @@ async def test_roadmap_multiple_versions(
     await _seed_issue(db_session, project, v2, status_open, tracker, priority, author, 201)
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/roadmap",
+        f"/api/v1/projects/{project.key}/roadmap/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text

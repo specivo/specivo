@@ -9,7 +9,7 @@ from datetime import date, timedelta
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import NotFoundError, ValidationError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 from specivo.models.issue import Issue
 from specivo.models.relation import IssueRelation
 from specivo.models.user import User
@@ -160,12 +160,33 @@ class RelationService:
     async def delete(self, session: AsyncSession, relation_id: int, user: User) -> None:
         """Delete a relation by ID.
 
+        Permission: user must be admin or have access to at least one
+        of the two linked issues (via project membership or public project).
         Raises ``NotFoundError`` when the relation does not exist.
+        Raises ``PermissionDeniedError`` when the user has no access.
         """
+
         result = await session.execute(select(IssueRelation).where(IssueRelation.id == relation_id))
         relation = result.scalar_one_or_none()
         if relation is None:
             raise NotFoundError(f"Relation {relation_id} not found")
+
+        if not user.is_admin:
+            from specivo.services.permission_service import check_permission
+
+            # Check user has edit_issues permission on at least one of the related projects
+            issue_ids = [relation.issue_from_id, relation.issue_to_id]
+            issues_result = await session.execute(select(Issue.project_id).where(Issue.id.in_(issue_ids)))
+            project_ids = {row[0] for row in issues_result.all()}
+
+            has_permission = False
+            for pid in project_ids:
+                if await check_permission(user, pid, "edit_issues", session):
+                    has_permission = True
+                    break
+
+            if not has_permission:
+                raise PermissionDeniedError("You do not have permission to delete this relation")
 
         await session.delete(relation)
         await session.flush()

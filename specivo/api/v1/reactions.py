@@ -20,7 +20,7 @@ _issue_service = IssueService()
 
 
 @router.post(
-    "/issues/{issue_ref}/journals/{journal_id}/reactions",
+    "/issues/{issue_ref}/journals/{journal_id}/reactions/",
     response_model=ReactionOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -53,7 +53,7 @@ async def add_reaction(
 
 
 @router.delete(
-    "/issues/{issue_ref}/journals/{journal_id}/reactions/{emoji}",
+    "/issues/{issue_ref}/journals/{journal_id}/reactions/{emoji}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def remove_reaction(
@@ -77,7 +77,7 @@ async def remove_reaction(
 
 
 @router.get(
-    "/issues/{issue_ref}/journals/{journal_id}/reactions",
+    "/issues/{issue_ref}/journals/{journal_id}/reactions/",
     response_model=list[ReactionGroupOut],
 )
 async def list_reactions(

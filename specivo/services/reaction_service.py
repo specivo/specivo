@@ -1,32 +1,41 @@
-"""ReactionService — add, remove, and list emoji reactions on journals."""
+"""Reaction service — add, remove, toggle, and bulk-list emoji reactions."""
 
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from typing import TYPE_CHECKING, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from specivo.core.exceptions import ConflictError, NotFoundError
-from specivo.models.journal import Journal
+from specivo.core.constants import REACTION_EMOJI
+from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.models.reaction import Reaction
-from specivo.models.user import User
+
+if TYPE_CHECKING:
+    from specivo.models.user import User
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class ReactionGroup:
-    """A group of reactions for a single emoji."""
+class ReactionGroup(NamedTuple):
+    emoji: str
+    count: int
+    reacted_by_me: bool
+
+
+class ReactionListGroup(NamedTuple):
+    """Group used by list_reactions (per-journal, with user details)."""
 
     emoji: str
     count: int
-    users: list[dict]
+    users: list[dict[str, object]]
 
 
 class ReactionService:
-    """Service layer for journal reactions."""
+    """Service for managing emoji reactions on journal entries."""
 
     async def add_reaction(
         self,
@@ -35,42 +44,38 @@ class ReactionService:
         user: User,
         emoji: str,
     ) -> Reaction:
-        """Add a reaction to a journal entry.
+        """Add a reaction. Returns the created Reaction row.
 
-        Raises ``NotFoundError`` if the journal does not exist.
-        Raises ``ConflictError`` if the user already reacted with this emoji.
+        Race-safe via ON CONFLICT DO NOTHING.
         """
-        # Check journal exists
-        result = await session.execute(select(Journal).where(Journal.id == journal_id))
-        if result.scalar_one_or_none() is None:
-            raise NotFoundError(f"Journal {journal_id} not found")
+        if emoji not in REACTION_EMOJI:
+            raise ValidationError(f"Invalid emoji: {emoji}. Allowed: {', '.join(REACTION_EMOJI.keys())}")
 
-        # Check duplicate
-        result = await session.execute(
-            select(Reaction).where(
-                Reaction.journal_id == journal_id,
-                Reaction.user_id == user.id,
-                Reaction.emoji == emoji,
+        stmt = (
+            insert(Reaction)
+            .values(journal_id=journal_id, user_id=user.id, emoji=emoji)
+            .on_conflict_do_nothing(constraint="uq_reaction")
+            .returning(Reaction.id)
+        )
+        result = await session.execute(stmt)
+        row = result.scalar_one_or_none()
+
+        if row is None:
+            # Already exists — return the existing reaction
+            existing = await session.execute(
+                select(Reaction).where(
+                    Reaction.journal_id == journal_id,
+                    Reaction.user_id == user.id,
+                    Reaction.emoji == emoji,
+                )
             )
-        )
-        if result.scalar_one_or_none() is not None:
-            raise ConflictError(f"You already reacted with {emoji}")
+            reaction = existing.scalar_one()
+            return reaction
 
-        reaction = Reaction(
-            journal_id=journal_id,
-            user_id=user.id,
-            emoji=emoji,
-        )
-        session.add(reaction)
         await session.flush()
-        await session.refresh(reaction)
-        logger.debug(
-            "Added reaction %s on journal %d by user %d",
-            emoji,
-            journal_id,
-            user.id,
-        )
-        return reaction
+        reaction_obj = await session.get(Reaction, row)
+        assert reaction_obj is not None
+        return reaction_obj
 
     async def remove_reaction(
         self,
@@ -79,57 +84,110 @@ class ReactionService:
         user: User,
         emoji: str,
     ) -> None:
-        """Remove a reaction from a journal entry.
-
-        Raises ``NotFoundError`` if the reaction does not exist.
-        """
+        """Remove a reaction."""
         result = await session.execute(
-            select(Reaction).where(
+            delete(Reaction).where(
                 Reaction.journal_id == journal_id,
                 Reaction.user_id == user.id,
                 Reaction.emoji == emoji,
             )
         )
-        reaction = result.scalar_one_or_none()
-        if reaction is None:
+        if result.rowcount == 0:
             raise NotFoundError("Reaction not found")
-
-        await session.delete(reaction)
-        await session.flush()
-        logger.debug(
-            "Removed reaction %s on journal %d by user %d",
-            emoji,
-            journal_id,
-            user.id,
-        )
 
     async def list_reactions(
         self,
         session: AsyncSession,
         journal_id: int,
-    ) -> list[ReactionGroup]:
-        """List reactions on a journal, grouped by emoji with user lists."""
-        # Get all reactions for this journal with user info
-        from sqlalchemy.orm import selectinload
-
-        result = await session.execute(
+    ) -> list[ReactionListGroup]:
+        """List reactions for a single journal, grouped by emoji with user details."""
+        stmt = (
             select(Reaction)
             .where(Reaction.journal_id == journal_id)
             .options(selectinload(Reaction.user))
             .order_by(Reaction.emoji, Reaction.created_at)
         )
-        reactions = list(result.scalars().all())
+        rows = list((await session.execute(stmt)).scalars().all())
 
-        # Group by emoji
-        groups: dict[str, list[Reaction]] = {}
-        for r in reactions:
-            groups.setdefault(r.emoji, []).append(r)
-
-        return [
-            ReactionGroup(
-                emoji=emoji,
-                count=len(rxns),
-                users=[{"id": r.user_id, "login": r.user.login, "display_name": r.user.display_name} for r in rxns],
+        groups: dict[str, ReactionListGroup] = {}
+        for r in rows:
+            if r.emoji not in groups:
+                groups[r.emoji] = ReactionListGroup(emoji=r.emoji, count=0, users=[])
+            grp = groups[r.emoji]
+            groups[r.emoji] = ReactionListGroup(
+                emoji=r.emoji,
+                count=grp.count + 1,
+                users=[*grp.users, {"id": r.user_id, "login": r.user.login, "display_name": r.user.display_name}],
             )
-            for emoji, rxns in groups.items()
-        ]
+        return list(groups.values())
+
+    async def toggle_reaction(
+        self,
+        session: AsyncSession,
+        journal_id: int,
+        user_id: int,
+        emoji: str,
+    ) -> bool:
+        """Toggle a reaction. Returns True if added, False if removed.
+
+        Race-safe: delete-first then insert with ON CONFLICT DO NOTHING.
+        """
+        if emoji not in REACTION_EMOJI:
+            raise ValidationError(f"Invalid emoji: {emoji}. Allowed: {', '.join(REACTION_EMOJI.keys())}")
+
+        result = await session.execute(
+            delete(Reaction).where(
+                Reaction.journal_id == journal_id,
+                Reaction.user_id == user_id,
+                Reaction.emoji == emoji,
+            )
+        )
+        if result.rowcount > 0:
+            return False  # removed
+
+        await session.execute(
+            insert(Reaction)
+            .values(journal_id=journal_id, user_id=user_id, emoji=emoji)
+            .on_conflict_do_nothing(constraint="uq_reaction")
+        )
+        return True  # added
+
+    async def list_reactions_bulk(
+        self,
+        session: AsyncSession,
+        journal_ids: list[int],
+        current_user_id: int | None = None,
+    ) -> dict[int, list[ReactionGroup]]:
+        """Batch-load reactions for multiple journals in a single query.
+
+        Returns {journal_id: [ReactionGroup(emoji, count, reacted_by_me)]}.
+        """
+        if not journal_ids:
+            return {}
+
+        # Build the reacted_by_me expression
+        if current_user_id:
+            reacted_col = func.bool_or(Reaction.user_id == current_user_id).label("reacted_by_me")
+        else:
+            from sqlalchemy import literal
+
+            reacted_col = literal(False).label("reacted_by_me")
+
+        stmt = (
+            select(
+                Reaction.journal_id,
+                Reaction.emoji,
+                func.count().label("cnt"),
+                reacted_col,
+            )
+            .where(Reaction.journal_id.in_(journal_ids))
+            .group_by(Reaction.journal_id, Reaction.emoji)
+            .order_by(Reaction.journal_id, Reaction.emoji)
+        )
+
+        rows = (await session.execute(stmt)).all()
+        result: dict[int, list[ReactionGroup]] = {}
+        for row in rows:
+            jid = row[0]
+            result.setdefault(jid, []).append(ReactionGroup(emoji=row[1], count=row[2], reacted_by_me=bool(row[3])))
+        return result

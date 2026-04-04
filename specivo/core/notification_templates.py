@@ -22,3 +22,6 @@ ISSUE_UPDATED_IN_APP_TITLE = _l("[{issue_key}] Updated by {actor_name}")
 # --- Comment ---
 COMMENT_EMAIL_SUBJECT = _l("[{issue_key}] New comment: {issue_subject}")
 COMMENT_IN_APP_TITLE = _l("[{issue_key}] {actor_name} commented")
+
+# --- Password reset ---
+PASSWORD_RESET_EMAIL_SUBJECT = _l("Password reset request")

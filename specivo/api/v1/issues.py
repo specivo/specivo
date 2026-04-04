@@ -8,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.database import get_db
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError
+from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
@@ -34,6 +35,7 @@ from specivo.services.mention_service import MentionService
 from specivo.services.notification_service import NotificationService
 from specivo.services.permission_service import check_permission
 from specivo.services.project_service import ProjectService
+from specivo.services.reaction_service import ReactionService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.workflow_service import WorkflowService
@@ -49,6 +51,7 @@ _saved_filter_service = SavedFilterService()
 _workflow_service = WorkflowService()
 _notification_service = NotificationService()
 _mention_service = MentionService()
+_reaction_svc = ReactionService()
 
 
 # ---------------------------------------------------------------------------
@@ -101,7 +104,7 @@ def _issue_out(issue: Issue) -> IssueOut:
 
 
 @router.post(
-    "/projects/{project_key}/issues",
+    "/projects/{project_key}/issues/",
     response_model=IssueOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -125,7 +128,7 @@ async def create_issue(
 
 
 @router.get(
-    "/projects/{project_key}/issues",
+    "/projects/{project_key}/issues/",
     response_model=IssueListResponse,
 )
 async def list_issues(
@@ -224,11 +227,31 @@ async def list_issues(
 
 
 # ---------------------------------------------------------------------------
+# Autocomplete (must be before {issue_ref} routes to avoid path conflicts)
+# ---------------------------------------------------------------------------
+
+
+@router.get(
+    "/issues/autocomplete/",
+    tags=["issues"],
+)
+async def autocomplete_issues(
+    q: str = Query("", min_length=1),
+    limit: int = Query(10, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Autocomplete issues by key or subject. Returns only issues the user can access."""
+    results = await _service.autocomplete(db, q, current_user, limit=limit)
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Bulk operations (must be before {issue_ref} routes to avoid path conflicts)
 # ---------------------------------------------------------------------------
 
 
-@router.post("/issues/bulk-update", response_model=BulkResult)
+@router.post("/issues/bulk-update/", response_model=BulkResult)
 async def bulk_update_issues(
     data: BulkUpdateRequest,
     current_user: User = Depends(get_current_user),
@@ -238,7 +261,7 @@ async def bulk_update_issues(
     return await _bulk_service.bulk_update(db, data.issue_ids, data.updates, current_user)
 
 
-@router.post("/issues/bulk-delete", response_model=BulkResult)
+@router.post("/issues/bulk-delete/", response_model=BulkResult)
 async def bulk_delete_issues(
     data: BulkDeleteRequest,
     current_user: User = Depends(get_current_user),
@@ -253,7 +276,7 @@ async def bulk_delete_issues(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/issues/{issue_ref}", response_model=IssueWithChildren)
+@router.get("/issues/{issue_ref}/", response_model=IssueWithChildren)
 async def get_issue(
     issue_ref: str,
     request: Request,
@@ -376,7 +399,7 @@ async def get_issue(
     )
 
 
-@router.patch("/issues/{issue_ref}", response_model=IssueOut)
+@router.patch("/issues/{issue_ref}/", response_model=IssueOut)
 async def update_issue(
     issue_ref: str,
     data: IssueUpdate,
@@ -420,7 +443,7 @@ async def update_issue(
     return _issue_out(issue)
 
 
-@router.delete("/issues/{issue_ref}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/issues/{issue_ref}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_issue(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
@@ -439,7 +462,7 @@ async def delete_issue(
 
 
 @router.get(
-    "/issues/{issue_ref}/allowed-statuses",
+    "/issues/{issue_ref}/allowed-statuses/",
     response_model=AllowedStatusesOut,
     tags=["workflow"],
 )
@@ -520,7 +543,7 @@ def _journal_out(j: Journal, resolved_by_user: User | None = None) -> JournalOut
 
 
 @router.post(
-    "/issues/{issue_ref}/journals",
+    "/issues/{issue_ref}/journals/",
     response_model=JournalOut,
     status_code=status.HTTP_201_CREATED,
     tags=["journals"],
@@ -574,7 +597,7 @@ async def add_comment(
 
 
 @router.post(
-    "/issues/{issue_ref}/journals/{journal_id}/resolve",
+    "/issues/{issue_ref}/journals/{journal_id}/resolve/",
     response_model=JournalOut,
     tags=["journals"],
 )
@@ -584,11 +607,18 @@ async def resolve_thread(
     data: ResolveThreadRequest,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit("resolve_toggle", max_requests=30, window_seconds=60)),
 ) -> JournalOut:
     """Mark a journal thread as resolved."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
-    if not await check_permission(current_user, issue.project_id, "add_issue_notes", db):
-        raise PermissionDeniedError("You do not have permission to manage threads in this project")
+    can_resolve = (
+        current_user.is_admin
+        or issue.author_id == current_user.id
+        or issue.assigned_to_id == current_user.id
+        or await check_permission(current_user, issue.project_id, "edit_issues", db)
+    )
+    if not can_resolve:
+        raise PermissionDeniedError("Only the author, assignee, or a user with edit permission can resolve")
 
     journal = await _journal_service.resolve_thread(
         session=db,
@@ -609,7 +639,7 @@ async def resolve_thread(
 
 
 @router.post(
-    "/issues/{issue_ref}/journals/{journal_id}/unresolve",
+    "/issues/{issue_ref}/journals/{journal_id}/unresolve/",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["journals"],
 )
@@ -618,11 +648,18 @@ async def unresolve_thread(
     journal_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit("resolve_toggle", max_requests=30, window_seconds=60)),
 ) -> None:
     """Clear resolution on a journal thread."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
-    if not await check_permission(current_user, issue.project_id, "add_issue_notes", db):
-        raise PermissionDeniedError("You do not have permission to manage threads in this project")
+    can_resolve = (
+        current_user.is_admin
+        or issue.author_id == current_user.id
+        or issue.assigned_to_id == current_user.id
+        or await check_permission(current_user, issue.project_id, "edit_issues", db)
+    )
+    if not can_resolve:
+        raise PermissionDeniedError("Only the author, assignee, or a user with edit permission can resolve")
 
     await _journal_service.unresolve_thread(
         session=db,
@@ -638,7 +675,7 @@ async def unresolve_thread(
 
 
 @router.post(
-    "/issues/{issue_ref}/watchers",
+    "/issues/{issue_ref}/watchers/",
     status_code=status.HTTP_201_CREATED,
     tags=["watchers"],
 )
@@ -654,7 +691,7 @@ async def watch_issue(
 
 
 @router.delete(
-    "/issues/{issue_ref}/watchers",
+    "/issues/{issue_ref}/watchers/",
     status_code=status.HTTP_204_NO_CONTENT,
     tags=["watchers"],
 )
@@ -669,7 +706,7 @@ async def unwatch_issue(
 
 
 @router.get(
-    "/issues/{issue_ref}/watchers",
+    "/issues/{issue_ref}/watchers/",
     response_model=list[WatcherOut],
     tags=["watchers"],
 )
@@ -690,3 +727,34 @@ async def list_watchers(
         )
         for u in watcher_users
     ]
+
+
+# ---------------------------------------------------------------------------
+# Reaction endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/issues/{issue_ref}/journals/{journal_id}/reactions/{emoji}/",
+    status_code=status.HTTP_200_OK,
+    tags=["reactions"],
+)
+async def toggle_reaction(
+    issue_ref: str,
+    journal_id: int,
+    emoji: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit("reaction_toggle", max_requests=60, window_seconds=60)),
+) -> dict:
+    """Toggle an emoji reaction on a journal entry."""
+    issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
+
+    # Verify the journal exists and belongs to this issue
+    result = await db.execute(select(Journal).where(Journal.id == journal_id))
+    journal = result.scalar_one_or_none()
+    if journal is None or journal.issue_id != issue.id:
+        raise NotFoundError("Journal not found")
+
+    added = await _reaction_svc.toggle_reaction(db, journal_id, current_user.id, emoji)
+    return {"added": added, "emoji": emoji}

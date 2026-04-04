@@ -1,10 +1,10 @@
-"""Integration tests for email notifications.
+"""Integration tests for notifications.
 
 Covers:
-- Email queued on assignment change
+- Email queued on assignment change (via channel dispatch)
 - Email queued on comment (to watchers)
 - No email when preference disabled
-- Notification preferences CRUD
+- Notification preferences CRUD (channels JSONB)
 - No self-notification on assignment
 """
 
@@ -31,7 +31,7 @@ from tests.factories.user import TEST_PASSWORD, AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = TEST_PASSWORD) -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -56,7 +56,7 @@ async def _create_issue_via_api(
     if assigned_to_id is not None:
         body["assigned_to_id"] = assigned_to_id
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -166,7 +166,7 @@ async def test_email_queued_on_assignment(
     with patch("specivo.tasks.notifications.send_notification_email.delay") as mock_delay:
         # Assign to second_user
         resp = await client.patch(
-            f"/api/v1/issues/{issue_key}",
+            f"/api/v1/issues/{issue_key}/",
             json={"assigned_to_id": second_user.id, "lock_version": issue_data["lock_version"]},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -205,14 +205,14 @@ async def test_email_queued_on_comment(
 
     # second_user watches the issue
     await client.post(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {second_token}"},
     )
 
     with patch("specivo.tasks.notifications.send_notification_email.delay") as mock_delay:
         # Admin adds a comment -> should notify second_user (watcher), not admin (actor)
         resp = await client.post(
-            f"/api/v1/issues/{issue_key}/journals",
+            f"/api/v1/issues/{issue_key}/journals/",
             json={"notes": "This is a test comment"},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -239,12 +239,12 @@ async def test_no_email_when_preference_disabled(
     priority: IssuePriority,
 ) -> None:
     """When a user disables email notification for an event type, no email is queued."""
-    # Disable assignment notifications for second_user
+    # Disable assignment email for second_user via channels JSONB
     pref = NotificationPreference(
         user_id=second_user.id,
         project_id=None,
         event_type="assignment",
-        email_enabled=False,
+        channels={"email": False, "in_app": True},
     )
     db_session.add(pref)
     await db_session.commit()
@@ -264,7 +264,7 @@ async def test_no_email_when_preference_disabled(
     with patch("specivo.tasks.notifications.send_notification_email.delay") as mock_delay:
         # Assign to second_user
         resp = await client.patch(
-            f"/api/v1/issues/{issue_key}",
+            f"/api/v1/issues/{issue_key}/",
             json={"assigned_to_id": second_user.id, "lock_version": issue_data["lock_version"]},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
@@ -282,46 +282,47 @@ async def test_notification_preferences_crud(
     admin_token: str,
     project: Project,
 ) -> None:
-    """GET and PATCH notification preferences."""
+    """GET and PATCH notification preferences (channels JSONB)."""
     # GET — initially empty (defaults apply)
     resp = await client.get(
-        "/api/v1/notification-preferences",
+        "/api/v1/notification-preferences/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
     assert resp.json() == []
 
-    # PATCH — disable assignment notifications globally
+    # PATCH — disable assignment email
     resp = await client.patch(
-        "/api/v1/notification-preferences",
-        json={"event_type": "assignment", "email_enabled": False},
+        "/api/v1/notification-preferences/",
+        json={"event_type": "assignment", "channels": {"email": False, "in_app": True}},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["event_type"] == "assignment"
-    assert data["email_enabled"] is False
+    assert data["channels"]["email"] is False
+    assert data["channels"]["in_app"] is True
     assert data["project_id"] is None
 
     # GET — now has one preference
     resp = await client.get(
-        "/api/v1/notification-preferences",
+        "/api/v1/notification-preferences/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
     prefs = resp.json()
     assert len(prefs) == 1
     assert prefs[0]["event_type"] == "assignment"
-    assert prefs[0]["email_enabled"] is False
+    assert prefs[0]["channels"]["email"] is False
 
-    # PATCH — re-enable
+    # PATCH — re-enable email
     resp = await client.patch(
-        "/api/v1/notification-preferences",
-        json={"event_type": "assignment", "email_enabled": True},
+        "/api/v1/notification-preferences/",
+        json={"event_type": "assignment", "channels": {"email": True, "in_app": True}},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["email_enabled"] is True
+    assert resp.json()["channels"]["email"] is True
 
 
 @pytest.mark.asyncio
@@ -350,7 +351,7 @@ async def test_assignment_no_self_notify(
     with patch("specivo.tasks.notifications.send_notification_email.delay") as mock_delay:
         # Admin assigns to self
         resp = await client.patch(
-            f"/api/v1/issues/{issue_key}",
+            f"/api/v1/issues/{issue_key}/",
             json={"assigned_to_id": admin_user.id, "lock_version": issue_data["lock_version"]},
             headers={"Authorization": f"Bearer {admin_token}"},
         )

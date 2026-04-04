@@ -4,21 +4,25 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import AppError, NotFoundError
+from specivo.core.exceptions import AppError, ConflictError, NotFoundError
+from specivo.core.utils import utcnow
+from specivo.models.issue import Issue
+from specivo.models.lookups import IssueStatus
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import EnabledModule, Project
+from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
 from specivo.models.role import Role
 from specivo.models.user import User
+from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
 
 logger = logging.getLogger(__name__)
 
 # Default modules enabled for every new project
-_DEFAULT_MODULES = ("issue_tracking",)
+_DEFAULT_MODULES = ("issue_tracking", "wiki", "time_tracking")
 
 
 class ProjectService:
@@ -40,8 +44,19 @@ class ProjectService:
         return label
 
     async def _get_by_key(self, session: AsyncSession, key: str) -> Project | None:
-        stmt = select(Project).where(Project.key == key.upper())
+        upper_key = key.upper()
+        stmt = select(Project).where(Project.key == upper_key)
         result = await session.execute(stmt)
+        project = result.scalar_one_or_none()
+        if project is not None:
+            return project
+        # Alias fallback — check retired keys
+        alias_stmt = (
+            select(Project)
+            .join(ProjectKeyAlias, ProjectKeyAlias.project_id == Project.id)
+            .where(ProjectKeyAlias.old_key == upper_key)
+        )
+        result = await session.execute(alias_stmt)
         return result.scalar_one_or_none()
 
     # -----------------------------------------------------------------------
@@ -66,6 +81,18 @@ class ProjectService:
             if parent is None:
                 raise NotFoundError(f"Parent project '{data.parent_key}' not found")
 
+            # Enforce maximum nesting depth
+            from specivo.core.constants import MAX_PROJECT_DEPTH
+
+            parent_depth = parent.path.count(".") + 1 if parent.path else 1
+            if parent_depth >= MAX_PROJECT_DEPTH:
+                raise AppError(
+                    code="max_depth_exceeded",
+                    message=f"Maximum project nesting depth of {MAX_PROJECT_DEPTH} exceeded.",
+                    status_code=422,
+                    details={"max_depth": MAX_PROJECT_DEPTH, "current_depth": parent_depth},
+                )
+
         path = self._build_path(
             data.identifier,
             parent.path if parent else None,
@@ -79,6 +106,7 @@ class ProjectService:
             parent_id=parent.id if parent else None,
             path=path,
             is_public=data.is_public,
+            color=data.color,
         )
         session.add(project)
 
@@ -102,9 +130,18 @@ class ProjectService:
                 ) from exc
             raise
 
-        # Enable default modules
-        for module_name in _DEFAULT_MODULES:
-            session.add(EnabledModule(project_id=project.id, name=module_name))
+        # Enable modules — use explicit list from request, or defaults
+        if data.modules is not None:
+            # Always enable issue_tracking; add requested modules
+            modules_to_enable = {"issue_tracking"}
+            for m in data.modules:
+                if m in KNOWN_MODULES:
+                    modules_to_enable.add(m)
+            for module_name in sorted(modules_to_enable):
+                session.add(EnabledModule(project_id=project.id, name=module_name))
+        else:
+            for module_name in _DEFAULT_MODULES:
+                session.add(EnabledModule(project_id=project.id, name=module_name))
 
         await session.flush()
         return project
@@ -151,6 +188,13 @@ class ProjectService:
         projects = (await session.execute(stmt)).scalars().all()
         return list(projects), total
 
+    async def list_all_admin(self, session: AsyncSession, user: User) -> list[Project]:
+        """List all projects (including archived). Admin use only."""
+        if not user.is_admin:
+            raise AppError(code="forbidden", message="Admin access required", status_code=403)
+        stmt = select(Project).order_by(Project.status, Project.name)
+        return list((await session.execute(stmt)).scalars().all())
+
     async def update(
         self,
         session: AsyncSession,
@@ -166,11 +210,107 @@ class ProjectService:
             project.is_public = data.is_public
         if data.status is not None:
             project.status = data.status
+        if data.color is not None:
+            project.color = data.color
 
         session.add(project)
         await session.flush()
         await session.refresh(project)
         return project
+
+    async def rename(
+        self,
+        session: AsyncSession,
+        project: Project,
+        new_key: str | None,
+        new_identifier: str | None,
+        admin_user: User,
+    ) -> tuple[Project, int]:
+        """Rename project key and/or identifier. Returns (project, issues_rekeyed).
+
+        Admin-only. Re-keys all issues atomically. Stores old key as alias
+        for redirect lookups.
+        """
+        from sqlalchemy import text, update
+
+        issues_rekeyed = 0
+
+        if new_key and new_key != project.key:
+            # Check conflict with live projects
+            conflict = await session.execute(
+                select(Project.id).where(Project.key == new_key, Project.id != project.id)
+            )
+            if conflict.scalar_one_or_none() is not None:
+                raise ConflictError(message=f"Project key '{new_key}' is already in use")
+
+            # Check conflict with aliases
+            alias_conflict = await session.execute(
+                select(ProjectKeyAlias).where(ProjectKeyAlias.old_key == new_key)
+            )
+            existing_alias = alias_conflict.scalar_one_or_none()
+            if existing_alias is not None:
+                if existing_alias.project_id == project.id:
+                    # Reverting to a previous key — delete the alias
+                    await session.delete(existing_alias)
+                else:
+                    raise ConflictError(message=f"Key '{new_key}' is a retired key of another project")
+
+            # Store old key as alias
+            session.add(ProjectKeyAlias(
+                old_key=project.key,
+                project_id=project.id,
+                renamed_at=utcnow(),
+                renamed_by_id=admin_user.id,
+            ))
+
+            # Bulk re-key all issues
+            rekey_stmt = (
+                update(Issue)
+                .where(Issue.project_id == project.id)
+                .values(project_key=new_key)
+            )
+            result = await session.execute(rekey_stmt)
+            issues_rekeyed = result.rowcount
+
+            project.key = new_key
+
+        if new_identifier and new_identifier != project.identifier:
+            # Check conflict
+            id_conflict = await session.execute(
+                select(Project.id).where(
+                    Project.identifier == new_identifier, Project.id != project.id
+                )
+            )
+            if id_conflict.scalar_one_or_none() is not None:
+                raise ConflictError(message=f"Identifier '{new_identifier}' is already in use")
+
+            # Recalculate ltree path for project and descendants
+            old_path = project.path
+            new_label = new_identifier.replace("-", "_")
+            # Replace the last segment of the path
+            parts = old_path.rsplit(".", 1)
+            new_path = f"{parts[0]}.{new_label}" if len(parts) > 1 else new_label
+
+            # Update descendants
+            await session.execute(
+                text(
+                    "UPDATE projects SET path = :new_prefix || substring(path FROM length(:old_prefix) + 1) "
+                    "WHERE path::text = :old_prefix OR path::text LIKE :old_prefix_dot"
+                ),
+                {
+                    "new_prefix": new_path,
+                    "old_prefix": old_path,
+                    "old_prefix_dot": f"{old_path}.%",
+                },
+            )
+
+            project.identifier = new_identifier
+            project.path = new_path
+
+        session.add(project)
+        await session.flush()
+        await session.refresh(project)
+        return project, issues_rekeyed
 
     async def delete(self, session: AsyncSession, project: Project) -> None:
         """Delete a project and all its children (CASCADE handles DB rows)."""
@@ -239,6 +379,43 @@ class ProjectService:
         for role_id in role_ids:
             if role_id not in existing_role_ids:
                 session.add(MemberRole(member_id=member.id, role_id=role_id))
+
+        await session.flush()
+        return member
+
+    async def update_member_roles(
+        self,
+        session: AsyncSession,
+        project: Project,
+        user_id: int,
+        role_ids: list[int],
+    ) -> Member:
+        """Replace all roles for a project member with the given role_ids."""
+        # Verify member exists
+        result = await session.execute(
+            select(Member).where(
+                Member.user_id == user_id,
+                Member.project_id == project.id,
+            )
+        )
+        member = result.scalar_one_or_none()
+        if member is None:
+            raise NotFoundError(f"User {user_id} is not a member of project '{project.key}'")
+
+        # Verify all roles exist
+        roles_result = await session.execute(select(Role).where(Role.id.in_(role_ids)))
+        roles = roles_result.scalars().all()
+        if len(roles) != len(role_ids):
+            found_ids = {r.id for r in roles}
+            missing = set(role_ids) - found_ids
+            raise NotFoundError(f"Roles not found: {sorted(missing)}")
+
+        # Delete existing roles and replace
+        await session.execute(
+            delete(MemberRole).where(MemberRole.member_id == member.id)
+        )
+        for role_id in role_ids:
+            session.add(MemberRole(member_id=member.id, role_id=role_id))
 
         await session.flush()
         return member
@@ -376,3 +553,101 @@ class ProjectService:
         for module_name, enabled in modules.items():
             await self.toggle_module(session, project, module_name, enabled)
         return await self.get_modules(session, project)
+
+    # -----------------------------------------------------------------------
+    # Stats
+    # -----------------------------------------------------------------------
+
+    async def load_project_stats(
+        self,
+        session: AsyncSession,
+        project_ids: list[int],
+    ) -> dict:
+        """Batch-load stats for a set of project IDs.
+
+        Returns a dict keyed by project_id with:
+        - open_count, closed_count (issue stats)
+        - member_count
+        - wiki_page_count
+        - modules (dict of module_name -> bool)
+        - members (list of dicts with user_id, display_name, avatar_url)
+        """
+        stats: dict[int, dict] = {
+            pid: {
+                "open_count": 0,
+                "closed_count": 0,
+                "member_count": 0,
+                "wiki_page_count": 0,
+                "modules": {m: False for m in sorted(KNOWN_MODULES)},
+                "members": [],
+            }
+            for pid in project_ids
+        }
+
+        if not project_ids:
+            return stats
+
+        # --- Issue counts (open vs closed) ---
+        is_closed_sub = select(IssueStatus.id).where(IssueStatus.is_closed.is_(True)).scalar_subquery()
+        issue_stmt = (
+            select(
+                Issue.project_id,
+                func.count().filter(Issue.status_id.not_in(is_closed_sub)).label("open_count"),
+                func.count().filter(Issue.status_id.in_(is_closed_sub)).label("closed_count"),
+            )
+            .where(Issue.project_id.in_(project_ids))
+            .group_by(Issue.project_id)
+        )
+        issue_rows = (await session.execute(issue_stmt)).all()
+        for row in issue_rows:
+            stats[row.project_id]["open_count"] = row.open_count
+            stats[row.project_id]["closed_count"] = row.closed_count
+
+        # --- Member counts + member details (first 6 per project) ---
+        member_stmt = (
+            select(
+                Member.project_id,
+                User.id.label("user_id"),
+                User.display_name,
+                User.avatar_url,
+            )
+            .join(User, Member.user_id == User.id)
+            .where(Member.project_id.in_(project_ids))
+            .order_by(Member.project_id, Member.id)
+        )
+        member_rows = (await session.execute(member_stmt)).all()
+        members_by_project: dict[int, list[dict]] = {}
+        for row in member_rows:
+            members_by_project.setdefault(row.project_id, []).append(
+                {
+                    "user_id": row.user_id,
+                    "display_name": row.display_name,
+                    "avatar_url": row.avatar_url,
+                }
+            )
+        for pid, members in members_by_project.items():
+            stats[pid]["member_count"] = len(members)
+            stats[pid]["members"] = members[:6]  # first 6 for avatars
+
+        # --- Wiki page counts ---
+        wiki_stmt = (
+            select(Wiki.project_id, func.count(WikiPage.id).label("page_count"))
+            .join(WikiPage, Wiki.id == WikiPage.wiki_id)
+            .where(Wiki.project_id.in_(project_ids))
+            .group_by(Wiki.project_id)
+        )
+        wiki_rows = (await session.execute(wiki_stmt)).all()
+        for row in wiki_rows:
+            stats[row.project_id]["wiki_page_count"] = row.page_count
+
+        # --- Enabled modules ---
+        module_stmt = (
+            select(EnabledModule.project_id, EnabledModule.name)
+            .where(EnabledModule.project_id.in_(project_ids))
+        )
+        module_rows = (await session.execute(module_stmt)).all()
+        for row in module_rows:
+            if row.project_id in stats:
+                stats[row.project_id]["modules"][row.name] = True
+
+        return stats

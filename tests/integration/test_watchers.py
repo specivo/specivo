@@ -29,7 +29,7 @@ from tests.factories.user import AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -44,7 +44,7 @@ async def _create_issue_via_api(
     subject: str,
 ) -> dict:
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json={
             "project_key": project_key,
             "tracker_id": tracker_id,
@@ -183,7 +183,7 @@ async def test_watch_issue(
     issue_key = issue_data["key"]
 
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {second_token}"},
     )
     assert resp.status_code == 201, resp.text
@@ -216,11 +216,11 @@ async def test_watch_issue_is_idempotent(
 
     # Watch twice
     await client.post(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     resp = await client.post(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 201, resp.text
@@ -254,7 +254,7 @@ async def test_unwatch_issue(
 
     # Admin is already watching (auto-watch on create)
     resp = await client.delete(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204, resp.text
@@ -289,7 +289,7 @@ async def test_unwatch_not_watching_is_noop(
 
     # second_user never watched this issue
     resp = await client.delete(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {second_token}"},
     )
     assert resp.status_code == 204, resp.text
@@ -321,12 +321,12 @@ async def test_list_watchers(
 
     # second_user watches the issue
     await client.post(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {second_token}"},
     )
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}/watchers",
+        f"/api/v1/issues/{issue_key}/watchers/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -360,7 +360,7 @@ async def test_include_watchers_on_issue_get(
     issue_key = issue_data["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=watchers",
+        f"/api/v1/issues/{issue_key}/?include=watchers",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -390,7 +390,7 @@ async def test_include_watchers_not_requested_returns_none(
     issue_key = issue_data["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text

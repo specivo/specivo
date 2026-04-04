@@ -38,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from specivo.core.config import get_settings
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.role import Role
+from specivo.models.search import EmbeddingModel
 from specivo.models.time_entry import TimeEntryActivity
 from specivo.models.workflow import WorkflowTransition
 
@@ -343,6 +344,50 @@ async def seed_workflow_transitions(session: AsyncSession) -> None:
     print(f"Seeded {count} new workflow transitions")
 
 
+async def seed_embedding_model(session: AsyncSession) -> None:
+    """Insert the default local embedding model if it does not already exist.
+
+    Idempotent: does nothing when a model with the same name is already present,
+    and never overwrites admin-modified values.
+    """
+    result = await session.execute(select(EmbeddingModel).where(EmbeddingModel.name == "multilingual-e5-small"))
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        logger.info("Embedding model 'multilingual-e5-small' already exists, skipping")
+        return
+
+    model = EmbeddingModel(
+        name="multilingual-e5-small",
+        provider="local",
+        model_name="multilingual-e5-small",
+        dimensions=384,
+        is_default=True,
+    )
+    session.add(model)
+    await session.flush()
+    logger.info("Seeded default embedding model: multilingual-e5-small")
+
+
+async def seed_settings(session: AsyncSession) -> None:
+    """Seed default application settings (insert only, never overwrite user values)."""
+    import json
+
+    from specivo.core.constants import DEFAULT_AVATAR_PALETTE
+    from specivo.models.setting import Setting
+
+    defaults = {
+        "brand_name": "Specivo",
+        "avatar_color_palette": json.dumps(DEFAULT_AVATAR_PALETTE),
+    }
+    for key, value in defaults.items():
+        result = await session.execute(select(Setting).where(Setting.key == key))
+        if result.scalar_one_or_none() is None:
+            session.add(Setting(key=key, value=value))
+            print(f"  Seeded setting: {key}={value}")
+
+    await session.flush()
+
+
 async def _run() -> None:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False)
@@ -356,6 +401,9 @@ async def _run() -> None:
         await seed_roles(session)
         await seed_time_entry_activities(session)
         await seed_workflow_transitions(session)
+        await seed_embedding_model(session)
+        await seed_settings(session)
+        await session.commit()
 
     await engine.dispose()
 

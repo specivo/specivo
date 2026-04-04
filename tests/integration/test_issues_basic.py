@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
@@ -59,6 +60,10 @@ async def tracker(db_session: AsyncSession, status: IssueStatus) -> Tracker:
 @pytest_asyncio.fixture
 async def priority(db_session: AsyncSession) -> IssuePriority:
     """Persisted Normal priority (is_default=True)."""
+    result = await db_session.execute(select(IssuePriority).where(IssuePriority.name == "Normal"))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     p = PriorityFactory.build(name="Normal", is_default=True, position=2)
     db_session.add(p)
     await db_session.commit()

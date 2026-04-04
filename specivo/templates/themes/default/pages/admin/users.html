@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Users - Admin - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/admin/">Admin</a>
+  <span class="sep">/</span>
+  <span class="current">Users</span>
+</div>
+
+<div x-data='adminUsers({ users: {{ users_data | tojson }}, roles: {{ roles | tojson }} })'>
+  <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
+    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">Users</h1>
+    <button class="sp-btn sp-btn-primary" @click="showCreate = true">+ New User</button>
+  </div>
+
+  <div class="card" style="padding: var(--sp-space-lg);">
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Login</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Last Active</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="users.length === 0">
+          <tr>
+            <td colspan="6" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">No users.</td>
+          </tr>
+        </template>
+        <template x-for="u in users" :key="u.id">
+          <tr :class="u.status === 'locked' ? 'sp-row-muted' : ''">
+            <td style="display: flex; align-items: center; gap: var(--sp-space-sm);">
+              <span class="avatar-sm" :style="'background:' + (u.status === 'locked' ? 'var(--sp-text-muted)' : u.avatar_color)" x-text="u.display_name.split(' ').map(function(w){return w[0]}).join('').substring(0,2).toUpperCase()"></span>
+              <span>
+                <span :style="'font-weight:' + (u.status === 'locked' ? '400' : '500') + (u.status === 'locked' ? ';text-decoration:line-through' : '')" x-text="u.display_name"></span><br>
+                <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="u.email"></span>
+              </span>
+            </td>
+            <td>
+              <code style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); background: var(--sp-bg-input); padding: 2px 6px; border-radius: 3px;" x-text="u.login"></code>
+            </td>
+            <td>
+              <span class="sp-role"
+                :class="u.is_admin ? 'sp-role-admin' : (u.is_service_account ? 'sp-role-member' : 'sp-role-member')"
+                x-text="u.is_admin ? 'Admin' : (u.is_service_account ? 'Service' : 'Member')"></span>
+            </td>
+            <td>
+              <span class="sp-user-status"
+                :class="'sp-user-status-' + u.status"
+                x-text="u.status.charAt(0).toUpperCase() + u.status.slice(1)"></span>
+            </td>
+            <td style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);" x-text="u.last_login_at ? timeAgo(u.last_login_at) : 'Never'"></td>
+            <td style="white-space: nowrap; display: flex; gap: var(--sp-space-xs);">
+              <button class="sp-btn-sm" @click="openResetPassword(u)" style="display: inline-flex; align-items: center; gap: 4px;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                Password
+              </button>
+              <template x-if="u.status === 'locked'">
+                <button class="sp-btn-sm" @click="toggleLock(u)" style="display: inline-flex; align-items: center; gap: 4px; color: var(--sp-success);">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                  Unlock
+                </button>
+              </template>
+              <template x-if="u.status !== 'locked'">
+                <button class="sp-btn-sm danger" @click="toggleLock(u)" style="display: inline-flex; align-items: center; gap: 4px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                  Lock
+                </button>
+              </template>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Create user modal -->
+  <div x-show="showCreate" x-cloak style="position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;">
+    <div class="sp-scrim" @click="showCreate = false"></div>
+    <div class="sp-modal" style="max-width: 520px;">
+      <div class="sp-modal-header">
+        <h2>New User</h2>
+        <button class="sp-modal-close" @click="showCreate = false">&times;</button>
+      </div>
+      <div class="sp-modal-body">
+        <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+          <label class="form-label">Display Name</label>
+          <input class="form-input" type="text" x-model="newUser.display_name" placeholder="John Doe">
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-md); margin-bottom: var(--sp-space-md);">
+          <div class="form-group">
+            <label class="form-label">Login</label>
+            <input class="form-input" type="text" x-model="newUser.login" placeholder="johndoe">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input class="form-input" type="email" x-model="newUser.email" placeholder="john@example.com">
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+          <label class="form-label">Password</label>
+          <input class="form-input" type="password" x-model="newUser.password" placeholder="Min 10 characters">
+        </div>
+        <div style="display: flex; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
+          <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer;">
+            <input type="checkbox" x-model="newUser.is_service_account" style="accent-color: var(--sp-accent);"> Service Account
+          </label>
+        </div>
+        <div x-show="createError" style="color: var(--sp-danger); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-sm);" x-text="createError"></div>
+      </div>
+      <div class="sp-modal-footer">
+        <button class="sp-btn" @click="showCreate = false">Cancel</button>
+        <button class="sp-btn sp-btn-primary" @click="createUser()" :disabled="creating">
+          <span x-show="!creating">Create</span>
+          <span x-show="creating">Creating...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset password modal -->
+  <div x-show="showReset" x-cloak style="position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;">
+    <div class="sp-scrim" @click="showReset = false"></div>
+    <div class="sp-modal" style="max-width: 420px;">
+      <div class="sp-modal-header">
+        <h2>Reset Password</h2>
+        <button class="sp-modal-close" @click="showReset = false">&times;</button>
+      </div>
+      <div class="sp-modal-body">
+        <p style="margin-bottom: var(--sp-space-md); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary);">
+          Reset password for <strong x-text="resetUser?.display_name"></strong> (<span x-text="resetUser?.login"></span>)
+        </p>
+        <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+          <label class="form-label">New Password</label>
+          <input class="form-input" type="password" x-model="resetPassword" placeholder="Min 10 characters">
+        </div>
+        <div x-show="resetError" style="color: var(--sp-danger); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-sm);" x-text="resetError"></div>
+        <div x-show="resetSuccess" style="color: var(--sp-success); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-sm);" x-text="resetSuccess"></div>
+      </div>
+      <div class="sp-modal-footer">
+        <button class="sp-btn" @click="showReset = false">Cancel</button>
+        <button class="sp-btn sp-btn-primary" @click="doResetPassword()" :disabled="resetting">
+          <span x-show="!resetting">Reset</span>
+          <span x-show="resetting">Resetting...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

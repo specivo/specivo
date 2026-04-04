@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, pagination %}
 
-{% block title %}Search{% if query %} - {{ query }}{% endif %} - Specivo{% endblock %}
+{% block title %}Search{% if query %} - {{ query }}{% endif %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -9,93 +9,228 @@
   {"label": "Search"}
 ]) }}
 
-<h1 class="page-title">Search</h1>
+<div class="page-header">
+  <h1>Search</h1>
+</div>
 
 {# Search box #}
-<form method="get" action="/search">
+<form method="get" action="/search/" id="search-form" x-data="{ submitting: false }" @submit="submitting = true">
+  <input type="hidden" name="mode" value="{{ mode }}" x-ref="modeInput">
+  <input type="hidden" name="scope" value="{{ scope }}" x-ref="scopeInput">
+  {% if project_key %}<input type="hidden" name="project_key" value="{{ project_key }}">{% endif %}
+
   <div class="search-box">
     <svg class="search-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-    <input type="text" name="q" value="{{ query }}" placeholder="Search issues and wiki..." autofocus>
+    <input type="text" name="q" value="{{ query }}" placeholder="Search everything..." autofocus>
+    <button type="submit" class="search-submit-btn" :disabled="submitting">Search</button>
   </div>
 
   <div class="search-controls">
     {# Mode toggle #}
     <div class="mode-toggle">
-      {% for m in ['keyword', 'semantic', 'hybrid'] %}
-      <button type="submit" name="mode" value="{{ m }}" class="mode-toggle-btn{{ ' active' if mode == m else '' }}">{{ m | capitalize }}</button>
+      {% for m in ['hybrid', 'keyword'] %}
+      <button type="button" class="mode-toggle-btn{{ ' active' if mode == m else '' }}" :disabled="submitting"
+              @click="$refs.modeInput.value = '{{ m }}'; submitting = true; $el.closest('form').submit()">{{ m | capitalize }}</button>
       {% endfor %}
     </div>
 
-    {# Scope tabs #}
+    {# Scope tabs with icons and backend counts #}
     <div class="scope-tabs">
-      {% for s in ['all', 'issues', 'wiki'] %}
-      <button type="submit" name="scope" value="{{ s }}" class="scope-tab{{ ' active' if scope == s else '' }}">{{ s | capitalize }}</button>
+      {% set tc = type_counts if type_counts is defined else {} %}
+      {% set tab_defs = [
+        ('all', 'All', tc.get('all', total)),
+        ('issues', 'Issues', tc.get('issues', '')),
+        ('wiki', 'Wiki', tc.get('wiki', '')),
+        ('comments', 'Comments', tc.get('comments', '')),
+        ('attachments', 'Attachments', tc.get('attachments', ''))
+      ] %}
+      {% set tab_icons = {
+        'all': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
+        'issues': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>',
+        'wiki': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>',
+        'comments': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
+        'attachments': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>'
+      } %}
+      {% for s_val, s_label, s_count in tab_defs %}
+      <button type="button" class="scope-tab{{ ' active' if scope == s_val else '' }}" :disabled="submitting"
+              @click="$refs.scopeInput.value = '{{ s_val }}'; submitting = true; $el.closest('form').submit()">
+        <span class="scope-tab-icon">{{ tab_icons[s_val] | safe }}</span>
+        {{ s_label }}{% if query and s_count is not none and s_count != '' %} ({{ s_count }}){% endif %}
+      </button>
       {% endfor %}
     </div>
 
     {% if project_key %}
-    <input type="hidden" name="project_key" value="{{ project_key }}">
-    <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">Project: {{ project_key }}</span>
+    <span class="search-project-label">Project: {{ project_key }}</span>
     {% endif %}
   </div>
 </form>
 
 {% if query %}
 {# Results header #}
-<div style="margin-bottom:var(--sp-space-md);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
-  {{ total }} result{{ 's' if total != 1 else '' }} for "{{ query }}"
+<div class="search-results-header">
+  {{ total }} result{{ 's' if total != 1 else '' }} for &ldquo;{{ query }}&rdquo;
 </div>
+
+{# SVG icon macros for result types #}
+{% set icon_issue = '<svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>' %}
+{% set icon_wiki = '<svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>' %}
+{% set icon_comment = '<svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>' %}
+{% set icon_attachment = '<svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>' %}
 
 {% if results %}
 <div class="search-results">
   {% for r in results %}
-  <div class="search-result">
-    <div class="result-header">
-      {% if r.result_type == 'issue' %}
-      <svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-      {% else %}
-      <svg class="result-type-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-      {% endif %}
-      <a href="{% if r.result_type == 'issue' %}/projects/{{ r.project_key }}/issues/{{ r.title }}{% else %}/projects/{{ r.project_key }}/wiki/{{ r.subtitle }}{% endif %}" class="result-title">{{ r.title }}</a>
+
+  {# Determine border color class based on type #}
+  {% if r.result_type == 'issue' %}
+    {% set border_class = 'search-result result-type-issue' %}
+  {% elif r.result_type in ('wiki', 'wiki_page') %}
+    {% set border_class = 'search-result result-type-wiki' %}
+  {% elif r.result_type in ('comment', 'journal') %}
+    {% set border_class = 'search-result result-type-comment' %}
+  {% elif r.result_type == 'attachment' %}
+    {% set border_class = 'search-result result-type-attachment' %}
+  {% else %}
+    {% set border_class = 'search-result' %}
+  {% endif %}
+
+  <div class="{{ border_class }}">
+
+    {# --- Comment / Journal result --- #}
+    {% if r.result_type in ('comment', 'journal') %}
+    <div class="comment-header">
+      {{ icon_comment | safe }}
+      <a class="result-title" href="/projects/{{ r.project_key }}/issues/{{ r.title }}">Comment on {{ r.title }}</a>
     </div>
-    {% if r.subtitle %}
     <div class="result-subtitle">
-      {% if r.project_key %}<span class="project-key">{{ r.project_key }}</span>{% endif %}
-      <span>{{ r.subtitle }}</span>
-      <span class="badge-status" style="font-size:var(--sp-font-size-xs);">{{ r.result_type }}</span>
+      <span class="project-key">{{ r.project_key }}</span>
+      <span>Comment</span>
     </div>
+
+    {# --- Issue result (scope=issues view with expanded detail) --- #}
+    {% elif r.result_type == 'issue' and scope == 'issues' %}
+    <div class="result-header">
+      {{ icon_issue | safe }}
+      <a class="issue-key" href="/projects/{{ r.project_key }}/issues/{{ r.title }}">{{ r.title }}</a>
+      {% if r.subtitle %}
+      <span class="result-subject">{{ r.subtitle }}</span>
+      {% endif %}
+    </div>
+
+    {# --- Issue result (all/default view) --- #}
+    {% elif r.result_type == 'issue' %}
+    <div class="result-header">
+      {{ icon_issue | safe }}
+      <a class="result-title" href="/projects/{{ r.project_key }}/issues/{{ r.title }}">{{ r.title }}{% if r.subtitle %}: {{ r.subtitle }}{% endif %}</a>
+    </div>
+    <div class="result-subtitle">
+      <span class="project-key">{{ r.project_key }}</span>
+      <span>Issue</span>
+    </div>
+
+    {# --- Wiki / Wiki Page result (scope=wiki view with expanded detail) --- #}
+    {% elif r.result_type in ('wiki', 'wiki_page') and scope == 'wiki' %}
+    <div class="result-header">
+      {{ icon_wiki | safe }}
+      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}">{{ (r.subtitle | replace('_', ' ')) if r.subtitle else (r.title or r.result_type) }}</a>
+      <span class="project-key" style="font-size:var(--sp-font-size-xs)">{{ r.project_key }}</span>
+    </div>
+
+    {# --- Wiki / Wiki Page result (all/default view) --- #}
+    {% elif r.result_type in ('wiki', 'wiki_page') %}
+    <div class="result-header">
+      {{ icon_wiki | safe }}
+      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}">{{ (r.subtitle | replace('_', ' ')) if r.subtitle else (r.title or 'Wiki Page') }}</a>
+    </div>
+    <div class="result-subtitle">
+      <span class="project-key">{{ r.project_key }}</span>
+      <span>Wiki Page</span>
+    </div>
+
+    {# --- Attachment result --- #}
+    {% elif r.result_type == 'attachment' %}
+    <div class="result-header">
+      {{ icon_attachment | safe }}
+      <a class="result-title" href="#">{{ r.subtitle or r.title or 'Attachment' }}</a>
+    </div>
+    <div class="result-subtitle">
+      <span class="project-key">{{ r.project_key }}</span>
+      <span>Attachment</span>
+    </div>
+
+    {# --- Fallback for unknown result types --- #}
+    {% else %}
+    <div class="result-header">
+      {{ icon_wiki | safe }}
+      <a class="result-title" href="#">{{ r.title or r.subtitle or r.result_type }}</a>
+    </div>
+    <div class="result-subtitle">
+      <span class="project-key">{{ r.project_key }}</span>
+      <span>{{ r.result_type | replace('_', ' ') | title }}</span>
+    </div>
+
     {% endif %}
+
+    {# Snippet #}
     {% if r.snippet %}
-    <p class="result-snippet">{{ r.snippet | safe }}</p>
+    <div class="result-snippet">{{ r.snippet | safe }}</div>
     {% endif %}
+
+    {# Footer with score #}
     <div class="result-footer">
-      <span class="result-score">Score: {{ '%.3f' | format(r.score) }}</span>
+      <span class="result-score">Score: {{ '%.2f' | format(r.score) }}</span>
     </div>
   </div>
   {% endfor %}
 </div>
 
-{# Pagination #}
-{% if total > limit %}
-<div class="search-pagination">
-  {% if offset > 0 %}
-  <a href="/search?q={{ query }}&mode={{ mode }}&scope={{ scope }}&offset={{ offset - limit }}&limit={{ limit }}{% if project_key %}&project_key={{ project_key }}{% endif %}" class="btn btn-ghost">Previous</a>
+{# Pagination — reuse the standard sp-pagination layout inline since base_url already has query params #}
+{% if total > 0 %}
+{% set current_page = (offset // limit) + 1 %}
+{% set total_pages = ((total - 1) // limit) + 1 %}
+{% set pbase = "/search/?q=" ~ query ~ "&mode=" ~ mode ~ "&scope=" ~ scope ~ ("&project_key=" ~ project_key if project_key else "") %}
+<div class="sp-pagination">
+  <div class="sp-pagination-info">{{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total }}</div>
+  {% if total_pages > 1 %}
+  <div class="sp-pagination-pages">
+    {% if current_page > 1 %}
+    <a href="{{ pbase }}&offset={{ (current_page - 2) * limit }}&limit={{ limit }}" class="sp-page-link">«</a>
+    {% endif %}
+    {% for page in range(1, total_pages + 1) %}
+    {% if page == current_page %}
+    <span class="sp-page-link active">{{ page }}</span>
+    {% elif page <= 2 or page >= total_pages - 1 or (page >= current_page - 2 and page <= current_page + 2) %}
+    <a href="{{ pbase }}&offset={{ (page - 1) * limit }}&limit={{ limit }}" class="sp-page-link">{{ page }}</a>
+    {% elif page == 3 or page == total_pages - 2 %}
+    <span class="sp-page-link dots">…</span>
+    {% endif %}
+    {% endfor %}
+    {% if current_page < total_pages %}
+    <a href="{{ pbase }}&offset={{ current_page * limit }}&limit={{ limit }}" class="sp-page-link">»</a>
+    {% endif %}
+  </div>
   {% endif %}
-  {% if offset + limit < total %}
-  <a href="/search?q={{ query }}&mode={{ mode }}&scope={{ scope }}&offset={{ offset + limit }}&limit={{ limit }}{% if project_key %}&project_key={{ project_key }}{% endif %}" class="btn btn-ghost">Next</a>
-  {% endif %}
+  <div class="sp-pagination-size">
+    <label>Show</label>
+    <select onchange="window.location='{{ pbase }}&offset=0&limit='+this.value">
+      {% for size in [10, 25, 50] %}
+      <option value="{{ size }}" {{ 'selected' if limit == size else '' }}>{{ size }}</option>
+      {% endfor %}
+    </select>
+  </div>
 </div>
 {% endif %}
 
 {% else %}
-<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  No results found for "{{ query }}". Try different keywords or search mode.
+<div class="card search-empty">
+  No results found for &ldquo;{{ query }}&rdquo;. Try different keywords or search mode.
 </div>
 {% endif %}
 
 {% else %}
-<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  Enter a search query to find issues and wiki pages.
+<div class="card search-empty">
+  Enter a search query to find issues, wiki pages, and comments.
 </div>
 {% endif %}
 {% endblock %}

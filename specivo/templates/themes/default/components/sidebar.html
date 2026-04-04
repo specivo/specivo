@@ -7,15 +7,19 @@
       <path d="M7 21 L18 26.5 L29 21" stroke="var(--sp-text-sidebar)" stroke-width="1.2" fill="none" opacity="0.4"/>
       <path d="M7 24 L18 29.5 L29 24" stroke="var(--sp-text-sidebar)" stroke-width="1.2" fill="none" opacity="0.25"/>
     </svg>
-    <span>Specivo</span>
+    <span>{{ brand_name }}</span>
   </a>
 
   <div class="sidebar-section">
+    <a class="sidebar-item{% if active_page == 'search' %} active{% endif %}" href="/search/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      {% trans %}Search{% endtrans %}
+    </a>
     <a class="sidebar-item{% if active_page == 'dashboard' %} active{% endif %}" href="/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
       {% trans %}Dashboard{% endtrans %}
     </a>
-    <a class="sidebar-item{% if active_page == 'projects' %} active{% endif %}" href="/projects">
+    <a class="sidebar-item{% if active_page == 'projects' %} active{% endif %}" href="/projects/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/></svg>
       {% trans %}Projects{% endtrans %}
     </a>
@@ -24,28 +28,24 @@
   {% if active_project is defined and active_project %}
   <div class="sidebar-section">
     <div class="sidebar-section-label">{{ active_project.name }}</div>
-    <a class="sidebar-item{% if active_page == 'issues' %} active{% endif %}" href="/projects/{{ active_project.key }}/issues">
+    <a class="sidebar-item{% if active_page == 'issues' %} active{% endif %}" href="/projects/{{ active_project.key }}/issues/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
       {% trans %}Issues{% endtrans %}
       {% if active_project.open_issues_count is defined and active_project.open_issues_count %}<span class="badge">{{ active_project.open_issues_count }}</span>{% endif %}
     </a>
-    <a class="sidebar-item{% if active_page == 'wiki' %} active{% endif %}" href="/projects/{{ active_project.key }}/wiki">
+    <a class="sidebar-item{% if active_page == 'wiki' %} active{% endif %}" href="/projects/{{ active_project.key }}/wiki/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
       {% trans %}Wiki{% endtrans %}
     </a>
-    <a class="sidebar-item{% if active_page == 'roadmap' %} active{% endif %}" href="/projects/{{ active_project.key }}/roadmap">
+    <a class="sidebar-item{% if active_page == 'roadmap' %} active{% endif %}" href="/projects/{{ active_project.key }}/roadmap/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
       {% trans %}Roadmap{% endtrans %}
     </a>
-    <a class="sidebar-item{% if active_page == 'time' %} active{% endif %}" href="/projects/{{ active_project.key }}/time-entries">
+    <a class="sidebar-item{% if active_page == 'time' %} active{% endif %}" href="/projects/{{ active_project.key }}/time-entries/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       {% trans %}Time Tracking{% endtrans %}
     </a>
-    <a class="sidebar-item{% if active_page == 'search' %} active{% endif %}" href="/search{% if active_project %}?project_key={{ active_project.key }}{% endif %}">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-      {% trans %}Search{% endtrans %}
-    </a>
-    <a class="sidebar-item{% if active_page == 'settings' %} active{% endif %}" href="/projects/{{ active_project.key }}/settings">
+    <a class="sidebar-item{% if active_page == 'settings' %} active{% endif %}" href="/projects/{{ active_project.key }}/settings/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg>
       {% trans %}Settings{% endtrans %}
     </a>
@@ -54,7 +54,7 @@
   <div class="sidebar-section">
     <div class="sidebar-section-label">{% trans %}Projects{% endtrans %}</div>
     {% for project in sidebar_projects %}
-    <a class="sidebar-item" href="/projects/{{ project.key }}">
+    <a class="sidebar-item" href="/projects/{{ project.key }}/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
       {{ project.name }}
       {% if project.identifier is defined %}<span class="sidebar-project-key">{{ project.identifier }}</span>{% endif %}
@@ -101,17 +101,18 @@
   </div>
   {% endif %}
 
-  {# Pro/Enterprise sidebar items injected here #}
-  {% block sidebar_plugins %}{% endblock %}
-
-  <div class="sidebar-spacer"></div>
-
-  {% if user is defined and user and user.admin %}
-  <div class="sidebar-section" style="border-top:1px solid rgba(255,255,255,0.06);padding-top:var(--sp-space-md)">
-    <a class="sidebar-item{% if active_page == 'admin' %} active{% endif %}" href="/admin">
+  {% if user is defined and user and user.is_admin %}
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">{% trans %}Administration{% endtrans %}</div>
+    <a class="sidebar-item{% if active_page == 'admin' %} active{% endif %}" href="/admin/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       {% trans %}Admin{% endtrans %}
     </a>
   </div>
   {% endif %}
+
+  {# Pro/Enterprise sidebar items injected here #}
+  {% block sidebar_plugins %}{% endblock %}
+
+  <div class="sidebar-spacer"></div>
 </nav>

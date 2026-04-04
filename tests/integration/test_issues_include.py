@@ -26,7 +26,7 @@ from tests.factories.user import AdminUserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -41,7 +41,7 @@ async def _create_issue(
     subject: str,
 ) -> dict:
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json={
             "project_key": project_key,
             "tracker_id": tracker_id,
@@ -132,7 +132,7 @@ async def test_get_issue_without_include_has_no_children_key(
     issue_key = issue["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}",
+        f"/api/v1/issues/{issue_key}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -157,7 +157,7 @@ async def test_include_children_returns_empty_for_leaf_issue(
     issue_key = issue["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=children",
+        f"/api/v1/issues/{issue_key}/?include=children",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -180,7 +180,7 @@ async def test_unknown_include_is_ignored(
     issue_key = issue["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=journals,watchers,relations",
+        f"/api/v1/issues/{issue_key}/?include=journals,watchers,relations",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -228,7 +228,7 @@ async def test_include_children_with_actual_children(
     await db_session.commit()
 
     resp = await client.get(
-        f"/api/v1/issues/{parent['key']}?include=children",
+        f"/api/v1/issues/{parent['key']}/?include=children",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -254,7 +254,7 @@ async def test_include_with_comma_separated_values(
     issue_key = issue["key"]
 
     resp = await client.get(
-        f"/api/v1/issues/{issue_key}?include=children,journals,watchers",
+        f"/api/v1/issues/{issue_key}/?include=children,journals,watchers",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text

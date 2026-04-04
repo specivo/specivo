@@ -1,15 +1,23 @@
 <header class="header">
-  <div class="header-search">
+  <button class="hamburger" aria-label="Menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+  </button>
+  <form class="header-search" action="/search/" method="get">
+    <input type="hidden" name="mode" value="hybrid">
+    <input type="hidden" name="scope" value="all">
     <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-    <input type="text" placeholder="{{ _('Search issues, wiki, projects...') }}" id="global-search">
+    <input type="text" name="q" placeholder="{{ _('Search issues, wiki, projects...') }}" id="global-search">
+    <button type="submit" class="header-search-btn" aria-label="{{ _('Search') }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    </button>
     <kbd>&#8984;K</kbd>
-  </div>
+  </form>
 
   <div class="header-actions">
     <div class="font-toggle" title="{% trans %}Font size{% endtrans %}">
-      <button class="active" onclick="setFont(this,'');" style="font-size:12px">A</button>
-      <button onclick="setFont(this,'font-md');" style="font-size:15px">A</button>
-      <button onclick="setFont(this,'font-lg');" style="font-size:18px">A</button>
+      <button class="active" data-font="" style="font-size:12px">A</button>
+      <button data-font="font-md" style="font-size:15px">A</button>
+      <button data-font="font-lg" style="font-size:18px">A</button>
     </div>
 
     {% if has_feature("active_timer") %}
@@ -35,8 +43,8 @@
           </div>
           <div class="timer-big-display" id="timerBigDisplay">{{ active_timer.elapsed }}</div>
           <div class="timer-actions">
-            <button class="btn btn-primary" style="flex:1"><svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> {% trans %}Stop & Log{% endtrans %}</button>
-            <button class="btn btn-ghost" style="color:var(--sp-danger)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 6L6 18M6 6l12 12"/></svg> {% trans %}Discard{% endtrans %}</button>
+            <button class="sp-btn sp-btn-primary" style="flex:1"><svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> {% trans %}Stop & Log{% endtrans %}</button>
+            <button class="sp-btn sp-btn-ghost" style="color:var(--sp-danger)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 6L6 18M6 6l12 12"/></svg> {% trans %}Discard{% endtrans %}</button>
           </div>
         </div>
       </div>
@@ -58,7 +66,7 @@
           {% if notifications is defined and notifications %}
             {% for n in notifications[:5] %}
             <div class="notif-item{% if not n.read %} unread{% endif %}">
-              <div class="avatar-sm" style="width:28px;height:28px;font-size:10px">{{ n.actor_initials if n.actor_initials is defined else '?' }}</div>
+              <div class="avatar-sm" style="width:28px;height:28px;font-size:10px;{% if n.actor_avatar_url is defined and n.actor_avatar_url %}background-image:url('{{ n.actor_avatar_url }}');background-size:cover;background-position:center;color:transparent;{% elif n.actor_avatar_color is defined and n.actor_avatar_color %}background:{{ n.actor_avatar_color }};{% endif %}">{{ n.actor_initials if n.actor_initials is defined else '?' }}</div>
               <div class="notif-body">
                 <div class="notif-text">{{ n.text | safe }}</div>
                 <div class="notif-meta">{{ n.time_ago }}</div>
@@ -70,15 +78,44 @@
           {% endif %}
         </div>
         <div class="notif-footer">
-          <a href="/notifications">{% trans %}View all notifications{% endtrans %}</a>
+          <a href="/my/notifications/">{% trans %}View all notifications{% endtrans %}</a>
         </div>
       </div>
     </div>
 
     {% if user is defined and user %}
-    <div class="header-user">
-      <div class="header-user-avatar">{{ user.login[:2] | upper if user.login else '?' }}</div>
-      <span class="header-user-name">{{ user.firstname if user.firstname else user.login }}</span>
+    <div class="dropdown">
+      <div class="header-user" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
+        <div class="header-user-avatar"{% if user.avatar_url %} style="background-image:url('{{ user.avatar_url }}');background-size:cover;background-position:center;color:transparent;"{% elif user.preferences.avatar_color|default('') %} style="background:{{ user.preferences.avatar_color }}"{% endif %}>{{ user.login[:2] | upper if user.login else '?' }}</div>
+        <span class="header-user-name">{{ user.firstname if user.firstname else user.login }}</span>
+      </div>
+      <div class="dropdown-menu dropdown-menu-end user-dropdown">
+        <div class="user-dropdown-header">
+          <div class="header-user-avatar" style="width:36px;height:36px;font-size:13px;{% if user.avatar_url %}background-image:url('{{ user.avatar_url }}');background-size:cover;background-position:center;color:transparent;{% elif user.preferences.avatar_color|default('') %}background:{{ user.preferences.avatar_color }};{% endif %}">{{ user.login[:2] | upper }}</div>
+          <div>
+            <div class="user-dropdown-name">{{ user.display_name or user.login }}</div>
+            <div class="user-dropdown-email">{{ user.email }}</div>
+          </div>
+        </div>
+        <div class="user-dropdown-divider"></div>
+        <a class="user-dropdown-item" href="/my/profile/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          {% trans %}Profile{% endtrans %}
+        </a>
+        <a class="user-dropdown-item" href="/my/preferences/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          {% trans %}Preferences{% endtrans %}
+        </a>
+        <a class="user-dropdown-item" href="/my/api-keys/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.78 7.78 5.5 5.5 0 017.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+          {% trans %}API Keys{% endtrans %}
+        </a>
+        <div class="user-dropdown-divider"></div>
+        <a class="user-dropdown-item user-dropdown-logout" href="/logout/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          {% trans %}Sign out{% endtrans %}
+        </a>
+      </div>
     </div>
     {% endif %}
   </div>

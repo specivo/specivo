@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}Roadmap - {{ project.name }} - Specivo{% endblock %}
+{% block title %}Roadmap - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -14,9 +14,9 @@
   <h1>Roadmap</h1>
   <div class="page-header-actions">
     <div class="filter-tabs">
-      <a href="/projects/{{ project.key }}/roadmap?show=open"
+      <a href="/projects/{{ project.key }}/roadmap/?show=open"
          class="filter-tab{{ ' active' if show is not defined or show == 'open' else '' }}">Open</a>
-      <a href="/projects/{{ project.key }}/roadmap?show=all"
+      <a href="/projects/{{ project.key }}/roadmap/?show=all"
          class="filter-tab{{ ' active' if show is defined and show == 'all' else '' }}">All</a>
     </div>
   </div>
@@ -55,7 +55,7 @@
     {% if entry.total > 0 %}
     <div class="version-issues" x-show="expanded" x-cloak>
       <p style="padding:var(--sp-space-lg) var(--sp-space-xl);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
-        View issues on the <a href="/projects/{{ project.key }}/issues?fixed_version_id={{ entry.version.id }}">issues page</a>.
+        View issues on the <a href="/projects/{{ project.key }}/issues/?fixed_version_id={{ entry.version.id }}">issues page</a>.
       </p>
     </div>
     {% endif %}

@@ -45,7 +45,7 @@ async def _validate_gitlab_token(request: Request, db: AsyncSession) -> None:
         )
 
 
-@router.post("/gitlab/push")
+@router.post("/gitlab/push/")
 async def gitlab_push(
     request: Request,
     db: AsyncSession = Depends(get_db),

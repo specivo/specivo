@@ -14,7 +14,7 @@ from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tr
 from specivo.models.member import Member, MemberRole
 from specivo.models.metadata_schema import MetadataSchema
 from specivo.models.notification import Notification, NotificationPreference
-from specivo.models.project import EnabledModule, Project
+from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
 from specivo.models.reaction import Mention, Reaction
 from specivo.models.relation import IssueRelation
 from specivo.models.role import Role
@@ -68,6 +68,7 @@ __all__ = [
     "Tracker",
     "GroupPolicy",
     "EnabledModule",
+    "ProjectKeyAlias",
     "Member",
     "MemberRole",
     "Project",

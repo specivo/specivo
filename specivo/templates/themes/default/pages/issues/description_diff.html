@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, avatar %}
+
+{% block title %}Description Changes - {{ issue.display_key }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
+  {"label": issue.display_key, "url": "/projects/" ~ project.key ~ "/issues/" ~ issue.display_key},
+  {"label": "Description Changes"}
+]) }}
+
+<h1 class="page-title" style="font-size:var(--sp-font-size-xl);">Description Changes — {{ issue.display_key }} <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-md);">Version #{{ selected_num }}</span></h1>
+
+{% if selected_num > 1 %}
+{# Diff and side-by-side comparison — only for versions after the first #}
+<div class="card" style="padding:var(--sp-space-lg);margin-bottom:var(--sp-space-xl);overflow-x:auto;">
+  <div style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);line-height:1.5;">
+    {%- for line in diff_lines -%}
+    {%- if line.startswith('+++') or line.startswith('---') -%}
+    <div style="color:var(--sp-text-muted);font-weight:600;padding:1px var(--sp-space-sm);">{{ line }}</div>
+    {%- elif line.startswith('@@') -%}
+    <div style="color:var(--sp-info);background:var(--sp-info-subtle);padding:2px var(--sp-space-sm);margin:var(--sp-space-xs) 0;border-radius:3px;">{{ line }}</div>
+    {%- elif line.startswith('+') -%}
+    <div style="color:var(--sp-success);background:var(--sp-success-subtle);padding:1px var(--sp-space-sm);">{{ line }}</div>
+    {%- elif line.startswith('-') -%}
+    <div style="color:var(--sp-danger);background:var(--sp-danger-subtle);padding:1px var(--sp-space-sm);">{{ line }}</div>
+    {%- else -%}
+    <div style="padding:1px var(--sp-space-sm);">{{ line }}</div>
+    {%- endif -%}
+    {%- endfor -%}
+    {% if not diff_lines %}
+    <div style="color:var(--sp-text-muted);text-align:center;padding:var(--sp-space-xl);">No differences found.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-space-xl);">
+  <div>
+    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-danger);">Version #{{ prev_num }} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">(before)</span></h3>
+    <div class="card" style="padding:var(--sp-space-lg);">
+      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ old_text | markdown if old_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+    </div>
+  </div>
+  <div>
+    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-success);">Version #{{ selected_num }} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">(after)</span></h3>
+    <div class="card" style="padding:var(--sp-space-lg);">
+      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | markdown if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+    </div>
+  </div>
+</div>
+{% else %}
+{# First version — just show the content #}
+<div class="card" style="padding:var(--sp-space-lg);margin-bottom:var(--sp-space-xl);">
+  <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-md);">This is the first recorded description edit. No previous version to compare against.</p>
+  <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | markdown if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+</div>
+{% endif %}
+
+{# Version History Table #}
+{% if versions is defined and versions %}
+<div style="margin-top:var(--sp-space-2xl);">
+  <h2 style="font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-md);">Version History</h2>
+
+  <div class="card" style="overflow:hidden;">
+    <table class="sp-table">
+      <thead>
+        <tr>
+          <th style="width:180px;">Version</th>
+          <th>Author</th>
+          <th>Date</th>
+          <th>Comment</th>
+          <th style="width:140px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in versions %}
+        <tr{% if v.is_selected %} style="background:var(--sp-accent-subtle);box-shadow:inset 3px 0 0 var(--sp-accent);"{% endif %}>
+          <td>
+            <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
+              <input type="checkbox" name="compare" value="{{ v.journal_id }}" style="margin:0;">
+              <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);font-weight:600;">#{{ v.num }}</a>
+              {% if v.is_current %}
+              <span style="background:var(--sp-accent-subtle);color:var(--sp-accent);font-size:var(--sp-font-size-xs);font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--sp-accent);">Current</span>
+              {% endif %}
+            </div>
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
+              {{ avatar(v.author_login, size='sm', color='') }}
+              {{ v.author_name }}
+            </div>
+          </td>
+          <td style="color:var(--sp-text-muted);">{{ v.date.strftime('%b %d, %Y %H:%M') if v.date else '' }}</td>
+          <td style="color:var(--sp-text-muted);"></td>
+          <td>
+            <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);">View</a>
+            {% if not v.is_current %}
+            <form method="POST" action="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ v.journal_id }}/restore/" style="display:inline;margin-left:var(--sp-space-sm);">
+              <button type="submit" style="background:none;border:none;color:var(--sp-text-secondary);cursor:pointer;font-size:inherit;font-family:inherit;padding:0;" onclick="return confirm('Restore this version of the description?')">Restore</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+<div style="margin-top:var(--sp-space-xl);">
+  <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/" class="sp-btn sp-btn-ghost">← Back to issue</a>
+</div>
+{% endblock %}

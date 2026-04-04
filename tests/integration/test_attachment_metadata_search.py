@@ -39,7 +39,7 @@ pytestmark = pytest.mark.integration
 # Helpers
 # ---------------------------------------------------------------------------
 
-SEARCH_URL = "/api/v1/search"
+SEARCH_URL = "/api/v1/search/"
 
 
 async def _make_user(db: AsyncSession, login: str = "meta_user") -> User:
@@ -52,7 +52,7 @@ async def _make_user(db: AsyncSession, login: str = "meta_user") -> User:
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
@@ -130,7 +130,7 @@ async def _create_issue(
         "tracker_id": tracker_id,
         "subject": subject,
     }
-    resp = await client.post(f"/api/v1/projects/{project_key}/issues", json=payload)
+    resp = await client.post(f"/api/v1/projects/{project_key}/issues/", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -150,7 +150,7 @@ async def _upload_attachment(
     if description is not None:
         data["description"] = description
     resp = await client.post(
-        "/api/v1/attachments",
+        "/api/v1/attachments/",
         files=files,
         data=data,
         headers={"Authorization": f"Bearer {token}"},
@@ -231,7 +231,7 @@ async def test_upload_attachment_with_metadata(
 
     # PATCH with metadata
     resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={
             "metadata": {
                 "schema_version": 1,
@@ -295,7 +295,7 @@ async def test_metadata_update_triggers_reindex(
     # PATCH with metadata containing long extracted_text -> multiple chunks
     long_extracted = ("This document covers authentication patterns in detail. " * 40).strip()
     resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={
             "metadata": {
                 "schema_version": 1,
@@ -346,7 +346,7 @@ async def test_search_finds_attachment_by_extracted_text(
 
     # Add metadata with extracted_text
     resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={
             "metadata": {
                 "schema_version": 1,
@@ -399,7 +399,7 @@ async def test_search_finds_attachment_by_ai_description(
 
     # Add metadata with AI-generated description
     resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={
             "metadata": {
                 "schema_version": 1,
@@ -453,7 +453,7 @@ async def test_metadata_validation_rejects_invalid(
 
     # Missing schema_version -> should be rejected
     resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={
             "metadata": {
                 "source": "upload",
@@ -498,7 +498,7 @@ async def test_metadata_preserved_on_description_update(
 
     # Set metadata first
     meta_resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={
             "metadata": {
                 "schema_version": 1,
@@ -515,7 +515,7 @@ async def test_metadata_preserved_on_description_update(
 
     # Now update only the description (no metadata in payload)
     desc_resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={"description": "Updated description only"},
         headers={"Authorization": f"Bearer {token}"},
     )

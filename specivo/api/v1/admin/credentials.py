@@ -5,9 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import get_db
-from specivo.core.exceptions import PermissionDeniedError
-from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.credential import (
     CredentialAuditLogOut,
@@ -23,26 +22,19 @@ router = APIRouter(tags=["admin"])
 _service = CredentialBrokerService()
 
 
-def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency: raise 403 if the current user is not an admin."""
-    if not current_user.is_admin:
-        raise PermissionDeniedError("Admin access required")
-    return current_user
-
-
 # ---------------------------------------------------------------------------
 # External Systems
 # ---------------------------------------------------------------------------
 
 
 @router.post(
-    "/admin/external-systems",
+    "/admin/external-systems/",
     response_model=ExternalSystemOut,
     status_code=status.HTTP_201_CREATED,
 )
 async def register_system(
     data: ExternalSystemCreate,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> ExternalSystemOut:
     """Register a new external system (admin only)."""
@@ -51,11 +43,11 @@ async def register_system(
 
 
 @router.get(
-    "/admin/external-systems",
+    "/admin/external-systems/",
     response_model=list[ExternalSystemOut],
 )
 async def list_systems(
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[ExternalSystemOut]:
     """List all external systems (admin only)."""
@@ -64,12 +56,12 @@ async def list_systems(
 
 
 @router.delete(
-    "/admin/external-systems/{system_id}",
+    "/admin/external-systems/{system_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_system(
     system_id: int,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete an external system (admin only)."""
@@ -82,13 +74,13 @@ async def delete_system(
 
 
 @router.post(
-    "/admin/credentials/issue",
+    "/admin/credentials/issue/",
     response_model=CredentialIssueResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def issue_credential(
     data: CredentialIssueRequest,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> CredentialIssueResponse:
     """Issue a temporary credential to an agent (admin only)."""
@@ -106,12 +98,12 @@ async def issue_credential(
 
 
 @router.post(
-    "/admin/credentials/{credential_id}/revoke",
+    "/admin/credentials/{credential_id}/revoke/",
     response_model=IssuedCredentialOut,
 )
 async def revoke_credential(
     credential_id: int,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> IssuedCredentialOut:
     """Revoke a credential (admin only)."""
@@ -124,12 +116,12 @@ async def revoke_credential(
 
 
 @router.get(
-    "/admin/credentials",
+    "/admin/credentials/",
     response_model=list[IssuedCredentialOut],
 )
 async def list_active_credentials(
     system_id: int | None = None,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[IssuedCredentialOut]:
     """List active (non-expired, non-revoked) credentials (admin only)."""
@@ -138,13 +130,13 @@ async def list_active_credentials(
 
 
 @router.get(
-    "/admin/credentials/audit-log",
+    "/admin/credentials/audit-log/",
     response_model=list[CredentialAuditLogOut],
 )
 async def list_audit_logs(
     system_id: int | None = None,
     agent_user_id: int | None = None,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[CredentialAuditLogOut]:
     """List credential audit log entries (admin only)."""

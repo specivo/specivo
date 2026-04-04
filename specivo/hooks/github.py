@@ -54,7 +54,7 @@ async def _validate_github_signature(request: Request, body: bytes, db: AsyncSes
         )
 
 
-@router.post("/github/push")
+@router.post("/github/push/")
 async def github_push(
     request: Request,
     db: AsyncSession = Depends(get_db),

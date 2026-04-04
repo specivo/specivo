@@ -18,7 +18,7 @@ _project_service = ProjectService()
 
 
 @router.post(
-    "/projects/{project_key}/saved-filters",
+    "/projects/{project_key}/saved-filters/",
     response_model=SavedFilterOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -35,7 +35,7 @@ async def create_saved_filter(
 
 
 @router.get(
-    "/projects/{project_key}/saved-filters",
+    "/projects/{project_key}/saved-filters/",
     response_model=list[SavedFilterOut],
 )
 async def list_saved_filters(
@@ -50,7 +50,7 @@ async def list_saved_filters(
 
 
 @router.get(
-    "/projects/{project_key}/saved-filters/{filter_id}",
+    "/projects/{project_key}/saved-filters/{filter_id}/",
     response_model=SavedFilterOut,
 )
 async def get_saved_filter(
@@ -66,7 +66,7 @@ async def get_saved_filter(
 
 
 @router.patch(
-    "/projects/{project_key}/saved-filters/{filter_id}",
+    "/projects/{project_key}/saved-filters/{filter_id}/",
     response_model=SavedFilterOut,
 )
 async def update_saved_filter(
@@ -84,7 +84,7 @@ async def update_saved_filter(
 
 
 @router.delete(
-    "/projects/{project_key}/saved-filters/{filter_id}",
+    "/projects/{project_key}/saved-filters/{filter_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_saved_filter(

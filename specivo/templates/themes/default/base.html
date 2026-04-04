@@ -3,10 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Specivo{% endblock %}</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='img/favicon.svg') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='vendor/bootstrap.5.3.6.min.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='css/' + versioned['specivo.css']) }}">
+  <title>{% block title %}{{ brand_name }}{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#12102e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="apple-touch-icon" href="/static/img/favicon.svg">
+  <link rel="stylesheet" href="/static/vendor/bootstrap.5.3.6.min.css">
+  <link rel="stylesheet" href="/static/css/{{ versioned['specivo.css'] }}">
   {% block plugin_css %}
   {% for css_url in plugin_css_files %}
   <link rel="stylesheet" href="{{ css_url }}">
@@ -16,19 +20,63 @@
 </head>
 <body>
   <div class="app-layout">
+    <div class="sidebar-overlay"></div>
     {% include "components/sidebar.html" %}
     {% include "components/header.html" %}
     <main class="main-content">
       {% block content %}{% endblock %}
       <footer class="app-footer">
-        Powered by <a href="https://specivo.io/" target="_blank">Specivo</a>
+        Powered by <a href="https://specivo.io/" target="_blank">Specivo</a>{% if debug %} <span style="color:var(--sp-text-muted);font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);">v{{ app_version }}</span>{% endif %}
+        {% if debug and request.state.sql_debug_queries is defined %}
+        {% set _sq = request.state.sql_debug_queries %}
+        {% set _sql_ms = _sq | sum(attribute='duration_ms') %}
+        <div x-data="{ open: false }" style="display:inline-block;margin-left:var(--sp-space-sm);">
+          <button @click="open = true"
+                  style="background:none;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);padding:2px 8px;cursor:pointer;font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);color:{% if _sq|length > 10 %}var(--sp-color-danger){% elif _sq|length > 5 %}var(--sp-color-warning){% else %}var(--sp-text-muted){% endif %};">
+            SQL: {{ _sq|length }} queries · {{ "%.1f"|format(_sql_ms) }}ms
+          </button>
+          <div x-show="open" x-cloak @keydown.escape.window="open = false" style="position:fixed;inset:0;z-index:1050;">
+            <div class="sp-scrim" @click="open = false"></div>
+            <div class="sp-modal" style="max-width:800px;">
+              <div class="sp-modal-header">
+                <h2>SQL Debug · {{ _sq|length }} queries · {{ "%.1f"|format(_sql_ms) }}ms</h2>
+                <button class="sp-modal-close" @click="open = false">&times;</button>
+              </div>
+              <div class="sp-modal-body" style="padding:0;max-height:60vh;overflow-y:auto;">
+                {% if _sq %}
+                <table style="width:100%;border-collapse:collapse;font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);background:#0d0b20;color:#F8F8F2;">
+                  <thead>
+                    <tr style="border-bottom:1px solid #2a2745;text-align:left;">
+                      <th style="padding:var(--sp-space-sm) var(--sp-space-md);width:3em;color:#959077;">#</th>
+                      <th style="padding:var(--sp-space-sm) var(--sp-space-md);width:5em;color:#959077;">Time</th>
+                      <th style="padding:var(--sp-space-sm) var(--sp-space-md);color:#959077;">Query</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for q in _sq %}
+                    <tr style="border-bottom:1px solid #2a2745;">
+                      <td style="padding:var(--sp-space-xs) var(--sp-space-md);vertical-align:top;color:#959077;">{{ loop.index }}</td>
+                      <td style="padding:var(--sp-space-xs) var(--sp-space-md);vertical-align:top;white-space:nowrap;color:{% if q.duration_ms > 50 %}#FF4689{% elif q.duration_ms > 20 %}#E6DB74{% else %}#AE81FF{% endif %};">{{ "%.1f"|format(q.duration_ms) }}ms</td>
+                      <td style="padding:var(--sp-space-xs) var(--sp-space-md);word-break:break-all;">{{ q.sql[:500] | highlight_sql }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                {% else %}
+                <p style="padding:var(--sp-space-xl);color:var(--sp-text-muted);">No SQL queries executed.</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endif %}
       </footer>
     </main>
   </div>
-  <script src="{{ url_for('static', path='js/' + versioned['specivo.js']) }}" defer></script>
-  <script src="{{ url_for('static', path='vendor/alpine.3.14.min.js') }}" defer></script>
-  <script src="{{ url_for('static', path='vendor/htmx.2.0.min.js') }}"></script>
-  <script src="{{ url_for('static', path='vendor/bootstrap.bundle.5.3.6.min.js') }}"></script>
+  <script src="/static/js/{{ versioned['specivo.js'] }}" defer></script>
+  <script src="/static/vendor/alpine.3.14.min.js" defer></script>
+  <script src="/static/vendor/htmx.2.0.min.js"></script>
+  <script src="/static/vendor/bootstrap.bundle.5.3.6.min.js"></script>
   {% block plugin_js %}
   {% for js_url in plugin_js_files %}
   <script src="{{ js_url }}"></script>
@@ -36,13 +84,5 @@
   {% endblock %}
   {% block chart_js %}{% endblock %}
   {% block scripts %}{% endblock %}
-  <script>
-    function setFont(btn, cls) {
-      document.documentElement.classList.remove('font-md', 'font-lg');
-      if (cls) document.documentElement.classList.add(cls);
-      document.querySelectorAll('.font-toggle button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-    }
-  </script>
 </body>
 </html>

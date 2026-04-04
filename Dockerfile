@@ -1,7 +1,7 @@
-FROM python:3.12-alpine
+FROM python:3.12-slim
 
-# Patch base image packages (zlib CVE-2026-22184, CVE-2026-27171)
-RUN apk upgrade --no-cache
+# Patch base image packages
+RUN apt-get update -qq && apt-get upgrade -y -qq && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

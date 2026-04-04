@@ -5,9 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import get_db
-from specivo.core.exceptions import PermissionDeniedError
-from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.metadata_schema import (
     MetadataSchemaCreate,
@@ -22,22 +21,15 @@ _project_service = ProjectService()
 _schema_service = MetadataSchemaService()
 
 
-def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency: raise 403 if the current user is not an admin."""
-    if not current_user.is_admin:
-        raise PermissionDeniedError("Admin access required")
-    return current_user
-
-
 @router.post(
-    "/admin/projects/{project_key}/metadata-schemas",
+    "/admin/projects/{project_key}/metadata-schemas/",
     response_model=MetadataSchemaOut,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_metadata_schema(
     project_key: str,
     data: MetadataSchemaCreate,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> MetadataSchemaOut:
     """Create a metadata schema for a project (admin only)."""
@@ -47,12 +39,12 @@ async def create_metadata_schema(
 
 
 @router.get(
-    "/admin/projects/{project_key}/metadata-schemas",
+    "/admin/projects/{project_key}/metadata-schemas/",
     response_model=list[MetadataSchemaOut],
 )
 async def list_metadata_schemas(
     project_key: str,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[MetadataSchemaOut]:
     """List all metadata schemas for a project (admin only)."""
@@ -62,13 +54,13 @@ async def list_metadata_schemas(
 
 
 @router.get(
-    "/admin/projects/{project_key}/metadata-schemas/{schema_id}",
+    "/admin/projects/{project_key}/metadata-schemas/{schema_id}/",
     response_model=MetadataSchemaOut,
 )
 async def get_metadata_schema(
     project_key: str,
     schema_id: int,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> MetadataSchemaOut:
     """Get a single metadata schema by ID (admin only)."""
@@ -78,14 +70,14 @@ async def get_metadata_schema(
 
 
 @router.patch(
-    "/admin/projects/{project_key}/metadata-schemas/{schema_id}",
+    "/admin/projects/{project_key}/metadata-schemas/{schema_id}/",
     response_model=MetadataSchemaOut,
 )
 async def update_metadata_schema(
     project_key: str,
     schema_id: int,
     data: MetadataSchemaUpdate,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> MetadataSchemaOut:
     """Update a metadata schema (admin only)."""
@@ -96,13 +88,13 @@ async def update_metadata_schema(
 
 
 @router.delete(
-    "/admin/projects/{project_key}/metadata-schemas/{schema_id}",
+    "/admin/projects/{project_key}/metadata-schemas/{schema_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_metadata_schema(
     project_key: str,
     schema_id: int,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a metadata schema (admin only)."""

@@ -136,7 +136,7 @@ class ChunkEmbedding(Base, TimestampMixin):
     model_id: Mapped[int] = mapped_column(
         ForeignKey("embedding_models.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    embedding = mapped_column(Vector(1536), nullable=False)
+    embedding = mapped_column(Vector(), nullable=False)
 
     chunk: Mapped[SearchChunk] = relationship("SearchChunk", back_populates="embeddings", lazy="raise")
     model: Mapped[EmbeddingModel] = relationship("EmbeddingModel", lazy="raise")

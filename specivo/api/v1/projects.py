@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,6 +15,7 @@ from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.project import (
     MemberAdd,
     MemberOut,
+    MemberUpdateRoles,
     ModulesOut,
     ModuleToggle,
     ProjectCreate,
@@ -23,9 +24,11 @@ from specivo.schemas.project import (
 )
 from specivo.services.permission_service import check_permission
 from specivo.services.project_service import ProjectService
+from specivo.services.security_audit_service import MemberAction, SecurityAuditService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 _service = ProjectService()
+_audit = SecurityAuditService()
 
 
 # ---------------------------------------------------------------------------
@@ -37,12 +40,22 @@ async def _require_manage(
     project,
     user: User,
     db: AsyncSession,
+    request: Request | None = None,
 ) -> None:
-    """Raise 403 if user cannot manage the project."""
+    """Raise 403 if user cannot manage the project. Logs failed attempts."""
     if user.is_admin:
         return
     allowed = await check_permission(user, project.id, "manage_project", db)
     if not allowed:
+        try:
+            await _audit.log_member_change(
+                session=db, action=MemberAction.PERMISSION_DENIED, user_id=user.id,
+                project_id=project.id, target_user_id=0, target_login="",
+                request=request,
+            )
+            await db.commit()
+        except Exception:
+            pass
         raise PermissionDeniedError("You do not have permission to manage this project")
 
 
@@ -82,6 +95,7 @@ def _project_out(project, parent_key: str | None) -> ProjectOut:
         inherit_members=project.inherit_members,
         status=project.status,
         issue_sequence=project.issue_sequence,
+        color=project.color,
         created_at=project.created_at,
         updated_at=project.updated_at,
     )
@@ -92,7 +106,7 @@ def _project_out(project, parent_key: str | None) -> ProjectOut:
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=PaginatedResponse[ProjectOut])
+@router.get("/", response_model=PaginatedResponse[ProjectOut])
 async def list_projects(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -109,7 +123,7 @@ async def list_projects(
     return PaginatedResponse(total_count=total, offset=offset, limit=limit, items=items)
 
 
-@router.post("", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ProjectOut, status_code=status.HTTP_201_CREATED)
 async def create_project(
     data: ProjectCreate,
     current_user: User = Depends(get_current_user),
@@ -123,7 +137,7 @@ async def create_project(
     return _project_out(project, parent_key)
 
 
-@router.get("/{key}", response_model=ProjectOut)
+@router.get("/{key}/", response_model=ProjectOut)
 async def get_project(
     key: str,
     current_user: User = Depends(get_current_user),
@@ -136,7 +150,7 @@ async def get_project(
     return _project_out(project, parent_key)
 
 
-@router.patch("/{key}", response_model=ProjectOut)
+@router.patch("/{key}/", response_model=ProjectOut)
 async def update_project(
     key: str,
     data: ProjectUpdate,
@@ -151,7 +165,7 @@ async def update_project(
     return _project_out(project, parent_key)
 
 
-@router.delete("/{key}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{key}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
     key: str,
     current_user: User = Depends(get_current_user),
@@ -167,7 +181,7 @@ async def delete_project(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{key}/members", response_model=list[MemberOut])
+@router.get("/{key}/members/", response_model=list[MemberOut])
 async def list_members(
     key: str,
     current_user: User = Depends(get_current_user),
@@ -179,37 +193,108 @@ async def list_members(
     return [MemberOut(**m) for m in members]
 
 
-@router.post("/{key}/members", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
+@router.post("/{key}/members/", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
 async def add_member(
     key: str,
     data: MemberAdd,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
     project = await _service.get_by_key(db, key.upper())
-    await _require_manage(project, current_user, db)
+    await _require_manage(project, current_user, db, request)
 
     await _service.add_member(db, project, data.user_id, data.role_ids)
 
     # Return the member's current state
     members = await _service.list_members(db, project)
+    result: MemberOut | None = None
     for m in members:
         if m["user_id"] == data.user_id:
-            return MemberOut(**m)
+            result = MemberOut(**m)
+            break
 
-    raise AppError(code="internal_error", message="Member not found after add", status_code=500)
+    if result is None:
+        raise AppError(code="internal_error", message="Member not found after add", status_code=500)
+
+    try:
+        await _audit.log_member_change(
+            session=db, action=MemberAction.ADDED, user_id=current_user.id,
+            project_id=project.id, target_user_id=data.user_id,
+            target_login=result.login, roles=result.roles, request=request,
+        )
+    except Exception:
+        pass
+
+    return result
 
 
-@router.delete("/{key}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{key}/members/{user_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_member(
     key: str,
     user_id: int,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     project = await _service.get_by_key(db, key.upper())
-    await _require_manage(project, current_user, db)
+    await _require_manage(project, current_user, db, request)
+
+    # Capture member info before deletion for audit
+    target_login = ""
+    try:
+        target = await db.execute(select(User.login).where(User.id == user_id))
+        target_login = target.scalar_one_or_none() or ""
+    except Exception:
+        pass
+
     await _service.remove_member(db, project, user_id)
+
+    try:
+        await _audit.log_member_change(
+            session=db, action=MemberAction.REMOVED, user_id=current_user.id,
+            project_id=project.id, target_user_id=user_id,
+            target_login=target_login, request=request,
+        )
+    except Exception:
+        pass
+
+
+@router.patch("/{key}/members/{user_id}/", response_model=MemberOut)
+async def update_member_roles(
+    key: str,
+    user_id: int,
+    data: MemberUpdateRoles,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> MemberOut:
+    """Replace all roles for a project member."""
+    project = await _service.get_by_key(db, key.upper())
+    await _require_manage(project, current_user, db, request)
+
+    await _service.update_member_roles(db, project, user_id, data.role_ids)
+
+    members = await _service.list_members(db, project)
+    result: MemberOut | None = None
+    for m in members:
+        if m["user_id"] == user_id:
+            result = MemberOut(**m)
+            break
+
+    if result is None:
+        raise AppError(code="internal_error", message="Member not found after update", status_code=500)
+
+    try:
+        await _audit.log_member_change(
+            session=db, action=MemberAction.ROLES_CHANGED, user_id=current_user.id,
+            project_id=project.id, target_user_id=user_id,
+            target_login=result.login, roles=result.roles, request=request,
+        )
+    except Exception:
+        pass
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +302,7 @@ async def remove_member(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/{key}/modules", response_model=ModulesOut)
+@router.get("/{key}/modules/", response_model=ModulesOut)
 async def get_modules(
     key: str,
     current_user: User = Depends(get_current_user),
@@ -229,7 +314,7 @@ async def get_modules(
     return ModulesOut(modules=modules)
 
 
-@router.patch("/{key}/modules", response_model=ModulesOut)
+@router.patch("/{key}/modules/", response_model=ModulesOut)
 async def update_modules(
     key: str,
     data: ModuleToggle,

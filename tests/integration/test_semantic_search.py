@@ -33,8 +33,8 @@ pytestmark = pytest.mark.integration
 # Helpers
 # ---------------------------------------------------------------------------
 
-SEARCH_URL = "/api/v1/search"
-ADMIN_MODELS_URL = "/api/v1/admin/embedding-models"
+SEARCH_URL = "/api/v1/search/"
+ADMIN_MODELS_URL = "/api/v1/admin/embedding-models/"
 
 
 async def _make_user(db: AsyncSession, login: str = "sem_user") -> User:
@@ -47,7 +47,7 @@ async def _make_user(db: AsyncSession, login: str = "sem_user") -> User:
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
@@ -129,7 +129,7 @@ async def _create_issue(
     }
     if description is not None:
         payload["description"] = description
-    resp = await client.post(f"/api/v1/projects/{project_key}/issues", json=payload)
+    resp = await client.post(f"/api/v1/projects/{project_key}/issues/", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -141,7 +141,7 @@ async def _create_wiki_page(
     page_text: str,
 ) -> dict:
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/wiki",
+        f"/api/v1/projects/{project_key}/wiki/",
         json={"title": title, "text": page_text},
     )
     assert resp.status_code == 201, resp.text
@@ -230,7 +230,7 @@ async def test_list_embedding_models(admin_client: AsyncClient, db_session: Asyn
 async def test_delete_embedding_model(admin_client: AsyncClient, db_session: AsyncSession):
     """Admin can delete an embedding model."""
     model = await _create_mock_model(db_session)
-    resp = await admin_client.delete(f"{ADMIN_MODELS_URL}/{model.id}")
+    resp = await admin_client.delete(f"{ADMIN_MODELS_URL}{model.id}/")
     assert resp.status_code == 204, resp.text
 
 

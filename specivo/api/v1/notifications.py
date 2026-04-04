@@ -26,7 +26,7 @@ _notification_service = NotificationService()
 
 
 @router.get(
-    "/notification-preferences",
+    "/notification-preferences/",
     response_model=list[NotificationPreferenceOut],
 )
 async def list_notification_preferences(
@@ -60,8 +60,7 @@ async def list_notification_preferences(
             user_id=p.user_id,
             project_id=p.project_id,
             event_type=p.event_type,
-            email_enabled=p.email_enabled,
-            in_app_enabled=p.in_app_enabled,
+            channels=p.channels,
             created_at=p.created_at,
             updated_at=p.updated_at,
         )
@@ -70,7 +69,7 @@ async def list_notification_preferences(
 
 
 @router.patch(
-    "/notification-preferences",
+    "/notification-preferences/",
     response_model=NotificationPreferenceOut,
 )
 async def update_notification_preference(
@@ -99,13 +98,11 @@ async def update_notification_preference(
             user_id=current_user.id,
             project_id=data.project_id,
             event_type=data.event_type,
-            email_enabled=data.email_enabled,
-            in_app_enabled=data.in_app_enabled,
+            channels=data.channels,
         )
         db.add(pref)
     else:
-        pref.email_enabled = data.email_enabled
-        pref.in_app_enabled = data.in_app_enabled
+        pref.channels = data.channels
 
     await db.flush()
     await db.refresh(pref)
@@ -115,8 +112,7 @@ async def update_notification_preference(
         user_id=pref.user_id,
         project_id=pref.project_id,
         event_type=pref.event_type,
-        email_enabled=pref.email_enabled,
-        in_app_enabled=pref.in_app_enabled,
+        channels=pref.channels,
         created_at=pref.created_at,
         updated_at=pref.updated_at,
     )
@@ -128,7 +124,7 @@ async def update_notification_preference(
 
 
 @router.get(
-    "/notifications",
+    "/notifications/",
     response_model=NotificationListOut,
 )
 async def list_notifications(
@@ -171,7 +167,7 @@ async def list_notifications(
 
 
 @router.get(
-    "/notifications/unread-count",
+    "/notifications/unread-count/",
     response_model=UnreadCountOut,
 )
 async def get_unread_count(
@@ -184,7 +180,7 @@ async def get_unread_count(
 
 
 @router.patch(
-    "/notifications/{notification_id}/read",
+    "/notifications/{notification_id}/read/",
     response_model=NotificationOut,
 )
 async def mark_notification_read(
@@ -213,7 +209,7 @@ async def mark_notification_read(
 
 
 @router.post(
-    "/notifications/mark-all-read",
+    "/notifications/mark-all-read/",
     response_model=MarkAllReadOut,
 )
 async def mark_all_notifications_read(

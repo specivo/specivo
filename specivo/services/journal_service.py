@@ -175,8 +175,11 @@ class JournalService:
                 raise NotFoundError(f"Journal {reply_to_id} not found")
             if parent_journal.issue_id != issue.id:
                 raise ValidationError(_("Cannot reply to a journal on a different issue"))
+            # Flatten reply-to-reply: redirect to the root parent (2-level max)
             if parent_journal.reply_to_id is not None:
-                raise ValidationError(_("Cannot reply to a reply (only 1-level threading is supported)"))
+                reply_to_id = parent_journal.reply_to_id
+            if parent_journal.is_private and not user.is_admin:
+                raise ValidationError("Cannot reply to a private note")
 
         sequence = await self._next_sequence(session, issue.id)
 
@@ -211,17 +214,6 @@ class JournalService:
         summary: str,
     ) -> Journal:
         """Mark a journal thread as resolved.
-
-        Parameters
-        ----------
-        journal_id:
-            The journal to resolve.
-        issue_id:
-            The issue the journal must belong to (for authorization).
-        user:
-            The user performing the resolution.
-        summary:
-            A short description of the resolution.
 
         Raises ``NotFoundError`` if the journal does not exist or belongs
         to a different issue.
@@ -286,6 +278,7 @@ class JournalService:
             .options(
                 selectinload(Journal.user),
                 selectinload(Journal.details),
+                selectinload(Journal.resolved_by),
             )
             .order_by(Journal.created_at.asc())
         )

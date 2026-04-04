@@ -19,7 +19,7 @@ async def test_admin_dashboard(admin_client: AsyncClient):
     """GET /admin with admin returns 200 and contains 'Admin'."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        "/admin",
+        "/admin/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -31,7 +31,7 @@ async def test_admin_requires_admin(auth_client: AsyncClient):
     """GET /admin as regular user returns 403."""
     token = auth_client.state.token
     resp = await auth_client.get(
-        "/admin",
+        "/admin/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 403
@@ -47,7 +47,7 @@ async def test_admin_workflows_page(admin_client: AsyncClient):
     """GET /admin/workflows with admin returns 200."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        "/admin/workflows",
+        "/admin/workflows/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -59,7 +59,7 @@ async def test_admin_settings_page(admin_client: AsyncClient):
     """GET /admin/settings with admin returns 200."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        "/admin/settings",
+        "/admin/settings/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -71,7 +71,7 @@ async def test_admin_agent_groups_page(admin_client: AsyncClient):
     """GET /admin/agent-groups with admin returns 200."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        "/admin/agent-groups",
+        "/admin/agent-groups/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -83,7 +83,7 @@ async def test_admin_kill_switch_page(admin_client: AsyncClient):
     """GET /admin/kill-switch with admin returns 200."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        "/admin/kill-switch",
+        "/admin/kill-switch/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200

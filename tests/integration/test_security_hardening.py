@@ -58,7 +58,7 @@ async def _create_admin(db: AsyncSession, **kwargs):
 
 async def _login(client: AsyncClient, login: str, password: str):
     return await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": password},
     )
 
@@ -136,7 +136,7 @@ class TestJwtClaims:
         access_token = resp.json()["access_token"]
         payload = pyjwt.decode(access_token, options={"verify_signature": False})
 
-        allowed_claims = {"sub", "iat", "exp", "jti"}
+        allowed_claims = {"sub", "iat", "exp", "jti", "rem"}
         extra_claims = set(payload.keys()) - allowed_claims
         assert not extra_claims, f"JWT contains unexpected claims: {extra_claims}"
 
@@ -208,7 +208,7 @@ class TestWebhookPermissions:
         token = resp.json()["access_token"]
 
         resp = await client.post(
-            f"/api/v1/projects/{project.key}/webhooks",
+            f"/api/v1/projects/{project.key}/webhooks/",
             json={
                 "url": "https://example.com/hook",
                 "secret": "supersecretkey123",
@@ -233,7 +233,7 @@ class TestWebhookPermissions:
         token = resp.json()["access_token"]
 
         resp = await client.post(
-            f"/api/v1/projects/{project.key}/webhooks",
+            f"/api/v1/projects/{project.key}/webhooks/",
             json={
                 "url": "https://example.com/hook",
                 "secret": "supersecretkey123",
@@ -252,7 +252,7 @@ class TestWebhookPermissions:
         token = resp.json()["access_token"]
 
         resp = await client.post(
-            f"/api/v1/projects/{project.key}/webhooks",
+            f"/api/v1/projects/{project.key}/webhooks/",
             json={
                 "url": "https://example.com/hook",
                 "secret": "supersecretkey123",
@@ -287,7 +287,7 @@ class TestAttachmentAuthorization:
         import io
 
         resp = await client.post(
-            "/api/v1/attachments",
+            "/api/v1/attachments/",
             data={"container_type": "Issue", "container_id": "999999"},
             files={"file": ("test.txt", io.BytesIO(b"secret data"), "text/plain")},
             headers={"Authorization": f"Bearer {token}"},
@@ -306,7 +306,7 @@ class TestAttachmentAuthorization:
         # Attachment ID that belongs to a private project the user cannot access.
         # Even if the attachment exists, the user should get 404 (not 200 or 403).
         resp = await client.get(
-            "/api/v1/attachments/999999/download",
+            "/api/v1/attachments/999999/download/",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404, (
@@ -515,7 +515,7 @@ class TestMediumSecurityFixes:
         # the response as f"error: {exc}". After fix, it should just say "error".
         with patch("specivo.core.database.get_engine") as mock_engine:
             mock_engine.side_effect = Exception("Connection refused to secret-host:5432")
-            resp = await unauth_client.get("/health")
+            resp = await unauth_client.get("/health/")
 
             if resp.status_code == 200:
                 body = resp.json()
@@ -549,7 +549,7 @@ class TestMediumSecurityFixes:
         import io
 
         resp = await client.post(
-            "/api/v1/attachments",
+            "/api/v1/attachments/",
             data={"container_type": "Setting", "container_id": "1"},
             files={"file": ("test.txt", io.BytesIO(b"data"), "text/plain")},
             headers={"Authorization": f"Bearer {token}"},
@@ -575,7 +575,7 @@ class TestLowSecurityFixes:
         oversized_password = "A" * 1025
 
         resp = await client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/login/",
             json={"login": "bigpw_user", "password": oversized_password},
         )
         assert resp.status_code == 422, f"Oversized password should return 422, got {resp.status_code}"

@@ -5,9 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import get_db
-from specivo.core.exceptions import PermissionDeniedError
-from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.workflow import (
     BulkTransitionReplace,
@@ -22,26 +21,19 @@ router = APIRouter(tags=["admin"])
 _service = WorkflowService()
 
 
-def _require_admin(current_user: User = Depends(get_current_user)) -> User:
-    """Dependency: raise 403 if the current user is not an admin."""
-    if not current_user.is_admin:
-        raise PermissionDeniedError("Admin access required")
-    return current_user
-
-
 # ---------------------------------------------------------------------------
 # Transitions
 # ---------------------------------------------------------------------------
 
 
 @router.get(
-    "/admin/workflows/transitions",
+    "/admin/workflows/transitions/",
     response_model=list[TransitionOut],
 )
 async def list_transitions(
     tracker_id: int | None = Query(default=None),
     role_id: int | None = Query(default=None),
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[TransitionOut]:
     """List workflow transitions (admin only)."""
@@ -50,13 +42,13 @@ async def list_transitions(
 
 
 @router.post(
-    "/admin/workflows/transitions",
+    "/admin/workflows/transitions/",
     response_model=TransitionOut,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_transition(
     data: TransitionCreate,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> TransitionOut:
     """Create a workflow transition (admin only)."""
@@ -65,12 +57,12 @@ async def create_transition(
 
 
 @router.delete(
-    "/admin/workflows/transitions/{transition_id}",
+    "/admin/workflows/transitions/{transition_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_transition(
     transition_id: int,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a workflow transition (admin only)."""
@@ -78,14 +70,14 @@ async def delete_transition(
 
 
 @router.put(
-    "/admin/workflows/transitions/bulk",
+    "/admin/workflows/transitions/bulk/",
     response_model=list[TransitionOut],
 )
 async def bulk_replace_transitions(
     data: BulkTransitionReplace,
     tracker_id: int = Query(),
     role_id: int = Query(),
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[TransitionOut]:
     """Replace all transitions for tracker+role (admin only)."""
@@ -99,13 +91,13 @@ async def bulk_replace_transitions(
 
 
 @router.get(
-    "/admin/workflows/field-rules",
+    "/admin/workflows/field-rules/",
     response_model=list[FieldRuleOut],
 )
 async def list_field_rules(
     tracker_id: int | None = Query(default=None),
     role_id: int | None = Query(default=None),
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> list[FieldRuleOut]:
     """List workflow field rules (admin only)."""
@@ -114,13 +106,13 @@ async def list_field_rules(
 
 
 @router.post(
-    "/admin/workflows/field-rules",
+    "/admin/workflows/field-rules/",
     response_model=FieldRuleOut,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_field_rule(
     data: FieldRuleCreate,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> FieldRuleOut:
     """Create a workflow field rule (admin only)."""
@@ -129,12 +121,12 @@ async def create_field_rule(
 
 
 @router.delete(
-    "/admin/workflows/field-rules/{rule_id}",
+    "/admin/workflows/field-rules/{rule_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_field_rule(
     rule_id: int,
-    current_user: User = Depends(_require_admin),
+    current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a workflow field rule (admin only)."""

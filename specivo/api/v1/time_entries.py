@@ -73,7 +73,7 @@ def _timer_out(timer) -> TimerOut:
 
 
 @router.get(
-    "/time-entries/activities",
+    "/time-entries/activities/",
     response_model=list[ActivityOut],
 )
 async def list_activities(
@@ -91,7 +91,7 @@ async def list_activities(
 
 
 @router.post(
-    "/projects/{project_key}/time-entries",
+    "/projects/{project_key}/time-entries/",
     response_model=TimeEntryOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -109,7 +109,7 @@ async def create_time_entry(
 
 
 @router.get(
-    "/projects/{project_key}/time-entries",
+    "/projects/{project_key}/time-entries/",
     response_model=TimeEntryListResponse,
 )
 async def list_time_entries(
@@ -147,7 +147,7 @@ async def list_time_entries(
 
 
 @router.get(
-    "/time-entries/{entry_id}",
+    "/time-entries/{entry_id}/",
     response_model=TimeEntryOut,
 )
 async def get_time_entry(
@@ -161,7 +161,7 @@ async def get_time_entry(
 
 
 @router.patch(
-    "/time-entries/{entry_id}",
+    "/time-entries/{entry_id}/",
     response_model=TimeEntryOut,
 )
 async def update_time_entry(
@@ -178,7 +178,7 @@ async def update_time_entry(
 
 
 @router.delete(
-    "/time-entries/{entry_id}",
+    "/time-entries/{entry_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_time_entry(
@@ -197,7 +197,7 @@ async def delete_time_entry(
 
 
 @router.get(
-    "/timer",
+    "/timer/",
     response_model=TimerOut | None,
 )
 async def get_timer(
@@ -212,7 +212,7 @@ async def get_timer(
 
 
 @router.post(
-    "/timer/start",
+    "/timer/start/",
     response_model=TimerOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -233,7 +233,7 @@ async def start_timer(
 
 
 @router.post(
-    "/timer/stop",
+    "/timer/stop/",
     response_model=TimeEntryOut,
     status_code=status.HTTP_201_CREATED,
 )

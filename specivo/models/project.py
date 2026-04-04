@@ -1,14 +1,18 @@
-"""Project, EnabledModule models for the Specivo tracker."""
+"""Project, EnabledModule, ProjectKeyAlias models for the Specivo tracker."""
+
+from datetime import datetime
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -82,6 +86,9 @@ class Project(Base, TimestampMixin):
     # Atomic counter for PROJECT-NNN issue numbers
     issue_sequence: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
+    # Hex color for project card border (e.g. "#c49a3c")
+    color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+
     # Extensible JSONB settings bag
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
 
@@ -113,3 +120,39 @@ class EnabledModule(Base):
 
     def __repr__(self) -> str:
         return f"<EnabledModule project_id={self.project_id} name={self.name!r}>"
+
+
+class ProjectKeyAlias(Base):
+    """Historical project key alias for redirect after rename.
+
+    When a project key is changed (e.g. ACME → NEWCO), the old key
+    is stored here so that API lookups using the retired key can
+    resolve to the current project.
+    """
+
+    __tablename__ = "project_key_aliases"
+
+    __table_args__ = (
+        Index("ix_project_key_aliases_project_id", "project_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    old_key: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
+
+    project_id: Mapped[int] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    renamed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    renamed_by_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<ProjectKeyAlias old_key={self.old_key!r} project_id={self.project_id}>"

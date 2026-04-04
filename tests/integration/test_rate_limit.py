@@ -103,7 +103,7 @@ async def test_login_allows_requests_under_limit(client: AsyncClient):
     # not 429, because the rate limit passes them through).
     for _ in range(3):
         resp = await client.post(
-            "/api/v1/auth/login",
+            "/api/v1/auth/login/",
             json={"login": "nosuchuser", "password": "wrongpass"},
         )
         assert resp.status_code != 429, f"Unexpected 429 on request under limit: {resp.text}"
@@ -114,11 +114,11 @@ async def test_login_returns_429_after_limit_exceeded(client: AsyncClient):
     """The 11th login attempt within 60 s must return 429."""
     payload = {"login": "nosuchuser", "password": "wrongpass"}
     for i in range(10):
-        resp = await client.post("/api/v1/auth/login", json=payload)
+        resp = await client.post("/api/v1/auth/login/", json=payload)
         assert resp.status_code != 429, f"Request {i + 1} got unexpected 429"
 
     # 11th request — must be rate-limited
-    resp = await client.post("/api/v1/auth/login", json=payload)
+    resp = await client.post("/api/v1/auth/login/", json=payload)
     assert resp.status_code == 429
 
 
@@ -127,9 +127,9 @@ async def test_429_response_has_retry_after_header(client: AsyncClient):
     """429 response must include a Retry-After header with a positive value."""
     payload = {"login": "x", "password": "x"}
     for _ in range(10):
-        await client.post("/api/v1/auth/login", json=payload)
+        await client.post("/api/v1/auth/login/", json=payload)
 
-    resp = await client.post("/api/v1/auth/login", json=payload)
+    resp = await client.post("/api/v1/auth/login/", json=payload)
     assert resp.status_code == 429
 
     retry_after = resp.headers.get("Retry-After")
@@ -144,7 +144,7 @@ async def test_x_ratelimit_remaining_decrements(client: AsyncClient):
     remainders = []
 
     for _ in range(5):
-        resp = await client.post("/api/v1/auth/login", json=payload)
+        resp = await client.post("/api/v1/auth/login/", json=payload)
         if resp.status_code == 429:
             break
         header = resp.headers.get("X-RateLimit-Remaining")
@@ -162,9 +162,9 @@ async def test_429_response_body_has_error_code(client: AsyncClient):
     """429 body must follow the standard error envelope with code rate_limit_exceeded."""
     payload = {"login": "x", "password": "x"}
     for _ in range(10):
-        await client.post("/api/v1/auth/login", json=payload)
+        await client.post("/api/v1/auth/login/", json=payload)
 
-    resp = await client.post("/api/v1/auth/login", json=payload)
+    resp = await client.post("/api/v1/auth/login/", json=payload)
     assert resp.status_code == 429
 
     body = resp.json()
@@ -177,7 +177,7 @@ async def test_429_response_body_has_error_code(client: AsyncClient):
 async def test_x_ratelimit_limit_header_present(client: AsyncClient):
     """X-RateLimit-Limit header should be present and equal the configured limit."""
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": "x", "password": "x"},
     )
     # Even 401 responses (bad credentials) should carry the rate limit header

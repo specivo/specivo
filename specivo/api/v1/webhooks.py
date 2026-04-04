@@ -38,7 +38,7 @@ async def _require_project_member(user: User, project_id: int, db: AsyncSession)
         raise PermissionDeniedError("Project membership required")
 
 
-@router.get("", response_model=list[WebhookOut])
+@router.get("/", response_model=list[WebhookOut])
 async def list_webhooks(
     project_key: str,
     current_user: User = Depends(get_current_user),
@@ -51,7 +51,7 @@ async def list_webhooks(
     return [WebhookOut.model_validate(wh) for wh in webhooks]
 
 
-@router.post("", response_model=WebhookOut, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=WebhookOut, status_code=status.HTTP_201_CREATED)
 async def register_webhook(
     project_key: str,
     data: WebhookCreate,
@@ -71,7 +71,7 @@ async def register_webhook(
     return WebhookOut.model_validate(webhook)
 
 
-@router.patch("/{webhook_id}", response_model=WebhookOut)
+@router.patch("/{webhook_id}/", response_model=WebhookOut)
 async def update_webhook(
     project_key: str,
     webhook_id: int,
@@ -87,7 +87,7 @@ async def update_webhook(
     return WebhookOut.model_validate(webhook)
 
 
-@router.delete("/{webhook_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{webhook_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_webhook(
     project_key: str,
     webhook_id: int,

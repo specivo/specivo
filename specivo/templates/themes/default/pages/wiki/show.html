@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}{{ wiki_page.title }} - Wiki - {{ project.name }} - Specivo{% endblock %}
+{% block title %}{{ wiki_page.title }} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -28,14 +28,20 @@
         </div>
       </div>
       <div class="wiki-page-actions">
-        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history" class="btn btn-ghost">
+        <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          All pages
+        </a>
+        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           History
         </a>
-        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/edit" class="btn btn-primary">
+        {% if can_manage_wiki %}
+        <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/edit/" class="sp-btn sp-btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Edit
         </a>
+        {% endif %}
       </div>
     </div>
 
@@ -57,28 +63,91 @@
 
     {# Rendered content #}
     <div class="wiki-content">
-      {{ content.text | safe }}
+      {{ content.text | wiki_markdown(project.key) }}
     </div>
   </div>
 
-  {# Right sidebar #}
-  <div>
-    {# Page tree #}
-    {% if pages is defined and pages %}
-    <div class="wiki-tree-card">
-      <div class="wiki-tree-title">Pages</div>
-      <ul class="wiki-tree">
-        {% for p in pages %}
-        <li>
-          <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}"
-             class="{{ 'active' if p.id == wiki_page.id else '' }}">
-            {{ p.title }}
+  {# Right sidebar: TOC + pages button #}
+  <div class="wiki-sidebar">
+    {# Table of contents (auto-generated from headers) #}
+    <div class="wiki-tree-card" id="wiki-toc" x-data="wikiToc()" x-show="headings.length > 0" x-cloak>
+      <div class="wiki-tree-title" style="text-transform:uppercase;font-size:var(--sp-font-size-xs);letter-spacing:0.06em;color:var(--sp-text-muted);font-weight:600;margin-bottom:var(--sp-space-md);">On this page</div>
+      <nav style="position:sticky;top:var(--sp-space-xl);">
+        <template x-for="h in headings" :key="h.id">
+          <a :href="'#' + h.id"
+             :class="{ 'sp-toc-active': activeId === h.id }"
+             class="sp-toc-link"
+             :style="'padding-left:' + ((h.level - 2) * 12 + 4) + 'px; font-weight:' + (h.level === 2 ? '600' : '400') + '; font-size:' + (h.level === 2 ? 'var(--sp-font-size-sm)' : 'var(--sp-font-size-xs)')"
+             x-text="h.text">
           </a>
-        </li>
-        {% endfor %}
+        </template>
+      </nav>
+    </div>
+
+    {# Pages button — opens slide-out panel #}
+    {% if page_tree %}
+    <button class="wiki-pages-trigger" x-data @click="$dispatch('wiki-panel-open')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+      Pages
+      <span class="wiki-pages-count">{{ pages|length }}</span>
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{# Slide-out page tree panel #}
+{% if page_tree %}
+{% macro render_tree(parent_id) %}
+  {% for p in page_tree.get(parent_id, []) %}
+  {% set has_children = p.id in page_tree %}
+  <li>
+    <div class="wiki-tree-row{% if p.id == wiki_page.id %} active{% endif %}">
+      {% if has_children %}
+      <button class="wiki-tree-toggle" @click="expanded[{{ p.id }}] = !expanded[{{ p.id }}]" :class="{ 'open': expanded[{{ p.id }}] }">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg>
+      </button>
+      {% endif %}
+      <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}/"{% if p.id == wiki_page.id %} class="active"{% endif %}>{{ p.title }}</a>
+      {% if can_manage_wiki %}
+      <a href="/projects/{{ project.key }}/wiki/new/?parent={{ p.id }}" class="wiki-tree-add" title="Add child page">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      </a>
+      {% endif %}
+    </div>
+    {% if has_children %}
+    <ul x-show="expanded[{{ p.id }}]">
+      {{ render_tree(p.id) }}
+    </ul>
+    {% endif %}
+  </li>
+  {% endfor %}
+{% endmacro %}
+<div class="wiki-panel-overlay"
+     x-data="{ open: false, expanded: { {% for eid in expanded_ids %}{{ eid }}: true{% if not loop.last %}, {% endif %}{% endfor %} } }"
+     :class="{ 'open': open }"
+     @wiki-panel-open.window="open = true"
+     @keydown.escape.window="open = false">
+  <div class="wiki-panel-scrim" @click="open = false"></div>
+  <div class="wiki-panel">
+    <div class="wiki-panel-header">
+      <h2>Pages</h2>
+      <button class="sp-modal-close" @click="open = false">&times;</button>
+    </div>
+    <div class="wiki-panel-body">
+      <ul class="wiki-tree">
+        {{ render_tree(None) }}
       </ul>
+    </div>
+    {% if can_manage_wiki %}
+    <div class="wiki-panel-footer">
+      <a href="/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-ghost" style="width:100%;justify-content:center;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>
+        New page
+      </a>
     </div>
     {% endif %}
   </div>
+</div>
+{% endif %}
 </div>
 {% endblock %}

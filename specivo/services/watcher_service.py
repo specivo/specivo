@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -33,9 +34,16 @@ class WatcherService:
         if watcher is not None:
             return watcher
 
-        watcher = Watcher(issue_id=issue.id, wiki_page_id=None, user_id=user.id)
-        session.add(watcher)
-        await session.flush()
+        try:
+            watcher = Watcher(issue_id=issue.id, wiki_page_id=None, user_id=user.id)
+            session.add(watcher)
+            await session.flush()
+        except IntegrityError:
+            await session.rollback()
+            result = await session.execute(
+                select(Watcher).where(Watcher.issue_id == issue.id, Watcher.user_id == user.id)
+            )
+            watcher = result.scalar_one()
 
         logger.debug("User %d is now watching issue %s", user.id, issue.display_key)
         return watcher

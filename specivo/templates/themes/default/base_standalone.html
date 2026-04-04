@@ -3,10 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}Specivo{% endblock %}</title>
-  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', path='img/favicon.svg') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='vendor/bootstrap.5.3.6.min.css') }}">
-  <link rel="stylesheet" href="{{ url_for('static', path='css/' + versioned['specivo.css']) }}">
+  <title>{% block title %}{{ brand_name }}{% endblock %}</title>
+  <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#12102e">
+  <meta name="mobile-web-app-capable" content="yes">
+  <link rel="stylesheet" href="/static/vendor/bootstrap.5.3.6.min.css">
+  <link rel="stylesheet" href="/static/css/{{ versioned['specivo.css'] }}">
   {% block plugin_css %}{% endblock %}
   {% block head %}{% endblock %}
 </head>

@@ -38,7 +38,7 @@ async def _create_user(db: AsyncSession, **kwargs):
 
 
 async def _login(client: AsyncClient, login: str, password: str) -> dict:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     return resp
 
 
@@ -205,7 +205,7 @@ class TestTokenRefresh:
         old_refresh = login_resp.json()["refresh_token"]
         old_access = login_resp.json()["access_token"]
 
-        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+        resp = await client.post("/api/v1/auth/refresh/", json={"refresh_token": old_refresh})
         assert resp.status_code == 200
         body = resp.json()
         assert body["access_token"] != old_access
@@ -218,16 +218,16 @@ class TestTokenRefresh:
         old_refresh = login_resp.json()["refresh_token"]
 
         # First rotation — success
-        resp1 = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+        resp1 = await client.post("/api/v1/auth/refresh/", json={"refresh_token": old_refresh})
         assert resp1.status_code == 200
 
         # Replay the old token — must fail
-        resp2 = await client.post("/api/v1/auth/refresh", json={"refresh_token": old_refresh})
+        resp2 = await client.post("/api/v1/auth/refresh/", json={"refresh_token": old_refresh})
         assert resp2.status_code == 401
         assert resp2.json()["errors"][0]["code"] == "auth_refresh_expired"
 
     async def test_refresh_with_garbage_token_returns_401(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": "not-a-valid-token-at-all"})
+        resp = await client.post("/api/v1/auth/refresh/", json={"refresh_token": "not-a-valid-token-at-all"})
         assert resp.status_code == 401
         assert resp.json()["errors"][0]["code"] == "auth_refresh_expired"
 
@@ -244,7 +244,7 @@ class TestTokenRefresh:
         db_session.add(expired_record)
         await db_session.flush()
 
-        resp = await client.post("/api/v1/auth/refresh", json={"refresh_token": raw})
+        resp = await client.post("/api/v1/auth/refresh/", json={"refresh_token": raw})
         assert resp.status_code == 401
         assert resp.json()["errors"][0]["code"] == "auth_refresh_expired"
 
@@ -259,7 +259,7 @@ class TestTokenRefresh:
         # Explicitly pass the cookie because the Secure flag prevents
         # automatic cookie sending over the HTTP test transport.
         resp = await client.post(
-            "/api/v1/auth/refresh",
+            "/api/v1/auth/refresh/",
             cookies={"refresh_token": refresh_cookie},
         )
         assert resp.status_code == 200
@@ -277,18 +277,18 @@ class TestLogout:
         refresh_token = login_resp.json()["refresh_token"]
 
         # Logout
-        resp = await client.post("/api/v1/auth/logout", json={"refresh_token": refresh_token})
+        resp = await client.post("/api/v1/auth/logout/", json={"refresh_token": refresh_token})
         assert resp.status_code == 204
 
         # Attempt refresh with the revoked token — must fail
-        resp2 = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+        resp2 = await client.post("/api/v1/auth/refresh/", json={"refresh_token": refresh_token})
         assert resp2.status_code == 401
 
     async def test_logout_clears_cookies(self, client: AsyncClient, db_session: AsyncSession):
         await _create_user(db_session, login="cookie_logout")
         await _login(client, "cookie_logout", TEST_PASSWORD)
 
-        resp = await client.post("/api/v1/auth/logout", json={"refresh_token": "any"})
+        resp = await client.post("/api/v1/auth/logout/", json={"refresh_token": "any"})
         assert resp.status_code == 204
         # Cookies should be cleared (max-age=0 or deleted)
         # httpx sets the value to empty string for deleted cookies
@@ -296,7 +296,7 @@ class TestLogout:
 
     async def test_logout_without_token_returns_204(self, client: AsyncClient, db_session: AsyncSession):
         """Logout with no token is a no-op — still returns 204."""
-        resp = await client.post("/api/v1/auth/logout")
+        resp = await client.post("/api/v1/auth/logout/")
         assert resp.status_code == 204
 
 
@@ -318,20 +318,20 @@ class TestLogoutAll:
 
         # Logout all (using JWT auth)
         resp = await client.post(
-            "/api/v1/auth/logout-all",
+            "/api/v1/auth/logout-all/",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert resp.status_code == 200
         assert resp.json()["revoked_count"] == 2
 
         # Both tokens now invalid
-        r1 = await client.post("/api/v1/auth/refresh", json={"refresh_token": rt1})
-        r2 = await client.post("/api/v1/auth/refresh", json={"refresh_token": rt2})
+        r1 = await client.post("/api/v1/auth/refresh/", json={"refresh_token": rt1})
+        r2 = await client.post("/api/v1/auth/refresh/", json={"refresh_token": rt2})
         assert r1.status_code == 401
         assert r2.status_code == 401
 
     async def test_logout_all_without_auth_returns_401(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.post("/api/v1/auth/logout-all")
+        resp = await client.post("/api/v1/auth/logout-all/")
         assert resp.status_code == 401
 
 
@@ -348,7 +348,7 @@ class TestSessions:
         access_token = resp2.json()["access_token"]
 
         resp = await client.get(
-            "/api/v1/auth/sessions",
+            "/api/v1/auth/sessions/",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert resp.status_code == 200
@@ -377,7 +377,7 @@ class TestSessions:
         access_token = login_resp.json()["access_token"]
 
         resp = await client.get(
-            "/api/v1/auth/sessions",
+            "/api/v1/auth/sessions/",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert resp.status_code == 200
@@ -385,7 +385,7 @@ class TestSessions:
         assert len(resp.json()) == 1
 
     async def test_list_sessions_without_auth_returns_401(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.get("/api/v1/auth/sessions")
+        resp = await client.get("/api/v1/auth/sessions/")
         assert resp.status_code == 401
 
     async def test_delete_session_revokes_specific_token(self, client: AsyncClient, db_session: AsyncSession):
@@ -396,7 +396,7 @@ class TestSessions:
 
         # Get session list to find the first session's ID
         sessions_resp = await client.get(
-            "/api/v1/auth/sessions",
+            "/api/v1/auth/sessions/",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         sessions = sessions_resp.json()
@@ -405,14 +405,14 @@ class TestSessions:
         # Delete the first session
         session_id = sessions[0]["id"]
         del_resp = await client.delete(
-            f"/api/v1/auth/sessions/{session_id}",
+            f"/api/v1/auth/sessions/{session_id}/",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert del_resp.status_code == 204
 
         # Only one session remains
         list_resp = await client.get(
-            "/api/v1/auth/sessions",
+            "/api/v1/auth/sessions/",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         assert len(list_resp.json()) == 1
@@ -428,18 +428,145 @@ class TestSessions:
         token_b = login_b.json()["access_token"]
 
         sessions_resp = await client.get(
-            "/api/v1/auth/sessions",
+            "/api/v1/auth/sessions/",
             headers={"Authorization": f"Bearer {token_a}"},
         )
         session_id = sessions_resp.json()[0]["id"]
 
         # user_b tries to delete user_a's session
         resp = await client.delete(
-            f"/api/v1/auth/sessions/{session_id}",
+            f"/api/v1/auth/sessions/{session_id}/",
             headers={"Authorization": f"Bearer {token_b}"},
         )
         assert resp.status_code == 404
 
     async def test_delete_session_without_auth_returns_401(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.delete("/api/v1/auth/sessions/1")
+        resp = await client.delete("/api/v1/auth/sessions/1/")
         assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Remember Me — cookie lifetime behaviour
+# ---------------------------------------------------------------------------
+
+
+def _get_cookie_header(resp, name: str) -> str | None:
+    """Return the raw Set-Cookie header string for the named cookie, or None."""
+    headers = resp.headers.get_list("set-cookie")
+    matches = [h for h in headers if h.startswith(f"{name}=")]
+    return matches[0] if matches else None
+
+
+class TestRememberMe:
+    async def test_login_without_remember_sets_session_cookies(self, client: AsyncClient, db_session: AsyncSession):
+        """remember=false must produce session cookies (no Max-Age attribute)."""
+        await _create_user(db_session, login="no_remember")
+        resp = await client.post(
+            "/api/v1/auth/login/",
+            json={"login": "no_remember", "password": TEST_PASSWORD, "remember": False},
+        )
+        assert resp.status_code == 200
+
+        access_header = _get_cookie_header(resp, "access_token")
+        refresh_header = _get_cookie_header(resp, "refresh_token")
+        assert access_header is not None, "access_token cookie missing"
+        assert refresh_header is not None, "refresh_token cookie missing"
+        assert "Max-Age" not in access_header, f"access_token cookie must be a session cookie but got: {access_header}"
+        assert "Max-Age" not in refresh_header, (
+            f"refresh_token cookie must be a session cookie but got: {refresh_header}"
+        )
+
+    async def test_login_with_remember_sets_persistent_cookies(self, client: AsyncClient, db_session: AsyncSession):
+        """remember=true must produce persistent cookies with correct Max-Age values."""
+        await _create_user(db_session, login="with_remember")
+        resp = await client.post(
+            "/api/v1/auth/login/",
+            json={"login": "with_remember", "password": TEST_PASSWORD, "remember": True},
+        )
+        assert resp.status_code == 200
+
+        access_header = _get_cookie_header(resp, "access_token")
+        refresh_header = _get_cookie_header(resp, "refresh_token")
+        assert access_header is not None, "access_token cookie missing"
+        assert refresh_header is not None, "refresh_token cookie missing"
+        assert "Max-Age=900" in access_header, f"access_token cookie must have Max-Age=900 but got: {access_header}"
+        assert "Max-Age=2592000" in refresh_header, (
+            f"refresh_token cookie must have Max-Age=2592000 but got: {refresh_header}"
+        )
+
+    async def test_login_without_remember_field_defaults_to_session_cookies(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Omitting remember entirely must default to session cookies (same as remember=false)."""
+        await _create_user(db_session, login="default_remember")
+        resp = await client.post(
+            "/api/v1/auth/login/",
+            json={"login": "default_remember", "password": TEST_PASSWORD},
+        )
+        assert resp.status_code == 200
+
+        access_header = _get_cookie_header(resp, "access_token")
+        refresh_header = _get_cookie_header(resp, "refresh_token")
+        assert access_header is not None, "access_token cookie missing"
+        assert refresh_header is not None, "refresh_token cookie missing"
+        assert "Max-Age" not in access_header, f"access_token cookie must be a session cookie but got: {access_header}"
+        assert "Max-Age" not in refresh_header, (
+            f"refresh_token cookie must be a session cookie but got: {refresh_header}"
+        )
+
+    async def test_refresh_preserves_remember_preference(self, client: AsyncClient, db_session: AsyncSession):
+        """Refresh token rotation must carry forward the original remember preference."""
+        await _create_user(db_session, login="remember_refresh")
+
+        # --- remember=true: refresh should also produce persistent cookies ---
+        login_resp = await client.post(
+            "/api/v1/auth/login/",
+            json={"login": "remember_refresh", "password": TEST_PASSWORD, "remember": True},
+        )
+        assert login_resp.status_code == 200
+        refresh_token = login_resp.json()["refresh_token"]
+
+        access_token = login_resp.json()["access_token"]
+        refresh_resp = await client.post(
+            "/api/v1/auth/refresh/",
+            json={"refresh_token": refresh_token},
+            cookies={"access_token": access_token},
+        )
+        assert refresh_resp.status_code == 200
+
+        access_header = _get_cookie_header(refresh_resp, "access_token")
+        refresh_header = _get_cookie_header(refresh_resp, "refresh_token")
+        assert access_header is not None, "access_token cookie missing after remember=true refresh"
+        assert refresh_header is not None, "refresh_token cookie missing after remember=true refresh"
+        assert "Max-Age=900" in access_header, f"Refreshed access_token must remain persistent but got: {access_header}"
+        assert "Max-Age=2592000" in refresh_header, (
+            f"Refreshed refresh_token must remain persistent but got: {refresh_header}"
+        )
+
+        # --- remember=false: refresh should also produce session cookies ---
+        await _create_user(db_session, login="no_remember_refresh")
+        login_resp2 = await client.post(
+            "/api/v1/auth/login/",
+            json={"login": "no_remember_refresh", "password": TEST_PASSWORD, "remember": False},
+        )
+        assert login_resp2.status_code == 200
+        access_token2 = login_resp2.json()["access_token"]
+        refresh_token2 = login_resp2.json()["refresh_token"]
+
+        refresh_resp2 = await client.post(
+            "/api/v1/auth/refresh/",
+            json={"refresh_token": refresh_token2},
+            cookies={"access_token": access_token2},
+        )
+        assert refresh_resp2.status_code == 200
+
+        access_header2 = _get_cookie_header(refresh_resp2, "access_token")
+        refresh_header2 = _get_cookie_header(refresh_resp2, "refresh_token")
+        assert access_header2 is not None, "access_token cookie missing after remember=false refresh"
+        assert refresh_header2 is not None, "refresh_token cookie missing after remember=false refresh"
+        assert "Max-Age" not in access_header2, (
+            f"Refreshed access_token must remain a session cookie but got: {access_header2}"
+        )
+        assert "Max-Age" not in refresh_header2, (
+            f"Refreshed refresh_token must remain a session cookie but got: {refresh_header2}"
+        )

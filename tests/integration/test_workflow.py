@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
@@ -33,7 +34,7 @@ from tests.factories.user import AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -48,7 +49,7 @@ async def _create_issue(
     subject: str = "Test issue",
 ) -> dict:
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json={
             "project_key": project_key,
             "tracker_id": tracker_id,
@@ -132,6 +133,10 @@ async def priority(db_session: AsyncSession) -> IssuePriority:
 
 @pytest_asyncio.fixture
 async def developer_role(db_session: AsyncSession) -> Role:
+    result = await db_session.execute(select(Role).where(Role.name == "Developer"))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     role = Role(
         name="Developer",
         position=2,
@@ -250,7 +255,7 @@ async def test_valid_transition_succeeds(
     issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={
             "status_id": in_progress_status.id,
             "lock_version": issue["lock_version"],
@@ -279,7 +284,7 @@ async def test_invalid_transition_returns_422(
     issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={
             "status_id": closed_status.id,
             "lock_version": issue["lock_version"],
@@ -311,7 +316,7 @@ async def test_admin_bypasses_workflow(
 
     # New -> Closed is not in workflow rules, but admin bypasses
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={
             "status_id": closed_status.id,
             "lock_version": issue["lock_version"],
@@ -340,7 +345,7 @@ async def test_no_rules_allows_any_transition(
     issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
 
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={
             "status_id": closed_status.id,
             "lock_version": issue["lock_version"],
@@ -370,7 +375,7 @@ async def test_allowed_statuses_endpoint(
     issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
 
     resp = await client.get(
-        f"/api/v1/issues/{issue['key']}/allowed-statuses",
+        f"/api/v1/issues/{issue['key']}/allowed-statuses/",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -411,7 +416,7 @@ async def test_required_field_on_transition(
 
     # Try transition without assigned_to_id
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={
             "status_id": in_progress_status.id,
             "lock_version": issue["lock_version"],
@@ -459,7 +464,7 @@ async def test_readonly_field_on_transition(
 
     # Move to In Progress first
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={"status_id": in_progress_status.id, "lock_version": issue["lock_version"]},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -468,7 +473,7 @@ async def test_readonly_field_on_transition(
 
     # Move to Resolved + try to change subject
     resp = await client.patch(
-        f"/api/v1/issues/{issue['key']}",
+        f"/api/v1/issues/{issue['key']}/",
         json={
             "status_id": resolved_status.id,
             "subject": "Changed subject",

@@ -33,6 +33,15 @@ make lint
 
 See [README.md](README.md) for more details.
 
+## Architecture Decision Records
+
+Before writing code, read the ADRs in `docs/adr/`. They document conventions that aren't obvious from the code:
+
+- **[ADR-0001](docs/adr/0001-frontend-conventions.md)** — Frontend stack (Alpine.js, HTMX, no build step), CSP compliance (no inline scripts), `sp-` CSS prefix convention, Markdown rendering
+- **[ADR-0002](docs/adr/0002-backend-testing-strategy.md)** — Test isolation, fixtures, markers (`@pytest.mark.integration`, `@pytest.mark.serial`)
+- **[ADR-0003](docs/adr/0003-e2e-testing-with-playwright.md)** — Playwright E2E setup, page objects, test DB lifecycle
+- **[ADR-0004](docs/adr/0004-backend-conventions.md)** — API design, service layer, error handling, model conventions
+
 ## Code style
 
 - Python: `ruff` for linting and formatting, `mypy` for type checking

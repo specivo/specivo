@@ -7,16 +7,18 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import PlainTextResponse
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.router import api_router
 from specivo.core.config import get_settings
-from specivo.core.database import get_engine
+from specivo.core.database import get_db, get_engine
 from specivo.core.exceptions import (
     AppError,
     app_error_handler,
@@ -29,6 +31,8 @@ from specivo.core.middleware import (
     LocaleMiddleware,
     RateLimitHeaderMiddleware,
     RequestIDMiddleware,
+    SQLDebugMiddleware,
+    TokenRefreshMiddleware,
 )
 from specivo.core.plugin_manager import PluginManager
 from specivo.core.redis import close_redis, get_redis
@@ -38,13 +42,14 @@ from specivo.web.router import web_router
 
 
 def _create_versioned_static_files() -> dict[str, str]:
-    """Create versioned symlinks for CSS/JS files and return the filenames.
+    """Create versioned copies of CSS/JS files and return the filenames.
 
     e.g. specivo.css -> specivo.0.1.0.css
     Templates reference the versioned filename so CDN/proxy caches
     bust automatically on version bumps. No build step needed.
+    Uses copies instead of symlinks for Docker bind-mount compatibility.
     """
-    import os
+    import shutil
 
     settings = get_settings()
     version = settings.version
@@ -58,14 +63,11 @@ def _create_versioned_static_files() -> dict[str, str]:
         source = static_dir / subdir / f"{base}{ext}"
         target = static_dir / subdir / f"{base}.{version}{ext}"
         if source.exists():
-            # Remove old versioned symlinks
+            # Remove old versioned copies
             for old in source.parent.glob(f"{base}.*{ext}"):
-                if old != source and old.is_symlink():
+                if old != source:
                     old.unlink()
-            # Create new symlink
-            if target.exists() or target.is_symlink():
-                target.unlink()
-            os.symlink(source.name, str(target))
+            shutil.copy2(source, target)
             versioned[f"{base}{ext}"] = f"{base}.{version}{ext}"
 
     return versioned
@@ -84,6 +86,21 @@ async def lifespan(app: FastAPI):
 
     redis = await get_redis()
     await redis.ping()
+
+    # Load brand_name from DB settings for template rendering
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from specivo.web.deps import set_brand_name
+
+    async with AsyncSession(bind=engine, expire_on_commit=False) as session:
+        from sqlalchemy import select as _select
+
+        from specivo.models.setting import Setting
+
+        result = await session.execute(_select(Setting).where(Setting.key == "brand_name"))
+        row = result.scalar_one_or_none()
+        if row and row.value:
+            set_brand_name(row.value)
 
     yield
 
@@ -110,6 +127,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     sp = settings.stealth_prefix.rstrip("/")
 
+    # Disable built-in docs/openapi endpoints — we mount admin-only versions below.
     application = FastAPI(
         title=settings.app_name,
         description=(
@@ -119,10 +137,15 @@ def create_app() -> FastAPI:
         ),
         version=settings.version,
         lifespan=lifespan,
-        docs_url=f"{sp}/docs",
-        redoc_url=f"{sp}/redoc",
-        openapi_url=f"{sp}{settings.api_v1_prefix}/openapi.json",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
     )
+
+    # Store the intended paths so the admin-only routes can reference them.
+    _openapi_url = f"{sp}{settings.api_v1_prefix}/openapi.json"
+    _docs_url = f"{sp}/docs"
+    _redoc_url = f"{sp}/redoc"
 
     # Request ID — added first so it is outermost (runs before CORS).
     application.add_middleware(RequestIDMiddleware)
@@ -131,10 +154,20 @@ def create_app() -> FastAPI:
     # them in a single batch INSERT after the response is sent.
     application.add_middleware(AuditBatchMiddleware)
 
+    # SQL debug — per-request query profiler (headers + log).  Only active
+    # when debug=True so production adds zero overhead.
+    if settings.debug:
+        application.add_middleware(SQLDebugMiddleware)
+
     # Rate limit headers — copies X-RateLimit-* headers from request.state
     # onto the response at the ASGI level so they survive endpoints that
     # return their own Response objects (e.g. JSONResponse).
     application.add_middleware(RateLimitHeaderMiddleware)
+
+    # Silent token refresh — sets auth cookies on the response when
+    # get_current_user_optional() transparently rotated an expired access
+    # token using the refresh_token cookie.
+    application.add_middleware(TokenRefreshMiddleware)
 
     # Locale — detect language from cookie/header and activate per-request.
     application.add_middleware(LocaleMiddleware)
@@ -167,6 +200,13 @@ def create_app() -> FastAPI:
     pm.service_registry.register("api_key", ApiKeyService)
     pm.service_registry.register("workflow", WorkflowService)
     pm.service_registry.register("notification", NotificationService)
+
+    # Register notification channels
+    from specivo.services.channels.email_channel import EmailChannel
+    from specivo.services.channels.registry import get_channel, register_channel
+
+    if get_channel("email") is None:
+        register_channel(EmailChannel())
 
     if settings.installed_plugins:
         pm.load_plugins(settings.installed_plugins)
@@ -225,6 +265,30 @@ def create_app() -> FastAPI:
             pass
         return settings.robots_txt
 
+    # PWA manifest — dynamic so it reflects the current brand_name setting.
+    @application.get("/manifest.json", include_in_schema=False)
+    async def pwa_manifest():
+        from specivo.web.deps import get_brand_name
+
+        name = get_brand_name()
+        return {
+            "name": name,
+            "short_name": name,
+            "description": f"{name} — project tracking and knowledge base",
+            "start_url": "/",
+            "display": "standalone",
+            "background_color": "#12102e",
+            "theme_color": "#12102e",
+            "icons": [
+                {
+                    "src": "/static/img/favicon.svg",
+                    "sizes": "any",
+                    "type": "image/svg+xml",
+                    "purpose": "any maskable",
+                }
+            ],
+        }
+
     # API router — behind stealth prefix when configured
     application.include_router(api_router, prefix=sp)
 
@@ -242,12 +306,17 @@ def create_app() -> FastAPI:
     # Static files — always at /static (not behind stealth prefix)
     application.mount("/static", StaticFiles(directory="specivo/static"), name="static")
 
+    # Serve user avatar photos from the external data mount
+    _avatar_dir = Path(settings.avatar_upload_dir)
+    _avatar_dir.mkdir(parents=True, exist_ok=True)
+    application.mount("/data/avatars", StaticFiles(directory=str(_avatar_dir)), name="avatars")
+
     # Web pages — behind stealth prefix, AFTER API router (catch-all paths)
     application.include_router(web_router, prefix=sp)
 
     # Health check — behind stealth prefix.
     # Returns minimal info publicly; detailed diagnostics require admin auth.
-    @application.get(f"{sp}/health", response_model=HealthResponse, tags=["system"])
+    @application.get(f"{sp}/health/", response_model=HealthResponse, tags=["system"])
     async def health_check():
         """Check database and Redis connectivity.
 
@@ -282,6 +351,52 @@ def create_app() -> FastAPI:
             redis=redis_status,
             version="",
             tier="",
+        )
+
+    # ------------------------------------------------------------------
+    # Admin-only OpenAPI / docs endpoints
+    # ------------------------------------------------------------------
+    # Returns 404 (not 401/403) for non-admin or unauthenticated requests
+    # to avoid revealing that these endpoints exist.
+
+    async def _require_admin(request: Request, db_dep) -> bool:
+        """Return True if the request is from an admin user, False otherwise.
+
+        In debug mode, docs are open to everyone (no auth required).
+        """
+        if settings.debug:
+            return True
+
+        from specivo.core.security import get_current_user as _get_user
+
+        try:
+            user = await _get_user(request, db_dep)
+        except Exception:
+            return False
+        return bool(user.is_admin)
+
+    @application.get(_openapi_url, include_in_schema=False)
+    async def openapi_schema(request: Request, db: AsyncSession = Depends(get_db)):
+        if not await _require_admin(request, db):
+            raise HTTPException(status_code=404)
+        return application.openapi()
+
+    @application.get(_docs_url, include_in_schema=False, response_class=HTMLResponse)
+    async def swagger_ui(request: Request, db: AsyncSession = Depends(get_db)):
+        if not await _require_admin(request, db):
+            raise HTTPException(status_code=404)
+        return get_swagger_ui_html(
+            openapi_url=_openapi_url,
+            title=f"{settings.app_name} — Swagger UI",
+        )
+
+    @application.get(_redoc_url, include_in_schema=False, response_class=HTMLResponse)
+    async def redoc_ui(request: Request, db: AsyncSession = Depends(get_db)):
+        if not await _require_admin(request, db):
+            raise HTTPException(status_code=404)
+        return get_redoc_html(
+            openapi_url=_openapi_url,
+            title=f"{settings.app_name} — ReDoc",
         )
 
     return application

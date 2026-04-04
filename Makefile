@@ -1,7 +1,8 @@
 .PHONY: configure up down logs status create-admin reset-password dev-up dev-down \
        test test-serial test-all test-unit test-integration test-service test-cov lint format \
        migrate migrate-gen migrate-merge seed \
-       test-db-up test-db-down test-ci \
+       test-db-up test-db-down test-db-reset test-ci \
+       test-e2e test-e2e-headed test-e2e-debug playwright-install \
        install sync lock download-model \
        build bundle
 
@@ -57,7 +58,8 @@ status:
 
 # Development mode (build from source, hot-reload, direct port 8000)
 dev-up:
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml build api
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 dev-down:
 	docker compose down
@@ -100,13 +102,13 @@ add-dev:
 # -----------------------------------------------------------------------------
 
 test:
-	$(RUN) pytest -m 'not serial'
+	$(RUN) pytest -m 'not serial and not e2e'
 
 test-serial:
 	$(RUN) pytest -m serial -n 0
 
 test-all:
-	$(RUN) pytest -m 'not serial'
+	$(RUN) pytest -m 'not serial and not e2e'
 	$(RUN) pytest -m serial -n 0
 
 test-unit:
@@ -120,6 +122,19 @@ test-service:
 
 test-cov:
 	$(RUN) pytest --cov=specivo --cov-report=html --cov-report=term
+
+# E2E (Playwright) — requires test DB running (make test-db-up)
+test-e2e:
+	$(RUN) pytest tests/e2e/ -m e2e -n 0
+
+test-e2e-headed:
+	$(RUN) pytest tests/e2e/ -m e2e -n 0 --headed --slowmo=300
+
+test-e2e-debug:
+	PWDEBUG=1 $(RUN) pytest tests/e2e/ -m e2e -n 0 --headed
+
+playwright-install:
+	$(RUN) playwright install chromium
 
 # -----------------------------------------------------------------------------
 # Linting & Formatting
@@ -160,10 +175,16 @@ test-db-up:
 test-db-down:
 	docker compose -f docker-compose.test.yml down
 
+# Reset test DB: destroy and recreate (clears all leftover data)
+test-db-reset:
+	docker compose -f docker-compose.test.yml down -v
+	docker compose -f docker-compose.test.yml up -d --wait
+	$(RUN) alembic upgrade head
+
 # CI: start test DB, run tests, stop DB
 test-ci:
 	docker compose -f docker-compose.test.yml up -d --wait
-	$(RUN) pytest || (docker compose -f docker-compose.test.yml down; exit 1)
+	$(RUN) pytest -m 'not e2e' || (docker compose -f docker-compose.test.yml down; exit 1)
 	docker compose -f docker-compose.test.yml down
 
 # -----------------------------------------------------------------------------
@@ -212,5 +233,8 @@ bundle:
 # Embedding model
 # ---------------------------------------------------------------------------
 
-download-model:  ## Download bundled e5-small embedding model (~393 MB)
-	bash scripts/download-model.sh specivo/static/models
+download-model:  ## Download embedding model (~393 MB) for hybrid search
+	bash scripts/download-model.sh
+
+backfill-embeddings:  ## Re-embed all existing issues and wiki pages
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.backfill_embeddings

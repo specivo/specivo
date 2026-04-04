@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{% trans %}Dashboard{% endtrans %} - Specivo{% endblock %}
+{% block title %}{% trans %}Dashboard{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {# Dashboard Picker Tabs #}
@@ -52,7 +52,7 @@
     <div class="card animate-in">
       <div class="card-header">
         <h2>{% trans %}My Open Issues{% endtrans %}</h2>
-        <a href="/projects">{% trans %}View all{% endtrans %} &rarr;</a>
+        <a href="/projects/">{% trans %}View all{% endtrans %} &rarr;</a>
       </div>
       {% if my_issues is defined and my_issues %}
       <table class="issue-table">
@@ -70,7 +70,7 @@
           {% for issue in my_issues %}
           <tr>
             <td><span class="badge-priority {{ issue.priority.name | lower | replace(' ', '-') if issue.priority else 'normal' }}"></span></td>
-            <td><a class="issue-key" href="/projects/{{ issue.project_key }}/issues/{{ issue.display_key }}">{{ issue.display_key }}</a></td>
+            <td><a class="issue-key" href="/projects/{{ issue.project_key }}/issues/{{ issue.display_key }}/">{{ issue.display_key }}</a></td>
             <td class="issue-subject">{{ issue.subject }}</td>
             <td><span class="badge-status {{ issue.status.name | lower | replace(' ', '-') if issue.status else '' }}">{{ issue.status.name if issue.status else '' }}</span></td>
             <td><span class="badge-tracker {{ issue.tracker.name | lower if issue.tracker else '' }}">{{ issue.tracker.name if issue.tracker else '' }}</span></td>
@@ -130,7 +130,7 @@
       </div>
       {% if projects is defined and projects %}
         {% for p in projects %}
-        <a href="/projects/{{ p.key }}" class="project-compact" style="text-decoration:none;color:inherit;">
+        <a href="/projects/{{ p.key }}/" class="project-compact" style="text-decoration:none;color:inherit;">
           <span class="key">{{ p.key }}</span>
           <span class="name">{{ p.name }}</span>
         </a>

@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.issue import Issue
@@ -45,6 +46,10 @@ async def lookup_data(db_session: AsyncSession):
 @pytest_asyncio.fixture
 async def role_developer(db_session: AsyncSession) -> Role:
     """Developer role with default visibility and basic permissions."""
+    result = await db_session.execute(select(Role).where(Role.name == "Developer"))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     role = Role(
         name="Developer",
         position=2,
@@ -61,6 +66,10 @@ async def role_developer(db_session: AsyncSession) -> Role:
 @pytest_asyncio.fixture
 async def role_manager(db_session: AsyncSession) -> Role:
     """Manager role with 'all' visibility and full permissions."""
+    result = await db_session.execute(select(Role).where(Role.name == "Manager"))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     role = Role(
         name="Manager",
         position=1,
@@ -182,7 +191,7 @@ class TestIssueVisibility:
 
         await _add_member(db_session, private_project, user, role_developer)
         issue = await _create_issue(db_session, private_project, lookup_data, other_user, is_private=True)
-        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}")
+        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 404
 
     async def test_user_can_see_own_private_issue(
@@ -197,7 +206,7 @@ class TestIssueVisibility:
         user = auth_client.state.user
         await _add_member(db_session, private_project, user, role_developer)
         issue = await _create_issue(db_session, private_project, lookup_data, user, is_private=True)
-        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}")
+        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 200
 
     async def test_assignee_can_see_private_issue(
@@ -224,7 +233,7 @@ class TestIssueVisibility:
             is_private=True,
             assigned_to_id=user.id,
         )
-        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}")
+        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 200
 
     async def test_non_member_cannot_see_issues_in_private_project(
@@ -241,7 +250,7 @@ class TestIssueVisibility:
         await db_session.refresh(other_user)
 
         issue = await _create_issue(db_session, private_project, lookup_data, other_user)
-        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}")
+        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 404
 
     async def test_admin_can_see_all_issues(
@@ -258,7 +267,7 @@ class TestIssueVisibility:
         await db_session.refresh(other_user)
 
         issue = await _create_issue(db_session, private_project, lookup_data, other_user, is_private=True)
-        resp = await admin_client.get(f"/api/v1/issues/{issue.display_key}")
+        resp = await admin_client.get(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 200
 
     async def test_non_member_can_see_public_project_non_private_issues(
@@ -275,7 +284,7 @@ class TestIssueVisibility:
         await db_session.refresh(other_user)
 
         issue = await _create_issue(db_session, public_project, lookup_data, other_user)
-        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}")
+        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 200
 
     async def test_non_member_cannot_see_private_issues_in_public_project(
@@ -292,7 +301,7 @@ class TestIssueVisibility:
         await db_session.refresh(other_user)
 
         issue = await _create_issue(db_session, public_project, lookup_data, other_user, is_private=True)
-        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}")
+        resp = await auth_client.get(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 404
 
     async def test_list_issues_filters_by_visibility(
@@ -316,7 +325,7 @@ class TestIssueVisibility:
         await _create_issue(db_session, private_project, lookup_data, user)
         await _create_issue(db_session, private_project, lookup_data, other_user, is_private=True)
 
-        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/issues?status=all")
+        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/issues/?status=all")
         assert resp.status_code == 200
         data = resp.json()
         # Only the user's own issue should be visible (private issue hidden)
@@ -343,7 +352,7 @@ class TestIssueVisibility:
         await _create_issue(db_session, private_project, lookup_data, user)
         await _create_issue(db_session, private_project, lookup_data, other_user)
 
-        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/issues?status=all")
+        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/issues/?status=all")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_count"] == 1
@@ -371,7 +380,7 @@ class TestIssuePermissions:
         await _add_member(db_session, private_project, user, role_viewer)
 
         resp = await auth_client.post(
-            f"/api/v1/projects/{private_project.key}/issues",
+            f"/api/v1/projects/{private_project.key}/issues/",
             json={
                 "project_key": private_project.key,
                 "tracker_id": lookup_data["tracker"].id,
@@ -393,7 +402,7 @@ class TestIssuePermissions:
         await _add_member(db_session, private_project, user, role_developer)
 
         resp = await auth_client.post(
-            f"/api/v1/projects/{private_project.key}/issues",
+            f"/api/v1/projects/{private_project.key}/issues/",
             json={
                 "project_key": private_project.key,
                 "tracker_id": lookup_data["tracker"].id,
@@ -416,7 +425,7 @@ class TestIssuePermissions:
         issue = await _create_issue(db_session, private_project, lookup_data, user)
 
         resp = await auth_client.patch(
-            f"/api/v1/issues/{issue.display_key}",
+            f"/api/v1/issues/{issue.display_key}/",
             json={"subject": "Updated", "lock_version": issue.lock_version},
         )
         assert resp.status_code == 403
@@ -434,7 +443,7 @@ class TestIssuePermissions:
         await _add_member(db_session, private_project, user, role_developer)
         issue = await _create_issue(db_session, private_project, lookup_data, user)
 
-        resp = await auth_client.delete(f"/api/v1/issues/{issue.display_key}")
+        resp = await auth_client.delete(f"/api/v1/issues/{issue.display_key}/")
         assert resp.status_code == 403
 
     async def test_admin_can_create_without_membership(
@@ -446,7 +455,7 @@ class TestIssuePermissions:
     ):
         """Admin bypasses permission checks."""
         resp = await admin_client.post(
-            f"/api/v1/projects/{private_project.key}/issues",
+            f"/api/v1/projects/{private_project.key}/issues/",
             json={
                 "project_key": private_project.key,
                 "tracker_id": lookup_data["tracker"].id,
@@ -472,7 +481,7 @@ class TestProjectSubResourceAccess:
         private_project,
     ):
         """Non-member gets 404 on members of private project."""
-        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/members")
+        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/members/")
         assert resp.status_code == 404
 
     async def test_non_member_cannot_get_modules_of_private_project(
@@ -482,7 +491,7 @@ class TestProjectSubResourceAccess:
         private_project,
     ):
         """Non-member gets 404 on modules of private project."""
-        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/modules")
+        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/modules/")
         assert resp.status_code == 404
 
     async def test_private_project_returns_404_not_403(
@@ -492,7 +501,7 @@ class TestProjectSubResourceAccess:
         private_project,
     ):
         """GET /projects/{key} for non-member on private project returns 404."""
-        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}")
+        resp = await auth_client.get(f"/api/v1/projects/{private_project.key}/")
         assert resp.status_code == 404
         # Should not reveal the project exists
         body = resp.json()
@@ -544,7 +553,7 @@ class TestMassAssignment:
         await _add_member(db_session, public_project, user, role_developer)
 
         resp = await auth_client.post(
-            f"/api/v1/projects/{public_project.key}/issues",
+            f"/api/v1/projects/{public_project.key}/issues/",
             json={
                 "project_key": public_project.key,
                 "tracker_id": lookup_data["tracker"].id,
@@ -571,7 +580,7 @@ class TestMassAssignment:
         await _add_member(db_session, public_project, user, role_developer)
 
         resp = await auth_client.post(
-            f"/api/v1/projects/{public_project.key}/issues",
+            f"/api/v1/projects/{public_project.key}/issues/",
             json={
                 "project_key": public_project.key,
                 "tracker_id": lookup_data["tracker"].id,

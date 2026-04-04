@@ -18,7 +18,7 @@ async def test_robots_txt_disallows_all(unauth_client: AsyncClient):
 @pytest.mark.integration
 async def test_x_robots_tag_header_present(unauth_client: AsyncClient):
     """Every response includes X-Robots-Tag: noindex, nofollow, noarchive."""
-    response = await unauth_client.get("/health")
+    response = await unauth_client.get("/health/")
     assert response.headers.get("x-robots-tag") == "noindex, nofollow, noarchive"
 
 

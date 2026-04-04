@@ -19,7 +19,7 @@ async def test_search_page(auth_client: AsyncClient):
     """GET /search with auth returns 200 and contains search UI."""
     token = auth_client.state.token
     resp = await auth_client.get(
-        "/search?q=test",
+        "/search/?q=test",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -31,7 +31,7 @@ async def test_search_page_empty_query(auth_client: AsyncClient):
     """GET /search with empty query returns 200."""
     token = auth_client.state.token
     resp = await auth_client.get(
-        "/search",
+        "/search/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -41,6 +41,6 @@ async def test_search_page_empty_query(auth_client: AsyncClient):
 @pytest.mark.integration
 async def test_search_requires_auth(unauth_client: AsyncClient):
     """GET /search without auth redirects to /login."""
-    resp = await unauth_client.get("/search", follow_redirects=False)
+    resp = await unauth_client.get("/search/", follow_redirects=False)
     assert resp.status_code == 302
-    assert "/login" in resp.headers["location"]
+    assert "/login/" in resp.headers["location"]

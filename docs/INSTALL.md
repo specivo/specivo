@@ -86,6 +86,58 @@ CREATE EXTENSION IF NOT EXISTS ltree;
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
+## Hybrid search (embedding model)
+
+Specivo supports hybrid search (keyword + semantic) using a local embedding model.
+No API keys required — the model runs locally inside the Celery worker container.
+
+### Online setup
+
+```bash
+make download-model
+```
+
+This downloads `multilingual-e5-small` (~393 MB) to `data/models/`.
+After downloading, restart the application and backfill existing data:
+
+```bash
+make dev-up           # or: docker compose up -d
+make backfill-embeddings
+```
+
+Hybrid search is now active. New issues and wiki pages are embedded automatically.
+
+### Air-gapped / offline setup
+
+If you cannot download from the internet:
+
+1. On a machine with internet, download the model files:
+   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/model.onnx` → rename to `multilingual-e5-small.onnx`
+   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/tokenizer.json`
+   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/tokenizer_config.json`
+   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/special_tokens_map.json`
+   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/sentencepiece.bpe.model`
+
+   Or download `specivo-models.tar.gz` from the GitHub releases page.
+
+2. Copy the files to `specivo-data/models/` on the target machine:
+   ```bash
+   mkdir -p specivo-data/models
+   cp multilingual-e5-small.onnx tokenizer.json tokenizer_config.json \
+      special_tokens_map.json sentencepiece.bpe.model specivo-data/models/
+   ```
+
+3. Restart and backfill:
+   ```bash
+   docker compose up -d
+   make backfill-embeddings
+   ```
+
+### Without the embedding model
+
+Search still works — it falls back to keyword-only mode (PostgreSQL full-text search).
+Hybrid and semantic modes require the embedding model.
+
 ## Next steps
 
 - See [docs/deployment.md](deployment.md) for full configuration reference

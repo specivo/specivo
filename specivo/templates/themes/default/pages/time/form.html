@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Log Time - {{ project.name }} - Specivo{% endblock %}
+{% block title %}Log Time - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
   <a href="/">Home</a>
   <span class="sep">/</span>
-  <a href="/projects/{{ project.key }}">{{ project.name }}</a>
+  <a href="/projects/{{ project.key }}/">{{ project.name }}</a>
   <span class="sep">/</span>
-  <a href="/projects/{{ project.key }}/time-entries">Time Entries</a>
+  <a href="/projects/{{ project.key }}/time-entries/">Time Entries</a>
   <span class="sep">/</span>
   <span class="current">Log Time</span>
 </div>
@@ -16,7 +16,7 @@
 <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">Log Time</h1>
 
 <div class="card" style="padding: var(--sp-space-xl); max-width: 600px;">
-  <form method="post" action="/api/v1/projects/{{ project.key }}/time-entries" style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
+  <form method="post" action="/api/v1/projects/{{ project.key }}/time-entries/" style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
     <div>
       <label for="issue_id" style="font-size: var(--sp-font-size-sm); font-weight: 500; display: block; margin-bottom: var(--sp-space-xs);">Issue (optional)</label>
       <input type="text" id="issue_id" name="issue_id" placeholder="e.g. {{ project.key }}-1" class="input" style="width: 100%;">
@@ -53,8 +53,8 @@
     </div>
 
     <div style="display: flex; gap: var(--sp-space-md); justify-content: flex-end;">
-      <a href="/projects/{{ project.key }}/time-entries" class="btn btn-secondary">Cancel</a>
-      <button type="submit" class="btn btn-primary">Log Time</button>
+      <a href="/projects/{{ project.key }}/time-entries/" class="sp-btn sp-btn-ghost">Cancel</a>
+      <button type="submit" class="sp-btn sp-btn-primary">Log Time</button>
     </div>
   </form>
 </div>

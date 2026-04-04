@@ -42,6 +42,32 @@ class RefreshToken(Base, TimestampMixin):
         return f"<RefreshToken id={self.id} user_id={self.user_id}>"
 
 
+class PasswordResetToken(Base, TimestampMixin):
+    """One-time token for self-service password reset.
+
+    Token values are never stored raw. Only a SHA-256 hash is persisted.
+    The raw token is sent via email and never retrievable from the DB.
+
+    Tokens are single-use: ``used_at`` is set when the password is changed.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    __table_args__ = (Index("ix_password_reset_tokens_user_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<PasswordResetToken id={self.id} user_id={self.user_id}>"
+
+
 class ApiKey(Base, TimestampMixin):
     """Machine-generated API key for service accounts and CI agents.
 

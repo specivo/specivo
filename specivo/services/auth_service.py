@@ -1,4 +1,4 @@
-"""Authentication service: login, refresh, logout, session management.
+"""Authentication service: login, refresh, logout, session management, password reset.
 
 Implements:
 - JWT access token generation (PyJWT, HS256, 15 min)
@@ -6,27 +6,32 @@ Implements:
 - Token rotation on refresh (replay attack detection)
 - Progressive account lockout on failed logins
 - Session listing and targeted revocation
+- Self-service password reset via email token
 """
 
 from __future__ import annotations
 
 import hashlib
+import logging
 import secrets
 import uuid
 from datetime import timedelta
+from pathlib import Path
 
 import jwt
-from sqlalchemy import delete, func, select
+from jinja2 import Environment, FileSystemLoader
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
-from specivo.core.constants import JWT_ALGORITHM, REFRESH_TOKEN_ENTROPY_BYTES
+from specivo.core.constants import CREDENTIAL_TOKEN_ENTROPY_BYTES, JWT_ALGORITHM, REFRESH_TOKEN_ENTROPY_BYTES
 from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
-from specivo.models.auth import RefreshToken
+from specivo.models.auth import PasswordResetToken, RefreshToken
 from specivo.models.user import User
 from specivo.services.auth_utils import hash_password, verify_password
+from specivo.tasks.notifications import send_notification_email
 
 # ---------------------------------------------------------------------------
 # Constant-time enumeration guard
@@ -64,8 +69,12 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _make_access_token(user: User, settings) -> str:
-    """Encode a JWT access token for *user*."""
+def _make_access_token(user: User, settings, *, remember: bool = True) -> str:
+    """Encode a JWT access token for *user*.
+
+    The ``rem`` claim stores the "Remember Me" preference so that
+    token refresh can carry the cookie-lifetime policy forward.
+    """
     now = utcnow()
     exp = now + timedelta(minutes=settings.access_token_expire_minutes)
     payload = {
@@ -73,6 +82,7 @@ def _make_access_token(user: User, settings) -> str:
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
         "jti": str(uuid.uuid4()),
+        "rem": remember,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=JWT_ALGORITHM)
 
@@ -93,6 +103,19 @@ def _apply_lockout(user: User, new_count: int) -> None:
         user.locked_until = utcnow() + timedelta(minutes=lock_minutes)
 
 
+_logger = logging.getLogger(__name__)
+_EMAIL_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "_shared"
+_email_env = Environment(
+    loader=FileSystemLoader(str(_EMAIL_TEMPLATES_DIR)),
+    autoescape=True,
+)
+
+
+def _render_email(template_name: str, **context: object) -> str:
+    template = _email_env.get_template(f"email/{template_name}")
+    return template.render(**context)
+
+
 class AuthService:
     """Stateless service class — all state lives in the DB session."""
 
@@ -107,6 +130,7 @@ class AuthService:
         password: str,
         device_info: str | None = None,
         ip: str | None = None,
+        remember: bool = False,
     ) -> tuple[str, str]:
         """Authenticate a user and return *(access_token, refresh_token_raw)*.
 
@@ -193,8 +217,21 @@ class AuthService:
         user.locked_until = None
         user.last_login_at = utcnow()
 
+        # Auto-assign avatar color on first login if not set
+        if not user.preferences.get("avatar_color"):
+            import random
+
+            from specivo.services.settings_service import SettingsService
+
+            try:
+                palette = await SettingsService().get_avatar_palette(session)
+                color = random.choice(palette)
+                user.preferences = {**user.preferences, "avatar_color": color}
+            except Exception:
+                pass  # Non-critical — don't block login
+
         # 7 & 8. Generate tokens
-        access_token = _make_access_token(user, settings)
+        access_token = _make_access_token(user, settings, remember=remember)
         refresh_raw = _make_refresh_token()
         await self._store_refresh_token(session, user.id, refresh_raw, device_info, ip, settings)
 
@@ -205,6 +242,7 @@ class AuthService:
         self,
         session: AsyncSession,
         refresh_token_raw: str,
+        remember: bool = True,
     ) -> tuple[str, str]:
         """Rotate a refresh token and return *(access_token, new_refresh_token_raw)*.
 
@@ -263,7 +301,7 @@ class AuthService:
             record.ip_address,
             settings,
         )
-        new_access_token = _make_access_token(user, settings)
+        new_access_token = _make_access_token(user, settings, remember=remember)
 
         await session.flush()
         return new_access_token, new_refresh_raw
@@ -325,6 +363,133 @@ class AuthService:
         if record is None:
             raise NotFoundError(message=_("Session not found"))
         await session.delete(record)
+        await session.flush()
+
+    # ------------------------------------------------------------------
+    # Password reset
+    # ------------------------------------------------------------------
+
+    async def request_password_reset(
+        self,
+        session: AsyncSession,
+        email: str,
+    ) -> None:
+        """Request a password reset for the given email.
+
+        Always succeeds silently to prevent email enumeration.
+        Only sends an email if the user exists and is active.
+        """
+        from specivo.core.notification_templates import PASSWORD_RESET_EMAIL_SUBJECT
+
+        settings = get_settings()
+        normalized = email.strip().lower()
+
+        # Look up user by email
+        stmt = select(User).where(func.lower(User.email) == normalized)
+        result = await session.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        # Silent return for nonexistent or inactive users — no enumeration
+        if user is None or user.status not in ("active", "locked"):
+            return
+
+        # Invalidate any existing unused tokens for this user
+        invalidate_stmt = (
+            update(PasswordResetToken)
+            .where(
+                PasswordResetToken.user_id == user.id,
+                PasswordResetToken.used_at.is_(None),
+            )
+            .values(used_at=utcnow())
+        )
+        await session.execute(invalidate_stmt)
+
+        # Generate new token
+        raw_token = secrets.token_urlsafe(CREDENTIAL_TOKEN_ENTROPY_BYTES)
+        expire_hours = settings.password_reset_token_expire_hours
+
+        record = PasswordResetToken(
+            user_id=user.id,
+            token_hash=_hash_token(raw_token),
+            expires_at=utcnow() + timedelta(hours=expire_hours),
+        )
+        session.add(record)
+        await session.flush()
+
+        # Build reset URL and send email
+        reset_url = f"{settings.app_url.rstrip('/')}/reset-password/?token={raw_token}"
+        subject = str(PASSWORD_RESET_EMAIL_SUBJECT)
+        body_html = _render_email(
+            "password_reset.html",
+            display_name=user.display_name or user.login,
+            reset_url=reset_url,
+            expire_hours=expire_hours,
+        )
+        send_notification_email.delay(user.email, subject, body_html)
+
+    async def reset_password_with_token(
+        self,
+        session: AsyncSession,
+        token: str,
+        new_password: str,
+    ) -> None:
+        """Reset a user's password using a valid reset token.
+
+        Raises ``AppError`` if the token is invalid, expired, or already used.
+        """
+        token_hash = _hash_token(token)
+
+        # Find token record
+        stmt = select(PasswordResetToken).where(PasswordResetToken.token_hash == token_hash)
+        result = await session.execute(stmt)
+        record = result.scalar_one_or_none()
+
+        if record is None:
+            raise AppError(
+                code="password_reset_invalid",
+                message=_("Invalid or expired password reset link"),
+                status_code=400,
+            )
+
+        # Check if already used
+        if record.used_at is not None:
+            raise AppError(
+                code="password_reset_invalid",
+                message=_("This password reset link has already been used"),
+                status_code=400,
+            )
+
+        # Check expiry
+        if record.expires_at < utcnow():
+            raise AppError(
+                code="password_reset_invalid",
+                message=_("This password reset link has expired"),
+                status_code=400,
+            )
+
+        # Load user
+        user_result = await session.execute(select(User).where(User.id == record.user_id))
+        user = user_result.scalar_one_or_none()
+        if user is None:
+            raise AppError(
+                code="password_reset_invalid",
+                message=_("Invalid or expired password reset link"),
+                status_code=400,
+            )
+
+        # Update password
+        user.password_hash = hash_password(new_password)
+        user.password_changed_at = utcnow()
+        user.failed_login_count = 0
+        user.locked_until = None
+
+        # If user was locked (brute-force), reactivate
+        if user.status == "locked":
+            user.status = "active"
+
+        # Mark token as used
+        record.used_at = utcnow()
+
         await session.flush()
 
     # ------------------------------------------------------------------

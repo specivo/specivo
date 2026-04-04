@@ -566,8 +566,8 @@ class SearchService:
         limit: int = 25,
         filters: SearchFilters | None = None,
         skip_count: bool = False,
-    ) -> tuple[list[SearchResult], int]:
-        """Execute a full-text search and return (results, total_count).
+    ) -> tuple[list[SearchResult], int, dict[str, int]]:
+        """Execute a full-text search and return (results, total_count, type_counts).
 
         Args:
             session: Async database session.
@@ -579,15 +579,19 @@ class SearchService:
             offset: Pagination offset.
             limit: Pagination limit.
             filters: Optional metadata filters for issues.
-            skip_count: If True, skip COUNT queries and return total=0.
+            skip_count: If True, skip COUNT queries and return total=0 / empty counts.
 
         Returns:
-            Tuple of (list of SearchResult, total count across all pages).
+            Tuple of (results, total count for current scope, per-type counts dict).
+            The type_counts dict has keys: issues, wiki, comments, attachments, all.
         """
         settings = get_settings()
         fts_lang = settings.search_fts_language
         parts: list[str] = []
-        count_parts: list[str] = []
+        # Per-type count SQL fragments, keyed by type name.
+        # Always populated for all 4 types (regardless of scope) so that
+        # a single query can return per-type totals for filter tabs.
+        count_parts: dict[str, str] = {}
         # Normalize hyphens to spaces so plainto_tsquery doesn't generate
         # compound tokens (e.g. 'jwt-rotat') that fail to match individual
         # tsvector lexemes.
@@ -626,6 +630,8 @@ class SearchService:
         # Issue metadata filters
         issue_filter_sql = self._build_issue_filters(filters, params)
 
+        # --- Result parts: scope-gated (only fetch rows for the active scope) ---
+
         if scope in ("all", "issues"):
             issue_sql = f"""
                 SELECT * FROM (
@@ -647,16 +653,6 @@ class SearchService:
                 ) issues_sub
             """
             parts.append(issue_sql)
-
-            issue_count_sql = f"""
-                SELECT COUNT(*) as cnt
-                FROM issues i, plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
-                WHERE i.search_vector @@ query
-                {issue_project_filter}
-                {issue_visibility}
-                {issue_filter_sql}
-            """
-            count_parts.append(issue_count_sql)
 
         if scope in ("all", "wiki"):
             wiki_sql = f"""
@@ -688,26 +684,9 @@ class SearchService:
             """
             parts.append(wiki_sql)
 
-            wiki_count_sql = f"""
-                SELECT COUNT(*) as cnt
-                FROM wiki_contents wc
-                JOIN wiki_pages wp ON wp.id = wc.page_id
-                JOIN wikis w ON w.id = wp.wiki_id
-                CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
-                JOIN (
-                    SELECT page_id, MAX(version) as max_ver
-                    FROM wiki_contents
-                    GROUP BY page_id
-                ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
-                WHERE wc.search_vector @@ query
-                {wiki_project_filter}
-                {wiki_visibility}
-            """
-            count_parts.append(wiki_count_sql)
-
         # Comment keyword search: search search_chunks content for source_type='comment'
         # Comments inherit visibility from their parent issue via journals table.
-        if scope in ("all",):
+        if scope in ("all", "comments"):
             comment_sql = f"""
                 SELECT * FROM (
                     SELECT
@@ -721,11 +700,11 @@ class SearchService:
                         ci.project_key
                     FROM search_chunks sc
                     JOIN search_sources ss ON ss.id = sc.source_id
-                    JOIN journals j ON j.id = ss.entity_id AND ss.source_type = 'comment'
+                    JOIN journals j ON j.id = ss.entity_id AND ss.source_type = 'journal'
                     JOIN issues ci ON ci.id = j.issue_id
                     CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
                     WHERE sc.search_vector @@ query
-                    AND ss.source_type = 'comment'
+                    AND ss.source_type = 'journal'
                     {comment_project_filter}
                     {comment_visibility}
                     ORDER BY score DESC LIMIT :limit
@@ -733,29 +712,55 @@ class SearchService:
             """
             parts.append(comment_sql)
 
-            comment_count_sql = f"""
-                SELECT COUNT(*) as cnt
-                FROM search_chunks sc
-                JOIN search_sources ss ON ss.id = sc.source_id
-                JOIN journals j ON j.id = ss.entity_id AND ss.source_type = 'comment'
-                JOIN issues ci ON ci.id = j.issue_id
-                CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
-                WHERE sc.search_vector @@ query
-                AND ss.source_type = 'comment'
-                {comment_project_filter}
-                {comment_visibility}
-            """
-            count_parts.append(comment_count_sql)
-
         # Attachment keyword search: search search_chunks for source_type='attachment'
+        att_pf = issue_project_filter  # same params, different alias handled in helper
         if scope in ("all", "attachments"):
-            # Determine the project filter to use for attachments
-            att_pf = issue_project_filter  # same params, different alias handled in helper
             parts.append(self._attachment_fts_sql(fts_lang, user, att_pf))
-            count_parts.append(self._attachment_fts_count_sql(fts_lang, user, att_pf))
+
+        # --- Count parts: ALWAYS build for all 4 types (single-query per-type counts) ---
+
+        count_parts["issues"] = f"""
+            SELECT COUNT(*) as cnt
+            FROM issues i, plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+            WHERE i.search_vector @@ query
+            {issue_project_filter}
+            {issue_visibility}
+            {issue_filter_sql}
+        """
+
+        count_parts["wiki"] = f"""
+            SELECT COUNT(*) as cnt
+            FROM wiki_contents wc
+            JOIN wiki_pages wp ON wp.id = wc.page_id
+            JOIN wikis w ON w.id = wp.wiki_id
+            CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+            JOIN (
+                SELECT page_id, MAX(version) as max_ver
+                FROM wiki_contents
+                GROUP BY page_id
+            ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
+            WHERE wc.search_vector @@ query
+            {wiki_project_filter}
+            {wiki_visibility}
+        """
+
+        count_parts["comments"] = f"""
+            SELECT COUNT(*) as cnt
+            FROM search_chunks sc
+            JOIN search_sources ss ON ss.id = sc.source_id
+            JOIN journals j ON j.id = ss.entity_id AND ss.source_type = 'journal'
+            JOIN issues ci ON ci.id = j.issue_id
+            CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+            WHERE sc.search_vector @@ query
+            AND ss.source_type = 'journal'
+            {comment_project_filter}
+            {comment_visibility}
+        """
+
+        count_parts["attachments"] = self._attachment_fts_count_sql(fts_lang, user, att_pf)
 
         if not parts:
-            return [], 0
+            return [], 0, {}
 
         # Combined query with UNION ALL, ordered by score desc
         union_sql = " UNION ALL ".join(parts)
@@ -783,15 +788,29 @@ class SearchService:
             for row in result
         ]
 
-        # Total count (skipped when called from hybrid_search for performance)
+        # Per-type counts in a single query (skipped when called from hybrid_search)
+        type_counts: dict[str, int] = {}
         total = 0
         if not skip_count:
-            for count_sql in count_parts:
-                full_count_sql = f"{cte_prefix} {count_sql}"
-                count_result = await session.execute(text(full_count_sql), params)
-                total += count_result.scalar_one()
+            # Build a single SELECT with scalar subqueries for each type.
+            # PostgreSQL can parallelize these subqueries internally.
+            subquery_parts = [f"({count_sql}) as {type_name}_count" for type_name, count_sql in count_parts.items()]
+            combined_count_sql = f"""
+                {cte_prefix}
+                SELECT {", ".join(subquery_parts)}
+            """
+            count_result = await session.execute(text(combined_count_sql), params)
+            row = count_result.one()
+            for type_name in count_parts:
+                type_counts[type_name] = row._mapping[f"{type_name}_count"]
+            type_counts["all"] = sum(type_counts.values())
+            # Total for the current scope: sum of active scope types only
+            if scope == "all":
+                total = type_counts["all"]
+            else:
+                total = type_counts.get(scope, 0)
 
-        return results, total
+        return results, total, type_counts
 
     async def semantic_search(
         self,
@@ -901,7 +920,7 @@ class SearchService:
                             iss.project_key || '-' || iss.sequence_number
                         WHEN ss.source_type = 'wiki_page' THEN
                             wp.title
-                        WHEN ss.source_type = 'comment' THEN
+                        WHEN ss.source_type = 'journal' THEN
                             cmt_iss.project_key || '-' || cmt_iss.sequence_number
                         WHEN ss.source_type = 'attachment' THEN
                             CASE
@@ -917,7 +936,7 @@ class SearchService:
                             iss.subject
                         WHEN ss.source_type = 'wiki_page' THEN
                             wp.slug
-                        WHEN ss.source_type = 'comment' THEN
+                        WHEN ss.source_type = 'journal' THEN
                             left(sc.content, {SEARCH_SNIPPET_MAX_CHARS})
                         WHEN ss.source_type = 'attachment' THEN
                             att.filename
@@ -930,7 +949,7 @@ class SearchService:
                             iss.project_key
                         WHEN ss.source_type = 'wiki_page' THEN
                             wp_proj.key
-                        WHEN ss.source_type = 'comment' THEN
+                        WHEN ss.source_type = 'journal' THEN
                             cmt_iss.project_key
                         WHEN ss.source_type = 'attachment' THEN
                             COALESCE(att_iss_p.key, att_wp_p.key)
@@ -943,7 +962,7 @@ class SearchService:
                 LEFT JOIN wiki_pages wp ON ss.source_type = 'wiki_page' AND wp.id = ss.entity_id
                 LEFT JOIN wikis wp_w ON wp_w.id = wp.wiki_id
                 LEFT JOIN projects wp_proj ON wp_proj.id = wp_w.project_id
-                LEFT JOIN journals cmt_j ON ss.source_type = 'comment' AND cmt_j.id = ss.entity_id
+                LEFT JOIN journals cmt_j ON ss.source_type = 'journal' AND cmt_j.id = ss.entity_id
                 LEFT JOIN issues cmt_iss ON cmt_iss.id = cmt_j.issue_id
                 LEFT JOIN attachments att ON ss.source_type = 'attachment' AND att.id = ss.entity_id
                 LEFT JOIN issues att_iss ON att.container_type = 'Issue' AND att_iss.id = att.container_id
@@ -966,7 +985,7 @@ class SearchService:
                         {wiki_vis}
                     ))
                     OR
-                    (ss.source_type = 'comment' AND EXISTS (
+                    (ss.source_type = 'journal' AND EXISTS (
                         SELECT 1 FROM journals cj
                         JOIN issues ci2 ON ci2.id = cj.issue_id
                         WHERE cj.id = ss.entity_id
@@ -1030,7 +1049,7 @@ class SearchService:
                         {wiki_vis}
                     ))
                     OR
-                    (ss.source_type = 'comment' AND EXISTS (
+                    (ss.source_type = 'journal' AND EXISTS (
                         SELECT 1 FROM journals cj
                         JOIN issues ci2 ON ci2.id = cj.issue_id
                         WHERE cj.id = ss.entity_id
@@ -1057,24 +1076,27 @@ class SearchService:
         offset: int = 0,
         limit: int = 25,
         filters: SearchFilters | None = None,
-    ) -> tuple[list[SearchResult], int]:
+    ) -> tuple[list[SearchResult], int, dict[str, int]]:
         """Hybrid search: semantic (pgvector) + keyword (tsvector), RRF fusion.
 
         1. Run FTS query (existing search logic) -> ranked list with IDs
         2. Run semantic query (pgvector cosine similarity) -> ranked list with IDs
         3. Merge using RRF (k=60): score = 1/(k+rank_fts) + 1/(k+rank_semantic)
         4. Sort by combined score, apply offset/limit
+
+        Returns:
+            Tuple of (results, total, type_counts). The type_counts are derived
+            from the FTS count query (accurate per-type totals from the DB).
         """
         # Get both result sets (unpaginated for RRF merging).
-        # skip_count=True avoids redundant COUNT queries — hybrid computes
-        # its own total from the RRF merged results.
-        fts_results, fts_total = await self.search(
+        # skip_count=True for both — hybrid computes its own counts from merged results.
+        fts_results, _fts_total, _ = await self.search(
             session,
             query,
             user=user,
             project_id=project_id,
             project_ids=project_ids,
-            scope=scope,
+            scope="all",
             offset=0,
             limit=SEARCH_HYBRID_PREFETCH_LIMIT,
             filters=filters,
@@ -1092,7 +1114,7 @@ class SearchService:
         )
 
         if not fts_results and not sem_results:
-            return [], 0
+            return [], 0, {"issues": 0, "wiki": 0, "comments": 0, "attachments": 0, "all": 0}
 
         # Build ID lists for RRF (using composite key: "type:id")
         fts_keys = [f"{r.result_type}:{r.id}" for r in fts_results]
@@ -1118,8 +1140,34 @@ class SearchService:
 
         sorted_keys = sorted(scores, key=lambda x: scores[x], reverse=True)
 
-        # Apply pagination
+        # Compute per-type counts from the merged RRF results (not FTS alone)
+        type_counts: dict[str, int] = {"issues": 0, "wiki": 0, "comments": 0, "attachments": 0}
+        for key in sorted_keys:
+            r = result_map[key]
+            if r.result_type == "issue":
+                type_counts["issues"] += 1
+            elif r.result_type in ("wiki", "wiki_page"):
+                type_counts["wiki"] += 1
+            elif r.result_type in ("comment", "journal"):
+                type_counts["comments"] += 1
+            elif r.result_type == "attachment":
+                type_counts["attachments"] += 1
+
+        # Apply scope filter to sorted_keys if not "all"
+        if scope != "all":
+            scope_types = {
+                "issues": ("issue",),
+                "wiki": ("wiki", "wiki_page"),
+                "comments": ("comment", "journal"),
+                "attachments": ("attachment",),
+            }
+            allowed = scope_types.get(scope, ())
+            sorted_keys = [k for k in sorted_keys if result_map[k].result_type in allowed]
+
         total = len(sorted_keys)
+        type_counts["all"] = sum(type_counts.values())
+
+        # Apply pagination
         page_keys = sorted_keys[offset : offset + limit]
 
         results = []
@@ -1137,4 +1185,4 @@ class SearchService:
                 )
             )
 
-        return results, total
+        return results, total, type_counts

@@ -93,7 +93,7 @@ async def test_issues_list_page(
     """GET /projects/{key}/issues with auth returns 200 and contains 'Issues'."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues",
+        f"/projects/{_project.key}/issues/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -104,11 +104,11 @@ async def test_issues_list_page(
 async def test_issues_list_requires_auth(unauth_client: AsyncClient):
     """GET /projects/{key}/issues without auth redirects to /login."""
     resp = await unauth_client.get(
-        "/projects/ANY/issues",
+        "/projects/ANY/issues/",
         follow_redirects=False,
     )
     assert resp.status_code == 302
-    assert "/login" in resp.headers["location"]
+    assert "/login/" in resp.headers["location"]
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +129,7 @@ async def test_issue_detail_page(
     issue = await _create_issue(db_session, _project, user, tracker, subject="Detail page bug")
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{issue.display_key}",
+        f"/projects/{_project.key}/issues/{issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -151,7 +151,7 @@ async def test_issue_create_form(
     """GET /projects/{key}/issues/new returns 200 and contains form elements."""
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/new",
+        f"/projects/{_project.key}/issues/new/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -176,7 +176,7 @@ async def test_issue_edit_form(
     issue = await _create_issue(db_session, _project, user, tracker, subject="Edit form bug")
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{issue.display_key}/edit",
+        f"/projects/{_project.key}/issues/{issue.display_key}/edit/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -204,7 +204,7 @@ async def test_issue_detail_shows_journals(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{issue.display_key}",
+        f"/projects/{_project.key}/issues/{issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -231,9 +231,34 @@ async def test_issue_partial_table(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/partials/issues/table?project_key={_project.key}",
+        f"/partials/issues/table/?project_key={_project.key}",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
     # Partial should NOT contain a full HTML page wrapper
     assert "<html" not in resp.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Tests: filter with empty string params (HTML form sends value="")
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_issue_list_empty_filter_params(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _project,
+):
+    """GET /projects/{key}/issues/?tracker_id=&assigned_to_id=&priority_id= returns 200.
+
+    HTML <select> elements send empty strings for unselected options.
+    The handler must treat these as None, not fail with a validation error.
+    """
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/projects/{_project.key}/issues/?status=all&tracker_id=&assigned_to_id=&priority_id=",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text[:200]}"
+    assert "Issues" in resp.text

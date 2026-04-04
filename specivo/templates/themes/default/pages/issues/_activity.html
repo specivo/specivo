@@ -1,39 +1,124 @@
+{# Expects: thread_tree (list of {journal, replies}), lookup_maps, user, issue #}
 {% from "components/macros.html" import avatar %}
 
-{% if journals %}
-<div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
-  {% for journal in journals %}
-  <div class="card" style="padding: var(--sp-space-md); {{ 'margin-left: var(--sp-space-xl);' if journal.reply_to_id else '' }}">
-    <div style="display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm);">
-      {{ avatar(journal.user.login if journal.user else '?', size='sm') }}
-      <span style="font-weight: 600; font-size: var(--sp-font-size-sm);">{{ journal.user.login if journal.user else 'Unknown' }}</span>
-      {% if journal.api_key_id %}
-      <span class="badge-status" style="font-size: var(--sp-font-size-xs);">agent</span>
-      {% endif %}
-      <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-xs);">#{{ journal.sequence }}</span>
-      <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-xs); margin-left: auto;">
-        {{ journal.created_at.strftime('%Y-%m-%d %H:%M') if journal.created_at else '' }}
-      </span>
+{% macro render_journal(j, depth=0) %}
+<div class="journal-entry{% if depth > 0 %} sp-reply-indent{% endif %}" id="journal-{{ j.id }}">
+  <div style="display:flex;gap:var(--sp-space-md);padding:var(--sp-space-md) 0;width:100%;">
+    <div style="flex-shrink:0;">
+      {{ avatar(j.user.login if j.user else '?', 'sm',
+         color=j.user.preferences.avatar_color|default('') if j.user else '',
+         avatar_url=j.user.avatar_url|default('') if j.user else '') }}
     </div>
+    <div style="flex:1;min-width:0;width:100%;">
+      <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-bottom:var(--sp-space-xs);">
+        <strong style="font-size:var(--sp-font-size-sm);">{{ j.user.display_name or j.user.login if j.user else 'Unknown' }}</strong>
+        {% if j.api_key_id %}
+        <span class="badge-status" style="font-size:var(--sp-font-size-xs);">Agent</span>
+        {% endif %}
+        <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);">#{{ j.sequence }}</span>
+        <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);margin-left:auto;">{{ j.created_at | timeago }}</span>
+      </div>
 
-    {# Field changes #}
-    {% if journal.details %}
-    <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-bottom: var(--sp-space-sm);">
-      {% for detail in journal.details %}
-      <div style="margin-bottom: 2px;">
-        <strong>{{ detail.prop_key }}</strong> changed
-        {% if detail.old_value %}from <em>{{ detail.old_value }}</em>{% endif %}
-        {% if detail.new_value %}to <em>{{ detail.new_value }}</em>{% endif %}
+      {# Field changes #}
+      {% if j.details %}
+      {% for d in j.details %}
+      <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
+        {% if d.prop_key == 'description' %}
+        <strong class="sp-change-label">Description</strong> updated
+        <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">View changes</a>
+        {% else %}
+        {% set field_label = d.prop_key | replace('_id', '') | replace('_', ' ') | title %}
+        {% set old_name = lookup_maps.get(d.prop_key, {}).get(d.old_value|string, d.old_value) if lookup_maps is defined else d.old_value %}
+        {% set new_name = lookup_maps.get(d.prop_key, {}).get(d.new_value|string, d.new_value) if lookup_maps is defined else d.new_value %}
+        <strong class="sp-change-label">{{ field_label }}</strong>
+        changed from <span class="sp-change-old">{{ old_name or 'unassigned' }}</span>
+        to <span class="sp-change-new">{{ new_name }}</span>
+        {% endif %}
       </div>
       {% endfor %}
-    </div>
-    {% endif %}
+      {% endif %}
 
-    {# Comment body #}
-    {% if journal.notes %}
-    <div class="prose" style="font-size: var(--sp-font-size-sm);">{{ journal.notes }}</div>
-    {% endif %}
+      {# Comment body #}
+      {% if j.notes %}
+      <div class="card" style="padding:var(--sp-space-md);margin-top:var(--sp-space-sm);">
+        <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ j.notes | markdown }}</div>
+      </div>
+      {% endif %}
+
+      {# Resolved banner #}
+      {% if j.is_resolved %}
+      <div class="sp-resolved-banner">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+        Resolved by {{ j.resolved_by.display_name or j.resolved_by.login if j.resolved_by else 'Unknown' }}
+        {% if j.resolved_summary %} — "{{ j.resolved_summary }}"{% endif %}
+      </div>
+      {% endif %}
+
+      {# Action links + inline reply #}
+      {% if j.notes %}
+      <div x-data='replyForm({ displayKey: "{{ issue.display_key }}", journalId: {{ j.id }} })'>
+        <div class="sp-journal-actions">
+          <a @click="showReply = !showReply" style="cursor:pointer;">↩ Reply</a>
+          {% if depth == 0 %}
+          {% if j.is_resolved %}
+          <a @click="fetch('/api/v1/issues/{{ issue.display_key }}/journals/{{ j.id }}/unresolve/', { method: 'POST', headers: {'Content-Type': 'application/json'} }).then(function(r){ if(r.ok || r.status===204) window.location.reload(); })" style="cursor:pointer;">Unresolve</a>
+          {% else %}
+          <a @click="$dispatch('open-resolve', { journalId: {{ j.id }} })" style="cursor:pointer;">Resolve</a>
+          {% endif %}
+          {% endif %}
+        </div>
+        <div x-show="showReply" x-cloak style="margin-top:var(--sp-space-sm);width:100%;">
+          <textarea x-model="replyText" placeholder="Write a reply..." style="display:block;width:100%;min-height:100px;padding:var(--sp-space-sm) var(--sp-space-md);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm);line-height:1.6;background:var(--sp-bg-input);color:var(--sp-text-primary);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+          <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-xs);">
+            <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showReply = false; replyText = ''">Cancel</button>
+            <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || !replyText.trim()" @click="submitReply()">Reply</button>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+
+      {# Emoji reactions #}
+      {% if j.notes %}
+      {% set reactions = reactions_by_journal.get(j.id, []) if reactions_by_journal is defined else [] %}
+      <div x-data='journalReactions({
+        reactions: {{ reactions | tojson }},
+        issueKey: "{{ issue.display_key }}",
+        journalId: {{ j.id }}
+      })'>
+        <div class="sp-reaction-row">
+          <template x-for="r in reactions" :key="r.emoji">
+            <button class="sp-reaction-btn" :class="{ 'sp-reaction-active': r.reacted_by_me }" @click="toggle(r.emoji)">
+              <span class="emoji" x-text="emojiChar(r.emoji)"></span>
+              <span class="count" x-text="r.count"></span>
+            </button>
+          </template>
+          <div style="position:relative;">
+            <button class="sp-reaction-btn" @click="showPicker = !showPicker" title="React">☺ React</button>
+            <div x-show="showPicker" x-cloak @click.outside="showPicker = false"
+                 style="position:absolute;bottom:100%;left:0;margin-bottom:4px;display:flex;gap:2px;padding:4px 6px;background:var(--sp-bg-surface);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);box-shadow:var(--sp-shadow-md);z-index:10;">
+              <button class="sp-reaction-btn" @click="toggle('thumbs_up'); showPicker = false" title="Thumbs up">👍</button>
+              <button class="sp-reaction-btn" @click="toggle('thumbs_down'); showPicker = false" title="Thumbs down">👎</button>
+              <button class="sp-reaction-btn" @click="toggle('heart'); showPicker = false" title="Heart">❤️</button>
+              <button class="sp-reaction-btn" @click="toggle('rocket'); showPicker = false" title="Rocket">🚀</button>
+              <button class="sp-reaction-btn" @click="toggle('eyes'); showPicker = false" title="Eyes">👀</button>
+              <button class="sp-reaction-btn" @click="toggle('tada'); showPicker = false" title="Tada">🎉</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
   </div>
+</div>
+{% endmacro %}
+
+{% if thread_tree %}
+<div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
+  {% for node in thread_tree %}
+    {{ render_journal(node.journal, 0) }}
+    {% for reply in node.replies %}
+      {{ render_journal(reply.journal, 1) }}
+    {% endfor %}
   {% endfor %}
 </div>
 {% else %}
@@ -41,3 +126,27 @@
   No activity yet.
 </div>
 {% endif %}
+
+{# Shared resolve modal #}
+<div x-data='resolveThread({ issueKey: "{{ issue.display_key }}" })'
+     @open-resolve.window="journalId = $event.detail.journalId; showModal = true">
+  <div x-show="showModal" x-cloak style="position:fixed;inset:0;z-index:1050;">
+    <div class="sp-scrim" @click="showModal = false"></div>
+    <div class="sp-modal">
+      <div class="sp-modal-header">
+        <h2>Resolve Thread</h2>
+        <button class="sp-modal-close" @click="showModal = false">&times;</button>
+      </div>
+      <div class="sp-modal-body">
+        <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-md);">Mark this discussion thread as resolved.</p>
+        <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Summary (optional)</label>
+        <input type="text" x-model="summary" placeholder="e.g. Agreed on approach"
+               style="width:100%;padding:var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+      </div>
+      <div class="sp-modal-footer">
+        <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showModal = false">Cancel</button>
+        <button class="sp-btn sp-btn-sm sp-btn-primary" @click="resolve()">Resolve</button>
+      </div>
+    </div>
+  </div>
+</div>

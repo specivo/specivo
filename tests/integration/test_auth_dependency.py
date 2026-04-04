@@ -53,7 +53,7 @@ async def _create_user(db: AsyncSession, **kwargs):
 
 async def _login(client: AsyncClient, login: str, password: str = TEST_PASSWORD):
     return await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": password},
     )
 
@@ -81,7 +81,7 @@ def _make_jwt(user_id: int, *, expired: bool = False, bad_secret: bool = False, 
 
 # We use /api/v1/auth/sessions as a probe endpoint — it requires auth and
 # returns 200 (empty list) when authentication succeeds.
-_PROBE = "/api/v1/auth/sessions"
+_PROBE = "/api/v1/auth/sessions/"
 
 
 async def _probe(client: AsyncClient, **request_kwargs) -> int:
@@ -199,7 +199,7 @@ class TestApiKeyAuth:
         token = (await _login(client, "apikey_valid")).json()["access_token"]
 
         created = await client.post(
-            "/api/v1/my/api-keys",
+            "/api/v1/my/api-keys/",
             json={"name": "test-dep-key"},
             headers={"Authorization": f"Bearer {token}"},
         )

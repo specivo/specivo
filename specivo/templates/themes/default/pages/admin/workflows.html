@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Workflows - Admin - Specivo{% endblock %}
+{% block title %}Workflows - Admin - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
   <a href="/">Home</a>
   <span class="sep">/</span>
-  <a href="/admin">Admin</a>
+  <a href="/admin/">Admin</a>
   <span class="sep">/</span>
   <span class="current">Workflows</span>
 </div>
@@ -88,7 +88,7 @@ function workflowEditor() {
     async loadTransitions() {
       if (!this.selectedTracker || !this.selectedRole) return;
       try {
-        const resp = await fetch(`/api/v1/admin/workflows/transitions?tracker_id=${this.selectedTracker}&role_id=${this.selectedRole}`);
+        const resp = await fetch(`/api/v1/admin/workflows/transitions/?tracker_id=${this.selectedTracker}&role_id=${this.selectedRole}`);
         if (resp.ok) {
           this.transitions = await resp.json();
         }

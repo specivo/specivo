@@ -256,14 +256,14 @@ async def _log_auth_failure(db: AsyncSession, reason: str, request: Request) -> 
     response, surviving the outer transaction rollback caused by the 401 error.
     """
     try:
-        from specivo.services.security_audit_service import SecurityAuditService
+        from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
         audit = SecurityAuditService()
         ip = request.client.host if request.client else None
         request_id = request.headers.get("x-request-id")
         await audit.log_event(
             session=db,
-            event_type="auth_failure",
+            event_type=AuditEvent.AUTH_FAILURE,
             user_id=None,
             ip_address=ip,
             request_id=request_id,

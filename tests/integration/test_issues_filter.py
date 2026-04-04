@@ -30,7 +30,7 @@ from tests.factories.user import AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -55,7 +55,7 @@ async def _create_issue(
     if assigned_to_id is not None:
         body["assigned_to_id"] = assigned_to_id
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -179,7 +179,7 @@ async def test_list_issues_default_returns_open_only(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues",
+        f"/api/v1/projects/{project.key}/issues/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -208,7 +208,7 @@ async def test_list_issues_status_closed(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?status=closed",
+        f"/api/v1/projects/{project.key}/issues/?status=closed",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -237,7 +237,7 @@ async def test_list_issues_status_all(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?status=all",
+        f"/api/v1/projects/{project.key}/issues/?status=all",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -269,7 +269,7 @@ async def test_filter_by_tracker_id(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?tracker_id={bug_tracker.id}",
+        f"/api/v1/projects/{project.key}/issues/?tracker_id={bug_tracker.id}",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -320,7 +320,7 @@ async def test_filter_assigned_to_me(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?assigned_to_id=me",
+        f"/api/v1/projects/{project.key}/issues/?assigned_to_id=me",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -361,7 +361,7 @@ async def test_filter_subject_contains(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?subject_contains=auth&status=all",
+        f"/api/v1/projects/{project.key}/issues/?subject_contains=auth&status=all",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -397,7 +397,7 @@ async def test_sort_by_priority_desc(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?sort=priority_id:desc",
+        f"/api/v1/projects/{project.key}/issues/?sort=priority_id:desc",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -424,7 +424,7 @@ async def test_multi_sort(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?sort=priority_id:desc,created_at:asc",
+        f"/api/v1/projects/{project.key}/issues/?sort=priority_id:desc,created_at:asc",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -458,7 +458,7 @@ async def test_pagination_offset_and_total_count(
 
     # First page
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?status=all&offset=0&limit=2",
+        f"/api/v1/projects/{project.key}/issues/?status=all&offset=0&limit=2",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -470,7 +470,7 @@ async def test_pagination_offset_and_total_count(
 
     # Second page
     resp2 = await client.get(
-        f"/api/v1/projects/{project.key}/issues?status=all&offset=2&limit=2",
+        f"/api/v1/projects/{project.key}/issues/?status=all&offset=2&limit=2",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     data2 = resp2.json()
@@ -480,7 +480,7 @@ async def test_pagination_offset_and_total_count(
 
     # Third page (last item)
     resp3 = await client.get(
-        f"/api/v1/projects/{project.key}/issues?status=all&offset=4&limit=2",
+        f"/api/v1/projects/{project.key}/issues/?status=all&offset=4&limit=2",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     data3 = resp3.json()
@@ -503,7 +503,7 @@ async def test_pagination_beyond_end_returns_empty(
     )
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/issues?status=all&offset=100&limit=25",
+        f"/api/v1/projects/{project.key}/issues/?status=all&offset=100&limit=25",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text

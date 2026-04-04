@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import ForeignKey, Index, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from specivo.models.base import Base, TimestampMixin
@@ -16,7 +16,10 @@ class Reaction(Base, TimestampMixin):
 
     __tablename__ = "reactions"
 
-    __table_args__ = (UniqueConstraint("journal_id", "user_id", "emoji", name="uq_reaction"),)
+    __table_args__ = (
+        UniqueConstraint("journal_id", "user_id", "emoji", name="uq_reaction"),
+        Index("ix_reactions_journal_emoji", "journal_id", "emoji"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 

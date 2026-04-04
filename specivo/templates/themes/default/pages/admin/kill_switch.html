@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Kill Switch - Admin - Specivo{% endblock %}
+{% block title %}Kill Switch - Admin - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {% if has_feature("kill_switch") %}
 <div class="breadcrumbs">
   <a href="/">Home</a>
   <span class="sep">/</span>
-  <a href="/admin">Admin</a>
+  <a href="/admin/">Admin</a>
   <span class="sep">/</span>
   <span class="current">Kill Switch</span>
 </div>

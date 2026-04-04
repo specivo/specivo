@@ -22,7 +22,14 @@ from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
 from specivo.models.user import User
-from specivo.schemas.auth import LoginRequest, RefreshRequest, SessionOut, TokenResponse
+from specivo.schemas.auth import (
+    ForgotPasswordRequest,
+    LoginRequest,
+    RefreshRequest,
+    ResetPasswordRequest,
+    SessionOut,
+    TokenResponse,
+)
 from specivo.services.auth_service import AuthService
 
 router = APIRouter()
@@ -38,34 +45,74 @@ _service = AuthService()
 # now would invalidate all active sessions.
 _ACCESS_COOKIE = "access_token"
 _REFRESH_COOKIE = "refresh_token"
-_REFRESH_COOKIE_PATH = "/api/v1/auth"
+_REFRESH_COOKIE_PATH = "/"
 
 
-def _set_auth_cookies(response: Response, access_token: str, refresh_token: str, settings) -> None:
-    """Attach httpOnly auth cookies for browser clients."""
-    response.set_cookie(
+def _set_auth_cookies(
+    response: Response,
+    access_token: str,
+    refresh_token: str,
+    settings,
+    *,
+    remember: bool = False,
+) -> None:
+    """Attach httpOnly auth cookies for browser clients.
+
+    When *remember* is ``False`` (the default), cookies are set without
+    ``max_age`` so the browser treats them as session cookies and discards
+    them when the browser closes.  When ``True``, persistent ``max_age``
+    values are used.
+    """
+    access_kwargs: dict = dict(
         key=_ACCESS_COOKIE,
         value=access_token,
         httponly=True,
         samesite="lax",
         secure=not settings.debug,
         path="/",
-        max_age=settings.access_token_expire_minutes * 60,
     )
-    response.set_cookie(
+    refresh_kwargs: dict = dict(
         key=_REFRESH_COOKIE,
         value=refresh_token,
         httponly=True,
         samesite="lax",
         secure=not settings.debug,
         path=_REFRESH_COOKIE_PATH,
-        max_age=settings.refresh_token_expire_days * 86400,
     )
+    if remember:
+        access_kwargs["max_age"] = settings.access_token_expire_minutes * 60
+        refresh_kwargs["max_age"] = settings.refresh_token_expire_days * 86400
+    response.set_cookie(**access_kwargs)
+    response.set_cookie(**refresh_kwargs)
 
 
 def _clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(key=_ACCESS_COOKIE, path="/")
     response.delete_cookie(key=_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
+
+
+def _read_remember_from_access_cookie(request: Request, settings) -> bool:
+    """Read the ``rem`` claim from the access token cookie.
+
+    The token may be expired (that is the normal case during refresh), so
+    we decode without verifying expiration.  Returns ``True`` for backward
+    compatibility with tokens that predate the ``rem`` claim.
+    """
+    import jwt as pyjwt
+
+    token = request.cookies.get(_ACCESS_COOKIE)
+    if not token:
+        return True  # backward compat: no cookie → persistent (old behaviour)
+    try:
+        payload = pyjwt.decode(
+            token,
+            settings.secret_key,
+            algorithms=["HS256"],
+            options={"verify_exp": False},
+        )
+        return payload.get("rem", True)
+    except Exception:
+        return True  # decode failure → default to persistent
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +125,7 @@ _refresh_rate_limit = rate_limit("auth_refresh", max_requests=30, window_seconds
 
 
 @router.post(
-    "/login",
+    "/login/",
     response_model=TokenResponse,
     summary="Login with username/email and password",
     responses={
@@ -98,15 +145,34 @@ async def login(
     device_info = request.headers.get("User-Agent")
     ip = request.client.host if request.client else None
 
-    access_token, refresh_token = await _service.login(
-        session=db,
-        login_or_email=body.login,
-        password=body.password,
-        device_info=device_info,
-        ip=ip,
-    )
+    try:
+        access_token, refresh_token = await _service.login(
+            session=db,
+            login_or_email=body.login,
+            password=body.password,
+            device_info=device_info,
+            ip=ip,
+            remember=body.remember,
+        )
+    except AppError as exc:
+        # Log failed login attempt — commit before re-raising so the
+        # audit row survives the get_db rollback on error.
+        try:
+            from specivo.services.security_audit_service import SecurityAuditService
 
-    # Audit log the successful login
+            audit = SecurityAuditService()
+            await audit.log_login_failure(
+                session=db,
+                request=request,
+                login_hint=body.login,
+                reason=exc.code,
+            )
+            await db.commit()
+        except Exception:
+            pass  # Non-critical — never block error response
+        raise
+
+    # Log successful login
     try:
         import jwt as pyjwt
 
@@ -115,13 +181,7 @@ async def login(
         payload = pyjwt.decode(access_token, settings.secret_key, algorithms=["HS256"])
         user_id = int(payload.get("sub", 0))
         audit = SecurityAuditService()
-        await audit.log_event(
-            session=db,
-            event_type="login_success",
-            user_id=user_id,
-            ip_address=ip,
-            details={"method": "password"},
-        )
+        await audit.log_login_success(session=db, user_id=user_id, request=request)
     except Exception:
         pass  # Non-critical — never block login
 
@@ -131,7 +191,7 @@ async def login(
         expires_in=settings.access_token_expire_minutes * 60,
     )
     response = JSONResponse(content=token_data.model_dump(), status_code=status.HTTP_200_OK)
-    _set_auth_cookies(response, access_token, refresh_token, settings)
+    _set_auth_cookies(response, access_token, refresh_token, settings, remember=body.remember)
     return response
 
 
@@ -141,12 +201,13 @@ async def login(
 
 
 @router.post(
-    "/refresh",
+    "/refresh/",
     response_model=TokenResponse,
     summary="Rotate refresh token and issue new access token",
     responses={401: {"description": "Refresh token expired or revoked"}},
 )
 async def refresh(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     _rl: Annotated[None, Depends(_refresh_rate_limit)],
     body: RefreshRequest | None = None,
@@ -165,7 +226,11 @@ async def refresh(
             status_code=401,
         )
 
-    access_token, new_refresh_token = await _service.refresh(session=db, refresh_token_raw=raw_token)
+    # Read the "remember me" preference from the existing access token JWT.
+    # The token may be expired, so we decode without verifying expiration.
+    remember = _read_remember_from_access_cookie(request, settings)
+
+    access_token, new_refresh_token = await _service.refresh(session=db, refresh_token_raw=raw_token, remember=remember)
 
     token_data = TokenResponse(
         access_token=access_token,
@@ -173,7 +238,7 @@ async def refresh(
         expires_in=settings.access_token_expire_minutes * 60,
     )
     response = JSONResponse(content=token_data.model_dump(), status_code=status.HTTP_200_OK)
-    _set_auth_cookies(response, access_token, new_refresh_token, settings)
+    _set_auth_cookies(response, access_token, new_refresh_token, settings, remember=remember)
     return response
 
 
@@ -183,7 +248,7 @@ async def refresh(
 
 
 @router.post(
-    "/logout",
+    "/logout/",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Revoke the current refresh token",
 )
@@ -207,7 +272,7 @@ async def logout(
 
 
 @router.post(
-    "/logout-all",
+    "/logout-all/",
     summary="Revoke all sessions for the authenticated user",
 )
 async def logout_all(
@@ -227,7 +292,7 @@ async def logout_all(
 
 
 @router.get(
-    "/sessions",
+    "/sessions/",
     response_model=list[SessionOut],
     summary="List active sessions for the authenticated user",
 )
@@ -246,7 +311,7 @@ async def list_sessions(
 
 
 @router.delete(
-    "/sessions/{session_id}",
+    "/sessions/{session_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Revoke a specific session by ID",
 )
@@ -258,3 +323,49 @@ async def revoke_session(
     """Revoke a single session owned by the current user."""
     await _service.revoke_session(session=db, user_id=current_user.id, token_id=session_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/forgot-password
+# ---------------------------------------------------------------------------
+
+_forgot_password_rate_limit = rate_limit("auth_forgot_password", max_requests=5, window_seconds=300)
+
+
+@router.post(
+    "/forgot-password/",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request a password reset email",
+    responses={429: {"description": "Rate limit exceeded"}},
+)
+async def forgot_password(
+    body: ForgotPasswordRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _rl: Annotated[None, Depends(_forgot_password_rate_limit)],
+) -> dict:
+    """Send a password reset email if the address is associated with an account.
+
+    Always returns 202 regardless of whether the email exists — no enumeration.
+    """
+    await _service.request_password_reset(session=db, email=body.email)
+    return {"detail": "If the email is registered, a reset link has been sent."}
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/reset-password
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/reset-password/",
+    status_code=status.HTTP_200_OK,
+    summary="Reset password using a token from the reset email",
+    responses={400: {"description": "Invalid, expired, or already-used token"}},
+)
+async def reset_password(
+    body: ResetPasswordRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> dict:
+    """Set a new password using a valid reset token."""
+    await _service.reset_password_with_token(session=db, token=body.token, new_password=body.new_password)
+    return {"detail": "Password has been reset successfully."}

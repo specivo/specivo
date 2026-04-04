@@ -15,6 +15,7 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.role import Role
@@ -27,6 +28,10 @@ from tests.factories.user import AdminUserFactory, UserFactory
 
 
 async def _make_role(db_session: AsyncSession, name: str = "Manager") -> Role:
+    result = await db_session.execute(select(Role).where(Role.name == name))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
     role = Role(
         name=name,
         permissions=["*"],
@@ -56,7 +61,7 @@ async def _make_admin(db_session: AsyncSession, **kwargs) -> User:
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -95,7 +100,7 @@ async def test_create_project(
     admin_token: str,
 ) -> None:
     resp = await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={
             "name": "Specivo Tracker",
             "identifier": "specivo-tracker",
@@ -124,14 +129,14 @@ async def test_create_child_project(
 ) -> None:
     # Create parent
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Parent", "identifier": "parent-proj", "key": "PAR", "is_public": True},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     # Create child
     resp = await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={
             "name": "Child Project",
             "identifier": "child-proj",
@@ -155,12 +160,12 @@ async def test_get_project(
     admin_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Get Test", "identifier": "get-test", "key": "GET"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     resp = await client.get(
-        "/api/v1/projects/GET",
+        "/api/v1/projects/GET/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -174,7 +179,7 @@ async def test_get_project_not_found(
     admin_token: str,
 ) -> None:
     resp = await client.get(
-        "/api/v1/projects/NOTEXIST",
+        "/api/v1/projects/NOTEXIST/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 404
@@ -187,12 +192,12 @@ async def test_update_project(
     admin_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Update Me", "identifier": "update-me", "key": "UPD"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     resp = await client.patch(
-        "/api/v1/projects/UPD",
+        "/api/v1/projects/UPD/",
         json={"name": "Updated Name", "status": 5},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -209,18 +214,18 @@ async def test_delete_project(
     admin_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Delete Me", "identifier": "delete-me", "key": "DEL"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     resp = await client.delete(
-        "/api/v1/projects/DEL",
+        "/api/v1/projects/DEL/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204
 
     get_resp = await client.get(
-        "/api/v1/projects/DEL",
+        "/api/v1/projects/DEL/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert get_resp.status_code == 404
@@ -234,7 +239,7 @@ async def test_list_projects(
 ) -> None:
     for i in range(3):
         await client.post(
-            "/api/v1/projects",
+            "/api/v1/projects/",
             json={
                 "name": f"List Project {i}",
                 "identifier": f"list-project-{i}",
@@ -244,7 +249,7 @@ async def test_list_projects(
         )
 
     resp = await client.get(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -265,12 +270,12 @@ async def test_duplicate_key_returns_409(
     admin_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Dup Key", "identifier": "dup-key-1", "key": "DUP"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     resp = await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Dup Key 2", "identifier": "dup-key-2", "key": "DUP"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -284,12 +289,12 @@ async def test_duplicate_identifier_returns_409(
     admin_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Dup ID", "identifier": "dup-identifier", "key": "DI1"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     resp = await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Dup ID 2", "identifier": "dup-identifier", "key": "DI2"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -311,13 +316,13 @@ async def test_add_member(
     role = await _make_role(db_session, "Developer")
 
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Member Test", "identifier": "member-test", "key": "MBT"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.post(
-        "/api/v1/projects/MBT/members",
+        "/api/v1/projects/MBT/members/",
         json={"user_id": regular_user.id, "role_ids": [role.id]},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -337,18 +342,18 @@ async def test_list_members(
     role = await _make_role(db_session, "Viewer")
 
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "List Members", "identifier": "list-members", "key": "LMB"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     await client.post(
-        "/api/v1/projects/LMB/members",
+        "/api/v1/projects/LMB/members/",
         json={"user_id": regular_user.id, "role_ids": [role.id]},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.get(
-        "/api/v1/projects/LMB/members",
+        "/api/v1/projects/LMB/members/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -367,24 +372,24 @@ async def test_remove_member(
     role = await _make_role(db_session, "Contributor")
 
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Remove Member", "identifier": "remove-member", "key": "RMB"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     await client.post(
-        "/api/v1/projects/RMB/members",
+        "/api/v1/projects/RMB/members/",
         json={"user_id": regular_user.id, "role_ids": [role.id]},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.delete(
-        f"/api/v1/projects/RMB/members/{regular_user.id}",
+        f"/api/v1/projects/RMB/members/{regular_user.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204
 
     list_resp = await client.get(
-        "/api/v1/projects/RMB/members",
+        "/api/v1/projects/RMB/members/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     user_ids = [m["user_id"] for m in list_resp.json()]
@@ -403,12 +408,12 @@ async def test_get_modules_default(
     admin_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Module Test", "identifier": "module-test", "key": "MOD"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     resp = await client.get(
-        "/api/v1/projects/MOD/modules",
+        "/api/v1/projects/MOD/modules/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -424,13 +429,13 @@ async def test_toggle_modules(
     admin_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Toggle Modules", "identifier": "toggle-modules", "key": "TGM"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.patch(
-        "/api/v1/projects/TGM/modules",
+        "/api/v1/projects/TGM/modules/",
         json={"modules": {"wiki": True, "time_tracking": True}},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -442,7 +447,7 @@ async def test_toggle_modules(
 
     # Now disable one
     resp2 = await client.patch(
-        "/api/v1/projects/TGM/modules",
+        "/api/v1/projects/TGM/modules/",
         json={"modules": {"wiki": False}},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -462,7 +467,7 @@ async def test_non_admin_cannot_create_project(
     user_token: str,
 ) -> None:
     resp = await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "No Perms", "identifier": "no-perms", "key": "NOP"},
         headers={"Authorization": f"Bearer {user_token}"},
     )
@@ -477,7 +482,7 @@ async def test_non_member_cannot_access_private_project(
     user_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={
             "name": "Private Project",
             "identifier": "private-project",
@@ -488,7 +493,7 @@ async def test_non_member_cannot_access_private_project(
     )
 
     resp = await client.get(
-        "/api/v1/projects/PRV",
+        "/api/v1/projects/PRV/",
         headers={"Authorization": f"Bearer {user_token}"},
     )
     assert resp.status_code == 404  # 404 not 403 — prevents enumeration
@@ -502,13 +507,13 @@ async def test_non_member_cannot_edit_project(
     user_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Edit Guard", "identifier": "edit-guard", "key": "EDG"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.patch(
-        "/api/v1/projects/EDG",
+        "/api/v1/projects/EDG/",
         json={"name": "Hacked Name"},
         headers={"Authorization": f"Bearer {user_token}"},
     )
@@ -537,21 +542,21 @@ async def test_member_with_manage_project_can_edit(
 
     # Admin creates project
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "PM Project", "identifier": "pm-project", "key": "PMJ"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     # Admin adds pm_user as member with ProjectManager role
     await client.post(
-        "/api/v1/projects/PMJ/members",
+        "/api/v1/projects/PMJ/members/",
         json={"user_id": pm_user_id, "role_ids": [pm_role_id]},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     # pm_user can now edit
     resp = await client.patch(
-        "/api/v1/projects/PMJ",
+        "/api/v1/projects/PMJ/",
         json={"name": "PM Updated Name"},
         headers={"Authorization": f"Bearer {pm_token}"},
     )
@@ -567,13 +572,110 @@ async def test_public_project_visible_to_non_member(
     user_token: str,
 ) -> None:
     await client.post(
-        "/api/v1/projects",
+        "/api/v1/projects/",
         json={"name": "Public Proj", "identifier": "public-proj", "key": "PUB"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.get(
-        "/api/v1/projects/PUB",
+        "/api/v1/projects/PUB/",
         headers={"Authorization": f"Bearer {user_token}"},
     )
     assert resp.status_code == 200, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Subproject depth limit (MAX_PROJECT_DEPTH = 5)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_subproject_depth_limit_allows_up_to_max(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Creating subprojects up to MAX_PROJECT_DEPTH levels succeeds."""
+    from specivo.core.constants import MAX_PROJECT_DEPTH
+
+    admin = await _make_admin(db_session, login="depth_admin")
+    token = await _login(client, admin.login)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Create a chain: level1 -> level2 -> ... -> level MAX_PROJECT_DEPTH
+    prev_key = None
+    for i in range(1, MAX_PROJECT_DEPTH + 1):
+        key = f"D{i:02d}"
+        payload = {
+            "name": f"Depth {i}",
+            "identifier": f"depth-{i}",
+            "key": key,
+        }
+        if prev_key:
+            payload["parent_key"] = prev_key
+
+        resp = await client.post("/api/v1/projects/", json=payload, headers=headers)
+        assert resp.status_code == 201, f"Level {i} failed: {resp.text}"
+        prev_key = key
+
+
+@pytest.mark.asyncio
+async def test_subproject_depth_limit_rejects_beyond_max(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Creating a subproject that would exceed MAX_PROJECT_DEPTH returns 422."""
+    from specivo.core.constants import MAX_PROJECT_DEPTH
+
+    admin = await _make_admin(db_session, login="depth_reject_admin")
+    token = await _login(client, admin.login)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Create a chain up to MAX_PROJECT_DEPTH
+    prev_key = None
+    for i in range(1, MAX_PROJECT_DEPTH + 1):
+        key = f"R{i:02d}"
+        payload = {
+            "name": f"Reject {i}",
+            "identifier": f"reject-{i}",
+            "key": key,
+        }
+        if prev_key:
+            payload["parent_key"] = prev_key
+
+        resp = await client.post("/api/v1/projects/", json=payload, headers=headers)
+        assert resp.status_code == 201, f"Level {i} failed: {resp.text}"
+        prev_key = key
+
+    # Try one more — should fail
+    resp = await client.post(
+        "/api/v1/projects/",
+        json={
+            "name": "Too Deep",
+            "identifier": "too-deep",
+            "key": "TDEEP",
+            "parent_key": prev_key,
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422, f"Expected 422 but got {resp.status_code}: {resp.text}"
+    data = resp.json()
+    assert data["errors"][0]["code"] == "max_depth_exceeded"
+    assert data["errors"][0]["details"]["max_depth"] == MAX_PROJECT_DEPTH
+
+
+@pytest.mark.asyncio
+async def test_subproject_depth_root_project_always_allowed(
+    client: AsyncClient,
+    db_session: AsyncSession,
+) -> None:
+    """Root projects (no parent) are never affected by the depth limit."""
+    admin = await _make_admin(db_session, login="root_admin")
+    token = await _login(client, admin.login)
+
+    resp = await client.post(
+        "/api/v1/projects/",
+        json={"name": "Root A", "identifier": "root-a", "key": "ROOTA"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    assert resp.json()["parent_key"] is None

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}{% if mode == 'create' %}New Page{% else %}Edit {{ wiki_page.title }}{% endif %} - Wiki - {{ project.name }} - Specivo{% endblock %}
+{% block title %}{% if mode == 'create' %}New Page{% else %}Edit {{ wiki_page.title }}{% endif %} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {% if mode == 'edit' %}
@@ -25,21 +25,30 @@
   {% if mode == 'create' %}New Wiki Page{% else %}Editing: {{ wiki_page.title }}{% endif %}
 </h1>
 
-<div class="wiki-layout">
+<div class="{{ 'wiki-layout' if pages is defined and pages else '' }}"
+     x-data='wikiForm({
+       mode: {{ mode | tojson }},
+       projectKey: {{ project.key | tojson }},
+       slug: {{ (wiki_page.slug if wiki_page else "") | tojson }},
+       lockVersion: {{ wiki_page.lock_version if wiki_page else 0 }},
+       title: {{ (wiki_page.title if wiki_page else "") | tojson }},
+       text: {{ (content.text if content else "") | tojson }},
+       parentSlug: {{ (preselect_parent_slug if preselect_parent_slug is defined else "") | tojson }},
+       parentTitle: {{ (preselect_parent_title if preselect_parent_title is defined else "") | tojson }}
+     })'>
   {# Editor area #}
   <div>
-    <form method="post"
-          action="{% if mode == 'create' %}/api/v1/projects/{{ project.key }}/wiki{% else %}/api/v1/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}{% endif %}"
-          x-data="{ preview: false, text: '' }"
-          x-init="text = $refs.wikiTextarea ? $refs.wikiTextarea.value : ''">
+    <form onsubmit="return false;">
+
+      {# Error banner #}
+      <div class="login-error" :class="{ 'show': error }" style="margin-bottom:var(--sp-space-lg)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+        <span x-text="error"></span>
+      </div>
 
       <div class="editor-card">
         {# Title field (for new pages) #}
-        {% if mode == 'create' %}
-        <input type="text" name="title" class="editor-title-input" placeholder="Page title..." required>
-        {% else %}
-        <input type="text" class="editor-title-input" value="{{ wiki_page.title }}" readonly>
-        {% endif %}
+        <input type="text" class="editor-title-input" placeholder="Page title..." x-model="title" required>
 
         {# Toolbar #}
         <div class="editor-toolbar">
@@ -53,38 +62,63 @@
         </div>
 
         {# Editor textarea #}
-        <textarea name="text" class="editor-textarea" x-ref="wikiTextarea" x-show="!preview" x-model="text" placeholder="Write your content here (Markdown)...">{{ content.text if content else '' }}</textarea>
+        <textarea class="editor-textarea" x-show="!preview" x-model="text" placeholder="Write your content here (Markdown)..." style="display:block;"></textarea>
 
         {# Preview panel #}
-        <div class="editor-preview" x-show="preview" x-html="text"></div>
+        <div class="editor-preview" x-show="preview" x-cloak x-html="text"></div>
       </div>
 
       {# Edit metadata #}
       <div class="edit-metadata">
         <div>
           <label class="modal-label">Edit summary</label>
-          <input type="text" name="comments" class="modal-input" placeholder="Describe your changes...">
+          <input type="text" class="modal-input" x-model="comments" placeholder="Describe your changes...">
         </div>
-        {% if mode == 'create' and pages is defined and pages %}
-        <div>
+        {% if page_tree is defined and page_tree %}
+        <div x-data="{ pickerOpen: false, treeExpanded: {} }" style="position:relative;">
           <label class="modal-label">Parent page</label>
-          <select name="parent_slug" class="modal-input">
-            <option value="">(none)</option>
-            {% for p in pages %}
-            <option value="{{ p.slug }}">{{ p.title }}</option>
-            {% endfor %}
-          </select>
+          <button type="button" class="modal-input wiki-parent-picker-btn" @click="pickerOpen = !pickerOpen">
+            <span x-text="parentTitle || '(none)'" :style="parentTitle ? '' : 'color:var(--sp-text-muted)'"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;color:var(--sp-text-muted);"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div x-show="pickerOpen" x-cloak @click.outside="pickerOpen = false" class="wiki-parent-picker-dropdown">
+            <div class="wiki-parent-picker-option" :class="{ 'selected': !parentSlug }" @click="parentSlug = ''; parentTitle = ''; pickerOpen = false">
+              <span style="color:var(--sp-text-muted);">(none — root level)</span>
+            </div>
+            {% macro render_picker_tree(parent_id, depth=0) %}
+              {% for p in page_tree.get(parent_id, []) %}
+              {% if not (wiki_page and p.id == wiki_page.id) %}
+              {% set has_children = p.id in page_tree %}
+              <div class="wiki-parent-picker-option" :class="{ 'selected': parentSlug === '{{ p.slug }}' }" style="padding-left: {{ 8 + depth * 20 }}px;">
+                {% if has_children %}
+                <button type="button" class="wiki-tree-toggle" @click.stop="treeExpanded[{{ p.id }}] = !treeExpanded[{{ p.id }}]" :class="{ 'open': treeExpanded[{{ p.id }}] }" style="width:16px;height:16px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+                {% endif %}
+                <span @click="parentSlug = '{{ p.slug }}'; parentTitle = $el.textContent.trim(); pickerOpen = false" style="cursor:pointer;flex:1;">{{ p.title }}</span>
+              </div>
+              {% if has_children %}
+              <div x-show="treeExpanded[{{ p.id }}]">
+                {{ render_picker_tree(p.id, depth + 1) }}
+              </div>
+              {% endif %}
+              {% endif %}
+              {% endfor %}
+            {% endmacro %}
+            {{ render_picker_tree(None) }}
+          </div>
         </div>
         {% endif %}
       </div>
 
-      {% if mode == 'edit' and wiki_page %}
-      <input type="hidden" name="lock_version" value="{{ wiki_page.lock_version }}">
-      {% endif %}
-
       <div class="edit-actions">
-        <button type="submit" class="btn btn-primary">Save</button>
-        <a href="{% if mode == 'edit' %}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}{% else %}/projects/{{ project.key }}/wiki{% endif %}" class="cancel-link">Cancel</a>
+        <button type="button" class="sp-btn sp-btn-primary"
+                :disabled="submitting || (mode === 'create' && !title.trim())"
+                @click="submitForm()">
+          <span x-show="!submitting">Save</span>
+          <span x-show="submitting">Saving...</span>
+        </button>
+        <a href="{% if mode == 'edit' %}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/{% else %}/projects/{{ project.key }}/wiki/{% endif %}" class="cancel-link">Cancel</a>
       </div>
     </form>
   </div>
@@ -97,7 +131,7 @@
       <ul class="wiki-tree">
         {% for p in pages %}
         <li>
-          <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}"
+          <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}/"
              class="{{ 'active' if mode == 'edit' and wiki_page and p.id == wiki_page.id else '' }}">
             {{ p.title }}
           </a>

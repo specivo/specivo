@@ -97,12 +97,15 @@ async def request_validation_error_handler(_request: Request, exc: RequestValida
         # Skip the first element if it's "body" / "query" / "path" — keep field path only
         field_parts = [str(p) for p in loc if p not in ("body", "query", "path", "header")]
         field = ".".join(field_parts) if field_parts else None
+        raw_input = error.get("input")
+        if isinstance(raw_input, bytes):
+            raw_input = raw_input.decode("utf-8", errors="replace")
         errors.append(
             {
                 "code": "validation_error",
                 "message": error.get("msg", "Validation error"),
                 "field": field,
-                "details": {"type": error.get("type"), "input": error.get("input")},
+                "details": {"type": error.get("type"), "input": raw_input},
             }
         )
     return JSONResponse(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, content=_error_body(errors))

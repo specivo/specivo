@@ -24,21 +24,23 @@ _project_svc = ProjectService()
 _time_svc = TimeEntryService()
 
 
-@router.get("/projects/{project_key}/time-entries", response_class=HTMLResponse)
+@router.get("/projects/{project_key}/time-entries/", response_class=HTMLResponse)
 async def time_entries_list(
     project_key: str,
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
-    user_id: int | None = Query(None),
+    user_id: str = Query(""),
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
     """Render the time entries list page for a project."""
+    from specivo.core.utils import safe_int
+
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login", status_code=302)
+        return RedirectResponse("/login/", status_code=302)
     user = cast("User", user_obj)
 
     try:
@@ -49,7 +51,7 @@ async def time_entries_list(
     entries, total = await _time_svc.list_for_project(
         db,
         project.id,
-        user_id=user_id,
+        user_id=safe_int(user_id),
         from_date=from_date,
         to_date=to_date,
         offset=offset,
@@ -90,7 +92,7 @@ async def time_entries_list(
     )
 
 
-@router.get("/projects/{project_key}/time-entries/new", response_class=HTMLResponse)
+@router.get("/projects/{project_key}/time-entries/new/", response_class=HTMLResponse)
 async def time_entry_form(
     project_key: str,
     request: Request,
@@ -99,7 +101,7 @@ async def time_entry_form(
     """Render the log-time form."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login", status_code=302)
+        return RedirectResponse("/login/", status_code=302)
     user = cast("User", user_obj)
 
     try:

@@ -7,14 +7,14 @@ from httpx import AsyncClient
 @pytest.mark.integration
 async def test_health_returns_200(unauth_client: AsyncClient):
     """Health endpoint always returns HTTP 200 regardless of service state."""
-    response = await unauth_client.get("/health")
+    response = await unauth_client.get("/health/")
     assert response.status_code == 200
 
 
 @pytest.mark.integration
 async def test_health_response_structure(unauth_client: AsyncClient):
     """Health endpoint returns expected fields and a known version string."""
-    response = await unauth_client.get("/health")
+    response = await unauth_client.get("/health/")
     data = response.json()
 
     # status is either fully healthy or degraded — never absent

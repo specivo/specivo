@@ -30,7 +30,7 @@ _service = ApiKeyService()
 
 
 @router.get(
-    "/my/api-keys",
+    "/my/api-keys/",
     response_model=list[ApiKeyOut],
     summary="List API keys for the authenticated user",
 )
@@ -49,7 +49,7 @@ async def list_api_keys(
 
 
 @router.post(
-    "/my/api-keys",
+    "/my/api-keys/",
     response_model=ApiKeyCreated,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new API key",
@@ -86,7 +86,7 @@ async def create_api_key(
 
 
 @router.patch(
-    "/my/api-keys/{key_id}",
+    "/my/api-keys/{key_id}/",
     response_model=ApiKeyOut,
     summary="Deactivate or reactivate an API key",
 )
@@ -112,7 +112,7 @@ async def patch_api_key(
 
 
 @router.delete(
-    "/my/api-keys/{key_id}",
+    "/my/api-keys/{key_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Hard-delete an API key",
 )

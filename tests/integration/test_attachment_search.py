@@ -42,7 +42,7 @@ pytestmark = pytest.mark.integration
 # Helpers
 # ---------------------------------------------------------------------------
 
-SEARCH_URL = "/api/v1/search"
+SEARCH_URL = "/api/v1/search/"
 
 
 async def _make_user(db: AsyncSession, login: str = "att_user") -> User:
@@ -63,7 +63,7 @@ async def _make_admin(db: AsyncSession, login: str = "att_admin") -> User:
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
@@ -148,7 +148,7 @@ async def _create_issue(
         payload["description"] = description
     if is_private:
         payload["is_private"] = True
-    resp = await client.post(f"/api/v1/projects/{project_key}/issues", json=payload)
+    resp = await client.post(f"/api/v1/projects/{project_key}/issues/", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
 
@@ -168,7 +168,7 @@ async def _upload_attachment(
     if description is not None:
         data["description"] = description
     resp = await client.post(
-        "/api/v1/attachments",
+        "/api/v1/attachments/",
         files=files,
         data=data,
         headers={"Authorization": f"Bearer {token}"},
@@ -481,7 +481,7 @@ async def test_delete_attachment_removes_from_search(
 
     # Delete the attachment
     del_resp = await authed_client.delete(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert del_resp.status_code == 204, del_resp.text
@@ -696,7 +696,7 @@ async def test_update_description_reindexes(
 
     # Update description via PATCH
     patch_resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={"description": "revised agile sprint planning guide"},
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -786,7 +786,7 @@ async def test_attachment_description_update_audit_logged(
 
     # Update the description
     patch_resp = await authed_client.patch(
-        f"/api/v1/attachments/{att['id']}",
+        f"/api/v1/attachments/{att['id']}/",
         json={"description": "updated description for audit test"},
         headers={"Authorization": f"Bearer {token}"},
     )

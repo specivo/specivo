@@ -39,7 +39,7 @@ _issue_service = IssueService()
 
 
 @router.post(
-    "/agent-token-logs",
+    "/agent-token-logs/",
     response_model=AgentTokenLogOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -58,7 +58,7 @@ async def log_tokens(
 
 
 @router.get(
-    "/projects/{project_key}/agent-costs",
+    "/projects/{project_key}/agent-costs/",
     response_model=list[CostSummaryItem],
 )
 async def get_cost_summary(
@@ -74,7 +74,7 @@ async def get_cost_summary(
 
 
 @router.get(
-    "/projects/{project_key}/agent-costs/by-issue/{issue_ref}",
+    "/projects/{project_key}/agent-costs/by-issue/{issue_ref}/",
     response_model=IssueCostOut,
 )
 async def get_cost_per_issue(
@@ -94,7 +94,7 @@ async def get_cost_per_issue(
 
 
 @router.post(
-    "/projects/{project_key}/billing-rates",
+    "/projects/{project_key}/billing-rates/",
     response_model=BillingRateOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -110,7 +110,7 @@ async def create_billing_rate(
 
 
 @router.get(
-    "/projects/{project_key}/billing-rates",
+    "/projects/{project_key}/billing-rates/",
     response_model=list[BillingRateOut],
 )
 async def list_billing_rates(
@@ -124,7 +124,7 @@ async def list_billing_rates(
 
 
 @router.patch(
-    "/projects/{project_key}/billing-rates/{rate_id}",
+    "/projects/{project_key}/billing-rates/{rate_id}/",
     response_model=BillingRateOut,
 )
 async def update_billing_rate(
@@ -140,7 +140,7 @@ async def update_billing_rate(
 
 
 @router.delete(
-    "/projects/{project_key}/billing-rates/{rate_id}",
+    "/projects/{project_key}/billing-rates/{rate_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_billing_rate(
@@ -160,7 +160,7 @@ async def delete_billing_rate(
 
 
 @router.get(
-    "/projects/{project_key}/billing-report",
+    "/projects/{project_key}/billing-report/",
     response_model=BillingReportOut,
 )
 async def get_billing_report(

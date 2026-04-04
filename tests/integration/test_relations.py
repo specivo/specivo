@@ -33,7 +33,7 @@ from tests.factories.user import AdminUserFactory
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": "testpassword"},
     )
     assert resp.status_code == 200, resp.text
@@ -67,7 +67,7 @@ async def _create_issue(
         body["start_date"] = start_date
 
     resp = await client.post(
-        f"/api/v1/projects/{project_key}/issues",
+        f"/api/v1/projects/{project_key}/issues/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -87,7 +87,7 @@ async def _create_relation(
     if delay is not None:
         body["delay"] = delay
     resp = await client.post(
-        f"/api/v1/issues/{issue_ref}/relations",
+        f"/api/v1/issues/{issue_ref}/relations/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -96,7 +96,7 @@ async def _create_relation(
 
 async def _list_relations(client: AsyncClient, token: str, issue_ref: str) -> tuple[int, list]:
     resp = await client.get(
-        f"/api/v1/issues/{issue_ref}/relations",
+        f"/api/v1/issues/{issue_ref}/relations/",
         headers={"Authorization": f"Bearer {token}"},
     )
     return resp.status_code, resp.json()
@@ -104,7 +104,7 @@ async def _list_relations(client: AsyncClient, token: str, issue_ref: str) -> tu
 
 async def _delete_relation(client: AsyncClient, token: str, relation_id: int) -> int:
     resp = await client.delete(
-        f"/api/v1/relations/{relation_id}",
+        f"/api/v1/relations/{relation_id}/",
         headers={"Authorization": f"Bearer {token}"},
     )
     return resp.status_code
@@ -248,7 +248,7 @@ async def test_create_precedes_with_delay_reschedules(
 
     # Verify successor was rescheduled: 2026-04-04 + 0 + 1 = 2026-04-05
     resp = await admin_client.get(
-        f"/api/v1/issues/{b['key']}",
+        f"/api/v1/issues/{b['key']}/",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 200

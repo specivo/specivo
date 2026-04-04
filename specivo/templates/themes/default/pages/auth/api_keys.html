@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}API Keys - Specivo{% endblock %}
+{% block title %}API Keys - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
@@ -13,7 +13,7 @@
 
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">API Keys</h1>
-    <button class="btn btn-primary" @click="showCreate = !showCreate; newKey = null;">
+    <button class="sp-btn sp-btn-primary" @click="showCreate = !showCreate; newKey = null;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       New API Key
     </button>
@@ -35,10 +35,10 @@
             font-size: var(--sp-font-size-sm);
             word-break: break-all;
           " x-text="newKey"></code>
-          <button class="btn-sm" @click="copyKey()" x-text="copied ? 'Copied!' : 'Copy'"></button>
+          <button class="sp-btn-sm" @click="copyKey()" x-text="copied ? 'Copied!' : 'Copy'"></button>
         </div>
       </div>
-      <button class="btn-sm" @click="dismissNewKey()" style="align-self: start;">Dismiss</button>
+      <button class="sp-btn-sm" @click="dismissNewKey()" style="align-self: start;">Dismiss</button>
     </div>
   </template>
 
@@ -59,8 +59,8 @@
       </div>
       <div x-show="error" class="flash flash-error" style="margin-bottom: var(--sp-space-md);" x-text="error"></div>
       <div style="display: flex; gap: var(--sp-space-sm);">
-        <button class="btn btn-primary" type="submit" :disabled="loading" x-text="loading ? 'Creating...' : 'Create key'"></button>
-        <button class="btn btn-ghost" type="button" @click="showCreate = false; error = '';">Cancel</button>
+        <button class="sp-btn sp-btn-primary" type="submit" :disabled="loading" x-text="loading ? 'Creating...' : 'Create key'"></button>
+        <button class="sp-btn sp-btn-ghost" type="button" @click="showCreate = false; error = '';">Cancel</button>
       </div>
     </form>
   </div>
@@ -103,12 +103,12 @@
             </td>
             <td style="display: flex; gap: var(--sp-space-xs);">
               <button
-                class="btn-sm"
+                class="sp-btn-sm"
                 @click="toggleKey(key.id, key.is_active)"
                 x-text="key.is_active ? 'Deactivate' : 'Activate'"
               ></button>
               <button
-                class="btn-sm danger"
+                class="sp-btn-sm danger"
                 @click="deleteKey(key.id)"
               >Delete</button>
             </td>

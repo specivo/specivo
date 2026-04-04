@@ -31,7 +31,7 @@ class IssueCreate(BaseModel):
     parent_id: int | None = None
     start_date: date | None = None
     due_date: date | None = None
-    estimated_hours: Decimal | None = None
+    estimated_hours: Decimal | None = Field(None, ge=0)
     done_ratio: int = Field(default=0, ge=0, le=100)
     is_private: bool = False
     metadata: dict = Field(default_factory=dict)
@@ -60,7 +60,7 @@ class IssueUpdate(BaseModel):
     parent_id: int | None = None  # None = no change; 0 = move to root
     start_date: date | None = None
     due_date: date | None = None
-    estimated_hours: Decimal | None = None
+    estimated_hours: Decimal | None = Field(None, ge=0)
     done_ratio: int | None = Field(None, ge=0, le=100)
     is_private: bool | None = None
     metadata: dict | None = None

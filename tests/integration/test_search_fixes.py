@@ -34,7 +34,7 @@ pytestmark = pytest.mark.integration
 # Helpers
 # ---------------------------------------------------------------------------
 
-SEARCH_URL = "/api/v1/search"
+SEARCH_URL = "/api/v1/search/"
 
 
 async def _make_user(db: AsyncSession, login: str = "fix_user") -> User:
@@ -47,7 +47,7 @@ async def _make_user(db: AsyncSession, login: str = "fix_user") -> User:
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
@@ -134,7 +134,7 @@ async def _create_issue(
     }
     if description is not None:
         payload["description"] = description
-    resp = await client.post(f"/api/v1/projects/{project_key}/issues", json=payload)
+    resp = await client.post(f"/api/v1/projects/{project_key}/issues/", json=payload)
     assert resp.status_code == 201, resp.text
     return resp.json()
 

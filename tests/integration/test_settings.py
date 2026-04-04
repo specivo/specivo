@@ -22,7 +22,7 @@ from tests.factories.user import AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = "testpassword") -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -74,7 +74,7 @@ async def test_get_settings_admin(
 ) -> None:
     """Admin can GET /admin/settings and receives a dict."""
     resp = await client.get(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -91,7 +91,7 @@ async def test_get_settings_non_admin_forbidden(
 ) -> None:
     """Non-admin gets 403 when accessing settings."""
     resp = await client.get(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         headers={"Authorization": f"Bearer {regular_token}"},
     )
     assert resp.status_code == 403, resp.text
@@ -103,7 +103,7 @@ async def test_get_settings_unauthenticated(
     db_session: AsyncSession,
 ) -> None:
     """Unauthenticated request gets 401."""
-    resp = await client.get("/api/v1/admin/settings")
+    resp = await client.get("/api/v1/admin/settings/")
     assert resp.status_code == 401, resp.text
 
 
@@ -121,7 +121,7 @@ async def test_update_settings_admin(
 ) -> None:
     """Admin can PATCH /admin/settings to upsert settings."""
     resp = await client.patch(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         json={"app.name": "My Tracker", "theme": "dark"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -141,14 +141,14 @@ async def test_update_settings_is_upsert(
     """PATCH updates existing keys and adds new keys."""
     # First set
     await client.patch(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         json={"key1": "value1", "key2": "value2"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     # Update one key and add another
     resp = await client.patch(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         json={"key1": "updated", "key3": "new"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -168,13 +168,13 @@ async def test_update_settings_clear_value(
 ) -> None:
     """Passing null as a value clears the setting."""
     await client.patch(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         json={"clearable": "initial"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.patch(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         json={"clearable": None},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -192,7 +192,7 @@ async def test_update_settings_non_admin_forbidden(
 ) -> None:
     """Non-admin gets 403 when trying to update settings."""
     resp = await client.patch(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         json={"key": "value"},
         headers={"Authorization": f"Bearer {regular_token}"},
     )
@@ -208,13 +208,13 @@ async def test_get_returns_previously_set_values(
 ) -> None:
     """Settings set via PATCH are returned by GET."""
     await client.patch(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         json={"persist_test": "persisted_value"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
     resp = await client.get(
-        "/api/v1/admin/settings",
+        "/api/v1/admin/settings/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text

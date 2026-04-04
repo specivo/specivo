@@ -1,101 +1,188 @@
-"""Web admin pages: dashboard, workflows, settings, agent groups, kill switch."""
+"""Web admin pages: dashboard, workflows, settings, email, agent groups, kill switch."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
-from sqlalchemy import func, select
+from fastapi.responses import HTMLResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.config import get_settings
 from specivo.core.database import get_db
-from specivo.services.group_policy_service import GroupPolicyService
-from specivo.services.kill_switch_service import KillSwitchService
+from specivo.models.user import User
+from specivo.models.user import User as UserModel
 from specivo.services.settings_service import SettingsService
 from specivo.services.workflow_service import WorkflowService
 from specivo.web.deps import get_current_user_optional, get_templates
 
-if TYPE_CHECKING:
-    from specivo.models.user import User
-
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 
-_workflow_svc = WorkflowService()
 _settings_svc = SettingsService()
-_group_svc = GroupPolicyService()
-_kill_svc = KillSwitchService()
+_workflow_svc = WorkflowService()
 
 
-async def _require_admin(request: Request, db: AsyncSession) -> User | None:
-    """Check auth and admin role. Returns user or None (caller should return 403/302)."""
+# ---------------------------------------------------------------------------
+# Shared admin dependency
+# ---------------------------------------------------------------------------
+
+
+async def require_admin(
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> User:
+    """Dependency: return the admin user or abort with redirect/403.
+
+    Uses HTTPException with headers trick for redirect; raises 403 for non-admins.
+    """
+    from fastapi import HTTPException
+
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return None
-    user = cast("User", user_obj)
-    if not user.is_admin:
-        return None
-    return user
+        raise HTTPException(status_code=307, headers={"Location": "/login/"})
+    if not user_obj.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return user_obj  # type: ignore[return-value]
 
 
-@router.get("/admin", response_class=HTMLResponse)
+# ---------------------------------------------------------------------------
+# Dashboard
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/", response_class=HTMLResponse)
 async def admin_dashboard(
     request: Request,
+    user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the admin dashboard."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login", status_code=302)
-    user = cast("User", user_obj)
-
-    if not user.is_admin:
-        return JSONResponse({"detail": "Admin access required"}, status_code=403)
-
-    # Gather stats
-    from specivo.models.agent_session import AgentSession
-    from specivo.models.kill_switch import KillEvent
-    from specivo.models.project import Project
-    from specivo.models.user import User as UserModel
-
-    total_users = (await db.execute(select(func.count()).select_from(UserModel))).scalar_one()
-    active_projects = (
-        await db.execute(select(func.count()).select_from(Project).where(Project.status == 1))
-    ).scalar_one()
-    agent_sessions = (await db.execute(select(func.count()).select_from(AgentSession))).scalar_one()
-    kill_events = (await db.execute(select(func.count()).select_from(KillEvent))).scalar_one()
-
+    stats = await _settings_svc.get_dashboard_stats(db)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/admin/dashboard.html",
+        context={"user": user, "active_page": "admin", "stats": stats},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Users
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/users/", response_class=HTMLResponse)
+async def admin_users(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the admin users page."""
+    from specivo.models.role import Role
+
+    result = await db.execute(
+        select(UserModel).order_by(UserModel.id)
+    )
+    users = list(result.scalars().all())
+
+    roles_result = await db.execute(
+        select(Role).where(Role.builtin == 0, Role.assignable.is_(True)).order_by(Role.position)
+    )
+    roles = [{"id": r.id, "name": r.name} for r in roles_result.scalars().all()]
+
+    users_data = [
+        {
+            "id": u.id,
+            "login": u.login,
+            "email": u.email,
+            "display_name": u.display_name,
+            "is_admin": u.is_admin,
+            "is_service_account": u.is_service_account,
+            "status": u.status,
+            "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
+            "avatar_color": u.preferences.get("avatar_color", "#c49a3c"),
+        }
+        for u in users
+    ]
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/users.html",
         context={
             "user": user,
             "active_page": "admin",
-            "stats": {
-                "total_users": total_users,
-                "active_projects": active_projects,
-                "agent_sessions": agent_sessions,
-                "kill_events": kill_events,
-            },
+            "users_data": users_data,
+            "roles": roles,
         },
     )
 
 
-@router.get("/admin/workflows", response_class=HTMLResponse)
+# ---------------------------------------------------------------------------
+# Workflows
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/projects/", response_class=HTMLResponse)
+async def admin_projects(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the admin projects management page."""
+    from specivo.core.constants import DEFAULT_PROJECT_COLORS
+    from specivo.services.project_service import ProjectService
+
+    svc = ProjectService()
+    # Load all projects including archived (status 9)
+    all_projects = await svc.list_all_admin(db, user)
+    project_ids = [p.id for p in all_projects]
+    stats = await svc.load_project_stats(db, project_ids) if project_ids else {}
+
+    # Serialize for Alpine.js
+    projects_data = []
+    for p in all_projects:
+        s = stats.get(p.id, {})
+        issue_count = s.get("open_count", 0) + s.get("closed_count", 0)
+        projects_data.append({
+            "id": p.id,
+            "key": p.key,
+            "identifier": p.identifier,
+            "name": p.name,
+            "description": p.description or "",
+            "color": p.color or "#c49a3c",
+            "status": p.status,
+            "issue_count": issue_count,
+            "member_count": s.get("member_count", 0),
+            "has_issues": issue_count > 0,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        })
+
+    # For parent dropdown (active projects only)
+    active_projects = [{"key": p.key, "name": p.name} for p in all_projects if p.status != 9]
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/projects.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "projects_data": projects_data,
+            "all_projects": active_projects,
+            "project_colors": DEFAULT_PROJECT_COLORS,
+        },
+    )
+
+
+@router.get("/admin/workflows/", response_class=HTMLResponse)
 async def admin_workflows(
     request: Request,
+    user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the workflow management page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login", status_code=302)
-    user = cast("User", user_obj)
-
-    if not user.is_admin:
-        return JSONResponse({"detail": "Admin access required"}, status_code=403)
-
     from specivo.models.lookups import IssueStatus, Tracker
     from specivo.models.role import Role
 
@@ -117,85 +204,121 @@ async def admin_workflows(
     )
 
 
-@router.get("/admin/settings", response_class=HTMLResponse)
+# ---------------------------------------------------------------------------
+# Settings
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/settings/", response_class=HTMLResponse)
 async def admin_settings(
     request: Request,
+    user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the settings management page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login", status_code=302)
-    user = cast("User", user_obj)
-
-    if not user.is_admin:
-        return JSONResponse({"detail": "Admin access required"}, status_code=403)
-
     settings = await _settings_svc.get_all(db)
-
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/admin/settings.html",
+        context={"user": user, "active_page": "admin", "settings": settings},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Email
+# ---------------------------------------------------------------------------
+
+
+def mask_smtp_host(host: str) -> str:
+    """Mask SMTP hostname, keeping first char and domain parts visible."""
+    parts = host.split(".")
+    if len(parts) <= 1:
+        return host[0] + "*" * (len(host) - 1) if host else host
+    first = parts[0]
+    masked_first = first[0] + "*" * (len(first) - 1) if first else first
+    return ".".join([masked_first, *parts[1:]])
+
+
+def mask_smtp_user(user: str) -> str:
+    """Mask SMTP username, showing first 4 and last 3 chars."""
+    if len(user) <= 7:
+        return user[:1] + "*" * (len(user) - 1)
+    return user[:4] + "*" * (len(user) - 7) + user[-3:]
+
+
+@router.get("/admin/email/", response_class=HTMLResponse)
+async def admin_email(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+) -> Response:
+    """Render the admin email configuration and test page."""
+    settings = get_settings()
+
+    smtp_configured = settings.smtp_host != "localhost" and bool(settings.smtp_user)
+
+    smtp_info = {
+        "host": mask_smtp_host(settings.smtp_host) if smtp_configured else settings.smtp_host,
+        "port": settings.smtp_port,
+        "user": mask_smtp_user(settings.smtp_user) if smtp_configured else "",
+        "from": settings.smtp_from,
+        "tls": settings.smtp_tls,
+        "configured": smtp_configured,
+    }
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/email.html",
         context={
             "user": user,
             "active_page": "admin",
-            "settings": settings,
+            "smtp": smtp_info,
         },
     )
 
 
-@router.get("/admin/agent-groups", response_class=HTMLResponse)
+# ---------------------------------------------------------------------------
+# Agent Groups (enterprise)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/agent-groups/", response_class=HTMLResponse)
 async def admin_agent_groups(
     request: Request,
+    user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the agent groups management page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login", status_code=302)
-    user = cast("User", user_obj)
+    from specivo.services.group_policy_service import GroupPolicyService
 
-    if not user.is_admin:
-        return JSONResponse({"detail": "Admin access required"}, status_code=403)
-
-    groups = await _group_svc.list_groups(db)
-
+    groups = await GroupPolicyService().list_groups(db)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/admin/agent_groups.html",
-        context={
-            "user": user,
-            "active_page": "admin",
-            "groups": groups,
-        },
+        context={"user": user, "active_page": "admin", "groups": groups},
     )
 
 
-@router.get("/admin/kill-switch", response_class=HTMLResponse)
+# ---------------------------------------------------------------------------
+# Kill Switch (enterprise)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/kill-switch/", response_class=HTMLResponse)
 async def admin_kill_switch(
     request: Request,
+    user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the kill switch page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login", status_code=302)
-    user = cast("User", user_obj)
+    from specivo.services.kill_switch_service import KillSwitchService
 
-    if not user.is_admin:
-        return JSONResponse({"detail": "Admin access required"}, status_code=403)
-
-    events = await _kill_svc.list_kill_events(db)
-
+    events = await KillSwitchService().list_kill_events(db)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/admin/kill_switch.html",
-        context={
-            "user": user,
-            "active_page": "admin",
-            "events": events,
-        },
+        context={"user": user, "active_page": "admin", "events": events},
     )

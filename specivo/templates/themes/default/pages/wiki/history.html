@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}History: {{ wiki_page.title }} - Wiki - {{ project.name }} - Specivo{% endblock %}
+{% block title %}History: {{ wiki_page.title }} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -14,12 +14,12 @@
 
 <div class="history-page-header">
   <h1 class="history-page-title">History: {{ wiki_page.title }}</h1>
-  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}" class="btn btn-ghost">Back to page</a>
+  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/" class="sp-btn sp-btn-ghost">Back to page</a>
 </div>
 
 <div class="compare-toolbar">
   <span class="compare-hint">Select two versions to compare</span>
-  <button class="btn btn-compare" id="btn-compare">Compare Selected</button>
+  <button class="sp-btn sp-btn-compare" id="btn-compare">Compare Selected</button>
 </div>
 
 {% if versions %}
@@ -37,14 +37,14 @@
   <tbody>
     {% for v in versions %}
     <tr>
-      <td style="text-align:center"><input type="checkbox" class="version-check" value="{{ v.version }}"></td>
+      <td style="text-align:center"><input type="checkbox" class="version-check" value="{{ v.version }}" style="accent-color:var(--sp-accent);width:18px;height:18px;cursor:pointer;"></td>
       <td>
         <span class="version-num">#{{ v.version }}</span>
         {% if loop.first %}<span class="version-current-badge">Current</span>{% endif %}
       </td>
       <td>
         <div class="version-author">
-          <span class="avatar-sm" style="width:24px;height:24px;font-size:9px">{{ (v.author.display_name or v.author.login)[:2] | upper if v.author else '?' }}</span>
+          <span class="avatar-sm" style="width:24px;height:24px;font-size:9px;{% if v.author and v.author.avatar_url %}background-image:url('{{ v.author.avatar_url }}');background-size:cover;background-position:center;color:transparent;{% elif v.author and v.author.preferences.avatar_color|default('') %}background:{{ v.author.preferences.avatar_color }};{% endif %}">{{ (v.author.display_name or v.author.login)[:2] | upper if v.author else '?' }}</span>
           <span class="version-author-name">{{ v.author.display_name or v.author.login if v.author else 'Unknown' }}</span>
         </div>
       </td>
@@ -52,7 +52,7 @@
       <td><span class="version-comment">{{ v.comments or '' }}</span></td>
       <td>
         <div class="version-actions">
-          <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}?version={{ v.version }}">View</a>
+          <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/?version={{ v.version }}">View</a>
           {% if not loop.first %}
           <a href="#" class="restore-link">Restore</a>
           {% endif %}

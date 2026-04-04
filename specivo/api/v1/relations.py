@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
+from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.relation import RelationCreate, RelationOut
@@ -19,7 +20,7 @@ _relation_service = RelationService()
 
 
 @router.get(
-    "/issues/{issue_ref}/relations",
+    "/issues/{issue_ref}/relations/",
     response_model=list[RelationOut],
 )
 async def list_relations(
@@ -39,7 +40,7 @@ async def list_relations(
 
 
 @router.post(
-    "/issues/{issue_ref}/relations",
+    "/issues/{issue_ref}/relations/",
     response_model=RelationOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -84,13 +85,14 @@ async def create_relation(
 
 
 @router.delete(
-    "/relations/{relation_id}",
+    "/relations/{relation_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_relation(
     relation_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit("relation_delete", max_requests=30, window_seconds=60)),
 ) -> None:
     """Delete a relation by its ID."""
     await _relation_service.delete(db, relation_id, current_user)

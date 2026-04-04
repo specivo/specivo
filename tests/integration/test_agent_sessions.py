@@ -51,7 +51,7 @@ async def _make_service_account(db: AsyncSession, **kw):
 
 async def _login(client: AsyncClient, login: str) -> str:
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, resp.text
@@ -84,7 +84,7 @@ class TestAgentSessionCreatedOnApiKeyUse:
 
         # Make a request using the API key (any authenticated endpoint)
         resp = await client.get(
-            f"/api/v1/projects/{project.key}/agent-sessions",
+            f"/api/v1/projects/{project.key}/agent-sessions/",
             headers={
                 "Authorization": f"Bearer {raw_key}",
                 "User-Agent": "claude-code/1.0 (Claude opus-4)",
@@ -114,7 +114,7 @@ class TestSessionModelNameParsed:
         await db_session.commit()
 
         resp = await client.get(
-            f"/api/v1/projects/{project.key}/agent-sessions",
+            f"/api/v1/projects/{project.key}/agent-sessions/",
             headers={
                 "Authorization": f"Bearer {raw_key}",
                 "User-Agent": "claude-code/1.0 (Claude opus-4)",
@@ -146,7 +146,7 @@ class TestListSessions:
 
         # First request — creates session
         await client.get(
-            f"/api/v1/projects/{project.key}/agent-sessions",
+            f"/api/v1/projects/{project.key}/agent-sessions/",
             headers={
                 "Authorization": f"Bearer {raw_key}",
                 "User-Agent": "claude-code/1.0",
@@ -156,7 +156,7 @@ class TestListSessions:
         # Now list via admin JWT
         admin_token = await _login(client, "admin_list_user")
         resp = await client.get(
-            f"/api/v1/projects/{project.key}/agent-sessions",
+            f"/api/v1/projects/{project.key}/agent-sessions/",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200

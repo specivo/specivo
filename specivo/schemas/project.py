@@ -15,6 +15,9 @@ _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9-]{0,98}[a-z0-9]$|^[a-z]$")
 _KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
 
 
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
 class ProjectCreate(BaseModel):
     name: str
     identifier: str
@@ -22,6 +25,15 @@ class ProjectCreate(BaseModel):
     description: str | None = None
     parent_key: str | None = None
     is_public: bool = True
+    color: str | None = None
+    modules: list[str] | None = None
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: str | None) -> str | None:
+        if v is not None and not _HEX_COLOR_RE.match(v):
+            raise ValueError("color must be a valid hex color (e.g. #c49a3c)")
+        return v
 
     @field_validator("identifier")
     @classmethod
@@ -61,6 +73,14 @@ class ProjectUpdate(BaseModel):
     description: str | None = None
     is_public: bool | None = None
     status: int | None = None
+    color: str | None = None
+
+    @field_validator("color")
+    @classmethod
+    def validate_color(cls, v: str | None) -> str | None:
+        if v is not None and not _HEX_COLOR_RE.match(v):
+            raise ValueError("color must be a valid hex color (e.g. #c49a3c)")
+        return v
 
     @field_validator("name")
     @classmethod
@@ -96,8 +116,52 @@ class ProjectOut(BaseModel):
     inherit_members: bool
     status: int
     issue_sequence: int
+    color: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Rename schemas (admin-only)
+# ---------------------------------------------------------------------------
+
+
+class ProjectRenameRequest(BaseModel):
+    new_key: str | None = None
+    new_identifier: str | None = None
+    reason: str | None = None
+
+    @field_validator("new_key")
+    @classmethod
+    def validate_new_key(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip().upper()
+            if not _KEY_RE.match(v):
+                raise ValueError("new_key must be 2-10 uppercase chars, start with a letter")
+        return v
+
+    @field_validator("new_identifier")
+    @classmethod
+    def validate_new_identifier(cls, v: str | None) -> str | None:
+        if v is not None:
+            v = v.strip().lower()
+            if not _IDENTIFIER_RE.match(v):
+                raise ValueError("new_identifier must be lowercase, start with a letter, letters/digits/hyphens only")
+            if len(v) > 100:
+                raise ValueError("new_identifier must be 100 characters or fewer")
+        return v
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> ProjectRenameRequest:
+        if self.new_key is None and self.new_identifier is None:
+            raise ValueError("At least one of new_key or new_identifier must be provided")
+        return self
+
+
+class ProjectRenameOut(ProjectOut):
+    old_key: str | None = None
+    old_identifier: str | None = None
+    issues_rekeyed: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -111,6 +175,16 @@ class MemberAdd(BaseModel):
 
     @model_validator(mode="after")
     def check_role_ids(self) -> MemberAdd:
+        if not self.role_ids:
+            raise ValueError("role_ids must contain at least one role")
+        return self
+
+
+class MemberUpdateRoles(BaseModel):
+    role_ids: list[int]
+
+    @model_validator(mode="after")
+    def check_role_ids(self) -> MemberUpdateRoles:
         if not self.role_ids:
             raise ValueError("role_ids must contain at least one role")
         return self

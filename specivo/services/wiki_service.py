@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from specivo.core.exceptions import AppError, ConflictError, NotFoundError
+from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 from specivo.services.wiki_utils import slugify as _slugify
@@ -32,10 +32,18 @@ class WikiService:
         if wiki is not None:
             return wiki
 
-        wiki = Wiki(project_id=project_id)
-        session.add(wiki)
-        await session.flush()
-        return wiki
+        try:
+            wiki = Wiki(project_id=project_id)
+            session.add(wiki)
+            await session.flush()
+            return wiki
+        except IntegrityError:
+            await session.rollback()
+            result = await session.execute(stmt)
+            wiki = result.scalar_one_or_none()
+            if wiki is not None:
+                return wiki
+            raise
 
     async def create_page(
         self,
@@ -183,11 +191,36 @@ class WikiService:
 
         return page, content
 
+    async def ensure_home_page(self, session: AsyncSession, project_id: int, author: User) -> WikiPage:
+        """Ensure the Home page exists for the project's wiki.
+
+        Auto-creates it if missing. Returns the Home page.
+        """
+        wiki = await self.get_or_create_wiki(session, project_id)
+        home = await self._get_page_by_slug(session, wiki.id, "home")
+        if home is not None:
+            return home
+
+        page, _content = await self.create_page(
+            session,
+            project_id,
+            "Home",
+            "Welcome to the wiki. Edit this page to get started.",
+            author,
+            comments="Auto-created home page",
+        )
+        return page
+
     async def delete_page(self, session: AsyncSession, page_id: int) -> None:
-        """Delete a wiki page and all its content versions."""
+        """Delete a wiki page and all its content versions.
+
+        The Home page (slug='home') cannot be deleted.
+        """
         page = await self._get_page_by_id(session, page_id)
         if page is None:
             raise NotFoundError("Wiki page not found")
+        if page.slug == "home":
+            raise ValidationError("The Home page cannot be deleted")
         await session.delete(page)
         await session.flush()
 
@@ -268,6 +301,14 @@ class WikiService:
 
         await session.refresh(page)
         return page
+
+    @staticmethod
+    def build_page_tree(pages: list[WikiPage]) -> dict[int | None, list[WikiPage]]:
+        """Group pages by parent_id for tree rendering."""
+        tree: dict[int | None, list[WikiPage]] = {}
+        for p in pages:
+            tree.setdefault(p.parent_id, []).append(p)
+        return tree
 
     # -----------------------------------------------------------------------
     # Private helpers

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
 
-{% block title %}{{ issue.display_key }} - {{ issue.subject }} - Specivo{% endblock %}
+{% block title %}{{ issue.display_key }} - {{ issue.subject }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -23,34 +23,306 @@
       <h1 class="issue-title">{{ issue.subject }}</h1>
     </div>
 
-    {% if issue.description %}
-    <div class="description-card">
-      {{ issue.description | safe }}
+    <div x-data='descriptionEditor({ description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }} })'>
+      <div x-show="!editing" class="description-card" style="position:relative;">
+        <div style="position:absolute;top:var(--sp-space-md);right:var(--sp-space-md);z-index:1;display:flex;gap:var(--sp-space-xs);">
+          {% set desc_edits = [] %}
+          {% for j in journals if journals is defined %}{% for d in j.details if d.prop_key == 'description' %}{% if desc_edits.append(j) %}{% endif %}{% endfor %}{% endfor %}
+          {% if desc_edits %}
+          <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ desc_edits[-1].id }}/" class="sp-btn sp-btn-sm sp-btn-ghost" style="font-size:var(--sp-font-size-xs);">History ({{ desc_edits | length }})</a>
+          {% endif %}
+          <button class="sp-btn sp-btn-sm sp-btn-primary" @click="startEdit()">Edit</button>
+        </div>
+        <div style="padding-right:120px;">
+        {% if issue.description %}
+        {{ issue.description | markdown }}
+        {% else %}
+        <span style="color:var(--sp-text-muted);font-style:italic;">No description.</span>
+        {% endif %}
+        </div>
+      </div>
+      <div x-show="editing" x-cloak>
+        <div class="description-card" style="padding:var(--sp-space-md);">
+          <textarea x-model="draft" style="width:100%;min-height:200px;padding:var(--sp-space-sm) var(--sp-space-md);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm);line-height:1.7;background:var(--sp-bg-input);color:var(--sp-text-primary);resize:vertical;outline:none;box-sizing:border-box;" @keydown.escape="cancelEdit()"></textarea>
+          <div class="form-hint" style="margin-bottom:var(--sp-space-sm);">Supports Markdown. Use @username to mention.</div>
+          <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);">
+            <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="cancelEdit()">Cancel</button>
+            <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="saving" @click="save()">Save</button>
+          </div>
+        </div>
+      </div>
     </div>
-    {% endif %}
 
     {# Activity tabs #}
-    <div class="activity-tabs">
-      <div class="activity-tab active">Activity <span class="tab-count">{{ journals | length if journals is defined else 0 }}</span></div>
-      <div class="activity-tab">Time</div>
-      <div class="activity-tab">Relations</div>
-      <div class="activity-tab">Attachments</div>
-    </div>
+    <div class="activity-tabs" x-data="{ tab: 'activity' }">
+      <div class="activity-tabs-header">
+        <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">Activity <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">Time{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
+        <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">Relations{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
+        <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'" href="#">Attachments{% if attachment_count %} <span class="tab-count">{{ attachment_count }}</span>{% endif %}</a>
+      </div>
 
-    {# Activity content #}
-    <div id="issue-activity"
-         hx-get="/partials/issues/{{ issue.display_key }}/activity"
-         hx-trigger="none"
-         hx-swap="innerHTML">
-      {% include "pages/issues/_activity.html" %}
+      {# Activity content #}
+      <div x-show="tab === 'activity'">
+        {% if activity_per_page_options is defined and activity_total is defined and activity_total > activity_per_page_options[0] %}
+        <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-sm);">
+          <select style="padding:var(--sp-space-xs);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-xs);background:var(--sp-bg-surface);color:var(--sp-text-muted);"
+                  onchange="fetch('/api/v1/users/me/preferences/activity-per-page/?per_page=' + this.value, { method: 'PATCH', headers: {'Content-Type': 'application/json'} }).then(function(){ window.location.search = ''; })">
+            {% for opt in activity_per_page_options %}
+            <option value="{{ opt }}" {{ 'selected' if activity_per_page == opt }}>{{ opt }} per page</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% endif %}
+
+        <div id="issue-activity"
+             hx-get="/partials/issues/{{ issue.display_key }}/activity/?activity_page={{ activity_page }}"
+             hx-trigger="refresh-activity from:body"
+             hx-swap="innerHTML">
+          {% include "pages/issues/_activity.html" %}
+        </div>
+
+        {# Activity pagination #}
+        {% if activity_total_pages is defined and activity_total_pages > 1 %}
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:var(--sp-space-lg);padding-top:var(--sp-space-md);border-top:1px solid var(--sp-border);">
+          <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">
+            Showing {{ ((activity_page - 1) * activity_per_page) + 1 }}–{{ [activity_page * activity_per_page, activity_total] | min }} of {{ activity_total }}
+          </div>
+          <div style="display:flex;align-items:center;gap:var(--sp-space-md);">
+            {% if activity_page > 1 %}
+            <a href="?activity_page={{ activity_page - 1 }}" class="sp-btn sp-btn-sm sp-btn-ghost">Previous</a>
+            {% endif %}
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">Page {{ activity_page }} of {{ activity_total_pages }}</span>
+            {% if activity_page < activity_total_pages %}
+            <a href="?activity_page={{ activity_page + 1 }}" class="sp-btn sp-btn-sm sp-btn-ghost">Next</a>
+            {% endif %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+
+      {# Time entries tab #}
+      <div x-show="tab === 'time'">
+        <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }} })'>
+          {# Log time toggle button #}
+          <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
+            <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Log time'"></button>
+          </div>
+
+          {# Inline log time form #}
+          <div x-show="showForm" x-cloak style="margin-top:var(--sp-space-sm);">
+            <div class="card" style="padding:var(--sp-space-md);">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:var(--sp-space-sm);">
+                <div>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Hours</label>
+                  <input type="number" step="1" min="0" x-model="hours" placeholder="0"
+                         style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+                </div>
+                <div>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Minutes</label>
+                  <input type="number" step="1" min="0" max="59" x-model="minutes" placeholder="0"
+                         style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+                </div>
+                <div>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Activity</label>
+                  <select x-model="activityId"
+                          style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+                    <option value="">-- Select --</option>
+                    {% for a in activities if activities is defined %}
+                    <option value="{{ a.id }}">{{ a.name }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Date</label>
+                  <input type="date" x-model="spentOn"
+                         style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+                </div>
+              </div>
+              <div style="margin-top:var(--sp-space-sm);">
+                <input type="text" x-model="comments" placeholder="Comment (optional)"
+                       style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-sm);">
+                <template x-if="error"><span style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);" x-text="error"></span></template>
+                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || totalHours <= 0 || !activityId" @click="submit()">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% if time_entries %}
+        <table class="sp-table" style="width: 100%; margin-top: var(--sp-space-md);">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>User</th>
+              <th>Hours</th>
+              <th>Activity</th>
+              <th>Comment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for te in time_entries %}
+            <tr>
+              <td style="font-size:var(--sp-font-size-sm);">{{ te.spent_on.strftime('%Y-%m-%d') if te.spent_on else '--' }}</td>
+              <td style="font-size:var(--sp-font-size-sm);">
+                <div style="display:flex;align-items:center;gap:var(--sp-space-xs);">
+                  {{ avatar(te.user.login if te.user else '?', size='xs', color=te.user.preferences.avatar_color|default('') if te.user else '', avatar_url=te.user.avatar_url|default('') if te.user else '') }}
+                  {{ te.user.login if te.user else 'Unknown' }}
+                </div>
+              </td>
+              <td style="font-size:var(--sp-font-size-sm);font-family:var(--sp-font-mono);font-weight:600;">{{ te.hours }}h</td>
+              <td style="font-size:var(--sp-font-size-sm);">
+                {% if te.activity %}<span class="badge-status">{{ te.activity.name }}</span>{% else %}--{% endif %}
+              </td>
+              <td style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">{{ te.comments or '' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="2" style="font-weight:600;font-size:var(--sp-font-size-sm);">Total</td>
+              <td style="font-family:var(--sp-font-mono);font-weight:600;font-size:var(--sp-font-size-sm);">{{ time_logged if time_logged is defined else '0.0' }}h / {{ '%.1f' | format(issue.estimated_hours) if issue.estimated_hours else '--' }}h est.</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+        {% else %}
+        <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
+          No time entries logged.
+        </div>
+        {% endif %}
+      </div>
+
+      {# Relations tab #}
+      <div x-show="tab === 'relations'">
+        <div x-data='relationForm({ issueKey: "{{ issue.display_key }}" })'>
+          <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
+            <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Add relation'"></button>
+          </div>
+
+          {# Inline add relation form #}
+          <div x-show="showForm" x-cloak style="margin-top:var(--sp-space-sm);">
+            <div class="card" style="padding:var(--sp-space-md);">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-space-sm);">
+                <div>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Related Issue</label>
+                  <input type="text" x-model="issueToKey" placeholder="e.g. PROJ-42"
+                         style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+                </div>
+                <div>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Type</label>
+                  <select x-model="relationType"
+                          style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+                    <option value="relates">Relates to</option>
+                    <option value="blocks">Blocks</option>
+                    <option value="blocked">Blocked by</option>
+                    <option value="duplicates">Duplicates</option>
+                    <option value="precedes">Precedes</option>
+                    <option value="follows">Follows</option>
+                    <option value="copied_to">Copied to</option>
+                    <option value="copied_from">Copied from</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-sm);">
+                <template x-if="error"><span style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);" x-text="error"></span></template>
+                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || !issueToKey.trim()" @click="submit()">Add</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% if relations %}
+        <div style="display: flex; flex-direction: column; gap: var(--sp-space-sm); margin-top: var(--sp-space-md);">
+          {% for rel in relations %}
+          <div class="card" style="padding: var(--sp-space-sm) var(--sp-space-md); display:flex; align-items:center; gap: var(--sp-space-sm);">
+            <span class="badge-status" style="font-size: var(--sp-font-size-xs);">{{ rel.relation_type | replace('_', ' ') | title }}</span>
+            <a href="/projects/{{ project.key }}/issues/{{ rel.issue_to_key }}/" style="font-weight: 600; font-size: var(--sp-font-size-sm); color: var(--sp-accent);">{{ rel.issue_to_key }}</a>
+            {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
+            <span style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary);">{{ rel.issue_to_subject }}</span>
+            {% endif %}
+            {% if rel.issue_to_status is defined and rel.issue_to_status %}
+            <span class="badge-status" style="font-size: var(--sp-font-size-xs);">{{ rel.issue_to_status }}</span>
+            {% endif %}
+            {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">({{ rel.delay }} days)</span>{% endif %}
+            <a style="margin-left:auto;color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);"
+               @click="fetch('/api/v1/relations/{{ rel.id }}/', { method: 'DELETE', headers: {'Content-Type': 'application/json'} }).then(function(r){ if(r.ok || r.status===204) window.location.reload(); })">Remove</a>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
+          No relations.
+        </div>
+        {% endif %}
+      </div>
+
+      {# Attachments tab #}
+      <div x-show="tab === 'attachments'">
+        <div x-data='attachmentForm({ issueId: {{ issue.id }} })'>
+          <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
+            <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Attach file'"></button>
+          </div>
+
+          {# Inline upload form #}
+          <div x-show="showForm" x-cloak style="margin-top:var(--sp-space-sm);">
+            <div class="card" style="padding:var(--sp-space-md);">
+              <div>
+                <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">File</label>
+                <input type="file" @change="selectFile($event)"
+                       style="font-size:var(--sp-font-size-sm);">
+              </div>
+              <div style="margin-top:var(--sp-space-sm);">
+                <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Description (optional)</label>
+                <input type="text" x-model="description" placeholder="Brief description"
+                       style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-sm);">
+                <template x-if="error"><span style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);" x-text="error"></span></template>
+                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || !file" @click="submit()">Upload</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {% if attachments %}
+        <div style="display: flex; flex-direction: column; gap: var(--sp-space-sm); margin-top: var(--sp-space-md);">
+          {% for att in attachments %}
+          <div class="card" style="padding: var(--sp-space-sm) var(--sp-space-md); display: flex; align-items: center; gap: var(--sp-space-sm);">
+            <div class="sp-file-icon">{{ att.filename.rsplit('.', 1)[-1][:4] if '.' in att.filename else '?' }}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:var(--sp-font-size-sm);">{{ att.filename }}</div>
+              <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">
+                {{ (att.filesize / 1024) | round(1) }} KB
+                {% if att.author %} · {{ att.author.login if att.author.login is defined else att.author }}{% endif %}
+                · {{ att.created_at | timeago }}
+              </div>
+              {% if att.description %}
+              <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-secondary);margin-top:2px;">{{ att.description }}</div>
+              {% endif %}
+            </div>
+            <div style="display:flex;gap:var(--sp-space-sm);">
+              <a href="/api/v1/attachments/{{ att.id }}/download/" class="sp-btn sp-btn-sm sp-btn-ghost" style="font-size:var(--sp-font-size-xs);">Download</a>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
+          No attachments.
+        </div>
+        {% endif %}
+      </div>
     </div>
 
     {# Comment form #}
-    <div class="comment-form" x-data="commentForm({ displayKey: {{ issue.display_key | tojson }} })">
+    <div class="comment-form" x-data='commentForm({ displayKey: {{ issue.display_key | tojson }} })'>
       <textarea x-model="notes" placeholder="Write a comment (Markdown supported)..."></textarea>
       <div class="comment-form-footer">
-        <span class="hint">Markdown supported</span>
-        <button class="btn btn-primary"
+        <span class="hint">Supports Markdown. Use @username to mention.</span>
+        <button class="sp-btn sp-btn-primary"
                 :disabled="submitting || !notes.trim()"
                 @click="submit()">
           Comment

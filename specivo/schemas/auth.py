@@ -15,6 +15,7 @@ class LoginRequest(BaseModel):
 
     login: str
     password: str = Field(max_length=1024)
+    remember: bool = False
 
 
 class TokenResponse(BaseModel):
@@ -91,3 +92,21 @@ class ApiKeyPatch(BaseModel):
     """Request body for PATCH /my/api-keys/{id} — toggle active state."""
 
     is_active: bool
+
+
+# ---------------------------------------------------------------------------
+# Password reset schemas
+# ---------------------------------------------------------------------------
+
+
+class ForgotPasswordRequest(BaseModel):
+    """Request body for POST /auth/forgot-password."""
+
+    email: str = Field(max_length=255)
+
+
+class ResetPasswordRequest(BaseModel):
+    """Request body for POST /auth/reset-password."""
+
+    token: str
+    new_password: str = Field(min_length=8, max_length=1024)

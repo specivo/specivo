@@ -11,8 +11,10 @@ class NotificationPreferenceUpdate(BaseModel):
     """Payload for creating or updating a notification preference."""
 
     event_type: str = Field(min_length=1, max_length=50)
-    email_enabled: bool
-    in_app_enabled: bool = True
+    channels: dict[str, bool] = Field(
+        default_factory=dict,
+        description='Per-channel enablement, e.g. {"email": true, "in_app": false}',
+    )
     project_id: int | None = None
 
 
@@ -23,8 +25,7 @@ class NotificationPreferenceOut(BaseModel):
     user_id: int
     project_id: int | None
     event_type: str
-    email_enabled: bool
-    in_app_enabled: bool
+    channels: dict[str, bool]
     created_at: datetime
     updated_at: datetime
 

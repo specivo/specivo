@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}Diff: v{{ from_version }} → v{{ to_version }} - {{ wiki_page.title }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
+  {"label": "History", "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/history"},
+  {"label": "Diff"}
+]) }}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-space-xl);">
+  <h1 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-xl);font-weight:700;">
+    Comparing version {{ from_version }} → {{ to_version }}
+  </h1>
+  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">Back to history</a>
+</div>
+
+{% if diff_lines %}
+<div class="card" style="padding:0;overflow:hidden;">
+  <div style="margin:0;padding:var(--sp-space-lg);background:#0d0b20;color:#d4cfc0;font-family:var(--sp-font-mono);font-size:var(--sp-font-size-sm);line-height:1.7;overflow-x:auto;white-space:pre-wrap;word-break:break-word;">
+    {% for line in diff_lines %}{% if line.startswith('---') or line.startswith('+++') %}<div style="color:#8a8a9a;">{{ line | e }}</div>{% elif line.startswith('@@') %}<div style="color:#7c8cc4;">{{ line | e }}</div>{% elif line.startswith('+') %}<div style="color:#6ec87a;background:rgba(110,200,122,0.1);">{{ line | e }}</div>{% elif line.startswith('-') %}<div style="color:#e87272;background:rgba(232,114,114,0.1);">{{ line | e }}</div>{% else %}<div>{{ line | e }}</div>{% endif %}{% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+  No differences between version {{ from_version }} and version {{ to_version }}.
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Profile{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Profile{% endtrans %}</span>
+</div>
+
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">{% trans %}Profile{% endtrans %}</h1>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-xl); max-width: 800px;">
+
+  <div class="card" style="padding: var(--sp-space-xl);">
+    <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">
+      {% if user.avatar_url %}
+      <img src="{{ user.avatar_url }}" style="width:56px;height:56px;border-radius:50%;object-fit:cover;" alt="{{ user.login[:2] | upper }}">
+      {% else %}
+      <div class="header-user-avatar" style="width: 56px; height: 56px; font-size: 20px;{% if user.preferences.avatar_color|default('') %}background:{{ user.preferences.avatar_color }};{% endif %}">{{ user.login[:2] | upper }}</div>
+      {% endif %}
+      <div x-data="{ editing: false }">
+        <div x-show="!editing" style="display:flex;align-items:center;gap:var(--sp-space-sm);">
+          <span style="font-weight: 600; font-size: var(--sp-font-size-lg); color: var(--sp-text-primary);">{{ user.display_name or user.login }}</span>
+          <button type="button" @click="editing = true; $nextTick(() => $refs.nameInput.select())" style="background:none;border:none;cursor:pointer;color:var(--sp-text-muted);padding:4px;border-radius:var(--sp-border-radius);transition:all 0.15s;display:flex;align-items:center;" title="{% trans %}Edit display name{% endtrans %}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg>
+          </button>
+        </div>
+        <form x-show="editing" method="post" action="/my/profile/" @keydown.escape.prevent="editing = false" style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-bottom:var(--sp-space-xs);" x-cloak>
+          <input type="text" name="display_name" x-ref="nameInput" value="{{ user.display_name or user.login }}" style="padding:4px 8px;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-md);font-weight:600;background:var(--sp-bg-input);color:var(--sp-text-primary);outline:none;width:200px;" required>
+          <button type="submit" style="background:var(--sp-accent);color:white;border:none;cursor:pointer;padding:4px 8px;border-radius:var(--sp-border-radius);display:flex;align-items:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
+          <button type="button" @click="editing = false" style="background:none;border:1px solid var(--sp-border);cursor:pointer;padding:4px 8px;border-radius:var(--sp-border-radius);display:flex;align-items:center;color:var(--sp-text-muted);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </form>
+        <div style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted);">@{{ user.login }}</div>
+        <div style="margin-top:var(--sp-space-md);">
+          {% if user.avatar_url %}
+          <form method="post" action="/my/profile/avatar/delete/" style="display:inline;">
+            <button type="submit" class="sp-btn sp-btn-ghost" style="font-size:var(--sp-font-size-xs);color:var(--sp-danger);">{% trans %}Remove photo{% endtrans %}</button>
+          </form>
+          {% endif %}
+          <form method="post" action="/my/profile/avatar/" enctype="multipart/form-data" style="display:inline;margin-left:var(--sp-space-sm);">
+            <label class="sp-btn sp-btn-ghost" style="cursor:pointer;font-size:var(--sp-font-size-xs);">
+              {% trans %}Upload photo{% endtrans %}
+              <input type="file" name="file" accept="image/jpeg,image/png,image/webp" style="display:none;" data-avatar-upload>
+            </label>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <table style="width: 100%; font-size: var(--sp-font-size-sm);">
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted); width: 120px;">{% trans %}Email{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-primary);">{{ user.email }}</td>
+      </tr>
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted);">{% trans %}Language{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-primary);">{{ user.language }}</td>
+      </tr>
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted);">{% trans %}Timezone{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-primary);">{{ user.timezone }}</td>
+      </tr>
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted);">{% trans %}Status{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0;"><span class="badge-status in-progress">{{ user.status }}</span></td>
+      </tr>
+      {% if user.is_admin %}
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted);">{% trans %}Role{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0;"><span class="badge-status" style="background: rgba(196, 154, 60, 0.12); color: var(--sp-accent);">{% trans %}Administrator{% endtrans %}</span></td>
+      </tr>
+      {% endif %}
+      {% if user.is_service_account %}
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted);">{% trans %}Type{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0;"><span class="badge-tracker task">{% trans %}Service account{% endtrans %}</span></td>
+      </tr>
+      {% endif %}
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted);">{% trans %}Member since{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-primary);">{{ user.created_at.strftime('%Y-%m-%d') if user.created_at else '-' }}</td>
+      </tr>
+      {% if user.last_login_at %}
+      <tr>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-muted);">{% trans %}Last login{% endtrans %}</td>
+        <td style="padding: var(--sp-space-sm) 0; color: var(--sp-text-primary);">{{ user.last_login_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      </tr>
+      {% endif %}
+    </table>
+  </div>
+
+  <div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
+    <a href="/my/preferences/" class="card" style="padding: var(--sp-space-lg); text-decoration: none; color: inherit; transition: border-color 0.15s;">
+      <div style="display: flex; align-items: center; gap: var(--sp-space-md); margin-bottom: var(--sp-space-xs);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; color: var(--sp-accent);"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span style="font-weight: 600; font-size: var(--sp-font-size-sm);">{% trans %}Preferences{% endtrans %}</span>
+      </div>
+      <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans %}Language, timezone, notification settings{% endtrans %}</div>
+    </a>
+
+    <a href="/my/api-keys/" class="card" style="padding: var(--sp-space-lg); text-decoration: none; color: inherit; transition: border-color 0.15s;">
+      <div style="display: flex; align-items: center; gap: var(--sp-space-md); margin-bottom: var(--sp-space-xs);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; color: var(--sp-accent);"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.78 7.78 5.5 5.5 0 017.78-7.78zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+        <span style="font-weight: 600; font-size: var(--sp-font-size-sm);">{% trans %}API Keys{% endtrans %}</span>
+      </div>
+      <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans %}Manage keys for API and MCP access{% endtrans %}</div>
+    </a>
+  </div>
+
+</div>
+{% endblock %}

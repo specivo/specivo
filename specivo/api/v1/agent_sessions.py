@@ -17,7 +17,7 @@ _project_service = ProjectService()
 _session_service = AgentSessionService()
 
 
-@router.get("", response_model=list[AgentSessionOut])
+@router.get("/", response_model=list[AgentSessionOut])
 async def list_agent_sessions(
     project_key: str,
     limit: int = Query(25, ge=1, le=100),

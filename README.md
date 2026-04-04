@@ -15,10 +15,19 @@ Specivo puts issues, wiki, and search in one place. The search part is the point
 ```bash
 git clone https://github.com/specivo/specivo.git
 cd specivo
-docker compose up
+docker compose up -d
 ```
 
-Open http://localhost:9933.
+Create your first admin user:
+
+```bash
+docker compose exec api python -m specivo.cli.admin create \
+  --login admin --email admin@localhost --password changeme
+```
+
+Open http://localhost:9933 and sign in.
+
+For production, copy `.env.example` to `.env` and set a real `SECRET_KEY`.
 
 ## What's in it
 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Notifications - Specivo{% endblock %}
+{% block title %}Notifications - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
@@ -12,20 +12,20 @@
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
   <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">Notifications</h1>
   {% if unread_count > 0 %}
-  <form method="post" action="/api/v1/notifications/mark-all-read" style="margin: 0;">
-    <button type="submit" class="btn btn-secondary">Mark all read</button>
+  <form method="post" action="/api/v1/notifications/mark-all-read/" style="margin: 0;">
+    <button type="submit" class="sp-btn sp-btn-ghost">Mark all read</button>
   </form>
   {% endif %}
 </div>
 
 <!-- Filter tabs -->
 <div style="display: flex; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-lg); border-bottom: 2px solid var(--sp-border);">
-  <a href="/my/notifications"
+  <a href="/my/notifications/"
      class="btn"
      style="{{ 'border-bottom: 2px solid var(--sp-accent); font-weight: 600;' if not unread_only else 'opacity: 0.6;' }}">
     All ({{ total }})
   </a>
-  <a href="/my/notifications?unread_only=true"
+  <a href="/my/notifications/?unread_only=true"
      class="btn"
      style="{{ 'border-bottom: 2px solid var(--sp-accent); font-weight: 600;' if unread_only else 'opacity: 0.6;' }}">
     Unread ({{ unread_count }})
@@ -73,10 +73,10 @@
 {% if total > limit %}
 <div style="display: flex; justify-content: center; gap: var(--sp-space-md); margin-top: var(--sp-space-xl);">
   {% if offset > 0 %}
-  <a href="/my/notifications?offset={{ offset - limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="btn btn-secondary">Previous</a>
+  <a href="/my/notifications/?offset={{ offset - limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="sp-btn sp-btn-ghost">Previous</a>
   {% endif %}
   {% if offset + limit < total %}
-  <a href="/my/notifications?offset={{ offset + limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="btn btn-secondary">Next</a>
+  <a href="/my/notifications/?offset={{ offset + limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="sp-btn sp-btn-ghost">Next</a>
   {% endif %}
 </div>
 {% endif %}

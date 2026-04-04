@@ -102,7 +102,7 @@ def _page_out(page: WikiPage) -> WikiPageOut:
 
 
 @router.get(
-    "/projects/{project_key}/wiki",
+    "/projects/{project_key}/wiki/",
     response_model=WikiPageListResponse,
 )
 async def list_wiki_pages(
@@ -120,7 +120,7 @@ async def list_wiki_pages(
 
 
 @router.post(
-    "/projects/{project_key}/wiki",
+    "/projects/{project_key}/wiki/",
     response_model=WikiPageWithContent,
     status_code=status.HTTP_201_CREATED,
 )
@@ -150,7 +150,7 @@ async def create_wiki_page(
 
 
 @router.get(
-    "/projects/{project_key}/wiki/graph",
+    "/projects/{project_key}/wiki/graph/",
     response_model=WikiGraphResponse,
 )
 async def get_wiki_graph(
@@ -175,7 +175,7 @@ async def get_wiki_graph(
 
 
 @router.get(
-    "/projects/{project_key}/wiki/{slug}",
+    "/projects/{project_key}/wiki/{slug}/",
     response_model=WikiPageWithContent,
 )
 async def get_wiki_page(
@@ -215,7 +215,7 @@ async def get_wiki_page(
 
 
 @router.patch(
-    "/projects/{project_key}/wiki/{slug}",
+    "/projects/{project_key}/wiki/{slug}/",
     response_model=WikiPageWithContent,
 )
 async def update_wiki_page(
@@ -225,13 +225,31 @@ async def update_wiki_page(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> WikiPageWithContent:
-    """Update wiki page content (creates a new version)."""
+    """Update wiki page content, title, and/or parent."""
     project = await _project_service.get_by_key(db, project_key.upper())
     await _require_wiki_module(project.id, db)
     await _require_manage_wiki(current_user, project.id, db)
 
     # Resolve the page first
     page, _old_content = await _service.get_page(db, project.id, slug)
+
+    # Rename if title changed
+    if data.title and data.title != page.title:
+        page = await _service.rename_page(db, page.id, data.title, data.lock_version)
+        # lock_version was bumped by rename — refresh for update_page
+        data.lock_version = page.lock_version
+
+    # Update parent if changed
+    if data.parent_slug is not None:
+        new_parent_id: int | None = None
+        if data.parent_slug:
+            parent_page = await _service.get_page(db, project.id, data.parent_slug)
+            new_parent_id = parent_page[0].id
+        if new_parent_id != page.parent_id:
+            page.parent_id = new_parent_id
+            await db.flush()
+            await db.refresh(page)
+            data.lock_version = page.lock_version
 
     page, content = await _service.update_page(
         session=db,
@@ -247,7 +265,7 @@ async def update_wiki_page(
 
 
 @router.delete(
-    "/projects/{project_key}/wiki/{slug}",
+    "/projects/{project_key}/wiki/{slug}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_wiki_page(
@@ -266,7 +284,7 @@ async def delete_wiki_page(
 
 
 @router.post(
-    "/projects/{project_key}/wiki/{slug}/rename",
+    "/projects/{project_key}/wiki/{slug}/rename/",
     response_model=WikiPageWithContent,
 )
 async def rename_wiki_page(
@@ -290,7 +308,7 @@ async def rename_wiki_page(
 
 
 @router.get(
-    "/projects/{project_key}/wiki/{slug}/versions",
+    "/projects/{project_key}/wiki/{slug}/versions/",
     response_model=WikiVersionsResponse,
 )
 async def get_wiki_page_history(
@@ -322,7 +340,7 @@ async def get_wiki_page_history(
 
 
 @router.get(
-    "/projects/{project_key}/wiki/{slug}/versions/{version_num}",
+    "/projects/{project_key}/wiki/{slug}/versions/{version_num}/",
     response_model=WikiContentVersionOut,
 )
 async def get_wiki_page_version(

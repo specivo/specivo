@@ -58,7 +58,7 @@ class UserFactory(factory.Factory):
     password_changed_at = None
     github_id = None
     google_id = None
-    preferences = factory.LazyFunction(dict)
+    preferences = factory.LazyFunction(lambda: {"avatar_color": "#c49a3c"})
 
 
 class AdminUserFactory(UserFactory):

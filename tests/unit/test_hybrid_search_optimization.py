@@ -1,9 +1,10 @@
 """Unit tests for hybrid search optimization.
 
-Verifies that hybrid_search() avoids redundant count queries by:
-1. Calling search() and semantic_search() with skip_count=True
-2. Using len(merged_keys) as the total instead of sub-search counts
-3. search() returning total=0 when skip_count=True (no COUNT query)
+Verifies that hybrid_search() efficiently handles counts by:
+1. Getting per-type counts from search() in a single DB query
+2. Calling semantic_search() with skip_count=True (counts come from FTS)
+3. Using len(merged_keys) as the RRF-fused total
+4. search() returning total=0 and empty type_counts when skip_count=True
 
 These tests mock the search internals to verify the optimization
 without hitting the database.
@@ -42,12 +43,11 @@ def _make_result(result_type: str, id: int, score: float = 0.5) -> SearchResult:
 
 
 @pytest.mark.asyncio
-async def test_hybrid_search_does_not_run_count_queries():
-    """hybrid_search() should call search() and semantic_search() with
-    skip_count=True so they skip their COUNT(*) queries.
+async def test_hybrid_search_gets_counts_from_fts():
+    """hybrid_search() computes per-type counts from merged RRF results, not from FTS.
 
-    This is a performance optimization: hybrid search computes its own
-    total from the RRF merged results, so sub-search counts are wasted work.
+    Both search() and semantic_search() are called with skip_count=True.
+    Counts are derived by iterating merged results by type.
     """
     service = SearchService()
     mock_session = AsyncMock()
@@ -55,32 +55,44 @@ async def test_hybrid_search_does_not_run_count_queries():
 
     fts_results = [_make_result("issue", 1), _make_result("issue", 2)]
     sem_results = [_make_result("issue", 2), _make_result("issue", 3)]
+    mock_type_counts = {"issues": 2, "wiki": 0, "comments": 0, "attachments": 0, "all": 2}
 
     with (
-        patch.object(service, "search", new_callable=AsyncMock, return_value=(fts_results, 0)) as mock_search,
+        patch.object(
+            service,
+            "search",
+            new_callable=AsyncMock,
+            return_value=(fts_results, 2, mock_type_counts),
+        ) as mock_search,
         patch.object(
             service, "semantic_search", new_callable=AsyncMock, return_value=(sem_results, 0)
         ) as mock_sem_search,
     ):
-        results, total = await service.hybrid_search(
+        results, total, type_counts = await service.hybrid_search(
             session=mock_session,
             query="test query",
             user=mock_user,
         )
 
-        # Verify search() was called with skip_count=True
+        # Both should be called with skip_count=True — hybrid computes its own counts
         mock_search.assert_called_once()
         call_kwargs = mock_search.call_args
-        assert call_kwargs.kwargs.get("skip_count") is True or (
-            len(call_kwargs.args) > 0 and "skip_count" in str(call_kwargs)
-        ), "search() should be called with skip_count=True in hybrid mode"
+        assert call_kwargs.kwargs.get("skip_count") is True
 
-        # Verify semantic_search() was called with skip_count=True
         mock_sem_search.assert_called_once()
+
+        # Type counts should be computed from merged results (3 unique issues)
+        assert type_counts["issues"] == 3
+        assert type_counts["all"] == 3
         sem_call_kwargs = mock_sem_search.call_args
         assert sem_call_kwargs.kwargs.get("skip_count") is True or (
             len(sem_call_kwargs.args) > 0 and "skip_count" in str(sem_call_kwargs)
         ), "semantic_search() should be called with skip_count=True in hybrid mode"
+
+        # type_counts are computed from merged results, not from FTS mock
+        assert type_counts["wiki"] == 0
+        assert type_counts["comments"] == 0
+        assert type_counts["attachments"] == 0
 
 
 @pytest.mark.asyncio
@@ -110,13 +122,14 @@ async def test_search_with_skip_count_returns_zero_total():
 
     mock_session.execute = AsyncMock(side_effect=tracking_execute)
 
-    results, total = await service.search(
+    results, total, type_counts = await service.search(
         session=mock_session,
         query="test",
         skip_count=True,
     )
 
     assert total == 0, "search() with skip_count=True should return total=0"
+    assert type_counts == {}, "search() with skip_count=True should return empty type_counts"
 
     # Verify no COUNT query was executed
     count_queries = [c for c in execute_calls if "COUNT" in c.upper()]
@@ -153,13 +166,14 @@ async def test_hybrid_total_uses_rrf_count():
         _make_result("issue", 5, score=0.3),
     ]
 
+    mock_type_counts = {"issues": 3, "wiki": 0, "comments": 0, "attachments": 0, "all": 3}
+
     with (
         patch.object(
             service,
             "search",
             new_callable=AsyncMock,
-            # Sub-search returns 0 total (because skip_count=True)
-            return_value=(fts_results, 0),
+            return_value=(fts_results, 3, mock_type_counts),
         ),
         patch.object(
             service,
@@ -168,7 +182,7 @@ async def test_hybrid_total_uses_rrf_count():
             return_value=(sem_results, 0),
         ),
     ):
-        results, total = await service.hybrid_search(
+        results, total, type_counts = await service.hybrid_search(
             session=mock_session,
             query="test query",
             user=mock_user,

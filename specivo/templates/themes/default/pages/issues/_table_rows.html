@@ -1,18 +1,16 @@
 {% from "components/macros.html" import status_badge, priority_badge, tracker_badge, avatar %}
 {% for issue in issues %}
-<tr style="border-bottom: 1px solid var(--sp-border); transition: background 0.1s;"
-    onmouseover="this.style.background='var(--sp-bg-hover)'"
-    onmouseout="this.style.background='transparent'">
+<tr class="sp-row-hover">
   {% if has_feature("bulk_operations") %}<td style="padding: var(--sp-space-sm); width: 32px;"><input type="checkbox" value="{{ issue.id }}" /></td>{% endif %}
   <td style="padding: var(--sp-space-sm); width: 24px;">{{ priority_badge(issue.priority.name if issue.priority else 'Normal') }}</td>
   <td style="padding: var(--sp-space-sm);">
-    <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}"
+    <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/"
        style="font-family: var(--sp-font-mono, 'JetBrains Mono', monospace); font-size: var(--sp-font-size-sm); text-decoration: none; color: var(--sp-accent);">
       {{ issue.display_key }}
     </a>
   </td>
   <td style="padding: var(--sp-space-sm);">
-    <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}"
+    <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/"
        style="text-decoration: none; color: inherit; font-weight: 500;">
       {{ issue.subject }}
     </a>
@@ -21,14 +19,14 @@
   <td style="padding: var(--sp-space-sm);">{{ tracker_badge(issue.tracker.name if issue.tracker else 'Unknown') }}</td>
   <td style="padding: var(--sp-space-sm);">
     {% if issue.assigned_to %}
-      {{ avatar(issue.assigned_to.login, size='xs') }}
+      {{ avatar(issue.assigned_to.login, size='xs', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
       <span style="font-size: var(--sp-font-size-sm);">{{ issue.assigned_to.login }}</span>
     {% else %}
       <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">--</span>
     {% endif %}
   </td>
-  <td style="padding: var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">
-    {{ issue.updated_at.strftime('%Y-%m-%d %H:%M') if issue.updated_at else '' }}
+  <td style="padding: var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" title="{{ issue.updated_at.strftime('%Y-%m-%d %H:%M') if issue.updated_at else '' }}">
+    {{ issue.updated_at | timeago }}
   </td>
 </tr>
 {% endfor %}

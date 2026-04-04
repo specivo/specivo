@@ -37,7 +37,7 @@ from tests.factories.user import TEST_PASSWORD, AdminUserFactory, UserFactory
 
 
 async def _login(client: AsyncClient, login: str, password: str = TEST_PASSWORD) -> str:
-    resp = await client.post("/api/v1/auth/login", json={"login": login, "password": password})
+    resp = await client.post("/api/v1/auth/login/", json={"login": login, "password": password})
     assert resp.status_code == 200, resp.text
     return resp.json()["access_token"]
 
@@ -172,7 +172,7 @@ async def test_create_time_entry(
 ) -> None:
     """POST with hours, activity, issue -> 201."""
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/time-entries",
+        f"/api/v1/projects/{project.key}/time-entries/",
         json={
             "issue_id": issue["id"],
             "activity_id": activity.id,
@@ -200,7 +200,7 @@ async def test_create_time_entry_project_level(
 ) -> None:
     """POST without issue_id -> 201 (project-level time entry)."""
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/time-entries",
+        f"/api/v1/projects/{project.key}/time-entries/",
         json={
             "activity_id": activity.id,
             "hours": "1.00",
@@ -237,7 +237,7 @@ async def test_list_time_entries_for_project(
     await db_session.commit()
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/time-entries",
+        f"/api/v1/projects/{project.key}/time-entries/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -269,7 +269,7 @@ async def test_list_time_entries_filter_by_user(
     await db_session.commit()
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/time-entries?user_id={admin_user.id}",
+        f"/api/v1/projects/{project.key}/time-entries/?user_id={admin_user.id}",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -299,7 +299,7 @@ async def test_list_time_entries_filter_by_date(
     await db_session.commit()
 
     resp = await client.get(
-        f"/api/v1/projects/{project.key}/time-entries?from_date=2026-03-21&to_date=2026-03-22",
+        f"/api/v1/projects/{project.key}/time-entries/?from_date=2026-03-21&to_date=2026-03-22",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -330,7 +330,7 @@ async def test_get_time_entry(
     await db_session.refresh(entry)
 
     resp = await client.get(
-        f"/api/v1/time-entries/{entry.id}",
+        f"/api/v1/time-entries/{entry.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -361,7 +361,7 @@ async def test_update_time_entry(
     await db_session.refresh(entry)
 
     resp = await client.patch(
-        f"/api/v1/time-entries/{entry.id}",
+        f"/api/v1/time-entries/{entry.id}/",
         json={"hours": "3.50", "comments": "Updated time"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -392,7 +392,7 @@ async def test_delete_own_time_entry(
     await db_session.refresh(entry)
 
     resp = await client.delete(
-        f"/api/v1/time-entries/{entry.id}",
+        f"/api/v1/time-entries/{entry.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204
@@ -419,7 +419,7 @@ async def test_delete_others_entry_as_admin(
     await db_session.refresh(entry)
 
     resp = await client.delete(
-        f"/api/v1/time-entries/{entry.id}",
+        f"/api/v1/time-entries/{entry.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204
@@ -446,7 +446,7 @@ async def test_delete_others_entry_as_regular_user(
     await db_session.refresh(entry)
 
     resp = await client.delete(
-        f"/api/v1/time-entries/{entry.id}",
+        f"/api/v1/time-entries/{entry.id}/",
         headers={"Authorization": f"Bearer {regular_token}"},
     )
     assert resp.status_code == 403
@@ -462,7 +462,7 @@ async def test_list_activities(
 ) -> None:
     """GET activities -> list with seed data."""
     resp = await client.get(
-        "/api/v1/time-entries/activities",
+        "/api/v1/time-entries/activities/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -481,7 +481,7 @@ async def test_create_time_entry_invalid_activity(
 ) -> None:
     """Nonexistent activity_id -> 422."""
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/time-entries",
+        f"/api/v1/projects/{project.key}/time-entries/",
         json={
             "activity_id": 99999,
             "hours": "1.00",
@@ -501,7 +501,7 @@ async def test_time_entry_billable_flag(
 ) -> None:
     """Set is_billable=true, verify in response."""
     resp = await client.post(
-        f"/api/v1/projects/{project.key}/time-entries",
+        f"/api/v1/projects/{project.key}/time-entries/",
         json={
             "activity_id": activity.id,
             "hours": "1.00",
@@ -527,7 +527,7 @@ async def test_start_timer(
 ) -> None:
     """POST /timer/start -> timer created."""
     resp = await client.post(
-        "/api/v1/timer/start",
+        "/api/v1/timer/start/",
         json={"project_id": project.id},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -559,7 +559,7 @@ async def test_get_current_timer(
     await db_session.commit()
 
     resp = await client.get(
-        "/api/v1/timer",
+        "/api/v1/timer/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -590,7 +590,7 @@ async def test_stop_timer(
     await db_session.commit()
 
     resp = await client.post(
-        "/api/v1/timer/stop",
+        "/api/v1/timer/stop/",
         json={"activity_id": activity.id},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -603,7 +603,7 @@ async def test_stop_timer(
 
     # Timer should be gone
     resp2 = await client.get(
-        "/api/v1/timer",
+        "/api/v1/timer/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp2.status_code == 200
@@ -632,7 +632,7 @@ async def test_start_timer_stops_previous(
 
     # Start a new timer — old one should be auto-stopped
     resp = await client.post(
-        "/api/v1/timer/start",
+        "/api/v1/timer/start/",
         json={"project_id": project.id, "comments": "New task"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -640,7 +640,7 @@ async def test_start_timer_stops_previous(
 
     # The old timer should have created a time entry
     resp2 = await client.get(
-        f"/api/v1/projects/{project.key}/time-entries",
+        f"/api/v1/projects/{project.key}/time-entries/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp2.status_code == 200
@@ -655,7 +655,7 @@ async def test_stop_timer_no_active(
 ) -> None:
     """Stop when no timer -> 404."""
     resp = await client.post(
-        "/api/v1/timer/stop",
+        "/api/v1/timer/stop/",
         json={"activity_id": 1},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -667,11 +667,11 @@ async def test_timer_requires_auth(
     client: AsyncClient,
 ) -> None:
     """No auth -> 401."""
-    resp = await client.get("/api/v1/timer")
+    resp = await client.get("/api/v1/timer/")
     assert resp.status_code == 401
 
-    resp2 = await client.post("/api/v1/timer/start", json={"project_id": 1})
+    resp2 = await client.post("/api/v1/timer/start/", json={"project_id": 1})
     assert resp2.status_code == 401
 
-    resp3 = await client.post("/api/v1/timer/stop", json={"activity_id": 1})
+    resp3 = await client.post("/api/v1/timer/stop/", json={"activity_id": 1})
     assert resp3.status_code == 401

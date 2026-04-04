@@ -32,7 +32,7 @@ async def dashboard(
     """Render the main dashboard page."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login", status_code=302)
+        return RedirectResponse("/login/", status_code=302)
     user = cast("User", user_obj)
 
     projects, total_projects = await _project_svc.list_projects(db, user, offset=0, limit=10)
@@ -54,7 +54,7 @@ async def dashboard(
     )
 
 
-@router.get("/my/notifications", response_class=HTMLResponse)
+@router.get("/my/notifications/", response_class=HTMLResponse)
 async def notifications_page(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -65,7 +65,7 @@ async def notifications_page(
     """Render the notifications page."""
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
-        return RedirectResponse("/login", status_code=302)
+        return RedirectResponse("/login/", status_code=302)
     user = cast("User", user_obj)
 
     notifications, total = await _notif_svc.list_notifications(

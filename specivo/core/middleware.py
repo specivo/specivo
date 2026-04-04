@@ -7,7 +7,10 @@ the extra task group that BaseHTTPMiddleware creates, which causes
 
 from __future__ import annotations
 
+import contextvars
+import dataclasses
 import logging
+import time
 import uuid
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -265,3 +268,189 @@ class AuditBatchMiddleware:
                 await session.commit()
         except Exception:
             logger.warning("Batch audit flush failed", exc_info=True)
+
+
+class TokenRefreshMiddleware:
+    """Set auth cookies when a silent token refresh occurred during the request.
+
+    ``get_current_user_optional()`` in the web layer stores new tokens on
+    ``scope["state"]["refreshed_tokens"]`` when it transparently rotates an
+    expired access token using the refresh token cookie.  This middleware
+    intercepts the ``http.response.start`` message and appends ``Set-Cookie``
+    headers for both ``access_token`` and ``refresh_token``.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_refresh_cookies(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                state = scope.get("state", {})
+                tokens: dict[str, str] | None = state.get("refreshed_tokens")
+                if tokens:
+                    from specivo.core.config import get_settings
+
+                    settings = get_settings()
+                    resp_headers = list(message.get("headers", []))
+                    resp_headers.extend(
+                        _build_auth_cookie_headers(
+                            access_token=tokens["access_token"],
+                            refresh_token=tokens["refresh_token"],
+                            settings=settings,
+                            remember=tokens.get("remember", True),
+                        )
+                    )
+                    message["headers"] = resp_headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_refresh_cookies)
+
+
+def _build_auth_cookie_headers(
+    access_token: str,
+    refresh_token: str,
+    settings: object,
+    *,
+    remember: bool = True,
+) -> list[tuple[bytes, bytes]]:
+    """Build raw ``Set-Cookie`` header tuples for the auth cookies.
+
+    Mirrors the cookie attributes in ``specivo.api.v1.auth._set_auth_cookies``
+    but produces raw ASGI header tuples for use in middleware.
+
+    When *remember* is ``False``, ``Max-Age`` is omitted so the browser
+    treats the cookies as session cookies.
+    """
+    debug = getattr(settings, "debug", False)
+    secure_flag = "" if debug else "; Secure"
+
+    max_age_access = ""
+    max_age_refresh = ""
+    if remember:
+        access_max_age = getattr(settings, "access_token_expire_minutes", 15) * 60
+        refresh_max_age = getattr(settings, "refresh_token_expire_days", 30) * 86400
+        max_age_access = f"; Max-Age={access_max_age}"
+        max_age_refresh = f"; Max-Age={refresh_max_age}"
+
+    access_cookie = f"access_token={access_token}; HttpOnly; SameSite=Lax; Path=/{max_age_access}{secure_flag}"
+    refresh_cookie = f"refresh_token={refresh_token}; HttpOnly; SameSite=Lax; Path=/{max_age_refresh}{secure_flag}"
+    return [
+        (b"set-cookie", access_cookie.encode()),
+        (b"set-cookie", refresh_cookie.encode()),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# SQL Debug Profiler (active only when settings.debug=True)
+# ---------------------------------------------------------------------------
+
+_sql_debug_logger = logging.getLogger("sql_debug")
+
+
+@dataclasses.dataclass
+class _QueryRecord:
+    sql: str
+    duration_ms: float = 0.0
+    _start: float = 0.0
+
+
+_sql_debug_queries: contextvars.ContextVar[list[_QueryRecord] | None] = contextvars.ContextVar(
+    "_sql_debug_queries", default=None
+)
+
+
+def install_sql_debug_hooks(engine: object) -> None:
+    """Attach before/after cursor-execute listeners for per-request SQL profiling.
+
+    *engine* must be a :class:`~sqlalchemy.ext.asyncio.AsyncEngine`.  The hooks
+    are installed on its underlying ``sync_engine`` so they fire inside the
+    thread that actually executes the DBAPI call.
+    """
+    from sqlalchemy import event as _event
+
+    sync_engine = engine.sync_engine  # type: ignore[attr-defined]
+
+    @_event.listens_for(sync_engine, "before_cursor_execute")
+    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        queries = _sql_debug_queries.get()
+        if queries is None:
+            return
+        record = _QueryRecord(sql=statement, _start=time.perf_counter())
+        queries.append(record)
+
+    @_event.listens_for(sync_engine, "after_cursor_execute")
+    def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        queries = _sql_debug_queries.get()
+        if queries is None or not queries:
+            return
+        record = queries[-1]
+        record.duration_ms = (time.perf_counter() - record._start) * 1000.0
+
+
+class SQLDebugMiddleware:
+    """Per-request SQL query profiler that adds debug headers and logs query details.
+
+    Only useful when ``settings.debug=True``; the middleware itself does not
+    check the flag — the caller decides whether to register it.
+
+    Headers injected into every response:
+
+    * ``X-SQL-Query-Count`` — number of SQL statements executed.
+    * ``X-SQL-Time-Ms`` — cumulative SQL wall-clock time in milliseconds.
+    * ``X-Request-Time-Ms`` — total request wall-clock time in milliseconds.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        queries: list[_QueryRecord] = []
+        token = _sql_debug_queries.set(queries)
+        request_start = time.perf_counter()
+
+        # Expose to templates via request.state.sql_debug
+        scope.setdefault("state", {})
+        scope["state"]["sql_debug_queries"] = queries
+        scope["state"]["sql_debug_start"] = request_start
+
+        try:
+
+            async def send_with_debug_headers(message: Message) -> None:
+                if message["type"] == "http.response.start":
+                    request_ms = (time.perf_counter() - request_start) * 1000.0
+                    sql_ms = sum(q.duration_ms for q in queries)
+                    resp_headers = list(message.get("headers", []))
+                    resp_headers.append((b"x-sql-query-count", str(len(queries)).encode()))
+                    resp_headers.append((b"x-sql-time-ms", f"{sql_ms:.1f}".encode()))
+                    resp_headers.append((b"x-request-time-ms", f"{request_ms:.1f}".encode()))
+                    message["headers"] = resp_headers
+                await send(message)
+
+            await self.app(scope, receive, send_with_debug_headers)
+
+            # Log query summary (only when queries were actually executed)
+            if queries:
+                request_ms = (time.perf_counter() - request_start) * 1000.0
+                sql_ms = sum(q.duration_ms for q in queries)
+                method = scope.get("method", "?")
+                path = scope.get("path", "?")
+
+                lines = [
+                    f"{method} {path}",
+                    f"Queries: {len(queries)} | Total: {request_ms:.1f}ms | SQL: {sql_ms:.1f}ms",
+                ]
+                for idx, q in enumerate(queries, 1):
+                    truncated = q.sql[:200]
+                    lines.append(f"  [{idx}] {q.duration_ms:.1f}ms  {truncated}")
+                _sql_debug_logger.debug("\n".join(lines))
+        finally:
+            _sql_debug_queries.reset(token)

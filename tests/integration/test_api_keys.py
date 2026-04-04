@@ -43,7 +43,7 @@ async def _create_user(db: AsyncSession, **kwargs):
 async def _login_user(client: AsyncClient, login: str) -> str:
     """Login as *login* and return the JWT access token."""
     resp = await client.post(
-        "/api/v1/auth/login",
+        "/api/v1/auth/login/",
         json={"login": login, "password": TEST_PASSWORD},
     )
     assert resp.status_code == 200, f"Login failed for {login!r}: {resp.text}"
@@ -59,7 +59,7 @@ async def _create_key(
     """POST /my/api-keys with JWT auth and return the response JSON."""
     body = {"name": name, **body_kwargs}
     resp = await client.post(
-        "/api/v1/my/api-keys",
+        "/api/v1/my/api-keys/",
         json=body,
         headers={"Authorization": f"Bearer {token}"},
     )
@@ -116,14 +116,14 @@ class TestCreateApiKey:
         assert data["expires_at"] is not None
 
     async def test_create_requires_auth(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.post("/api/v1/my/api-keys", json={"name": "no-auth"})
+        resp = await client.post("/api/v1/my/api-keys/", json={"name": "no-auth"})
         assert resp.status_code == 401
 
     async def test_create_rejects_empty_name(self, client: AsyncClient, db_session: AsyncSession):
         await _create_user(db_session, login="empty_name_user")
         token = await _login_user(client, "empty_name_user")
         resp = await client.post(
-            "/api/v1/my/api-keys",
+            "/api/v1/my/api-keys/",
             json={"name": ""},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -147,7 +147,7 @@ class TestListApiKeys:
         await _create_key(client, token_b, name="key-b1")
 
         resp = await client.get(
-            "/api/v1/my/api-keys",
+            "/api/v1/my/api-keys/",
             headers={"Authorization": f"Bearer {token_a}"},
         )
         assert resp.status_code == 200
@@ -162,7 +162,7 @@ class TestListApiKeys:
         await _create_key(client, token, name="secret-key")
 
         resp = await client.get(
-            "/api/v1/my/api-keys",
+            "/api/v1/my/api-keys/",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
@@ -176,7 +176,7 @@ class TestListApiKeys:
         await _create_key(client, token, name="field-check")
 
         resp = await client.get(
-            "/api/v1/my/api-keys",
+            "/api/v1/my/api-keys/",
             headers={"Authorization": f"Bearer {token}"},
         )
         key_data = resp.json()[0]
@@ -188,7 +188,7 @@ class TestListApiKeys:
         assert "last_used_at" in key_data
 
     async def test_list_requires_auth(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.get("/api/v1/my/api-keys")
+        resp = await client.get("/api/v1/my/api-keys/")
         assert resp.status_code == 401
 
 
@@ -260,7 +260,7 @@ class TestApiKeyAuthentication:
 
         # Deactivate via PATCH
         patch_resp = await client.patch(
-            f"/api/v1/my/api-keys/{key_id}",
+            f"/api/v1/my/api-keys/{key_id}/",
             json={"is_active": False},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -287,7 +287,7 @@ class TestPatchApiKey:
         key_id = created["id"]
 
         resp = await client.patch(
-            f"/api/v1/my/api-keys/{key_id}",
+            f"/api/v1/my/api-keys/{key_id}/",
             json={"is_active": False},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -302,14 +302,14 @@ class TestPatchApiKey:
 
         # First deactivate
         await client.patch(
-            f"/api/v1/my/api-keys/{key_id}",
+            f"/api/v1/my/api-keys/{key_id}/",
             json={"is_active": False},
             headers={"Authorization": f"Bearer {token}"},
         )
 
         # Then reactivate
         resp = await client.patch(
-            f"/api/v1/my/api-keys/{key_id}",
+            f"/api/v1/my/api-keys/{key_id}/",
             json={"is_active": True},
             headers={"Authorization": f"Bearer {token}"},
         )
@@ -325,14 +325,14 @@ class TestPatchApiKey:
         key_id = created["id"]
 
         resp = await client.patch(
-            f"/api/v1/my/api-keys/{key_id}",
+            f"/api/v1/my/api-keys/{key_id}/",
             json={"is_active": False},
             headers={"Authorization": f"Bearer {token_b}"},
         )
         assert resp.status_code == 404
 
     async def test_patch_requires_auth(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.patch("/api/v1/my/api-keys/1", json={"is_active": False})
+        resp = await client.patch("/api/v1/my/api-keys/1/", json={"is_active": False})
         assert resp.status_code == 401
 
 
@@ -349,14 +349,14 @@ class TestDeleteApiKey:
         key_id = created["id"]
 
         del_resp = await client.delete(
-            f"/api/v1/my/api-keys/{key_id}",
+            f"/api/v1/my/api-keys/{key_id}/",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert del_resp.status_code == 204
 
         # Key should no longer appear in list
         list_resp = await client.get(
-            "/api/v1/my/api-keys",
+            "/api/v1/my/api-keys/",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert list_resp.json() == []
@@ -370,7 +370,7 @@ class TestDeleteApiKey:
         key_id = created["id"]
 
         resp = await client.delete(
-            f"/api/v1/my/api-keys/{key_id}",
+            f"/api/v1/my/api-keys/{key_id}/",
             headers={"Authorization": f"Bearer {token_b}"},
         )
         assert resp.status_code == 404
@@ -379,11 +379,11 @@ class TestDeleteApiKey:
         await _create_user(db_session, login="del_nonexistent")
         token = await _login_user(client, "del_nonexistent")
         resp = await client.delete(
-            "/api/v1/my/api-keys/99999",
+            "/api/v1/my/api-keys/99999/",
             headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 404
 
     async def test_delete_requires_auth(self, client: AsyncClient, db_session: AsyncSession):
-        resp = await client.delete("/api/v1/my/api-keys/1")
+        resp = await client.delete("/api/v1/my/api-keys/1/")
         assert resp.status_code == 401

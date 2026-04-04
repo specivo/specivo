@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Projects{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Projects{% endtrans %}</span>
+</div>
+
+<div x-data='adminProjects({ projects: {{ projects_data | tojson }}, colors: {{ project_colors | tojson }}, allProjects: {{ all_projects | tojson }} })'>
+  <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
+    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Projects{% endtrans %}</h1>
+    <button class="sp-btn sp-btn-primary" @click="openCreate()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
+      {% trans %}New Project{% endtrans %}
+    </button>
+  </div>
+
+  <div class="card" style="padding: var(--sp-space-lg);">
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Project{% endtrans %}</th>
+          <th>{% trans %}Key{% endtrans %}</th>
+          <th>{% trans %}Issues{% endtrans %}</th>
+          <th>{% trans %}Members{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Created{% endtrans %}</th>
+          <th style="width: 180px">{% trans %}Actions{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="projects.length === 0">
+          <tr>
+            <td colspan="7" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">{% trans %}No projects.{% endtrans %}</td>
+          </tr>
+        </template>
+        <template x-for="p in projects" :key="p.id">
+          <tr :style="p.status === 9 ? 'color: var(--sp-text-muted)' : ''">
+            <td>
+              <div style="display: flex; align-items: center; gap: var(--sp-space-sm);">
+                <span :style="'width:10px;height:10px;border-radius:50%;flex-shrink:0;background:' + (p.status === 9 ? 'var(--sp-text-muted)' : (p.color || '#c49a3c'))"></span>
+                <span :style="'font-weight:' + (p.status === 9 ? '400' : '500')" x-text="p.name"></span>
+              </div>
+            </td>
+            <td>
+              <code :style="'font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);padding:2px 6px;border-radius:3px;' + (p.status === 9 ? 'background:var(--sp-bg-input);color:var(--sp-text-muted)' : 'background:var(--sp-danger-subtle);color:var(--sp-danger)')" x-text="p.key"></code>
+            </td>
+            <td x-text="p.issue_count"></td>
+            <td x-text="p.member_count"></td>
+            <td>
+              <span style="display: inline-flex; align-items: center; gap: var(--sp-space-xs); font-size: var(--sp-font-size-sm);">
+                <span :style="'width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + (p.status === 1 ? 'var(--sp-success)' : p.status === 9 ? 'var(--sp-warning)' : 'var(--sp-text-muted)')"></span>
+                <span x-text="p.status === 1 ? '{% trans %}Active{% endtrans %}' : p.status === 9 ? '{% trans %}Archived{% endtrans %}' : '{% trans %}Closed{% endtrans %}'"></span>
+              </span>
+            </td>
+            <td style="color: var(--sp-text-muted); font-size: var(--sp-font-size-xs);" x-text="formatDate(p.created_at)"></td>
+            <td>
+              <div style="display: flex; gap: var(--sp-space-xs);">
+                <template x-if="p.status !== 9">
+                  <button class="sp-btn-sm" @click="openEdit(p)" style="display: inline-flex; align-items: center; gap: 4px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg>
+                    {% trans %}Edit{% endtrans %}
+                  </button>
+                </template>
+                <template x-if="p.status !== 9">
+                  <button class="sp-btn-sm warning" @click="archiveProject(p)" style="display: inline-flex; align-items: center; gap: 4px;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                    {% trans %}Archive{% endtrans %}
+                  </button>
+                </template>
+                <template x-if="p.status === 9">
+                  <button class="sp-btn-sm" @click="unarchiveProject(p)" style="display: inline-flex; align-items: center; gap: 4px; color: var(--sp-success);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><path d="M10 12h4"/></svg>
+                    {% trans %}Unarchive{% endtrans %}
+                  </button>
+                </template>
+              </div>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  {# ======== Create / Edit Project Modal ======== #}
+  <div x-show="showModal" x-cloak style="position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;">
+    <div class="sp-scrim" @click="closeModal()"></div>
+    <div class="sp-modal" style="max-width: 560px;" @click.stop>
+      <div class="sp-modal-header">
+        <h2 x-text="editMode ? '{% trans %}Edit Project{% endtrans %}' : '{% trans %}New Project{% endtrans %}'"></h2>
+        <button class="sp-modal-close" @click="closeModal()">&times;</button>
+      </div>
+      <form @submit.prevent="submitForm()">
+        <div class="sp-modal-body">
+          <div class="form-group" style="margin-bottom: var(--sp-space-lg);">
+            <label class="form-label">{% trans %}Project name{% endtrans %}</label>
+            <input class="form-input" type="text" x-model="form.name" @input="onNameInput()" required placeholder="{% trans %}e.g. Backend API{% endtrans %}">
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-md); margin-bottom: var(--sp-space-lg);">
+            <div class="form-group">
+              <label class="form-label">{% trans %}Identifier{% endtrans %}</label>
+              <input class="form-input" type="text" x-model="form.identifier" required placeholder="backend-api" :disabled="editMode && editHasIssues">
+            </div>
+            <div class="form-group">
+              <label class="form-label">{% trans %}Project key{% endtrans %}</label>
+              <input class="form-input" type="text" x-model="form.key" required placeholder="BACK" maxlength="10" style="text-transform: uppercase;" :disabled="editMode">
+              <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); display: block;">{% trans %}2-10 uppercase letters/digits{% endtrans %}</span>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--sp-space-lg);">
+            <label class="form-label">{% trans %}Description{% endtrans %} <span style="color: var(--sp-text-muted); font-weight: normal;">({% trans %}optional{% endtrans %})</span></label>
+            <textarea class="form-input" x-model="form.description" rows="3" placeholder="{% trans %}Brief project description...{% endtrans %}"></textarea>
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--sp-space-lg);">
+            <label class="form-label">{% trans %}Color{% endtrans %}</label>
+            <div class="color-swatches">
+              <template x-for="c in colors" :key="c">
+                <div class="color-swatch"
+                     :class="{ 'selected': form.color === c }"
+                     :style="'background:' + c"
+                     @click="form.color = c"></div>
+              </template>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-bottom: var(--sp-space-lg);">
+            <label class="form-label">{% trans %}Parent project{% endtrans %}</label>
+            <select class="form-input" x-model="form.parentKey">
+              <option value="">{% trans %}(none -- root project){% endtrans %}</option>
+              <template x-for="proj in parentOptions" :key="proj.key">
+                <option :value="proj.key" x-text="proj.name + ' (' + proj.key + ')'"></option>
+              </template>
+            </select>
+          </div>
+
+          <template x-if="!editMode">
+            <div class="form-group">
+              <label class="form-label">{% trans %}Modules{% endtrans %}</label>
+              <div style="display: flex; flex-direction: column; gap: var(--sp-space-sm);">
+                <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer;">
+                  <input type="checkbox" checked disabled style="accent-color: var(--sp-accent);"> {% trans %}Issues{% endtrans %}
+                </label>
+                <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer;">
+                  <input type="checkbox" x-model="form.moduleWiki" style="accent-color: var(--sp-accent);"> {% trans %}Wiki{% endtrans %}
+                </label>
+                <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer;">
+                  <input type="checkbox" x-model="form.moduleTime" style="accent-color: var(--sp-accent);"> {% trans %}Time tracking{% endtrans %}
+                </label>
+              </div>
+              <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-sm); display: block;">{% trans %}You can change this later in project settings.{% endtrans %}</span>
+            </div>
+          </template>
+
+          <div x-show="formError" class="flash flash-error" style="margin-top: var(--sp-space-md);" x-text="formError"></div>
+        </div>
+        <div class="sp-modal-footer">
+          <button class="sp-btn sp-btn-ghost" type="button" @click="closeModal()">{% trans %}Cancel{% endtrans %}</button>
+          <button class="sp-btn sp-btn-primary" type="submit" :disabled="saving">
+            <span x-show="!saving" x-text="editMode ? '{% trans %}Save{% endtrans %}' : '{% trans %}Create Project{% endtrans %}'"></span>
+            <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

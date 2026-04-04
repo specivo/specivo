@@ -63,7 +63,7 @@ def _version_out(version, project_key: str) -> VersionOut:
 
 
 @router.get(
-    "/projects/{project_key}/versions",
+    "/projects/{project_key}/versions/",
     response_model=list[VersionOut],
 )
 async def list_versions(
@@ -77,7 +77,7 @@ async def list_versions(
 
 
 @router.post(
-    "/projects/{project_key}/versions",
+    "/projects/{project_key}/versions/",
     response_model=VersionOut,
     status_code=status.HTTP_201_CREATED,
 )
@@ -94,7 +94,7 @@ async def create_version(
 
 
 @router.get(
-    "/projects/{project_key}/versions/{version_id}",
+    "/projects/{project_key}/versions/{version_id}/",
     response_model=VersionOut,
 )
 async def get_version(
@@ -111,7 +111,7 @@ async def get_version(
 
 
 @router.patch(
-    "/projects/{project_key}/versions/{version_id}",
+    "/projects/{project_key}/versions/{version_id}/",
     response_model=VersionOut,
 )
 async def update_version(
@@ -131,7 +131,7 @@ async def update_version(
 
 
 @router.delete(
-    "/projects/{project_key}/versions/{version_id}",
+    "/projects/{project_key}/versions/{version_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def delete_version(
@@ -149,7 +149,7 @@ async def delete_version(
 
 
 @router.get(
-    "/projects/{project_key}/roadmap",
+    "/projects/{project_key}/roadmap/",
     response_model=list[RoadmapEntry],
 )
 async def get_roadmap(
