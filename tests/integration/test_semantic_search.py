@@ -101,7 +101,14 @@ async def _add_manager(db: AsyncSession, project: Project, user: User) -> None:
 
 
 async def _create_mock_model(db: AsyncSession) -> EmbeddingModel:
-    """Create a mock embedding model for tests."""
+    """Create a mock embedding model for tests.
+
+    Un-defaults any existing models first so the mock is the only default,
+    avoiding collision with seed data (e.g. a local model without ONNX files).
+    """
+    from sqlalchemy import update
+
+    await db.execute(update(EmbeddingModel).where(EmbeddingModel.is_default.is_(True)).values(is_default=False))
     model = EmbeddingModel(
         name="test-mock",
         provider="mock",

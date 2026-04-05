@@ -67,10 +67,13 @@ class Settings(BaseSettings):
     registration_mode: str = "open"  # open, invite_only, disabled
     captcha_enabled: bool = False
 
+    # Password policy
+    password_min_length: int = 8  # minimum 6, enforced by validator
+
     # App
     debug: bool = False
     app_name: str = "Specivo"
-    version: str = "0.1.6"
+    version: str = "0.1.7"
     api_v1_prefix: str = "/api/v1"
 
     # Stealth mode — secret URL prefix for all routes.
@@ -159,6 +162,13 @@ class Settings(BaseSettings):
     def validate_secret_key_length(cls, v: str) -> str:
         if len(v.encode()) < 32:
             raise ValueError("SECRET_KEY must be at least 32 bytes (64 hex chars recommended)")
+        return v
+
+    @field_validator("password_min_length")
+    @classmethod
+    def validate_password_min_length(cls, v: int) -> int:
+        if v < 6:
+            raise ValueError("password_min_length must be at least 6")
         return v
 
     @field_validator("cors_origins", mode="before")

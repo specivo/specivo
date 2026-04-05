@@ -17,6 +17,7 @@ services:
       DATABASE_URL: "postgresql+asyncpg://specivo:specivo@db:5432/specivo_dev"
       REDIS_URL: "redis://redis:6379/0"
       SECRET_KEY: "dev-secret-key-minimum-32-bytes-for-hs256-signing"
+      GIT_COMMIT: "${GIT_COMMIT:-}"
       PYTHONPATH: "/app"
     command: uvicorn specivo.main:app --host 0.0.0.0 --port 8000 --reload
 

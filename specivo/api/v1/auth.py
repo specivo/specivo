@@ -367,5 +367,15 @@ async def reset_password(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Set a new password using a valid reset token."""
+    from specivo.core.config import get_settings
+
+    settings = get_settings()
+    if len(body.new_password) < settings.password_min_length:
+        raise AppError(
+            code="validation_error",
+            message=f"Password must be at least {settings.password_min_length} characters",
+            status_code=422,
+            field="new_password",
+        )
     await _service.reset_password_with_token(session=db, token=body.token, new_password=body.new_password)
     return {"detail": "Password has been reset successfully."}

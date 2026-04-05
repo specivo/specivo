@@ -35,7 +35,6 @@ class UserCreate(BaseModel):
     email: EmailStr = Field(description="User email address.")
     password: str | None = Field(
         default=None,
-        min_length=10,
         max_length=128,
         description="Plain-text password. Omit for service accounts.",
     )

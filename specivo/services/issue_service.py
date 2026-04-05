@@ -13,9 +13,8 @@ from specivo.core.exceptions import AppError, ConflictError, NotFoundError, Vali
 from specivo.core.i18n import gettext as _
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
-from specivo.models.member import Member, MemberRole
+from specivo.models.member import Member
 from specivo.models.project import Project
-from specivo.models.role import Role
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
@@ -112,17 +111,17 @@ class IssueService:
 
         Returns None when the user is not a member of the project.
         Visibility precedence: "all" > "default" > "own".
+
+        Uses the cached role lookup from ``permission_service`` to avoid
+        a duplicate 3-table JOIN when ``check_permission`` was already
+        called for the same user+project (e.g. in MCP tool paths).
         """
-        stmt = (
-            select(Role.issues_visibility)
-            .join(MemberRole, MemberRole.role_id == Role.id)
-            .join(Member, Member.id == MemberRole.member_id)
-            .where(Member.project_id == project_id, Member.user_id == user.id)
-        )
-        result = await session.execute(stmt)
-        visibilities = [row[0] for row in result.all()]
-        if not visibilities:
+        from specivo.services.permission_service import get_user_roles
+
+        roles = await get_user_roles(session, user.id, project_id)
+        if not roles:
             return None
+        visibilities = [r.issues_visibility for r in roles]
         # Most permissive wins
         if "all" in visibilities:
             return "all"

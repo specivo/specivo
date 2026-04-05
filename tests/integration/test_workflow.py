@@ -338,9 +338,15 @@ async def test_no_rules_allows_any_transition(
     priority: IssuePriority,
     dev_user: User,
     dev_member: Member,
-    # Note: NO workflow_rules fixture — table is empty
+    # Note: NO workflow_rules fixture — table must be empty
 ) -> None:
     """When workflow_transitions is empty, any status change works (backward compat)."""
+    # Clear any seed workflow rules so the "no rules" premise holds
+    from sqlalchemy import text
+
+    await db_session.execute(text("DELETE FROM workflow_transitions"))
+    await db_session.commit()
+
     token = await _login(client, dev_user.login)
     issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
 

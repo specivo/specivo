@@ -83,22 +83,33 @@ async def project(db_session: AsyncSession) -> Project:
     return proj
 
 
-@pytest_asyncio.fixture
-async def activity(db_session: AsyncSession) -> TimeEntryActivity:
-    a = TimeEntryActivityFactory.build(name="Development", position=1, is_default=True)
+async def _get_or_create_activity(
+    db_session: AsyncSession, name: str, position: int = 1, is_default: bool = False,
+) -> TimeEntryActivity:
+    """Select-or-insert to avoid collision with seed data."""
+    from sqlalchemy import select
+
+    result = await db_session.execute(
+        select(TimeEntryActivity).where(TimeEntryActivity.name == name)
+    )
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
+    a = TimeEntryActivityFactory.build(name=name, position=position, is_default=is_default)
     db_session.add(a)
     await db_session.commit()
     await db_session.refresh(a)
     return a
+
+
+@pytest_asyncio.fixture
+async def activity(db_session: AsyncSession) -> TimeEntryActivity:
+    return await _get_or_create_activity(db_session, "Development", position=1, is_default=True)
 
 
 @pytest_asyncio.fixture
 async def activity2(db_session: AsyncSession) -> TimeEntryActivity:
-    a = TimeEntryActivityFactory.build(name="Testing", position=2, is_default=False)
-    db_session.add(a)
-    await db_session.commit()
-    await db_session.refresh(a)
-    return a
+    return await _get_or_create_activity(db_session, "Testing", position=2, is_default=False)
 
 
 @pytest_asyncio.fixture

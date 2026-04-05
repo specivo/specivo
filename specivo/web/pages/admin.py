@@ -13,6 +13,7 @@ from specivo.core.config import get_settings
 from specivo.core.database import get_db
 from specivo.models.user import User
 from specivo.models.user import User as UserModel
+from specivo.services.api_key_service import ApiKeyService
 from specivo.services.settings_service import SettingsService
 from specivo.services.workflow_service import WorkflowService
 from specivo.web.deps import get_current_user_optional, get_templates
@@ -21,6 +22,7 @@ router = APIRouter(tags=["web-admin"], include_in_schema=False)
 
 _settings_svc = SettingsService()
 _workflow_svc = WorkflowService()
+_api_key_svc = ApiKeyService()
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +117,60 @@ async def admin_users(
             "active_page": "admin",
             "users_data": users_data,
             "roles": roles,
+        },
+    )
+
+
+@router.get("/admin/users/{user_id}/", response_class=HTMLResponse)
+async def admin_user_detail(
+    request: Request,
+    user_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the admin user detail page with API key management."""
+    from fastapi import HTTPException
+
+    result = await db.execute(select(UserModel).where(UserModel.id == user_id))
+    target_user = result.scalar_one_or_none()
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    api_keys = await _api_key_svc.list_keys(session=db, user_id=target_user.id)
+    keys_data = [
+        {
+            "id": k.id,
+            "name": k.name,
+            "key_prefix": k.key_prefix,
+            "is_active": k.is_active,
+            "created_at": k.created_at.isoformat() if k.created_at else None,
+            "last_used_at": k.last_used_at.isoformat() if k.last_used_at else None,
+        }
+        for k in api_keys
+    ]
+
+    target_data = {
+        "id": target_user.id,
+        "login": target_user.login,
+        "email": target_user.email,
+        "display_name": target_user.display_name,
+        "is_admin": target_user.is_admin,
+        "is_service_account": target_user.is_service_account,
+        "status": target_user.status,
+        "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
+        "last_login_at": target_user.last_login_at.isoformat() if target_user.last_login_at else None,
+        "avatar_color": target_user.preferences.get("avatar_color", "#c49a3c"),
+    }
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/user_detail.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "target_user": target_data,
+            "api_keys": keys_data,
         },
     )
 

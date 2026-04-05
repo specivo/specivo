@@ -5,6 +5,8 @@ Single source of truth -- import from here, never duplicate values.
 
 # Authentication
 API_KEY_PREFIX = "spv_"
+API_KEY_MIN_LENGTH = 20  # fast reject for obviously invalid keys (prefix + some entropy)
+MCP_PENDING_CLIENT_ID = "pending-auth"  # placeholder until tool-level auth resolves real user
 JWT_ALGORITHM = "HS256"
 API_KEY_ENTROPY_BYTES = 32
 REFRESH_TOKEN_ENTROPY_BYTES = 32

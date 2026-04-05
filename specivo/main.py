@@ -102,7 +102,17 @@ async def lifespan(app: FastAPI):
         if row and row.value:
             set_brand_name(row.value)
 
-    yield
+    # Start the MCP session manager (Streamable HTTP transport needs an
+    # active task group).  Must be entered before ``yield`` so it is live
+    # when requests arrive, and torn down after ``yield`` on shutdown.
+    from specivo.mcp.mount import get_mcp_session_manager
+
+    mcp_sm = get_mcp_session_manager()
+    if mcp_sm is not None:
+        async with mcp_sm.run():
+            yield
+    else:
+        yield
 
     await close_redis()
     await engine.dispose()
@@ -310,6 +320,12 @@ def create_app() -> FastAPI:
     _avatar_dir = Path(settings.avatar_upload_dir)
     _avatar_dir.mkdir(parents=True, exist_ok=True)
     application.mount("/data/avatars", StaticFiles(directory=str(_avatar_dir)), name="avatars")
+
+    # MCP server — Streamable HTTP + SSE transports, behind stealth prefix.
+    # Must be mounted BEFORE the web router (catch-all paths).
+    from specivo.mcp.mount import mount_mcp
+
+    mount_mcp(application, prefix=f"{sp}/mcp")
 
     # Web pages — behind stealth prefix, AFTER API router (catch-all paths)
     application.include_router(web_router, prefix=sp)

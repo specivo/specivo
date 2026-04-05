@@ -49,7 +49,7 @@ class MemberRole(Base):
     __tablename__ = "member_roles"
 
     __table_args__ = (
-        Index("ix_member_roles_member_id", "member_id"),
+        UniqueConstraint("member_id", "role_id", name="uq_member_roles_member_role"),
         Index("ix_member_roles_role_id", "role_id"),
     )
 

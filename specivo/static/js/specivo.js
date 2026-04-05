@@ -628,6 +628,13 @@ document.addEventListener('alpine:init', function () {
             users: initial.users || [],
             roles: initial.roles || [],
 
+            generatePassword: function () {
+                var chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%&*';
+                var arr = new Uint8Array(16);
+                crypto.getRandomValues(arr);
+                return Array.from(arr, function (b) { return chars[b % chars.length]; }).join('');
+            },
+
             // Create user
             showCreate: false,
             creating: false,
@@ -637,17 +644,33 @@ document.addEventListener('alpine:init', function () {
             async createUser() {
                 this.creating = true;
                 this.createError = '';
+                var payload = Object.assign({}, this.newUser);
+                // Service accounts don't need a password
+                if (payload.is_service_account && !payload.password) {
+                    delete payload.password;
+                }
+                if (!payload.password && !payload.is_service_account) {
+                    this.createError = 'Password: required for regular users.';
+                    this.creating = false;
+                    return;
+                }
                 var res = await fetch('/api/v1/admin/users/', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify(this.newUser)
+                    body: JSON.stringify(payload)
                 });
                 if (res.ok) {
-                    // Reload page to get fresh data
                     window.location.reload();
                 } else {
                     var err = await res.json().catch(function () { return {}; });
-                    this.createError = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to create user.';
+                    if (err.errors && err.errors.length > 0) {
+                        this.createError = err.errors.map(function (e) {
+                            var field = e.field ? e.field + ': ' : '';
+                            return field + e.message;
+                        }).join('\n');
+                    } else {
+                        this.createError = err.detail || 'Failed to create user.';
+                    }
                 }
                 this.creating = false;
             },
@@ -705,6 +728,97 @@ document.addEventListener('alpine:init', function () {
                     var err = await res.json().catch(function () { return {}; });
                     alert((err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to ' + action + ' user.');
                 }
+            },
+
+            timeAgo(iso) {
+                if (!iso) return 'Never';
+                var d = new Date(iso);
+                var now = new Date();
+                var diff = Math.floor((now - d) / 1000);
+                if (diff < 60) return 'Just now';
+                if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
+                if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
+                if (diff < 172800) return 'Yesterday';
+                if (diff < 604800) return Math.floor(diff / 86400) + ' days ago';
+                return d.toLocaleDateString();
+            }
+        };
+    });
+
+    /**
+     * Admin user detail — view user info and manage API keys for any user.
+     *
+     * Expects initial data via argument:
+     *   x-data="adminUserDetail({ targetUser: {...}, apiKeys: [...] })"
+     */
+    Alpine.data('adminUserDetail', function (initial) {
+        return {
+            targetUser: initial.targetUser || {},
+            apiKeys: initial.apiKeys || [],
+
+            // Create key state
+            newKeyName: '',
+            newKey: null,
+            creating: false,
+            createError: '',
+            copied: false,
+
+            async loadKeys() {
+                var res = await fetch('/api/v1/admin/users/' + this.targetUser.id + '/api-keys/');
+                if (res.ok) {
+                    this.apiKeys = await res.json();
+                }
+            },
+
+            async createKey() {
+                if (!this.newKeyName.trim()) return;
+                this.creating = true;
+                this.createError = '';
+                try {
+                    var res = await fetch('/api/v1/admin/users/' + this.targetUser.id + '/api-keys/', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({name: this.newKeyName.trim()})
+                    });
+                    if (res.ok) {
+                        var data = await res.json();
+                        this.newKey = data.raw_key;
+                        this.newKeyName = '';
+                        await this.loadKeys();
+                    } else {
+                        var errData = await res.json().catch(function () { return {}; });
+                        this.createError = (errData.errors && errData.errors[0] && errData.errors[0].message) || errData.detail || 'Failed to create key';
+                    }
+                } catch (_e) {
+                    this.createError = 'Unable to connect. Please try again.';
+                }
+                this.creating = false;
+            },
+
+            async revokeKey(id) {
+                if (!confirm('Revoke this API key? This cannot be undone.')) return;
+                var res = await fetch('/api/v1/admin/users/' + this.targetUser.id + '/api-keys/' + id + '/', {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'}
+                });
+                if (res.ok || res.status === 204) {
+                    await this.loadKeys();
+                }
+            },
+
+            copyKey() {
+                if (this.newKey) {
+                    navigator.clipboard.writeText(this.newKey);
+                    this.copied = true;
+                    var self = this;
+                    setTimeout(function () { self.copied = false; }, 2000);
+                }
+            },
+
+            formatDate(iso) {
+                if (!iso) return '-';
+                var d = new Date(iso);
+                return d.toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'});
             },
 
             timeAgo(iso) {

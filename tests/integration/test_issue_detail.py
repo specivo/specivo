@@ -16,6 +16,7 @@ from specivo.models.attachment import Attachment
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import EnabledModule, Project
 from specivo.models.relation import IssueRelation
+from specivo.models.time_entry import TimeEntryActivity
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
@@ -250,10 +251,15 @@ async def test_detail_page_shows_tab_counts(
     """
     user = admin_client.state.user
 
-    # Seed a time entry activity and log time against the issue
-    activity = TimeEntryActivityFactory.build(name="Development", is_default=True)
-    db_session.add(activity)
-    await db_session.flush()
+    # Seed a time entry activity (select-or-insert to avoid collision with seed data)
+    result = await db_session.execute(
+        select(TimeEntryActivity).where(TimeEntryActivity.name == "Development")
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        activity = TimeEntryActivityFactory.build(name="Development", is_default=True)
+        db_session.add(activity)
+        await db_session.flush()
 
     time_entry = TimeEntryFactory.build(
         project_id=_project.id,
@@ -544,9 +550,14 @@ async def test_detail_page_time_tab_content(
     """
     user = admin_client.state.user
 
-    activity = TimeEntryActivityFactory.build(name="Testing", is_default=False)
-    db_session.add(activity)
-    await db_session.flush()
+    result = await db_session.execute(
+        select(TimeEntryActivity).where(TimeEntryActivity.name == "Testing")
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        activity = TimeEntryActivityFactory.build(name="Testing", is_default=False)
+        db_session.add(activity)
+        await db_session.flush()
 
     time_entry = TimeEntryFactory.build(
         project_id=_project.id,

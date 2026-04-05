@@ -204,9 +204,13 @@ async def test_semantic_search_count_respects_visibility(
     outsider_token = await _login(client, outsider_user.login)
     client.headers["Authorization"] = f"Bearer {outsider_token}"
 
-    data = await _search(client, "quantum computing consensus", mode="semantic")
+    data = await _search(
+        client, "quantum computing consensus",
+        mode="semantic", project_key=private_project.key,
+    )
 
     # The critical assertion: total_count must be 0 for a non-member
+    # (scoped to the private project so seed data from public projects is excluded)
     assert data["total_count"] == 0, (
         f"Expected total_count=0 for non-member, got {data['total_count']}. "
         "The semantic search count query is not applying visibility filters."
@@ -268,7 +272,12 @@ async def test_semantic_search_count_matches_visible_results(
     outsider_token = await _login(client, outsider_user.login)
     client.headers["Authorization"] = f"Bearer {outsider_token}"
 
-    data = await _search(client, "photosynthesis algorithm energy", mode="semantic")
+    # Scope to both test projects to exclude seed data noise
+    data = await _search(
+        client, "photosynthesis algorithm energy",
+        mode="semantic",
+        project_keys=f"{public_project.key},{private_project.key}",
+    )
 
     # total_count must match the number of actually visible results
     visible_count = len(data["items"])

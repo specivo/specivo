@@ -9,9 +9,11 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.project import Project
+from specivo.models.time_entry import TimeEntryActivity
 from tests.factories.project import ProjectFactory
 from tests.factories.time_entry import TimeEntryActivityFactory
 
@@ -74,10 +76,15 @@ async def test_time_entry_form(
     _project: Project,
 ):
     """GET /projects/{key}/time-entries/new with auth returns 200."""
-    # Seed an activity for the form dropdown
-    activity = TimeEntryActivityFactory.build(name="Development")
-    db_session.add(activity)
-    await db_session.commit()
+    # Seed an activity for the form dropdown (select-or-insert to avoid seed data collision)
+    result = await db_session.execute(
+        select(TimeEntryActivity).where(TimeEntryActivity.name == "Development")
+    )
+    activity = result.scalar_one_or_none()
+    if activity is None:
+        activity = TimeEntryActivityFactory.build(name="Development")
+        db_session.add(activity)
+        await db_session.commit()
 
     token = admin_client.state.token
     resp = await admin_client.get(

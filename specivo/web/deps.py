@@ -175,6 +175,25 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     templates.env.globals["debug"] = settings.debug
     templates.env.globals["app_version"] = settings.version
 
+    # Git commit hash (debug only, resolved once at startup)
+    if settings.debug:
+        _commit = ""
+        try:
+            import subprocess
+
+            _commit = subprocess.run(
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True, text=True, timeout=2, cwd="/app",
+            ).stdout.strip()
+        except Exception:
+            pass
+        if not _commit:
+            # Fallback: read from GIT_COMMIT env var or VERSION file
+            import os
+
+            _commit = os.environ.get("GIT_COMMIT", "")
+        templates.env.globals["git_commit"] = _commit
+
     # Markdown filter for wiki content
     import markdown as _md
     import markupsafe

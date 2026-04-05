@@ -169,7 +169,15 @@ class AuthService:
                 status_code=401,
             )
 
-        # 3. Check active lockout
+        # 3. Block service accounts from password login
+        if user.is_service_account:
+            raise AppError(
+                code="auth_service_account",
+                message=_("Service accounts cannot log in. Use an API key instead."),
+                status_code=401,
+            )
+
+        # 4. Check active lockout
         if user.locked_until is not None and user.locked_until > utcnow():
             raise AppError(
                 code="auth_account_locked",

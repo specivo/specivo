@@ -27,6 +27,9 @@ class SecurityAuditLog(Base):
         Index("idx_security_audit_created_at_brin", "created_at", postgresql_using="brin"),
         # Standard B-tree indexes for common query patterns
         Index("ix_security_audit_resource", "resource_type", "resource_id"),
+        # Composite indexes for admin listing: WHERE event_type = X ORDER BY created_at DESC
+        Index("ix_security_audit_event_type_created", "event_type", "created_at"),
+        Index("ix_security_audit_user_id_created", "user_id", "created_at"),
         {"postgresql_partition_by": "RANGE (created_at)"},
     )
 

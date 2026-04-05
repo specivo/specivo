@@ -101,6 +101,11 @@ class RequestIDMiddleware:
         headers = dict(scope.get("headers", []))
         request_id = (headers.get(b"x-request-id") or b"").decode() or str(uuid.uuid4())
 
+        # Clear per-request caches
+        from specivo.services.permission_service import clear_role_cache
+
+        clear_role_cache()
+
         # Store in scope state (accessible via request.state.request_id)
         scope.setdefault("state", {})
         scope["state"]["request_id"] = request_id

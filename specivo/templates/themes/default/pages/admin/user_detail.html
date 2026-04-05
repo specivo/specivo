@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+
+{% block title %}{{ target_user.display_name }} - {% trans %}Users{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/users/">{% trans %}Users{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{{ target_user.display_name }}</span>
+</div>
+
+<div x-data='adminUserDetail({ targetUser: {{ target_user | tojson }}, apiKeys: {{ api_keys | tojson }} })'>
+
+  {# --- User header --- #}
+  <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">
+    <div class="avatar-lg" :style="'background:' + targetUser.avatar_color"
+         x-text="targetUser.display_name.split(' ').map(function(w){return w[0]}).join('').substring(0,2).toUpperCase()"></div>
+    <div>
+      <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: 2px;"
+          x-text="targetUser.display_name"></h1>
+      <div style="display: flex; gap: var(--sp-space-sm); align-items: center;">
+        <template x-if="targetUser.is_service_account">
+          <span class="sp-badge sp-badge-info">{% trans %}Service Account{% endtrans %}</span>
+        </template>
+        <span class="sp-role" :class="targetUser.is_admin ? 'sp-role-admin' : 'sp-role-member'"
+              x-text="targetUser.is_admin ? '{% trans %}Admin{% endtrans %}' : '{% trans %}Member{% endtrans %}'"></span>
+        <span class="sp-user-status" :class="'sp-user-status-' + targetUser.status"
+              x-text="targetUser.status.charAt(0).toUpperCase() + targetUser.status.slice(1)"></span>
+      </div>
+    </div>
+  </div>
+
+  {# --- Account Details --- #}
+  <div class="card" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;">
+    <h2 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Account Details{% endtrans %}</h2>
+    <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-xl); line-height: 1.5;">
+      <template x-if="targetUser.is_service_account">
+        <span>{% trans %}Service accounts authenticate via API keys only. They cannot log in via the web interface.{% endtrans %}</span>
+      </template>
+      <template x-if="!targetUser.is_service_account">
+        <span>{% trans %}User account details and authentication information.{% endtrans %}</span>
+      </template>
+    </p>
+
+    <div class="sp-info-row">
+      <span class="sp-info-label">{% trans %}Login{% endtrans %}</span>
+      <span class="sp-info-value" style="font-family: var(--sp-font-mono);" x-text="targetUser.login"></span>
+    </div>
+    <div class="sp-info-row">
+      <span class="sp-info-label">{% trans %}Email{% endtrans %}</span>
+      <span class="sp-info-value" x-text="targetUser.email"></span>
+    </div>
+    <div class="sp-info-row">
+      <span class="sp-info-label">{% trans %}Created{% endtrans %}</span>
+      <span class="sp-info-value" x-text="formatDate(targetUser.created_at)"></span>
+    </div>
+    <div class="sp-info-row">
+      <span class="sp-info-label" x-text="targetUser.is_service_account ? '{% trans %}Last API call{% endtrans %}' : '{% trans %}Last login{% endtrans %}'"></span>
+      <span class="sp-info-value" :style="!targetUser.last_login_at ? 'color: var(--sp-text-muted)' : ''"
+            x-text="targetUser.last_login_at ? formatDate(targetUser.last_login_at) : '{% trans %}Never{% endtrans %}'"></span>
+    </div>
+  </div>
+
+  {# --- API Keys --- #}
+  <div class="card" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;">
+    <h2 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}API Keys{% endtrans %}</h2>
+    <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-xl); line-height: 1.5;">
+      {% trans %}Keys are used for MCP server connections, CI/CD pipelines, and programmatic access. The full key is shown only once when created.{% endtrans %}
+    </p>
+
+    {# New key reveal banner #}
+    <template x-if="newKey">
+      <div class="sp-key-reveal" style="margin-bottom: var(--sp-space-xl);">
+        <div class="sp-key-reveal-label">{% trans %}New API Key Created{% endtrans %}</div>
+        <div class="sp-key-reveal-value" style="display: flex; align-items: center; gap: var(--sp-space-sm);">
+          <code style="flex: 1; padding: var(--sp-space-sm) var(--sp-space-md); background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); word-break: break-all;" x-text="newKey"></code>
+          <button class="sp-btn-sm" @click="copyKey()" x-text="copied ? '{% trans %}Copied!{% endtrans %}' : '{% trans %}Copy{% endtrans %}'"></button>
+        </div>
+        <div class="sp-key-reveal-warn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px; display: inline; vertical-align: -1px; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          {% trans %}Copy this key now. It will not be shown again.{% endtrans %}
+        </div>
+      </div>
+    </template>
+
+    {# Create key inline form #}
+    <div style="margin-bottom: var(--sp-space-lg);">
+      <label class="form-label" for="admin-key-name">{% trans %}Key name{% endtrans %}</label>
+      <form @submit.prevent="createKey()" style="display: flex; gap: var(--sp-space-sm);">
+        <input id="admin-key-name" class="form-input" type="text" x-model="newKeyName"
+               placeholder="{% trans %}e.g. MCP Server, CI Pipeline{% endtrans %}" required style="flex: 1;">
+        <button class="sp-btn sp-btn-primary" type="submit" :disabled="creating">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><path d="M12 5v14M5 12h14"/></svg>
+          <span x-text="creating ? '{% trans %}Creating...{% endtrans %}' : '{% trans %}Create Key{% endtrans %}'"></span>
+        </button>
+      </form>
+    </div>
+    <div x-show="createError" style="color: var(--sp-danger); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-md);" x-text="createError"></div>
+
+    {# Keys table #}
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Name{% endtrans %}</th>
+          <th>{% trans %}Key Prefix{% endtrans %}</th>
+          <th>{% trans %}Created{% endtrans %}</th>
+          <th>{% trans %}Last Used{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Actions{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="apiKeys.length === 0">
+          <tr>
+            <td colspan="6" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">
+              {% trans %}No API keys yet. Create one to get started.{% endtrans %}
+            </td>
+          </tr>
+        </template>
+        <template x-for="key in apiKeys" :key="key.id">
+          <tr>
+            <td style="font-weight: 500;" x-text="key.name"></td>
+            <td>
+              <code style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs);" x-text="key.key_prefix + '...'"></code>
+            </td>
+            <td style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="formatDate(key.created_at)"></td>
+            <td style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="key.last_used_at ? timeAgo(key.last_used_at) : '{% trans %}Never{% endtrans %}'"></td>
+            <td>
+              <span class="badge-status" :class="key.is_active ? 'in-progress' : 'closed'"
+                    x-text="key.is_active ? '{% trans %}Active{% endtrans %}' : '{% trans %}Revoked{% endtrans %}'"></span>
+            </td>
+            <td>
+              <template x-if="key.is_active">
+                <button class="sp-btn-sm danger" @click="revokeKey(key.id)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px;"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                  {% trans %}Revoke{% endtrans %}
+                </button>
+              </template>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+
+  {# --- MCP Configuration (service accounts only) --- #}
+  <template x-if="targetUser.is_service_account">
+    <div class="card" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;">
+      <h2 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}MCP Configuration{% endtrans %}</h2>
+      <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-xl); line-height: 1.5;">
+        {% trans %}Add this to your MCP client settings (Claude Code, Cursor, etc.) to connect to this Specivo instance.{% endtrans %}
+      </p>
+
+      <div style="background: var(--sp-bg-sidebar); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); overflow-x: auto;">
+        <pre style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-inverse); margin: 0; line-height: 1.6;">{
+  "mcpServers": {
+    "specivo": {
+      "type": "sse",
+      "url": "https://your-specivo-host/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer spv_your_api_key_here"
+      }
+    }
+  }
+}</pre>
+      </div>
+      <p style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-md); line-height: 1.5;">
+        {% trans %}Replace <code>spv_your_api_key_here</code> with an API key created above. The agent connects to Specivo over HTTP — no database access or local installation required.{% endtrans %}
+      </p>
+    </div>
+  </template>
+
+</div>
+{% endblock %}

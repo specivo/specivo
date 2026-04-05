@@ -154,19 +154,28 @@ class ApiKeyService:
         Checks: is_active, expires_at, ip_allowlist, user status.
         Updates last_used_at with a 60-second debounce.
         Raises AppError(401) on any auth failure.
+
+        Uses a single JOIN query to load both ApiKey and User in one
+        round-trip (previously two sequential queries).
         """
         key_hash = _hash_key(raw_key)
 
-        stmt = select(ApiKey).where(ApiKey.key_hash == key_hash)
+        stmt = (
+            select(ApiKey, User)
+            .join(User, ApiKey.user_id == User.id)
+            .where(ApiKey.key_hash == key_hash)
+        )
         result = await session.execute(stmt)
-        key = result.scalar_one_or_none()
+        row = result.one_or_none()
 
-        if key is None:
+        if row is None:
             raise AppError(
                 code="api_key_invalid",
                 message=_("Invalid API key"),
                 status_code=401,
             )
+
+        key, user = row._tuple()
 
         if not key.is_active:
             raise AppError(
@@ -184,14 +193,10 @@ class ApiKeyService:
 
         _check_ip_allowlist(key.ip_allowlist, client_ip)
 
-        # Load the associated user
-        user_result = await session.execute(select(User).where(User.id == key.user_id))
-        user = user_result.scalar_one_or_none()
-
         # Per spec: locked accounts can still use API keys.
         # Locking is brute-force protection targeting password login.
         # Only deactivated accounts (admin action) block all auth methods.
-        if user is None or user.status == "deactivated":
+        if user.status == "deactivated":
             raise AppError(
                 code="api_key_invalid",
                 message=_("Invalid API key"),

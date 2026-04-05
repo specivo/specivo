@@ -23,6 +23,8 @@ class RefreshToken(Base, TimestampMixin):
     __table_args__ = (
         # Index for fast per-user session listing and bulk revocation
         Index("ix_refresh_tokens_user_id", "user_id"),
+        # Index for background cleanup of expired tokens
+        Index("ix_refresh_tokens_expires_at", "expires_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

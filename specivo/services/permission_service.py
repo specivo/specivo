@@ -6,6 +6,8 @@
   - For non-admins: queries member_roles + roles for this user+project,
     and checks whether any role grants the requested permission or ``"*"``.
 - ``check_permission()`` async function for endpoint-level authorization.
+- ``get_user_roles(session, user_id, project_id)``: cacheable role lookup
+  used by both permission checks and visibility checks.
 """
 
 from __future__ import annotations
@@ -22,6 +24,44 @@ from specivo.models.role import Role
 from specivo.models.user import User
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Role lookup (cacheable per request)
+# ---------------------------------------------------------------------------
+
+# Per-session role cache to avoid repeated 3-table JOINs within the same
+# request/tool call.  Keyed by (user_id, project_id) → list[Role].
+# Callers should call ``get_user_roles()`` instead of querying directly.
+_role_cache: dict[tuple[int, int], list[Role]] = {}
+
+
+def clear_role_cache() -> None:
+    """Clear the in-process role cache. Call at request boundaries."""
+    _role_cache.clear()
+
+
+async def get_user_roles(
+    session: AsyncSession, user_id: int, project_id: int,
+) -> list[Role]:
+    """Return roles for *user_id* on *project_id*, with per-request caching.
+
+    The 3-table JOIN (roles → member_roles → members) is the most
+    frequent query in the system.  This function caches the result so
+    repeated checks within the same request hit the DB only once.
+    """
+    cache_key = (user_id, project_id)
+    if cache_key in _role_cache:
+        return _role_cache[cache_key]
+
+    stmt = (
+        select(Role)
+        .join(MemberRole, MemberRole.role_id == Role.id)
+        .join(Member, Member.id == MemberRole.member_id)
+        .where(Member.project_id == project_id, Member.user_id == user_id)
+    )
+    roles = list((await session.execute(stmt)).scalars().all())
+    _role_cache[cache_key] = roles
+    return roles
 
 # ---------------------------------------------------------------------------
 # Permission catalogue
@@ -100,14 +140,8 @@ async def check_permission(
             if project_key is None or project_key not in allowed_projects:
                 return False
 
-    # Project-scoped member role lookup
-    stmt = (
-        select(Role)
-        .join(MemberRole, MemberRole.role_id == Role.id)
-        .join(Member, Member.id == MemberRole.member_id)
-        .where(Member.project_id == project_id, Member.user_id == user.id)
-    )
-    roles = (await session.execute(stmt)).scalars().all()
+    # Project-scoped member role lookup (cached per request)
+    roles = await get_user_roles(session, user.id, project_id)
     granted = _any_role_grants(roles, permission)
 
     # Audit logging (non-critical — never block permission checks).

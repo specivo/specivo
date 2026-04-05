@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -44,19 +44,18 @@ class ProjectService:
         return label
 
     async def _get_by_key(self, session: AsyncSession, key: str) -> Project | None:
+        """Look up a project by key, falling back to retired key aliases.
+
+        Uses a single query with LEFT JOIN to avoid two round-trips.
+        """
         upper_key = key.upper()
-        stmt = select(Project).where(Project.key == upper_key)
-        result = await session.execute(stmt)
-        project = result.scalar_one_or_none()
-        if project is not None:
-            return project
-        # Alias fallback — check retired keys
-        alias_stmt = (
+        stmt = (
             select(Project)
-            .join(ProjectKeyAlias, ProjectKeyAlias.project_id == Project.id)
-            .where(ProjectKeyAlias.old_key == upper_key)
+            .outerjoin(ProjectKeyAlias, ProjectKeyAlias.project_id == Project.id)
+            .where(or_(Project.key == upper_key, ProjectKeyAlias.old_key == upper_key))
+            .limit(1)
         )
-        result = await session.execute(alias_stmt)
+        result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     # -----------------------------------------------------------------------

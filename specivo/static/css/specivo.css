@@ -649,6 +649,21 @@ textarea.modal-input { font-family: var(--sp-font-body); }
 .sp-user-status-locked { color: var(--sp-danger); }
 .sp-user-status-deactivated::before { background: var(--sp-warning); }
 
+/* Service account badge */
+.sp-badge-info { display: inline-flex; padding: 2px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; background: var(--sp-info-subtle); color: var(--sp-info); }
+
+/* Info rows (key-value pairs in detail cards) */
+.sp-info-row { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-space-md) 0; border-bottom: 1px solid var(--sp-border); }
+.sp-info-row:last-child { border-bottom: none; }
+.sp-info-label { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); min-width: 120px; }
+.sp-info-value { font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); font-weight: 500; }
+
+/* Key reveal banner (shown once after creating an API key) */
+.sp-key-reveal { background: var(--sp-success-subtle); border: 1px solid rgba(22,163,74,0.15); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); }
+.sp-key-reveal-label { font-size: var(--sp-font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sp-success); margin-bottom: var(--sp-space-sm); }
+.sp-key-reveal-value { margin-bottom: var(--sp-space-sm); }
+.sp-key-reveal-warn { font-size: var(--sp-font-size-xs); color: var(--sp-warning); }
+
 .badge-priority { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
 .badge-priority.low { background: var(--sp-priority-low); }
 .badge-priority.normal { background: var(--sp-priority-normal); }

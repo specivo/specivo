@@ -837,6 +837,8 @@ class SearchService:
             return [], 0
 
         query_vector = await emb_service.generate_embedding(query, model, intent="query")
+        if query_vector is None:
+            return [], 0
         # Format vector as PostgreSQL literal: '[0.1,0.2,...]'
         vec_literal = "[" + ",".join(str(v) for v in query_vector) + "]"
 

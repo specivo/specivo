@@ -31,6 +31,22 @@ class AuditEvent(StrEnum):
     ATTACHMENT_DELETED = "attachment_deleted"
     ATTACHMENT_UPDATED = "attachment_description_updated"
     PROJECT_KEY_RENAMED = "project_key_renamed"
+    ISSUE_CREATED = "issue_created"
+    ISSUE_UPDATED = "issue_updated"
+    ISSUE_READ = "issue_read"
+    ISSUE_LISTED = "issue_listed"
+    WIKI_READ = "wiki_read"
+    WIKI_UPDATED = "wiki_updated"
+    WIKI_LISTED = "wiki_listed"
+    COMMENT_ADDED = "comment_added"
+    PROJECTS_LISTED = "projects_listed"
+    WIKI_CREATED = "wiki_created"
+    MEMBERS_LISTED = "members_listed"
+    LOOKUPS_READ = "lookups_read"
+    TIME_LOGGED = "time_logged"
+    VERSIONS_LISTED = "versions_listed"
+    VERSION_CREATED = "version_created"
+    VERSION_UPDATED = "version_updated"
 
 
 class MemberAction(StrEnum):

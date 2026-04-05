@@ -3,6 +3,41 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.7] - 2026-04-05
+
+### Added
+- **MCP HTTP transport** — Streamable HTTP + SSE endpoints replace stdio, enabling remote AI agent connectivity
+- **MCP tool expansion** — 7 new tools: create_wiki, list_lookups, list_members, log_time, list/create/update versions (18 tools total)
+- **MCP permission enforcement** — every tool call checks project-scoped permissions via `check_permission`
+- **MCP audit logging** — granular event types per tool (ISSUE_CREATED, WIKI_UPDATED, etc.) with `source: "mcp"` tag
+- **Admin user detail page** — API key management (create/list/revoke), service account support
+- **Configurable password policy** — `PASSWORD_MIN_LENGTH` setting (default 8, minimum 6)
+
+### Changed
+- MCP transport-level auth is now format-only (no DB hit); real auth happens per-tool call for instant key revocation
+- API key authentication uses single JOIN query instead of two sequential queries
+- Permission checks cached per-request to avoid repeated 3-table JOINs
+- Project lookup with alias fallback uses single LEFT JOIN query instead of two queries
+- Git commit hash shown in debug footer
+
+### Fixed
+- IDOR in MCP `_update_version` — version ownership now verified against claimed project
+- Service account creation sends no password field (was sending empty string → 422)
+- Form error display shows field names and supports multiline errors
+- `is_admin=False` enforced on user creation (admin promotion only via CLI)
+- Search service handles missing embedding model gracefully (was TypeError on None vector)
+- 23 test failures from seed data collisions resolved (select-or-insert pattern)
+
+### Security
+- Per-request role cache cleared at request boundaries to prevent cross-request permission leakage
+- Unique constraint on `member_roles(member_id, role_id)` prevents duplicate role assignments
+
+### Performance
+- Composite B-tree indexes on `security_audit_logs(event_type, created_at)` and `(user_id, created_at)`
+- Index on `refresh_tokens.expires_at` for background token cleanup
+- Eliminated double DB round-trip on every MCP tool call (transport + tool auth)
+- 1153 tests passing (up from ~1100)
+
 ## [0.1.6] - 2026-04-05
 
 ### Added
