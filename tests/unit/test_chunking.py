@@ -55,11 +55,10 @@ class TestWikiChunking:
             "Deploy to production."
         )
         chunks = service.chunk_wiki_page("Setup Guide", text)
-        assert len(chunks) == 4  # intro + 3 sections
-        # First chunk includes the title and intro paragraph
-        assert "Setup Guide" in chunks[0]
+        # Every chunk includes the page title for semantic context
+        for chunk in chunks:
+            assert "Setup Guide" in chunk
         assert "Introduction paragraph" in chunks[0]
-        # Subsequent chunks contain heading-based sections
         assert any("Getting Started" in c for c in chunks)
         assert any("Configuration" in c for c in chunks)
         assert any("Deployment" in c for c in chunks)
@@ -81,9 +80,49 @@ class TestWikiChunking:
         """Wiki page splits on h1, h2, and h3 headings."""
         text = "# Overview\nTop level section.\n\n### Details\nDetailed info here."
         chunks = service.chunk_wiki_page("Doc", text)
-        assert len(chunks) == 2
+        for chunk in chunks:
+            assert "Doc" in chunk
         assert any("Overview" in c for c in chunks)
         assert any("Details" in c for c in chunks)
+
+    def test_wiki_code_block_not_split(self, service: ChunkingService):
+        """Headings inside fenced code blocks are not split points."""
+        text = (
+            "## Running Tests\n\n"
+            "```bash\n"
+            "# All tests\n"
+            "$DC exec backend pytest\n"
+            "# App tests\n"
+            "$DC exec backend pytest subscriptions/\n"
+            "```\n\n"
+            "## Configuration\n"
+            "Set up the config."
+        )
+        chunks = service.chunk_wiki_page("Testing", text)
+        # The code block should stay intact within the "Running Tests" chunk
+        code_chunk = [c for c in chunks if "Running Tests" in c]
+        assert len(code_chunk) == 1
+        assert "# All tests" in code_chunk[0]
+        assert "# App tests" in code_chunk[0]
+        assert "$DC exec backend pytest" in code_chunk[0]
+
+    def test_wiki_tilde_fence_protected(self, service: ChunkingService):
+        """Tilde-fenced code blocks are also protected."""
+        text = "## Overview\nIntro.\n\n~~~python\n# This is a comment\ndef foo():\n    pass\n~~~\n"
+        chunks = service.chunk_wiki_page("Code", text)
+        code_chunk = [c for c in chunks if "Overview" in c]
+        assert len(code_chunk) == 1
+        assert "# This is a comment" in code_chunk[0]
+
+    def test_wiki_tiny_chunks_merged(self, service: ChunkingService):
+        """Sections shorter than MIN_CHUNK_CHARS are merged with neighbours."""
+        text = "## A\nShort.\n\n## B\nAlso short.\n\n## C\nTiny."
+        chunks = service.chunk_wiki_page("Page", text)
+        # All three sections are < 100 chars, should be merged into one chunk
+        assert len(chunks) == 1
+        assert "Short." in chunks[0]
+        assert "Also short." in chunks[0]
+        assert "Tiny." in chunks[0]
 
 
 class TestJournalChunking:

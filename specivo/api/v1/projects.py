@@ -7,9 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
-from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
+from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.security import get_current_user
-from specivo.models.member import Member
 from specivo.models.user import User
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.project import (
@@ -49,8 +48,12 @@ async def _require_manage(
     if not allowed:
         try:
             await _audit.log_member_change(
-                session=db, action=MemberAction.PERMISSION_DENIED, user_id=user.id,
-                project_id=project.id, target_user_id=0, target_login="",
+                session=db,
+                action=MemberAction.PERMISSION_DENIED,
+                user_id=user.id,
+                project_id=project.id,
+                target_user_id=0,
+                target_login="",
                 request=request,
             )
             await db.commit()
@@ -64,21 +67,8 @@ async def _require_project_access(
     user: User,
     db: AsyncSession,
 ) -> None:
-    """Raise 404 if user cannot access the project.
-
-    Returns 404 (not 403) for private projects to prevent enumeration.
-    """
-    if user.is_admin:
-        return
-    if not project.is_public:
-        member_result = await db.execute(
-            select(Member).where(
-                Member.project_id == project.id,
-                Member.user_id == user.id,
-            )
-        )
-        if member_result.scalar_one_or_none() is None:
-            raise NotFoundError(f"Project '{project.key}' not found")
+    """Raise 404 if user cannot access the project."""
+    await _service.require_project_access(db, project, user)
 
 
 def _project_out(project, parent_key: str | None) -> ProjectOut:
@@ -133,6 +123,7 @@ async def create_project(
         raise PermissionDeniedError("Only admins can create projects")
 
     project = await _service.create(db, data, current_user)
+    await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     return _project_out(project, parent_key)
 
@@ -161,6 +152,7 @@ async def update_project(
     await _require_manage(project, current_user, db)
 
     project = await _service.update(db, project, data)
+    await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     return _project_out(project, parent_key)
 
@@ -219,9 +211,14 @@ async def add_member(
 
     try:
         await _audit.log_member_change(
-            session=db, action=MemberAction.ADDED, user_id=current_user.id,
-            project_id=project.id, target_user_id=data.user_id,
-            target_login=result.login, roles=result.roles, request=request,
+            session=db,
+            action=MemberAction.ADDED,
+            user_id=current_user.id,
+            project_id=project.id,
+            target_user_id=data.user_id,
+            target_login=result.login,
+            roles=result.roles,
+            request=request,
         )
     except Exception:
         pass
@@ -252,9 +249,13 @@ async def remove_member(
 
     try:
         await _audit.log_member_change(
-            session=db, action=MemberAction.REMOVED, user_id=current_user.id,
-            project_id=project.id, target_user_id=user_id,
-            target_login=target_login, request=request,
+            session=db,
+            action=MemberAction.REMOVED,
+            user_id=current_user.id,
+            project_id=project.id,
+            target_user_id=user_id,
+            target_login=target_login,
+            request=request,
         )
     except Exception:
         pass
@@ -287,9 +288,14 @@ async def update_member_roles(
 
     try:
         await _audit.log_member_change(
-            session=db, action=MemberAction.ROLES_CHANGED, user_id=current_user.id,
-            project_id=project.id, target_user_id=user_id,
-            target_login=result.login, roles=result.roles, request=request,
+            session=db,
+            action=MemberAction.ROLES_CHANGED,
+            user_id=current_user.id,
+            project_id=project.id,
+            target_user_id=user_id,
+            target_login=result.login,
+            roles=result.roles,
+            request=request,
         )
     except Exception:
         pass

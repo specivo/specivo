@@ -94,7 +94,7 @@ async def project(db_session: AsyncSession) -> Project:
 
 @pytest_asyncio.fixture
 async def status_open(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -103,7 +103,7 @@ async def status_open(db_session: AsyncSession) -> IssueStatus:
 
 @pytest_asyncio.fixture
 async def status_closed(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="Closed", position=5, is_closed=True)
+    s = StatusFactory.build(name="Closed", position=5, category="closed")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -342,7 +342,11 @@ async def test_create_version_permission_denied_for_non_member(
     db_session: AsyncSession,
     project: Project,
 ) -> None:
-    """A regular user with no role on the project cannot manage versions."""
+    """A regular user with no role on the project cannot manage versions.
+
+    Returns 404 (not 403) because require_project_access runs first and
+    returns 404 for non-members on private projects to prevent enumeration.
+    """
     regular = await _make_user(db_session, login="regular_ver_user")
     token = await _login(client, regular.login)
 
@@ -351,7 +355,7 @@ async def test_create_version_permission_denied_for_non_member(
         json={"name": "blocked"},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 403, resp.text
+    assert resp.status_code == 404, resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -654,3 +658,113 @@ async def test_descendants_sharing_visible_to_subproject(
     visible = await svc.visible_versions(db_session, child)
     visible_ids = [v.id for v in visible]
     assert version.id in visible_ids, f"descendants-shared version {version.id} should be visible from child project"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Status categories and roadmap progress
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_roadmap_progress_counts_done_category(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    priority: IssuePriority,
+    author: User,
+) -> None:
+    """Issues in 'done' and 'closed' categories count toward progress.
+
+    4 issues: backlog, active, done, closed -> 2 of 4 = 50%.
+    """
+    statuses = {}
+    for name, cat, pos in [
+        ("Backlog", "backlog", 1),
+        ("Active", "active", 2),
+        ("Done", "done", 3),
+        ("Terminal", "closed", 4),
+    ]:
+        s = StatusFactory.build(name=name, position=pos, category=cat)
+        db_session.add(s)
+        await db_session.flush()
+        statuses[cat] = s
+
+    await db_session.commit()
+    version = await _make_version(db_session, project, name="cat-test")
+
+    seq = 500
+    for cat in ("backlog", "active", "done", "closed"):
+        await _seed_issue(db_session, project, version, statuses[cat], tracker, priority, author, seq)
+        seq += 1
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/roadmap/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    entries = resp.json()
+    entry = next(e for e in entries if e["version"]["name"] == "cat-test")
+    assert entry["closed_count"] == 2  # done + closed
+    assert entry["open_count"] == 2  # backlog + active
+    assert entry["progress_percent"] == 50
+
+
+@pytest.mark.asyncio
+async def test_roadmap_progress_resolved_counts_as_done(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    priority: IssuePriority,
+    author: User,
+) -> None:
+    """Resolved (done category) issues count toward roadmap progress."""
+    s_new = StatusFactory.build(name="NewR", position=1, category="backlog")
+    s_resolved = StatusFactory.build(name="ResolvedR", position=3, category="done")
+    db_session.add_all([s_new, s_resolved])
+    await db_session.commit()
+
+    version = await _make_version(db_session, project, name="resolved-test")
+
+    # 1 new, 1 resolved -> 50%
+    await _seed_issue(db_session, project, version, s_new, tracker, priority, author, 600)
+    await _seed_issue(db_session, project, version, s_resolved, tracker, priority, author, 601)
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/roadmap/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    entries = resp.json()
+    entry = next(e for e in entries if e["version"]["name"] == "resolved-test")
+    assert entry["closed_count"] == 1
+    assert entry["progress_percent"] == 50
+
+
+@pytest.mark.asyncio
+async def test_status_is_closed_property() -> None:
+    """The is_closed property returns True only for category='closed'."""
+    for cat, expected in [
+        ("backlog", False),
+        ("active", False),
+        ("done", False),
+        ("closed", True),
+    ]:
+        s = StatusFactory.build(category=cat)
+        assert s.is_closed is expected, f"category={cat} -> is_closed should be {expected}"
+
+
+@pytest.mark.asyncio
+async def test_status_is_done_property() -> None:
+    """The is_done property returns True for 'done' and 'closed' categories."""
+    for cat, expected in [
+        ("backlog", False),
+        ("active", False),
+        ("done", True),
+        ("closed", True),
+    ]:
+        s = StatusFactory.build(category=cat)
+        assert s.is_done is expected, f"category={cat} -> is_done should be {expected}"

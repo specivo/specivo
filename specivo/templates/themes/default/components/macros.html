@@ -3,13 +3,15 @@
    ============================================================ #}
 
 {# --- Breadcrumbs ---
-   Usage: {{ breadcrumbs([{"label": "Projects", "url": "/projects"}, {"label": "ACME"}]) }}
+   Usage: {{ breadcrumbs([{"label": "Projects", "url": "/projects/"}, {"label": "ACME"}]) }}
+   Trailing slashes are enforced automatically on all URLs.
 #}
 {% macro breadcrumbs(items) %}
 <div class="breadcrumbs">
   {% for item in items %}
     {% if not loop.last %}
-      <a href="{{ item.url }}">{{ item.label }}</a><span class="sep">/</span>
+      {% set href = item.url if item.url.endswith('/') else item.url ~ '/' %}
+      <a href="{{ href }}">{{ item.label }}</a><span class="sep">/</span>
     {% else %}
       <span class="current">{{ item.label }}</span>
     {% endif %}
@@ -48,9 +50,9 @@
 {% macro avatar(name, size='sm', color='', avatar_url='') %}
 {% set initials = name[:2] | upper if name else '?' %}
 {% if avatar_url %}
-<img src="{{ avatar_url }}" class="avatar-{{ size }}" style="border-radius:50%;object-fit:cover;" alt="{{ initials }}">
+<img src="{{ avatar_url }}" class="avatar-{{ size }} avatar-img" alt="{{ initials }}">
 {% else %}
-<span class="avatar-{{ size }}"{% if color %} style="background:{{ color }}"{% endif %}>{{ initials }}</span>
+<span class="avatar-{{ size }}"{% if color %} style="background:{{ color }};color:white"{% endif %}>{{ initials }}</span>
 {% endif %}
 {% endmacro %}
 

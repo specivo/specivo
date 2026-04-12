@@ -160,11 +160,7 @@ class ApiKeyService:
         """
         key_hash = _hash_key(raw_key)
 
-        stmt = (
-            select(ApiKey, User)
-            .join(User, ApiKey.user_id == User.id)
-            .where(ApiKey.key_hash == key_hash)
-        )
+        stmt = select(ApiKey, User).join(User, ApiKey.user_id == User.id).where(ApiKey.key_hash == key_hash)
         result = await session.execute(stmt)
         row = result.one_or_none()
 
@@ -207,6 +203,8 @@ class ApiKeyService:
         now = utcnow()
         if key.last_used_at is None or (now - key.last_used_at).total_seconds() >= _DEBOUNCE_SECONDS:
             key.last_used_at = now
+            # Also update user-level timestamp (shown as "Last API call" for service accounts)
+            user.last_login_at = now
             await session.flush()
 
         return user, key

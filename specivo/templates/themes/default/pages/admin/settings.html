@@ -23,12 +23,12 @@
       </tr>
     </thead>
     <tbody>
-      <template x-if="Object.keys(items).length === 0">
+      <template x-if="!hasItems">
         <tr>
           <td colspan="3" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">No settings configured.</td>
         </tr>
       </template>
-      <template x-for="key in Object.keys(items)" :key="key">
+      <template x-for="key in itemKeys" :key="key">
         <tr>
           <td class="sp-mono-key" x-text="key"></td>
           <td>

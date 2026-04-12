@@ -29,7 +29,7 @@ from tests.factories.user import UserFactory
 @pytest_asyncio.fixture
 async def lookup_data(db_session: AsyncSession):
     """Seed lookup tables (tracker, status, priority)."""
-    status_obj = StatusFactory.build(name="New", position=1, is_closed=False)
+    status_obj = StatusFactory.build(name="New", position=1, category="backlog")
     tracker = TrackerFactory.build(name="Bug", default_status_id=None)
     priority = PriorityFactory.build(name="Normal", is_default=True)
     db_session.add_all([status_obj, tracker, priority])

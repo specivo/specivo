@@ -38,7 +38,7 @@ def test_threaded_reply_appears_indented(admin_page: Page, api_client: httpx.Cli
         f"/api/v1/issues/{issue['key']}/journals/",
         json={"notes": "Reply to parent", "reply_to_id": comment["id"]},
     )
-    admin_page.goto(f"/projects/{project['key']}/issues/{issue['key']}/")
+    admin_page.goto(f"/issue/{issue['key']}/")
     reply = admin_page.locator(".sp-reply-indent")
     expect(reply).to_be_visible()
 
@@ -52,7 +52,7 @@ def test_emoji_reaction_visible(admin_page: Page, api_client: httpx.Client) -> N
         api_client,
         f"/api/v1/issues/{issue['key']}/journals/{comment['id']}/reactions/thumbs_up/",
     )
-    admin_page.goto(f"/projects/{project['key']}/issues/{issue['key']}/")
+    admin_page.goto(f"/issue/{issue['key']}/")
     reaction_btn = admin_page.locator(".sp-reaction-btn.sp-reaction-active")
     expect(reaction_btn).to_be_visible()
 
@@ -67,7 +67,7 @@ def test_status_change_shows_color_coded(admin_page: Page, api_client: httpx.Cli
         json={"subject": "Updated status test subject", "lock_version": issue["lock_version"]},
     )
     assert resp.status_code == 200, f"PATCH failed: {resp.text}"
-    admin_page.goto(f"/projects/{project['key']}/issues/{issue['key']}/")
+    admin_page.goto(f"/issue/{issue['key']}/")
     admin_page.wait_for_load_state("networkidle")
     expect(admin_page.locator(".sp-change-new").first).to_be_visible(timeout=10000)
 
@@ -76,7 +76,7 @@ def test_watcher_toggle_present(admin_page: Page, api_client: httpx.Client) -> N
     """The watcher chip with Watch/Unwatch should be visible in the sidebar."""
     project = _create_project(api_client)
     issue = _create_issue(api_client, project["key"], "Watcher test")
-    admin_page.goto(f"/projects/{project['key']}/issues/{issue['key']}/")
+    admin_page.goto(f"/issue/{issue['key']}/")
     admin_page.wait_for_load_state("networkidle")
     watcher = admin_page.locator(".sp-watcher-chip").first
     expect(watcher).to_be_visible(timeout=10000)
@@ -86,7 +86,7 @@ def test_time_log_form_opens(admin_page: Page, api_client: httpx.Client) -> None
     """Clicking the Time tab then Log time should reveal the time log form."""
     project = _create_project(api_client)
     issue = _create_issue(api_client, project["key"], "Time test")
-    admin_page.goto(f"/projects/{project['key']}/issues/{issue['key']}/")
+    admin_page.goto(f"/issue/{issue['key']}/")
     admin_page.wait_for_load_state("networkidle")
     admin_page.locator(".activity-tab", has_text="Time").click()
     admin_page.locator("text=Log time").click()
@@ -94,11 +94,17 @@ def test_time_log_form_opens(admin_page: Page, api_client: httpx.Client) -> None
 
 
 def test_attachment_form_opens(admin_page: Page, api_client: httpx.Client) -> None:
-    """Clicking the Attachments tab then Attach file should reveal a file input."""
+    """Clicking the Attachments tab then Upload should reveal a file input.
+
+    The Attachments tab is lazy-loaded via htmx on first click, so we wait
+    for the Upload button to appear before interacting with it.
+    """
     project = _create_project(api_client)
     issue = _create_issue(api_client, project["key"], "Attach test")
-    admin_page.goto(f"/projects/{project['key']}/issues/{issue['key']}/")
+    admin_page.goto(f"/issue/{issue['key']}/")
     admin_page.wait_for_load_state("networkidle")
     admin_page.locator(".activity-tab", has_text="Attachments").click()
-    admin_page.locator("text=Attach file").click()
-    expect(admin_page.locator("input[type='file']")).to_be_visible()
+    upload_btn = admin_page.locator("button", has_text="Upload")
+    expect(upload_btn).to_be_visible()
+    upload_btn.click()
+    expect(admin_page.locator("input[type='file']")).to_be_attached()

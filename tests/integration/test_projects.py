@@ -396,6 +396,78 @@ async def test_remove_member(
     assert regular_user.id not in user_ids
 
 
+@pytest.mark.asyncio
+async def test_update_member_roles(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    regular_user: User,
+) -> None:
+    """PATCH replaces a member's roles and response exposes role_ids."""
+    dev_role = await _make_role(db_session, "UpdDev")
+    mgr_role = await _make_role(db_session, "UpdMgr")
+
+    await client.post(
+        "/api/v1/projects/",
+        json={"name": "Update Roles", "identifier": "update-roles", "key": "UPR"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    await client.post(
+        "/api/v1/projects/UPR/members/",
+        json={"user_id": regular_user.id, "role_ids": [dev_role.id]},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    resp = await client.patch(
+        f"/api/v1/projects/UPR/members/{regular_user.id}/",
+        json={"role_ids": [mgr_role.id]},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["user_id"] == regular_user.id
+    assert data["roles"] == ["UpdMgr"]
+    assert data["role_ids"] == [mgr_role.id]
+
+    # list_members also exposes role_ids
+    list_resp = await client.get(
+        "/api/v1/projects/UPR/members/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert list_resp.status_code == 200
+    member_row = next(m for m in list_resp.json() if m["user_id"] == regular_user.id)
+    assert member_row["role_ids"] == [mgr_role.id]
+
+
+@pytest.mark.asyncio
+async def test_update_member_roles_empty_rejected(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    regular_user: User,
+) -> None:
+    """PATCH with empty role_ids is rejected by schema validation."""
+    role = await _make_role(db_session, "UpdEmpty")
+
+    await client.post(
+        "/api/v1/projects/",
+        json={"name": "Update Empty", "identifier": "update-empty", "key": "UPE"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    await client.post(
+        "/api/v1/projects/UPE/members/",
+        json={"user_id": regular_user.id, "role_ids": [role.id]},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    resp = await client.patch(
+        f"/api/v1/projects/UPE/members/{regular_user.id}/",
+        json={"role_ids": []},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422, resp.text
+
+
 # ---------------------------------------------------------------------------
 # Tests: Modules
 # ---------------------------------------------------------------------------
@@ -573,7 +645,7 @@ async def test_public_project_visible_to_non_member(
 ) -> None:
     await client.post(
         "/api/v1/projects/",
-        json={"name": "Public Proj", "identifier": "public-proj", "key": "PUB"},
+        json={"name": "Public Proj", "identifier": "public-proj", "key": "PUB", "is_public": True},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 

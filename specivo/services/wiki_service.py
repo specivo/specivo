@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -78,7 +79,7 @@ class WikiService:
             await session.flush()
         except IntegrityError as exc:
             msg = str(exc.orig).lower() if exc.orig else ""
-            if "uq_wiki_pages_wiki_slug" in msg:
+            if "uq_wiki_pages_wiki_slug" in msg or "uq_wiki_pages_wiki_slug_active" in msg:
                 raise AppError(
                     code="conflict",
                     message=f"A page with slug '{slug}' already exists",
@@ -98,11 +99,14 @@ class WikiService:
 
         # Generate search embeddings (inline, non-blocking on failure)
         try:
+            from specivo.schemas.search import SearchSourceType
             from specivo.services.chunking_service import ChunkingService
             from specivo.services.embedding_service import EmbeddingService
 
             chunks = ChunkingService().chunk_wiki_page(title, text)
-            await EmbeddingService().embed_source(session, "wiki_page", page.id, project_id, chunks)
+            await EmbeddingService().embed_source(
+                session, SearchSourceType.WIKI_PAGE, page.id, project_id, chunks
+            )
         except Exception:
             logger.debug("Embedding generation skipped for wiki page %s", slug)
 
@@ -122,7 +126,12 @@ class WikiService:
         project_id: int,
         slug: str,
     ) -> tuple[WikiPage, WikiContent]:
-        """Get a page by slug, following redirects. Returns page + latest content."""
+        """Get a page by slug, following redirects. Returns page + latest content.
+
+        The slug is normalized (lowercased, underscores → hyphens) so callers
+        can pass titles like ``GDB_Illusion_of_Choice`` and still find the page.
+        """
+        slug = _slugify(slug)
         wiki = await self._get_wiki(session, project_id)
         if wiki is None:
             raise NotFoundError(f"Wiki page '{slug}' not found")
@@ -211,18 +220,236 @@ class WikiService:
         )
         return page
 
-    async def delete_page(self, session: AsyncSession, page_id: int) -> None:
-        """Delete a wiki page and all its content versions.
+    async def delete_page(
+        self,
+        session: AsyncSession,
+        page_id: int,
+        deleted_by: User,
+        *,
+        cascade_children: bool = False,
+    ) -> list[int]:
+        """Soft-delete a wiki page.
 
         The Home page (slug='home') cannot be deleted.
+        If cascade_children is True, all descendants are also soft-deleted.
+        If False, children are re-parented to the deleted page's parent.
+
+        Returns list of soft-deleted page IDs.
         """
         page = await self._get_page_by_id(session, page_id)
         if page is None:
             raise NotFoundError("Wiki page not found")
         if page.slug == "home":
             raise ValidationError("The Home page cannot be deleted")
-        await session.delete(page)
+
+        now = datetime.now(UTC)
+        deleted_ids: list[int] = [page.id]
+
+        page.deleted_at = now
+        page.deleted_by_id = deleted_by.id
+
+        if cascade_children:
+            # Recursively find all descendants
+            ids_to_check = {page.id}
+            all_descendant_ids: set[int] = set()
+            while ids_to_check:
+                stmt = select(WikiPage.id).where(
+                    WikiPage.parent_id.in_(ids_to_check),
+                    WikiPage.deleted_at.is_(None),
+                )
+                result = await session.execute(stmt)
+                child_ids = {row[0] for row in result.all()}
+                new_ids = child_ids - all_descendant_ids
+                all_descendant_ids.update(new_ids)
+                ids_to_check = new_ids
+
+            if all_descendant_ids:
+                await session.execute(
+                    update(WikiPage)
+                    .where(WikiPage.id.in_(all_descendant_ids))
+                    .values(deleted_at=now, deleted_by_id=deleted_by.id)
+                )
+                deleted_ids.extend(all_descendant_ids)
+        else:
+            # Re-parent children to the deleted page's parent
+            await session.execute(
+                update(WikiPage)
+                .where(WikiPage.parent_id == page.id, WikiPage.deleted_at.is_(None))
+                .values(parent_id=page.parent_id)
+            )
+
         await session.flush()
+
+        # Remove search index for all deleted pages
+        try:
+            from specivo.schemas.search import SearchSourceType
+            from specivo.services.embedding_service import EmbeddingService
+
+            embed_svc = EmbeddingService()
+            for pid in deleted_ids:
+                await embed_svc.remove_source(session, SearchSourceType.WIKI_PAGE, pid)
+        except Exception:
+            logger.debug("Search index cleanup skipped for wiki page delete %d", page.id)
+
+        # Audit log
+        try:
+            from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
+
+            await SecurityAuditService().log_event(
+                session=session,
+                event_type=AuditEvent.WIKI_DELETED,
+                user_id=deleted_by.id,
+                resource_type="WikiPage",
+                resource_id=page.id,
+                project_id=None,
+                details={
+                    "slug": page.slug,
+                    "title": page.title,
+                    "cascade_children": cascade_children,
+                    "deleted_page_ids": deleted_ids,
+                },
+            )
+        except Exception:
+            logger.debug("Audit logging skipped for wiki page delete %d", page.id)
+
+        return deleted_ids
+
+    async def restore_page(
+        self,
+        session: AsyncSession,
+        page_id: int,
+        *,
+        cascade: bool = True,
+    ) -> list[int]:
+        """Restore a soft-deleted wiki page.
+
+        If cascade is True, co-deleted children (same deleted_at ±1s) are also restored.
+        Raises ConflictError if an active page with the same slug exists.
+
+        Returns list of restored page IDs.
+        """
+        page = await self._get_page_by_id_include_deleted(session, page_id)
+        if page is None or page.deleted_at is None:
+            raise NotFoundError("Deleted wiki page not found")
+
+        # Check slug conflict
+        existing = await self._get_page_by_slug(session, page.wiki_id, page.slug)
+        if existing is not None:
+            raise ConflictError(f"A page with slug '{page.slug}' already exists")
+
+        restored_ids: list[int] = [page.id]
+        deleted_at = page.deleted_at
+        deleted_by_id = page.deleted_by_id
+
+        page.deleted_at = None
+        page.deleted_by_id = None
+
+        if cascade:
+            # Find co-deleted children (same timestamp ±1 second, same deleter)
+            lower = deleted_at - timedelta(seconds=1)
+            upper = deleted_at + timedelta(seconds=1)
+            cascade_conditions = [
+                WikiPage.wiki_id == page.wiki_id,
+                WikiPage.id != page.id,
+                WikiPage.deleted_at.isnot(None),
+                WikiPage.deleted_at >= lower,
+                WikiPage.deleted_at <= upper,
+            ]
+            if deleted_by_id is not None:
+                cascade_conditions.append(WikiPage.deleted_by_id == deleted_by_id)
+            stmt = select(WikiPage).where(*cascade_conditions)
+            result = await session.execute(stmt)
+            co_deleted = list(result.scalars().all())
+            for child in co_deleted:
+                child.deleted_at = None
+                child.deleted_by_id = None
+                restored_ids.append(child.id)
+
+        await session.flush()
+
+        # Audit log
+        try:
+            from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
+
+            await SecurityAuditService().log_event(
+                session=session,
+                event_type=AuditEvent.WIKI_RESTORED,
+                user_id=None,
+                resource_type="WikiPage",
+                resource_id=page.id,
+                project_id=None,
+                details={
+                    "slug": page.slug,
+                    "title": page.title,
+                    "cascade": cascade,
+                    "restored_page_ids": restored_ids,
+                },
+            )
+        except Exception:
+            logger.debug("Audit logging skipped for wiki page restore %d", page.id)
+
+        # Re-index restored pages for search
+        try:
+            from specivo.schemas.search import SearchSourceType
+            from specivo.services.chunking_service import ChunkingService
+            from specivo.services.embedding_service import EmbeddingService
+
+            wiki = await self._get_wiki_by_id(session, page.wiki_id)
+            project_id = wiki.project_id if wiki else None
+            if project_id:
+                embed_svc = EmbeddingService()
+                chunk_svc = ChunkingService()
+                for pid in restored_ids:
+                    restored_page = await self._get_page_by_id(session, pid)
+                    if restored_page:
+                        content = await self._get_latest_content(session, pid)
+                        if content:
+                            chunks = chunk_svc.chunk_wiki_page(restored_page.title, content.text)
+                            await embed_svc.embed_source(
+                                session, SearchSourceType.WIKI_PAGE, pid, project_id, chunks
+                            )
+        except Exception:
+            logger.debug("Search re-indexing skipped for wiki page restore %d", page.id)
+
+        return restored_ids
+
+    async def list_deleted_pages(self, session: AsyncSession, project_id: int) -> list[WikiPage]:
+        """List all soft-deleted pages for a project (trash view)."""
+        wiki = await self._get_wiki(session, project_id)
+        if wiki is None:
+            return []
+
+        stmt = (
+            select(WikiPage)
+            .where(WikiPage.wiki_id == wiki.id, WikiPage.deleted_at.isnot(None))
+            .order_by(WikiPage.deleted_at.desc())
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def hard_delete_expired_pages(
+        self, session: AsyncSession, retention_days: int = 90,
+    ) -> list[int]:
+        """Permanently delete pages in trash older than retention_days.
+
+        Returns list of hard-deleted page IDs.
+        """
+        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+        # First collect IDs for the return value
+        stmt = select(WikiPage.id).where(
+            WikiPage.deleted_at.isnot(None),
+            WikiPage.deleted_at < cutoff,
+        )
+        result = await session.execute(stmt)
+        expired_ids = [row[0] for row in result.all()]
+
+        if expired_ids:
+            await session.execute(
+                delete(WikiPage).where(WikiPage.id.in_(expired_ids))
+            )
+            await session.flush()
+
+        return expired_ids
 
     async def list_pages(self, session: AsyncSession, project_id: int) -> list[WikiPage]:
         """List all pages for a project."""
@@ -230,7 +457,11 @@ class WikiService:
         if wiki is None:
             return []
 
-        stmt = select(WikiPage).where(WikiPage.wiki_id == wiki.id).order_by(WikiPage.title)
+        stmt = (
+            select(WikiPage)
+            .where(WikiPage.wiki_id == wiki.id, WikiPage.deleted_at.is_(None))
+            .order_by(WikiPage.title)
+        )
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
@@ -291,7 +522,7 @@ class WikiService:
             await session.flush()
         except IntegrityError as exc:
             msg = str(exc.orig).lower() if exc.orig else ""
-            if "uq_wiki_pages_wiki_slug" in msg:
+            if "uq_wiki_pages_wiki_slug" in msg or "uq_wiki_pages_wiki_slug_active" in msg:
                 raise AppError(
                     code="conflict",
                     message=f"A page with slug '{new_slug}' already exists",
@@ -319,12 +550,25 @@ class WikiService:
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def _get_wiki_by_id(self, session: AsyncSession, wiki_id: int) -> Wiki | None:
+        stmt = select(Wiki).where(Wiki.id == wiki_id)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def _get_page_by_slug(self, session: AsyncSession, wiki_id: int, slug: str) -> WikiPage | None:
-        stmt = select(WikiPage).where(WikiPage.wiki_id == wiki_id, WikiPage.slug == slug)
+        stmt = select(WikiPage).where(
+            WikiPage.wiki_id == wiki_id, WikiPage.slug == slug, WikiPage.deleted_at.is_(None),
+        )
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
 
     async def _get_page_by_id(self, session: AsyncSession, page_id: int) -> WikiPage | None:
+        stmt = select(WikiPage).where(WikiPage.id == page_id)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def _get_page_by_id_include_deleted(self, session: AsyncSession, page_id: int) -> WikiPage | None:
+        """Like _get_page_by_id but does NOT filter out soft-deleted pages."""
         stmt = select(WikiPage).where(WikiPage.id == page_id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()

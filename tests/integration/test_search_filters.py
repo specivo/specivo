@@ -56,8 +56,8 @@ async def _make_project(db: AsyncSession, key: str = "FLT", identifier: str = "f
 
 async def _seed_lookups(db: AsyncSession) -> dict:
     """Seed two trackers, two statuses, and two priorities for filter testing."""
-    status_new = StatusFactory.build(name="New", position=1, is_closed=False)
-    status_done = StatusFactory.build(name="Done", position=2, is_closed=True)
+    status_new = StatusFactory.build(name="New", position=1, category="backlog")
+    status_done = StatusFactory.build(name="Done", position=2, category="closed")
     db.add(status_new)
     db.add(status_done)
     await db.flush()

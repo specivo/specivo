@@ -69,6 +69,7 @@ async def get_cost_summary(
     db: AsyncSession = Depends(get_db),
 ) -> list[CostSummaryItem]:
     project = await _project_service.get_by_key(db, project_key)
+    await _project_service.require_project_access(db, project, current_user)
     items = await _cost_service.get_cost_summary(db, project.id, date_from, date_to)
     return [CostSummaryItem(**item) for item in items]
 
@@ -105,6 +106,7 @@ async def create_billing_rate(
     db: AsyncSession = Depends(get_db),
 ) -> BillingRateOut:
     project = await _project_service.get_by_key(db, project_key)
+    await _project_service.require_project_access(db, project, current_user)
     rate = await _billing_service.create_rate(db, project.id, data)
     return BillingRateOut.model_validate(rate)
 
@@ -119,6 +121,7 @@ async def list_billing_rates(
     db: AsyncSession = Depends(get_db),
 ) -> list[BillingRateOut]:
     project = await _project_service.get_by_key(db, project_key)
+    await _project_service.require_project_access(db, project, current_user)
     rates = await _billing_service.list_rates(db, project.id)
     return [BillingRateOut.model_validate(r) for r in rates]
 
@@ -135,6 +138,7 @@ async def update_billing_rate(
     db: AsyncSession = Depends(get_db),
 ) -> BillingRateOut:
     project = await _project_service.get_by_key(db, project_key)
+    await _project_service.require_project_access(db, project, current_user)
     rate = await _billing_service.update_rate(db, rate_id, project.id, data)
     return BillingRateOut.model_validate(rate)
 
@@ -150,6 +154,7 @@ async def delete_billing_rate(
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     project = await _project_service.get_by_key(db, project_key)
+    await _project_service.require_project_access(db, project, current_user)
     await _billing_service.delete_rate(db, rate_id, project.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -171,5 +176,6 @@ async def get_billing_report(
     db: AsyncSession = Depends(get_db),
 ) -> BillingReportOut:
     project = await _project_service.get_by_key(db, project_key)
+    await _project_service.require_project_access(db, project, current_user)
     report = await _billing_service.billable_report(db, project.id, date_from, date_to)
     return BillingReportOut(**report)

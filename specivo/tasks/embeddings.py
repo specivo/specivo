@@ -11,6 +11,7 @@ import asyncio
 import logging
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_EMBEDDING
+from specivo.schemas.search import SearchSourceType
 from specivo.tasks import celery_app
 
 logger = logging.getLogger(__name__)
@@ -32,7 +33,10 @@ def generate_embeddings(self, source_type: str, entity_id: int, project_id: int)
     Called on issue/wiki/journal create/update.
 
     Args:
-        source_type: "issue", "wiki_page", or "journal".
+        source_type: One of :class:`SearchSourceType` string values
+            (``"issue"``, ``"wiki_page"``, ``"journal"``, ``"attachment"``).
+            Passed as a plain string because Celery serializes task args
+            to JSON via the broker.
         entity_id: ID of the source entity.
         project_id: ID of the project the entity belongs to.
     """
@@ -56,7 +60,7 @@ async def _generate_embeddings_async(source_type: str, entity_id: int, project_i
     async with factory() as session:
         chunks: list[str] = []
 
-        if source_type == "issue":
+        if source_type == SearchSourceType.ISSUE:
             from sqlalchemy import select
 
             from specivo.models.issue import Issue
@@ -66,7 +70,7 @@ async def _generate_embeddings_async(source_type: str, entity_id: int, project_i
             if issue:
                 chunks = chunking.chunk_issue(issue.subject, issue.description)
 
-        elif source_type == "wiki_page":
+        elif source_type == SearchSourceType.WIKI_PAGE:
             from sqlalchemy import select
 
             from specivo.models.wiki import WikiContent, WikiPage
@@ -85,7 +89,7 @@ async def _generate_embeddings_async(source_type: str, entity_id: int, project_i
                 if content:
                     chunks = chunking.chunk_wiki_page(page.title, content.text)
 
-        elif source_type == "journal":
+        elif source_type == SearchSourceType.JOURNAL:
             from sqlalchemy import select
 
             from specivo.models.journal import Journal
@@ -95,7 +99,7 @@ async def _generate_embeddings_async(source_type: str, entity_id: int, project_i
             if journal and journal.notes:
                 chunks = chunking.chunk_journal(journal.notes)
 
-        elif source_type == "attachment":
+        elif source_type == SearchSourceType.ATTACHMENT:
             from sqlalchemy import select
 
             from specivo.models.attachment import Attachment

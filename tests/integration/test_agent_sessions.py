@@ -59,7 +59,7 @@ async def _login(client: AsyncClient, login: str) -> str:
 
 
 async def _make_project(db: AsyncSession, **kw) -> Project:
-    proj = ProjectFactory.build(**kw)
+    proj = ProjectFactory.build(is_public=True, **kw)
     db.add(proj)
     await db.commit()
     await db.refresh(proj)

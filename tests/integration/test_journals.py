@@ -71,7 +71,7 @@ async def _create_issue_via_api(
 
 @pytest_asyncio.fixture
 async def open_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -80,7 +80,7 @@ async def open_status(db_session: AsyncSession) -> IssueStatus:
 
 @pytest_asyncio.fixture
 async def closed_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="Closed", position=2, is_closed=True)
+    s = StatusFactory.build(name="Closed", position=2, category="closed")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -216,13 +216,20 @@ async def test_description_change_stores_full_text(
         select(JournalDetail)
         .join(Journal, JournalDetail.journal_id == Journal.id)
         .where(Journal.issue_id == issue_data["id"], JournalDetail.prop_key == "description")
+        .order_by(Journal.sequence)
     )
-    detail = result.scalar_one_or_none()
-    assert detail is not None, "Expected a journal detail for description"
+    details = list(result.scalars().all())
+
+    # First journal: initial description (None → old_desc)
+    # Second journal: description edit (old_desc → new_desc)
+    assert len(details) == 2, f"Expected 2 description details (initial + edit), got {len(details)}"
+
+    assert details[0].old_value is None
+    assert details[0].new_value == old_desc
 
     # Full text must be stored — not a diff, not truncated
-    assert detail.old_value == old_desc
-    assert detail.new_value == new_desc
+    assert details[1].old_value == old_desc
+    assert details[1].new_value == new_desc
 
 
 @pytest.mark.asyncio
@@ -297,6 +304,134 @@ async def test_multiple_fields_create_one_journal_with_multiple_details(
     assert "status_id" in prop_keys
     assert "subject" in prop_keys
     assert "done_ratio" in prop_keys
+
+
+# ---------------------------------------------------------------------------
+# Tests: initial description versioning (SPECIVO-9)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_issue_created_with_description_stores_initial_version(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """Creating an issue with a description stores it as the initial version (version 0)."""
+    desc = "## Overview\n\nThis is the initial description."
+
+    issue_data = await _create_issue_via_api(
+        client,
+        admin_token,
+        project.key,
+        tracker.id,
+        open_status.id,
+        priority.id,
+        "Initial version test",
+        description=desc,
+    )
+
+    result = await db_session.execute(
+        select(Journal).options(selectinload(Journal.details)).where(Journal.issue_id == issue_data["id"])
+    )
+    journals = list(result.scalars().all())
+    assert len(journals) == 1, "Expected one journal for the initial description"
+
+    journal = journals[0]
+    assert journal.sequence == 1
+    assert journal.user_id == admin_user.id
+    assert journal.notes is None  # no comment, just the description snapshot
+
+    desc_detail = next((d for d in journal.details if d.prop_key == "description"), None)
+    assert desc_detail is not None, "Expected a description detail in the initial journal"
+    assert desc_detail.old_value is None  # no previous description
+    assert desc_detail.new_value == desc
+
+
+@pytest.mark.asyncio
+async def test_issue_created_without_description_has_no_initial_journal(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """Creating an issue without a description does not create an initial journal."""
+    issue_data = await _create_issue_via_api(
+        client,
+        admin_token,
+        project.key,
+        tracker.id,
+        open_status.id,
+        priority.id,
+        "No description issue",
+    )
+
+    result = await db_session.execute(select(Journal).where(Journal.issue_id == issue_data["id"]))
+    journals = list(result.scalars().all())
+    assert len(journals) == 0, "No journal should be created for issue without description"
+
+
+@pytest.mark.asyncio
+async def test_first_description_edit_has_diff_baseline(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """The first description edit can diff against the initial version."""
+    original = "Original description text."
+    updated = "Updated description text."
+
+    issue_data = await _create_issue_via_api(
+        client,
+        admin_token,
+        project.key,
+        tracker.id,
+        open_status.id,
+        priority.id,
+        "Diff baseline test",
+        description=original,
+    )
+    issue_key = issue_data["key"]
+    lock_version = issue_data["lock_version"]
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"description": updated, "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Should have 2 journals: initial version + edit
+    result = await db_session.execute(
+        select(JournalDetail)
+        .join(Journal, JournalDetail.journal_id == Journal.id)
+        .where(Journal.issue_id == issue_data["id"], JournalDetail.prop_key == "description")
+        .order_by(Journal.sequence)
+    )
+    details = list(result.scalars().all())
+    assert len(details) == 2
+
+    # Initial: None → original
+    assert details[0].old_value is None
+    assert details[0].new_value == original
+
+    # Edit: original → updated (this is what the diff view uses)
+    assert details[1].old_value == original
+    assert details[1].new_value == updated
 
 
 # ---------------------------------------------------------------------------
@@ -515,3 +650,42 @@ async def test_include_journals_shows_field_changes(
     assert status_detail is not None
     assert status_detail["old_value"] == str(open_status.id)
     assert status_detail["new_value"] == str(closed_status.id)
+
+
+@pytest.mark.asyncio
+async def test_metadata_change_is_journaled(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """Changing issue_metadata via PATCH creates a journal detail."""
+    issue_data = await _create_issue_via_api(
+        client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Meta change"
+    )
+    issue_key = issue_data["key"]
+    lock_version = issue_data["lock_version"]
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"metadata": {"severity": "high"}, "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    result = await db_session.execute(
+        select(Journal).options(selectinload(Journal.details)).where(Journal.issue_id == issue_data["id"])
+    )
+    journals = list(result.scalars().all())
+    # Find any journal carrying an issue_metadata detail
+    meta_details = [
+        d for j in journals for d in j.details if d.prop_key == "issue_metadata"
+    ]
+    assert len(meta_details) == 1
+    assert meta_details[0].old_value in (None, "{}")
+    assert "severity" in meta_details[0].new_value
+    assert "high" in meta_details[0].new_value

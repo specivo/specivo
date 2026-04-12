@@ -84,7 +84,7 @@ async def _make_project(
 async def _seed_lookups(
     db: AsyncSession,
 ) -> tuple[Tracker, IssueStatus, IssuePriority]:
-    status = StatusFactory.build(name="New", position=1, is_closed=False)
+    status = StatusFactory.build(name="New", position=1, category="backlog")
     db.add(status)
     await db.flush()
     tracker = TrackerFactory.build(name="Bug", default_status_id=status.id)
@@ -642,7 +642,6 @@ async def test_short_comment_not_indexed(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="Bot comment exclusion not yet enforced in chunking/embedding layer")
 async def test_bot_comment_excluded_when_setting_enabled(
     authed_client: AsyncClient,
     db_session: AsyncSession,
@@ -703,7 +702,6 @@ async def test_bot_comment_excluded_when_setting_enabled(
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(reason="search_index_comments toggle not yet enforced in chunking/embedding layer")
 async def test_comment_indexing_disabled_via_setting(
     authed_client: AsyncClient,
     db_session: AsyncSession,

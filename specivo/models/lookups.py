@@ -1,7 +1,10 @@
 """Lookup / configuration models: IssueStatus, Tracker, IssuePriority, IssueCategory."""
 
+import enum
+
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     ForeignKey,
     Index,
     Integer,
@@ -15,20 +18,40 @@ from sqlalchemy.orm import Mapped, mapped_column
 from specivo.models.base import Base
 
 
+class StatusCategory(enum.StrEnum):
+    """Workflow category for issue statuses."""
+
+    backlog = "backlog"
+    active = "active"
+    done = "done"
+    closed = "closed"
+
+
 class IssueStatus(Base):
     """Available statuses for issues (e.g. New, In Progress, Closed).
 
-    ``is_closed`` marks terminal statuses — issues in these states
-    are excluded from "open issues" counts by default.
+    Each status belongs to a ``category`` that controls how it behaves in
+    filters and progress calculations:
+
+    - **backlog** — not started (open in filters, not counted in progress)
+    - **active** — work in progress (open in filters, not counted in progress)
+    - **done** — completed (open in filters, counted in progress)
+    - **closed** — terminal (excluded from "open" filters, counted in progress)
     """
 
     __tablename__ = "issue_statuses"
+    __table_args__ = (
+        CheckConstraint(
+            "category IN ('backlog', 'active', 'done', 'closed')",
+            name="ck_issue_statuses_category",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    is_closed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    category: Mapped[str] = mapped_column(String(20), nullable=False, default="backlog", server_default="backlog")
 
     # Display ordering
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
@@ -36,8 +59,18 @@ class IssueStatus(Base):
     # Optional default done-ratio when this status is set
     default_done_ratio: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
+    @property
+    def is_closed(self) -> bool:
+        """Convenience property: True only for terminal (closed) statuses."""
+        return self.category == StatusCategory.closed
+
+    @property
+    def is_done(self) -> bool:
+        """True for statuses that count toward progress (done + closed)."""
+        return self.category in (StatusCategory.done, StatusCategory.closed)
+
     def __repr__(self) -> str:
-        return f"<IssueStatus id={self.id} name={self.name!r} is_closed={self.is_closed}>"
+        return f"<IssueStatus id={self.id} name={self.name!r} category={self.category!r}>"
 
 
 class Tracker(Base):

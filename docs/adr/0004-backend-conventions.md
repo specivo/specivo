@@ -346,6 +346,19 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 Callers (routers, services) must **not** call `session.commit()` themselves -- the dependency handles it. For multi-step transactions, use `session.begin_nested()` (savepoints).
 
+**Browser reload race condition:** FastAPI sends the HTTP response *before* the `get_db` cleanup runs (which is where the commit happens). When the Alpine.js frontend calls `location.reload()` upon receiving a success response, the reload request can arrive before the commit completes — the user doesn't see their changes.
+
+**Rule:** Endpoints whose responses trigger `location.reload()` in the browser UI must call `await db.commit()` explicitly before returning. The `get_db` cleanup's second `commit()` on an already-committed session is a no-op (since `expire_on_commit=False`).
+
+```python
+# In mutating endpoints called by the browser UI:
+project = await _service.create(db, data, current_user)
+await db.commit()  # commit before response to avoid reload race condition
+return _project_out(project, parent_key)
+```
+
+This does **not** apply to pure API endpoints consumed by scripts or agents — only to endpoints whose JS handlers call `location.reload()`.
+
 Engine settings: `pool_pre_ping=True`, `pool_size=10`, `max_overflow=20`, `expire_on_commit=False`.
 
 ### 13. Logging

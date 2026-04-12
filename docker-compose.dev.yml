@@ -13,6 +13,7 @@ services:
       - "${SPECIVO_DEV_PORT:-8000}:8000"
     volumes:
       - ./specivo:/app/specivo
+      - ./alembic:/app/alembic
     environment:
       DATABASE_URL: "postgresql+asyncpg://specivo:specivo@db:5432/specivo_dev"
       REDIS_URL: "redis://redis:6379/0"

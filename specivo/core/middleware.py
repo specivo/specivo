@@ -1,4 +1,4 @@
-"""Pure ASGI middleware for request ID propagation, security headers, and audit batching.
+"""Pure ASGI middleware for request ID propagation, security headers, CSRF, and audit batching.
 
 Uses a raw ASGI middleware instead of BaseHTTPMiddleware to avoid
 the extra task group that BaseHTTPMiddleware creates, which causes
@@ -9,7 +9,10 @@ from __future__ import annotations
 
 import contextvars
 import dataclasses
+import hashlib
+import hmac
 import logging
+import secrets
 import time
 import uuid
 
@@ -27,20 +30,221 @@ _SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
     (b"referrer-policy", b"strict-origin-when-cross-origin"),
     (b"permissions-policy", b"geolocation=(), microphone=(), camera=()"),
     (b"x-robots-tag", b"noindex, nofollow, noarchive"),
-    # NOTE: 'unsafe-eval' is required by Alpine.js v3 standard build
-    # (static/vendor/alpine.3.14.min.js) for x-model, x-bind expressions etc.
-    # The CSP-safe build (alpine.csp.min.js) would remove this need but
-    # disallows all inline expressions which breaks simple inline x-data
-    # blocks like { expanded: false }.
-    # TODO: Switch to Alpine.js CSP build (alpine.csp.3.14.min.js) to allow
-    # removing both 'unsafe-eval' and 'unsafe-inline' from script-src. This
-    # requires rewriting inline x-data blocks to use Alpine.data() instead.
+    # CSP: 'unsafe-eval' required by Alpine.js (standard build) for inline
+    # x-data/x-on/x-bind expressions.  The CSP build was evaluated but is too
+    # restrictive for real-world templates (no :class objects, no inline
+    # ternaries, no property negation).  'unsafe-inline' needed for
+    # style-src (inline style= attributes) and script-src (inline handlers
+    # in a few legacy templates).
     (
         b"content-security-policy",
-        b"default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline';"
+        b"default-src 'self'; script-src 'self' 'unsafe-eval' 'unsafe-inline';"
+        b" style-src 'self' 'unsafe-inline';"
         b" img-src 'self' data:; font-src 'self'; frame-ancestors 'none'",
     ),
 ]
+
+
+# ---------------------------------------------------------------------------
+# CSRF Protection (Double-Submit Cookie)
+# ---------------------------------------------------------------------------
+
+_CSRF_COOKIE = "csrf_token"
+_CSRF_HEADER = b"x-csrf-token"
+_CSRF_MUTATING_METHODS = frozenset({b"POST", b"PATCH", b"PUT", b"DELETE"})
+# Path suffixes exempt from CSRF validation (matched after stripping stealth prefix).
+# Each entry is checked with path.startswith(prefix + suffix).
+_CSRF_EXEMPT_SUFFIXES = (
+    "/api/v1/auth/",
+    "/mcp/",
+)
+
+
+class CSRFMiddleware:
+    """Double-submit cookie CSRF protection.
+
+    On every response to a GET request, sets a non-HttpOnly ``csrf_token``
+    cookie with a signed random token (readable by JavaScript).
+
+    On mutating requests (POST/PATCH/PUT/DELETE), validates that the
+    ``X-CSRF-Token`` request header matches the ``csrf_token`` cookie and
+    that the token signature is valid.
+
+    Exempt from validation:
+    - Requests with an ``X-API-Key`` header (API key auth, not cookie-based)
+    - Paths in ``_CSRF_EXEMPT_PREFIXES`` (login, password reset, MCP)
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+        self._secret = secrets.token_hex(32)
+        # Resolve exempt prefixes once at startup (stealth prefix + suffix)
+        from specivo.core.config import get_settings
+
+        sp = get_settings().stealth_prefix.rstrip("/")
+        self._exempt_prefixes = tuple(sp + s for s in _CSRF_EXEMPT_SUFFIXES)
+
+    def _generate_token(self) -> str:
+        nonce = secrets.token_hex(16)
+        sig = hmac.new(self._secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()[:32]
+        return f"{nonce}.{sig}"
+
+    def _validate_token(self, token: str) -> bool:
+        parts = token.split(".", 1)
+        if len(parts) != 2:
+            return False
+        nonce, sig = parts
+        expected = hmac.new(self._secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()[:32]
+        return hmac.compare_digest(sig, expected)
+
+    def _needs_csrf(self, path: str, headers: dict[bytes, bytes]) -> bool:
+        """Return True if this request requires CSRF validation."""
+        # Non-cookie auth (API key or Bearer token) is not CSRF-vulnerable
+        if b"x-api-key" in headers or b"authorization" in headers:
+            return False
+        # Exempt paths (auth endpoints, MCP)
+        if any(path.startswith(p) for p in self._exempt_prefixes):
+            return False
+        # No auth cookies present — let the auth layer handle the 401
+        cookie_header = headers.get(b"cookie", b"").decode()
+        if "access_token=" not in cookie_header:
+            return False
+        return True
+
+    @staticmethod
+    def _get_cookie_token(headers: dict[bytes, bytes]) -> str:
+        cookie_header = headers.get(b"cookie", b"").decode()
+        for part in cookie_header.split(";"):
+            part = part.strip()
+            if part.startswith(f"{_CSRF_COOKIE}="):
+                return part.split("=", 1)[1].strip()
+        return ""
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        method = scope.get("method", "GET").encode()
+        path = scope.get("path", "")
+        req_headers = dict(scope.get("headers", []))
+        is_mutating = method in _CSRF_MUTATING_METHODS
+
+        # --- Validation on mutating requests ---
+        if is_mutating and self._needs_csrf(path, req_headers):
+            cookie_token = self._get_cookie_token(req_headers)
+            # Accept token from header (fetch/HTMX) or form body (HTML forms)
+            header_token = req_headers.get(_CSRF_HEADER, b"").decode()
+            if not header_token:
+                header_token, receive = await self._extract_form_token(receive, req_headers)
+
+            if (
+                not cookie_token
+                or not header_token
+                or not hmac.compare_digest(cookie_token, header_token)
+                or not self._validate_token(cookie_token)
+            ):
+                await self._reject(send)
+                return
+
+        # --- Set cookie on GET responses if missing/invalid ---
+        existing = self._get_cookie_token(req_headers)
+        need_cookie = not is_mutating and (not existing or not self._validate_token(existing))
+
+        if not need_cookie:
+            await self.app(scope, receive, send)
+            return
+
+        token = self._generate_token()
+
+        async def send_with_csrf_cookie(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                resp_headers = list(message.get("headers", []))
+                from specivo.core.config import get_settings
+
+                settings = get_settings()
+                secure = "" if getattr(settings, "debug", False) else "; Secure"
+                cookie_val = f"{_CSRF_COOKIE}={token}; Path=/; SameSite=Lax{secure}"
+                resp_headers.append((b"set-cookie", cookie_val.encode()))
+                message["headers"] = resp_headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_csrf_cookie)
+
+    @staticmethod
+    async def _extract_form_token(
+        receive: Receive, headers: dict[bytes, bytes]
+    ) -> tuple[str, Receive]:
+        """Try to extract csrf_token from a form body (URL-encoded or multipart).
+
+        Returns the token (or empty string) and a new receive callable
+        that replays the already-consumed body bytes.
+        """
+        content_type = headers.get(b"content-type", b"").decode()
+        is_urlencoded = "application/x-www-form-urlencoded" in content_type
+        is_multipart = "multipart/form-data" in content_type
+        if not is_urlencoded and not is_multipart:
+            return "", receive
+
+        # Buffer the body
+        body_parts: list[bytes] = []
+        while True:
+            message = await receive()
+            body_parts.append(message.get("body", b""))
+            if not message.get("more_body", False):
+                break
+
+        body = b"".join(body_parts)
+        token = ""
+
+        if is_urlencoded:
+            from urllib.parse import parse_qs
+
+            parsed = parse_qs(body.decode("utf-8", errors="replace"))
+            values = parsed.get("csrf_token", [])
+            if values:
+                token = values[0]
+        elif is_multipart:
+            # Quick extraction: find csrf_token field without full multipart parsing
+            marker = b'name="csrf_token"'
+            idx = body.find(marker)
+            if idx != -1:
+                # Value follows after \r\n\r\n
+                start = body.find(b"\r\n\r\n", idx)
+                if start != -1:
+                    start += 4
+                    end = body.find(b"\r\n", start)
+                    if end != -1:
+                        token = body[start:end].decode("utf-8", errors="replace").strip()
+
+        # Create a replay receive that yields the buffered body
+        replayed = False
+
+        async def replay_receive() -> Message:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            return {"type": "http.disconnect"}
+
+        return token, replay_receive
+
+    @staticmethod
+    async def _reject(send: Send) -> None:
+        import json as _json
+
+        body = _json.dumps({"detail": "CSRF validation failed"}).encode()
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 403,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"content-length", str(len(body)).encode()),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
 
 
 class RateLimitHeaderMiddleware:

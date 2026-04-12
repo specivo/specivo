@@ -4,7 +4,7 @@ Covers:
 - PATCH /api/v1/users/me/preferences/activity-per-page/ — save preference
 - Validation of allowed per_page values
 - Auth requirement on the preference endpoint
-- GET /projects/{key}/issues/{ref}/?activity_page=N — pagination param handling
+- GET /issue/{ref}/?activity_page=N — pagination param handling
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ PREF_URL = "/api/v1/users/me/preferences/activity-per-page/"
 @pytest_asyncio.fixture
 async def _lookups(db_session: AsyncSession) -> dict:
     """Seed minimum lookup rows for issue creation."""
-    status = StatusFactory.build(name="New", position=1, is_closed=False)
+    status = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(status)
     await db_session.flush()
 
@@ -203,7 +203,7 @@ async def test_activity_page_param_works(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/?activity_page=1",
+        f"/issue/{_issue.display_key}/?activity_page=1",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -227,7 +227,7 @@ async def test_activity_page_param_accepted_without_error(
     """
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/?activity_page=2",
+        f"/issue/{_issue.display_key}/?activity_page=2",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -248,7 +248,7 @@ async def test_activity_page_out_of_range_clamped(
     """
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/?activity_page=999",
+        f"/issue/{_issue.display_key}/?activity_page=999",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -278,7 +278,7 @@ async def test_default_per_page_used_when_no_preference(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text

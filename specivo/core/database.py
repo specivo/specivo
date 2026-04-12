@@ -84,9 +84,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
     Commits on clean exit, rolls back on any exception. The session is
     always closed, even if commit/rollback raises.
 
-    Callers must NOT call ``session.commit()`` themselves — the dependency
-    handles it. For multi-step transactions that need savepoints, use
+    For multi-step transactions that need savepoints, use
     ``session.begin_nested()`` inside the endpoint.
+
+    .. note:: **Browser-UI reload race condition**
+
+       Endpoints whose HTML/Alpine.js responses trigger
+       ``location.reload()`` should call ``await db.commit()`` explicitly
+       before returning.  Otherwise the reload request may arrive before
+       this dependency's post-yield commit completes, and the user won't
+       see their changes.  The duplicate commit is safe — committing an
+       already-committed session is a no-op.
     """
     factory = get_session_factory()
     async with factory() as session:

@@ -25,9 +25,11 @@ _version_service = VersionService()
 # ---------------------------------------------------------------------------
 
 
-async def _get_project(project_key: str, db: AsyncSession) -> Project:
-    """Resolve a project by key; raises NotFoundError if missing."""
-    return await _project_service.get_by_key(db, project_key.upper())
+async def _get_project(project_key: str, user: User, db: AsyncSession) -> Project:
+    """Resolve a project by key; raises NotFoundError if missing or inaccessible."""
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, user)
+    return project
 
 
 async def _require_manage_versions(
@@ -71,7 +73,7 @@ async def list_versions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[VersionOut]:
-    project = await _get_project(project_key, db)
+    project = await _get_project(project_key, current_user, db)
     versions = await _version_service.list_for_project(db, project.id)
     return [_version_out(v, project.key) for v in versions]
 
@@ -87,7 +89,7 @@ async def create_version(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> VersionOut:
-    project = await _get_project(project_key, db)
+    project = await _get_project(project_key, current_user, db)
     await _require_manage_versions(project, current_user, db)
     version = await _version_service.create(db, project, data)
     return _version_out(version, project.key)
@@ -103,7 +105,7 @@ async def get_version(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> VersionOut:
-    project = await _get_project(project_key, db)
+    project = await _get_project(project_key, current_user, db)
     version = await _version_service.get_by_id(db, version_id)
     if version.project_id != project.id:
         raise NotFoundError(f"Version {version_id} not found in project '{project.key}'")
@@ -121,7 +123,7 @@ async def update_version(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> VersionOut:
-    project = await _get_project(project_key, db)
+    project = await _get_project(project_key, current_user, db)
     await _require_manage_versions(project, current_user, db)
     version = await _version_service.get_by_id(db, version_id)
     if version.project_id != project.id:
@@ -140,7 +142,7 @@ async def delete_version(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    project = await _get_project(project_key, db)
+    project = await _get_project(project_key, current_user, db)
     await _require_manage_versions(project, current_user, db)
     version = await _version_service.get_by_id(db, version_id)
     if version.project_id != project.id:
@@ -157,5 +159,5 @@ async def get_roadmap(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[RoadmapEntry]:
-    project = await _get_project(project_key, db)
+    project = await _get_project(project_key, current_user, db)
     return await _version_service.roadmap(db, project)

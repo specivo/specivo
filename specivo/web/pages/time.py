@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, cast
 
-from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
@@ -46,7 +46,8 @@ async def time_entries_list(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        return JSONResponse({"detail": "Project not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="Project not found")
+    await _project_svc.require_project_access(db, project, user)
 
     entries, total = await _time_svc.list_for_project(
         db,
@@ -107,7 +108,8 @@ async def time_entry_form(
     try:
         project = await _project_svc.get_by_key(db, project_key)
     except NotFoundError:
-        return JSONResponse({"detail": "Project not found"}, status_code=404)
+        raise HTTPException(status_code=404, detail="Project not found")
+    await _project_svc.require_project_access(db, project, user)
 
     activities = await _time_svc.list_activities(db)
 

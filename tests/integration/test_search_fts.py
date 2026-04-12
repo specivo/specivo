@@ -55,7 +55,7 @@ async def _login(client: AsyncClient, login: str) -> str:
 
 
 async def _make_project(db: AsyncSession, key: str = "SRCH", identifier: str = "search-project") -> Project:
-    proj = ProjectFactory.build(key=key, identifier=identifier)
+    proj = ProjectFactory.build(key=key, identifier=identifier, is_public=True)
     db.add(proj)
     await db.commit()
     await db.refresh(proj)
@@ -65,7 +65,7 @@ async def _make_project(db: AsyncSession, key: str = "SRCH", identifier: str = "
 async def _seed_lookups(
     db: AsyncSession,
 ) -> tuple[Tracker, IssueStatus, IssuePriority]:
-    status = StatusFactory.build(name="New", position=1, is_closed=False)
+    status = StatusFactory.build(name="New", position=1, category="backlog")
     db.add(status)
     await db.flush()
     tracker = TrackerFactory.build(name="Bug", default_status_id=status.id)

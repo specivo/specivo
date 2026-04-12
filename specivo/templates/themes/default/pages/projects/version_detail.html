@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, avatar %}
+
+{% block title %}{{ version.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Projects", "url": "/projects/"},
+  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": "Roadmap", "url": "/projects/" ~ project.key ~ "/roadmap/"},
+  {"label": version.name}
+]) }}
+
+{# Hero #}
+<div class="version-hero">
+  <div class="version-hero-left">
+    <div class="version-title">
+      {{ version.name }}
+      <span class="badge-version {{ version.status }}">{{ version.status }}</span>
+    </div>
+    <div class="version-meta-row">
+      {% if version.effective_date %}
+      <div class="version-meta-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+        Due <strong class="{{ due_class }}">{{ version.effective_date.strftime('%b %d, %Y') }}</strong>
+        {% if days_diff is not none %}
+        <span style="color:var(--sp-text-muted)">
+          {% if days_diff > 0 %}({{ days_diff }} day{{ 's' if days_diff != 1 else '' }} left)
+          {% elif days_diff == 0 %}(due today)
+          {% else %}({{ (-days_diff) }} day{{ 's' if (-days_diff) != 1 else '' }} overdue){% endif %}
+        </span>
+        {% endif %}
+      </div>
+      {% endif %}
+      <div class="version-meta-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Created on <strong>{{ version.created_at | localtime(user.timezone) }}</strong>
+      </div>
+    </div>
+  </div>
+  <div class="version-hero-actions">
+    <a href="/projects/{{ project.key }}/settings/#versions" class="sp-btn sp-btn-ghost">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+      Edit
+    </a>
+  </div>
+</div>
+
+{# Progress #}
+<div class="vd-progress-section">
+  <div class="vd-progress-bar-container">
+    <div class="progress-track" style="height:8px;border-radius:4px">
+      <div class="progress-fill {{ 'green' if version.status == 'closed' else 'gold' }}" style="width:{{ progress_percent }}%;border-radius:4px"></div>
+    </div>
+    <span class="vd-progress-pct">{{ progress_percent }}%</span>
+  </div>
+  <div class="vd-progress-counts">
+    <div class="vd-progress-count"><span class="vd-dot open"></span> <strong>{{ open_count }}</strong> <span>open</span></div>
+    <div class="vd-progress-count"><span class="vd-dot closed"></span> <strong>{{ closed_count }}</strong> <span>closed</span></div>
+    <div class="vd-progress-count"><span class="vd-dot total"></span> <strong>{{ total_count }}</strong> <span>total</span></div>
+  </div>
+</div>
+
+{# Description #}
+{% if version.description %}
+<div class="vd-description">
+  <div class="card" style="padding:var(--sp-space-lg)">
+    <div class="prose">
+      {{ version.description | markdown }}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{# Two-column layout: Issues + Sidebar #}
+<div class="vd-layout" x-data='versionIssues({ issues: {{ issues_json | tojson }} })'>
+
+  {# Left: Issues #}
+  <div>
+    <div class="vd-section-header">
+      <h2 class="vd-section-title">Issues</h2>
+      <div class="filter-tabs">
+        <button class="filter-tab" :class="{ active: filter === 'all' }" @click="filter = 'all'">All <span class="count">{{ total_count }}</span></button>
+        <button class="filter-tab" :class="{ active: filter === 'open' }" @click="filter = 'open'">Open <span class="count">{{ open_count }}</span></button>
+        <button class="filter-tab" :class="{ active: filter === 'closed' }" @click="filter = 'closed'">Closed <span class="count">{{ closed_count }}</span></button>
+      </div>
+    </div>
+
+    {% if total_count > 0 %}
+    <div class="card" style="overflow:hidden">
+      <table class="issue-table">
+        <thead>
+          <tr>
+            <th style="width:90px">Key</th>
+            <th>Subject</th>
+            <th style="width:80px">Tracker</th>
+            <th style="width:100px">Status</th>
+            <th style="width:30px"></th>
+            <th style="width:120px">Assignee</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="issue in filtered" :key="issue.key">
+            <tr>
+              <td><a class="issue-key" :href="issue.url" x-text="issue.key"></a></td>
+              <td><div class="issue-subject"><a :href="issue.url" x-text="issue.subject"></a></div></td>
+              <td><span class="badge-tracker" :class="issue.tracker_class" x-text="issue.tracker"></span></td>
+              <td><span class="badge-status" :class="issue.status_class" x-text="issue.status"></span></td>
+              <td><span class="badge-priority" :class="issue.priority"></span></td>
+              <td>
+                <div class="td-assignee" x-show="issue.assignee">
+                  <template x-if="issue.assignee_avatar_url">
+                    <img :src="issue.assignee_avatar_url" class="avatar-sm avatar-img" :alt="assigneeInitials(issue)">
+                  </template>
+                  <template x-if="!issue.assignee_avatar_url">
+                    <span class="avatar-sm" x-text="assigneeInitials(issue)"></span>
+                  </template>
+                  <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-secondary)" x-text="issue.assignee"></span>
+                </div>
+                <span x-show="!issue.assignee" style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">&mdash;</span>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+      No issues assigned to this version yet.
+    </div>
+    {% endif %}
+  </div>
+
+  {# Right: Info sidebar #}
+  <div>
+    {# Details card #}
+    <div class="card vd-info-card" style="margin-bottom:var(--sp-space-lg)">
+      <h3>Details</h3>
+      <div class="vd-info-row">
+        <span class="vd-info-label">Status</span>
+        <span class="vd-info-value"><span class="badge-version {{ version.status }}">{{ version.status }}</span></span>
+      </div>
+      {% if version.effective_date %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">Due date</span>
+        <span class="vd-info-value"><span class="mono {{ due_class }}">{{ version.effective_date }}</span></span>
+      </div>
+      {% endif %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">Created</span>
+        <span class="vd-info-value"><span class="mono">{{ version.created_at | localtime(user.timezone) }}</span></span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">Open issues</span>
+        <span class="vd-info-value" style="color:var(--sp-accent)">{{ open_count }}</span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">Closed issues</span>
+        <span class="vd-info-value" style="color:var(--sp-success)">{{ closed_count }}</span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">Time logged</span>
+        <span class="vd-info-value"><span class="mono">{{ "%.1f"|format(time_logged) }}h</span></span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">Estimated</span>
+        <span class="vd-info-value"><span class="mono">{{ "%.1f"|format(estimated_hours) }}h</span></span>
+      </div>
+    </div>
+
+    {# Changelog card (placeholder) #}
+    <div class="card vd-info-card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-space-lg)">
+        <h3 style="margin:0">Changelog</h3>
+      </div>
+      {% if version.description %}
+      <div class="prose">
+        {{ version.description | markdown }}
+      </div>
+      {% else %}
+      <p class="vd-changelog-empty">No changelog yet.</p>
+      {% endif %}
+    </div>
+  </div>
+
+</div>
+
+{% endblock %}

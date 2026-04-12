@@ -16,6 +16,7 @@ from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
 from specivo.services.metadata_schema_service import MetadataSchemaService
@@ -101,6 +102,62 @@ class IssueService:
                 status_code=422,
             )
         return priority.id
+
+    # ------------------------------------------------------------------
+    # Version validation
+    # ------------------------------------------------------------------
+
+    async def _validate_fixed_version(self, session: AsyncSession, fixed_version_id: int, project_id: int) -> None:
+        """Validate that fixed_version_id is a valid, open version in the project.
+
+        Raises AppError (422) if the version does not exist, belongs to another
+        project, or is locked/closed.
+        """
+        result = await session.execute(select(Version).where(Version.id == fixed_version_id))
+        version = result.scalar_one_or_none()
+        if version is None:
+            raise AppError(
+                code="validation_error",
+                message=_("Version %(id)s not found") % {"id": fixed_version_id},
+                status_code=422,
+            )
+        if version.project_id != project_id:
+            raise AppError(
+                code="validation_error",
+                message=_("Version does not belong to this project"),
+                status_code=422,
+            )
+        if version.status in ("locked", "closed"):
+            raise AppError(
+                code="validation_error",
+                message=_("Cannot assign issues to a %(status)s version") % {"status": version.status},
+                status_code=422,
+            )
+
+    async def _validate_sprint(self, session: AsyncSession, sprint_id: int, project_id: int) -> None:
+        """Validate that sprint_id belongs to the same project and is active or planned."""
+        from specivo.models.sprint import Sprint
+
+        result = await session.execute(select(Sprint).where(Sprint.id == sprint_id))
+        sprint = result.scalar_one_or_none()
+        if sprint is None:
+            raise AppError(
+                code="validation_error",
+                message=_("Sprint %(id)s not found") % {"id": sprint_id},
+                status_code=422,
+            )
+        if sprint.project_id != project_id:
+            raise AppError(
+                code="validation_error",
+                message=_("Sprint does not belong to this project"),
+                status_code=422,
+            )
+        if sprint.status == "completed":
+            raise AppError(
+                code="validation_error",
+                message=_("Cannot assign issues to a completed sprint"),
+                status_code=422,
+            )
 
     # ------------------------------------------------------------------
     # Visibility helpers
@@ -220,6 +277,7 @@ class IssueService:
         project: Project,
         data: IssueCreate,
         author: User,
+        api_key_id: int | None = None,
     ) -> Issue:
         """Create an issue with an atomic per-project sequence number.
 
@@ -235,6 +293,14 @@ class IssueService:
         priority_id = data.priority_id
         if priority_id is None:
             priority_id = await self._resolve_default_priority(session)
+
+        # Validate fixed_version_id if provided
+        if data.fixed_version_id is not None:
+            await self._validate_fixed_version(session, data.fixed_version_id, project.id)
+
+        # Validate sprint_id if provided
+        if data.sprint_id is not None:
+            await self._validate_sprint(session, data.sprint_id, project.id)
 
         # Validate metadata against schemas (if any exist for this project/tracker)
         await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, data.metadata)
@@ -275,6 +341,8 @@ class IssueService:
             status_id=status_id,
             priority_id=priority_id,
             category_id=data.category_id,
+            fixed_version_id=data.fixed_version_id,
+            sprint_id=data.sprint_id,
             author_id=author.id,
             assigned_to_id=data.assigned_to_id,
             subject=data.subject,
@@ -307,6 +375,21 @@ class IssueService:
             if assignee is not None:
                 await self._watcher_service.auto_watch(session, issue, assignee)
 
+        # Store initial description as version 0 so the first edit has a diff baseline
+        if issue.description:
+            empty_attrs = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
+            initial_attrs = {attr: None for attr, _ in _JOURNALIZED_ATTRS}
+            initial_attrs["description"] = issue.description
+            await self._journal_service.record_change(
+                session=session,
+                issue=issue,
+                user=author,
+                old_attrs=empty_attrs,
+                new_attrs=initial_attrs,
+                notes=None,
+                api_key_id=api_key_id,
+            )
+
         logger.info(
             "Created issue %s (project=%s, tracker=%d, parent=%s)",
             issue.display_key,
@@ -317,11 +400,14 @@ class IssueService:
 
         # Generate search embeddings (inline, non-blocking on failure)
         try:
+            from specivo.schemas.search import SearchSourceType
             from specivo.services.chunking_service import ChunkingService
             from specivo.services.embedding_service import EmbeddingService
 
             chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
-            await EmbeddingService().embed_source(session, "issue", issue.id, project.id, chunks)
+            await EmbeddingService().embed_source(
+                session, SearchSourceType.ISSUE, issue.id, project.id, chunks
+            )
         except Exception:
             logger.debug("Embedding generation skipped for %s (no model or error)", issue.display_key)
 
@@ -385,16 +471,19 @@ class IssueService:
         When ``user`` is provided, a visibility check is applied.
         Raises ``NotFoundError`` when the issue does not exist or is not visible.
         """
+        from sqlalchemy.orm import joinedload
+
         result = await session.execute(
             select(Issue)
             .where(Issue.id == issue_id)
             .options(
-                selectinload(Issue.tracker),
-                selectinload(Issue.status),
-                selectinload(Issue.priority),
-                selectinload(Issue.category),
-                selectinload(Issue.author),
-                selectinload(Issue.assigned_to),
+                joinedload(Issue.tracker),
+                joinedload(Issue.status),
+                joinedload(Issue.priority),
+                joinedload(Issue.category),
+                joinedload(Issue.author),
+                joinedload(Issue.assigned_to),
+                joinedload(Issue.fixed_version),
             )
         )
         issue = result.scalar_one_or_none()
@@ -421,17 +510,22 @@ class IssueService:
                 except ValueError:
                     raise NotFoundError(f"Invalid issue reference: {display_key!r}")
 
+                from sqlalchemy.orm import joinedload
+
+                # Use joinedload on 1:1 relations to fetch in a single SQL with
+                # LEFT JOINs — one round trip instead of 7 for a single issue fetch.
                 result = await session.execute(
                     select(Issue)
                     .where(Issue.project_key == project_key)
                     .where(Issue.sequence_number == seq)
                     .options(
-                        selectinload(Issue.tracker),
-                        selectinload(Issue.status),
-                        selectinload(Issue.priority),
-                        selectinload(Issue.category),
-                        selectinload(Issue.author),
-                        selectinload(Issue.assigned_to),
+                        joinedload(Issue.tracker),
+                        joinedload(Issue.status),
+                        joinedload(Issue.priority),
+                        joinedload(Issue.category),
+                        joinedload(Issue.author),
+                        joinedload(Issue.assigned_to),
+                        joinedload(Issue.fixed_version),
                     )
                 )
                 issue = result.scalar_one_or_none()
@@ -498,6 +592,12 @@ class IssueService:
             issue.assigned_to_id = data.assigned_to_id
         if data.category_id is not None:
             issue.category_id = data.category_id
+        # fixed_version_id: use model_fields_set to distinguish "not provided"
+        # (None default) from "explicitly set to null" (clear the field).
+        if "fixed_version_id" in data.model_fields_set:
+            if data.fixed_version_id is not None:
+                await self._validate_fixed_version(session, data.fixed_version_id, issue.project_id)
+            issue.fixed_version_id = data.fixed_version_id
         if data.start_date is not None:
             issue.start_date = data.start_date
         if data.due_date is not None:
@@ -508,6 +608,10 @@ class IssueService:
             issue.done_ratio = data.done_ratio
         if data.is_private is not None:
             issue.is_private = data.is_private
+        if "sprint_id" in data.model_fields_set:
+            if data.sprint_id is not None:
+                await self._validate_sprint(session, data.sprint_id, issue.project_id)
+            issue.sprint_id = data.sprint_id
         if data.metadata is not None:
             # Validate against schemas using the effective tracker_id
             # (may have been changed in this same update)
@@ -638,6 +742,7 @@ class IssueService:
             selectinload(Issue.category),
             selectinload(Issue.author),
             selectinload(Issue.assigned_to),
+            selectinload(Issue.fixed_version),
         )
 
         if project_id is not None:
@@ -658,9 +763,9 @@ class IssueService:
         # ------------------------------------------------------------------
         status_filter = filters.get("status", "open")
         if status_filter == "open":
-            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.is_closed.is_(False))
+            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.category != "closed")
         elif status_filter == "closed":
-            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.is_closed.is_(True))
+            stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.category == "closed")
         elif status_filter not in (None, "all"):
             # Treat as numeric status ID
             try:
@@ -682,6 +787,10 @@ class IssueService:
             stmt = stmt.where(Issue.category_id == filters["category_id"])
         if filters.get("author_id") is not None:
             stmt = stmt.where(Issue.author_id == filters["author_id"])
+        if filters.get("version_id") is not None:
+            stmt = stmt.where(Issue.fixed_version_id == filters["version_id"])
+        if filters.get("sprint_id") is not None:
+            stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
 
         # ------------------------------------------------------------------
         # Text search
@@ -748,50 +857,15 @@ class IssueService:
 
         return issues, total_count
 
-    async def get_detail_tab_context(
+    async def list_time_entries(
         self,
         session: AsyncSession,
         issue_id: int,
-    ) -> dict[str, Any]:
-        """Load tab-related data for the issue detail page.
+    ) -> list[Any]:
+        """Load the full time-entry list for an issue, including user + activity."""
+        from specivo.models.time_entry import TimeEntry
 
-        Returns counts (time entries, attachments, relations),
-        time logged sum, time entries list, activities list, and attachments list.
-        """
-        from specivo.models.attachment import Attachment
-        from specivo.models.relation import IssueRelation
-        from specivo.models.time_entry import TimeEntry, TimeEntryActivity
-
-        # Tab counts
-        time_entry_count = (
-            await session.execute(select(func.count()).select_from(TimeEntry).where(TimeEntry.issue_id == issue_id))
-        ).scalar_one()
-
-        attachment_count = (
-            await session.execute(
-                select(func.count())
-                .select_from(Attachment)
-                .where(Attachment.container_type == "Issue", Attachment.container_id == issue_id)
-            )
-        ).scalar_one()
-
-        relation_count = (
-            await session.execute(
-                select(func.count())
-                .select_from(IssueRelation)
-                .where(or_(IssueRelation.issue_from_id == issue_id, IssueRelation.issue_to_id == issue_id))
-            )
-        ).scalar_one()
-
-        # Time logged sum
-        time_logged = (
-            await session.execute(
-                select(func.coalesce(func.sum(TimeEntry.hours), 0)).where(TimeEntry.issue_id == issue_id)
-            )
-        ).scalar_one()
-
-        # Time entries
-        time_entries = list(
+        return list(
             (
                 await session.execute(
                     select(TimeEntry)
@@ -804,21 +878,15 @@ class IssueService:
             .all()
         )
 
-        # Activities for log-time dropdown
-        activities = list(
-            (
-                await session.execute(
-                    select(TimeEntryActivity)
-                    .where(TimeEntryActivity.active.is_(True))
-                    .order_by(TimeEntryActivity.position)
-                )
-            )
-            .scalars()
-            .all()
-        )
+    async def list_attachments(
+        self,
+        session: AsyncSession,
+        issue_id: int,
+    ) -> list[Any]:
+        """Load the full attachment list for an issue, including author."""
+        from specivo.models.attachment import Attachment
 
-        # Attachments
-        attachments = list(
+        return list(
             (
                 await session.execute(
                     select(Attachment)
@@ -831,13 +899,34 @@ class IssueService:
             .all()
         )
 
+    async def get_detail_tab_context(
+        self,
+        session: AsyncSession,
+        issue_id: int,
+    ) -> dict[str, Any]:
+        """Load tab-related data for the issue detail page.
+
+        Returns time entries list and attachments list. Counts and time_logged
+        sum are derived in Python from the loaded lists to avoid redundant
+        COUNT/SUM queries. Activities for the log-time dropdown come from the
+        process-local lookup cache (specivo.core.lookup_cache) — callers pass
+        them via the template context separately.
+
+        NOTE: Kept for backward compatibility. New code should call
+        list_time_entries() / list_attachments() separately so tab content can
+        be lazy-loaded via htmx partials.
+        """
+        time_entries = await self.list_time_entries(session, issue_id)
+        attachments = await self.list_attachments(session, issue_id)
+
+        # Derive counts and sum in Python from already-loaded lists
+        time_logged = sum((te.hours or 0) for te in time_entries)
+
         return {
-            "time_entry_count": time_entry_count,
-            "attachment_count": attachment_count,
-            "relation_count": relation_count,
+            "time_entry_count": len(time_entries),
+            "attachment_count": len(attachments),
             "time_logged": time_logged,
             "time_entries": time_entries,
-            "activities": activities,
             "attachments": attachments,
         }
 

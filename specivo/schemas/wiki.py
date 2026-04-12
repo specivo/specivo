@@ -68,8 +68,17 @@ class WikiContentVersionOut(BaseModel):
     text: str
 
 
+class WikiDeletedPageOut(WikiPageOut):
+    deleted_at: datetime | None = None
+    deleted_by_id: int | None = None
+
+
 class WikiPageListResponse(BaseModel):
     items: list[WikiPageOut]
+
+
+class WikiTrashListResponse(BaseModel):
+    items: list[WikiDeletedPageOut]
 
 
 class WikiVersionsResponse(BaseModel):

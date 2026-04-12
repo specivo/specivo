@@ -49,7 +49,7 @@ async def _login(client: AsyncClient, login: str, password: str = TEST_PASSWORD)
 
 @pytest_asyncio.fixture
 async def open_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -84,14 +84,15 @@ async def project(db_session: AsyncSession) -> Project:
 
 
 async def _get_or_create_activity(
-    db_session: AsyncSession, name: str, position: int = 1, is_default: bool = False,
+    db_session: AsyncSession,
+    name: str,
+    position: int = 1,
+    is_default: bool = False,
 ) -> TimeEntryActivity:
     """Select-or-insert to avoid collision with seed data."""
     from sqlalchemy import select
 
-    result = await db_session.execute(
-        select(TimeEntryActivity).where(TimeEntryActivity.name == name)
-    )
+    result = await db_session.execute(select(TimeEntryActivity).where(TimeEntryActivity.name == name))
     existing = result.scalar_one_or_none()
     if existing:
         return existing

@@ -41,9 +41,17 @@ Alpine.data('issueForm', function (initial) {
 <div x-data='issueForm({ subject: {{ issue.subject | tojson }} })'>
 ```
 
-**What stays inline in templates:**
-- Simple UI toggles: `x-data="{ expanded: false }"`
-- Single expressions: `@click="showCreate = true"`
+**What stays inline in templates (Alpine CSP build supports these):**
+- Simple data objects: `x-data="{ expanded: false }"`
+- Simple assignments: `@click="showCreate = true"`
+- Property access and comparisons: `x-show="tab === 'general'"`
+- Object class bindings: `:class="{ active: tab === 'general' }"`
+
+**What must be in registered components (NOT supported by CSP build):**
+- String methods: `.trim()`, `.toUpperCase()`, `.substring()`, `.includes()`
+- Global functions: `Object.keys()`, `JSON.stringify()`, `Math.max()`
+- `async`/`await` and `fetch()` calls
+- Arrow functions, destructuring, template literals, spread operator
 
 **Naming:** `camelCase` for components (`projectCreateModal`, `wikiForm`), verb-first for methods (`submit`, `loadKeys`, `toggleModule`).
 
@@ -91,7 +99,7 @@ Non-button classes that are unique to Specivo keep descriptive names without pre
 
 ### 5. No Inline JavaScript (CSP Compliance)
 
-The Content Security Policy is `script-src 'self' 'unsafe-eval'` (unsafe-eval required by Alpine.js). Inline scripts and event handlers are blocked.
+The Content Security Policy is `script-src 'self'` (no `unsafe-eval` thanks to the Alpine CSP build). Inline scripts and event handlers are blocked.
 
 **Forbidden:**
 ```html
@@ -197,7 +205,7 @@ Cached in memory at startup, updated instantly when admin changes it. "Powered b
 
 **Negative:**
 - `specivo.js` will grow. When it exceeds ~1000 lines, split into modules and concatenate with esbuild (deferred — no build step until needed)
-- `unsafe-eval` in CSP required by Alpine.js (Alpine CSP build would fix this but forces all inline expressions into JS)
+- Alpine CSP build used — string/global methods in templates must go through component helper methods
 - Single CSS file — no component-level scoping (mitigated by `sp-` prefix convention)
 
 ## Not Chosen

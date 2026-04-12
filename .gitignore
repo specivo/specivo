@@ -32,6 +32,9 @@ specivo-dev-data/
 htmlcov/
 .mypy_cache/
 
+# Visual regression — actual diffs (baselines are committed)
+tests/e2e/snapshots/*.actual.png
+
 # OS
 .DS_Store
 Thumbs.db

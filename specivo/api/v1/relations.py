@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
+from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
+from specivo.models.relation import IssueRelation
 from specivo.models.user import User
 from specivo.schemas.relation import RelationCreate, RelationOut
 from specivo.services.issue_service import IssueService
-from specivo.services.relation_service import RelationService
+from specivo.services.journal_service import JournalService
+from specivo.services.relation_service import RELATION_TYPES, RelationService
 
 router = APIRouter(tags=["relations"])
 _issue_service = IssueService()
 _relation_service = RelationService()
+_journal_service = JournalService()
 
 
 @router.get(
@@ -66,13 +70,25 @@ async def create_relation(
         delay=data.delay,
     )
 
+    # Record journal entries on both issues
+    user_type = data.relation_type
+    sym_type = RELATION_TYPES[user_type]["sym"]
+    await _journal_service.record_relation_change(
+        db, issue_from, current_user, user_type, issue_to.display_key, added=True,
+    )
+    await _journal_service.record_relation_change(
+        db, issue_to, current_user, sym_type, issue_from.display_key, added=True,
+    )
+
     # Build the response from the persisted relation
     rows = await _relation_service.list_for_issue(db, issue_from)
     for row in rows:
         if row["id"] == relation.id:
+            await db.commit()  # commit before response to avoid reload race condition
             return RelationOut(**row)
 
     # Fallback: construct directly from the stored relation
+    await db.commit()  # commit before response to avoid reload race condition
     from_key = issue_from.display_key
     to_key = issue_to.display_key
     return RelationOut(
@@ -95,4 +111,22 @@ async def delete_relation(
     _rl: None = Depends(rate_limit("relation_delete", max_requests=30, window_seconds=60)),
 ) -> None:
     """Delete a relation by its ID."""
+    # Load relation + both issues BEFORE deleting so we can record journals
+    result = await db.execute(sa_select(IssueRelation).where(IssueRelation.id == relation_id))
+    relation = result.scalar_one_or_none()
+    if relation is not None:
+        issue_from = await _issue_service.get_by_id(db, relation.issue_from_id)
+        issue_to = await _issue_service.get_by_id(db, relation.issue_to_id)
+        canonical_type = relation.relation_type
+        sym_type = RELATION_TYPES[canonical_type]["sym"]
+
     await _relation_service.delete(db, relation_id, current_user)
+
+    # Record journal entries on both issues after successful delete
+    if relation is not None:
+        await _journal_service.record_relation_change(
+            db, issue_from, current_user, canonical_type, issue_to.display_key, added=False,
+        )
+        await _journal_service.record_relation_change(
+            db, issue_to, current_user, sym_type, issue_from.display_key, added=False,
+        )

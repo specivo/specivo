@@ -3,6 +3,76 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.8] - 2026-04-12
+
+### Added
+- **Sprint management** — backlog page, sprint board (kanban), sprint edit with lifecycle controls (start/complete), velocity chart and burndown, sprint analytics page, sprint history table
+- **Custom metadata schemas** — define structured fields per project or issue type, preset library with builtin/custom presets, dynamic metadata on issue forms and detail page, admin interface for schema lifecycle
+- **Kanban board view** — issues list page with board/list toggle, segmented status progress bar, per-column card limits, drag-friendly layout
+- **Version management UI** — version detail page with linked issues and progress, version selector in issue sidebar, full CRUD in project settings
+- **Wiki soft-delete** — trash with restore, auto-purge, search index cleanup on delete
+- **Issue relations** — add/list/remove relations (9 types), autocomplete for related issue input, structured display on detail page
+- **MCP tool expansion** — 38 tools total: wiki section ops (read/replace/append), wiki delete, wiki metadata, issue relations, sprint CRUD, version management, metadata ops, attachment upload, `whoami` for agent self-identification
+- **MCP self-documentation** — `specivo_setup_guide()` returns full agent configuration, enriched tool descriptions
+- **Short issue URLs** — `/issue/KEY-123/` redirects instead of `/projects/KEY/issues/KEY-123/`
+- **Wiki enhancements** — paste-to-embed images, drag-drop file upload, `[[wikilinks]]` in issue descriptions and comments, auto-linked issue references (KEY-123)
+- **Sprint sidebar link** — "Current Sprint" appears when an active sprint exists
+- **Project parent selector** — set parent project in project settings General tab
+- **Member role management** — change member roles from project settings page
+- **Separate `manage_sprints` permission** — independent from `manage_versions`
+
+### Changed
+- Issue detail SQL queries reduced from 39 to ~15
+- Project access control: membership-based visibility with public/private project support
+- All API endpoints enforce project access checks
+- Project key max length increased from 10 to 12 characters
+- Timestamps display in user's timezone instead of UTC
+- Sidebar icons differentiated (were duplicate 4-square grid)
+- Sidebar is now `position: fixed` — stays viewport-height on long pages
+- Wide tables in wiki and issues scroll horizontally instead of being clipped
+- FTS underscore tokenization fixed — `wiki_page` and `wiki page` both searchable
+- Status categories (backlog/active/done/closed) replace boolean `is_closed` for roadmap progress
+- Search results use enum-based result types instead of hardcoded strings
+
+### Fixed
+- Sidebar spacer stretched to ~10000px on wiki pages with long content
+- Wide code blocks in descriptions pushed sidebar off-screen
+- Kanban columns stretched full page width and pushed page horizontally
+- Large inline images broke page layout — overflow container width
+- Wiki inline images not rendered (bare filename src not resolved to attachment URL)
+- Project list showed wrong open/closed counts (missing "done" category)
+- Project list avatar initials hard to read on dark backgrounds
+- Member autocomplete popup style broken in project settings
+- Description diff missing — no initial version stored on issue creation
+- Race condition: project not visible after creation page reload
+- MCP `update_issue` silently ignored `done_ratio` parameter
+- Search result wiki links missing trailing slash (caused proxy redirect)
+- Markdown tables had no cell padding in descriptions and comments
+- SQL wildcard injection in autocomplete endpoint (% and _ not escaped)
+- API error pages returned raw JSON instead of styled error templates
+
+### Security
+- **CSRF protection** — double-submit cookie pattern across all forms, fetch, and htmx requests
+- XSS fix in search snippets — HTML-escaped content with preserved `<mark>` highlight tags
+- Content-Disposition header fix for attachment downloads (RFC 5987 compliance)
+- Authorization check added to sprint edit page
+- Wiki restore cascade fix for soft-delete `deleted_by_id` tracking
+- Notification text rendering uses escaped `title` instead of `text | safe`
+- Audit logging for password reset operations
+- SHA-256 content hash stored for attachments
+- Project-wide attachment filenames with auto-rename on collision
+
+### Performance
+- Composite indexes on query-heavy tables
+- Permission checks cached per-request
+- Project lookup with alias fallback uses single LEFT JOIN
+- Wiki chunking no longer splits inside fenced code blocks
+
+### Tests
+- 1449 integration tests + 266 E2E tests passing
+- E2E test infrastructure: ConsoleErrorTracker, page objects, page-centric organization
+- Visual regression snapshots across 4 viewports (mobile, tablet, narrow, desktop)
+
 ## [0.1.7] - 2026-04-05
 
 ### Added

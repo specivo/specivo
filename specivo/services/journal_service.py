@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from decimal import Decimal
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
@@ -34,7 +35,14 @@ _JOURNALIZED_ATTRS: list[tuple[str, str]] = [
     ("done_ratio", "done_ratio"),
     ("is_private", "is_private"),
     ("fixed_version_id", "fixed_version_id"),
+    ("sprint_id", "sprint_id"),
+    ("issue_metadata", "issue_metadata"),
 ]
+
+# Cap on journal-detail values for structured (dict/list) fields.
+# Prevents a single bulky metadata blob from bloating the history table
+# or the UI diff view.
+_STRUCTURED_VALUE_MAX_CHARS = 500
 
 
 def _to_str(value: object) -> str | None:
@@ -49,6 +57,15 @@ def _to_str(value: object) -> str | None:
         return str(value).lower()
     if isinstance(value, Decimal):
         return str(value)
+    if isinstance(value, (dict, list)):
+        # Structured values (e.g. issue_metadata) are stored as a
+        # compact JSON string, capped to ``_STRUCTURED_VALUE_MAX_CHARS``
+        # to avoid blowing up the journal_details table with large
+        # blobs.  The full value lives on the issue row itself.
+        serialized = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+        if len(serialized) > _STRUCTURED_VALUE_MAX_CHARS:
+            serialized = serialized[: _STRUCTURED_VALUE_MAX_CHARS - 3] + "..."
+        return serialized
     return str(value)
 
 
@@ -146,6 +163,59 @@ class JournalService:
             issue.display_key,
             len(details),
             notes,
+        )
+        return journal
+
+    async def record_relation_change(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        user: User,
+        relation_type: str,
+        other_issue_key: str,
+        added: bool,
+    ) -> Journal:
+        """Record a relation add or remove in the issue journal.
+
+        Parameters
+        ----------
+        relation_type:
+            User-facing relation label (e.g. ``blocks``, ``blocked``).
+        other_issue_key:
+            Display key of the other issue (e.g. ``ACME-45``).
+        added:
+            ``True`` when the relation was created, ``False`` when removed.
+        """
+        sequence = await self._next_sequence(session, issue.id)
+        journal = Journal(
+            issue_id=issue.id,
+            wiki_page_id=None,
+            project_id=issue.project_id,
+            user_id=user.id,
+            notes=None,
+            is_private=False,
+            sequence=sequence,
+        )
+        session.add(journal)
+        await session.flush()
+
+        detail = JournalDetail(
+            journal_id=journal.id,
+            property="relation",
+            prop_key=relation_type,
+            old_value=None if added else other_issue_key,
+            new_value=other_issue_key if added else None,
+        )
+        session.add(detail)
+
+        logger.debug(
+            "Recorded relation %s journal %d (seq=%d) for issue %s: %s %s",
+            "add" if added else "remove",
+            journal.id,
+            sequence,
+            issue.display_key,
+            relation_type,
+            other_issue_key,
         )
         return journal
 
@@ -276,9 +346,12 @@ class JournalService:
             select(Journal)
             .where(Journal.issue_id == issue_id)
             .options(
-                selectinload(Journal.user),
+                # joinedload collapses 1:1 author load into the main SELECT
+                # (saves one round-trip vs. selectinload).
+                joinedload(Journal.user),
+                joinedload(Journal.resolved_by),
+                # details is a collection — keep as selectinload (one extra query).
                 selectinload(Journal.details),
-                selectinload(Journal.resolved_by),
             )
             .order_by(Journal.created_at.asc())
         )

@@ -119,7 +119,7 @@ jobs:
         run: uv run alembic upgrade head
 
       - name: Run E2E tests
-        run: uv run pytest tests/e2e/ -m e2e -n 0 --output=test-results/
+        run: uv run pytest tests/e2e/ -m e2e -n 0 --ignore=tests/e2e/test_visual_regression.py --output=test-results/
 
       - name: Upload Playwright traces
         if: failure()

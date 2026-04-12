@@ -58,27 +58,16 @@ async def _check_container_access(db: AsyncSession, user: User, container_type: 
     if project_id is None:
         raise NotFoundError(f"{container_type} {container_id} not found")
 
-    from specivo.services.permission_service import check_permission
+    from sqlalchemy import select
 
-    if not await check_permission(user, project_id, "view_issues", db):
-        # Check if user is at least a member or project is public
-        from sqlalchemy import select
+    from specivo.models.project import Project
+    from specivo.services.project_service import ProjectService
 
-        from specivo.models.member import Member
-        from specivo.models.project import Project
-
-        member_result = await db.execute(
-            select(Member.id).where(Member.user_id == user.id, Member.project_id == project_id)
-        )
-        if member_result.scalar_one_or_none() is not None:
-            return  # Member — allow access
-
-        project_result = await db.execute(select(Project.is_public).where(Project.id == project_id))
-        is_public = project_result.scalar_one_or_none()
-        if is_public:
-            return  # Public project — allow access
-
-        raise PermissionDeniedError("Access denied to this resource")
+    project_result = await db.execute(select(Project).where(Project.id == project_id))
+    project = project_result.scalar_one_or_none()
+    if project is None:
+        raise NotFoundError(f"{container_type} {container_id} not found")
+    await ProjectService().require_project_access(db, project, user)
 
 
 def _attachment_out(attachment, author_name: str | None = None) -> AttachmentOut:
@@ -93,6 +82,7 @@ def _attachment_out(attachment, author_name: str | None = None) -> AttachmentOut
         content_type=attachment.content_type,
         filesize=attachment.filesize,
         description=attachment.description,
+        content_hash=attachment.content_hash,
         author=IdName(id=attachment.author_id, name=name),
         created_at=attachment.created_at,
         updated_at=attachment.updated_at,
@@ -145,6 +135,7 @@ async def upload_attachment(
             status_code=422,
         ) from exc
 
+    await db.commit()  # commit before response to avoid reload race condition
     return _attachment_out(attachment, author_name=current_user.display_name)
 
 
@@ -174,11 +165,13 @@ async def download_attachment(
 
     # Always force download (Content-Disposition: attachment) to prevent
     # browsers from rendering potentially dangerous content inline (XSS).
+    # Let Starlette's FileResponse handle Content-Disposition encoding
+    # (RFC 5987) — avoids header injection from filenames with quotes.
     return FileResponse(
         path=str(file_path),
         media_type=content_type,
         filename=attachment.filename,
-        headers={"Content-Disposition": f'attachment; filename="{attachment.filename}"'},
+        content_disposition_type="attachment",
     )
 
 

@@ -38,7 +38,7 @@
      })'>
   {# Editor area #}
   <div>
-    <form onsubmit="return false;">
+    <form @submit.prevent>
 
       {# Error banner #}
       <div class="login-error" :class="{ 'show': error }" style="margin-bottom:var(--sp-space-lg)">
@@ -95,7 +95,7 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;"><path d="M9 6l6 6-6 6"/></svg>
                 </button>
                 {% endif %}
-                <span @click="parentSlug = '{{ p.slug }}'; parentTitle = $el.textContent.trim(); pickerOpen = false" style="cursor:pointer;flex:1;">{{ p.title }}</span>
+                <span @click="parentSlug = '{{ p.slug }}'; parentTitle = {{ p.title | tojson }}; pickerOpen = false" style="cursor:pointer;flex:1;">{{ p.title }}</span>
               </div>
               {% if has_children %}
               <div x-show="treeExpanded[{{ p.id }}]">
@@ -113,7 +113,7 @@
 
       <div class="edit-actions">
         <button type="button" class="sp-btn sp-btn-primary"
-                :disabled="submitting || (mode === 'create' && !title.trim())"
+                :disabled="!canSubmit"
                 @click="submitForm()">
           <span x-show="!submitting">Save</span>
           <span x-show="submitting">Saving...</span>

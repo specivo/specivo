@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
+from specivo.schemas.search import SearchSourceType
 from specivo.services.chunking_service import ChunkingService
 from specivo.services.local_embedder import get_local_embedder
 from specivo.services.prefix_registry import get_effective_prefix
@@ -214,10 +215,31 @@ class EmbeddingService:
 
         return False
 
+    async def remove_source(
+        self,
+        session: AsyncSession,
+        source_type: SearchSourceType | str,
+        entity_id: int,
+    ) -> None:
+        """Remove a SearchSource and all associated chunks/embeddings.
+
+        Chunks and embeddings cascade-delete via FK constraints.
+        """
+        result = await session.execute(
+            select(SearchSource).where(
+                SearchSource.source_type == source_type,
+                SearchSource.entity_id == entity_id,
+            )
+        )
+        source = result.scalar_one_or_none()
+        if source is not None:
+            await session.delete(source)
+            await session.flush()
+
     async def embed_source(
         self,
         session: AsyncSession,
-        source_type: str,
+        source_type: SearchSourceType | str,
         entity_id: int,
         project_id: int,
         chunks: list[str],
@@ -227,7 +249,10 @@ class EmbeddingService:
 
         Args:
             session: Async DB session.
-            source_type: "issue", "wiki_page", "comment", or "journal".
+            source_type: One of :class:`SearchSourceType` (``ISSUE``,
+                ``WIKI_PAGE``, ``JOURNAL``, ``ATTACHMENT``). Plain strings
+                with matching values are also accepted for legacy callers
+                and tests that inject unknown types.
             entity_id: ID of the source entity.
             project_id: Project ID for scoping.
             chunks: List of text chunks to embed.
@@ -239,8 +264,8 @@ class EmbeddingService:
         if not chunks:
             return None
 
-        # Comment-specific gating: check settings before indexing
-        if source_type == "comment":
+        # Journal (comment) gating: check settings before indexing
+        if source_type == SearchSourceType.JOURNAL:
             if await self._should_skip_comment(session, entity_id):
                 return None
 
@@ -379,7 +404,7 @@ class EmbeddingService:
 
         return await self.embed_source(
             session,
-            "attachment",
+            SearchSourceType.ATTACHMENT,
             attachment.id,  # type: ignore[attr-defined]
             project_id,
             chunks,

@@ -68,7 +68,7 @@
             <div class="notif-item{% if not n.read %} unread{% endif %}">
               <div class="avatar-sm" style="width:28px;height:28px;font-size:10px;{% if n.actor_avatar_url is defined and n.actor_avatar_url %}background-image:url('{{ n.actor_avatar_url }}');background-size:cover;background-position:center;color:transparent;{% elif n.actor_avatar_color is defined and n.actor_avatar_color %}background:{{ n.actor_avatar_color }};{% endif %}">{{ n.actor_initials if n.actor_initials is defined else '?' }}</div>
               <div class="notif-body">
-                <div class="notif-text">{{ n.text | safe }}</div>
+                <div class="notif-text">{{ n.title }}</div>
                 <div class="notif-meta">{{ n.time_ago }}</div>
               </div>
             </div>

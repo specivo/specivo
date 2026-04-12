@@ -25,6 +25,7 @@ from mcp.server.auth.provider import AccessToken, TokenVerifier
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import API_KEY_MIN_LENGTH, API_KEY_PREFIX, MCP_PENDING_CLIENT_ID
+from specivo.models.auth import ApiKey
 from specivo.models.user import User
 from specivo.services.api_key_service import ApiKeyService
 
@@ -37,9 +38,7 @@ logger = logging.getLogger(__name__)
 # Raw ``spv_...`` key for the current MCP request / session.
 # Set by ``SpvTokenVerifier`` at transport level.
 # Read by ``authenticate_mcp_tool`` at tool level.
-mcp_raw_key_var: contextvars.ContextVar[str | None] = contextvars.ContextVar(
-    "mcp_raw_key", default=None
-)
+mcp_raw_key_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("mcp_raw_key", default=None)
 
 _api_key_svc = ApiKeyService()
 
@@ -81,7 +80,7 @@ class SpvTokenVerifier(TokenVerifier):
 # ---------------------------------------------------------------------------
 
 
-async def authenticate_mcp_tool(session: AsyncSession) -> tuple[User, object]:
+async def authenticate_mcp_tool(session: AsyncSession) -> tuple[User, ApiKey]:
     """Re-authenticate the raw API key within *session*.
 
     This runs on **every** tool call, ensuring that a revoked or

@@ -41,7 +41,15 @@ class WikiPage(Base, TimestampMixin, LockVersionMixin):
 
     __tablename__ = "wiki_pages"
 
-    __table_args__ = (UniqueConstraint("wiki_id", "slug", name="uq_wiki_pages_wiki_slug"),)
+    __table_args__ = (
+        Index(
+            "uq_wiki_pages_wiki_slug_active",
+            "wiki_id",
+            "slug",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     wiki_id: Mapped[int] = mapped_column(ForeignKey("wikis.id", ondelete="CASCADE"), nullable=False, index=True)
@@ -51,6 +59,10 @@ class WikiPage(Base, TimestampMixin, LockVersionMixin):
         ForeignKey("wiki_pages.id", ondelete="SET NULL"), nullable=True, index=True
     )
     protected: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, default=None)
+    deleted_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     wiki: Mapped[Wiki] = relationship("Wiki", lazy="raise")

@@ -48,7 +48,7 @@ async def _lookups(db_session: AsyncSession) -> dict:
         await db_session.execute(select(IssueStatus).where(IssueStatus.name == "New"))
     ).scalar_one_or_none()
     if open_status_row is None:
-        open_status_row = StatusFactory.build(name="New", position=1, is_closed=False)
+        open_status_row = StatusFactory.build(name="New", position=1, category="backlog")
         db_session.add(open_status_row)
         await db_session.flush()
 
@@ -56,7 +56,7 @@ async def _lookups(db_session: AsyncSession) -> dict:
         await db_session.execute(select(IssueStatus).where(IssueStatus.name == "In Progress"))
     ).scalar_one_or_none()
     if closed_status_row is None:
-        closed_status_row = StatusFactory.build(name="In Progress", position=2, is_closed=False)
+        closed_status_row = StatusFactory.build(name="In Progress", position=2, category="backlog")
         db_session.add(closed_status_row)
         await db_session.flush()
 
@@ -64,7 +64,7 @@ async def _lookups(db_session: AsyncSession) -> dict:
         await db_session.execute(select(IssueStatus).where(IssueStatus.name == "Closed"))
     ).scalar_one_or_none()
     if resolved_status_row is None:
-        resolved_status_row = StatusFactory.build(name="Closed", position=5, is_closed=True)
+        resolved_status_row = StatusFactory.build(name="Closed", position=5, category="closed")
         db_session.add(resolved_status_row)
         await db_session.flush()
 
@@ -165,7 +165,7 @@ async def test_detail_page_renders_with_sidebar(
     """
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -193,7 +193,7 @@ async def test_detail_page_shows_progress_select(
     """
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -224,7 +224,7 @@ async def test_detail_page_shows_activity_count(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -252,9 +252,7 @@ async def test_detail_page_shows_tab_counts(
     user = admin_client.state.user
 
     # Seed a time entry activity (select-or-insert to avoid collision with seed data)
-    result = await db_session.execute(
-        select(TimeEntryActivity).where(TimeEntryActivity.name == "Development")
-    )
+    result = await db_session.execute(select(TimeEntryActivity).where(TimeEntryActivity.name == "Development"))
     activity = result.scalar_one_or_none()
     if activity is None:
         activity = TimeEntryActivityFactory.build(name="Development", is_default=True)
@@ -304,7 +302,7 @@ async def test_detail_page_shows_tab_counts(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -550,9 +548,7 @@ async def test_detail_page_time_tab_content(
     """
     user = admin_client.state.user
 
-    result = await db_session.execute(
-        select(TimeEntryActivity).where(TimeEntryActivity.name == "Testing")
-    )
+    result = await db_session.execute(select(TimeEntryActivity).where(TimeEntryActivity.name == "Testing"))
     activity = result.scalar_one_or_none()
     if activity is None:
         activity = TimeEntryActivityFactory.build(name="Testing", is_default=False)
@@ -571,7 +567,7 @@ async def test_detail_page_time_tab_content(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
@@ -609,11 +605,38 @@ async def test_detail_page_attachments_tab_content(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text
     assert _issue.display_key in resp.text
+    # Main detail page must NOT embed the attachment JSON anymore — it is
+    # lazy-loaded via the htmx partial below.
+    assert "spec-document.pdf" not in resp.text
+    assert 'hx-get="/partials/issues/' in resp.text
+    assert "attachments/" in resp.text
+
+    # Fetch the attachments partial directly and verify the attachment appears.
+    partial_resp = await admin_client.get(
+        f"/partials/issues/{_issue.display_key}/attachments/",
+        cookies={"access_token": token},
+    )
+    assert partial_resp.status_code == 200, partial_resp.text
+    assert "spec-document.pdf" in partial_resp.text
+    assert "att-data-issue-" in partial_resp.text
+
+
+@pytest.mark.integration
+async def test_attachments_partial_returns_404_for_unknown_issue(
+    admin_client: AsyncClient,
+) -> None:
+    """The attachments partial mirrors the main handler's 404 behaviour."""
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        "/partials/issues/NOPE-999999/attachments/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 404
 
 
 @pytest.mark.integration
@@ -652,7 +675,7 @@ async def test_detail_page_relations_tab_content(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{_issue.display_key}/",
+        f"/issue/{_issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200, resp.text

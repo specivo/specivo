@@ -3,7 +3,7 @@
 Splits issues, wiki pages, journal notes, and attachments into searchable
 chunks.  Each source type has its own chunking strategy:
 - Issues: single chunk (subject + description)
-- Wiki pages: split by markdown headings (h1, h2, h3)
+- Wiki pages: split by markdown headings (h1, h2, h3), code-block-aware
 - Journals: single atomic chunk per note (respects min length setting)
 - Attachments: single chunk (filename + description)
 """
@@ -13,6 +13,17 @@ from __future__ import annotations
 import re
 
 from specivo.core.config import get_settings
+
+# Fenced code block: ``` or ~~~ (with optional language tag)
+_FENCE_RE = re.compile(
+    r"^(?P<fence>`{3,}|~{3,})[^\n]*\n(?P<body>.*?)^(?P=fence)\s*$",
+    re.MULTILINE | re.DOTALL,
+)
+_HEADING_RE = re.compile(r"(?=^#{1,3}\s)", re.MULTILINE)
+
+# Chunk size limits (characters; ~4 chars ≈ 1 token for e5-small 512-token max)
+MIN_CHUNK_CHARS = 100
+MAX_CHUNK_CHARS = 1500
 
 
 class ChunkingService:
@@ -34,10 +45,12 @@ class ChunkingService:
         return [text]
 
     def chunk_wiki_page(self, title: str, text: str) -> list[str]:
-        """Wiki page -> split by markdown headings (h1/h2/h3).
+        """Wiki page -> split by markdown headings, code-block-aware.
 
-        Each chunk includes its heading context. The first chunk
-        includes the page title as a prefix.
+        Fenced code blocks (``` or ~~~) are protected from heading-based
+        splitting. Tiny chunks (< 100 chars) are merged with neighbours.
+        Oversized chunks (> 1500 chars) are split at paragraph boundaries.
+        Every chunk gets the page title prepended for semantic context.
 
         Args:
             title: Wiki page title.
@@ -46,22 +59,71 @@ class ChunkingService:
         Returns:
             List of chunk strings, one per section.
         """
-        if not text:
+        if not text or not text.strip():
             return [title]
 
-        # Split by markdown headings (h1, h2, h3)
-        sections = re.split(r"(?=^#{1,3}\s)", text, flags=re.MULTILINE)
-        chunks: list[str] = []
-        for section in sections:
+        # Step 1: protect fenced code blocks with placeholders
+        placeholders: dict[str, str] = {}
+        counter = 0
+
+        def _replace_fence(m: re.Match) -> str:  # type: ignore[type-arg]
+            nonlocal counter
+            key = f"\x00FENCE{counter}\x00"
+            counter += 1
+            placeholders[key] = m.group(0)
+            return key
+
+        safe_text = _FENCE_RE.sub(_replace_fence, text)
+
+        # Step 2: split on real headings only (outside code blocks)
+        raw_sections = _HEADING_RE.split(safe_text)
+
+        # Step 3: restore code blocks
+        sections: list[str] = []
+        for section in raw_sections:
+            for key, original in placeholders.items():
+                section = section.replace(key, original)
             section = section.strip()
             if section:
-                # First chunk gets the title prefix
-                if not chunks:
-                    chunks.append(f"{title}\n\n{section}")
-                else:
-                    chunks.append(section)
+                sections.append(section)
 
-        return chunks if chunks else [f"{title}\n\n{text}"]
+        if not sections:
+            return [f"{title}\n\n{text.strip()}"]
+
+        # Step 4: merge small chunks, split large ones
+        chunks: list[str] = []
+        buf = ""
+
+        for section in sections:
+            candidate = f"{buf}\n\n{section}".strip() if buf else section
+
+            if len(candidate) <= MAX_CHUNK_CHARS:
+                buf = candidate
+            else:
+                if buf:
+                    chunks.append(buf)
+                    buf = ""
+                if len(section) > MAX_CHUNK_CHARS:
+                    chunks.extend(self._split_text(section, MAX_CHUNK_CHARS, overlap=0))
+                else:
+                    buf = section
+
+        if buf:
+            if len(buf) < MIN_CHUNK_CHARS and chunks:
+                chunks[-1] = f"{chunks[-1]}\n\n{buf}"
+            else:
+                chunks.append(buf)
+
+        # Final pass: merge remaining tiny chunks forward
+        merged: list[str] = []
+        for chunk in chunks:
+            if merged and len(chunk) < MIN_CHUNK_CHARS:
+                merged[-1] = f"{merged[-1]}\n\n{chunk}"
+            else:
+                merged.append(chunk)
+
+        # Step 5: add title prefix to every chunk
+        return [f"{title}\n\n{chunk}" for chunk in merged]
 
     def chunk_attachment(
         self,

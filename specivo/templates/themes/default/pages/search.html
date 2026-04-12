@@ -82,7 +82,11 @@
 <div class="search-results">
   {% for r in results %}
 
-  {# Determine border color class based on type #}
+  {# Determine border color class based on type.
+     Literal source of truth: specivo.schemas.search.SearchResultType
+     (and SearchSourceType for the raw ``wiki_page`` / ``journal`` fallbacks
+     kept here for defensive compatibility). Jinja cannot import Python
+     enums directly, so the string literals are duplicated intentionally. #}
   {% if r.result_type == 'issue' %}
     {% set border_class = 'search-result result-type-issue' %}
   {% elif r.result_type in ('wiki', 'wiki_page') %}
@@ -101,7 +105,7 @@
     {% if r.result_type in ('comment', 'journal') %}
     <div class="comment-header">
       {{ icon_comment | safe }}
-      <a class="result-title" href="/projects/{{ r.project_key }}/issues/{{ r.title }}">Comment on {{ r.title }}</a>
+      <a class="result-title" href="/issue/{{ r.title }}/">Comment on {{ r.title }}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
@@ -112,7 +116,7 @@
     {% elif r.result_type == 'issue' and scope == 'issues' %}
     <div class="result-header">
       {{ icon_issue | safe }}
-      <a class="issue-key" href="/projects/{{ r.project_key }}/issues/{{ r.title }}">{{ r.title }}</a>
+      <a class="issue-key" href="/issue/{{ r.title }}/">{{ r.title }}</a>
       {% if r.subtitle %}
       <span class="result-subject">{{ r.subtitle }}</span>
       {% endif %}
@@ -122,7 +126,7 @@
     {% elif r.result_type == 'issue' %}
     <div class="result-header">
       {{ icon_issue | safe }}
-      <a class="result-title" href="/projects/{{ r.project_key }}/issues/{{ r.title }}">{{ r.title }}{% if r.subtitle %}: {{ r.subtitle }}{% endif %}</a>
+      <a class="result-title" href="/issue/{{ r.title }}/">{{ r.title }}{% if r.subtitle %}: {{ r.subtitle }}{% endif %}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
@@ -133,7 +137,7 @@
     {% elif r.result_type in ('wiki', 'wiki_page') and scope == 'wiki' %}
     <div class="result-header">
       {{ icon_wiki | safe }}
-      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}">{{ (r.subtitle | replace('_', ' ')) if r.subtitle else (r.title or r.result_type) }}</a>
+      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or r.result_type }}</a>
       <span class="project-key" style="font-size:var(--sp-font-size-xs)">{{ r.project_key }}</span>
     </div>
 
@@ -141,7 +145,7 @@
     {% elif r.result_type in ('wiki', 'wiki_page') %}
     <div class="result-header">
       {{ icon_wiki | safe }}
-      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}">{{ (r.subtitle | replace('_', ' ')) if r.subtitle else (r.title or 'Wiki Page') }}</a>
+      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or 'Wiki Page' }}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
@@ -179,7 +183,7 @@
 
     {# Footer with score #}
     <div class="result-footer">
-      <span class="result-score">Score: {{ '%.2f' | format(r.score) }}</span>
+      <span class="result-score">Score: {{ '%.4f' | format(r.score) }}{% if r.fts_rank is not none or r.sem_rank is not none %} ({% if r.fts_rank is not none %}FTS #{{ r.fts_rank }}{% endif %}{% if r.fts_rank is not none and r.sem_rank is not none %}, {% endif %}{% if r.sem_rank is not none %}Sem #{{ r.sem_rank }}{% endif %}){% endif %}</span>
     </div>
   </div>
   {% endfor %}
@@ -213,7 +217,7 @@
   {% endif %}
   <div class="sp-pagination-size">
     <label>Show</label>
-    <select onchange="window.location='{{ pbase }}&offset=0&limit='+this.value">
+    <select data-search-limit="{{ pbase }}">
       {% for size in [10, 25, 50] %}
       <option value="{{ size }}" {{ 'selected' if limit == size else '' }}>{{ size }}</option>
       {% endfor %}

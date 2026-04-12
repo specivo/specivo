@@ -251,8 +251,8 @@ class AuthService:
         session: AsyncSession,
         refresh_token_raw: str,
         remember: bool = True,
-    ) -> tuple[str, str]:
-        """Rotate a refresh token and return *(access_token, new_refresh_token_raw)*.
+    ) -> tuple[str, str, User]:
+        """Rotate a refresh token and return *(access_token, new_refresh_token_raw, user)*.
 
         If the token is not found (already used or never existed) we raise 401.
         Replay detection: if a token is reused after rotation, the caller should
@@ -312,7 +312,7 @@ class AuthService:
         new_access_token = _make_access_token(user, settings, remember=remember)
 
         await session.flush()
-        return new_access_token, new_refresh_raw
+        return new_access_token, new_refresh_raw, user
 
     async def logout(
         self,
@@ -381,11 +381,12 @@ class AuthService:
         self,
         session: AsyncSession,
         email: str,
-    ) -> None:
+    ) -> int | None:
         """Request a password reset for the given email.
 
         Always succeeds silently to prevent email enumeration.
         Only sends an email if the user exists and is active.
+        Returns the user_id if a token was generated, None otherwise.
         """
         from specivo.core.notification_templates import PASSWORD_RESET_EMAIL_SUBJECT
 
@@ -399,7 +400,7 @@ class AuthService:
 
         # Silent return for nonexistent or inactive users — no enumeration
         if user is None or user.status not in ("active", "locked"):
-            return
+            return None
 
         # Invalidate any existing unused tokens for this user
         invalidate_stmt = (
@@ -434,15 +435,17 @@ class AuthService:
             expire_hours=expire_hours,
         )
         send_notification_email.delay(user.email, subject, body_html)
+        return user.id
 
     async def reset_password_with_token(
         self,
         session: AsyncSession,
         token: str,
         new_password: str,
-    ) -> None:
+    ) -> int:
         """Reset a user's password using a valid reset token.
 
+        Returns the user_id of the user whose password was reset.
         Raises ``AppError`` if the token is invalid, expired, or already used.
         """
         token_hash = _hash_token(token)
@@ -499,6 +502,7 @@ class AuthService:
         record.used_at = utcnow()
 
         await session.flush()
+        return user.id
 
     # ------------------------------------------------------------------
     # Helpers

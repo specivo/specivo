@@ -64,7 +64,7 @@ class Project(Base, TimestampMixin):
     identifier: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
 
     # Uppercase project key used as issue prefix (SPV, ACME, …)
-    key: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
+    key: Mapped[str] = mapped_column(String(12), nullable=False, unique=True)
 
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -76,7 +76,7 @@ class Project(Base, TimestampMixin):
     # ltree path stored as text; DB column is ltree type (set in migration)
     path: Mapped[str] = mapped_column(Text, nullable=False)
 
-    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     inherit_members: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
@@ -132,22 +132,18 @@ class ProjectKeyAlias(Base):
 
     __tablename__ = "project_key_aliases"
 
-    __table_args__ = (
-        Index("ix_project_key_aliases_project_id", "project_id"),
-    )
+    __table_args__ = (Index("ix_project_key_aliases_project_id", "project_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    old_key: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
+    old_key: Mapped[str] = mapped_column(String(12), nullable=False, unique=True)
 
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
     )
 
-    renamed_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False, server_default=func.now()
-    )
+    renamed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     renamed_by_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="RESTRICT"),

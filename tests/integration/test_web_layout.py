@@ -29,7 +29,7 @@ async def test_static_css_variables_served(unauth_client: AsyncClient):
 @pytest.mark.integration
 async def test_static_js_alpine_served(unauth_client: AsyncClient):
     """Alpine.js vendor file is served from /static/vendor/."""
-    resp = await unauth_client.get("/static/vendor/alpine.3.14.min.js")
+    resp = await unauth_client.get("/static/vendor/alpine.csp.3.14.min.js")
     assert resp.status_code == 200
     assert "javascript" in resp.headers["content-type"]
 

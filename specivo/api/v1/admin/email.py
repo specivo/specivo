@@ -46,24 +46,18 @@ async def send_test_email(
 
     try:
         if settings.smtp_tls:
-            server = smtplib.SMTP(
-                settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout
-            )
+            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout)
             server.ehlo()
             server.starttls(context=ssl.create_default_context())
         else:
-            server = smtplib.SMTP(
-                settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout
-            )
+            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout)
 
         if settings.smtp_user:
             server.login(settings.smtp_user, settings.smtp_password)
 
         server.sendmail(settings.smtp_from, [payload.to], msg.as_string())
         server.quit()
-        logger.info(
-            "Test email sent by admin %s to %s", current_user.login, payload.to
-        )
+        logger.info("Test email sent by admin %s to %s", current_user.login, payload.to)
         return TestEmailResponse(ok=True)
     except (smtplib.SMTPException, OSError) as exc:
         logger.warning("Test email failed (admin %s): %s", current_user.login, exc)

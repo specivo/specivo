@@ -4,13 +4,13 @@
   {% if has_feature("bulk_operations") %}<td style="padding: var(--sp-space-sm); width: 32px;"><input type="checkbox" value="{{ issue.id }}" /></td>{% endif %}
   <td style="padding: var(--sp-space-sm); width: 24px;">{{ priority_badge(issue.priority.name if issue.priority else 'Normal') }}</td>
   <td style="padding: var(--sp-space-sm);">
-    <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/"
+    <a href="/issue/{{ issue.display_key }}/"
        style="font-family: var(--sp-font-mono, 'JetBrains Mono', monospace); font-size: var(--sp-font-size-sm); text-decoration: none; color: var(--sp-accent);">
       {{ issue.display_key }}
     </a>
   </td>
   <td style="padding: var(--sp-space-sm);">
-    <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/"
+    <a href="/issue/{{ issue.display_key }}/"
        style="text-decoration: none; color: inherit; font-weight: 500;">
       {{ issue.subject }}
     </a>
@@ -25,8 +25,8 @@
       <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">--</span>
     {% endif %}
   </td>
-  <td style="padding: var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" title="{{ issue.updated_at.strftime('%Y-%m-%d %H:%M') if issue.updated_at else '' }}">
-    {{ issue.updated_at | timeago }}
+  <td style="padding: var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" title="{{ issue.updated_at | localtime(user.timezone if user is defined else 'UTC') if issue.updated_at else '' }}">
+    {{ issue.updated_at | timeago(user.timezone if user is defined else 'UTC') }}
   </td>
 </tr>
 {% endfor %}

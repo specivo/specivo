@@ -30,6 +30,7 @@ class AttachmentOut(BaseModel):
     content_type: str | None
     filesize: int
     description: str | None
+    content_hash: str | None
     author: IdName
     created_at: datetime
     updated_at: datetime

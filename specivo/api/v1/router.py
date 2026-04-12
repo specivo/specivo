@@ -15,6 +15,8 @@ from fastapi import APIRouter
 
 from specivo.api.v1.admin.email import router as admin_email_router
 from specivo.api.v1.admin.embedding_models import router as admin_embedding_models_router
+from specivo.api.v1.admin.metadata_presets import router as admin_metadata_presets_router
+from specivo.api.v1.admin.metadata_schemas import router as admin_metadata_schemas_router
 from specivo.api.v1.admin.projects import router as admin_projects_router
 from specivo.api.v1.admin.settings import router as admin_settings_router
 from specivo.api.v1.admin.users import router as admin_users_router
@@ -24,12 +26,14 @@ from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
 from specivo.api.v1.issues import router as issues_router
+from specivo.api.v1.metadata import router as metadata_router
 from specivo.api.v1.notifications import router as notifications_router
 from specivo.api.v1.projects import router as projects_router
 from specivo.api.v1.reactions import router as reactions_router
 from specivo.api.v1.relations import router as relations_router
 from specivo.api.v1.saved_filters import router as saved_filters_router
 from specivo.api.v1.search import router as search_router
+from specivo.api.v1.sprints import router as sprints_router
 from specivo.api.v1.time_entries import router as time_entries_router
 from specivo.api.v1.users import router as users_router
 from specivo.api.v1.versions import router as versions_router
@@ -43,6 +47,7 @@ api_router.include_router(projects_router)
 api_router.include_router(issues_router)
 api_router.include_router(relations_router)
 api_router.include_router(versions_router)
+api_router.include_router(sprints_router)
 api_router.include_router(attachments_router)
 api_router.include_router(time_entries_router)
 api_router.include_router(admin_settings_router)
@@ -58,3 +63,6 @@ api_router.include_router(agent_sessions_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_projects_router)
 api_router.include_router(admin_email_router)
+api_router.include_router(admin_metadata_presets_router)
+api_router.include_router(admin_metadata_schemas_router)
+api_router.include_router(metadata_router)

@@ -11,24 +11,29 @@ from __future__ import annotations
 import logging
 from datetime import date
 from decimal import Decimal
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from specivo.core.constants import SEARCH_SNIPPET_MAX_CHARS
-from specivo.core.exceptions import NotFoundError, PermissionDeniedError
+from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
+from specivo.schemas.sprint import SprintCreate, SprintUpdate
 from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
+from specivo.services.relation_service import RelationService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import AuditEvent
+from specivo.services.sprint_service import SprintService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.services.version_service import VersionService
 from specivo.services.wiki_service import WikiService
@@ -42,6 +47,8 @@ _search_svc = SearchService()
 _journal_svc = JournalService()
 _time_entry_svc = TimeEntryService()
 _version_svc = VersionService()
+_relation_svc = RelationService()
+_sprint_svc = SprintService()
 
 
 async def _log_tool(
@@ -67,7 +74,10 @@ async def _log_tool(
 
 
 async def _require_permission(
-    session: AsyncSession, user: User, project_id: int, permission: str,
+    session: AsyncSession,
+    user: User,
+    project_id: int,
+    permission: str | Permission,
 ) -> None:
     if not await check_permission(user, project_id, permission, session):
         raise PermissionDeniedError(f"Permission '{permission}' denied for this project")
@@ -76,6 +86,20 @@ async def _require_permission(
 # ---------------------------------------------------------------------------
 # Projects
 # ---------------------------------------------------------------------------
+
+
+async def _whoami(session: AsyncSession, user: User) -> str:
+    """Return the authenticated user's identity."""
+    lines = [
+        f"user_id: {user.id}",
+        f"login: {user.login}",
+        f"display_name: {user.display_name}",
+        f"email: {user.email}",
+        f"is_admin: {user.is_admin}",
+        f"status: {user.status}",
+    ]
+    await _log_tool(session, user, AuditEvent.RESOURCE_ACCESS, "whoami")
+    return "\n".join(lines)
 
 
 async def _list_projects(
@@ -108,19 +132,26 @@ async def _list_issues(
     sort: str = "created_at:desc",
     offset: int = 0,
     limit: int = 25,
+    sprint_id: int | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_issues")
+    filters: dict = {"status": status}
+    if sprint_id is not None:
+        filters["sprint_id"] = sprint_id
     issues, total = await _issue_svc.list_issues(
         session,
         project_id=project.id,
-        filters={"status": status},
+        filters=filters,
         sort=sort,
         offset=offset,
         limit=limit,
         user=user,
     )
-    lines = [f"Issues for {project.key} ({total} total, filter={status}):", ""]
+    scope = f"filter={status}"
+    if sprint_id is not None:
+        scope += f", sprint_id={sprint_id}"
+    lines = [f"Issues for {project.key} ({total} total, {scope}):", ""]
     for i in issues:
         lines.append(f"  {i.display_key}  [{i.status.name}]  {i.subject}")
     if not issues:
@@ -218,6 +249,8 @@ async def _create_issue(
     status_id: int | None = None,
     priority_id: int | None = None,
     assigned_to_id: int | None = None,
+    fixed_version_id: int | None = None,
+    sprint_id: int | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "add_issues")
@@ -229,11 +262,16 @@ async def _create_issue(
         status_id=status_id,
         priority_id=priority_id,
         assigned_to_id=assigned_to_id,
+        fixed_version_id=fixed_version_id,
+        sprint_id=sprint_id,
     )
     issue = await _issue_svc.create(session, project, data, user)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.ISSUE_CREATED, "create_issue",
+        session,
+        user,
+        AuditEvent.ISSUE_CREATED,
+        "create_issue",
         {"project_key": project_key, "subject": subject, "issue_ref": issue.display_key},
         project_id=project.id,
     )
@@ -251,7 +289,10 @@ async def _update_issue(
     status_id: int | None = None,
     priority_id: int | None = None,
     assigned_to_id: int | None = None,
+    done_ratio: int | None = None,
     notes: str | None = None,
+    fixed_version_id: int | None = None,
+    sprint_id: int | None = None,
 ) -> str:
     issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue.project_id, "edit_issues")
@@ -261,7 +302,9 @@ async def _update_issue(
         status_id=status_id,
         priority_id=priority_id,
         assigned_to_id=assigned_to_id,
-        done_ratio=None,
+        done_ratio=done_ratio,
+        fixed_version_id=fixed_version_id,
+        sprint_id=sprint_id,
         lock_version=issue.lock_version,
     )
     updated = await _issue_svc.update(session, issue, data, user, notes=notes)
@@ -331,7 +374,10 @@ async def _search(
     if not results:
         lines.append("  (no results)")
     await _log_tool(
-        session, user, AuditEvent.SEARCH_QUERY, "search",
+        session,
+        user,
+        AuditEvent.SEARCH_QUERY,
+        "search",
         {"query": query, "scope": scope, "result_count": total},
     )
     return "\n".join(lines)
@@ -342,12 +388,88 @@ async def _search(
 # ---------------------------------------------------------------------------
 
 
+def _split_into_sections(text: str) -> list[dict]:
+    """Split markdown into sections by headings.
+
+    Returns list of {"heading": str|None, "level": int, "body": str, "start": int, "end": int}.
+    First section may have heading=None for content before any heading.
+    ``start`` and ``end`` are line indices (0-based) within the original text lines.
+    """
+    import re
+
+    lines = text.split("\n")
+    sections: list[dict] = []
+    current_heading: str | None = None
+    current_level: int = 0
+    current_start: int = 0
+    body_lines: list[str] = []
+
+    for idx, line in enumerate(lines):
+        m = re.match(r"^(#{1,6}) (.+)$", line)
+        if m:
+            # Flush previous section
+            sections.append(
+                {
+                    "heading": current_heading,
+                    "level": current_level,
+                    "body": "\n".join(body_lines),
+                    "start": current_start,
+                    "end": idx - 1 if idx > 0 else 0,
+                }
+            )
+            current_heading = line
+            current_level = len(m.group(1))
+            current_start = idx
+            body_lines = []
+        else:
+            body_lines.append(line)
+
+    # Flush last section
+    sections.append(
+        {
+            "heading": current_heading,
+            "level": current_level,
+            "body": "\n".join(body_lines),
+            "start": current_start,
+            "end": len(lines) - 1,
+        }
+    )
+
+    return sections
+
+
+def _find_section(
+    sections: list[dict],
+    heading: str,
+) -> tuple[int, dict] | None:
+    """Find a section by heading text.
+
+    Accepts both ``## Foo`` (exact heading line) and ``Foo`` (bare text, searches all levels).
+    Returns (index, section_dict) or None.
+    """
+    # Exact heading line match first
+    for idx, s in enumerate(sections):
+        if s["heading"] == heading:
+            return idx, s
+
+    # Bare text: strip leading #s from heading and compare
+    bare = heading.lstrip("#").strip()
+    for idx, s in enumerate(sections):
+        if s["heading"] is not None:
+            section_bare = s["heading"].lstrip("#").strip()
+            if section_bare == bare:
+                return idx, s
+
+    return None
+
+
 async def _read_wiki(
     session: AsyncSession,
     user: User,
     project_key: str,
     slug: str,
     metadata_only: bool = False,
+    search: str | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_wiki")
@@ -359,9 +481,21 @@ async def _read_wiki(
         f"Lock version: {page.lock_version}",
     ]
     if not metadata_only:
-        lines.append("")
-        lines.append("Content:")
-        lines.append(content.text or "")
+        text = content.text or ""
+        if search and text:
+            section = _extract_section(text, search)
+            if section is not None:
+                lines.append("")
+                lines.append(f"Content (section matching '{search}'):")
+                lines.append(section)
+            else:
+                lines.append("")
+                lines.append(f"Content ('{search}' not found in text):")
+                lines.append(text)
+        else:
+            lines.append("")
+            lines.append("Content:")
+            lines.append(text)
     await _log_tool(session, user, AuditEvent.WIKI_READ, "read_wiki", {"project_key": project_key, "slug": slug})
     return "\n".join(lines)
 
@@ -442,17 +576,374 @@ async def _create_wiki(
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "manage_wiki")
     page, content = await _wiki_svc.create_page(
-        session, project.id, title, text, user, parent_slug=parent_slug,
+        session,
+        project.id,
+        title,
+        text,
+        user,
+        parent_slug=parent_slug,
     )
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.WIKI_CREATED, "create_wiki",
+        session,
+        user,
+        AuditEvent.WIKI_CREATED,
+        "create_wiki",
         {"project_key": project_key, "slug": page.slug, "title": title},
         project_id=project.id,
     )
     return (
         f"Created wiki page '{page.title}' (slug: {page.slug}).\n"
         f"Version: {content.version}\nLock version: {page.lock_version}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Wiki — delete / restore
+# ---------------------------------------------------------------------------
+
+
+async def _delete_wiki(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    slug: str,
+    cascade_children: bool = False,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "delete_wiki_pages")
+    page, _content = await _wiki_svc.get_page(session, project.id, slug)
+    deleted_ids = await _wiki_svc.delete_page(session, page.id, user, cascade_children=cascade_children)
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.WIKI_DELETED,
+        "delete_wiki",
+        {"project_key": project_key, "slug": slug, "deleted_ids": deleted_ids},
+        project_id=project.id,
+    )
+    count = len(deleted_ids)
+    suffix = "s" if count > 1 else ""
+    return f"Deleted {count} wiki page{suffix} (slug: {slug}, cascade={cascade_children})."
+
+
+async def _restore_wiki(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    slug: str,
+    cascade: bool = True,
+) -> str:
+    from specivo.models.wiki import Wiki, WikiPage
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "delete_wiki_pages")
+
+    # Find deleted page by slug (without the deleted_at IS NULL filter)
+    wiki_stmt = select(Wiki).where(Wiki.project_id == project.id)
+    wiki_result = await session.execute(wiki_stmt)
+    wiki = wiki_result.scalar_one_or_none()
+    if wiki is None:
+        raise NotFoundError(f"Wiki page '{slug}' not found")
+
+    stmt = select(WikiPage).where(
+        WikiPage.wiki_id == wiki.id,
+        WikiPage.slug == slug,
+        WikiPage.deleted_at.isnot(None),
+    )
+    result = await session.execute(stmt)
+    page = result.scalar_one_or_none()
+    if page is None:
+        raise NotFoundError(f"Deleted wiki page '{slug}' not found")
+
+    restored_ids = await _wiki_svc.restore_page(session, page.id, cascade=cascade)
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.WIKI_RESTORED,
+        "restore_wiki",
+        {"project_key": project_key, "slug": slug, "restored_ids": restored_ids},
+        project_id=project.id,
+    )
+    count = len(restored_ids)
+    suffix = "s" if count > 1 else ""
+    return f"Restored {count} wiki page{suffix} (slug: {slug}, cascade={cascade})."
+
+
+# ---------------------------------------------------------------------------
+# Wiki — metadata (parent, title, protected)
+# ---------------------------------------------------------------------------
+
+
+async def _update_wiki_metadata(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    slug: str,
+    parent_slug: str | None = None,
+    title: str | None = None,
+    protected: bool | None = None,
+) -> str:
+    """Update wiki page metadata (parent, title, protected) without editing content."""
+    if parent_slug is None and title is None and protected is None:
+        return "Error: at least one of parent_slug, title, or protected must be provided."
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_wiki")
+    page, _content = await _wiki_svc.get_page(session, project.id, slug)
+
+    changes: list[str] = []
+    audit_changes: dict[str, dict[str, object]] = {}
+
+    # --- title (rename) ---
+    if title is not None:
+        old_title = page.title
+        old_slug = page.slug
+        page = await _wiki_svc.rename_page(session, page.id, title, page.lock_version)
+        changes.append(f"title -> '{page.title}' (new slug: {page.slug})")
+        audit_changes["title"] = {"old": old_title, "new": page.title}
+        audit_changes["slug"] = {"old": old_slug, "new": page.slug}
+
+    # --- parent ---
+    if parent_slug is not None:
+        old_parent_id = page.parent_id
+        if parent_slug == "":
+            page.parent_id = None
+            changes.append("parent -> (root)")
+        else:
+            parent_page, _parent_content = await _wiki_svc.get_page(session, project.id, parent_slug)
+            page.parent_id = parent_page.id
+            changes.append(f"parent -> '{parent_slug}'")
+        await session.flush()
+        audit_changes["parent_id"] = {"old": old_parent_id, "new": page.parent_id}
+
+    # --- protected ---
+    if protected is not None:
+        old_protected = page.protected
+        page.protected = protected
+        await session.flush()
+        changes.append(f"protected -> {protected}")
+        audit_changes["protected"] = {"old": old_protected, "new": protected}
+
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.WIKI_UPDATED,
+        "update_wiki_metadata",
+        {"project_key": project_key, "slug": slug, "changes": audit_changes},
+        project_id=project.id,
+    )
+    return f"Updated wiki page '{page.title}': " + ", ".join(changes) + "."
+
+
+# ---------------------------------------------------------------------------
+# Wiki — section operations
+# ---------------------------------------------------------------------------
+
+
+async def _append_wiki(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    slug: str,
+    text: str,
+    position: str = "end",
+) -> str:
+    """Append text to a wiki page at a given position.
+
+    ``position`` is either ``"end"`` (default) or ``"after:## Heading Name"``
+    to insert after a specific section.
+    """
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_wiki")
+    page, content = await _wiki_svc.get_page(session, project.id, slug)
+    current = content.text or ""
+
+    if position == "end":
+        new_text = current.rstrip("\n") + "\n\n" + text if current.strip() else text
+    elif position.startswith("after:"):
+        heading_query = position[len("after:") :]
+        sections = _split_into_sections(current)
+        match = _find_section(sections, heading_query)
+        if match is None:
+            return (
+                f"Error: heading '{heading_query}' not found in wiki page '{page.title}'.\n"
+                f"Content length: {len(current)} chars."
+            )
+        sec_idx, section = match
+        sec_level = section["level"]
+
+        # Find the end of this section (including children):
+        # next section at same-or-higher level
+        insert_before_line: int | None = None
+        for s in sections[sec_idx + 1 :]:
+            if s["heading"] is not None and s["level"] <= sec_level:
+                insert_before_line = s["start"]
+                break
+
+        lines = current.split("\n")
+        if insert_before_line is not None:
+            # Insert text before the next same-or-higher-level heading
+            before = "\n".join(lines[:insert_before_line]).rstrip("\n")
+            after = "\n".join(lines[insert_before_line:])
+            new_text = before + "\n\n" + text + "\n\n" + after
+        else:
+            # No next same-level heading; append at end
+            new_text = current.rstrip("\n") + "\n\n" + text
+    else:
+        return f"Error: invalid position '{position}'. Use 'end' or 'after:## Heading Name'."
+
+    page, new_content = await _wiki_svc.update_page(
+        session,
+        page.id,
+        new_text,
+        user,
+        lock_version=page.lock_version,
+    )
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.WIKI_UPDATED,
+        "append_wiki",
+        {"project_key": project_key, "slug": slug, "position": position},
+    )
+    return (
+        f"Appended to wiki page '{page.title}' (version {new_content.version}).\n"
+        f"Position: {position}. New content length: {len(new_text)} chars."
+    )
+
+
+async def _read_wiki_section(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    slug: str,
+    heading: str,
+    include_children: bool = True,
+) -> str:
+    """Read a single section from a wiki page by heading."""
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "view_wiki")
+    page, content = await _wiki_svc.get_page(session, project.id, slug)
+    text = content.text or ""
+
+    sections = _split_into_sections(text)
+    match = _find_section(sections, heading)
+    if match is None:
+        return (
+            f"Error: heading '{heading}' not found in wiki page '{page.title}'.\n"
+            f"Available headings: {', '.join(s['heading'] for s in sections if s['heading'])}"
+        )
+
+    sec_idx, section = match
+    sec_level = section["level"]
+    lines = text.split("\n")
+
+    if include_children:
+        # Include everything until the next same-or-higher-level heading
+        end_line: int | None = None
+        for s in sections[sec_idx + 1 :]:
+            if s["heading"] is not None and s["level"] <= sec_level:
+                end_line = s["start"]
+                break
+        if end_line is not None:
+            result_lines = lines[section["start"] : end_line]
+        else:
+            result_lines = lines[section["start"] :]
+    else:
+        # Stop at the first sub-heading
+        end_line = None
+        for s in sections[sec_idx + 1 :]:
+            if s["heading"] is not None:
+                end_line = s["start"]
+                break
+        if end_line is not None:
+            result_lines = lines[section["start"] : end_line]
+        else:
+            result_lines = lines[section["start"] :]
+
+    result_text = "\n".join(result_lines).strip()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.WIKI_READ,
+        "read_wiki_section",
+        {"project_key": project_key, "slug": slug, "heading": heading},
+    )
+    return f"Wiki: {page.title} (section)\n\n{result_text}"
+
+
+async def _replace_wiki_section(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    slug: str,
+    heading: str,
+    text: str,
+) -> str:
+    """Replace a section's body while preserving the heading line."""
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_wiki")
+    page, content = await _wiki_svc.get_page(session, project.id, slug)
+    current = content.text or ""
+
+    sections = _split_into_sections(current)
+    match = _find_section(sections, heading)
+    if match is None:
+        return (
+            f"Error: heading '{heading}' not found in wiki page '{page.title}'.\n"
+            f"Available headings: {', '.join(s['heading'] for s in sections if s['heading'])}"
+        )
+
+    sec_idx, section = match
+    sec_level = section["level"]
+    lines = current.split("\n")
+
+    # Find the end of this section (next same-or-higher-level heading)
+    end_line: int | None = None
+    for s in sections[sec_idx + 1 :]:
+        if s["heading"] is not None and s["level"] <= sec_level:
+            end_line = s["start"]
+            break
+
+    # Build new content: heading line + new body + rest
+    heading_line = section["heading"]
+    before = "\n".join(lines[: section["start"]])
+    if end_line is not None:
+        after = "\n".join(lines[end_line:])
+    else:
+        after = ""
+
+    parts = []
+    if before.strip():
+        parts.append(before.rstrip("\n"))
+    parts.append(heading_line + "\n\n" + text.strip())
+    if after.strip():
+        parts.append(after.lstrip("\n"))
+    new_text = "\n\n".join(parts)
+
+    page, new_content = await _wiki_svc.update_page(
+        session,
+        page.id,
+        new_text,
+        user,
+        lock_version=page.lock_version,
+    )
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.WIKI_UPDATED,
+        "replace_wiki_section",
+        {"project_key": project_key, "slug": slug, "heading": heading},
+    )
+    return (
+        f"Replaced section '{heading}' in wiki page '{page.title}' "
+        f"(version {new_content.version}).\n"
+        f"New content length: {len(new_text)} chars."
     )
 
 
@@ -473,8 +964,7 @@ async def _list_lookups(session: AsyncSession, user: User) -> str:
     lines.append("")
     lines.append("Statuses:")
     for s in statuses:
-        closed = "  [closed]" if s.is_closed else ""
-        lines.append(f"  {s.id}  {s.name}{closed}")
+        lines.append(f"  {s.id}  {s.name}  [{s.category}]")
     lines.append("")
     lines.append("Priorities:")
     for p in priorities:
@@ -488,6 +978,182 @@ async def _list_lookups(session: AsyncSession, user: User) -> str:
 
     await _log_tool(session, user, AuditEvent.LOOKUPS_READ, "list_lookups")
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Metadata schemas
+# ---------------------------------------------------------------------------
+
+
+async def _list_metadata_schemas(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    tracker_id: int | None = None,
+    content_type: str | None = None,
+) -> str:
+    """Discover metadata schemas for a project. Agents call this to learn
+    what metadata fields are available before creating/updating issues."""
+    from specivo.services.metadata_schema_service import MetadataSchemaService
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "view_issues")
+
+    svc = MetadataSchemaService()
+    schemas = await svc.list_for_project(session, project.id, content_type=content_type)
+    if tracker_id is not None:
+        schemas = [s for s in schemas if s.tracker_id is None or s.tracker_id == tracker_id]
+
+    if not schemas:
+        return f"No metadata schemas configured for project {project.key}."
+
+    lines = [f"Metadata schemas for {project.key}:", ""]
+    for s in schemas:
+        scope = f"tracker_id={s.tracker_id}" if s.tracker_id else "all trackers"
+        preset = f"  (preset: {s.preset_slug})" if s.preset_slug else ""
+        lines.append(f"  [{s.content_type}] {s.name} ({scope}){preset}")
+        props = s.schema_definition.get("properties", {})
+        for field_name, field_def in props.items():
+            ftype = field_def.get("type", "any")
+            desc = field_def.get("description", "")
+            enum = field_def.get("enum")
+            extra = f"  values: {enum}" if enum else ""
+            lines.append(f"    {field_name}: {ftype}  {desc}{extra}")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Metadata (per-key set/delete/append/remove)
+# ---------------------------------------------------------------------------
+
+
+# Serialized metadata blob size cap (bytes of JSON output).  Enforced
+# after the op is applied — prevents unbounded growth via repeated
+# ``append`` calls.
+_METADATA_MAX_BYTES = 16 * 1024
+
+
+async def _metadata(
+    session: AsyncSession,
+    user: User,
+    target_ref: str,
+    key: str,
+    op: str,
+    value: Any = None,
+) -> str:
+    """Per-key metadata mutation dispatched through the target registry.
+
+    Supported ops:
+
+    * ``set``     -- ``metadata[key] = value`` (any JSON value).
+    * ``delete``  -- pop *key*; silent no-op if missing.
+    * ``append``  -- append to a list at *key*.  Scalar values push one
+      element; list values extend.  Missing key creates a new list.
+      Errors if the existing value is not a list.
+    * ``remove``  -- remove matching items from a list at *key*.  Scalar
+      removes a single matching element; list removes each matching
+      element.  Errors if the existing value is not a list.
+
+    Recoverable errors (bad op, wrong type, stale version, oversize
+    blob) are returned as ``"Error: ..."`` strings.  Hard errors
+    (permission denied, unknown target, missing entity) raise.
+    """
+    import json
+
+    from sqlalchemy.orm.exc import StaleDataError
+
+    from specivo.core.metadata_targets import get_metadata_target_registry
+
+    registry = get_metadata_target_registry()
+    scheme, ref = registry.parse_ref(target_ref)
+    target = registry.get(scheme)
+    if target is None:
+        known = ", ".join(registry.schemes()) or "(none)"
+        return f"Error: unknown metadata target scheme '{scheme}'. Known schemes: {known}"
+
+    if not key:
+        return "Error: key must be a non-empty string"
+
+    valid_ops = {"set", "delete", "append", "remove"}
+    if op not in valid_ops:
+        return f"Error: invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}"
+
+    # Resolve & permission check
+    try:
+        entity = await target.resolve(session, ref, user)
+    except NotFoundError:
+        return f"Error: {scheme} '{ref}' not found"
+    await _require_permission(session, user, target.project_id_of(entity), target.permission)
+
+    metadata = target.get_metadata(entity)
+
+    # Apply op to a local copy.
+    if op == "set":
+        metadata[key] = value
+    elif op == "delete":
+        metadata.pop(key, None)
+    elif op == "append":
+        existing = metadata.get(key)
+        if existing is None:
+            metadata[key] = list(value) if isinstance(value, list) else [value]
+        elif isinstance(existing, list):
+            if isinstance(value, list):
+                existing.extend(value)
+            else:
+                existing.append(value)
+        else:
+            return (
+                f"Error: cannot append to key '{key}': existing value is "
+                f"{type(existing).__name__}, expected array"
+            )
+    elif op == "remove":
+        existing = metadata.get(key)
+        if existing is None:
+            # silent no-op — nothing to remove
+            pass
+        elif isinstance(existing, list):
+            drop = value if isinstance(value, list) else [value]
+            metadata[key] = [item for item in existing if item not in drop]
+        else:
+            return (
+                f"Error: cannot remove from key '{key}': existing value is "
+                f"{type(existing).__name__}, expected array"
+            )
+
+    # Size cap (serialized JSON, post-op)
+    try:
+        serialized = json.dumps(metadata, default=str)
+    except (TypeError, ValueError) as exc:
+        return f"Error: metadata value is not JSON-serializable: {exc}"
+    if len(serialized.encode("utf-8")) > _METADATA_MAX_BYTES:
+        return (
+            f"Error: metadata blob would exceed {_METADATA_MAX_BYTES} bytes "
+            f"after this operation"
+        )
+
+    # Persist through the target.
+    try:
+        updated_entity = await target.set_metadata(session, entity, metadata, user)
+    except StaleDataError:
+        return "Error: issue was modified by another request, retry"
+    except ValidationError as exc:
+        return f"Error: {exc.message}"
+    except ConflictError as exc:
+        return f"Error: {exc.message}"
+    await session.flush()
+
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.ISSUE_UPDATED,
+        "metadata",
+        {"target_ref": target_ref, "key": key, "op": op},
+        project_id=target.project_id_of(updated_entity),
+    )
+    display = target.display_ref(updated_entity)
+    return f"Updated metadata on {display}: {op} key={key}"
 
 
 # ---------------------------------------------------------------------------
@@ -506,10 +1172,102 @@ async def _list_members(session: AsyncSession, user: User, project_key: str) -> 
     if not members:
         lines.append("  (none)")
     await _log_tool(
-        session, user, AuditEvent.MEMBERS_LISTED, "list_members",
-        {"project_key": project_key}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.MEMBERS_LISTED,
+        "list_members",
+        {"project_key": project_key},
+        project_id=project.id,
     )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Relations
+# ---------------------------------------------------------------------------
+
+
+async def _list_relations(
+    session: AsyncSession,
+    user: User,
+    issue_ref: str,
+) -> str:
+    issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
+    await _require_permission(session, user, issue.project_id, "view_issues")
+    rows = await _relation_svc.list_for_issue(session, issue)
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.RELATION_LISTED,
+        "list_relations",
+        {"issue_ref": issue_ref},
+        project_id=issue.project_id,
+    )
+    if not rows:
+        return f"No relations for {issue.display_key}."
+    lines = [f"Relations for {issue.display_key} ({len(rows)} total):", ""]
+    for r in rows:
+        delay_str = f"  delay={r['delay']}d" if r.get("delay") else ""
+        lines.append(f"  #{r['id']}  {r['relation_type']}  {r['issue_to_key']}{delay_str}")
+    return "\n".join(lines)
+
+
+async def _add_relation(
+    session: AsyncSession,
+    user: User,
+    issue_ref: str,
+    issue_to_key: str,
+    relation_type: str,
+    delay: int | None = None,
+) -> str:
+    from specivo.schemas.relation import VALID_RELATION_TYPES
+
+    if relation_type not in VALID_RELATION_TYPES:
+        valid = ", ".join(sorted(VALID_RELATION_TYPES))
+        return f"Error: invalid relation_type '{relation_type}'. Must be one of: {valid}"
+
+    issue_from = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
+    await _require_permission(session, user, issue_from.project_id, "manage_issue_relations")
+    issue_to = await _issue_svc.get_by_display_key(session, issue_to_key, user=user)
+
+    relation = await _relation_svc.create(
+        session=session,
+        issue_from=issue_from,
+        issue_to=issue_to,
+        relation_type=relation_type,
+        delay=delay,
+    )
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.RELATION_ADDED,
+        "add_relation",
+        {"issue_ref": issue_ref, "issue_to_key": issue_to_key, "relation_type": relation_type},
+        project_id=issue_from.project_id,
+    )
+    return f"Created relation #{relation.id}: {issue_from.display_key} {relation_type} {issue_to.display_key}"
+
+
+async def _remove_relation(
+    session: AsyncSession,
+    user: User,
+    issue_ref: str,
+    relation_id: int,
+) -> str:
+    issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
+    await _require_permission(session, user, issue.project_id, "manage_issue_relations")
+    await _relation_svc.delete(session, relation_id, user)
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.RELATION_REMOVED,
+        "remove_relation",
+        {"issue_ref": issue_ref, "relation_id": relation_id},
+        project_id=issue.project_id,
+    )
+    return f"Relation #{relation_id} removed from {issue.display_key}."
 
 
 # ---------------------------------------------------------------------------
@@ -545,7 +1303,10 @@ async def _log_time(
     await session.flush()
     issue_label = f" on {issue_ref}" if issue_ref else ""
     await _log_tool(
-        session, user, AuditEvent.TIME_LOGGED, "log_time",
+        session,
+        user,
+        AuditEvent.TIME_LOGGED,
+        "log_time",
         {"project_key": project_key, "hours": str(hours), "issue_ref": issue_ref},
         project_id=project.id,
     )
@@ -568,8 +1329,12 @@ async def _list_versions(session: AsyncSession, user: User, project_key: str) ->
     if not versions:
         lines.append("  (none)")
     await _log_tool(
-        session, user, AuditEvent.VERSIONS_LISTED, "list_versions",
-        {"project_key": project_key}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.VERSIONS_LISTED,
+        "list_versions",
+        {"project_key": project_key},
+        project_id=project.id,
     )
     return "\n".join(lines)
 
@@ -586,13 +1351,20 @@ async def _create_version(
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "manage_versions")
     data = VersionCreate(
-        name=name, description=description, status=status, effective_date=due_date,
+        name=name,
+        description=description,
+        status=status,
+        effective_date=due_date,
     )
     version = await _version_svc.create(session, project, data)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.VERSION_CREATED, "create_version",
-        {"project_key": project_key, "name": name}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.VERSION_CREATED,
+        "create_version",
+        {"project_key": project_key, "name": name},
+        project_id=project.id,
     )
     return f"Created version '{version.name}' (ID: {version.id}) in {project.key}."
 
@@ -613,12 +1385,387 @@ async def _update_version(
     if version.project_id != project.id:
         raise NotFoundError(message="Version not found in this project")
     data = VersionUpdate(
-        name=name, description=description, status=status, effective_date=due_date,
+        name=name,
+        description=description,
+        status=status,
+        effective_date=due_date,
     )
     version = await _version_svc.update(session, version, data)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.VERSION_UPDATED, "update_version",
-        {"project_key": project_key, "version_id": version_id}, project_id=version.project_id,
+        session,
+        user,
+        AuditEvent.VERSION_UPDATED,
+        "update_version",
+        {"project_key": project_key, "version_id": version_id},
+        project_id=version.project_id,
     )
     return f"Updated version '{version.name}' (ID: {version.id})."
+
+
+async def _delete_version(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    version_id: int,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_versions")
+    version = await _version_svc.get_by_id(session, version_id)
+    if version.project_id != project.id:
+        raise NotFoundError(message="Version not found in this project")
+
+    # Block deletion while issues reference this version
+    from specivo.models.issue import Issue
+
+    count_q = select(func.count()).where(Issue.fixed_version_id == version_id)
+    issue_count: int = (await session.execute(count_q)).scalar_one()
+    if issue_count > 0:
+        return (
+            f"Cannot delete version '{version.name}': "
+            f"{issue_count} issue(s) still reference it. "
+            f"Reassign or clear their fixed version first."
+        )
+
+    name = version.name
+    await _version_svc.delete(session, version)
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.VERSION_DELETED,
+        "delete_version",
+        {"project_key": project_key, "version_id": version_id, "name": name},
+        project_id=project.id,
+    )
+    return f"Deleted version '{name}' (ID: {version_id}) from {project_key}."
+
+
+# ---------------------------------------------------------------------------
+# Sprints
+# ---------------------------------------------------------------------------
+
+
+async def _list_sprints(session: AsyncSession, user: User, project_key: str) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "view_issues")
+    sprints = await _sprint_svc.list_for_project(session, project.id)
+    lines = [f"Sprints for {project.key} ({len(sprints)} total):", ""]
+    for s in sprints:
+        dates = ""
+        if s.start_date and s.end_date:
+            dates = f"  {s.start_date} → {s.end_date}"
+        elif s.start_date:
+            dates = f"  {s.start_date} → ?"
+        vel = ""
+        if s.velocity_snapshot:
+            vel = f" | velocity: {s.velocity_snapshot.get('completed_issues', '?')} completed"
+        lines.append(f"  [{s.id}] {s.name} ({s.status}){dates}{vel}")
+    if not sprints:
+        lines.append("  (none)")
+    await _log_tool(
+        session, user, AuditEvent.RESOURCE_ACCESS, "list_sprints",
+        {"project_key": project_key}, project_id=project.id,
+    )
+    return "\n".join(lines)
+
+
+async def _create_sprint(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    name: str,
+    goal: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
+    data = SprintCreate(name=name, goal=goal, start_date=start_date, end_date=end_date)
+    sprint = await _sprint_svc.create(session, project, data)
+    await session.flush()
+    await _log_tool(
+        session, user, AuditEvent.RESOURCE_ACCESS, "create_sprint",
+        {"project_key": project_key, "name": name, "sprint_id": sprint.id},
+        project_id=project.id,
+    )
+    return f"Created sprint '{sprint.name}' (ID: {sprint.id}) in {project.key}. Status: {sprint.status}"
+
+
+async def _update_sprint(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    sprint_id: int,
+    name: str | None = None,
+    goal: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
+    sprint = await _sprint_svc.get_by_id(session, sprint_id)
+    if sprint.project_id != project.id:
+        raise NotFoundError(message="Sprint not found in this project")
+    data = SprintUpdate(name=name, goal=goal, start_date=start_date, end_date=end_date)
+    sprint = await _sprint_svc.update(session, sprint, data)
+    await session.flush()
+    await _log_tool(
+        session, user, AuditEvent.RESOURCE_ACCESS, "update_sprint",
+        {"project_key": project_key, "sprint_id": sprint_id},
+        project_id=project.id,
+    )
+    return f"Updated sprint '{sprint.name}' (ID: {sprint.id}). Status: {sprint.status}"
+
+
+async def _start_sprint(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    sprint_id: int,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
+    sprint = await _sprint_svc.get_by_id(session, sprint_id)
+    if sprint.project_id != project.id:
+        raise NotFoundError(message="Sprint not found in this project")
+    sprint = await _sprint_svc.start_sprint(session, sprint)
+    await session.flush()
+    await _log_tool(
+        session, user, AuditEvent.RESOURCE_ACCESS, "start_sprint",
+        {"project_key": project_key, "sprint_id": sprint_id},
+        project_id=project.id,
+    )
+    return f"Started sprint '{sprint.name}' (ID: {sprint.id}). Status: active, start_date: {sprint.start_date}"
+
+
+async def _complete_sprint(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    sprint_id: int,
+    move_incomplete_to_sprint_id: int | None = None,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, Permission.MANAGE_SPRINTS)
+    sprint = await _sprint_svc.get_by_id(session, sprint_id)
+    if sprint.project_id != project.id:
+        raise NotFoundError(message="Sprint not found in this project")
+    sprint = await _sprint_svc.complete_sprint(session, sprint, move_incomplete_to_sprint_id)
+    await session.flush()
+    vel = sprint.velocity_snapshot or {}
+    await _log_tool(
+        session, user, AuditEvent.RESOURCE_ACCESS, "complete_sprint",
+        {"project_key": project_key, "sprint_id": sprint_id, "velocity": vel},
+        project_id=project.id,
+    )
+    return (
+        f"Completed sprint '{sprint.name}' (ID: {sprint.id}).\n"
+        f"Total issues: {vel.get('total_issues', '?')}, "
+        f"Completed: {vel.get('completed_issues', '?')}"
+    )
+
+
+async def _list_sprint_issues(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    sprint_id: int,
+    fields: str = "default",
+    offset: int = 0,
+    limit: int = 25,
+) -> str:
+    """List issues belonging to a sprint (or backlog if sprint_id=0)."""
+    from specivo.models.issue import Issue
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "view_issues")
+
+    if fields not in ("minimal", "default", "full"):
+        return "Error: fields must be one of: minimal, default, full"
+
+    limit = max(1, min(limit, 100))
+
+    is_backlog = sprint_id == 0
+
+    if is_backlog:
+        issues, total = await _sprint_svc.backlog_issues(
+            session, project.id, offset=offset, limit=limit,
+        )
+        header = f"Backlog issues for {project.key} ({total} total, showing {offset}..{offset + len(issues)}):"
+    else:
+        # Validate sprint belongs to project
+        sprint = await _sprint_svc.get_by_id(session, sprint_id)
+        if sprint.project_id != project.id:
+            raise NotFoundError(message="Sprint not found in this project")
+
+        # Query issues for this sprint
+        base_where = [Issue.project_id == project.id, Issue.sprint_id == sprint_id]
+
+        count_result = await session.execute(
+            select(func.count(Issue.id)).where(*base_where)
+        )
+        total = count_result.scalar_one()
+
+        stmt = (
+            select(Issue)
+            .where(*base_where)
+            .options(
+                selectinload(Issue.status),
+                selectinload(Issue.tracker),
+                selectinload(Issue.priority),
+                selectinload(Issue.assigned_to),
+            )
+            .order_by(Issue.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        issues = list(result.scalars().all())
+        header = (
+            f'Issues in Sprint {sprint.id} "{sprint.name}" '
+            f"({total} total, showing {offset}..{offset + len(issues)}):"
+        )
+
+    lines = [header, ""]
+
+    for i in issues:
+        if fields == "minimal":
+            lines.append(f"  {i.display_key}  {i.subject}")
+        elif fields == "default":
+            assigned = f" \u2192 {i.assigned_to.display_name}" if i.assigned_to else ""
+            status_name = i.status.name if i.status else "?"
+            tracker_name = i.tracker.name if i.tracker else "?"
+            priority_name = i.priority.name if i.priority else "?"
+            lines.append(
+                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
+                f"{i.subject}{assigned}"
+            )
+        else:  # full
+            assigned = f" \u2192 {i.assigned_to.display_name}" if i.assigned_to else ""
+            status_name = i.status.name if i.status else "?"
+            tracker_name = i.tracker.name if i.tracker else "?"
+            priority_name = i.priority.name if i.priority else "?"
+            desc_preview = ""
+            if i.description:
+                desc_preview = i.description[:200].replace("\n", " ")
+            lines.append(
+                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
+                f"{i.subject}{assigned}"
+            )
+            lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  "
+                         f"version_id={i.fixed_version_id}")
+            if i.issue_metadata:
+                lines.append(f"    metadata={i.issue_metadata}")
+            if desc_preview:
+                lines.append(f"    desc: {desc_preview}")
+            lines.append("")
+
+    if not issues:
+        lines.append("  (none)")
+
+    await _log_tool(
+        session, user, AuditEvent.RESOURCE_ACCESS, "list_sprint_issues",
+        {"project_key": project_key, "sprint_id": sprint_id, "fields": fields},
+        project_id=project.id,
+    )
+    return "\n".join(lines)
+
+
+async def _list_version_issues(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    version_id: int,
+    fields: str = "default",
+    offset: int = 0,
+    limit: int = 25,
+) -> str:
+    """List issues assigned to a version/release (or unversioned if version_id=0)."""
+    from specivo.models.issue import Issue
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "view_issues")
+
+    if fields not in ("minimal", "default", "full"):
+        return "Error: fields must be one of: minimal, default, full"
+
+    limit = max(1, min(limit, 100))
+
+    is_unversioned = version_id == 0
+
+    if is_unversioned:
+        base_where = [Issue.project_id == project.id, Issue.fixed_version_id.is_(None)]
+        header_prefix = f"Unversioned issues for {project.key}"
+    else:
+        version = await _version_svc.get_by_id(session, version_id)
+        if version.project_id != project.id:
+            raise NotFoundError(message="Version not found in this project")
+        base_where = [Issue.project_id == project.id, Issue.fixed_version_id == version_id]
+        header_prefix = f'Issues in version {version.id} "{version.name}"'
+
+    count_result = await session.execute(
+        select(func.count(Issue.id)).where(*base_where)
+    )
+    total = count_result.scalar_one()
+
+    stmt = (
+        select(Issue)
+        .where(*base_where)
+        .options(
+            selectinload(Issue.status),
+            selectinload(Issue.tracker),
+            selectinload(Issue.priority),
+            selectinload(Issue.assigned_to),
+        )
+        .order_by(Issue.id.asc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    issues = list(result.scalars().all())
+    header = f"{header_prefix} ({total} total, showing {offset}..{offset + len(issues)}):"
+
+    lines = [header, ""]
+
+    for i in issues:
+        if fields == "minimal":
+            lines.append(f"  {i.display_key}  {i.subject}")
+        elif fields == "default":
+            assigned = f" \u2192 {i.assigned_to.display_name}" if i.assigned_to else ""
+            status_name = i.status.name if i.status else "?"
+            tracker_name = i.tracker.name if i.tracker else "?"
+            priority_name = i.priority.name if i.priority else "?"
+            lines.append(
+                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
+                f"{i.subject}{assigned}"
+            )
+        else:  # full
+            assigned = f" \u2192 {i.assigned_to.display_name}" if i.assigned_to else ""
+            status_name = i.status.name if i.status else "?"
+            tracker_name = i.tracker.name if i.tracker else "?"
+            priority_name = i.priority.name if i.priority else "?"
+            desc_preview = ""
+            if i.description:
+                desc_preview = i.description[:200].replace("\n", " ")
+            lines.append(
+                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
+                f"{i.subject}{assigned}"
+            )
+            lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  "
+                         f"version_id={i.fixed_version_id}")
+            if i.issue_metadata:
+                lines.append(f"    metadata={i.issue_metadata}")
+            if desc_preview:
+                lines.append(f"    desc: {desc_preview}")
+            lines.append("")
+
+    if not issues:
+        lines.append("  (none)")
+
+    await _log_tool(
+        session, user, AuditEvent.RESOURCE_ACCESS, "list_version_issues",
+        {"project_key": project_key, "version_id": version_id, "fields": fields},
+        project_id=project.id,
+    )
+    return "\n".join(lines)

@@ -347,7 +347,12 @@ def get_first_tracker_id(api: httpx.Client) -> int:
 
     db_url = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
     result = subprocess.run(
-        ["uv", "run", "python", "-c", f"""
+        [
+            "uv",
+            "run",
+            "python",
+            "-c",
+            f"""
 import asyncio, asyncpg
 async def _f():
     conn = await asyncpg.connect("{db_url}")
@@ -356,7 +361,8 @@ async def _f():
     finally:
         await conn.close()
 print(asyncio.run(_f()))
-"""],
+""",
+        ],
         capture_output=True,
         text=True,
     )

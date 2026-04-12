@@ -30,6 +30,7 @@ async def create_saved_filter(
 ) -> SavedFilterOut:
     """Create a new saved filter in the given project."""
     project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     sf = await _service.create(db, current_user, project.id, data)
     return SavedFilterOut.model_validate(sf)
 
@@ -45,6 +46,7 @@ async def list_saved_filters(
 ) -> list[SavedFilterOut]:
     """List saved filters for a project (own private + all public)."""
     project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     filters = await _service.list_for_project(db, current_user, project.id)
     return [SavedFilterOut.model_validate(f) for f in filters]
 
@@ -60,7 +62,8 @@ async def get_saved_filter(
     db: AsyncSession = Depends(get_db),
 ) -> SavedFilterOut:
     """Get a single saved filter by ID."""
-    await _project_service.get_by_key(db, project_key.upper())
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     sf = await _service.get_by_id(db, filter_id)
     return SavedFilterOut.model_validate(sf)
 
@@ -77,7 +80,8 @@ async def update_saved_filter(
     db: AsyncSession = Depends(get_db),
 ) -> SavedFilterOut:
     """Update a saved filter. Owner or admin only."""
-    await _project_service.get_by_key(db, project_key.upper())
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     sf = await _service.get_by_id(db, filter_id)
     sf = await _service.update(db, sf, data, current_user)
     return SavedFilterOut.model_validate(sf)
@@ -94,6 +98,7 @@ async def delete_saved_filter(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a saved filter. Owner or admin only."""
-    await _project_service.get_by_key(db, project_key.upper())
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     sf = await _service.get_by_id(db, filter_id)
     await _service.delete(db, sf, current_user)

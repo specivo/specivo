@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import logging
+from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
@@ -41,7 +42,9 @@ def clear_role_cache() -> None:
 
 
 async def get_user_roles(
-    session: AsyncSession, user_id: int, project_id: int,
+    session: AsyncSession,
+    user_id: int,
+    project_id: int,
 ) -> list[Role]:
     """Return roles for *user_id* on *project_id*, with per-request caching.
 
@@ -63,36 +66,76 @@ async def get_user_roles(
     _role_cache[cache_key] = roles
     return roles
 
+
 # ---------------------------------------------------------------------------
 # Permission catalogue
 # ---------------------------------------------------------------------------
 
-PERMISSIONS: dict[str, str] = {
+
+class Permission(StrEnum):
+    """Canonical permission keys.
+
+    Subclassing ``StrEnum`` keeps each member's string value identical to its
+    name, so members are drop-in replacements for the raw strings stored in
+    ``roles.permissions`` JSONB and accepted by ``check_permission()``.
+    Prefer using these constants over string literals at call sites.
+    """
+
     # --- Issues ---
-    "add_issues": "Create issues",
-    "edit_issues": "Edit issues",
-    "delete_issues": "Delete issues",
-    "add_issue_notes": "Add comments",
-    "edit_own_notes": "Edit own comments",
-    "edit_notes": "Edit any comments",
-    "delete_own_notes": "Delete own comments",
-    "delete_notes": "Delete any comments",
-    "manage_issue_relations": "Manage issue relations",
-    "manage_subtasks": "Manage subtasks",
-    "view_issues": "View issues",
-    "view_private_notes": "View private notes",
-    "set_issues_private": "Set issues private",
+    ADD_ISSUES = "add_issues"
+    EDIT_ISSUES = "edit_issues"
+    DELETE_ISSUES = "delete_issues"
+    ADD_ISSUE_NOTES = "add_issue_notes"
+    EDIT_OWN_NOTES = "edit_own_notes"
+    EDIT_NOTES = "edit_notes"
+    DELETE_OWN_NOTES = "delete_own_notes"
+    DELETE_NOTES = "delete_notes"
+    MANAGE_ISSUE_RELATIONS = "manage_issue_relations"
+    MANAGE_SUBTASKS = "manage_subtasks"
+    VIEW_ISSUES = "view_issues"
+    VIEW_PRIVATE_NOTES = "view_private_notes"
+    SET_ISSUES_PRIVATE = "set_issues_private"
     # --- Project management ---
-    "manage_members": "Manage project members",
-    "manage_versions": "Manage versions",
-    "view_wiki": "View wiki pages",
-    "manage_wiki": "Manage wiki pages",
+    MANAGE_MEMBERS = "manage_members"
+    MANAGE_VERSIONS = "manage_versions"
+    MANAGE_SPRINTS = "manage_sprints"
+    VIEW_WIKI = "view_wiki"
+    MANAGE_WIKI = "manage_wiki"
+    DELETE_WIKI_PAGES = "delete_wiki_pages"
     # --- Time tracking ---
-    "view_time_entries": "View time entries",
-    "log_time": "Log time",
-    "manage_time_entries": "Edit/delete any time entries",
+    VIEW_TIME_ENTRIES = "view_time_entries"
+    LOG_TIME = "log_time"
+    MANAGE_TIME_ENTRIES = "manage_time_entries"
     # --- Admin ---
-    "manage_project": "Manage project settings",
+    MANAGE_PROJECT = "manage_project"
+
+
+# Human-readable labels for the admin role editor. Keyed by the enum's string
+# value so existing consumers (templates, JSONB lookups) keep working unchanged.
+PERMISSIONS: dict[str, str] = {
+    Permission.ADD_ISSUES: "Create issues",
+    Permission.EDIT_ISSUES: "Edit issues",
+    Permission.DELETE_ISSUES: "Delete issues",
+    Permission.ADD_ISSUE_NOTES: "Add comments",
+    Permission.EDIT_OWN_NOTES: "Edit own comments",
+    Permission.EDIT_NOTES: "Edit any comments",
+    Permission.DELETE_OWN_NOTES: "Delete own comments",
+    Permission.DELETE_NOTES: "Delete any comments",
+    Permission.MANAGE_ISSUE_RELATIONS: "Manage issue relations",
+    Permission.MANAGE_SUBTASKS: "Manage subtasks",
+    Permission.VIEW_ISSUES: "View issues",
+    Permission.VIEW_PRIVATE_NOTES: "View private notes",
+    Permission.SET_ISSUES_PRIVATE: "Set issues private",
+    Permission.MANAGE_MEMBERS: "Manage project members",
+    Permission.MANAGE_VERSIONS: "Manage versions",
+    Permission.MANAGE_SPRINTS: "Manage sprints (create, start, complete, edit, delete)",
+    Permission.VIEW_WIKI: "View wiki pages",
+    Permission.MANAGE_WIKI: "Manage wiki pages",
+    Permission.DELETE_WIKI_PAGES: "Delete wiki pages",
+    Permission.VIEW_TIME_ENTRIES: "View time entries",
+    Permission.LOG_TIME: "Log time",
+    Permission.MANAGE_TIME_ENTRIES: "Edit/delete any time entries",
+    Permission.MANAGE_PROJECT: "Manage project settings",
 }
 
 
@@ -104,7 +147,7 @@ PERMISSIONS: dict[str, str] = {
 async def check_permission(
     user: User,
     project_id: int | None,
-    permission: str,
+    permission: str | Permission,
     session: AsyncSession,
     api_key_scopes: dict | None = None,
     request: Request | None = None,

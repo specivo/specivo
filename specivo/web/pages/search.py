@@ -52,6 +52,7 @@ async def search_page(
 
         try:
             project = await _project_svc.get_by_key(db, project_key)
+            await _project_svc.require_project_access(db, project, user)
             project_id = project.id
         except NotFoundError:
             pass  # Ignore invalid project key, search globally

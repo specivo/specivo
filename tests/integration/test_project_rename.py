@@ -49,7 +49,7 @@ async def _create_project(db: AsyncSession, **kwargs) -> Project:
 
 
 async def _seed_lookups(db: AsyncSession):
-    status = StatusFactory.build(name="Open", position=1, is_closed=False)
+    status = StatusFactory.build(name="Open", position=1, category="backlog")
     db.add(status)
     await db.flush()
     tracker = TrackerFactory.build(name="Task", default_status_id=status.id)
@@ -120,9 +120,7 @@ class TestRenameKey:
         )
         assert resp.status_code == 200
 
-        alias = await db_session.execute(
-            select(ProjectKeyAlias).where(ProjectKeyAlias.old_key == "OLD")
-        )
+        alias = await db_session.execute(select(ProjectKeyAlias).where(ProjectKeyAlias.old_key == "OLD"))
         assert alias.scalar_one_or_none() is not None
 
     async def test_old_key_lookup_resolves(self, admin_client: AsyncClient, db_session: AsyncSession, setup):
@@ -148,9 +146,7 @@ class TestRenameKey:
 
 
 class TestRenameIdentifier:
-    async def test_identifier_rename_updates_path(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_identifier_rename_updates_path(self, admin_client: AsyncClient, db_session: AsyncSession):
         await _create_project(db_session, key="IDTEST", identifier="id-test", path="id_test")
         resp = await admin_client.post(
             RENAME_URL.format(key="IDTEST"),
@@ -162,9 +158,7 @@ class TestRenameIdentifier:
         assert data["old_identifier"] == "id-test"
         assert "new_id" in data["path"]
 
-    async def test_identifier_conflict_returns_409(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_identifier_conflict_returns_409(self, admin_client: AsyncClient, db_session: AsyncSession):
         await _create_project(db_session, key="IDA", identifier="id-a", path="id_a")
         await _create_project(db_session, key="IDB", identifier="id-b", path="id_b")
         resp = await admin_client.post(
@@ -260,7 +254,5 @@ class TestAliasRevert:
         assert resp2.json()["key"] == "REV"
 
         # Old alias for REV should be gone (replaced by TEMP alias)
-        alias = await db_session.execute(
-            select(ProjectKeyAlias).where(ProjectKeyAlias.old_key == "REV")
-        )
+        alias = await db_session.execute(select(ProjectKeyAlias).where(ProjectKeyAlias.old_key == "REV"))
         assert alias.scalar_one_or_none() is None

@@ -11,7 +11,7 @@
     {# Status #}
     <div>
       <label style="{{ lbl }}">Status</label>
-      <select style="{{ sel }}" @change="updateField('status_id', parseInt($event.target.value))">
+      <select style="{{ sel }}" @change="onSelectIntRequired('status_id', $event)">
         {% for s in statuses %}
         <option value="{{ s.id }}" {{ 'selected' if issue.status_id == s.id }}>{{ s.name }}</option>
         {% endfor %}
@@ -27,7 +27,7 @@
         <span style="font-size: var(--sp-font-size-sm); font-weight: 500;">{{ issue.assigned_to.display_name or issue.assigned_to.login }}</span>
       </div>
       {% endif %}
-      <select style="{{ sel }}" @change="updateField('assigned_to_id', parseInt($event.target.value) || null)">
+      <select style="{{ sel }}" @change="onSelectInt('assigned_to_id', $event)">
         <option value="">-- Unassigned --</option>
         {% for m in members %}
         <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if issue.assigned_to_id == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
@@ -38,7 +38,7 @@
     {# Priority #}
     <div>
       <label style="{{ lbl }}">Priority</label>
-      <select style="{{ sel }}" @change="updateField('priority_id', parseInt($event.target.value))">
+      <select style="{{ sel }}" @change="onSelectIntRequired('priority_id', $event)">
         {% for p in priorities %}
         <option value="{{ p.id }}" {{ 'selected' if issue.priority_id == p.id }}>{{ p.name }}</option>
         {% endfor %}
@@ -52,10 +52,38 @@
     </div>
 
     {# Version #}
-    {% if issue.version %}
+    {% if versions is defined and versions %}
     <div>
       <label style="{{ lbl }}">Version</label>
-      <span style="font-size: var(--sp-font-size-sm);">{{ issue.version.name }}</span>
+      <select style="{{ sel }}" @change="onSelectInt('fixed_version_id', $event)">
+        <option value="">-- No version --</option>
+        {% for v in versions %}
+        <option value="{{ v.id }}" {{ 'selected' if issue.fixed_version_id == v.id }}>{{ v.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% elif issue.fixed_version %}
+    <div>
+      <label style="{{ lbl }}">Version</label>
+      <span style="font-size: var(--sp-font-size-sm);">{{ issue.fixed_version.name }}</span>
+    </div>
+    {% endif %}
+
+    {# Sprint #}
+    {% if sprints is defined and sprints %}
+    <div>
+      <label style="{{ lbl }}">Sprint</label>
+      <select style="{{ sel }}" @change="onSelectInt('sprint_id', $event)">
+        <option value="">-- No sprint --</option>
+        {% for sp in sprints %}
+        <option value="{{ sp.id }}" {{ 'selected' if issue.sprint_id == sp.id }}>{{ sp.name }}{% if sp.status == 'active' %} ●{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% elif issue.sprint_id %}
+    <div>
+      <label style="{{ lbl }}">Sprint</label>
+      <span style="font-size: var(--sp-font-size-sm);">Sprint #{{ issue.sprint_id }}</span>
     </div>
     {% endif %}
   </div>
@@ -73,7 +101,7 @@
           <div style="background: var(--sp-accent); height: 100%; width: {{ issue.done_ratio }}%; transition: width 0.3s;"></div>
         </div>
         <select style="width: auto; padding: var(--sp-space-xs); border-radius: var(--sp-border-radius); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-xs); background: var(--sp-bg-surface); color: var(--sp-text-primary);"
-                @change="updateField('done_ratio', parseInt($event.target.value))">
+                @change="onSelectIntRequired('done_ratio', $event)">
           {% for pct in range(0, 101, 10) %}
           <option value="{{ pct }}" {{ 'selected' if issue.done_ratio == pct }}>{{ pct }}%</option>
           {% endfor %}
@@ -86,7 +114,7 @@
       <label style="{{ lbl }}">Start Date</label>
       <input type="date" value="{{ issue.start_date.strftime('%Y-%m-%d') if issue.start_date else '' }}"
              style="{{ sel }}"
-             @change="updateField('start_date', $event.target.value || null)">
+             @change="onInputChange('start_date', $event)">
     </div>
 
     {# Due Date #}
@@ -94,7 +122,7 @@
       <label style="{{ lbl }}">Due Date</label>
       <input type="date" value="{{ issue.due_date.strftime('%Y-%m-%d') if issue.due_date else '' }}"
              style="{{ sel }}"
-             @change="updateField('due_date', $event.target.value || null)">
+             @change="onInputChange('due_date', $event)">
     </div>
 
     {# Estimated #}
@@ -152,7 +180,7 @@
         {% for rel in relations %}
         <div style="display:flex;align-items:baseline;gap:var(--sp-space-sm);font-size:var(--sp-font-size-sm);">
           <span style="color:var(--sp-text-muted);min-width:60px;">{{ rel.relation_type | replace('_', ' ') }}</span>
-          <a href="/projects/{{ project.key }}/issues/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
+          <a href="/issue/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
           {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
           <span style="color:var(--sp-text-secondary);">{{ rel.issue_to_subject }}</span>
           {% endif %}
@@ -166,10 +194,10 @@
 
 {# Footer: Created / Updated #}
 <div style="padding: 0 var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); line-height: 1.8;">
-  <div title="{{ issue.created_at.strftime('%Y-%m-%d %H:%M') if issue.created_at else '' }}">
-    Created {{ issue.created_at | timeago }}{% if issue.author %} by {{ issue.author.display_name or issue.author.login }}{% endif %}
+  <div title="{{ issue.created_at | localtime(user.timezone) if issue.created_at else '' }}">
+    Created {{ issue.created_at | timeago(user.timezone) }}{% if issue.author %} by {{ issue.author.display_name or issue.author.login }}{% endif %}
   </div>
-  <div title="{{ (last_activity_at or issue.updated_at).strftime('%Y-%m-%d %H:%M') if (last_activity_at or issue.updated_at) else '' }}">
-    Updated {{ (last_activity_at or issue.updated_at) | timeago }}
+  <div title="{{ (last_activity_at or issue.updated_at) | localtime(user.timezone) if (last_activity_at or issue.updated_at) else '' }}">
+    Updated {{ (last_activity_at or issue.updated_at) | timeago(user.timezone) }}
   </div>
 </div>

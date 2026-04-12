@@ -53,6 +53,7 @@ async def issue_table_partial(
 
     try:
         project = await _project_svc.get_by_key(db, project_key)
+        await _project_svc.require_project_access(db, project, user)
     except NotFoundError:
         return HTMLResponse("<tr><td colspan='7'>Project not found</td></tr>", status_code=404)
 
@@ -82,6 +83,7 @@ async def issue_table_partial(
             "issues": issues,
             "total": total,
             "project": project,
+            "user": user,
             "offset": offset,
             "limit": limit,
         },
@@ -170,5 +172,66 @@ async def issue_activity_partial(
             "activity_total_pages": activity_total_pages,
             "activity_total": activity_total,
             "activity_per_page_options": ACTIVITY_PER_PAGE_OPTIONS,
+        },
+    )
+
+
+@router.get("/issues/{issue_ref}/attachments/", response_class=HTMLResponse)
+async def issue_attachments_partial(
+    issue_ref: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Return the attachments tab content as an HTML fragment for htmx.
+
+    Lazy-loaded on first click of the Attachments tab in the issue detail page
+    so the main page render skips the attachments SELECT entirely.
+    """
+    import json
+
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+
+    try:
+        issue = await _issue_svc.get_by_display_key(db, issue_ref, user=user)
+    except NotFoundError:
+        return HTMLResponse("<p>Issue not found</p>", status_code=404)
+
+    # Enforce project access (mirrors issue_detail permission model).
+    try:
+        project = await _project_svc.get_by_key(db, issue.project_key)
+    except NotFoundError:
+        return HTMLResponse("<p>Project not found</p>", status_code=404)
+    await _project_svc.require_project_access(db, project, user)
+
+    attachments = await _issue_svc.list_attachments(db, issue.id)
+
+    issue_attachments_json = json.dumps(
+        [
+            {
+                "id": att.id,
+                "filename": att.filename,
+                "content_type": att.content_type or "application/octet-stream",
+                "filesize": att.filesize,
+                "author": {
+                    "id": att.author_id,
+                    "name": att.author.display_name or att.author.login,
+                },
+                "created_at": att.created_at.isoformat() if att.created_at else None,
+            }
+            for att in attachments
+        ]
+    )
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/issues/_tab_attachments.html",
+        context={
+            "issue": issue,
+            "issue_attachments_json": issue_attachments_json,
+            "user": user,
         },
     )

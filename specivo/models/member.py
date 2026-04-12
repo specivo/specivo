@@ -1,9 +1,15 @@
 """Member and MemberRole models — project membership and role assignments."""
 
+from typing import TYPE_CHECKING
+
 from sqlalchemy import ForeignKey, Index, Integer, UniqueConstraint
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from specivo.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from specivo.models.role import Role
+    from specivo.models.user import User
 
 
 class Member(Base, TimestampMixin):
@@ -32,6 +38,14 @@ class Member(Base, TimestampMixin):
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),
         nullable=False,
+    )
+
+    user: Mapped["User"] = relationship("User", foreign_keys=[user_id], lazy="raise")
+    member_roles: Mapped[list["MemberRole"]] = relationship(
+        "MemberRole",
+        back_populates="member",
+        cascade="all, delete-orphan",
+        lazy="raise",
     )
 
     def __repr__(self) -> str:
@@ -67,6 +81,11 @@ class MemberRole(Base):
 
     # member_roles.id from the ancestor project, or NULL for direct assignment
     inherited_from: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    member: Mapped["Member"] = relationship(
+        "Member", back_populates="member_roles", foreign_keys=[member_id], lazy="raise"
+    )
+    role: Mapped["Role"] = relationship("Role", foreign_keys=[role_id], lazy="raise")
 
     def __repr__(self) -> str:
         return f"<MemberRole id={self.id} member_id={self.member_id} role_id={self.role_id}>"

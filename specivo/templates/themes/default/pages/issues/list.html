@@ -65,12 +65,13 @@
 
   <button type="submit" class="sp-btn sp-btn-ghost">Apply</button>
 
+  <input type="hidden" name="view" value="{{ view }}">
   <div class="view-toggle">
-    <button type="button" class="view-toggle-btn active">
+    <button type="submit" name="view" value="list" class="view-toggle-btn{{ ' active' if view == 'list' }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
       List
     </button>
-    <button type="button" class="view-toggle-btn">
+    <button type="submit" name="view" value="board" class="view-toggle-btn{{ ' active' if view == 'board' }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
       Board
     </button>
@@ -81,6 +82,151 @@
 {% block issue_list_toolbar %}{% endblock %}
 
 {% if issues %}
+
+{% if view == 'board' %}
+{# ============ BOARD VIEW ============ #}
+<div class="kanban-toolbar">
+  <label>Cards per column:</label>
+  <select data-board-per-col>
+    {% for n in [10, 25, 50] %}
+    <option value="{{ n }}" {{ 'selected' if board_per_col == n }}>{{ n }}</option>
+    {% endfor %}
+  </select>
+  <span class="kanban-footer-info" style="margin-left:auto;">{{ total }} issue{{ 's' if total != 1 }} total</span>
+</div>
+
+{# Segmented progress bar by status #}
+{% if total > 0 %}
+<div class="board-progress">
+  <div class="board-progress-stats">
+    {% for st in statuses %}
+    {% set st_count = issues | selectattr('status') | selectattr('status.id', 'equalto', st.id) | list | length %}
+    {% if st_count > 0 %}
+    <div class="progress-stat">
+      <span class="progress-stat-dot" style="background:var(--sp-status-{{ st.name | lower | replace(' ', '-') }}, var(--sp-text-muted))"></span>
+      <span>{{ st.name }} <strong>{{ st_count }}</strong></span>
+    </div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  <div class="board-progress-bar">
+    <div class="board-progress-segments">
+      {% for st in statuses %}
+      {% set st_count = issues | selectattr('status') | selectattr('status.id', 'equalto', st.id) | list | length %}
+      {% if st_count > 0 %}
+      {% set pct = (st_count * 100 / total) | round(1) %}
+      <div style="width:{{ pct }}%;background:var(--sp-status-{{ st.name | lower | replace(' ', '-') }}, var(--sp-text-muted)){% if loop.first %};border-radius:3px 0 0 3px{% endif %}{% if loop.last %};border-radius:0 3px 3px 0{% endif %}"></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% set done_count = issues | selectattr('status') | selectattr('status.category', 'in', ['done', 'closed']) | list | length %}
+  <span class="board-progress-text">{{ done_count }} of {{ total }} done</span>
+</div>
+{% endif %}
+
+<div class="kanban-wrap" x-data="kanbanScroll()">
+  <button class="kanban-scroll-btn kanban-scroll-left" :class="{ visible: canScrollLeft }" @click="scrollLeft()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+  </button>
+
+  {# Macro to build column page URL preserving other column offsets #}
+  {% macro col_page_url(target_status_id, new_offset) %}
+    {%- set parts = [board_base_params] -%}
+    {%- for sid, off in col_offsets.items() if sid != target_status_id and off > 0 -%}
+      {%- set _ = parts.append('col_' ~ sid ~ '_offset=' ~ off) -%}
+    {%- endfor -%}
+    {%- if new_offset > 0 -%}
+      {%- set _ = parts.append('col_' ~ target_status_id ~ '_offset=' ~ new_offset) -%}
+    {%- endif -%}
+    ?{{ parts | join('&') }}
+  {%- endmacro %}
+
+  <div class="kanban-board" x-ref="board">
+    {% for st in statuses %}
+    {% set col_issues = issues | selectattr('status') | selectattr('status.id', 'equalto', st.id) | list %}
+    {% set col_total = col_issues | length %}
+    {% set col_offset = col_offsets.get(st.id, 0) if col_offsets is defined else 0 %}
+    {% set col_shown = col_issues[col_offset:col_offset + board_per_col] %}
+    {% set col_page = (col_offset // board_per_col) + 1 %}
+    {% set col_pages = ((col_total - 1) // board_per_col) + 1 if col_total > 0 else 1 %}
+    <div class="kanban-column">
+      <div class="kanban-column-header">
+        <span>{{ status_badge(st.name) }}</span>
+        <span class="kanban-count">{{ col_total }}</span>
+      </div>
+      <div class="kanban-cards">
+        {% for issue in col_shown %}
+        <a href="/issue/{{ issue.display_key }}/" class="kanban-card">
+          <div class="kanban-card-key">
+            {{ issue.display_key }}
+            {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
+          </div>
+          <div class="kanban-card-title">{{ issue.subject }}</div>
+          <div class="kanban-card-footer">
+            {{ priority_badge(issue.priority.name if issue.priority else 'Normal') }}
+            {% if issue.assigned_to %}
+            {{ avatar(issue.assigned_to.login, size='xs', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
+            {% endif %}
+          </div>
+        </a>
+        {% endfor %}
+        {% if col_total == 0 %}
+        <div style="padding:var(--sp-space-xl) var(--sp-space-md);text-align:center;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);">
+          No issues
+        </div>
+        {% endif %}
+      </div>
+      {% if col_total > 0 %}
+      <div class="kanban-footer">
+        {% if col_total > board_per_col %}
+        <div class="kanban-pager">
+          {# First page #}
+          {% if col_page > 1 %}
+          <a href="{{ col_page_url(st.id, 0) }}" class="kanban-pager-btn" title="First page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
+          </a>
+          {# Previous page #}
+          <a href="{{ col_page_url(st.id, [col_offset - board_per_col, 0] | max) }}" class="kanban-pager-btn" title="Previous">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </a>
+          {% else %}
+          <span class="kanban-pager-btn disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg></span>
+          <span class="kanban-pager-btn disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></span>
+          {% endif %}
+
+          <span class="kanban-footer-info">{{ col_offset + 1 }}–{{ [col_offset + board_per_col, col_total] | min }} of {{ col_total }}</span>
+
+          {# Next page #}
+          {% if col_page < col_pages %}
+          <a href="{{ col_page_url(st.id, col_offset + board_per_col) }}" class="kanban-pager-btn" title="Next">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+          </a>
+          {# Last page #}
+          <a href="{{ col_page_url(st.id, (col_pages - 1) * board_per_col) }}" class="kanban-pager-btn" title="Last page">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
+          </a>
+          {% else %}
+          <span class="kanban-pager-btn disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></span>
+          <span class="kanban-pager-btn disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg></span>
+          {% endif %}
+        </div>
+        {% else %}
+        <span class="kanban-footer-info">{{ col_total }} issue{{ 's' if col_total != 1 }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  <button class="kanban-scroll-btn kanban-scroll-right" :class="{ visible: canScrollRight }" @click="scrollRight()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+  </button>
+</div>
+
+{% else %}
+{# ============ LIST VIEW ============ #}
 <div class="card" style="overflow-x:auto;">
   <table class="issue-table">
     <thead>
@@ -105,6 +251,8 @@
 </div>
 
 {{ pagination(total, offset, limit, "/projects/" ~ project.key ~ "/issues") }}
+{% endif %}
+
 {% else %}
 {{ empty_state("No issues found", "Create your first issue to get started.") }}
 {% endif %}

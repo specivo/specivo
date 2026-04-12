@@ -43,9 +43,7 @@ def _clear_mcp_key() -> None:
 
 async def _get_mcp_audit_events(db: AsyncSession) -> list[SecurityAuditLog]:
     """Get all audit events with source=mcp in details."""
-    result = await db.execute(
-        select(SecurityAuditLog).order_by(SecurityAuditLog.created_at.desc())
-    )
+    result = await db.execute(select(SecurityAuditLog).order_by(SecurityAuditLog.created_at.desc()))
     all_events = result.scalars().all()
     return [e for e in all_events if e.details.get("source") == "mcp"]
 
@@ -84,7 +82,7 @@ async def agent_api_key(db_session: AsyncSession, agent_user: User) -> tuple[Api
 
 @pytest_asyncio.fixture
 async def status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -124,6 +122,20 @@ async def project(db_session: AsyncSession) -> Project:
 
 
 class TestMcpToolAuditLogging:
+    async def test_whoami_writes_audit_log(self, db_session: AsyncSession, agent_user: User, agent_api_key):
+        from specivo.mcp.tools import _whoami
+
+        _set_mcp_key(agent_api_key[1])
+        try:
+            await _whoami(db_session, agent_user)
+            events = await _get_mcp_audit_events(db_session)
+            whoami_events = [e for e in events if e.details.get("tool") == "whoami"]
+            assert len(whoami_events) >= 1, f"Expected whoami audit event, got {len(whoami_events)}"
+            assert whoami_events[0].details["source"] == "mcp"
+            assert whoami_events[0].event_type == "resource_access"
+        finally:
+            _clear_mcp_key()
+
     async def test_list_projects_writes_audit_log(
         self, db_session: AsyncSession, agent_user: User, agent_api_key, project: Project
     ):
@@ -140,16 +152,26 @@ class TestMcpToolAuditLogging:
             _clear_mcp_key()
 
     async def test_create_issue_writes_audit_log(
-        self, db_session: AsyncSession, agent_user: User, agent_api_key,
-        project: Project, tracker: Tracker, status: IssueStatus, priority: IssuePriority,
+        self,
+        db_session: AsyncSession,
+        agent_user: User,
+        agent_api_key,
+        project: Project,
+        tracker: Tracker,
+        status: IssueStatus,
+        priority: IssuePriority,
     ):
         from specivo.mcp.tools import _create_issue
 
         _set_mcp_key(agent_api_key[1])
         try:
             await _create_issue(
-                db_session, agent_user, "AUDIT", tracker.id,
-                "Test issue for audit", "desc",
+                db_session,
+                agent_user,
+                "AUDIT",
+                tracker.id,
+                "Test issue for audit",
+                "desc",
             )
             events = await _get_mcp_audit_events(db_session)
             assert len(events) >= 1
@@ -160,16 +182,26 @@ class TestMcpToolAuditLogging:
             _clear_mcp_key()
 
     async def test_update_issue_writes_audit_log(
-        self, db_session: AsyncSession, agent_user: User, agent_api_key,
-        project: Project, tracker: Tracker, status: IssueStatus, priority: IssuePriority,
+        self,
+        db_session: AsyncSession,
+        agent_user: User,
+        agent_api_key,
+        project: Project,
+        tracker: Tracker,
+        status: IssueStatus,
+        priority: IssuePriority,
     ):
         from specivo.mcp.tools import _create_issue, _update_issue
 
         _set_mcp_key(agent_api_key[1])
         try:
             await _create_issue(
-                db_session, agent_user, "AUDIT", tracker.id,
-                "Update test", "",
+                db_session,
+                agent_user,
+                "AUDIT",
+                tracker.id,
+                "Update test",
+                "",
             )
             await _update_issue(db_session, agent_user, "AUDIT-1", subject="Updated subject")
             events = await _get_mcp_audit_events(db_session)
@@ -179,8 +211,49 @@ class TestMcpToolAuditLogging:
         finally:
             _clear_mcp_key()
 
+    async def test_update_issue_done_ratio(
+        self,
+        db_session: AsyncSession,
+        agent_user: User,
+        agent_api_key,
+        project: Project,
+        tracker: Tracker,
+        status: IssueStatus,
+        priority: IssuePriority,
+    ):
+        """_update_issue persists done_ratio to the database."""
+        from specivo.mcp.tools import _create_issue, _update_issue
+
+        _set_mcp_key(agent_api_key[1])
+        try:
+            await _create_issue(
+                db_session,
+                agent_user,
+                "AUDIT",
+                tracker.id,
+                "Done ratio test",
+                "",
+            )
+            await _update_issue(db_session, agent_user, "AUDIT-1", done_ratio=75)
+            await db_session.flush()
+
+            # Verify the value was persisted
+            from specivo.models.issue import Issue
+
+            result = await db_session.execute(
+                select(Issue).where(Issue.project_key == "AUDIT", Issue.sequence_number == 1)
+            )
+            issue = result.scalar_one()
+            assert issue.done_ratio == 75, f"Expected done_ratio=75, got {issue.done_ratio}"
+        finally:
+            _clear_mcp_key()
+
     async def test_search_writes_audit_log(
-        self, db_session: AsyncSession, agent_user: User, agent_api_key, project: Project,
+        self,
+        db_session: AsyncSession,
+        agent_user: User,
+        agent_api_key,
+        project: Project,
     ):
         from specivo.mcp.tools import _search
 
@@ -196,16 +269,26 @@ class TestMcpToolAuditLogging:
             _clear_mcp_key()
 
     async def test_add_comment_writes_audit_log(
-        self, db_session: AsyncSession, agent_user: User, agent_api_key,
-        project: Project, tracker: Tracker, status: IssueStatus, priority: IssuePriority,
+        self,
+        db_session: AsyncSession,
+        agent_user: User,
+        agent_api_key,
+        project: Project,
+        tracker: Tracker,
+        status: IssueStatus,
+        priority: IssuePriority,
     ):
         from specivo.mcp.tools import _add_comment, _create_issue
 
         _set_mcp_key(agent_api_key[1])
         try:
             await _create_issue(
-                db_session, agent_user, "AUDIT", tracker.id,
-                "Comment test", "",
+                db_session,
+                agent_user,
+                "AUDIT",
+                tracker.id,
+                "Comment test",
+                "",
             )
             await _add_comment(db_session, agent_user, "AUDIT-1", "test note")
             events = await _get_mcp_audit_events(db_session)
@@ -216,7 +299,11 @@ class TestMcpToolAuditLogging:
             _clear_mcp_key()
 
     async def test_read_wiki_writes_audit_log(
-        self, db_session: AsyncSession, agent_user: User, agent_api_key, project: Project,
+        self,
+        db_session: AsyncSession,
+        agent_user: User,
+        agent_api_key,
+        project: Project,
     ):
         from specivo.mcp.tools import _read_wiki
         from specivo.services.wiki_service import WikiService
@@ -225,9 +312,7 @@ class TestMcpToolAuditLogging:
         wiki_svc = WikiService()
         await wiki_svc.get_or_create_wiki(db_session, project.id)
         await db_session.flush()
-        page, _content = await wiki_svc.create_page(
-            db_session, project.id, "TestPage", "Test content", agent_user
-        )
+        page, _content = await wiki_svc.create_page(db_session, project.id, "TestPage", "Test content", agent_user)
         await db_session.commit()
 
         _set_mcp_key(agent_api_key[1])
@@ -241,7 +326,11 @@ class TestMcpToolAuditLogging:
             _clear_mcp_key()
 
     async def test_audit_log_includes_source_mcp(
-        self, db_session: AsyncSession, agent_user: User, agent_api_key, project: Project,
+        self,
+        db_session: AsyncSession,
+        agent_user: User,
+        agent_api_key,
+        project: Project,
     ):
         """All MCP tool audit entries must have source=mcp in details."""
         from specivo.mcp.tools import _list_projects

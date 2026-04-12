@@ -65,6 +65,9 @@ class Attachment(Base, TimestampMixin):
 
     description: Mapped[str | None] = mapped_column(String(512), nullable=True)
 
+    # SHA-256 hex digest of the file content (64 chars). Populated on upload.
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     # Structured metadata (image dims, PDF info, extracted text, etc.)
     # Column name in DB is "metadata"; Python attribute is "file_metadata" to
     # avoid clash with SQLAlchemy's reserved `metadata` on DeclarativeBase.

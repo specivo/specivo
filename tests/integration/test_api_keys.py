@@ -250,6 +250,18 @@ class TestApiKeyAuthentication:
         await db_session.refresh(key)
         assert key.last_used_at is not None
 
+    async def test_authenticate_updates_user_last_login_at(self, db_session: AsyncSession):
+        """API key auth updates user.last_login_at (shown as 'Last API call' for service accounts)."""
+        user = await _create_user(db_session, login="auth_user_ts")
+        service = ApiKeyService()
+        key, raw_key = await service.create_key(session=db_session, user_id=user.id, name="ts-key")
+        await db_session.commit()
+
+        assert user.last_login_at is None
+        await service.authenticate(session=db_session, raw_key=raw_key)
+        await db_session.refresh(user)
+        assert user.last_login_at is not None
+
     async def test_authenticate_deactivated_via_patch_raises_401(self, client: AsyncClient, db_session: AsyncSession):
         """End-to-end: create key via API, deactivate via PATCH, auth must fail."""
         await _create_user(db_session, login="e2e_deactivate")

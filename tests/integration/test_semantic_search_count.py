@@ -65,7 +65,7 @@ async def _make_project(
 async def _seed_lookups(
     db: AsyncSession,
 ) -> tuple[Tracker, IssueStatus, IssuePriority]:
-    status = StatusFactory.build(name="New", position=1, is_closed=False)
+    status = StatusFactory.build(name="New", position=1, category="backlog")
     db.add(status)
     await db.flush()
     tracker = TrackerFactory.build(name="Bug", default_status_id=status.id)
@@ -205,8 +205,10 @@ async def test_semantic_search_count_respects_visibility(
     client.headers["Authorization"] = f"Bearer {outsider_token}"
 
     data = await _search(
-        client, "quantum computing consensus",
-        mode="semantic", project_key=private_project.key,
+        client,
+        "quantum computing consensus",
+        mode="semantic",
+        project_key=private_project.key,
     )
 
     # The critical assertion: total_count must be 0 for a non-member
@@ -274,7 +276,8 @@ async def test_semantic_search_count_matches_visible_results(
 
     # Scope to both test projects to exclude seed data noise
     data = await _search(
-        client, "photosynthesis algorithm energy",
+        client,
+        "photosynthesis algorithm energy",
         mode="semantic",
         project_keys=f"{public_project.key},{private_project.key}",
     )

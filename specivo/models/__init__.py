@@ -22,6 +22,7 @@ from specivo.models.saved_filter import SavedFilter
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, ProjectEmbeddingConfig, SearchChunk, SearchSource
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.setting import Setting
+from specivo.models.sprint import Sprint
 from specivo.models.time_entry import ActiveTimer, TimeEntry, TimeEntryActivity
 from specivo.models.user import User
 from specivo.models.version import Version
@@ -74,6 +75,7 @@ __all__ = [
     "Project",
     "Role",
     "Setting",
+    "Sprint",
     "User",
     "Version",
     "Watcher",

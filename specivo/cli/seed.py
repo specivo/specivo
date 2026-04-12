@@ -16,7 +16,8 @@ Agent     - API-facing role for automated agents (no management/delete rights)
 
 Default statuses
 ----------------
-New, In Progress, Resolved, Feedback, Closed (is_closed), Rejected (is_closed)
+New (backlog), In Progress (active), Resolved (done), Feedback (active),
+Closed (closed), Rejected (closed)
 
 Default trackers
 ----------------
@@ -37,6 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from specivo.core.config import get_settings
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.models.metadata_preset import MetadataPreset
 from specivo.models.role import Role
 from specivo.models.search import EmbeddingModel
 from specivo.models.time_entry import TimeEntryActivity
@@ -120,12 +122,12 @@ _DEFAULT_ROLES: list[dict] = [
 # ---------------------------------------------------------------------------
 
 _DEFAULT_STATUSES: list[dict] = [
-    {"name": "New", "position": 1, "is_closed": False, "default_done_ratio": None},
-    {"name": "In Progress", "position": 2, "is_closed": False, "default_done_ratio": None},
-    {"name": "Resolved", "position": 3, "is_closed": False, "default_done_ratio": 100},
-    {"name": "Feedback", "position": 4, "is_closed": False, "default_done_ratio": None},
-    {"name": "Closed", "position": 5, "is_closed": True, "default_done_ratio": 100},
-    {"name": "Rejected", "position": 6, "is_closed": True, "default_done_ratio": None},
+    {"name": "New", "position": 1, "category": "backlog", "default_done_ratio": None},
+    {"name": "In Progress", "position": 2, "category": "active", "default_done_ratio": None},
+    {"name": "Resolved", "position": 3, "category": "done", "default_done_ratio": 100},
+    {"name": "Feedback", "position": 4, "category": "active", "default_done_ratio": None},
+    {"name": "Closed", "position": 5, "category": "closed", "default_done_ratio": 100},
+    {"name": "Rejected", "position": 6, "category": "closed", "default_done_ratio": None},
 ]
 
 # Tracker definitions — default_status_id resolved after statuses are seeded
@@ -388,6 +390,183 @@ async def seed_settings(session: AsyncSession) -> None:
     await session.flush()
 
 
+# ---------------------------------------------------------------------------
+# Default metadata presets
+# ---------------------------------------------------------------------------
+
+_DEFAULT_METADATA_PRESETS: list[dict] = [
+    {
+        "slug": "software-development",
+        "name": "Software Development",
+        "description": "Track commits, branches, pull requests, and components for development workflows.",
+        "icon": "code",
+        "is_builtin": True,
+        "schema_definition": {
+            "type": "object",
+            "properties": {
+                "component": {
+                    "type": "string",
+                    "description": "Codebase component or module",
+                },
+                "commits": {
+                    "type": "array",
+                    "items": {"type": "string", "pattern": "^[a-f0-9]{7,40}$"},
+                    "description": "Git commit hashes",
+                },
+                "branches": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Git branch names",
+                },
+                "pull_requests": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Pull/merge request URLs or identifiers",
+                },
+            },
+        },
+    },
+    {
+        "slug": "bug-triage",
+        "name": "Bug Triage",
+        "description": "Classify bugs by severity, environment, and reproduction steps for efficient triage.",
+        "icon": "bug",
+        "is_builtin": True,
+        "schema_definition": {
+            "type": "object",
+            "properties": {
+                "severity": {
+                    "type": "string",
+                    "enum": ["critical", "major", "minor", "trivial"],
+                    "description": "Bug severity level",
+                },
+                "environment": {
+                    "type": "string",
+                    "enum": ["production", "staging", "development", "local"],
+                    "description": "Environment where the bug was observed",
+                },
+                "browser": {
+                    "type": "string",
+                    "description": "Browser or client (e.g. Chrome 125, Safari 18, curl)",
+                },
+                "steps_to_reproduce": {
+                    "type": "string",
+                    "description": "Steps to reproduce the bug",
+                },
+            },
+        },
+    },
+    {
+        "slug": "content-marketing",
+        "name": "Content & Marketing",
+        "description": "Manage content production with type, audience, publish dates, and status tracking.",
+        "icon": "megaphone",
+        "is_builtin": True,
+        "schema_definition": {
+            "type": "object",
+            "properties": {
+                "content_type": {
+                    "type": "string",
+                    "enum": ["blog", "social", "email", "landing_page", "video", "whitepaper", "case_study"],
+                    "description": "Type of content being produced",
+                },
+                "target_audience": {
+                    "type": "string",
+                    "description": "Intended audience for this content",
+                },
+                "publish_date": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "Planned or actual publish date (YYYY-MM-DD)",
+                },
+                "content_status": {
+                    "type": "string",
+                    "enum": ["idea", "draft", "in_review", "approved", "published"],
+                    "description": "Content production status",
+                },
+            },
+        },
+    },
+    {
+        "slug": "sprint-planning",
+        "name": "Sprint Planning",
+        "description": "Track story points, sprints, and epics for agile workflows.",
+        "icon": "sprint",
+        "is_builtin": True,
+        "schema_definition": {
+            "type": "object",
+            "properties": {
+                "story_points": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100,
+                    "description": "Estimated effort in story points",
+                },
+                "sprint": {
+                    "type": "string",
+                    "description": "Sprint name or number (e.g. Sprint 14, 2026-W15)",
+                },
+                "epic": {
+                    "type": "string",
+                    "description": "Epic or initiative this issue belongs to",
+                },
+            },
+        },
+    },
+    {
+        "slug": "research-documentation",
+        "name": "Research & Documentation",
+        "description": "Organize research with source links, reviewers, confidence levels, and tags.",
+        "icon": "book",
+        "is_builtin": True,
+        "schema_definition": {
+            "type": "object",
+            "properties": {
+                "source_url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "URL of the source material",
+                },
+                "reviewed_by": {
+                    "type": "string",
+                    "description": "Person who reviewed or verified this",
+                },
+                "confidence": {
+                    "type": "string",
+                    "enum": ["high", "medium", "low"],
+                    "description": "Confidence level in the information",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Free-form tags for categorization",
+                },
+            },
+        },
+    },
+]
+
+
+async def seed_metadata_presets(session: AsyncSession) -> None:
+    """Upsert built-in metadata presets."""
+    for data in _DEFAULT_METADATA_PRESETS:
+        result = await session.execute(select(MetadataPreset).where(MetadataPreset.slug == data["slug"]))
+        preset = result.scalar_one_or_none()
+        if preset is None:
+            preset = MetadataPreset(**data)
+            session.add(preset)
+            logger.info("Created metadata preset: %s", data["slug"])
+        else:
+            # Update builtin presets to latest definition
+            if preset.is_builtin:
+                for key, value in data.items():
+                    setattr(preset, key, value)
+                logger.info("Updated metadata preset: %s", data["slug"])
+
+    await session.flush()
+    print(f"Seeded {len(_DEFAULT_METADATA_PRESETS)} metadata presets: {[p['slug'] for p in _DEFAULT_METADATA_PRESETS]}")
+
+
 async def _run() -> None:
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False)
@@ -402,8 +581,15 @@ async def _run() -> None:
         await seed_time_entry_activities(session)
         await seed_workflow_transitions(session)
         await seed_embedding_model(session)
+        await seed_metadata_presets(session)
         await seed_settings(session)
         await session.commit()
+
+    # Clear the process-local lookup cache so any running worker picks up
+    # freshly seeded trackers/statuses/priorities/activities on the next request.
+    from specivo.core.lookup_cache import invalidate_lookups
+
+    invalidate_lookups()
 
     await engine.dispose()
 

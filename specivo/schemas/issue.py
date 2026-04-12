@@ -33,6 +33,8 @@ class IssueCreate(BaseModel):
     due_date: date | None = None
     estimated_hours: Decimal | None = Field(None, ge=0)
     done_ratio: int = Field(default=0, ge=0, le=100)
+    fixed_version_id: int | None = None
+    sprint_id: int | None = None
     is_private: bool = False
     metadata: dict = Field(default_factory=dict)
 
@@ -62,6 +64,8 @@ class IssueUpdate(BaseModel):
     due_date: date | None = None
     estimated_hours: Decimal | None = Field(None, ge=0)
     done_ratio: int | None = Field(None, ge=0, le=100)
+    fixed_version_id: int | None = None
+    sprint_id: int | None = None
     is_private: bool | None = None
     metadata: dict | None = None
     lock_version: int  # REQUIRED — must match current DB value
@@ -72,6 +76,7 @@ class IssueFilters(BaseModel):
 
     status: str | None = "open"  # "open", "closed", "all", or numeric status id
     tracker_id: int | None = None
+    version_id: int | None = None
     assigned_to_id: str | None = None  # numeric id or "me"
     priority_id: int | None = None
     category_id: int | None = None
@@ -111,6 +116,9 @@ class IssueOut(BaseModel):
     author: IdName
     assigned_to: IdName | None
     category: IdName | None = None
+    fixed_version_id: int | None = None
+    fixed_version: IdName | None = None
+    sprint_id: int | None = None
     parent_id: int | None = None
     root_id: int | None = None
     lft: int = 1

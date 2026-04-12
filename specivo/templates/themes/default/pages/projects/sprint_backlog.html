@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar, empty_state, pagination %}
+
+{% block title %}Backlog - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Backlog"}
+]) }}
+
+<div x-data="backlogPage({ projectKey: '{{ project.key }}' })">
+<div class="page-header">
+  <h1>Backlog</h1>
+  <div class="page-header-actions">
+    <button class="sp-btn sp-btn-ghost" @click="showCreateModal = true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
+      New Sprint
+    </button>
+  </div>
+</div>
+
+{# ============ CREATE SPRINT MODAL ============ #}
+<div class="sp-modal-overlay" x-show="showCreateModal" x-cloak @click.self="showCreateModal = false" @keydown.escape.window="showCreateModal = false">
+  <div class="sp-modal" @click.stop>
+    <h2>New Sprint</h2>
+    <div class="form-group">
+      <label class="form-label">Name</label>
+      <input type="text" class="form-input" placeholder="Sprint 7 — Feature Name" x-model="name">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Goal</label>
+      <textarea class="form-input" placeholder="What should this sprint accomplish?" x-model="goal"></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Start Date</label>
+        <input type="date" class="form-input" x-model="start_date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">End Date</label>
+        <input type="date" class="form-input" x-model="end_date">
+      </div>
+    </div>
+    <div class="sp-modal-actions">
+      <button class="sp-btn sp-btn-ghost" @click="showCreateModal = false">Cancel</button>
+      <button class="sp-btn sp-btn-primary"
+              @click="createSprint()">
+        Create Sprint
+      </button>
+    </div>
+  </div>
+</div>
+</div>
+
+{# ============ ACTIVE SPRINT ============ #}
+{% if active_sprint %}
+{% set pct = ((completed_count / total_count * 100) | round | int) if total_count > 0 else 0 %}
+<div class="sprint-active">
+  <div class="sprint-active-header">
+    <div>
+      <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-bottom:var(--sp-space-xs)">
+        <span class="badge-status active">Active</span>
+        <span class="sprint-active-title">{{ active_sprint.name }}</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:var(--sp-space-sm)">
+      <a href="/projects/{{ project.key }}/sprints/{{ active_sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Board
+      </a>
+      <button class="sp-btn sp-btn-success sp-btn-sm"
+              hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ active_sprint.id }}/complete/"
+              hx-ext="json-enc"
+              hx-vals='{"move_incomplete_to_sprint_id": null}'
+              hx-swap="none"
+              hx-confirm="Complete this sprint? Incomplete issues will be moved to the backlog."
+              data-hx-reload>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Complete Sprint
+      </button>
+    </div>
+  </div>
+
+  <div class="sprint-active-meta">
+    <div class="sprint-meta-item">
+      <span class="sprint-meta-label">Duration</span>
+      <span class="sprint-meta-value">
+        {% if active_sprint.start_date and active_sprint.end_date %}
+          {{ active_sprint.start_date.strftime('%b %-d') }} &ndash; {{ active_sprint.end_date.strftime('%b %-d, %Y') }}
+        {% elif active_sprint.start_date %}
+          {{ active_sprint.start_date.strftime('%b %-d, %Y') }} &ndash; ?
+        {% else %}
+          No dates set
+        {% endif %}
+      </span>
+    </div>
+    <div class="sprint-meta-item">
+      <span class="sprint-meta-label">Issues</span>
+      <span class="sprint-meta-value">{{ total_count }} total</span>
+    </div>
+    <div class="sprint-meta-item">
+      <span class="sprint-meta-label">Completed</span>
+      <span class="sprint-meta-value" style="color:var(--sp-success)">{{ completed_count }} of {{ total_count }}</span>
+    </div>
+    <div class="sprint-meta-item">
+      <span class="sprint-meta-label">Days left</span>
+      <span class="sprint-meta-value" {% if days_left <= 5 %}style="color:var(--sp-warning)"{% endif %}>
+        {% if active_sprint.end_date %}{{ days_left }} day{{ 's' if days_left != 1 }}{% else %}No end date{% endif %}
+      </span>
+    </div>
+  </div>
+
+  <div class="sprint-progress">
+    <div class="sprint-progress-bar">
+      <div class="sprint-progress-fill" style="width:{{ pct }}%"></div>
+    </div>
+    <span class="sprint-progress-text">{{ pct }}% complete</span>
+  </div>
+
+  {% if active_sprint.goal %}
+  <div class="sprint-goal">"{{ active_sprint.goal }}"</div>
+  {% endif %}
+</div>
+
+{% else %}
+{# No active sprint banner #}
+<div class="no-active-sprint">
+  <div class="no-active-sprint-title">No Active Sprint</div>
+  <div class="no-active-sprint-text">Start a planned sprint or create a new one to begin tracking work.</div>
+</div>
+{% endif %}
+
+{# ============ PLANNED SPRINTS ============ #}
+{% if planned_sprints %}
+<div class="section-divider"><span>Planned Sprints</span></div>
+
+{% for sprint in planned_sprints %}
+<div class="sprint-planned">
+  <div class="sprint-planned-header">
+    <div style="display:flex;align-items:center;gap:var(--sp-space-sm)">
+      <span class="badge-status planned">Planned</span>
+      <span class="sprint-planned-title">{{ sprint.name }}</span>
+      <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);background:var(--sp-bg-input);padding:1px 8px;border-radius:10px">{{ sprint_issue_counts.get(sprint.id, 0) }} issue{{ 's' if sprint_issue_counts.get(sprint.id, 0) != 1 }}</span>
+    </div>
+    <div class="sprint-planned-actions">
+      <span class="sprint-planned-dates">
+        {% if sprint.start_date and sprint.end_date %}
+          {{ sprint.start_date.strftime('%b %-d') }} &ndash; {{ sprint.end_date.strftime('%b %-d') }}
+        {% elif sprint.start_date %}
+          {{ sprint.start_date.strftime('%b %-d') }} &ndash; ?
+        {% else %}
+          No dates set
+        {% endif %}
+      </span>
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        Edit
+      </a>
+      {% if not active_sprint %}
+      <button class="sp-btn sp-btn-primary sp-btn-sm"
+              hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/start/"
+              hx-swap="none"
+              data-hx-reload>
+        Start Sprint
+      </button>
+      {% else %}
+      <button class="sp-btn sp-btn-ghost sp-btn-sm" disabled>Start Sprint</button>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+{# ============ VELOCITY ============ #}
+{% if completed_sprints_with_velocity %}
+<div class="section-divider"><span>Velocity</span></div>
+
+<div style="background:var(--sp-bg-surface);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius-lg);padding:var(--sp-space-md)">
+  <table style="width:100%;border-collapse:collapse">
+    <thead>
+      <tr style="text-align:left;border-bottom:1px solid var(--sp-border)">
+        <th style="padding:var(--sp-space-xs) var(--sp-space-sm)">Sprint</th>
+        <th style="padding:var(--sp-space-xs) var(--sp-space-sm)">Total</th>
+        <th style="padding:var(--sp-space-xs) var(--sp-space-sm)">Completed</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for sv in completed_sprints_with_velocity %}
+      <tr style="border-bottom:1px solid var(--sp-border)">
+        <td style="padding:var(--sp-space-xs) var(--sp-space-sm)">{{ sv.name }}</td>
+        <td style="padding:var(--sp-space-xs) var(--sp-space-sm)">{{ sv.total_issues }}</td>
+        <td style="padding:var(--sp-space-xs) var(--sp-space-sm)">{{ sv.completed_issues }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div style="margin-top:var(--sp-space-sm);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">
+    Average velocity: {{ average_velocity }} issues per sprint
+  </div>
+</div>
+{% endif %}
+
+{# ============ BACKLOG ============ #}
+<div class="section-divider"><span>Backlog</span></div>
+
+<div class="backlog-header">
+  <div style="display:flex;align-items:center">
+    <span class="backlog-title">Unassigned Issues</span>
+    <span class="backlog-count">{{ backlog_total }}</span>
+  </div>
+</div>
+
+{% if backlog_issues %}
+<div id="backlog-list" style="background:var(--sp-bg-surface);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius-lg)">
+  {% for issue in backlog_issues %}
+  <div class="backlog-issue" data-issue="{{ issue.display_key }}">
+    {# Drag handle #}
+    <svg class="backlog-issue-drag" viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><circle cx="9" cy="5" r="1.5"/><circle cx="15" cy="5" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="19" r="1.5"/><circle cx="15" cy="19" r="1.5"/></svg>
+
+    {# Issue key #}
+    <a href="/issue/{{ issue.display_key }}/" class="backlog-issue-key">{{ issue.display_key }}</a>
+
+    {# Tracker badge #}
+    {{ tracker_badge(issue.tracker.name if issue.tracker else 'Unknown') }}
+
+    {# Subject #}
+    <a href="/issue/{{ issue.display_key }}/" class="backlog-issue-subject" style="text-decoration:none;color:inherit">{{ issue.subject }}</a>
+
+    {# Status badge #}
+    {{ status_badge(issue.status.name if issue.status else 'Unknown') }}
+
+    {# Assignee #}
+    <div class="backlog-issue-assignee"
+         x-data="assigneePicker"
+         @click.outside="open = false">
+      <div class="assignee-picker">
+        {% if issue.assigned_to %}
+          <button class="assigned-avatar-btn" @click="open = !open" title="Click to reassign"
+                  style="background:none;border:none;padding:0;cursor:pointer;display:flex;align-items:center">
+            {{ avatar(issue.assigned_to.login, size='xs', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
+          </button>
+        {% else %}
+          <button class="unassigned-btn" @click="open = !open" title="Assign someone">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+          </button>
+        {% endif %}
+        <div class="assignee-dropdown" :class="{ 'open': open }">
+          <input type="text" class="assignee-search" placeholder="Search members..." x-model="search" @click.stop>
+          <div class="assignee-list">
+            {% for m in members %}
+            <div class="assignee-option"
+                 x-show="matchesSearch('{{ m.login }}')"
+                 hx-patch="/api/v1/issues/{{ issue.display_key }}/"
+                 hx-ext="json-enc"
+                 hx-vals='{"assigned_to_id": {{ m.user_id }}, "lock_version": {{ issue.lock_version }}}'
+                 hx-swap="none"
+                 data-hx-reload>
+              {{ avatar(m.login, size='xs', color=m.avatar_color, avatar_url=m.avatar_url|default('')) }}
+              {{ m.login }}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    {# Sprint picker #}
+    <div class="backlog-issue-actions"
+         x-data="{ open: false }"
+         @click.outside="open = false">
+      <div class="sprint-picker">
+        <button class="backlog-assign-btn" @click="open = !open">+ Sprint</button>
+        <div class="sprint-picker-dropdown" :class="{ 'open': open }">
+          {% for s in all_available_sprints %}
+          <div class="sprint-picker-item"
+               hx-patch="/api/v1/issues/{{ issue.display_key }}/"
+               hx-ext="json-enc"
+               hx-vals='{"sprint_id": {{ s.id }}, "lock_version": {{ issue.lock_version }}}'
+               hx-swap="none"
+               data-hx-reload>
+            <span class="badge-status {{ s.status }}" style="font-size:10px">{{ s.status | capitalize }}</span>
+            {{ s.name }}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{{ pagination(backlog_total, offset, limit, "/projects/" ~ project.key ~ "/backlog") }}
+{% else %}
+{{ empty_state("Backlog is empty", "All issues are assigned to sprints, or no issues exist yet.") }}
+{% endif %}
+{% endblock %}

@@ -58,7 +58,7 @@
       </div>
       {% endif %}
       <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: 4px;">
-        {{ notif.created_at.strftime('%Y-%m-%d %H:%M') if notif.created_at else '' }}
+        {{ notif.created_at | localtime(user.timezone) if notif.created_at else '' }}
       </div>
     </div>
     <!-- Read indicator -->

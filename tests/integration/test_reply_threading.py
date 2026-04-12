@@ -93,7 +93,7 @@ async def _resolve_issue_db(db_session: AsyncSession, issue_key: str) -> Issue:
 
 @pytest_asyncio.fixture
 async def open_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)

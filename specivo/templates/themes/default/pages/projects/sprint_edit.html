@@ -1,0 +1,264 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, status_badge %}
+
+{% block title %}Edit {{ sprint.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Backlog", "url": "/projects/" ~ project.key ~ "/backlog/"},
+  {"label": "Edit " ~ sprint.name}
+]) }}
+
+<div class="page-header">
+  <div style="display:flex;align-items:center;gap:var(--sp-space-md)">
+    <h1>{{ sprint.name }}</h1>
+    <span class="badge-status {{ sprint.status }}">{{ sprint.status | capitalize }}</span>
+  </div>
+  <div class="page-header-actions">
+    {% if sprint.status in ('active', 'planned') %}
+    <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      Board
+    </a>
+    {% endif %}
+    <a href="/projects/{{ project.key }}/sprints/analytics/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      Analytics
+    </a>
+    <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 18l-6-6 6-6"/></svg>
+      Backlog
+    </a>
+  </div>
+</div>
+
+<div class="edit-layout"
+     x-data='sprintEdit({ startDate: {{ (sprint.start_date.isoformat() if sprint.start_date else "") | tojson }}, endDate: {{ (sprint.end_date.isoformat() if sprint.end_date else "") | tojson }} })'>
+
+  {# ============ MAIN COLUMN ============ #}
+  <div>
+    {# Card 1: Sprint Details #}
+    <form class="edit-card"
+          hx-patch="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/"
+          hx-headers='{"Content-Type": "application/json"}'
+          hx-ext="json-enc"
+          hx-swap="none"
+          @htmx:before-request="saving = true; saved = false; error = ''"
+          @htmx:after-request="onSaveResponse(event)">
+      <h2>Sprint Details</h2>
+
+      <div class="form-group">
+        <label class="form-label sprint-edit-label" for="sprint-name">Name</label>
+        <input type="text" id="sprint-name" name="name" class="form-input" value="{{ sprint.name }}">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label sprint-edit-label" for="sprint-goal">Goal</label>
+        <textarea id="sprint-goal" name="goal" class="form-input" rows="3">{{ sprint.goal or '' }}</textarea>
+        <div class="form-hint">Describe what this sprint should accomplish. Visible to the team on the board.</div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label sprint-edit-label" for="sprint-start">Start Date</label>
+          <input type="date" id="sprint-start" name="start_date" class="form-input"
+                 value="{{ sprint.start_date.isoformat() if sprint.start_date else '' }}"
+                 x-model="startDate">
+        </div>
+        <div class="form-group">
+          <label class="form-label sprint-edit-label" for="sprint-end">End Date</label>
+          <input type="date" id="sprint-end" name="end_date" class="form-input"
+                 value="{{ sprint.end_date.isoformat() if sprint.end_date else '' }}"
+                 x-model="endDate">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label sprint-edit-label">Duration</label>
+        <input type="text" class="form-input" :value="duration" readonly>
+        <div class="form-hint">Calculated from start and end dates.</div>
+      </div>
+
+      <div class="form-actions" style="justify-content:space-between">
+        <button type="submit" class="sp-btn sp-btn-primary" :disabled="saving">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+          <span x-show="!saving && !saved">Save Changes</span>
+          <span x-show="saving" x-cloak>Saving...</span>
+          <span x-show="saved" x-cloak style="color:#15803D">Saved</span>
+        </button>
+        <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost">Cancel</a>
+      </div>
+      <template x-if="error">
+        <div style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);margin-top:var(--sp-space-sm)" x-text="error"></div>
+      </template>
+    </form>
+
+    {# Card 2: Sprint Lifecycle #}
+    <div class="edit-card" style="margin-top:var(--sp-space-xl)">
+      <h2>Sprint Lifecycle</h2>
+      <div style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-lg)">
+        {% if sprint.status == 'planned' %}
+        This sprint is currently <strong>Planned</strong>. Start it when the team is ready to begin work.
+        {% elif sprint.status == 'active' %}
+        This sprint is currently <strong>Active</strong>. Complete it when all work is done or the time-box ends.
+        {% else %}
+        This sprint has been <strong>Completed</strong>.
+        {% endif %}
+      </div>
+      <div style="display:flex;align-items:center;gap:var(--sp-space-sm)">
+        <span class="badge-status planned">Planned</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-text-muted)" stroke-width="2" style="width:16px;height:16px"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        <span class="badge-status active">Active</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-text-muted)" stroke-width="2" style="width:16px;height:16px"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        <span class="badge-status completed">Completed</span>
+      </div>
+      <div class="status-actions">
+        {% if sprint.status == 'planned' %}
+        <button class="sp-btn sp-btn-success"
+                hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/start/"
+                hx-swap="none"
+                data-hx-reload>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Start Sprint
+        </button>
+        {% elif sprint.status == 'active' %}
+        <button class="sp-btn sp-btn-success"
+                hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/complete/"
+                hx-swap="none"
+                data-hx-reload>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M20 6L9 17l-5-5"/></svg>
+          Complete Sprint
+        </button>
+        {% endif %}
+      </div>
+    </div>
+
+    {# Card 3: Danger Zone #}
+    {% if sprint.status != 'active' %}
+    <div class="edit-card danger-zone" style="margin-top:var(--sp-space-xl)">
+      <h2 style="color:var(--sp-danger)">Danger Zone</h2>
+      <div class="danger-text">
+        Deleting a sprint will unassign all issues back to the backlog. This action cannot be undone.
+        {% if sprint.status == 'active' %}Active sprints must be completed before deletion.{% endif %}
+      </div>
+      <button class="sp-btn sp-btn-danger sp-btn-sm"
+              hx-delete="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/"
+              hx-confirm="Are you sure you want to delete this sprint? All issues will be moved to the backlog."
+              hx-swap="none"
+              data-hx-redirect="/projects/{{ project.key }}/backlog/">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+        Delete Sprint
+      </button>
+    </div>
+    {% endif %}
+  </div>
+
+  {# ============ SIDEBAR ============ #}
+  <div>
+    {# Sprint Info #}
+    <div class="sidebar-card">
+      <h3>Sprint Info</h3>
+      <div class="info-row">
+        <span class="info-label">Status</span>
+        <span class="badge-status {{ sprint.status }}">{{ sprint.status | capitalize }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Created</span>
+        <span class="info-value">{{ sprint.created_at | localdt(user.timezone, '%b %-d, %Y') }}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">Updated</span>
+        <span class="info-value">{{ sprint.updated_at | localdt(user.timezone, '%b %-d, %Y') }}</span>
+      </div>
+      {% if sprint.start_date and sprint.end_date %}
+      <div class="info-row">
+        <span class="info-label">Duration</span>
+        <span class="info-value">{{ (sprint.end_date - sprint.start_date).days }} days</span>
+      </div>
+      {% endif %}
+      <div class="info-row">
+        <span class="info-label">Issues</span>
+        <span class="info-value">{{ total_issue_count }}</span>
+      </div>
+    </div>
+
+    {# Issues in Sprint #}
+    <div class="sidebar-card">
+      <h3>Issues in Sprint <span style="font-weight:400;color:var(--sp-text-muted)">({{ total_issue_count }})</span></h3>
+
+      {% if total_issue_count > 0 %}
+      {% set pct = (completed_issue_count / total_issue_count * 100) | int if total_issue_count > 0 else 0 %}
+      <div class="progress-mini">
+        <div class="progress-mini-bar">
+          <div class="progress-mini-fill" style="width:{{ pct }}%"></div>
+        </div>
+        <span class="progress-mini-text">{{ completed_issue_count }} of {{ total_issue_count }}</span>
+      </div>
+
+      <div class="sprint-issues-list">
+        {% for issue in issues_in_sprint %}
+        <div class="sprint-issue-row" id="sprint-issue-{{ issue.id }}">
+          <a href="/issue/{{ issue.display_key }}/" class="sprint-issue-key">{{ issue.display_key }}</a>
+          <span class="sprint-issue-subject" title="{{ issue.subject }}">{{ issue.subject }}</span>
+          {{ status_badge(issue.status.name) }}
+          <button class="sprint-issue-remove" title="Remove from sprint"
+                  hx-patch="/api/v1/issues/{{ issue.display_key }}/"
+                  hx-headers='{"Content-Type": "application/json"}'
+                  hx-vals='{"sprint_id": null, "lock_version": {{ issue.lock_version }}}'
+                  hx-ext="json-enc"
+                  hx-swap="none"
+                  hx-confirm="Remove {{ issue.display_key }} from this sprint?"
+                  data-hx-reload>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div style="text-align:center;padding:var(--sp-space-lg);color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">
+        No issues in this sprint yet.
+      </div>
+      {% endif %}
+
+      <div style="margin-top:var(--sp-space-md)">
+        <a href="/projects/{{ project.key }}/backlog/" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-link)">+ Add issues from backlog</a>
+      </div>
+    </div>
+
+    {# Velocity (completed sprints only) #}
+    <div class="sidebar-card"{% if sprint.status != 'completed' %} style="opacity:0.5;pointer-events:none"{% endif %}>
+      <h3>Velocity {% if sprint.status != 'completed' %}<span style="font-weight:400;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">(after completion)</span>{% endif %}</h3>
+      <div class="velocity-card">
+        {% if sprint.status == 'completed' and sprint.velocity_snapshot %}
+        <div class="velocity-grid">
+          <div class="velocity-stat">
+            <div class="velocity-stat-num">{{ sprint.velocity_snapshot.get('total_issues', 0) }}</div>
+            <div class="velocity-stat-label">Total</div>
+          </div>
+          <div class="velocity-stat">
+            <div class="velocity-stat-num" style="color:var(--sp-success)">{{ sprint.velocity_snapshot.get('completed_issues', 0) }}</div>
+            <div class="velocity-stat-label">Completed</div>
+          </div>
+        </div>
+        {% else %}
+        <div class="velocity-grid">
+          <div class="velocity-stat">
+            <div class="velocity-stat-num" style="color:var(--sp-text-muted)">&mdash;</div>
+            <div class="velocity-stat-label">Total</div>
+          </div>
+          <div class="velocity-stat">
+            <div class="velocity-stat-num" style="color:var(--sp-text-muted)">&mdash;</div>
+            <div class="velocity-stat-label">Completed</div>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% if sprint.status != 'completed' %}
+      <div class="form-hint" style="margin-top:var(--sp-space-sm);text-align:center">Available after sprint is completed</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

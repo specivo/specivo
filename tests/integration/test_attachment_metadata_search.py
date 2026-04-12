@@ -75,7 +75,7 @@ async def _make_project(
 async def _seed_lookups(
     db: AsyncSession,
 ) -> tuple[Tracker, IssueStatus, IssuePriority]:
-    status = StatusFactory.build(name="New", position=1, is_closed=False)
+    status = StatusFactory.build(name="New", position=1, category="backlog")
     db.add(status)
     await db.flush()
     tracker = TrackerFactory.build(name="Bug", default_status_id=status.id)

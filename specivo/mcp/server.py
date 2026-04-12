@@ -14,30 +14,53 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import Annotated, Any
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import Field
 
 from specivo.core.database import get_session_factory
 from specivo.mcp.auth import authenticate_mcp_tool
+from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools import (
     _add_comment,
+    _add_relation,
+    _append_wiki,
+    _complete_sprint,
     _create_issue,
+    _create_sprint,
     _create_version,
     _create_wiki,
+    _delete_version,
+    _delete_wiki,
     _edit_description,
     _edit_wiki,
     _list_issues,
     _list_lookups,
     _list_members,
+    _list_metadata_schemas,
     _list_projects,
+    _list_relations,
+    _list_sprint_issues,
+    _list_sprints,
+    _list_version_issues,
     _list_versions,
     _list_wiki_pages,
     _log_time,
+    _metadata,
     _read_wiki,
+    _read_wiki_section,
+    _remove_relation,
+    _replace_wiki_section,
+    _restore_wiki,
     _search,
     _show_issue,
+    _start_sprint,
     _update_issue,
+    _update_sprint,
     _update_version,
+    _update_wiki_metadata,
+    _whoami,
 )
 from specivo.services.agent_session_service import AgentSessionService
 from specivo.services.permission_service import clear_role_cache
@@ -46,7 +69,11 @@ logger = logging.getLogger(__name__)
 
 mcp = FastMCP(
     "specivo",
-    instructions="Specivo — self-hosted platform for project tracking, knowledge base, and AI-safe automation.",
+    instructions=(
+        "Specivo -- self-hosted platform for project tracking, knowledge base, and AI-safe automation. "
+        "Call specivo_setup_guide() to get the full agent configuration guide, "
+        "or read the specivo://docs/agent-setup resource."
+    ),
 )
 
 
@@ -70,9 +97,7 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
             user, api_key = await authenticate_mcp_tool(session)
             # Track agent session
             try:
-                await _agent_session_svc.get_or_create_session(
-                    session, api_key.id, user.id, user_agent=None
-                )
+                await _agent_session_svc.get_or_create_session(session, api_key.id, user.id, user_agent=None)
             except Exception:
                 logger.debug("AgentSession tracking failed", exc_info=True)
             yield session, user
@@ -83,40 +108,89 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
 
 
 # ---------------------------------------------------------------------------
+# MCP Resource
+# ---------------------------------------------------------------------------
+
+
+@mcp.resource(
+    "specivo://docs/agent-setup",
+    name="agent-setup",
+    title="Specivo Agent Setup Guide",
+    description=(
+        "Dynamic setup guide for AI agents: key concepts, tool overview, standard workflows, and anti-patterns."
+    ),
+    mime_type="text/markdown",
+)
+async def agent_setup_resource() -> str:
+    """Return the agent setup guide as an MCP resource."""
+    return generate_setup_guide(fmt="generic", mcp_server=mcp)
+
+
+# ---------------------------------------------------------------------------
 # Tool definitions
 # ---------------------------------------------------------------------------
 
 
 @mcp.tool()
-async def specivo_list_projects(offset: int = 0, limit: int = 25) -> str:
-    """List all projects."""
+async def specivo_whoami() -> str:
+    """Return the authenticated user's identity.
+
+    Returns user_id, login, display_name, email, is_admin, and status.
+    Call this to discover your own user_id for self-assignment.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _whoami(session, user)
+
+
+@mcp.tool()
+async def specivo_list_projects(
+    offset: Annotated[int, Field(description="Number of projects to skip (pagination).")] = 0,
+    limit: Annotated[int, Field(description="Max projects to return (1-100).")] = 25,
+) -> str:
+    """List all projects visible to the authenticated user.
+
+    Returns project key, name, and status (active/archived).
+    """
     async with _get_session_and_user() as (session, user):
         return await _list_projects(session, user, offset, limit)
 
 
 @mcp.tool()
 async def specivo_list_issues(
-    project_key: str,
-    status: str = "open",
-    sort: str = "created_at:desc",
-    offset: int = 0,
-    limit: int = 25,
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    status: Annotated[str, Field(description="Filter: 'open', 'all', or a status name.")] = "open",
+    sort: Annotated[str, Field(description="Sort field:direction, e.g. 'created_at:desc'.")] = "created_at:desc",
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+    sprint_id: Annotated[
+        int | None,
+        Field(
+            description=(
+                "Filter to issues in this sprint. Use specivo_list_sprint_issues "
+                "for sprint-specific listings with more fields."
+            ),
+        ),
+    ] = None,
 ) -> str:
-    """List issues for a project with filtering."""
+    """List issues for a project with filtering and sorting.
+
+    Use status='open' (default) for active issues, 'all' for everything.
+    Pass sprint_id to narrow the results to a single sprint.
+    """
     async with _get_session_and_user() as (session, user):
-        return await _list_issues(session, user, project_key, status, sort, offset, limit)
+        return await _list_issues(session, user, project_key, status, sort, offset, limit, sprint_id)
 
 
 @mcp.tool()
 async def specivo_show_issue(
-    issue_ref: str,
-    metadata_only: bool = False,
-    search: str | None = None,
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12. Never pass a numeric ID.")],
+    metadata_only: Annotated[bool, Field(description="If true, skip description body to save tokens.")] = False,
+    search: Annotated[str | None, Field(description="Return only the description section matching this text.")] = None,
 ) -> str:
-    """Show issue details.
+    """Show full issue details including description.
 
-    metadata_only: Return only metadata fields (no description body) -- saves tokens.
-    search: Return only the section of description matching this text.
+    Use metadata_only=true to skip the description body and save tokens.
+    Use search= to extract only the section containing specific text.
     """
     async with _get_session_and_user() as (session, user):
         return await _show_issue(session, user, issue_ref, metadata_only, search)
@@ -124,146 +198,458 @@ async def specivo_show_issue(
 
 @mcp.tool()
 async def specivo_create_issue(
-    project_key: str,
-    tracker_id: int,
-    subject: str,
-    description: str = "",
-    status_id: int | None = None,
-    priority_id: int | None = None,
-    assigned_to_id: int | None = None,
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    tracker_id: Annotated[int, Field(description="Tracker ID from specivo_list_lookups (e.g. 1=Bug, 2=Feature).")],
+    subject: Annotated[str, Field(description="Issue title/subject line.")],
+    description: Annotated[str, Field(description="Markdown body. Can be empty.")] = "",
+    status_id: Annotated[
+        int | None, Field(description="Status ID from list_lookups. Defaults to tracker default.")
+    ] = None,
+    priority_id: Annotated[
+        int | None, Field(description="Priority ID from list_lookups. Defaults to system default.")
+    ] = None,
+    assigned_to_id: Annotated[
+        int | None, Field(description="User ID from list_members. Use whoami for self-assign.")
+    ] = None,
+    fixed_version_id: Annotated[int | None, Field(description="Version ID from list_versions.")] = None,
+    sprint_id: Annotated[int | None, Field(description="Sprint ID from list_sprints.")] = None,
 ) -> str:
-    """Create a new issue."""
+    """Create a new issue in a project.
+
+    Call specivo_list_lookups first to get valid tracker_id and priority_id.
+    Call specivo_list_members to find user IDs for assignment.
+    """
     async with _get_session_and_user() as (session, user):
         return await _create_issue(
-            session, user, project_key, tracker_id, subject, description,
-            status_id, priority_id, assigned_to_id,
+            session,
+            user,
+            project_key,
+            tracker_id,
+            subject,
+            description,
+            status_id,
+            priority_id,
+            assigned_to_id,
+            fixed_version_id,
+            sprint_id,
         )
 
 
 @mcp.tool()
 async def specivo_update_issue(
-    issue_ref: str,
-    subject: str | None = None,
-    description: str | None = None,
-    status_id: int | None = None,
-    priority_id: int | None = None,
-    assigned_to_id: int | None = None,
-    notes: str | None = None,
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
+    subject: Annotated[str | None, Field(description="New subject line.")] = None,
+    description: Annotated[
+        str | None, Field(description="Full replacement. Prefer edit_description for patches.")
+    ] = None,
+    status_id: Annotated[int | None, Field(description="Status ID from list_lookups.")] = None,
+    priority_id: Annotated[int | None, Field(description="Priority ID from list_lookups.")] = None,
+    assigned_to_id: Annotated[int | None, Field(description="User ID from list_members.")] = None,
+    done_ratio: Annotated[int | None, Field(description="Completion percentage (0-100).")] = None,
+    notes: Annotated[str | None, Field(description="Journal note (appears in issue history).")] = None,
+    fixed_version_id: Annotated[int | None, Field(description="Version ID from list_versions.")] = None,
+    sprint_id: Annotated[int | None, Field(description="Sprint ID from list_sprints.")] = None,
 ) -> str:
-    """Update an issue. Automatically handles lock_version."""
+    """Update an issue. Lock version is handled automatically.
+
+    Only pass fields you want to change; others remain unchanged.
+    For description patches, prefer specivo_edit_description instead.
+    """
     async with _get_session_and_user() as (session, user):
         return await _update_issue(
-            session, user, issue_ref, subject, description,
-            status_id, priority_id, assigned_to_id, notes,
+            session,
+            user,
+            issue_ref,
+            subject,
+            description,
+            status_id,
+            priority_id,
+            assigned_to_id,
+            done_ratio,
+            notes,
+            fixed_version_id,
+            sprint_id,
         )
 
 
 @mcp.tool()
 async def specivo_edit_description(
-    issue_ref: str,
-    search_text: str,
-    replace_text: str,
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
+    search_text: Annotated[
+        str, Field(description="Exact text to find (first occurrence). Use show_issue(search=) to locate.")
+    ],
+    replace_text: Annotated[str, Field(description="Replacement text.")],
 ) -> str:
-    """Search-and-replace in issue description. Token-efficient editing."""
+    """Search-and-replace in issue description. Token-efficient editing.
+
+    Replaces only the first occurrence. Returns an error message (not exception) if search_text is not found.
+    Use specivo_show_issue(issue_ref, search='keyword') first to find the exact text.
+    """
     async with _get_session_and_user() as (session, user):
         return await _edit_description(session, user, issue_ref, search_text, replace_text)
 
 
 @mcp.tool()
 async def specivo_search(
-    query: str,
-    project_key: str | None = None,
-    scope: str = "all",
-    limit: int = 10,
+    query: Annotated[str, Field(description="Search query (full-text).")],
+    project_key: Annotated[str | None, Field(description="Limit to this project. Uppercase, e.g. ACME.")] = None,
+    scope: Annotated[str, Field(description="'all', 'issues', or 'wiki'.")] = "all",
+    limit: Annotated[int, Field(description="Max results to return (1-50).")] = 10,
 ) -> str:
-    """Search across issues and wiki pages."""
+    """Full-text search across issues and wiki pages.
+
+    Returns results with type, title, subtitle, and snippet.
+    Use project_key to narrow results to a single project.
+    """
     async with _get_session_and_user() as (session, user):
         return await _search(session, user, query, project_key, scope, limit)
 
 
 @mcp.tool()
 async def specivo_read_wiki(
-    project_key: str,
-    slug: str,
-    metadata_only: bool = False,
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Wiki page slug from list_wiki_pages, e.g. 'architecture-overview'.")],
+    metadata_only: Annotated[bool, Field(description="If true, skip body content to save tokens.")] = False,
+    search: Annotated[str | None, Field(description="Return only the section containing this text.")] = None,
 ) -> str:
-    """Read a wiki page."""
+    """Read a wiki page by its slug.
+
+    Use specivo_list_wiki_pages to discover available slugs.
+    Use search= to extract only the section containing specific text from long pages.
+    """
     async with _get_session_and_user() as (session, user):
-        return await _read_wiki(session, user, project_key, slug, metadata_only)
+        return await _read_wiki(session, user, project_key, slug, metadata_only, search)
 
 
 @mcp.tool()
-async def specivo_list_wiki_pages(project_key: str) -> str:
-    """List wiki pages for a project."""
+async def specivo_list_wiki_pages(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+) -> str:
+    """List all wiki pages for a project.
+
+    Returns slug and title for each page. Use the slug with specivo_read_wiki.
+    """
     async with _get_session_and_user() as (session, user):
         return await _list_wiki_pages(session, user, project_key)
 
 
 @mcp.tool()
 async def specivo_edit_wiki(
-    project_key: str,
-    slug: str,
-    search_text: str,
-    replace_text: str,
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Wiki page slug.")],
+    search_text: Annotated[str, Field(description="Exact text to find (first occurrence).")],
+    replace_text: Annotated[str, Field(description="Replacement text.")],
 ) -> str:
-    """Search-and-replace in wiki page content."""
+    """Search-and-replace in wiki page content. Token-efficient editing.
+
+    Replaces only the first occurrence. Returns an error message (not exception) if search_text is not found.
+    Use specivo_read_wiki first to find the exact text.
+    """
     async with _get_session_and_user() as (session, user):
         return await _edit_wiki(session, user, project_key, slug, search_text, replace_text)
 
 
 @mcp.tool()
-async def specivo_add_comment(
-    issue_ref: str,
-    notes: str,
+async def specivo_append_wiki(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Wiki page slug.")],
+    text: Annotated[str, Field(description="Markdown text to append.")],
+    position: Annotated[
+        str,
+        Field(description="Where to insert: 'end' (default) or 'after:## Heading Name' to insert after a section."),
+    ] = "end",
 ) -> str:
-    """Add a comment to an issue."""
+    """Append text to a wiki page. Token-efficient for building large pages incrementally.
+
+    Use position='end' to append at the bottom, or position='after:## Section Name'
+    to insert after a specific heading. The text is inserted before the next
+    same-or-higher-level heading.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _append_wiki(session, user, project_key, slug, text, position)
+
+
+@mcp.tool()
+async def specivo_read_wiki_section(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Wiki page slug.")],
+    heading: Annotated[
+        str,
+        Field(description="Section heading, e.g. '## Architecture' or just 'Architecture'."),
+    ],
+    include_children: Annotated[
+        bool,
+        Field(description="If true (default), include sub-headings. If false, stop at the first sub-heading."),
+    ] = True,
+) -> str:
+    """Read a single section from a wiki page by heading. Saves tokens on large pages.
+
+    Accepts both '## Foo' (exact heading) and 'Foo' (searches all levels).
+    Use specivo_read_wiki(metadata_only=true) first to check the page exists,
+    then read specific sections.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _read_wiki_section(
+            session,
+            user,
+            project_key,
+            slug,
+            heading,
+            include_children,
+        )
+
+
+@mcp.tool()
+async def specivo_replace_wiki_section(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Wiki page slug.")],
+    heading: Annotated[
+        str,
+        Field(description="Section heading to replace, e.g. '## Architecture' or just 'Architecture'."),
+    ],
+    text: Annotated[str, Field(description="New section body (the heading line is preserved).")],
+) -> str:
+    """Replace a section's body in a wiki page while preserving the heading line.
+
+    Replaces everything between the heading and the next same-or-higher-level heading.
+    Use specivo_read_wiki_section first to see the current content.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _replace_wiki_section(session, user, project_key, slug, heading, text)
+
+
+@mcp.tool()
+async def specivo_add_comment(
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
+    notes: Annotated[str, Field(description="Comment text (Markdown supported).")],
+) -> str:
+    """Add a comment (journal note) to an issue.
+
+    The comment appears in the issue's history/activity feed.
+    """
     async with _get_session_and_user() as (session, user):
         return await _add_comment(session, user, issue_ref, notes)
 
 
 @mcp.tool()
 async def specivo_create_wiki(
-    project_key: str,
-    title: str,
-    text: str,
-    parent_slug: str | None = None,
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    title: Annotated[str, Field(description="Page title. Slug is auto-derived from this.")],
+    text: Annotated[str, Field(description="Page content (Markdown).")],
+    parent_slug: Annotated[str | None, Field(description="Parent page slug for nested hierarchy.")] = None,
 ) -> str:
-    """Create a new wiki page. Slug is auto-derived from the title."""
+    """Create a new wiki page. Slug is auto-derived from the title.
+
+    Use parent_slug to nest under an existing page.
+    """
     async with _get_session_and_user() as (session, user):
         return await _create_wiki(session, user, project_key, title, text, parent_slug)
 
 
 @mcp.tool()
-async def specivo_list_lookups() -> str:
-    """List all trackers, statuses, priorities, and time entry activities with IDs.
+async def specivo_update_wiki_metadata(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Wiki page slug to update.")],
+    parent_slug: Annotated[
+        str | None,
+        Field(description="New parent page slug. Empty string '' to make root-level. None to leave unchanged."),
+    ] = None,
+    title: Annotated[
+        str | None,
+        Field(description="New title. Renames the page and creates a redirect from the old slug."),
+    ] = None,
+    protected: Annotated[
+        bool | None,
+        Field(description="Set protected flag. None to leave unchanged."),
+    ] = None,
+) -> str:
+    """Update wiki page metadata (parent, title, protected flag) without editing content.
 
-    Call this before create_issue or log_time to find valid ID values.
+    At least one of parent_slug, title, or protected must be provided.
+    For title changes, a redirect from the old slug is created automatically.
+    Set parent_slug to empty string '' to make the page root-level.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _update_wiki_metadata(session, user, project_key, slug, parent_slug, title, protected)
+
+
+@mcp.tool()
+async def specivo_delete_wiki(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Wiki page slug to delete.")],
+    cascade_children: Annotated[
+        bool, Field(description="If true, also delete all child pages. If false, re-parent children.")
+    ] = False,
+) -> str:
+    """Soft-delete a wiki page (moves to trash).
+
+    The Home page cannot be deleted. If cascade_children is true, all
+    descendant pages are also deleted. Otherwise children are re-parented.
+    Deleted pages can be restored with specivo_restore_wiki.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _delete_wiki(session, user, project_key, slug, cascade_children)
+
+
+@mcp.tool()
+async def specivo_restore_wiki(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    slug: Annotated[str, Field(description="Slug of the deleted wiki page to restore.")],
+    cascade: Annotated[
+        bool, Field(description="If true (default), also restore co-deleted child pages.")
+    ] = True,
+) -> str:
+    """Restore a soft-deleted wiki page from trash.
+
+    Fails if an active page with the same slug already exists.
+    Use specivo_list_wiki_pages to check before restoring.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _restore_wiki(session, user, project_key, slug, cascade)
+
+
+@mcp.tool()
+async def specivo_list_lookups() -> str:
+    """List all trackers, statuses, priorities, and time entry activities with their IDs.
+
+    Call this before specivo_create_issue or specivo_log_time to get valid ID values.
+    IDs are instance-specific and must not be assumed or hardcoded.
     """
     async with _get_session_and_user() as (session, user):
         return await _list_lookups(session, user)
 
 
 @mcp.tool()
-async def specivo_list_members(project_key: str) -> str:
-    """List project members with their roles and user IDs."""
+async def specivo_list_members(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+) -> str:
+    """List project members with their roles and user IDs.
+
+    Use this to find assigned_to_id values for specivo_create_issue / specivo_update_issue.
+    """
     async with _get_session_and_user() as (session, user):
         return await _list_members(session, user, project_key)
 
 
 @mcp.tool()
-async def specivo_log_time(
-    project_key: str,
-    hours: float,
-    activity_id: int,
-    issue_ref: str | None = None,
-    comments: str | None = None,
-    spent_on: str | None = None,
+async def specivo_list_metadata_schemas(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    tracker_id: Annotated[int | None, Field(description="Filter to schemas for this tracker ID.")] = None,
+    content_type: Annotated[
+        str | None,
+        Field(description="Filter to a single content type (e.g. 'issue'). None = all types."),
+    ] = None,
 ) -> str:
-    """Log time against a project (and optionally a specific issue).
+    """Discover custom metadata schemas for a project.
 
-    hours: Decimal hours, e.g. 1.5 for 90 minutes.
-    activity_id: Use list_lookups to find valid activity IDs.
-    spent_on: ISO date YYYY-MM-DD. Defaults to today.
+    Call this before creating or updating issues to learn what metadata
+    fields are available. When tracker_id is given, returns schemas
+    applicable to that specific tracker. When content_type is given,
+    returns only schemas targeting that content kind.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_metadata_schemas(session, user, project_key, tracker_id, content_type)
+
+
+@mcp.tool()
+async def specivo_metadata(
+    target_ref: Annotated[
+        str,
+        Field(
+            description=(
+                "Scheme-prefixed entity reference, e.g. 'issue:ACME-12'. "
+                "Bare issue refs like 'ACME-12' are accepted for backward compatibility."
+            ),
+        ),
+    ],
+    key: Annotated[str, Field(description="Metadata key to mutate.")],
+    op: Annotated[
+        str,
+        Field(description="One of: set, delete, append, remove."),
+    ],
+    value: Annotated[
+        Any,
+        Field(
+            default=None,
+            description=(
+                "Value to apply. For 'set', any JSON value. "
+                "For 'append'/'remove', a scalar or list. Ignored for 'delete'."
+            ),
+        ),
+    ] = None,
+) -> str:
+    """Mutate a single metadata key on an entity.
+
+    Supported operations:
+    - set: metadata[key] = value (any JSON value)
+    - delete: remove key (silent no-op if missing)
+    - append: append to a list at key (missing key -> new list)
+    - remove: drop matching items from a list at key
+
+    Use specivo_list_metadata_schemas first to discover available
+    fields. Recoverable errors are returned as 'Error: ...' strings.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _metadata(session, user, target_ref, key, op, value)
+
+
+@mcp.tool()
+async def specivo_list_relations(
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
+) -> str:
+    """List all relations for an issue.
+
+    Returns relation ID, type, and target issue key.
+    Use the relation ID with specivo_remove_relation.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_relations(session, user, issue_ref)
+
+
+@mcp.tool()
+async def specivo_add_relation(
+    issue_ref: Annotated[str, Field(description="Source issue display key, e.g. ACME-12.")],
+    issue_to_key: Annotated[str, Field(description="Target issue display key, e.g. ACME-15.")],
+    relation_type: Annotated[
+        str,
+        Field(description="relates|blocks|blocked|duplicates|duplicated|precedes|follows|copied_to|copied_from."),
+    ],
+    delay: Annotated[int | None, Field(description="Delay in days. Only meaningful for precedes/follows.")] = None,
+) -> str:
+    """Create a relation between two issues.
+
+    Relation types: relates, blocks, blocked, duplicates, duplicated,
+    precedes, follows, copied_to, copied_from.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _add_relation(session, user, issue_ref, issue_to_key, relation_type, delay)
+
+
+@mcp.tool()
+async def specivo_remove_relation(
+    issue_ref: Annotated[str, Field(description="Issue display key, e.g. ACME-12.")],
+    relation_id: Annotated[int, Field(description="Relation ID from specivo_list_relations.")],
+) -> str:
+    """Remove a relation by its ID.
+
+    Use specivo_list_relations first to find the relation ID.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _remove_relation(session, user, issue_ref, relation_id)
+
+
+@mcp.tool()
+async def specivo_log_time(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    hours: Annotated[float, Field(description="Decimal hours, e.g. 1.5 for 90 minutes.")],
+    activity_id: Annotated[int, Field(description="Activity ID from specivo_list_lookups.")],
+    issue_ref: Annotated[str | None, Field(description="Optional issue display key, e.g. ACME-12.")] = None,
+    comments: Annotated[str | None, Field(description="Description of work performed.")] = None,
+    spent_on: Annotated[str | None, Field(description="ISO date YYYY-MM-DD. Defaults to today.")] = None,
+) -> str:
+    """Log time against a project and optionally a specific issue.
+
+    Call specivo_list_lookups first to get a valid activity_id.
     """
     from datetime import date
     from decimal import Decimal
@@ -272,27 +658,72 @@ async def specivo_log_time(
 
     async with _get_session_and_user() as (session, user):
         return await _log_time(
-            session, user, project_key, Decimal(str(hours)),
-            activity_id, issue_ref, comments, parsed_date,
+            session,
+            user,
+            project_key,
+            Decimal(str(hours)),
+            activity_id,
+            issue_ref,
+            comments,
+            parsed_date,
         )
 
 
 @mcp.tool()
-async def specivo_list_versions(project_key: str) -> str:
-    """List project versions/milestones with status and due dates."""
+async def specivo_list_versions(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+) -> str:
+    """List project versions/milestones with status and due dates.
+
+    Use the version ID with specivo_create_issue(fixed_version_id=) or specivo_update_issue(fixed_version_id=).
+    """
     async with _get_session_and_user() as (session, user):
         return await _list_versions(session, user, project_key)
 
 
 @mcp.tool()
-async def specivo_create_version(
-    project_key: str,
-    name: str,
-    description: str | None = None,
-    status: str = "open",
-    due_date: str | None = None,
+async def specivo_list_version_issues(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    version_id: Annotated[
+        int,
+        Field(description="Version ID from list_versions. Use 0 for unversioned issues."),
+    ],
+    fields: Annotated[
+        str,
+        Field(
+            description=(
+                "Field level: 'minimal' (key+subject), "
+                "'default' (+status/tracker/priority/assignee), "
+                "'full' (+description/done/metadata)."
+            ),
+        ),
+    ] = "default",
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
 ) -> str:
-    """Create a new version/milestone. status: open, locked, or closed."""
+    """List issues assigned to a version/release, or unversioned issues (version_id=0).
+
+    Field levels control output verbosity to save tokens:
+    - minimal: display_key and subject only
+    - default: adds status, tracker, priority, assigned_to
+    - full: adds description (first 200 chars), done_ratio, sprint_id, metadata
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_version_issues(session, user, project_key, version_id, fields, offset, limit)
+
+
+@mcp.tool()
+async def specivo_create_version(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    name: Annotated[str, Field(description="Version name, e.g. 'v1.2.0'.")],
+    description: Annotated[str | None, Field(description="Version description.")] = None,
+    status: Annotated[str, Field(description="One of: open, locked, closed.")] = "open",
+    due_date: Annotated[str | None, Field(description="Due date in YYYY-MM-DD format.")] = None,
+) -> str:
+    """Create a new version/milestone in a project.
+
+    Status can be: open (default), locked, or closed.
+    """
     from datetime import date
 
     parsed_date: date | None = date.fromisoformat(due_date) if due_date else None
@@ -303,19 +734,168 @@ async def specivo_create_version(
 
 @mcp.tool()
 async def specivo_update_version(
-    project_key: str,
-    version_id: int,
-    name: str | None = None,
-    description: str | None = None,
-    status: str | None = None,
-    due_date: str | None = None,
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    version_id: Annotated[int, Field(description="Version ID from specivo_list_versions.")],
+    name: Annotated[str | None, Field(description="New version name.")] = None,
+    description: Annotated[str | None, Field(description="New description.")] = None,
+    status: Annotated[str | None, Field(description="One of: open, locked, closed.")] = None,
+    due_date: Annotated[str | None, Field(description="Due date in YYYY-MM-DD format.")] = None,
 ) -> str:
-    """Update an existing version/milestone."""
+    """Update an existing version/milestone.
+
+    Only pass fields you want to change.
+    """
     from datetime import date
 
     parsed_date: date | None = date.fromisoformat(due_date) if due_date else None
 
     async with _get_session_and_user() as (session, user):
         return await _update_version(
-            session, user, project_key, version_id, name, description, status, parsed_date,
+            session,
+            user,
+            project_key,
+            version_id,
+            name,
+            description,
+            status,
+            parsed_date,
         )
+
+
+@mcp.tool()
+async def specivo_delete_version(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    version_id: Annotated[int, Field(description="Version ID from specivo_list_versions.")],
+) -> str:
+    """Delete a version/milestone.
+
+    Fails with an error message if any issues still reference this version.
+    Reassign or clear fixed_version_id on those issues first.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _delete_version(session, user, project_key, version_id)
+
+
+@mcp.tool()
+async def specivo_list_sprints(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+) -> str:
+    """List sprints/iterations for a project with status and dates.
+
+    Use sprint IDs with specivo_update_sprint, specivo_start_sprint, etc.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_sprints(session, user, project_key)
+
+
+@mcp.tool()
+async def specivo_list_sprint_issues(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    sprint_id: Annotated[
+        int,
+        Field(description="Sprint ID from list_sprints. Use 0 for backlog (unassigned)."),
+    ],
+    fields: Annotated[
+        str,
+        Field(
+            description=(
+                "Field level: 'minimal' (key+subject), "
+                "'default' (+status/tracker/priority/assignee), "
+                "'full' (+description/done/metadata)."
+            ),
+        ),
+    ] = "default",
+    offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
+    limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,
+) -> str:
+    """List issues in a specific sprint, or backlog issues (sprint_id=0).
+
+    Field levels control output verbosity to save tokens:
+    - minimal: display_key and subject only — cheapest for LLMs that just need IDs
+    - default: adds status, tracker, priority, assigned_to — like list_issues
+    - full: adds description (first 200 chars), done_ratio, sprint_id, version_id, metadata
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_sprint_issues(session, user, project_key, sprint_id, fields, offset, limit)
+
+
+@mcp.tool()
+async def specivo_create_sprint(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    name: Annotated[str, Field(description="Sprint name, e.g. 'Sprint 5 — Route Optimization'.")],
+    goal: Annotated[str | None, Field(description="Sprint goal text.")] = None,
+    start_date: Annotated[str | None, Field(description="Start date in YYYY-MM-DD format.")] = None,
+    end_date: Annotated[str | None, Field(description="End date in YYYY-MM-DD format.")] = None,
+) -> str:
+    """Create a new sprint in a project. Status starts as 'planned'."""
+    from datetime import date
+
+    parsed_start: date | None = date.fromisoformat(start_date) if start_date else None
+    parsed_end: date | None = date.fromisoformat(end_date) if end_date else None
+
+    async with _get_session_and_user() as (session, user):
+        return await _create_sprint(session, user, project_key, name, goal, parsed_start, parsed_end)
+
+
+@mcp.tool()
+async def specivo_update_sprint(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    sprint_id: Annotated[int, Field(description="Sprint ID from specivo_list_sprints.")],
+    name: Annotated[str | None, Field(description="New sprint name.")] = None,
+    goal: Annotated[str | None, Field(description="New sprint goal.")] = None,
+    start_date: Annotated[str | None, Field(description="Start date in YYYY-MM-DD format.")] = None,
+    end_date: Annotated[str | None, Field(description="End date in YYYY-MM-DD format.")] = None,
+) -> str:
+    """Update an existing sprint. Only pass fields you want to change."""
+    from datetime import date
+
+    parsed_start: date | None = date.fromisoformat(start_date) if start_date else None
+    parsed_end: date | None = date.fromisoformat(end_date) if end_date else None
+
+    async with _get_session_and_user() as (session, user):
+        return await _update_sprint(session, user, project_key, sprint_id, name, goal, parsed_start, parsed_end)
+
+
+@mcp.tool()
+async def specivo_start_sprint(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    sprint_id: Annotated[int, Field(description="Sprint ID to start.")],
+) -> str:
+    """Start a planned sprint (transitions to 'active').
+
+    Only one sprint per project can be active at a time.
+    Fails if another sprint is already active.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _start_sprint(session, user, project_key, sprint_id)
+
+
+@mcp.tool()
+async def specivo_complete_sprint(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    sprint_id: Annotated[int, Field(description="Sprint ID to complete.")],
+    move_incomplete_to_sprint_id: Annotated[
+        int | None, Field(description="Sprint ID to move incomplete issues to. Null = move to backlog.")
+    ] = None,
+) -> str:
+    """Complete an active sprint (transitions to 'completed').
+
+    Incomplete issues are moved to the specified sprint, or to the backlog if null.
+    Builds a velocity snapshot with total and completed issue counts.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _complete_sprint(session, user, project_key, sprint_id, move_incomplete_to_sprint_id)
+
+
+@mcp.tool()
+async def specivo_setup_guide(
+    format: Annotated[
+        str, Field(description="'claude' for CLAUDE.md, 'cursor' for .cursorrules, 'generic' for plain md.")
+    ] = "claude",
+) -> str:
+    """Return the AI agent setup guide for Specivo.
+
+    Generates configuration content with key concepts, tool overview,
+    standard workflows, and anti-patterns. Call once, then save to your project.
+    """
+    return generate_setup_guide(fmt=format, mcp_server=mcp)

@@ -1,0 +1,135 @@
+{# Attachments tab partial — rendered via htmx when tab opens.
+   Expects: issue, issue_attachments_json (pre-serialized JSON string). #}
+<script type="application/json" id="att-data-issue-{{ issue.id }}">{{ issue_attachments_json | safe }}</script>
+<div class="attachments-section" style="margin-top:0"
+     x-data="issueAttachments({ containerId: {{ issue.id }}, dataElementId: 'att-data-issue-{{ issue.id }}' })">
+  <div class="attachments-header">
+    <div class="attachments-title">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+      Attachments
+      <span class="attachments-count" x-text="attachments.length"></span>
+    </div>
+    <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="showUpload = !showUpload">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      Upload
+    </button>
+  </div>
+
+  {# Upload zone #}
+  <div x-show="showUpload" x-cloak>
+    <div class="upload-zone" :class="{ dragover: isDragging }"
+         @dragover.prevent="isDragging = true"
+         @dragleave="isDragging = false"
+         @drop.prevent="handleDrop($event)"
+         @click="$refs.fileInput.click()">
+      <svg class="upload-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+      <div class="upload-zone-text"><strong>Drop files here</strong> or click to browse</div>
+      <div class="upload-zone-hint">Images, PDFs, documents up to 50 MB</div>
+      <input type="file" x-ref="fileInput" multiple style="display:none" @change="handleFiles($event.target.files)">
+    </div>
+    <template x-for="u in uploads" :key="u.name">
+      <div class="upload-progress">
+        <span class="upload-progress-name" x-text="u.name"></span>
+        <div class="upload-progress-bar"><div class="upload-progress-fill" :style="'width:' + u.progress + '%'"></div></div>
+        <span style="color:var(--sp-text-muted)" x-text="u.progress + '%'"></span>
+      </div>
+    </template>
+    <template x-if="uploadError">
+      <div style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);margin-top:var(--sp-space-sm)" x-text="uploadError"></div>
+    </template>
+  </div>
+
+  {# Image thumbnails #}
+  <template x-if="images.length > 0">
+    <div class="attachment-images">
+      <template x-for="att in images" :key="att.id">
+        <div class="attachment-thumb" @click="openLightbox(att)">
+          <img :src="'/api/v1/attachments/' + att.id + '/download/'" :alt="att.filename">
+          <div class="attachment-thumb-overlay">
+            <span class="attachment-thumb-name" x-text="att.filename"></span>
+          </div>
+          <div class="attachment-thumb-actions">
+            <button class="thumb-action" title="Copy markdown link" @click.stop="copyLink(att)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </button>
+            <button class="thumb-action" title="Download" @click.stop="downloadFile(att)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            </button>
+            <button class="thumb-action" title="Delete" @click.stop="confirmDelete(att)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  {# File list #}
+  <template x-if="files.length > 0">
+    <div class="attachment-files" style="margin-top:var(--sp-space-md)">
+      <template x-for="att in files" :key="att.id">
+        <div class="attachment-file">
+          <div class="file-icon" :class="fileIconClass(att)" x-text="fileIconLabel(att)"></div>
+          <div class="file-info">
+            <div class="file-name">
+              <a :href="'/api/v1/attachments/' + att.id + '/download/'" x-text="att.filename"></a>
+            </div>
+            <div class="file-meta">
+              <span x-text="formatSize(att.filesize)"></span>
+              <span x-text="'Uploaded by ' + att.author.name + ', ' + formatDate(att.created_at)"></span>
+            </div>
+          </div>
+          <div class="file-actions">
+            <button class="file-action copy" title="Copy markdown link" @click="copyLink(att)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+              Link
+            </button>
+            <button class="file-action" title="Download" @click="downloadFile(att)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+              Download
+            </button>
+            <button class="file-action delete" title="Delete" @click="confirmDelete(att)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              Delete
+            </button>
+          </div>
+        </div>
+      </template>
+    </div>
+  </template>
+
+  {# Empty state #}
+  <template x-if="attachments.length === 0 && !showUpload">
+    <div style="text-align:center;padding:var(--sp-space-xl);color:var(--sp-text-muted);font-size:var(--sp-font-size-sm);">
+      No attachments yet.
+    </div>
+  </template>
+
+  {# Lightbox #}
+  <template x-if="lightbox">
+    <div class="lightbox" @click="lightbox = null" @keydown.escape.window="lightbox = null">
+      <button class="lightbox-close" @click="lightbox = null">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+      <img :src="lightbox.url" :alt="lightbox.name" @click.stop>
+      <div class="lightbox-info" x-text="lightbox.name + '  ·  ' + lightbox.size"></div>
+    </div>
+  </template>
+
+  {# Delete confirmation #}
+  <template x-if="deleteTarget">
+    <div class="lightbox" @click="deleteTarget = null" @keydown.escape.window="deleteTarget = null">
+      <div class="att-delete-modal" @click.stop>
+        <h3>Delete attachment?</h3>
+        <p>Are you sure you want to delete <strong x-text="deleteTarget.filename"></strong>? This cannot be undone.</p>
+        <div style="display:flex;gap:var(--sp-space-sm);justify-content:flex-end;margin-top:var(--sp-space-lg)">
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="deleteTarget = null">Cancel</button>
+          <button class="sp-btn sp-btn-danger sp-btn-sm" @click="doDelete()" :disabled="deleting">
+            <span x-show="!deleting">Delete</span>
+            <span x-show="deleting">Deleting...</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>

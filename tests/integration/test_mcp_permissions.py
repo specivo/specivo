@@ -77,7 +77,7 @@ async def _add_member(
 
 @pytest_asyncio.fixture
 async def status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -106,9 +106,7 @@ async def priority(db_session: AsyncSession) -> IssuePriority:
 async def activity(db_session: AsyncSession) -> TimeEntryActivity:
     # Use SELECT-or-INSERT pattern to avoid unique constraint collisions when
     # another test in the same DB session has already inserted this activity.
-    result = await db_session.execute(
-        select(TimeEntryActivity).where(TimeEntryActivity.name == "MCP Perm Dev")
-    )
+    result = await db_session.execute(select(TimeEntryActivity).where(TimeEntryActivity.name == "MCP Perm Dev"))
     existing = result.scalar_one_or_none()
     if existing:
         return existing

@@ -40,7 +40,7 @@
               <span style="font-weight: 500;">{{ p.title }}</span>
             </a>
             <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">
-              {{ p.updated_at.strftime('%Y-%m-%d') if p.updated_at else '' }}
+              {{ p.updated_at | localtime(user.timezone) if p.updated_at else '' }}
             </span>
           </div>
           {% if page_tree.get(p.id) %}

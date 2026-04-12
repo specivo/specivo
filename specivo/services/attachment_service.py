@@ -119,13 +119,27 @@ class AttachmentService:
             )
 
         original_filename = file.filename or "upload"
-        disk_filename = self._make_disk_filename(original_filename)
-        file_path = self._file_path(disk_filename)
 
         # Ensure the upload directory exists
         _get_upload_dir().mkdir(parents=True, exist_ok=True)
 
-        # Write to disk
+        # Compute content hash
+        import hashlib
+
+        content_hash = hashlib.sha256(content).hexdigest()
+
+        # Auto-rename if filename collides in the project (different content)
+        project_id = await self._resolve_project_id(session, container_type, container_id)
+        if project_id is not None:
+            original_filename = await self._unique_filename_in_project(
+                session,
+                project_id,
+                original_filename,
+                content_hash,
+            )
+
+        disk_filename = self._make_disk_filename(original_filename)
+        file_path = self._file_path(disk_filename)
         file_path.write_bytes(content)
 
         try:
@@ -138,6 +152,7 @@ class AttachmentService:
                 filesize=filesize,
                 author_id=author.id,
                 description=description,
+                content_hash=content_hash,
             )
             session.add(attachment)
             await session.flush()
@@ -292,6 +307,111 @@ class AttachmentService:
         from specivo.services.embedding_service import resolve_attachment_project_id
 
         return await resolve_attachment_project_id(session, container_type, container_id)
+
+    async def _unique_filename_in_project(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        filename: str,
+        content_hash: str,
+    ) -> str:
+        """Return a unique filename within the project.
+
+        If a file with the same name and same hash exists, return the name as-is.
+        If a file with the same name but different hash exists, append _1, _2, etc.
+        """
+        existing = await self._get_project_attachments_by_name(
+            session,
+            project_id,
+            filename,
+        )
+        if not existing:
+            return filename
+
+        # Same content already uploaded with this name — keep it
+        for att in existing:
+            if att.content_hash == content_hash:
+                return filename
+
+        # Different content — find next available suffix
+        stem, dot, ext = filename.rpartition(".")
+        if not dot:
+            stem, ext = filename, ""
+
+        n = 1
+        while True:
+            candidate = f"{stem}_{n}.{ext}" if ext else f"{stem}_{n}"
+            conflict = await self._get_project_attachments_by_name(
+                session,
+                project_id,
+                candidate,
+            )
+            if not conflict:
+                return candidate
+            # Check if any conflict has same hash (reuse that name)
+            for att in conflict:
+                if att.content_hash == content_hash:
+                    return candidate
+            n += 1
+
+    async def _get_project_attachments_by_name(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        filename: str,
+    ) -> list[Attachment]:
+        """Find attachments with a given filename across the project."""
+        from specivo.models.issue import Issue
+        from specivo.models.wiki import Wiki, WikiPage
+
+        # Issue attachments
+        issue_att = await session.execute(
+            select(Attachment)
+            .join(Issue, (Attachment.container_type == "Issue") & (Attachment.container_id == Issue.id))
+            .where(Issue.project_id == project_id, Attachment.filename == filename)
+        )
+        # WikiPage attachments
+        wiki_att = await session.execute(
+            select(Attachment)
+            .join(WikiPage, (Attachment.container_type == "WikiPage") & (Attachment.container_id == WikiPage.id))
+            .join(Wiki, WikiPage.wiki_id == Wiki.id)
+            .where(Wiki.project_id == project_id, Attachment.filename == filename)
+        )
+        return list(issue_att.scalars().all()) + list(wiki_att.scalars().all())
+
+    async def build_project_attachment_map(
+        self,
+        session: AsyncSession,
+        project_id: int,
+    ) -> dict[str, str]:
+        """Build filename → download URL map for all attachments in a project.
+
+        Used by the wiki markdown renderer to resolve inline image references.
+        If multiple attachments share a filename, the most recent one wins.
+        """
+        from specivo.models.issue import Issue
+        from specivo.models.wiki import Wiki, WikiPage
+
+        # Issue attachments
+        issue_result = await session.execute(
+            select(Attachment.id, Attachment.filename)
+            .join(Issue, (Attachment.container_type == "Issue") & (Attachment.container_id == Issue.id))
+            .where(Issue.project_id == project_id)
+            .order_by(Attachment.created_at.asc())
+        )
+        # WikiPage attachments
+        wiki_result = await session.execute(
+            select(Attachment.id, Attachment.filename)
+            .join(WikiPage, (Attachment.container_type == "WikiPage") & (Attachment.container_id == WikiPage.id))
+            .join(Wiki, WikiPage.wiki_id == Wiki.id)
+            .where(Wiki.project_id == project_id)
+            .order_by(Attachment.created_at.asc())
+        )
+
+        att_map: dict[str, str] = {}
+        for att_id, filename in list(issue_result.all()) + list(wiki_result.all()):
+            att_map[filename] = f"/api/v1/attachments/{att_id}/download/"
+        return att_map
 
     async def update_description(
         self,

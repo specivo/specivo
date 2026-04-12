@@ -16,16 +16,22 @@
         <span class="badge-status" style="font-size:var(--sp-font-size-xs);">Agent</span>
         {% endif %}
         <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);">#{{ j.sequence }}</span>
-        <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);margin-left:auto;">{{ j.created_at | timeago }}</span>
+        <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);margin-left:auto;">{{ j.created_at | timeago(user.timezone) }}</span>
       </div>
 
       {# Field changes #}
       {% if j.details %}
       {% for d in j.details %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
-        {% if d.prop_key == 'description' %}
+        {% if d.property == 'relation' %}
+        {% if d.new_value and not d.old_value %}
+        Added <strong>{{ d.prop_key }}</strong> relation to <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
+        {% elif d.old_value and not d.new_value %}
+        Removed <strong>{{ d.prop_key }}</strong> relation to <a href="/issue/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.old_value }}</a>
+        {% endif %}
+        {% elif d.prop_key == 'description' %}
         <strong class="sp-change-label">Description</strong> updated
-        <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">View changes</a>
+        <a href="/issue/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">View changes</a>
         {% else %}
         {% set field_label = d.prop_key | replace('_id', '') | replace('_', ' ') | title %}
         {% set old_name = lookup_maps.get(d.prop_key, {}).get(d.old_value|string, d.old_value) if lookup_maps is defined else d.old_value %}
@@ -41,7 +47,7 @@
       {# Comment body #}
       {% if j.notes %}
       <div class="card" style="padding:var(--sp-space-md);margin-top:var(--sp-space-sm);">
-        <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ j.notes | markdown }}</div>
+        <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ j.notes | wiki_markdown(issue.project_key) }}</div>
       </div>
       {% endif %}
 
@@ -61,7 +67,10 @@
           <a @click="showReply = !showReply" style="cursor:pointer;">↩ Reply</a>
           {% if depth == 0 %}
           {% if j.is_resolved %}
-          <a @click="fetch('/api/v1/issues/{{ issue.display_key }}/journals/{{ j.id }}/unresolve/', { method: 'POST', headers: {'Content-Type': 'application/json'} }).then(function(r){ if(r.ok || r.status===204) window.location.reload(); })" style="cursor:pointer;">Unresolve</a>
+          <a hx-post="/api/v1/issues/{{ issue.display_key }}/journals/{{ j.id }}/unresolve/"
+             hx-swap="none"
+             data-hx-reload
+             style="cursor:pointer;">Unresolve</a>
           {% else %}
           <a @click="$dispatch('open-resolve', { journalId: {{ j.id }} })" style="cursor:pointer;">Resolve</a>
           {% endif %}
@@ -71,7 +80,7 @@
           <textarea x-model="replyText" placeholder="Write a reply..." style="display:block;width:100%;min-height:100px;padding:var(--sp-space-sm) var(--sp-space-md);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm);line-height:1.6;background:var(--sp-bg-input);color:var(--sp-text-primary);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
           <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-xs);">
             <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showReply = false; replyText = ''">Cancel</button>
-            <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || !replyText.trim()" @click="submitReply()">Reply</button>
+            <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="!canSubmitReply" @click="submitReply()">Reply</button>
           </div>
         </div>
       </div>

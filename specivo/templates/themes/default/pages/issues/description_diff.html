@@ -8,7 +8,7 @@
   {"label": "Home", "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
   {"label": "Issues", "url": "/projects/" ~ project.key ~ "/issues"},
-  {"label": issue.display_key, "url": "/projects/" ~ project.key ~ "/issues/" ~ issue.display_key},
+  {"label": issue.display_key, "url": "/issue/" ~ issue.display_key},
   {"label": "Description Changes"}
 ]) }}
 
@@ -41,13 +41,13 @@
   <div>
     <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-danger);">Version #{{ prev_num }} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">(before)</span></h3>
     <div class="card" style="padding:var(--sp-space-lg);">
-      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ old_text | markdown if old_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ old_text | wiki_markdown(project.key) if old_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
     </div>
   </div>
   <div>
     <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-success);">Version #{{ selected_num }} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">(after)</span></h3>
     <div class="card" style="padding:var(--sp-space-lg);">
-      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | markdown if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | wiki_markdown(project.key) if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
     </div>
   </div>
 </div>
@@ -55,7 +55,7 @@
 {# First version — just show the content #}
 <div class="card" style="padding:var(--sp-space-lg);margin-bottom:var(--sp-space-xl);">
   <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-md);">This is the first recorded description edit. No previous version to compare against.</p>
-  <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | markdown if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+  <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | wiki_markdown(project.key) if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
 </div>
 {% endif %}
 
@@ -80,27 +80,35 @@
         <tr{% if v.is_selected %} style="background:var(--sp-accent-subtle);box-shadow:inset 3px 0 0 var(--sp-accent);"{% endif %}>
           <td>
             <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
+              {% if v.journal_id %}
               <input type="checkbox" name="compare" value="{{ v.journal_id }}" style="margin:0;">
-              <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);font-weight:600;">#{{ v.num }}</a>
+              <a href="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);font-weight:600;">#{{ v.num }}</a>
+              {% else %}
+              <span style="color:var(--sp-text-muted);font-weight:600;">#{{ v.num }}</span>
+              {% endif %}
               {% if v.is_current %}
               <span style="background:var(--sp-accent-subtle);color:var(--sp-accent);font-size:var(--sp-font-size-xs);font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--sp-accent);">Current</span>
+              {% elif v.get('is_synthetic') %}
+              <span style="background:var(--sp-bg-input);color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);font-weight:500;padding:1px 8px;border-radius:10px;">Original</span>
               {% endif %}
             </div>
           </td>
           <td>
             <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
-              {{ avatar(v.author_login, size='sm', color='') }}
+              {{ avatar(v.author_login, size='sm', color=v.get('author_color', ''), avatar_url=v.get('author_avatar', '')) }}
               {{ v.author_name }}
             </div>
           </td>
-          <td style="color:var(--sp-text-muted);">{{ v.date.strftime('%b %d, %Y %H:%M') if v.date else '' }}</td>
-          <td style="color:var(--sp-text-muted);"></td>
+          <td style="color:var(--sp-text-muted);">{{ v.date | localtime(user.timezone) if v.date else '' }}</td>
+          <td style="color:var(--sp-text-muted);">{% if v.get('is_synthetic') %}Initial description{% endif %}</td>
           <td>
-            <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);">View</a>
+            {% if v.journal_id %}
+            <a href="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);">View</a>
             {% if not v.is_current %}
-            <form method="POST" action="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ v.journal_id }}/restore/" style="display:inline;margin-left:var(--sp-space-sm);">
-              <button type="submit" style="background:none;border:none;color:var(--sp-text-secondary);cursor:pointer;font-size:inherit;font-family:inherit;padding:0;" onclick="return confirm('Restore this version of the description?')">Restore</button>
+            <form method="POST" action="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/restore/" style="display:inline;margin-left:var(--sp-space-sm);">
+              <button type="submit" style="background:none;border:none;color:var(--sp-text-secondary);cursor:pointer;font-size:inherit;font-family:inherit;padding:0;" data-confirm="Restore this version of the description?">Restore</button>
             </form>
+            {% endif %}
             {% endif %}
           </td>
         </tr>
@@ -112,6 +120,6 @@
 {% endif %}
 
 <div style="margin-top:var(--sp-space-xl);">
-  <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/" class="sp-btn sp-btn-ghost">← Back to issue</a>
+  <a href="/issue/{{ issue.display_key }}/" class="sp-btn sp-btn-ghost">← Back to issue</a>
 </div>
 {% endblock %}

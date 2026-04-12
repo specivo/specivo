@@ -230,7 +230,9 @@ async def refresh(
     # The token may be expired, so we decode without verifying expiration.
     remember = _read_remember_from_access_cookie(request, settings)
 
-    access_token, new_refresh_token = await _service.refresh(session=db, refresh_token_raw=raw_token, remember=remember)
+    access_token, new_refresh_token, _refreshed_user = await _service.refresh(
+        session=db, refresh_token_raw=raw_token, remember=remember
+    )
 
     token_data = TokenResponse(
         access_token=access_token,
@@ -340,6 +342,7 @@ _forgot_password_rate_limit = rate_limit("auth_forgot_password", max_requests=5,
 )
 async def forgot_password(
     body: ForgotPasswordRequest,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     _rl: Annotated[None, Depends(_forgot_password_rate_limit)],
 ) -> dict:
@@ -347,7 +350,22 @@ async def forgot_password(
 
     Always returns 202 regardless of whether the email exists — no enumeration.
     """
-    await _service.request_password_reset(session=db, email=body.email)
+    user_id = await _service.request_password_reset(session=db, email=body.email)
+
+    # Audit: log the request (user_id is None if email didn't match)
+    try:
+        from specivo.services.security_audit_service import SecurityAuditService
+
+        audit = SecurityAuditService()
+        await audit.log_password_reset_requested(
+            session=db,
+            user_id=user_id,
+            request=request,
+            email_hint=body.email,
+        )
+    except Exception:
+        pass  # Non-critical — never block the response
+
     return {"detail": "If the email is registered, a reset link has been sent."}
 
 
@@ -364,6 +382,7 @@ async def forgot_password(
 )
 async def reset_password(
     body: ResetPasswordRequest,
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Set a new password using a valid reset token."""
@@ -377,5 +396,40 @@ async def reset_password(
             status_code=422,
             field="new_password",
         )
-    await _service.reset_password_with_token(session=db, token=body.token, new_password=body.new_password)
+
+    try:
+        user_id = await _service.reset_password_with_token(
+            session=db,
+            token=body.token,
+            new_password=body.new_password,
+        )
+    except AppError as exc:
+        # Audit: log the failure before re-raising
+        try:
+            from specivo.services.security_audit_service import SecurityAuditService
+
+            audit = SecurityAuditService()
+            await audit.log_password_reset_failed(
+                session=db,
+                reason=exc.code,
+                request=request,
+            )
+            await db.commit()
+        except Exception:
+            pass  # Non-critical — never block error response
+        raise
+
+    # Audit: log the successful reset
+    try:
+        from specivo.services.security_audit_service import SecurityAuditService
+
+        audit = SecurityAuditService()
+        await audit.log_password_reset_completed(
+            session=db,
+            user_id=user_id,
+            request=request,
+        )
+    except Exception:
+        pass  # Non-critical — never block the response
+
     return {"detail": "Password has been reset successfully."}

@@ -18,7 +18,7 @@
   {# --- User header --- #}
   <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">
     <div class="avatar-lg" :style="'background:' + targetUser.avatar_color"
-         x-text="targetUser.display_name.split(' ').map(function(w){return w[0]}).join('').substring(0,2).toUpperCase()"></div>
+         x-text="initials(targetUser.display_name)"></div>
     <div>
       <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: 2px;"
           x-text="targetUser.display_name"></h1>
@@ -29,7 +29,7 @@
         <span class="sp-role" :class="targetUser.is_admin ? 'sp-role-admin' : 'sp-role-member'"
               x-text="targetUser.is_admin ? '{% trans %}Admin{% endtrans %}' : '{% trans %}Member{% endtrans %}'"></span>
         <span class="sp-user-status" :class="'sp-user-status-' + targetUser.status"
-              x-text="targetUser.status.charAt(0).toUpperCase() + targetUser.status.slice(1)"></span>
+              x-text="capitalize(targetUser.status)"></span>
       </div>
     </div>
   </div>
@@ -155,12 +155,15 @@
         {% trans %}Add this to your MCP client settings (Claude Code, Cursor, etc.) to connect to this Specivo instance.{% endtrans %}
       </p>
 
-      <div style="background: var(--sp-bg-sidebar); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); overflow-x: auto;">
-        <pre style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-inverse); margin: 0; line-height: 1.6;">{
+      <div style="position: relative; background: var(--sp-bg-sidebar); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); overflow-x: auto;">
+        <button type="button" class="sp-btn-sm" @click="copyMcpConfig()"
+                x-text="mcpCopied ? '{% trans %}Copied!{% endtrans %}' : '{% trans %}Copy{% endtrans %}'"
+                style="position: absolute; top: var(--sp-space-sm); right: var(--sp-space-sm);"></button>
+        <pre x-ref="mcpConfig" style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-inverse); margin: 0; line-height: 1.6;">{
   "mcpServers": {
     "specivo": {
       "type": "sse",
-      "url": "https://your-specivo-host/mcp/sse",
+      "url": "https://your-specivo-host/mcp/sse/",
       "headers": {
         "Authorization": "Bearer spv_your_api_key_here"
       }
@@ -169,7 +172,7 @@
 }</pre>
       </div>
       <p style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-md); line-height: 1.5;">
-        {% trans %}Replace <code>spv_your_api_key_here</code> with an API key created above. The agent connects to Specivo over HTTP — no database access or local installation required.{% endtrans %}
+        {% trans %}Replace <code>your-specivo-host</code> with this instance's hostname (use <code>http://</code> for local development, <code>https://</code> in production) and <code>spv_your_api_key_here</code> with an API key created above. The agent connects to Specivo over HTTP — no database access or local installation required.{% endtrans %}
       </p>
     </div>
   </template>

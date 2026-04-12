@@ -77,9 +77,7 @@ async def test_time_entry_form(
 ):
     """GET /projects/{key}/time-entries/new with auth returns 200."""
     # Seed an activity for the form dropdown (select-or-insert to avoid seed data collision)
-    result = await db_session.execute(
-        select(TimeEntryActivity).where(TimeEntryActivity.name == "Development")
-    )
+    result = await db_session.execute(select(TimeEntryActivity).where(TimeEntryActivity.name == "Development"))
     activity = result.scalar_one_or_none()
     if activity is None:
         activity = TimeEntryActivityFactory.build(name="Development")

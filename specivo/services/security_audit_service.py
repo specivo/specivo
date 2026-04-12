@@ -41,12 +41,21 @@ class AuditEvent(StrEnum):
     COMMENT_ADDED = "comment_added"
     PROJECTS_LISTED = "projects_listed"
     WIKI_CREATED = "wiki_created"
+    WIKI_DELETED = "wiki_deleted"
+    WIKI_RESTORED = "wiki_restored"
     MEMBERS_LISTED = "members_listed"
     LOOKUPS_READ = "lookups_read"
     TIME_LOGGED = "time_logged"
     VERSIONS_LISTED = "versions_listed"
     VERSION_CREATED = "version_created"
     VERSION_UPDATED = "version_updated"
+    VERSION_DELETED = "version_deleted"
+    RELATION_LISTED = "relation_listed"
+    RELATION_ADDED = "relation_added"
+    RELATION_REMOVED = "relation_removed"
+    PASSWORD_RESET_REQUESTED = "password_reset_requested"
+    PASSWORD_RESET_COMPLETED = "password_reset_completed"
+    PASSWORD_RESET_FAILED = "password_reset_failed"
 
 
 class MemberAction(StrEnum):
@@ -398,6 +407,75 @@ class SecurityAuditService:
             request_id=info["request_id"],
             details=details,
         )
+
+    async def log_password_reset_requested(
+        self,
+        session: AsyncSession,
+        user_id: int | None,
+        request: Request | None = None,
+        email_hint: str | None = None,
+    ) -> SecurityAuditLog:
+        """Log a password reset request. Core feature — always persisted.
+
+        *user_id* is set when the email matched a real account, None otherwise.
+        """
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {}
+        if email_hint:
+            details["email_hint"] = email_hint
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_RESET_REQUESTED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_password_reset_completed(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a successful password reset. Core feature — always persisted."""
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_RESET_COMPLETED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_password_reset_failed(
+        self,
+        session: AsyncSession,
+        reason: str,
+        request: Request | None = None,
+        user_id: int | None = None,
+    ) -> SecurityAuditLog:
+        """Log a failed password reset attempt. Core feature — always persisted."""
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {"reason": reason}
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_RESET_FAILED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
 
     # ------------------------------------------------------------------
     # Query

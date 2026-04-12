@@ -82,6 +82,13 @@ def _issue_out(issue: Issue) -> IssueOut:
             else None
         ),
         category=(IdName(id=issue.category_id, name=issue.category.name) if issue.category_id is not None else None),
+        fixed_version_id=issue.fixed_version_id,
+        fixed_version=(
+            IdName(id=issue.fixed_version_id, name=issue.fixed_version.name)
+            if issue.fixed_version_id is not None
+            else None
+        ),
+        sprint_id=issue.sprint_id,
         parent_id=issue.parent_id,
         root_id=issue.root_id,
         lft=issue.lft,
@@ -96,6 +103,73 @@ def _issue_out(issue: Issue) -> IssueOut:
         created_at=issue.created_at,
         updated_at=issue.updated_at,
     )
+
+
+# ---------------------------------------------------------------------------
+# Issue autocomplete (cross-project, lightweight)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/issues/autocomplete/")
+async def issue_autocomplete(
+    q: str = Query(..., min_length=2, max_length=100),
+    limit: int = Query(8, ge=1, le=25),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Lightweight issue autocomplete — searches by key and subject via SQL ILIKE.
+
+    Returns only issues the user has access to. No FTS, no vectors — just
+    a fast SQL query for autocomplete dropdowns.
+    """
+    from sqlalchemy import String, and_, cast, or_
+
+    from specivo.models.member import Member
+    from specivo.models.project import Project
+
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    display_key = Issue.project_key + "-" + cast(Issue.sequence_number, String)
+
+    stmt = (
+        select(
+            Issue.project_key,
+            Issue.sequence_number,
+            Issue.subject,
+        )
+        .where(
+            or_(
+                display_key.ilike(pattern, escape="\\"),
+                Issue.subject.ilike(pattern, escape="\\"),
+            )
+        )
+        .order_by(Issue.updated_at.desc())
+        .limit(limit)
+    )
+
+    # Access control: admin sees all, others see member + public projects
+    if not current_user.is_admin:
+        member_projects = select(Member.project_id).where(Member.user_id == current_user.id).scalar_subquery()
+        public_projects = select(Project.id).where(Project.is_public.is_(True)).scalar_subquery()
+        stmt = stmt.where(
+            or_(
+                Issue.project_id.in_(member_projects),
+                and_(
+                    Issue.project_id.in_(public_projects),
+                    Issue.is_private.is_(False),
+                ),
+            )
+        )
+
+    result = await db.execute(stmt)
+    return [
+        {
+            "key": f"{row.project_key}-{row.sequence_number}",
+            "subject": row.subject,
+            "project_key": row.project_key,
+        }
+        for row in result
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -117,6 +191,7 @@ async def create_issue(
 ) -> IssueOut:
     """Create a new issue in the given project."""
     project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     if not await check_permission(current_user, project.id, "add_issues", db, request=request):
         raise PermissionDeniedError("You do not have permission to create issues in this project")
     # Override project_key in body to match path param
@@ -138,6 +213,7 @@ async def list_issues(
     assigned_to_id: str | None = Query(default=None),
     priority_id: int | None = Query(default=None),
     category_id: int | None = Query(default=None),
+    version_id: int | None = Query(default=None),
     author_id: int | None = Query(default=None),
     subject_contains: str | None = Query(default=None),
     created_after: str | None = Query(default=None),
@@ -153,6 +229,7 @@ async def list_issues(
 ) -> IssueListResponse:
     """List issues for a project with optional filtering, sorting, and pagination."""
     project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
 
     # If a saved filter is specified, load it and use its definition as defaults
     if saved_filter_id is not None:
@@ -200,6 +277,7 @@ async def list_issues(
         "assigned_to_id": resolved_assigned_to,
         "priority_id": priority_id,
         "category_id": category_id,
+        "version_id": version_id,
         "author_id": author_id,
         "subject_contains": subject_contains,
         "created_after": created_after,
@@ -383,6 +461,7 @@ async def get_issue(
                 content_type=a.content_type,
                 filesize=a.filesize,
                 description=a.description,
+                content_hash=a.content_hash,
                 author=IdName(id=a.author_id, name=a.author.display_name),
                 created_at=a.created_at,
                 updated_at=a.updated_at,
@@ -440,6 +519,7 @@ async def update_issue(
 
     # Reload with relationships
     issue = await _service.get_with_relations(db, issue.id)
+    await db.commit()  # commit before response to avoid reload race condition
     return _issue_out(issue)
 
 
@@ -593,6 +673,7 @@ async def add_comment(
         actor=current_user,
     )
 
+    await db.commit()  # commit before response to avoid reload race condition
     return _journal_out(journal)
 
 
@@ -635,6 +716,7 @@ async def resolve_thread(
     )
     journal = result.scalar_one()
 
+    await db.commit()  # commit before response to avoid reload race condition
     return _journal_out(journal, resolved_by_user=current_user)
 
 
@@ -687,6 +769,7 @@ async def watch_issue(
     """Subscribe the current user to an issue."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
     await _watcher_service.watch(db, issue, current_user)
+    await db.commit()  # commit before response to avoid reload race condition
     return {"watched": True}
 
 
@@ -703,6 +786,7 @@ async def unwatch_issue(
     """Unsubscribe the current user from an issue."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
     await _watcher_service.unwatch(db, issue, current_user)
+    await db.commit()  # commit before response to avoid reload race condition
 
 
 @router.get(

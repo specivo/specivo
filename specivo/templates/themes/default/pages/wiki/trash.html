@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Wiki Trash - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">Home</a>
+  <span class="sep">/</span>
+  <a href="/projects/{{ project.key }}/">{{ project.name }}</a>
+  <span class="sep">/</span>
+  <a href="/projects/{{ project.key }}/wiki/">Wiki</a>
+  <span class="sep">/</span>
+  <span>Trash</span>
+</div>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-space-lg);">
+  <h1 style="font-size:var(--sp-font-size-xl);font-weight:700;">Deleted Wiki Pages</h1>
+  <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">Back to Wiki</a>
+</div>
+
+{% if deleted_pages %}
+<table class="sp-table" style="width:100%;">
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Deleted</th>
+      <th style="width:100px;"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for page in deleted_pages %}
+    <tr>
+      <td style="font-weight:500;">{{ page.title }}</td>
+      <td style="color:var(--sp-text-muted);font-size:var(--sp-font-size-sm);">
+        {{ page.deleted_at | localtime(user.timezone) if page.deleted_at else '' }}
+      </td>
+      <td>
+        <form method="POST" action="/projects/{{ project.key }}/wiki/trash/{{ page.id }}/restore/" style="display:inline;">
+          <button type="submit" class="sp-btn sp-btn-sm sp-btn-primary">Restore</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:var(--sp-text-muted);font-style:italic;">No deleted pages.</p>
+{% endif %}
+{% endblock %}

@@ -7,7 +7,6 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from specivo.models.issue import Issue
 from specivo.models.user import User
@@ -76,15 +75,19 @@ class WatcherService:
         return result.scalar_one_or_none() is not None
 
     async def list_watchers(self, session: AsyncSession, issue: Issue) -> list[User]:
-        """Return the list of users watching the issue, ordered by user id."""
-        result = await session.execute(
-            select(Watcher)
+        """Return the list of users watching the issue, ordered by user id.
+
+        Uses a single JOIN to fetch User rows directly — avoids the two-query
+        pattern (watchers + selectinload user).
+        """
+        stmt = (
+            select(User)
+            .join(Watcher, Watcher.user_id == User.id)
             .where(Watcher.issue_id == issue.id)
-            .options(selectinload(Watcher.user))
-            .order_by(Watcher.user_id)
+            .order_by(User.id)
         )
-        watchers = list(result.scalars().all())
-        return [w.user for w in watchers]
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
 
     async def auto_watch(self, session: AsyncSession, issue: Issue, user: User) -> None:
         """Auto-subscribe a user to an issue (called on create and assignment).

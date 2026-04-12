@@ -1,6 +1,7 @@
 """Application configuration via pydantic-settings."""
 
 from functools import lru_cache
+from importlib.metadata import version as _pkg_version
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -73,7 +74,7 @@ class Settings(BaseSettings):
     # App
     debug: bool = False
     app_name: str = "Specivo"
-    version: str = "0.1.7"
+    version: str = _pkg_version("specivo")
     api_v1_prefix: str = "/api/v1"
 
     # Stealth mode — secret URL prefix for all routes.

@@ -48,7 +48,7 @@
           <span class="version-author-name">{{ v.author.display_name or v.author.login if v.author else 'Unknown' }}</span>
         </div>
       </td>
-      <td><span class="version-date">{{ v.created_at.strftime('%b %d, %Y %H:%M') if v.created_at else '' }}</span></td>
+      <td><span class="version-date">{{ v.created_at | localtime(user.timezone) if v.created_at else '' }}</span></td>
       <td><span class="version-comment">{{ v.comments or '' }}</span></td>
       <td>
         <div class="version-actions">

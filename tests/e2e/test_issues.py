@@ -92,7 +92,7 @@ def test_issue_detail_page(admin_page: Page, api_client: httpx.Client) -> None:
     subject = f"E2E Detail {unique_key()}"
     issue = _create_issue(api_client, project["key"], subject)
 
-    admin_page.goto(f"/projects/{project['key']}/issues/{issue['key']}/")
+    admin_page.goto(f"/issue/{issue['key']}/")
     expect(admin_page.locator(f"text={subject}")).to_be_visible()
 
 

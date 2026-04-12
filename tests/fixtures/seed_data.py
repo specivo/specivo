@@ -12,12 +12,12 @@ TRACKERS = [
 ]
 
 STATUSES = [
-    {"name": "New", "is_closed": False, "position": 1},
-    {"name": "In Progress", "is_closed": False, "position": 2},
-    {"name": "Resolved", "is_closed": False, "position": 3},
-    {"name": "Feedback", "is_closed": False, "position": 4},
-    {"name": "Closed", "is_closed": True, "position": 5},
-    {"name": "Rejected", "is_closed": True, "position": 6},
+    {"name": "New", "category": "backlog", "position": 1},
+    {"name": "In Progress", "category": "active", "position": 2},
+    {"name": "Resolved", "category": "done", "position": 3},
+    {"name": "Feedback", "category": "active", "position": 4},
+    {"name": "Closed", "category": "closed", "position": 5},
+    {"name": "Rejected", "category": "closed", "position": 6},
 ]
 
 PRIORITIES = [

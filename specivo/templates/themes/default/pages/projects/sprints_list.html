@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}Sprints - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Sprints"}
+]) }}
+
+<div class="page-header">
+  <h1>Sprints</h1>
+  <div class="page-header-actions">
+    <a href="/projects/{{ project.key }}/sprints/analytics/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
+      Analytics
+    </a>
+    <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      Backlog
+    </a>
+    {% if can_manage_sprint %}
+    <button class="sp-btn sp-btn-primary sp-btn-sm" data-open-modal="create-sprint-modal">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M12 5v14M5 12h14"/></svg>
+      New Sprint
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+{# ============ ACTIVE SPRINTS ============ #}
+{% if active_sprints %}
+<div class="section-divider"><span>Active</span></div>
+<div class="sprint-list-grid">
+  {% for sprint in active_sprints %}
+  {% set counts = sprint_issue_counts.get(sprint.id, {}) %}
+  <div class="sprint-list-card sprint-list-active">
+    <div class="sprint-list-card-header">
+      <div>
+        <div class="sprint-list-card-title">{{ sprint.name }}</div>
+        <div class="sprint-list-card-dates">
+          {% if sprint.start_date or sprint.end_date %}{{ sprint.start_date or '?' }} &mdash; {{ sprint.end_date or '?' }}{% endif %}
+          {% if sprint.start_date and sprint.end_date %}
+          {% set days_left = (sprint.end_date - today).days if today else 0 %}
+          {% if days_left > 0 %}&middot; {{ days_left }} days left{% elif days_left == 0 %}&middot; Ends today{% else %}&middot; {{ -days_left }} days overdue{% endif %}
+          {% endif %}
+        </div>
+      </div>
+      <span class="badge-status in-progress">Active</span>
+    </div>
+    <div class="sprint-list-stats">
+      <div class="sprint-list-stat">
+        <span class="sprint-list-stat-value">{{ counts.get('total', 0) }}</span>
+        <span class="sprint-list-stat-label">Issues</span>
+      </div>
+      <div class="sprint-list-stat">
+        <span class="sprint-list-stat-value" style="color:var(--sp-success)">{{ counts.get('completed', 0) }}</span>
+        <span class="sprint-list-stat-label">Done</span>
+      </div>
+      <div class="sprint-list-stat">
+        <span class="sprint-list-stat-value" style="color:var(--sp-warning)">{{ counts.get('remaining', 0) }}</span>
+        <span class="sprint-list-stat-label">Remaining</span>
+      </div>
+      <div class="sprint-list-stat">
+        <span class="sprint-list-stat-value" style="color:var(--sp-accent)">{{ counts.get('completed', 0) }}</span>
+        <span class="sprint-list-stat-label">Velocity</span>
+      </div>
+    </div>
+    {% if counts.get('total', 0) > 0 %}
+    <div class="sprint-list-progress">
+      {% set pct = (counts.get('completed', 0) * 100 / counts.get('total', 1)) | round %}
+      <div class="sprint-list-progress-bar"><div class="sprint-list-progress-fill" style="width:{{ pct }}%;background:var(--sp-accent)"></div></div>
+      <span class="sprint-list-progress-text">{{ pct }}% complete</span>
+    </div>
+    {% endif %}
+    {% if sprint.goal %}
+    <div class="sprint-list-goal">"{{ sprint.goal }}"</div>
+    {% endif %}
+    <div class="sprint-list-footer">
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/">Open board &rarr;</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ============ PLANNED SPRINTS ============ #}
+{% if planned_sprints %}
+<div class="section-divider"><span>Planned</span></div>
+<div class="sprint-list-grid">
+  {% for sprint in planned_sprints %}
+  {% set counts = sprint_issue_counts.get(sprint.id, {}) %}
+  <div class="sprint-list-card{% if counts.get('total', 0) == 0 %} sprint-list-empty{% endif %}">
+    <div class="sprint-list-card-header">
+      <div>
+        <div class="sprint-list-card-title">{{ sprint.name }}</div>
+        <div class="sprint-list-card-dates">
+          {% if sprint.start_date or sprint.end_date %}{{ sprint.start_date or '?' }} &mdash; {{ sprint.end_date or '?' }}{% else %}No dates set{% endif %}
+        </div>
+      </div>
+      <span class="badge-status new">Planned</span>
+    </div>
+    <div class="sprint-list-stats">
+      <div class="sprint-list-stat">
+        <span class="sprint-list-stat-value">{{ counts.get('total', 0) }}</span>
+        <span class="sprint-list-stat-label">Issues</span>
+      </div>
+    </div>
+    {% if sprint.goal %}
+    <div class="sprint-list-goal">"{{ sprint.goal }}"</div>
+    {% endif %}
+    <div class="sprint-list-footer">
+      {% if can_manage_sprint %}
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/">Edit sprint &rarr;</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ============ COMPLETED SPRINTS ============ #}
+{% if completed_sprints %}
+<div class="section-divider"><span>Completed</span></div>
+<div class="sprint-list-grid">
+  {% for sprint in completed_sprints %}
+  {% set counts = sprint_issue_counts.get(sprint.id, {}) %}
+  <div class="sprint-list-card">
+    <div class="sprint-list-card-header">
+      <div>
+        <div class="sprint-list-card-title">{{ sprint.name }}</div>
+        <div class="sprint-list-card-dates">{{ sprint.start_date or '?' }} &mdash; {{ sprint.end_date or '?' }}</div>
+      </div>
+      <span class="badge-status closed">Completed</span>
+    </div>
+    <div class="sprint-list-stats">
+      <div class="sprint-list-stat">
+        <span class="sprint-list-stat-value">{{ counts.get('total', 0) }}</span>
+        <span class="sprint-list-stat-label">Committed</span>
+      </div>
+      <div class="sprint-list-stat">
+        <span class="sprint-list-stat-value" style="color:var(--sp-success)">{{ counts.get('completed', 0) }}</span>
+        <span class="sprint-list-stat-label">Completed</span>
+      </div>
+    </div>
+    {% if counts.get('total', 0) > 0 %}
+    {% set pct = (counts.get('completed', 0) * 100 / counts.get('total', 1)) | round %}
+    <div class="sprint-list-progress">
+      <div class="sprint-list-progress-bar"><div class="sprint-list-progress-fill" style="width:{{ pct }}%;background:{% if pct >= 90 %}var(--sp-success){% elif pct >= 70 %}var(--sp-accent){% else %}var(--sp-warning){% endif %}"></div></div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="sprint-list-progress-text">{{ pct }}% complete</span>
+        <a href="/projects/{{ project.key }}/sprints/analytics/" style="display:inline-flex;align-items:center;gap:var(--sp-space-xs);font-size:var(--sp-font-size-xs);color:var(--sp-accent);font-weight:600;text-decoration:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          {{ counts.get('completed', 0) }} velocity
+        </a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{# ============ EMPTY STATE ============ #}
+{% if not active_sprints and not planned_sprints and not completed_sprints %}
+<div style="text-align:center;padding:var(--sp-space-3xl);color:var(--sp-text-muted)">
+  <div style="font-size:var(--sp-font-size-lg);font-weight:600;color:var(--sp-text-secondary);margin-bottom:var(--sp-space-sm)">No sprints yet</div>
+  <div style="font-size:var(--sp-font-size-sm);margin-bottom:var(--sp-space-xl)">Create your first sprint to start planning iterations.</div>
+  {% if can_manage_sprint %}
+  <button class="sp-btn sp-btn-primary" data-open-modal="create-sprint-modal">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
+    New Sprint
+  </button>
+  {% endif %}
+</div>
+{% endif %}
+
+{# ============ CREATE SPRINT MODAL ============ #}
+{% if can_manage_sprint %}
+<div class="lightbox" id="create-sprint-modal" style="display:none" data-modal-backdrop>
+  <div class="att-delete-modal" style="max-width:480px">
+    <h3>New Sprint</h3>
+    <form method="post" action="/api/v1/projects/{{ project.key }}/sprints/"
+          hx-post="/api/v1/projects/{{ project.key }}/sprints/"
+          hx-ext="json-enc"
+          hx-swap="none"
+          data-hx-reload>
+      <div style="margin:var(--sp-space-lg) 0">
+        <label style="font-size:var(--sp-font-size-xs);font-weight:600;color:var(--sp-text-secondary);display:block;margin-bottom:var(--sp-space-xs)">Name</label>
+        <input type="text" name="name" required placeholder="Sprint 7 — Feature Name" style="width:100%;padding:8px 12px;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm)">
+      </div>
+      <div style="margin-bottom:var(--sp-space-lg)">
+        <label style="font-size:var(--sp-font-size-xs);font-weight:600;color:var(--sp-text-secondary);display:block;margin-bottom:var(--sp-space-xs)">Goal (optional)</label>
+        <textarea name="goal" placeholder="What should this sprint accomplish?" style="width:100%;padding:8px 12px;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm);min-height:60px;resize:vertical"></textarea>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-space-lg);margin-bottom:var(--sp-space-lg)">
+        <div>
+          <label style="font-size:var(--sp-font-size-xs);font-weight:600;color:var(--sp-text-secondary);display:block;margin-bottom:var(--sp-space-xs)">Start Date</label>
+          <input type="date" name="start_date" style="width:100%;padding:8px 12px;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm)">
+        </div>
+        <div>
+          <label style="font-size:var(--sp-font-size-xs);font-weight:600;color:var(--sp-text-secondary);display:block;margin-bottom:var(--sp-space-xs)">End Date</label>
+          <input type="date" name="end_date" style="width:100%;padding:8px 12px;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm)">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm)">
+        <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" data-close-modal="create-sprint-modal">Cancel</button>
+        <button type="submit" class="sp-btn sp-btn-primary sp-btn-sm">Create Sprint</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

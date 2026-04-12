@@ -171,7 +171,7 @@
     <div class="project-card-footer">
       <div class="project-card-members">
         {% for m in item.members[:5] %}
-        {{ avatar(m.display_name, size='sm', avatar_url=m.avatar_url or '') }}
+        {{ avatar(m.display_name, size='sm', color=m.avatar_color or '', avatar_url=m.avatar_url or '') }}
         {% endfor %}
         {% if item.member_count > 5 %}
         <span class="more">+{{ item.member_count - 5 }}</span>

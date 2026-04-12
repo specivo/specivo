@@ -16,11 +16,11 @@
       {% trans %}Search{% endtrans %}
     </a>
     <a class="sidebar-item{% if active_page == 'dashboard' %} active{% endif %}" href="/">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1"/></svg>
       {% trans %}Dashboard{% endtrans %}
     </a>
     <a class="sidebar-item{% if active_page == 'projects' %} active{% endif %}" href="/projects/">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3z"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 17V7a2 2 0 00-2-2H6a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2z"/><path d="M16 21H8"/><path d="M12 17v4"/></svg>
       {% trans %}Projects{% endtrans %}
     </a>
   </div>
@@ -33,6 +33,16 @@
       {% trans %}Issues{% endtrans %}
       {% if active_project.open_issues_count is defined and active_project.open_issues_count %}<span class="badge">{{ active_project.open_issues_count }}</span>{% endif %}
     </a>
+    <a class="sidebar-item{% if active_page == 'backlog' %} active{% endif %}" href="/projects/{{ active_project.key }}/backlog/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+      {% trans %}Backlog{% endtrans %}
+    </a>
+    {% if active_sprint_id is defined and active_sprint_id %}
+    <a class="sidebar-item{% if active_page == 'sprint_board' %} active{% endif %}" href="/projects/{{ active_project.key }}/sprints/{{ active_sprint_id }}/board/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+      {% trans %}Current Sprint{% endtrans %}
+    </a>
+    {% endif %}
     <a class="sidebar-item{% if active_page == 'wiki' %} active{% endif %}" href="/projects/{{ active_project.key }}/wiki/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
       {% trans %}Wiki{% endtrans %}
@@ -44,6 +54,10 @@
     <a class="sidebar-item{% if active_page == 'time' %} active{% endif %}" href="/projects/{{ active_project.key }}/time-entries/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
       {% trans %}Time Tracking{% endtrans %}
+    </a>
+    <a class="sidebar-item{% if active_page == 'sprints' %} active{% endif %}" href="/projects/{{ active_project.key }}/sprints/">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      {% trans %}Sprints{% endtrans %}
     </a>
     <a class="sidebar-item{% if active_page == 'settings' %} active{% endif %}" href="/projects/{{ active_project.key }}/settings/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4z"/></svg>
@@ -63,19 +77,7 @@
   </div>
   {% endif %}
 
-  <div class="sidebar-section">
-    <div class="sidebar-section-label">{% trans %}AI & Agents{% endtrans %}</div>
-    <a class="sidebar-item{% if active_page == 'agent_sessions' %} active{% endif %}" href="#">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M2 12h20"/><path d="M12 2a15 15 0 014 10 15 15 0 01-4 10 15 15 0 01-4-10 15 15 0 014-10z"/></svg>
-      {% trans %}Agent Sessions{% endtrans %}
-    </a>
-    {% if has_feature("agent_cost_tracking") %}
-    <a class="sidebar-item" href="#">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-      {% trans %}Cost Tracking{% endtrans %}
-    </a>
-    {% endif %}
-  </div>
+  {# AI & Agents section — hidden until agent session UI is implemented #}
 
   {% if has_feature("agent_groups") or has_feature("external_credentials") or has_feature("security_audit_log") %}
   <div class="sidebar-section">

@@ -1,4 +1,4 @@
-"""Web admin pages: dashboard, workflows, settings, email, agent groups, kill switch."""
+"""Web admin pages: dashboard, workflows, settings, email, agent groups, kill switch, metadata presets."""
 
 from __future__ import annotations
 
@@ -15,12 +15,14 @@ from specivo.models.user import User
 from specivo.models.user import User as UserModel
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.settings_service import SettingsService
+from specivo.services.version_service import VersionService
 from specivo.services.workflow_service import WorkflowService
 from specivo.web.deps import get_current_user_optional, get_templates
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 
 _settings_svc = SettingsService()
+_version_svc = VersionService()
 _workflow_svc = WorkflowService()
 _api_key_svc = ApiKeyService()
 
@@ -83,9 +85,7 @@ async def admin_users(
     """Render the admin users page."""
     from specivo.models.role import Role
 
-    result = await db.execute(
-        select(UserModel).order_by(UserModel.id)
-    )
+    result = await db.execute(select(UserModel).order_by(UserModel.id))
     users = list(result.scalars().all())
 
     roles_result = await db.execute(
@@ -201,19 +201,21 @@ async def admin_projects(
     for p in all_projects:
         s = stats.get(p.id, {})
         issue_count = s.get("open_count", 0) + s.get("closed_count", 0)
-        projects_data.append({
-            "id": p.id,
-            "key": p.key,
-            "identifier": p.identifier,
-            "name": p.name,
-            "description": p.description or "",
-            "color": p.color or "#c49a3c",
-            "status": p.status,
-            "issue_count": issue_count,
-            "member_count": s.get("member_count", 0),
-            "has_issues": issue_count > 0,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-        })
+        projects_data.append(
+            {
+                "id": p.id,
+                "key": p.key,
+                "identifier": p.identifier,
+                "name": p.name,
+                "description": p.description or "",
+                "color": p.color or "#c49a3c",
+                "status": p.status,
+                "issue_count": issue_count,
+                "member_count": s.get("member_count", 0),
+                "has_issues": issue_count > 0,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            }
+        )
 
     # For parent dropdown (active projects only)
     active_projects = [{"key": p.key, "name": p.name} for p in all_projects if p.status != 9]
@@ -230,6 +232,46 @@ async def admin_projects(
             "project_colors": DEFAULT_PROJECT_COLORS,
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Versions (cross-project)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/versions/", response_class=HTMLResponse)
+async def admin_versions(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the admin versions page -- all versions across all projects."""
+    versions_data = await _version_svc.list_all(db)
+
+    # Extract unique projects for the filter dropdown
+    seen_keys: set[str] = set()
+    projects_data: list[dict[str, str]] = []
+    for v in versions_data:
+        if v["project_key"] not in seen_keys:
+            seen_keys.add(v["project_key"])
+            projects_data.append({"key": v["project_key"], "name": v["project_name"]})
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/versions.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "versions_data": versions_data,
+            "projects_data": projects_data,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Workflows
+# ---------------------------------------------------------------------------
 
 
 @router.get("/admin/workflows/", response_class=HTMLResponse)
@@ -377,4 +419,38 @@ async def admin_kill_switch(
         request,
         "pages/admin/kill_switch.html",
         context={"user": user, "active_page": "admin", "events": events},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Metadata Presets
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/metadata-presets/", response_class=HTMLResponse)
+async def admin_metadata_presets(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the admin metadata presets page."""
+    from specivo.schemas.metadata_schema import MetadataPresetOut
+    from specivo.services.metadata_preset_service import MetadataPresetService
+
+    svc = MetadataPresetService()
+    presets = await svc.list_presets(db)
+    presets_data = [
+        MetadataPresetOut.model_validate(p).model_dump(mode="json")
+        for p in presets
+    ]
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/metadata_presets.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "presets_data": presets_data,
+        },
     )

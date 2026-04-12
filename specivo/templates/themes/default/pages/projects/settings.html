@@ -13,37 +13,48 @@
   <span class="current">Settings</span>
 </div>
 
-<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-lg);">Settings</h1>
+<h1 class="sp-page-h1">Settings</h1>
 
 <!-- Settings tabs -->
-<div x-data="{ tab: 'general' }" style="margin-bottom: var(--sp-space-xl);">
+<div x-data="{ tab: 'general' }" class="sp-mb-xl">
   <div class="filter-tabs">
     <a class="filter-tab" :class="{ active: tab === 'general' }" @click.prevent="tab = 'general'" href="#">General</a>
     <a class="filter-tab" :class="{ active: tab === 'members' }" @click.prevent="tab = 'members'" href="#">Members</a>
     <a class="filter-tab" :class="{ active: tab === 'modules' }" @click.prevent="tab = 'modules'" href="#">Modules</a>
+    <a class="filter-tab" :class="{ active: tab === 'versions' }" @click.prevent="tab = 'versions'" href="#">Versions</a>
+    <a class="filter-tab" :class="{ active: tab === 'metadata' }" @click.prevent="tab = 'metadata'" href="#">Metadata</a>
   </div>
 
   <!-- General tab -->
-  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }} })'>
-    <div class="card" style="padding: var(--sp-space-lg);">
-      <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }} })'>
+    <div class="card sp-card-pad">
+      <div class="form-group sp-form-group-mb-md">
         <label class="form-label">Name</label>
         <input class="form-input" type="text" x-model="name">
       </div>
-      <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+      <div class="form-group sp-form-group-mb-md">
         <label class="form-label">Identifier</label>
-        <input class="form-input" type="text" value="{{ project.identifier }}" disabled style="opacity: 0.6;">
+        <input class="form-input sp-input-disabled" type="text" value="{{ project.identifier }}" disabled>
       </div>
-      <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+      <div class="form-group sp-form-group-mb-md">
         <label class="form-label">Key</label>
-        <input class="form-input" type="text" value="{{ project.key }}" disabled style="opacity: 0.6;">
+        <input class="form-input sp-input-disabled" type="text" value="{{ project.key }}" disabled>
       </div>
-      <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+      <div class="form-group sp-form-group-mb-md">
+        <label class="form-label">Parent project</label>
+        <select class="form-input" x-model.number="parentId" name="parent_id">
+          <option :value="null">(none — root project)</option>
+          <template x-for="p in availableParents" :key="p.id">
+            <option :value="p.id" x-text="p.name + ' (' + p.key + ')'"></option>
+          </template>
+        </select>
+      </div>
+      <div class="form-group sp-form-group-mb-md">
         <label class="form-label">Description</label>
         <textarea class="form-input" rows="4" x-model="description"></textarea>
       </div>
-      <div x-show="message" class="flash" style="margin-bottom: var(--sp-space-md);" x-text="message"></div>
-      <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving" style="width:auto;">Save</button>
+      <div x-show="message" class="flash sp-mb-md" x-text="message"></div>
+      <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">Save</button>
     </div>
   </div>
 
@@ -51,26 +62,25 @@
   <div x-show="tab === 'members'" x-data='projectMembers({ members: {{ members | tojson }}, projectKey: {{ project.key | tojson }}, roles: {{ roles | tojson }} })'>
 
     <!-- Add member form -->
-    <div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
-      <h3 style="font-family: var(--sp-font-display); font-weight: 600; margin: 0 0 var(--sp-space-md) 0;">Add Member</h3>
-      <div style="display: flex; gap: var(--sp-space-md); align-items: flex-end; flex-wrap: wrap;">
-        <div style="flex: 1; min-width: 200px; position: relative;">
+    <div class="card sp-card-pad-mb-md">
+      <h3 class="sp-card-h3">Add Member</h3>
+      <div class="sp-form-row-end-wrap">
+        <div class="sp-suggest-field">
           <label class="form-label">User</label>
           <input class="form-input" type="text" placeholder="Search by name or login..."
             x-model="userQuery" @input.debounce.300ms="searchUsers()" @focus="searchUsers()"
             @click.outside="showSuggestions = false" autocomplete="off">
-          <div x-show="showSuggestions && suggestions.length > 0"
-            style="position: absolute; top: 100%; left: 0; right: 0; z-index: 10; background: var(--sp-bg-card); border: 1px solid var(--sp-border); border-radius: var(--sp-radius-sm); box-shadow: var(--sp-shadow-md); max-height: 200px; overflow-y: auto;">
+          <div class="sp-suggest-panel" x-show="showSuggestions && suggestions.length > 0">
             <template x-for="u in suggestions" :key="u.id">
-              <div @click="selectUser(u)" style="padding: var(--sp-space-sm) var(--sp-space-md); cursor: pointer; display: flex; gap: var(--sp-space-sm);"
-                @mouseenter="$el.style.background='var(--sp-bg-hover)'" @mouseleave="$el.style.background=''">
-                <span style="font-weight: 500;" x-text="u.display_name"></span>
-                <span style="color: var(--sp-text-muted);" x-text="'(' + u.login + ')'"></span>
+              <div class="sp-suggest-item" @click="selectUser(u)"
+                @mouseenter="$el.style.background='var(--sp-bg-input)'" @mouseleave="$el.style.background=''">
+                <span class="sp-suggest-name" x-text="u.display_name"></span>
+                <span class="sp-text-muted" x-text="'(' + u.login + ')'"></span>
               </div>
             </template>
           </div>
         </div>
-        <div style="min-width: 160px;">
+        <div class="sp-field-min-160">
           <label class="form-label">Role</label>
           <select class="form-input" x-model="selectedRoleId">
             <option value="">Select role...</option>
@@ -80,19 +90,19 @@
           </select>
         </div>
         <div>
-          <button class="sp-btn sp-btn-primary" @click="addMember()" :disabled="!selectedUserId || !selectedRoleId || adding" style="white-space: nowrap;">
+          <button class="sp-btn sp-btn-primary sp-btn-nowrap-wide" @click="addMember()" :disabled="!selectedUserId || !selectedRoleId || adding">
             <span x-show="!adding">Add</span>
             <span x-show="adding">Adding...</span>
           </button>
         </div>
       </div>
-      <div x-show="addError" style="color: var(--sp-danger); margin-top: var(--sp-space-sm); font-size: var(--sp-font-size-sm);" x-text="addError"></div>
-      <div x-show="addSuccess" style="color: var(--sp-success); margin-top: var(--sp-space-sm); font-size: var(--sp-font-size-sm);" x-text="addSuccess"></div>
+      <div x-show="addError" class="sp-msg-danger" x-text="addError"></div>
+      <div x-show="addSuccess" class="sp-msg-success" x-text="addSuccess"></div>
     </div>
 
     <!-- Members list -->
-    <div class="card" style="padding: var(--sp-space-lg);">
-      <h3 style="font-family: var(--sp-font-display); font-weight: 600; margin: 0 0 var(--sp-space-md) 0;">Project Members</h3>
+    <div class="card sp-card-pad">
+      <h3 class="sp-card-h3">Project Members</h3>
       <table class="issue-table">
         <thead>
           <tr>
@@ -104,19 +114,21 @@
         <tbody>
           <template x-if="members.length === 0">
             <tr>
-              <td colspan="3" style="text-align: center; padding: var(--sp-space-lg); color: var(--sp-text-muted);">No members.</td>
+              <td colspan="3" class="sp-empty-td">No members.</td>
             </tr>
           </template>
           <template x-for="m in members" :key="m.user_id">
             <tr>
               <td>
-                <span style="font-weight: 500;" x-text="m.display_name"></span>
-                <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-xs);" x-text="'(' + m.login + ')'"></span>
+                <span class="sp-suggest-name" x-text="m.display_name"></span>
+                <span class="sp-text-muted-xs" x-text="'(' + m.login + ')'"></span>
               </td>
               <td>
-                <a href="#" style="color: var(--sp-link);" @click.prevent="openEditRoles(m)" x-text="m.roles.join(', ')"></a>
+                <a href="#" class="sp-text-link" @click.prevent="openEditRoles(m)" x-text="joinRoles(m)"
+                  title="Click to edit roles"></a>
               </td>
-              <td>
+              <td class="sp-td-actions-inline">
+                <button class="sp-btn-sm" @click="openEditRoles(m)">Edit roles</button>
                 <button class="sp-btn-sm danger" @click="removeMember(m.user_id)">Remove</button>
               </td>
             </tr>
@@ -126,24 +138,20 @@
     </div>
 
     <!-- Edit roles modal -->
-    <div x-show="editModal" style="position: fixed; inset: 0; z-index: 100; display: flex; align-items: center; justify-content: center;"
-      x-transition.opacity @click.self="editModal = false">
-      <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5);"></div>
-      <div style="position: relative; background: var(--sp-bg-card); border-radius: var(--sp-radius-md); padding: var(--sp-space-xl); min-width: 360px; max-width: 480px; box-shadow: var(--sp-shadow-lg);">
-        <h3 style="font-family: var(--sp-font-display); font-weight: 600; margin: 0 0 var(--sp-space-md) 0;">
-          Edit Roles — <span x-text="editMember?.display_name"></span>
-        </h3>
-        <div style="margin-bottom: var(--sp-space-md);">
+    <div class="sp-modal-overlay" x-show="editModal" x-cloak
+      @click.self="editModal = false" @keydown.escape.window="editModal = false">
+      <div class="sp-modal" @click.stop>
+        <h2>Edit Roles &mdash; <span x-text="editMember?.display_name"></span></h2>
+        <div class="sp-mb-md">
           <template x-for="r in roles" :key="r.id">
-            <label style="display: flex; align-items: center; gap: var(--sp-space-sm); padding: var(--sp-space-xs) 0; cursor: pointer;">
-              <input type="checkbox" :value="r.id" x-model.number="editRoleIds"
-                style="width: 18px; height: 18px; accent-color: var(--sp-accent);">
+            <label class="sp-label-check-row">
+              <input type="checkbox" :value="r.id" x-model.number="editRoleIds" class="sp-checkbox-accent">
               <span x-text="r.name"></span>
             </label>
           </template>
         </div>
-        <div x-show="editError" style="color: var(--sp-danger); margin-bottom: var(--sp-space-sm); font-size: var(--sp-font-size-sm);" x-text="editError"></div>
-        <div style="display: flex; gap: var(--sp-space-sm); justify-content: flex-end;">
+        <div x-show="editError" class="sp-msg-danger-mb-sm" x-text="editError"></div>
+        <div class="sp-modal-actions">
           <button class="sp-btn" @click="editModal = false">Cancel</button>
           <button class="sp-btn sp-btn-primary" @click="saveRoles()" :disabled="editRoleIds.length === 0 || editSaving">
             <span x-show="!editSaving">Save</span>
@@ -156,16 +164,423 @@
 
   <!-- Modules tab -->
   <div x-show="tab === 'modules'" x-data='projectModules({ modules: {{ modules | tojson }}, projectKey: {{ project.key | tojson }} })'>
-    <div class="card" style="padding: var(--sp-space-lg);">
-      <h3 style="font-family: var(--sp-font-display); font-weight: 600; margin: 0 0 var(--sp-space-md) 0;">Enabled Modules</h3>
+    <div class="card sp-card-pad">
+      <h3 class="sp-card-h3">Enabled Modules</h3>
       <template x-for="(enabled, name) in modules" :key="name">
-        <div style="display: flex; align-items: center; gap: var(--sp-space-sm); padding: var(--sp-space-sm) 0; border-bottom: 1px solid var(--sp-border);">
-          <input type="checkbox" :checked="enabled" @change="toggleModule(name)" :disabled="saving" style="width: 18px; height: 18px; accent-color: var(--sp-accent); cursor: pointer;">
-          <label style="font-family: var(--sp-font-body); font-weight: 500; font-size: var(--sp-font-size-sm); text-transform: capitalize; cursor: pointer; color: var(--sp-text-primary);" x-text="name.replace(/_/g, ' ')"></label>
+        <div class="sp-module-row">
+          <input type="checkbox" :checked="enabled" @change="toggleModule(name)" :disabled="saving" class="sp-checkbox-accent-pointer">
+          <label class="sp-module-label" x-text="name.replace(/_/g, ' ')"></label>
         </div>
       </template>
-      <div x-show="message" class="flash" style="margin-top: var(--sp-space-md);" x-text="message"></div>
+      <div x-show="message" class="flash sp-mt-md" x-text="message"></div>
     </div>
+  </div>
+
+  <!-- Versions tab -->
+  <div x-show="tab === 'versions'" x-data='projectVersions({ versions: {{ versions_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_versions | tojson }} })'>
+
+    <!-- Flash messages -->
+    <template x-if="message">
+      <div class="flash" :class="messageType === 'success' ? 'flash-success' : 'flash-error'">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><template x-if="messageType === 'success'"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/></template><template x-if="messageType !== 'success'"><circle cx="12" cy="12" r="10"/></template><template x-if="messageType === 'success'"><path d="m9 11 3 3L22 4"/></template><template x-if="messageType !== 'success'"><path d="m15 9-6 6M9 9l6 6"/></template></svg>
+        <span x-text="message"></span>
+      </div>
+    </template>
+
+    <!-- Version list card -->
+    <div class="card">
+      <div class="sp-listcard-header">
+        <div>
+          <span class="sp-listcard-title">Versions</span>
+          <span class="sp-text-muted-xs-ml-sm" x-text="'(' + versions.length + ')'"></span>
+        </div>
+        <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+          New version
+        </button>
+      </div>
+
+      <!-- Empty state -->
+      <template x-if="versions.length === 0">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+          <h3>No versions yet</h3>
+          <p x-text="canManage ? 'Create versions to organize your issues into releases and milestones.' : 'No versions have been created for this project yet.'"></p>
+          <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+            Create first version
+          </button>
+        </div>
+      </template>
+
+      <!-- Table -->
+      <template x-if="versions.length > 0">
+        <table class="version-table">
+          <thead>
+            <tr>
+              <th class="sp-col-28"></th>
+              <th>Version</th>
+              <th>Status</th>
+              <th>Due date</th>
+              <th>Progress</th>
+              <th>Issues</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="v in versions" :key="v.id">
+              <tr>
+                <td>
+                  <svg class="drag-handle" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg>
+                </td>
+                <td>
+                  <a class="version-name" :href="'/projects/' + projectKey + '/roadmap/#version-' + v.id" x-text="v.name"></a>
+                  <div class="version-desc" x-show="v.description" x-text="v.description"></div>
+                </td>
+                <td>
+                  <span class="badge-version" :class="v.status" x-text="v.status"></span>
+                </td>
+                <td>
+                  <span class="date-val" :class="{ 'date-overdue': v.overdue }" x-text="v.due_date || '\u2014'"></span>
+                </td>
+                <td class="sp-field-min-140">
+                  <div class="progress-wrap">
+                    <div class="progress-track">
+                      <div class="progress-fill" :class="v.progress === 100 ? 'green' : 'gold'" :style="'width:' + v.progress + '%'"></div>
+                    </div>
+                    <span class="progress-text" x-text="v.progress + '%'"></span>
+                  </div>
+                </td>
+                <td>
+                  <div class="issue-counts">
+                    <span class="open-count" x-text="v.open_count + ' open'"></span>
+                    <span class="closed-count" x-text="v.closed_count + ' closed'"></span>
+                  </div>
+                </td>
+                <td class="td-actions sp-td-actions-right" x-show="canManage">
+                  <button class="action-link" @click="openEdit(v)" title="Edit">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                  </button>
+                  <button class="action-link danger" @click="confirmDelete(v)" title="Delete" x-show="v.open_count + v.closed_count === 0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </template>
+    </div>
+
+    <!-- Create / Edit Modal -->
+    <template x-if="showModal">
+      <div class="sp-scrim" @click.self="showModal = false" x-cloak>
+        <div class="sp-modal">
+          <div class="sp-modal-header">
+            <h2 x-text="editingVersion ? 'Edit version' : 'New version'"></h2>
+            <button class="sp-modal-close" @click="showModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <div class="form-group">
+              <label class="form-label">Name</label>
+              <input class="form-input" type="text" x-model="form.name" placeholder="e.g. v1.0.0, Sprint 12, Q2 2026">
+              <div class="form-hint">The version name shown in roadmap and issue dropdowns.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Description</label>
+              <textarea class="form-input sp-textarea-vert" x-model="form.description" placeholder="Optional summary of what this version includes..." rows="3"></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">Status</label>
+                <select class="form-input" x-model="form.status">
+                  <option value="open">Open</option>
+                  <option value="locked">Locked</option>
+                  <option value="closed">Closed</option>
+                </select>
+                <div class="form-hint">Locked versions cannot receive new issues.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Due date</label>
+                <input class="form-input" type="date" x-model="form.due_date">
+              </div>
+            </div>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showModal = false">Cancel</button>
+            <button class="sp-btn sp-btn-primary" @click="saveVersion()" :disabled="!canSaveVersion">
+              <span x-show="saving" class="sp-spinner-inline">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-spinner-svg"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                Saving...
+              </span>
+              <span x-show="!saving" x-text="editingVersion ? 'Save changes' : 'Create version'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Delete confirmation modal -->
+    <template x-if="showDeleteModal">
+      <div class="sp-scrim" @click.self="showDeleteModal = false" x-cloak>
+        <div class="sp-modal sp-modal--xs">
+          <div class="sp-modal-header">
+            <h2>Delete version</h2>
+            <button class="sp-modal-close" @click="showDeleteModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <p class="sp-modal-lead">
+              Are you sure you want to delete version <strong x-text="deletingVersion?.name"></strong>? This action cannot be undone.
+            </p>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">Cancel</button>
+            <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="deleting">
+              <span x-show="deleting">Deleting...</span>
+              <span x-show="!deleting">Delete version</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Metadata tab -->
+  <div x-show="tab === 'metadata'" x-data='projectMetadataSettings({ presets: {{ presets_data | tojson }}, enabledSlugs: {{ enabled_slugs | tojson }}, schemas: {{ schemas_data | tojson }}, trackers: {{ trackers_data | tojson }}, projectKey: {{ project.key | tojson }} })'>
+
+    <!-- Available Presets section -->
+    <div class="sp-section-label">Available Presets</div>
+    <p class="sp-section-lead">Enable presets to add predefined metadata fields to issues in this project. Each preset can be scoped to all trackers or a specific one.</p>
+
+    <div class="sp-preset-enable-grid">
+      <template x-for="preset in presets" :key="preset.slug">
+        <div class="sp-preset-enable-card" :class="{ enabled: isEnabled(preset.slug) }">
+          <div class="sp-pe-icon" :class="'icon-' + preset.icon">
+            <template x-if="preset.icon === 'code'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></template>
+            <template x-if="preset.icon === 'bug'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 2l1.88 1.88M14.12 3.88L16 2M9 7.13v-1a3 3 0 016 0v1"/><path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 014-4h4a4 4 0 014 4v3c0 3.3-2.7 6-6 6z"/></svg></template>
+            <template x-if="preset.icon === 'megaphone'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l18-5v12L3 13v-2z"/></svg></template>
+            <template x-if="preset.icon === 'sprint'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></template>
+            <template x-if="preset.icon === 'book'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg></template>
+            <template x-if="!isKnownIcon(preset.icon)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg></template>
+          </div>
+          <div class="sp-pe-name" x-text="preset.name"></div>
+          <div class="sp-pe-desc" x-text="preset.description"></div>
+          <div class="sp-pe-fields">
+            <template x-for="f in schemaFields(preset.schema_definition)" :key="f">
+              <span class="sp-pe-field" x-text="f"></span>
+            </template>
+          </div>
+          <div class="sp-pe-footer">
+            <template x-if="isEnabled(preset.slug)">
+              <div class="sp-justify-between-full">
+                <span class="sp-pe-badge-enabled">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+                  Enabled
+                  <span class="sp-pe-scope" x-text="getEnabledScope(preset.slug)"></span>
+                </span>
+                <button class="sp-btn sp-btn-sm sp-btn-danger-subtle" @click="disablePreset(preset.slug)">Remove</button>
+              </div>
+            </template>
+            <template x-if="!isEnabled(preset.slug)">
+              <div class="sp-cluster-center-sm sp-w-full">
+                <button class="sp-btn sp-btn-sm sp-btn-success-subtle sp-flex-1" @click="enablePreset(preset.slug)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+                  Enable
+                </button>
+                <div class="sp-scope-select">
+                  <select x-model="enableScope[preset.slug]">
+                    <option value="">All trackers</option>
+                    <template x-for="t in trackers" :key="t.id">
+                      <option :value="t.id" x-text="t.name"></option>
+                    </template>
+                  </select>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Custom Schemas section -->
+    <div class="sp-section-label">Custom Schemas</div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Project-specific metadata schemas</h3>
+        <button class="sp-btn sp-btn-sm sp-btn-primary" @click="openCreateSchema()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
+          New Schema
+        </button>
+      </div>
+
+      <!-- Table -->
+      <template x-if="schemas.length > 0">
+        <table class="sp-schema-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Scope</th>
+              <th>Fields</th>
+              <th>Usage</th>
+              <th class="sp-col-100"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="schema in schemas" :key="schema.id">
+              <tr>
+                <td>
+                  <span class="sp-schema-name" x-text="schema.name"></span>
+                  <template x-if="schema.preset_slug">
+                    <span class="sp-text-muted-xs-ml-4" x-text="'from ' + schema.preset_slug"></span>
+                  </template>
+                </td>
+                <td>
+                  <span class="sp-schema-scope">
+                    <template x-if="!schema.tracker_id">
+                      <span>All trackers</span>
+                    </template>
+                    <template x-if="schema.tracker_id">
+                      <span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-12 sp-icon-inline-mid"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+                        <span x-text="trackerName(schema.tracker_id)"></span>
+                      </span>
+                    </template>
+                  </span>
+                </td>
+                <td>
+                  <div class="sp-schema-fields">
+                    <template x-for="f in schemaFields(schema.schema_definition)" :key="f">
+                      <span class="sp-schema-field" x-text="f"></span>
+                    </template>
+                  </div>
+                </td>
+                <td>
+                  <template x-if="schema.usage_count > 0">
+                    <span class="sp-schema-usage in-use" x-text="schema.usage_count + ' issues'"></span>
+                  </template>
+                  <template x-if="schema.usage_count === 0">
+                    <span class="sp-schema-usage no-use">No usage</span>
+                  </template>
+                </td>
+                <td>
+                  <div class="sp-schema-actions">
+                    <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="openEditSchema(schema)" title="Edit">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button class="sp-btn sp-btn-sm sp-btn-danger-subtle" @click="confirmDeleteSchema(schema)" title="Delete" :disabled="schema.usage_count > 0">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </template>
+
+      <!-- Empty state -->
+      <template x-if="schemas.length === 0">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+          <h3>No metadata schemas</h3>
+          <p>Enable a preset above or create a custom schema to add metadata fields to issues.</p>
+        </div>
+      </template>
+    </div>
+
+    <!-- Create/Edit Schema Modal -->
+    <template x-if="showSchemaModal">
+      <div class="sp-scrim" @click.self="showSchemaModal = false" x-cloak>
+        <div class="sp-modal">
+          <div class="sp-modal-header">
+            <h2 x-text="editingSchema ? 'Edit Schema' : 'New Custom Schema'"></h2>
+            <button class="sp-modal-close" @click="showSchemaModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <div class="form-group">
+              <label class="form-label">Name</label>
+              <input class="form-input" type="text" x-model="schemaForm.name" placeholder="e.g. Deployment Tracking">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Tracker Scope</label>
+              <select class="form-input" x-model="schemaForm.tracker_id">
+                <option value="">All trackers</option>
+                <template x-for="t in trackers" :key="t.id">
+                  <option :value="t.id" x-text="t.name"></option>
+                </template>
+              </select>
+              <div class="form-hint">Limit this schema to a specific tracker, or leave as "All trackers" for project-wide.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Schema Definition (JSON)</label>
+              <textarea class="form-input mono" :class="{ error: schemaError }" rows="10" x-model="schemaForm.schema_definition_raw" @blur="validateSchema()" placeholder='{"type": "object", "properties": {"field": {"type": "string"}}}'></textarea>
+              <template x-if="schemaError">
+                <div class="form-error">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+                  <span x-text="schemaError"></span>
+                </div>
+              </template>
+              <template x-if="!schemaError">
+                <div class="form-hint">JSON Schema with "type": "object" and "properties" defining the fields.</div>
+              </template>
+            </div>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showSchemaModal = false">Cancel</button>
+            <button class="sp-btn sp-btn-primary" @click="saveSchema()" :disabled="schemaError">
+              <span x-text="editingSchema ? 'Save Changes' : 'Create Schema'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Delete Schema Confirmation Modal -->
+    <template x-if="showDeleteModal">
+      <div class="sp-scrim" @click.self="showDeleteModal = false" x-cloak>
+        <div class="sp-modal sp-modal--sm">
+          <div class="sp-modal-body sp-modal-body--center">
+            <div class="sp-danger-circle">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-24"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M10 11v6M14 11v6"/></svg>
+            </div>
+            <h3 class="sp-modal-heading-md">Delete schema?</h3>
+            <p class="sp-modal-lead">This will permanently remove <strong x-text="deleteTarget?.name"></strong> from this project. Issues that already have metadata will retain their data.</p>
+          </div>
+          <div class="sp-modal-footer sp-modal-footer--center">
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">Cancel</button>
+            <button class="sp-btn sp-btn-danger" @click="doDeleteSchema()">Delete Schema</button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Disable Warning Modal -->
+    <template x-if="showDisableWarning">
+      <div class="sp-scrim" @click.self="showDisableWarning = false" x-cloak>
+        <div class="sp-modal sp-modal--md">
+          <div class="sp-modal-body sp-modal-body--pad-2xl">
+            <div class="sp-warning-banner sp-mb-lg">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4m0 4h.01"/></svg>
+              <div>
+                <strong>Cannot remove this preset</strong><br>
+                <span x-text="disableWarningMsg"></span>
+              </div>
+            </div>
+          </div>
+          <div class="sp-modal-footer sp-modal-footer--center">
+            <button class="sp-btn sp-btn-ghost" @click="showDisableWarning = false">Understood</button>
+          </div>
+        </div>
+      </div>
+    </template>
+
   </div>
 </div>
 {% endblock %}

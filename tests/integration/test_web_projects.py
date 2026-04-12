@@ -27,9 +27,10 @@ async def _create_project(
     name: str = "Web Test Project",
     identifier: str = "web-test-proj",
     key: str = "WTP",
+    is_public: bool = False,
 ) -> object:
     """Create a project via the service layer and commit."""
-    data = ProjectCreate(name=name, identifier=identifier, key=key)
+    data = ProjectCreate(name=name, identifier=identifier, key=key, is_public=is_public)
     project = await _svc.create(db_session, data, user)
     await db_session.commit()
     await db_session.refresh(project)
@@ -112,7 +113,7 @@ async def test_project_settings_requires_admin(
 ):
     """GET /projects/{key}/settings as regular user returns 403."""
     user = auth_client.state.user
-    project = await _create_project(db_session, user, key="WSR", identifier="web-settings-regular")
+    project = await _create_project(db_session, user, key="WSR", identifier="web-settings-regular", is_public=True)
     token = auth_client.state.token
     resp = await auth_client.get(
         f"/projects/{project.key}/settings/",
@@ -172,6 +173,7 @@ async def test_projects_list_private_parent_shows_child_as_root(
         identifier="pub-child",
         key="PCHD",
         parent_key="PPAR",
+        is_public=True,
     )
     child = await _svc.create(db_session, child_data, admin)
     await db_session.commit()

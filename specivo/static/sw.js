@@ -12,7 +12,12 @@ var STATIC_ASSETS = [
 self.addEventListener('install', function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(STATIC_ASSETS);
+      // Build credential-free Request objects to avoid Cache API rejection
+      // when the page was loaded with HTTP Basic Auth credentials in the URL.
+      var requests = STATIC_ASSETS.map(function (path) {
+        return new Request(new URL(path, self.location.origin).href);
+      });
+      return cache.addAll(requests);
     })
   );
   self.skipWaiting();

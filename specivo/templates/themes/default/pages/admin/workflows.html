@@ -88,14 +88,18 @@ function workflowEditor() {
     async loadTransitions() {
       if (!this.selectedTracker || !this.selectedRole) return;
       try {
-        const resp = await fetch(`/api/v1/admin/workflows/transitions/?tracker_id=${this.selectedTracker}&role_id=${this.selectedRole}`);
+        var resp = await spFetch('/api/v1/admin/workflows/transitions/?tracker_id=' + this.selectedTracker + '&role_id=' + this.selectedRole);
         if (resp.ok) {
           this.transitions = await resp.json();
         }
       } catch (e) {}
     },
     isAllowed(fromId, toId) {
-      return this.transitions.some(t => t.old_status_id === fromId && t.new_status_id === toId);
+      for (var i = 0; i < this.transitions.length; i++) {
+        var t = this.transitions[i];
+        if (t.old_status_id === fromId && t.new_status_id === toId) return true;
+      }
+      return false;
     },
     async toggleTransition(fromId, toId, checked) {
       // Managed via API — placeholder for full implementation

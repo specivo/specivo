@@ -67,39 +67,7 @@
 
   {# ── Send Test Email ── #}
   <div class="card" style="padding:var(--sp-space-xl);"
-       x-data='{
-         to: "",
-         subject: "Specivo test email",
-         body: "This is a test email from Specivo to verify SMTP configuration.\n\nIf you received this message, email delivery is working correctly.",
-         sending: false,
-         result: null,
-         resultOk: false,
-         async sendTest() {
-           if (!this.to) return;
-           this.sending = true;
-           this.result = null;
-           try {
-             const resp = await fetch("/api/v1/admin/test-email/", {
-               method: "POST",
-               headers: { "Content-Type": "application/json" },
-               body: JSON.stringify({ to: this.to, subject: this.subject, body: this.body })
-             });
-             const data = await resp.json();
-             if (data.ok) {
-               this.result = "Test email sent to " + this.to;
-               this.resultOk = true;
-             } else {
-               this.result = data.error || "Unknown error";
-               this.resultOk = false;
-             }
-           } catch (e) {
-             this.result = "Request failed: " + e.message;
-             this.resultOk = false;
-           } finally {
-             this.sending = false;
-           }
-         }
-       }'>
+       x-data="testEmailForm">
     <h2 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-xs);">{% trans %}Send Test Email{% endtrans %}</h2>
     <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-xl);line-height:1.5;">{% trans %}Verify your SMTP configuration by sending a test message.{% endtrans %}</p>
 

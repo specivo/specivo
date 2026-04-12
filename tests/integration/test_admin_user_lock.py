@@ -57,9 +57,7 @@ async def _get_user(db: AsyncSession, user_id: int) -> User | None:
 
 
 class TestLockUser:
-    async def test_lock_user_success(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_lock_user_success(self, admin_client: AsyncClient, db_session: AsyncSession):
         """Admin can lock an active user account."""
         target = await _create_user(db_session, login="lockme")
         resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/lock/")
@@ -73,9 +71,7 @@ class TestLockUser:
         assert db_user is not None
         assert db_user.status == "locked"
 
-    async def test_lock_user_with_locked_until(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_lock_user_with_locked_until(self, admin_client: AsyncClient, db_session: AsyncSession):
         """Admin can lock a user with an optional locked_until datetime."""
         target = await _create_user(db_session, login="lockuntil")
         future = (datetime.now(UTC) + timedelta(hours=24)).isoformat()
@@ -90,34 +86,26 @@ class TestLockUser:
         assert db_user.status == "locked"
         assert db_user.locked_until is not None
 
-    async def test_lock_already_locked_user_is_idempotent(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_lock_already_locked_user_is_idempotent(self, admin_client: AsyncClient, db_session: AsyncSession):
         """Locking an already-locked user returns 200 (idempotent)."""
         target = await _create_user(db_session, login="alreadylocked", status="locked")
         resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/lock/")
         assert resp.status_code == 200
         assert resp.json()["status"] == "locked"
 
-    async def test_lock_nonexistent_user_returns_404(
-        self, admin_client: AsyncClient
-    ):
+    async def test_lock_nonexistent_user_returns_404(self, admin_client: AsyncClient):
         """Locking a nonexistent user returns 404."""
         resp = await admin_client.post("/api/v1/admin/users/999999/lock/")
         assert resp.status_code == 404
 
-    async def test_cannot_lock_self(
-        self, admin_client: AsyncClient
-    ):
+    async def test_cannot_lock_self(self, admin_client: AsyncClient):
         """Admin cannot lock their own account (400)."""
         # admin_client.state.user holds the authenticated admin user
         admin_user = admin_client.state.user
         resp = await admin_client.post(f"/api/v1/admin/users/{admin_user.id}/lock/")
         assert resp.status_code == 400
 
-    async def test_non_admin_cannot_lock(
-        self, auth_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_non_admin_cannot_lock(self, auth_client: AsyncClient, db_session: AsyncSession):
         """Non-admin user gets 403 when trying to lock."""
         target = await _create_user(db_session, login="victim")
         resp = await auth_client.post(f"/api/v1/admin/users/{target.id}/lock/")
@@ -130,14 +118,10 @@ class TestLockUser:
 
 
 class TestUnlockUser:
-    async def test_unlock_user_success(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_unlock_user_success(self, admin_client: AsyncClient, db_session: AsyncSession):
         """Admin can unlock a locked user account."""
         future = datetime.now(UTC) + timedelta(hours=1)
-        target = await _create_user(
-            db_session, login="unlockme", status="locked", locked_until=future
-        )
+        target = await _create_user(db_session, login="unlockme", status="locked", locked_until=future)
         resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/unlock/")
         assert resp.status_code == 200
 
@@ -150,23 +134,17 @@ class TestUnlockUser:
         assert db_user.status == "active"
         assert db_user.locked_until is None
 
-    async def test_unlock_already_active_user_is_idempotent(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_unlock_already_active_user_is_idempotent(self, admin_client: AsyncClient, db_session: AsyncSession):
         """Unlocking an already-active user returns 200 (idempotent)."""
         target = await _create_user(db_session, login="alreadyactive")
         resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/unlock/")
         assert resp.status_code == 200
         assert resp.json()["status"] == "active"
 
-    async def test_unlock_clears_locked_until(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_unlock_clears_locked_until(self, admin_client: AsyncClient, db_session: AsyncSession):
         """Unlock must clear the locked_until timestamp."""
         future = datetime.now(UTC) + timedelta(hours=24)
-        target = await _create_user(
-            db_session, login="clearlock", status="locked", locked_until=future
-        )
+        target = await _create_user(db_session, login="clearlock", status="locked", locked_until=future)
         resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/unlock/")
         assert resp.status_code == 200
 
@@ -174,32 +152,24 @@ class TestUnlockUser:
         assert db_user is not None
         assert db_user.locked_until is None
 
-    async def test_unlock_nonexistent_user_returns_404(
-        self, admin_client: AsyncClient
-    ):
+    async def test_unlock_nonexistent_user_returns_404(self, admin_client: AsyncClient):
         """Unlocking a nonexistent user returns 404."""
         resp = await admin_client.post("/api/v1/admin/users/999999/unlock/")
         assert resp.status_code == 404
 
-    async def test_cannot_unlock_self(
-        self, admin_client: AsyncClient
-    ):
+    async def test_cannot_unlock_self(self, admin_client: AsyncClient):
         """Admin cannot unlock their own account (400)."""
         admin_user = admin_client.state.user
         resp = await admin_client.post(f"/api/v1/admin/users/{admin_user.id}/unlock/")
         assert resp.status_code == 400
 
-    async def test_non_admin_cannot_unlock(
-        self, auth_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_non_admin_cannot_unlock(self, auth_client: AsyncClient, db_session: AsyncSession):
         """Non-admin user gets 403 when trying to unlock."""
         target = await _create_user(db_session, login="victim2", status="locked")
         resp = await auth_client.post(f"/api/v1/admin/users/{target.id}/unlock/")
         assert resp.status_code == 403
 
-    async def test_unlock_resets_failed_login_count(
-        self, admin_client: AsyncClient, db_session: AsyncSession
-    ):
+    async def test_unlock_resets_failed_login_count(self, admin_client: AsyncClient, db_session: AsyncSession):
         """Unlock must also reset the failed login counter."""
         target = await _create_user(
             db_session,

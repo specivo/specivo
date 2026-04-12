@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
 from pathlib import Path
 
 from fastapi import Depends, Request
@@ -21,6 +23,34 @@ logger = logging.getLogger(__name__)
 # Plugin asset URLs populated by setup_plugin_assets() at startup.
 _plugin_css_files: list[str] = []
 _plugin_js_files: list[str] = []
+
+
+def _resolve_git_commit() -> str:
+    """Resolve the short git commit hash once at import time.
+
+    Tries ``/app`` first (Docker), then the package source directory (local dev),
+    and finally falls back to the ``GIT_COMMIT`` environment variable.
+    """
+    # The source tree lives two levels above this file (specivo/web/deps.py).
+    _src_dir = str(Path(__file__).resolve().parent.parent.parent)
+    for cwd in ("/app", _src_dir):
+        try:
+            result = subprocess.run(  # noqa: S603, S607
+                ["git", "rev-parse", "--short", "HEAD"],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                cwd=cwd,
+            )
+            commit = result.stdout.strip()
+            if commit:
+                return commit
+        except Exception:
+            continue
+    return os.environ.get("GIT_COMMIT", "")
+
+
+_git_commit: str = _resolve_git_commit()
 
 # Versioned static filenames populated by setup_versioned_assets() at startup.
 _versioned_assets: dict[str, str] = {
@@ -42,8 +72,69 @@ def get_brand_name() -> str:
     return _brand_name
 
 
-def _timeago(dt, mode="smart") -> str:
+async def get_active_sprint_id(db, project_id: int) -> int | None:
+    """Return the active sprint ID for a project, or None."""
+    from sqlalchemy import select
+
+    from specivo.models.sprint import Sprint
+
+    result = await db.execute(
+        select(Sprint.id).where(Sprint.project_id == project_id, Sprint.status == "active")
+    )
+    row = result.first()
+    return row[0] if row else None
+
+
+def _to_user_tz(dt, tz_name: str = "UTC"):
+    """Convert a UTC datetime to the given IANA timezone.
+
+    Returns a timezone-aware datetime in the user's local timezone.
+    If *tz_name* is invalid, falls back to UTC silently.
+    """
+    if dt is None:
+        return None
+    from datetime import UTC
+    from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=UTC)
+
+    try:
+        tz = ZoneInfo(tz_name) if tz_name else UTC
+    except (ZoneInfoNotFoundError, KeyError):
+        tz = UTC
+
+    return dt.astimezone(tz)
+
+
+def _localtime(dt, tz_name: str = "UTC") -> str:
+    """Jinja2 filter: convert UTC datetime to user timezone, format as 'YYYY-MM-DD HH:MM'.
+
+    Usage in templates: ``{{ dt | localtime(user.timezone) }}``
+    """
+    local_dt = _to_user_tz(dt, tz_name)
+    if local_dt is None:
+        return ""
+    return local_dt.strftime("%Y-%m-%d %H:%M")
+
+
+def _localdt(dt, tz_name: str = "UTC", fmt: str = "%Y-%m-%d %H:%M") -> str:
+    """Jinja2 filter: convert UTC datetime to user timezone with custom format.
+
+    Usage in templates: ``{{ dt | localdt(user.timezone, '%b %d, %Y at %H:%M') }}``
+    """
+    local_dt = _to_user_tz(dt, tz_name)
+    if local_dt is None:
+        return ""
+    return local_dt.strftime(fmt)
+
+
+def _timeago(dt, tz_name: str = "UTC", mode: str = "smart") -> str:
     """Convert a datetime to a human-readable relative time string.
+
+    The *tz_name* parameter is used when the mode falls back to an absolute
+    date — relative times ("5 min ago") are timezone-agnostic, but "today"
+    vs "yesterday" boundaries and formatted dates use the user's timezone.
 
     Modes:
       "smart" (default): today → relative, yesterday → "Yesterday", older → date
@@ -60,13 +151,17 @@ def _timeago(dt, mode="smart") -> str:
 
     delta = now - dt
     seconds = int(delta.total_seconds())
-    today = now.date()
-    dt_date = dt.date()
+
+    # Convert to user timezone for date boundary comparisons
+    local_dt = _to_user_tz(dt, tz_name)
+    local_now = _to_user_tz(now, tz_name)
+    today = local_now.date()
+    dt_date = local_dt.date()
 
     if mode == "date":
         if dt_date.year == today.year:
-            return dt.strftime("%b %d")
-        return dt.strftime("%b %d, %Y")
+            return local_dt.strftime("%b %d")
+        return local_dt.strftime("%b %d, %Y")
 
     # Relative time calculation (shared by "smart" and "relative")
     def _relative() -> str:
@@ -101,9 +196,9 @@ def _timeago(dt, mode="smart") -> str:
         return "Yesterday"
 
     if dt_date.year == today.year:
-        return dt.strftime("%b %d")
+        return local_dt.strftime("%b %d")
 
-    return dt.strftime("%b %d, %Y")
+    return local_dt.strftime("%b %d, %Y")
 
 
 def get_templates(theme: str = "default") -> Jinja2Templates:
@@ -175,24 +270,8 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     templates.env.globals["debug"] = settings.debug
     templates.env.globals["app_version"] = settings.version
 
-    # Git commit hash (debug only, resolved once at startup)
-    if settings.debug:
-        _commit = ""
-        try:
-            import subprocess
-
-            _commit = subprocess.run(
-                ["git", "rev-parse", "--short", "HEAD"],
-                capture_output=True, text=True, timeout=2, cwd="/app",
-            ).stdout.strip()
-        except Exception:
-            pass
-        if not _commit:
-            # Fallback: read from GIT_COMMIT env var or VERSION file
-            import os
-
-            _commit = os.environ.get("GIT_COMMIT", "")
-        templates.env.globals["git_commit"] = _commit
+    # Git commit hash (debug only, resolved once at import time)
+    templates.env.globals["git_commit"] = _git_commit if settings.debug else ""
 
     # Markdown filter for wiki content
     import markdown as _md
@@ -280,8 +359,22 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
 
     _wiki_link_re = __import__("re").compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
 
-    def _render_wiki_markdown(text: str, project_key: str = "") -> markupsafe.Markup:
-        """Render markdown with wiki [[Page Name]] link support."""
+    _img_src_re = __import__("re").compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+
+    # Issue reference: PROJ-123, but not inside markdown links or wiki links
+    _issue_ref_re = __import__("re").compile(r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b")
+
+    def _render_wiki_markdown(
+        text: str,
+        project_key: str = "",
+        attachment_map: dict | None = None,
+    ) -> markupsafe.Markup:
+        """Render markdown with wiki [[Page Name]] link support.
+
+        ``attachment_map``: optional dict mapping filenames to attachment
+        download URLs.  When provided, bare-filename image references like
+        ``![alt](chart.png)`` are rewritten to the attachment URL.
+        """
         if not text:
             return markupsafe.Markup("")
 
@@ -301,6 +394,21 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
             return f"[{display}]({url})"
 
         processed = _wiki_link_re.sub(_replace_wiki_link, text)
+
+        # Rewrite bare-filename image references to attachment URLs
+        if attachment_map:
+
+            def _resolve_image(m):
+                alt, src = m.group(1), m.group(2)
+                if src in attachment_map:
+                    return f"![{alt}]({attachment_map[src]})"
+                return m.group(0)
+
+            processed = _img_src_re.sub(_resolve_image, processed)
+
+        # Auto-link issue references: PROJ-123 → [PROJ-123](/issue/PROJ-123/)
+        processed = _issue_ref_re.sub(r"[\1](/issue/\1/)", processed)
+
         rendered = _md.markdown(
             processed,
             extensions=["fenced_code", "tables", "toc", "codehilite"],
@@ -327,6 +435,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
 
     # Timeago filter for relative timestamps
     templates.env.filters["timeago"] = _timeago
+
+    # Timezone-aware datetime filters
+    templates.env.filters["localtime"] = _localtime
+    templates.env.filters["localdt"] = _localdt
 
     return templates
 
@@ -429,7 +541,7 @@ async def get_current_user_optional(
                     pass
 
             svc = AuthService()
-            access_token, new_refresh_token = await svc.refresh(
+            access_token, new_refresh_token, refreshed_user = await svc.refresh(
                 session=db,
                 refresh_token_raw=refresh_token_raw,
                 remember=remember,
@@ -442,10 +554,9 @@ async def get_current_user_optional(
                 "remember": remember,
             }
 
-            # Re-authenticate with the fresh access token to get the User.
-            # Patch the cookie on the request so get_current_user reads it.
-            request._cookies = {**request.cookies, "access_token": access_token}
-            return await get_current_user(request, db)
+            # The refresh() call already looked up the user to mint the token,
+            # so we return it directly rather than re-querying.
+            return refreshed_user
         except Exception:
             logger.debug("Silent token refresh failed", exc_info=True)
             return None

@@ -109,6 +109,7 @@ async def create_user(
     except Exception:
         pass
 
+    await db.commit()  # commit before response to avoid reload race condition
     return UserOut.model_validate(user)
 
 

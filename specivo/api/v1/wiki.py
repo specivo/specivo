@@ -24,6 +24,7 @@ from specivo.schemas.wiki import (
     WikiPageRename,
     WikiPageUpdate,
     WikiPageWithContent,
+    WikiTrashListResponse,
     WikiVersionsResponse,
 )
 from specivo.services.permission_service import check_permission
@@ -63,6 +64,12 @@ async def _require_manage_wiki(user: User, project_id: int, db: AsyncSession) ->
     """Raise 403 if the user lacks manage_wiki permission."""
     if not await check_permission(user, project_id, "manage_wiki", db):
         raise PermissionDeniedError("You do not have permission to manage wiki pages")
+
+
+async def _require_delete_wiki(user: User, project_id: int, db: AsyncSession) -> None:
+    """Raise 403 if the user lacks delete_wiki_pages permission."""
+    if not await check_permission(user, project_id, "delete_wiki_pages", db):
+        raise PermissionDeniedError("You do not have permission to delete wiki pages")
 
 
 def _page_with_content(page: WikiPage, content: WikiContent) -> WikiPageWithContent:
@@ -175,6 +182,78 @@ async def get_wiki_graph(
 
 
 @router.get(
+    "/projects/{project_key}/wiki/trash/",
+    response_model=WikiTrashListResponse,
+)
+async def list_deleted_wiki_pages(
+    project_key: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WikiTrashListResponse:
+    """List soft-deleted wiki pages (trash)."""
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _require_wiki_module(project.id, db)
+    await _require_delete_wiki(current_user, project.id, db)
+
+    pages = await _service.list_deleted_pages(db, project.id)
+    from specivo.schemas.wiki import WikiDeletedPageOut
+
+    return WikiTrashListResponse(
+        items=[
+            WikiDeletedPageOut(
+                id=p.id,
+                title=p.title,
+                slug=p.slug,
+                parent_id=p.parent_id,
+                protected=p.protected,
+                lock_version=p.lock_version,
+                created_at=p.created_at,
+                updated_at=p.updated_at,
+                deleted_at=p.deleted_at,
+                deleted_by_id=p.deleted_by_id,
+            )
+            for p in pages
+        ]
+    )
+
+
+@router.post(
+    "/projects/{project_key}/wiki/{slug}/restore/",
+    response_model=WikiPageOut,
+)
+async def restore_wiki_page(
+    project_key: str,
+    slug: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> WikiPageOut:
+    """Restore a soft-deleted wiki page."""
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _require_wiki_module(project.id, db)
+    await _require_delete_wiki(current_user, project.id, db)
+
+    # Find the deleted page by slug (need to query without the deleted_at filter)
+    wiki = await _service.get_or_create_wiki(db, project.id)
+    from sqlalchemy import select as sa_select
+
+    stmt = sa_select(WikiPage).where(
+        WikiPage.wiki_id == wiki.id,
+        WikiPage.slug == slug,
+        WikiPage.deleted_at.isnot(None),
+    )
+    result = await db.execute(stmt)
+    page = result.scalar_one_or_none()
+    if page is None:
+        from specivo.core.exceptions import NotFoundError
+
+        raise NotFoundError(f"Deleted wiki page '{slug}' not found")
+
+    await _service.restore_page(db, page.id)
+    await db.refresh(page)
+    return _page_out(page)
+
+
+@router.get(
     "/projects/{project_key}/wiki/{slug}/",
     response_model=WikiPageWithContent,
 )
@@ -274,13 +353,13 @@ async def delete_wiki_page(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete a wiki page."""
+    """Soft-delete a wiki page."""
     project = await _project_service.get_by_key(db, project_key.upper())
     await _require_wiki_module(project.id, db)
-    await _require_manage_wiki(current_user, project.id, db)
+    await _require_delete_wiki(current_user, project.id, db)
 
     page, _ = await _service.get_page(db, project.id, slug)
-    await _service.delete_page(db, page.id)
+    await _service.delete_page(db, page.id, deleted_by=current_user)
 
 
 @router.post(

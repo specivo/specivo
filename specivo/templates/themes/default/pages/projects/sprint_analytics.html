@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}Sprint Analytics - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Sprints", "url": "/projects/" ~ project.key ~ "/sprints/"},
+  {"label": "Analytics"}
+]) }}
+
+<div class="page-header">
+  <h1>Sprint Analytics</h1>
+  <div class="page-header-actions">
+    <a href="/projects/{{ project.key }}/sprints/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
+      Back to Sprints
+    </a>
+  </div>
+</div>
+
+{# ============ SUMMARY STATS ============ #}
+<div class="analytics-stats">
+  <div class="analytics-stat-card">
+    <div class="analytics-stat-value">{{ avg_velocity }}</div>
+    <div class="analytics-stat-label">Avg Velocity</div>
+  </div>
+  <div class="analytics-stat-card">
+    <div class="analytics-stat-value">{{ num_completed }}</div>
+    <div class="analytics-stat-label">Sprints Completed</div>
+  </div>
+  <div class="analytics-stat-card">
+    <div class="analytics-stat-value">{{ avg_completion_rate }}%</div>
+    <div class="analytics-stat-label">Avg Completion Rate</div>
+  </div>
+  <div class="analytics-stat-card">
+    <div class="analytics-stat-value">{{ avg_duration }}d</div>
+    <div class="analytics-stat-label">Avg Sprint Duration</div>
+  </div>
+</div>
+
+{# ============ CHARTS ============ #}
+<div class="analytics-layout">
+  {# Left: Velocity chart (CSS bar chart) #}
+  <div class="analytics-chart-card">
+    <h2>Velocity</h2>
+    {% if velocity_data %}
+    {% set max_val = namespace(v=1) %}
+    {% for s in velocity_data %}
+      {% if s.committed > max_val.v %}{% set max_val.v = s.committed %}{% endif %}
+      {% if s.completed > max_val.v %}{% set max_val.v = s.completed %}{% endif %}
+    {% endfor %}
+    <div class="velocity-chart">
+      <div class="velocity-chart-bars">
+        {% for s in velocity_data %}
+        <div class="velocity-chart-group">
+          <div class="velocity-chart-pair">
+            <div class="velocity-chart-bar velocity-chart-committed" style="height:{{ (s.committed * 100 / max_val.v) | round }}%" title="Committed: {{ s.committed }}">
+              <span class="velocity-chart-bar-label">{{ s.committed }}</span>
+            </div>
+            <div class="velocity-chart-bar velocity-chart-completed" style="height:{{ (s.completed * 100 / max_val.v) | round }}%" title="Completed: {{ s.completed }}">
+              <span class="velocity-chart-bar-label">{{ s.completed }}</span>
+            </div>
+          </div>
+          <div class="velocity-chart-label" title="{{ s.name }}">{{ s.name | truncate(12, True) }}</div>
+        </div>
+        {% endfor %}
+      </div>
+      {# Average line overlay #}
+      {% if avg_velocity > 0 and max_val.v > 0 %}
+      <div class="velocity-chart-avg" style="bottom:{{ (avg_velocity * 100 / max_val.v) | round }}%">
+        <span class="velocity-chart-avg-label">avg {{ avg_velocity }}</span>
+      </div>
+      {% endif %}
+    </div>
+    <div class="velocity-chart-legend">
+      <span class="velocity-legend-item"><span class="velocity-legend-swatch velocity-legend-committed"></span> Committed</span>
+      <span class="velocity-legend-item"><span class="velocity-legend-swatch velocity-legend-completed"></span> Completed</span>
+    </div>
+    {% else %}
+    <div class="analytics-empty">No sprint data available yet.</div>
+    {% endif %}
+  </div>
+
+  {# Right: Burndown placeholder #}
+  <div class="analytics-chart-card analytics-chart-placeholder">
+    <h2>Burndown</h2>
+    <div class="analytics-coming-soon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.3">
+        <path d="M3 3v18h18"/><polyline points="18 9 12 15 9 12 3 18"/>
+      </svg>
+      <div>Coming soon</div>
+      <div class="analytics-coming-soon-sub">Daily burndown tracking will be available in a future update.</div>
+    </div>
+  </div>
+</div>
+
+{# ============ SPRINT HISTORY TABLE ============ #}
+{% if velocity_data %}
+<div class="analytics-table-card">
+  <h2>Sprint History</h2>
+  <div class="analytics-table-wrap">
+    <table class="velocity-table">
+      <thead>
+        <tr>
+          <th>Sprint</th>
+          <th>Status</th>
+          <th>Duration</th>
+          <th class="text-right">Committed</th>
+          <th class="text-right">Completed</th>
+          <th>Completion</th>
+          <th class="text-right">Velocity</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in velocity_data | reverse %}
+        {% if loop.index <= 5 %}
+        <tr>
+          <td>
+            <a href="/projects/{{ project.key }}/sprints/{{ s.sprint_id }}/board/" class="velocity-table-link">{{ s.name }}</a>
+          </td>
+          <td>
+            {% if s.get('active') %}
+            <span class="badge-status in-progress">Active</span>
+            {% else %}
+            <span class="badge-status closed">Completed</span>
+            {% endif %}
+          </td>
+          <td>{{ s.duration }}d</td>
+          <td class="text-right">{{ s.committed }}</td>
+          <td class="text-right">{{ s.completed }}</td>
+          <td>
+            <div class="velocity-table-bar-wrap">
+              <div class="velocity-table-bar">
+                <div class="velocity-table-bar-fill" style="width:{{ s.completion_rate }}%;background:{% if s.completion_rate >= 90 %}var(--sp-success){% elif s.completion_rate >= 70 %}var(--sp-accent){% else %}var(--sp-warning){% endif %}"></div>
+              </div>
+              <span class="velocity-table-bar-text">{{ s.completion_rate }}%</span>
+            </div>
+          </td>
+          <td class="text-right" style="font-weight:600;color:var(--sp-accent)">{{ s.completed }}</td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+      {% if num_completed > 0 %}
+      <tfoot>
+        <tr>
+          <td style="font-weight:600">Average</td>
+          <td></td>
+          <td>{{ avg_duration }}d</td>
+          <td class="text-right">{{ avg_committed }}</td>
+          <td class="text-right">{{ avg_velocity }}</td>
+          <td>
+            <div class="velocity-table-bar-wrap">
+              <div class="velocity-table-bar">
+                <div class="velocity-table-bar-fill" style="width:{{ avg_completion_rate }}%;background:var(--sp-accent)"></div>
+              </div>
+              <span class="velocity-table-bar-text">{{ avg_completion_rate }}%</span>
+            </div>
+          </td>
+          <td class="text-right" style="font-weight:600;color:var(--sp-accent)">{{ avg_velocity }}</td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

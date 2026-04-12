@@ -67,7 +67,7 @@ def test_sidebar_status_change_refreshes(
     subject = f"Sidebar status E2E {unique_key()}"
     issue = _create_issue(api_client, project["key"], subject)
 
-    issue_url = f"/projects/{project['key']}/issues/{issue['key']}/"
+    issue_url = f"/issue/{issue['key']}/"
     admin_page.goto(issue_url)
     admin_page.wait_for_load_state("networkidle")
 
@@ -115,7 +115,7 @@ def test_comment_form_refreshes_activity(
     issue = _create_issue(api_client, project["key"], subject)
     comment_text = f"E2E comment {unique_key()}"
 
-    issue_url = f"/projects/{project['key']}/issues/{issue['key']}/"
+    issue_url = f"/issue/{issue['key']}/"
     admin_page.goto(issue_url)
     admin_page.wait_for_load_state("networkidle")
 
@@ -151,7 +151,7 @@ def test_progress_select_exists(
     subject = f"Progress select E2E {unique_key()}"
     issue = _create_issue(api_client, project["key"], subject)
 
-    issue_url = f"/projects/{project['key']}/issues/{issue['key']}/"
+    issue_url = f"/issue/{issue['key']}/"
     admin_page.goto(issue_url)
     admin_page.wait_for_load_state("networkidle")
 

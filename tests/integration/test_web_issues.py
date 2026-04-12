@@ -31,7 +31,7 @@ _journal_svc = JournalService()
 @pytest_asyncio.fixture
 async def _lookups(db_session: AsyncSession) -> tuple[IssueStatus, Tracker, IssuePriority]:
     """Seed the minimum lookup rows needed to create issues."""
-    status = StatusFactory.build(name="New", position=1, is_closed=False)
+    status = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(status)
     await db_session.flush()
 
@@ -123,13 +123,13 @@ async def test_issue_detail_page(
     _lookups: tuple,
     _project: Project,
 ):
-    """GET /projects/{key}/issues/{ref} returns 200 and contains the subject."""
+    """GET /issue/{ref} returns 200 and contains the subject."""
     _, tracker, _ = _lookups
     user = admin_client.state.user
     issue = await _create_issue(db_session, _project, user, tracker, subject="Detail page bug")
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{issue.display_key}/",
+        f"/issue/{issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -170,13 +170,13 @@ async def test_issue_edit_form(
     _lookups: tuple,
     _project: Project,
 ):
-    """GET /projects/{key}/issues/{ref}/edit returns 200 and contains the subject."""
+    """GET /issue/{ref}/edit returns 200 and contains the subject."""
     _, tracker, _ = _lookups
     user = admin_client.state.user
     issue = await _create_issue(db_session, _project, user, tracker, subject="Edit form bug")
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{issue.display_key}/edit/",
+        f"/issue/{issue.display_key}/edit/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -204,7 +204,7 @@ async def test_issue_detail_shows_journals(
 
     token = admin_client.state.token
     resp = await admin_client.get(
-        f"/projects/{_project.key}/issues/{issue.display_key}/",
+        f"/issue/{issue.display_key}/",
         cookies={"access_token": token},
     )
     assert resp.status_code == 200
@@ -237,6 +237,60 @@ async def test_issue_partial_table(
     assert resp.status_code == 200
     # Partial should NOT contain a full HTML page wrapper
     assert "<html" not in resp.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# Tests: short URL auth
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_issue_detail_short_url_requires_auth(unauth_client: AsyncClient):
+    """GET /issue/{ref} without auth redirects to /login."""
+    resp = await unauth_client.get(
+        "/issue/WIS-999/",
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302
+    assert "/login/" in resp.headers["location"]
+
+
+@pytest.mark.integration
+async def test_issue_detail_short_url_not_found(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: tuple,
+    _project: Project,
+):
+    """GET /issue/{ref} for nonexistent issue returns 404."""
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        "/issue/WIS-999/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.integration
+async def test_issue_detail_links_use_short_url(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: tuple,
+    _project: Project,
+):
+    """Issue detail page links use /issue/{ref}/ short URLs."""
+    _, tracker, _ = _lookups
+    user = admin_client.state.user
+    issue = await _create_issue(db_session, _project, user, tracker, subject="Short URL links")
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/issue/{issue.display_key}/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200
+    # Links should use /issue/ pattern, not the old /projects/.../issues/ pattern
+    assert f"/issue/{issue.display_key}/" in resp.text or issue.display_key in resp.text
+    assert f"/projects/{_project.key}/issues/{issue.display_key}/" not in resp.text
 
 
 # ---------------------------------------------------------------------------

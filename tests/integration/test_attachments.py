@@ -91,7 +91,7 @@ async def _upload_file(
 
 @pytest_asyncio.fixture
 async def open_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -200,6 +200,13 @@ async def test_upload_attachment(
     att = result.scalar_one_or_none()
     assert att is not None
     assert att.filename == "notes.txt"
+
+    # content_hash is SHA-256 of file content
+    import hashlib
+
+    expected_hash = hashlib.sha256(b"some notes here").hexdigest()
+    assert data["content_hash"] == expected_hash
+    assert att.content_hash == expected_hash
 
 
 @pytest.mark.asyncio

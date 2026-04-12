@@ -15,18 +15,7 @@
   {# Main wiki content #}
   <div>
     <div class="wiki-page-header">
-      <div>
-        <h1 class="wiki-page-title">{{ wiki_page.title }}</h1>
-        <div class="wiki-page-meta">
-          {% if content.author %}
-          Last edited by <strong>{{ content.author.display_name or content.author.login }}</strong>
-          {% endif %}
-          {% if content.created_at %}
-          &middot; {{ content.created_at.strftime('%Y-%m-%d %H:%M') }}
-          {% endif %}
-          &middot; Version {{ content.version }}
-        </div>
-      </div>
+      <h1 class="wiki-page-title">{{ wiki_page.title }}</h1>
       <div class="wiki-page-actions">
         <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
@@ -43,6 +32,15 @@
         </a>
         {% endif %}
       </div>
+      <div class="wiki-page-meta">
+        {% if content.author %}
+        Last edited by <strong>{{ content.author.display_name or content.author.login }}</strong>
+        {% endif %}
+        {% if content.created_at %}
+        &middot; {{ content.created_at | localtime(user.timezone) }}
+        {% endif %}
+        &middot; Version {{ content.version }}
+      </div>
     </div>
 
     <div class="wiki-version-bar">
@@ -53,17 +51,162 @@
       <span>&middot;</span>
       {% endif %}
       {% if content.created_at %}
-      <span>{{ content.created_at.strftime('%b %d, %Y at %H:%M') }}</span>
+      <span>{{ content.created_at | localtime(user.timezone) }}</span>
       {% endif %}
       {% if content.comments %}
       <span>&middot;</span>
-      <span style="font-style:italic">"{{ content.comments }}"</span>
+      <span class="sp-text-italic">"{{ content.comments }}"</span>
       {% endif %}
     </div>
 
     {# Rendered content #}
     <div class="wiki-content">
-      {{ content.text | wiki_markdown(project.key) }}
+      {{ content.text | wiki_markdown(project.key, attachment_map) }}
+    </div>
+
+    {# Attachments section #}
+    <div class="attachments-section"
+         x-data="wikiAttachments({ pageId: {{ wiki_page.id }}, dataElementId: 'att-data-{{ wiki_page.id }}' })">
+      <script type="application/json" id="att-data-{{ wiki_page.id }}">{{ attachments | tojson }}</script>
+      <div class="attachments-header">
+        <div class="attachments-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+          Attachments
+          <span class="attachments-count" x-text="attachments.length"></span>
+        </div>
+        {% if can_manage_wiki %}
+        <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="showUpload = !showUpload">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          Upload
+        </button>
+        {% endif %}
+      </div>
+
+      {# Upload zone (toggled) #}
+      {% if can_manage_wiki %}
+      <div x-show="showUpload" x-cloak>
+        <div class="upload-zone" :class="{ dragover: isDragging }"
+             @dragover.prevent="isDragging = true"
+             @dragleave="isDragging = false"
+             @drop.prevent="handleDrop($event)"
+             @click="$refs.fileInput.click()">
+          <svg class="upload-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+          <div class="upload-zone-text"><strong>Drop files here</strong> or click to browse</div>
+          <div class="upload-zone-hint">Images, PDFs, documents up to 50 MB</div>
+          <input type="file" x-ref="fileInput" multiple class="sp-hidden" @change="handleFiles($event.target.files)">
+        </div>
+
+        <template x-for="u in uploads" :key="u.name">
+          <div class="upload-progress">
+            <span class="upload-progress-name" x-text="u.name"></span>
+            <div class="upload-progress-bar"><div class="upload-progress-fill" :style="'width:' + u.progress + '%'"></div></div>
+            <span class="sp-text-muted" x-text="u.progress + '%'"></span>
+          </div>
+        </template>
+
+        <template x-if="uploadError">
+          <div class="sp-msg-danger-xs" x-text="uploadError"></div>
+        </template>
+      </div>
+      {% endif %}
+
+      {# Image thumbnails #}
+      <template x-if="images.length > 0">
+        <div class="attachment-images">
+          <template x-for="att in images" :key="att.id">
+            <div class="attachment-thumb" @click="openLightbox(att)">
+              <img :src="'/api/v1/attachments/' + att.id + '/download/'" :alt="att.filename">
+              <div class="attachment-thumb-overlay">
+                <span class="attachment-thumb-name" x-text="att.filename"></span>
+              </div>
+              <div class="attachment-thumb-actions">
+                <button class="thumb-action" title="Copy markdown link" @click.stop="copyLink(att)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                </button>
+                <button class="thumb-action" title="Download" @click.stop="downloadFile(att)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                </button>
+                {% if can_manage_wiki %}
+                <button class="thumb-action" title="Delete" @click.stop="confirmDelete(att)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                </button>
+                {% endif %}
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      {# File list (non-images) #}
+      <template x-if="files.length > 0">
+        <div class="attachment-files sp-mt-md">
+          <template x-for="att in files" :key="att.id">
+            <div class="attachment-file">
+              <div class="file-icon" :class="fileIconClass(att)" x-text="fileIconLabel(att)"></div>
+              <div class="file-info">
+                <div class="file-name">
+                  <a :href="'/api/v1/attachments/' + att.id + '/download/'" x-text="att.filename"></a>
+                </div>
+                <div class="file-meta">
+                  <span x-text="formatSize(att.filesize)"></span>
+                  <span x-text="'Uploaded by ' + att.author.name + ', ' + formatDate(att.created_at)"></span>
+                </div>
+              </div>
+              <div class="file-actions">
+                <button class="file-action copy" title="Copy markdown link" @click="copyLink(att)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-13"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                  Link
+                </button>
+                <button class="file-action" title="Download" @click="downloadFile(att)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                  Download
+                </button>
+                {% if can_manage_wiki %}
+                <button class="file-action delete" title="Delete" @click="confirmDelete(att)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-13"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  Delete
+                </button>
+                {% endif %}
+              </div>
+            </div>
+          </template>
+        </div>
+      </template>
+
+      {# Empty state when no attachments #}
+      <template x-if="attachments.length === 0 && !showUpload">
+        <div class="sp-empty-center">
+          No attachments yet.
+        </div>
+      </template>
+
+      {# Lightbox overlay #}
+      <template x-if="lightbox">
+        <div class="lightbox" @click="lightbox = null" @keydown.escape.window="lightbox = null">
+          <button class="lightbox-close" @click="lightbox = null">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+          <img :src="lightbox.url" :alt="lightbox.name" @click.stop>
+          <div class="lightbox-info" x-text="lightbox.name + '  ·  ' + lightbox.size"></div>
+        </div>
+      </template>
+
+      {# Delete confirmation modal #}
+      <template x-if="deleteTarget">
+        <div class="lightbox" @click="deleteTarget = null" @keydown.escape.window="deleteTarget = null">
+          <div class="att-delete-modal" @click.stop>
+            <h3>Delete attachment?</h3>
+            <p>Are you sure you want to delete <strong x-text="deleteTarget.filename"></strong>? This cannot be undone.</p>
+            <div class="sp-flex-end-sm-mt-lg">
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="deleteTarget = null">Cancel</button>
+              <button class="sp-btn sp-btn-danger sp-btn-sm" @click="doDelete()" :disabled="deleting">
+                <span x-show="!deleting">Delete</span>
+                <span x-show="deleting">Deleting...</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -71,8 +214,8 @@
   <div class="wiki-sidebar">
     {# Table of contents (auto-generated from headers) #}
     <div class="wiki-tree-card" id="wiki-toc" x-data="wikiToc()" x-show="headings.length > 0" x-cloak>
-      <div class="wiki-tree-title" style="text-transform:uppercase;font-size:var(--sp-font-size-xs);letter-spacing:0.06em;color:var(--sp-text-muted);font-weight:600;margin-bottom:var(--sp-space-md);">On this page</div>
-      <nav style="position:sticky;top:var(--sp-space-xl);">
+      <div class="wiki-tree-title sp-toc-label">On this page</div>
+      <nav class="sp-sticky-top-xl">
         <template x-for="h in headings" :key="h.id">
           <a :href="'#' + h.id"
              :class="{ 'sp-toc-active': activeId === h.id }"
@@ -140,8 +283,8 @@
     </div>
     {% if can_manage_wiki %}
     <div class="wiki-panel-footer">
-      <a href="/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-ghost" style="width:100%;justify-content:center;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 5v14M5 12h14"/></svg>
+      <a href="/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-ghost sp-btn-block-center">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
         New page
       </a>
     </div>

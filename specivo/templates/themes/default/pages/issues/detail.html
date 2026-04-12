@@ -25,17 +25,17 @@
 
     <div x-data='descriptionEditor({ description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }} })'>
       <div x-show="!editing" class="description-card" style="position:relative;">
-        <div style="position:absolute;top:var(--sp-space-md);right:var(--sp-space-md);z-index:1;display:flex;gap:var(--sp-space-xs);">
+        <div class="description-actions">
           {% set desc_edits = [] %}
           {% for j in journals if journals is defined %}{% for d in j.details if d.prop_key == 'description' %}{% if desc_edits.append(j) %}{% endif %}{% endfor %}{% endfor %}
           {% if desc_edits %}
-          <a href="/projects/{{ project.key }}/issues/{{ issue.display_key }}/versions/{{ desc_edits[-1].id }}/" class="sp-btn sp-btn-sm sp-btn-ghost" style="font-size:var(--sp-font-size-xs);">History ({{ desc_edits | length }})</a>
+          <a href="/issue/{{ issue.display_key }}/versions/{{ desc_edits[-1].id }}/" class="sp-btn sp-btn-sm sp-btn-ghost" style="font-size:var(--sp-font-size-xs);">History ({{ desc_edits | length }})</a>
           {% endif %}
           <button class="sp-btn sp-btn-sm sp-btn-primary" @click="startEdit()">Edit</button>
         </div>
-        <div style="padding-right:120px;">
+        <div class="description-body">
         {% if issue.description %}
-        {{ issue.description | markdown }}
+        {{ issue.description | wiki_markdown(project.key) }}
         {% else %}
         <span style="color:var(--sp-text-muted);font-style:italic;">No description.</span>
         {% endif %}
@@ -53,13 +53,141 @@
       </div>
     </div>
 
+    {# Metadata panel -- collapsible, between description and activity #}
+    {% if metadata_schemas_data is defined and metadata_schemas_data and (issue_metadata or metadata_schemas_data) %}
+    <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }} })'>
+      {# Toggle header (always visible) #}
+      <button class="sp-metadata-toggle" :class="{ open: expanded }" @click="expanded = !expanded" type="button">
+        <svg class="sp-mt-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        <svg class="sp-mt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <span>Metadata</span>
+        <div class="sp-mt-schemas">
+          <template x-for="name in schemaNames" :key="name">
+            <span class="sp-mt-schema-badge" x-text="name"></span>
+          </template>
+        </div>
+        <span class="sp-mt-count" x-text="filledCount + '/' + totalCount + ' fields'"></span>
+      </button>
+
+      {# Summary chips (visible when collapsed) #}
+      <div class="sp-metadata-summary" x-show="!expanded">
+        <template x-for="chip in summaryChips" :key="chip.key">
+          <span class="sp-ms-chip" :class="chip.chipClass">
+            <span class="sp-ms-key" x-text="chip.label + ':'"></span>
+            <span class="sp-ms-val" x-text="chip.display"></span>
+          </span>
+        </template>
+      </div>
+
+      {# Expanded content with editable fields #}
+      <div class="sp-metadata-content" x-show="expanded" x-transition>
+        <div class="sp-metadata-grid">
+          <template x-for="field in fields" :key="field.key">
+            <div class="sp-meta-field">
+              <label class="sp-meta-label">
+                <span x-text="field.label"></span>
+                <span class="sp-meta-type" x-text="field.typeLabel"></span>
+              </label>
+
+              {# String #}
+              <template x-if="field.inputType === 'text'">
+                <input type="text" class="modal-input" :placeholder="field.placeholder || ''" x-model="metadata[field.key]" @change="dirty = true">
+              </template>
+
+              {# Number #}
+              <template x-if="field.inputType === 'number'">
+                <input type="number" class="modal-input" :min="field.min" :max="field.max" x-model.number="metadata[field.key]" @change="dirty = true">
+              </template>
+
+              {# Date #}
+              <template x-if="field.inputType === 'date'">
+                <input type="date" class="modal-input" x-model="metadata[field.key]" @change="dirty = true">
+              </template>
+
+              {# Enum chips #}
+              <template x-if="field.inputType === 'enum'">
+                <div class="sp-meta-chips">
+                  <template x-for="opt in field.options" :key="opt">
+                    <span class="sp-meta-chip" :class="{ selected: metadata[field.key] === opt }" @click="metadata[field.key] = metadata[field.key] === opt ? '' : opt; dirty = true" x-text="opt"></span>
+                  </template>
+                </div>
+              </template>
+
+              {# Boolean #}
+              <template x-if="field.inputType === 'boolean'">
+                <div class="sp-meta-toggle-row">
+                  <div class="sp-meta-toggle-track" :class="{ on: metadata[field.key] }" @click="metadata[field.key] = !metadata[field.key]; dirty = true">
+                    <div class="sp-meta-toggle-thumb"></div>
+                  </div>
+                  <span class="sp-meta-toggle-label" x-text="metadata[field.key] ? 'Yes' : 'No'"></span>
+                </div>
+              </template>
+
+              {# Tags #}
+              <template x-if="field.inputType === 'tags'">
+                <div>
+                  <div class="sp-meta-tags">
+                    <template x-for="(tag, i) in (metadata[field.key] || [])" :key="i">
+                      <span class="sp-meta-tag">
+                        <span x-text="tag"></span>
+                        <span class="sp-meta-tag-remove" @click.stop="metadata[field.key].splice(i, 1); dirty = true">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </span>
+                      </span>
+                    </template>
+                    <input type="text" :placeholder="(metadata[field.key] || []).length === 0 ? 'Type and press Enter...' : 'Add more...'" @keydown.enter.prevent="addTag(field.key, $event)" @keydown.comma.prevent="addTag(field.key, $event)" @keydown.backspace="removeLastTag(field.key, $event)">
+                  </div>
+                  <div class="form-hint">Press Enter or comma to add</div>
+                </div>
+              </template>
+
+              {# Multi-select checkboxes #}
+              <template x-if="field.inputType === 'multiselect'">
+                <div class="sp-meta-checkgroup">
+                  <template x-for="opt in field.options" :key="opt">
+                    <span class="sp-meta-check" :class="{ checked: hasMultiValue(field.key, opt) }" @click="toggleMulti(field.key, opt)">
+                      <span class="check-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" style="width:10px;height:10px"><path d="M20 6L9 17l-5-5"/></svg>
+                      </span>
+                      <span x-text="opt"></span>
+                    </span>
+                  </template>
+                </div>
+              </template>
+            </div>
+          </template>
+        </div>
+
+        {# Schema sources #}
+        <div style="margin-top:var(--sp-space-lg)">
+          <template x-for="name in schemaNames" :key="name">
+            <div class="sp-schema-source">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <span>from <strong x-text="name"></strong> schema</span>
+            </div>
+          </template>
+        </div>
+
+        {# Save bar #}
+        <div class="sp-metadata-save" x-show="dirty">
+          <span class="sp-save-hint" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-right:auto">You have unsaved metadata changes</span>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" type="button" @click="revert()">Discard</button>
+          <button class="sp-btn sp-btn-primary sp-btn-sm" type="button" :disabled="saving" @click="save()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            <span x-text="saving ? 'Saving...' : 'Save Metadata'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     {# Activity tabs #}
     <div class="activity-tabs" x-data="{ tab: 'activity' }">
       <div class="activity-tabs-header">
         <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">Activity <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
         <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">Time{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
         <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">Relations{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
-        <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'" href="#">Attachments{% if attachment_count %} <span class="tab-count">{{ attachment_count }}</span>{% endif %}</a>
+        <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">Attachments</a>
       </div>
 
       {# Activity content #}
@@ -67,7 +195,7 @@
         {% if activity_per_page_options is defined and activity_total is defined and activity_total > activity_per_page_options[0] %}
         <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-sm);">
           <select style="padding:var(--sp-space-xs);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-xs);background:var(--sp-bg-surface);color:var(--sp-text-muted);"
-                  onchange="fetch('/api/v1/users/me/preferences/activity-per-page/?per_page=' + this.value, { method: 'PATCH', headers: {'Content-Type': 'application/json'} }).then(function(){ window.location.search = ''; })">
+                  data-activity-per-page>
             {% for opt in activity_per_page_options %}
             <option value="{{ opt }}" {{ 'selected' if activity_per_page == opt }}>{{ opt }} per page</option>
             {% endfor %}
@@ -197,19 +325,67 @@
 
       {# Relations tab #}
       <div x-show="tab === 'relations'">
-        <div x-data='relationForm({ issueKey: "{{ issue.display_key }}" })'>
-          <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
-            <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Add relation'"></button>
+        {% if relations %}
+        <div class="sp-relations-list" style="margin-top: var(--sp-space-md);">
+          {% for rel in relations %}
+          <div class="sp-relation-row">
+            <span class="sp-rel-type">{{ rel.relation_type | replace('_', ' ') }}</span>
+            <a class="sp-rel-key" href="/issue/{{ rel.issue_to_key }}/">{{ rel.issue_to_key }}</a>
+            {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
+            <span class="sp-rel-title">{{ rel.issue_to_subject }}</span>
+            {% endif %}
+            {% if rel.issue_to_status is defined and rel.issue_to_status %}
+            <span class="badge-status sp-rel-status">{{ rel.issue_to_status }}</span>
+            {% endif %}
+            {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">({{ rel.delay }} days)</span>{% endif %}
+            <a class="sp-rel-remove"
+               hx-delete="/api/v1/relations/{{ rel.id }}/"
+               hx-swap="none"
+               hx-confirm="Remove this relation?"
+               data-hx-reload>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </a>
           </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
+          No relations.
+        </div>
+        {% endif %}
+
+        <div x-data='relationForm({ issueKey: "{{ issue.display_key }}" })' style="margin-top:var(--sp-space-lg);">
+          <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showForm = !showForm">
+            <template x-if="!showForm"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px;"><path d="M12 5v14M5 12h14"/></svg> Add relation</span></template>
+            <template x-if="showForm"><span>Cancel</span></template>
+          </button>
 
           {# Inline add relation form #}
           <div x-show="showForm" x-cloak style="margin-top:var(--sp-space-sm);">
             <div class="card" style="padding:var(--sp-space-md);">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-space-sm);">
-                <div>
+                <div style="position:relative;">
                   <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Related Issue</label>
-                  <input type="text" x-model="issueToKey" placeholder="e.g. PROJ-42"
+                  <input type="text" x-model="issueToKey" placeholder="e.g. PROJ-42" autocomplete="off"
+                         @keydown="onKeydown($event)" @blur="closeSuggestions()"
                          style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
+                  {# Autocomplete dropdown #}
+                  <div x-show="showSuggestions" x-cloak
+                       style="position:absolute;top:100%;left:0;right:0;z-index:20;background:var(--sp-bg-surface);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);box-shadow:var(--sp-shadow-lg);max-height:240px;overflow-y:auto;margin-top:2px;">
+                    <template x-for="(s, idx) in suggestions" :key="s.key">
+                      <div @mousedown.prevent="selectSuggestion(s)"
+                           :style="idx === highlightIndex ? 'background:var(--sp-bg-input)' : ''"
+                           style="padding:var(--sp-space-sm) var(--sp-space-md);cursor:pointer;display:flex;gap:var(--sp-space-sm);align-items:baseline;border-bottom:1px solid var(--sp-border);"
+                           @mouseenter="highlightIndex = idx">
+                        <span style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);font-weight:600;color:var(--sp-text-link);white-space:nowrap;" x-text="s.key"></span>
+                        <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" x-text="s.subject"></span>
+                        <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-left:auto;white-space:nowrap;" x-text="s.project"></span>
+                      </div>
+                    </template>
+                    <template x-if="searching">
+                      <div style="padding:var(--sp-space-sm) var(--sp-space-md);font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">Searching...</div>
+                    </template>
+                  </div>
                 </div>
                 <div>
                   <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Type</label>
@@ -228,92 +404,22 @@
               </div>
               <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-sm);">
                 <template x-if="error"><span style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);" x-text="error"></span></template>
-                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || !issueToKey.trim()" @click="submit()">Add</button>
+                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="!canSubmit" @click="submit()">Add</button>
               </div>
             </div>
           </div>
         </div>
-
-        {% if relations %}
-        <div style="display: flex; flex-direction: column; gap: var(--sp-space-sm); margin-top: var(--sp-space-md);">
-          {% for rel in relations %}
-          <div class="card" style="padding: var(--sp-space-sm) var(--sp-space-md); display:flex; align-items:center; gap: var(--sp-space-sm);">
-            <span class="badge-status" style="font-size: var(--sp-font-size-xs);">{{ rel.relation_type | replace('_', ' ') | title }}</span>
-            <a href="/projects/{{ project.key }}/issues/{{ rel.issue_to_key }}/" style="font-weight: 600; font-size: var(--sp-font-size-sm); color: var(--sp-accent);">{{ rel.issue_to_key }}</a>
-            {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
-            <span style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary);">{{ rel.issue_to_subject }}</span>
-            {% endif %}
-            {% if rel.issue_to_status is defined and rel.issue_to_status %}
-            <span class="badge-status" style="font-size: var(--sp-font-size-xs);">{{ rel.issue_to_status }}</span>
-            {% endif %}
-            {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">({{ rel.delay }} days)</span>{% endif %}
-            <a style="margin-left:auto;color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);"
-               @click="fetch('/api/v1/relations/{{ rel.id }}/', { method: 'DELETE', headers: {'Content-Type': 'application/json'} }).then(function(r){ if(r.ok || r.status===204) window.location.reload(); })">Remove</a>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
-          No relations.
-        </div>
-        {% endif %}
       </div>
 
-      {# Attachments tab #}
-      <div x-show="tab === 'attachments'">
-        <div x-data='attachmentForm({ issueId: {{ issue.id }} })'>
-          <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
-            <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Attach file'"></button>
-          </div>
-
-          {# Inline upload form #}
-          <div x-show="showForm" x-cloak style="margin-top:var(--sp-space-sm);">
-            <div class="card" style="padding:var(--sp-space-md);">
-              <div>
-                <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">File</label>
-                <input type="file" @change="selectFile($event)"
-                       style="font-size:var(--sp-font-size-sm);">
-              </div>
-              <div style="margin-top:var(--sp-space-sm);">
-                <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Description (optional)</label>
-                <input type="text" x-model="description" placeholder="Brief description"
-                       style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
-              </div>
-              <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-sm);">
-                <template x-if="error"><span style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);" x-text="error"></span></template>
-                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || !file" @click="submit()">Upload</button>
-              </div>
-            </div>
-          </div>
+      {# Attachments tab — lazy-loaded via htmx on first click #}
+      <div x-show="tab === 'attachments'"
+           id="issue-attachments-tab"
+           hx-get="/partials/issues/{{ issue.display_key }}/attachments/"
+           hx-trigger="sp-show-tab-attachments from:body once"
+           hx-swap="innerHTML">
+        <div style="text-align:center;padding:var(--sp-space-xl);color:var(--sp-text-muted);font-size:var(--sp-font-size-sm);">
+          Loading attachments…
         </div>
-
-        {% if attachments %}
-        <div style="display: flex; flex-direction: column; gap: var(--sp-space-sm); margin-top: var(--sp-space-md);">
-          {% for att in attachments %}
-          <div class="card" style="padding: var(--sp-space-sm) var(--sp-space-md); display: flex; align-items: center; gap: var(--sp-space-sm);">
-            <div class="sp-file-icon">{{ att.filename.rsplit('.', 1)[-1][:4] if '.' in att.filename else '?' }}</div>
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:600;font-size:var(--sp-font-size-sm);">{{ att.filename }}</div>
-              <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">
-                {{ (att.filesize / 1024) | round(1) }} KB
-                {% if att.author %} · {{ att.author.login if att.author.login is defined else att.author }}{% endif %}
-                · {{ att.created_at | timeago }}
-              </div>
-              {% if att.description %}
-              <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-secondary);margin-top:2px;">{{ att.description }}</div>
-              {% endif %}
-            </div>
-            <div style="display:flex;gap:var(--sp-space-sm);">
-              <a href="/api/v1/attachments/{{ att.id }}/download/" class="sp-btn sp-btn-sm sp-btn-ghost" style="font-size:var(--sp-font-size-xs);">Download</a>
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
-          No attachments.
-        </div>
-        {% endif %}
       </div>
     </div>
 
@@ -323,7 +429,7 @@
       <div class="comment-form-footer">
         <span class="hint">Supports Markdown. Use @username to mention.</span>
         <button class="sp-btn sp-btn-primary"
-                :disabled="submitting || !notes.trim()"
+                :disabled="!canSubmit"
                 @click="submit()">
           Comment
         </button>

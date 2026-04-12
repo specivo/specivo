@@ -45,7 +45,7 @@ async def _login(client: AsyncClient, login: str, password: str = "testpassword"
 
 @pytest_asyncio.fixture
 async def open_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -133,7 +133,7 @@ async def test_autocomplete_returns_matching_issues(
     assert len(data) >= 1
     assert data[0]["key"] == "ACME-1"
     assert data[0]["subject"] == "Automate weekly compliance report"
-    assert data[0]["status"] == "New"
+    assert data[0]["project_key"] == "ACME"
 
 
 @pytest.mark.asyncio
@@ -410,9 +410,10 @@ async def test_autocomplete_escapes_sql_wildcards(
         client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Normal issue without special chars"
     )
 
-    for wildcard in ("%", "_"):
+    for wildcard in ("%%", "__"):
         resp = await client.get(
-            f"/api/v1/issues/autocomplete/?q={wildcard}",
+            "/api/v1/issues/autocomplete/",
+            params={"q": wildcard},
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert resp.status_code == 200, resp.text

@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_validator, model_validator
 # ---------------------------------------------------------------------------
 
 _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9-]{0,98}[a-z0-9]$|^[a-z]$")
-_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
+_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,11}$")
 
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -24,7 +24,7 @@ class ProjectCreate(BaseModel):
     key: str
     description: str | None = None
     parent_key: str | None = None
-    is_public: bool = True
+    is_public: bool = False
     color: str | None = None
     modules: list[str] | None = None
 
@@ -53,7 +53,7 @@ class ProjectCreate(BaseModel):
         v = v.strip().upper()
         if not _KEY_RE.match(v):
             raise ValueError(
-                "key must be 2–10 uppercase characters, start with a letter, and contain only letters and digits"
+                "key must be 2–12 uppercase characters, start with a letter, and contain only letters and digits"
             )
         return v
 
@@ -74,6 +74,11 @@ class ProjectUpdate(BaseModel):
     is_public: bool | None = None
     status: int | None = None
     color: str | None = None
+    # parent_id: use model_fields_set to detect whether this field was provided.
+    # - Not in payload          → not in model_fields_set  → do not change parent
+    # - parent_id=null in JSON  → in model_fields_set, value is None  → move to root
+    # - parent_id=<int>         → in model_fields_set, value is int   → reparent
+    parent_id: int | None = None
 
     @field_validator("color")
     @classmethod
@@ -137,7 +142,7 @@ class ProjectRenameRequest(BaseModel):
         if v is not None:
             v = v.strip().upper()
             if not _KEY_RE.match(v):
-                raise ValueError("new_key must be 2-10 uppercase chars, start with a letter")
+                raise ValueError("new_key must be 2-12 uppercase chars, start with a letter")
         return v
 
     @field_validator("new_identifier")
@@ -197,6 +202,7 @@ class MemberOut(BaseModel):
     login: str
     display_name: str
     roles: list[str]
+    role_ids: list[int] = []
 
 
 # ---------------------------------------------------------------------------

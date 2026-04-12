@@ -75,6 +75,7 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
         Index("ix_issues_priority_id", "priority_id"),
         Index("ix_issues_author_id", "author_id"),
         Index("ix_issues_category_id", "category_id"),
+        Index("ix_issues_sprint_id", "sprint_id"),
         Index("ix_issues_updated_at", "updated_at"),
         # GIN index on metadata JSONB for key/value queries
         Index("ix_issues_metadata_gin", "issue_metadata", postgresql_using="gin"),
@@ -93,7 +94,7 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
 
     # Denormalised from projects.key — immutable once set.
     # Allows display key construction without a JOIN.
-    project_key: Mapped[str] = mapped_column(String(10), nullable=False)
+    project_key: Mapped[str] = mapped_column(String(12), nullable=False)
 
     # Per-project sequential number; assigned atomically on create
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -180,6 +181,12 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
         nullable=True,
     )
 
+    # FK to sprints table; SET NULL if sprint is deleted.
+    sprint_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sprints.id", ondelete="SET NULL", use_alter=True, name="fk_issues_sprint_id"),
+        nullable=True,
+    )
+
     done_ratio: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
 
     # Numeric(10, 2) — NOT Float — to avoid IEEE 754 rounding (I6 fix)
@@ -204,6 +211,8 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
     category = relationship("IssueCategory", foreign_keys=[category_id], lazy="raise")
     author = relationship("User", foreign_keys=[author_id], lazy="raise")
     assigned_to = relationship("User", foreign_keys=[assigned_to_id], lazy="raise")
+    fixed_version = relationship("Version", foreign_keys=[fixed_version_id], lazy="raise")
+    sprint = relationship("Sprint", foreign_keys=[sprint_id], lazy="raise")
     project = relationship("Project", foreign_keys=[project_id], lazy="raise")
 
     # ------------------------------------------------------------------

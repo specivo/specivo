@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Versions{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Versions{% endtrans %}</span>
+</div>
+
+<div x-data='adminVersions({ versions: {{ versions_data | tojson }}, projects: {{ projects_data | tojson }} })'>
+  <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
+    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Versions{% endtrans %}</h1>
+  </div>
+
+  {# Summary cards #}
+  <div class="admin-versions-summary">
+    <div class="summary-card">
+      <div class="label">{% trans %}Total{% endtrans %}</div>
+      <div class="value" x-text="allVersions.length"></div>
+    </div>
+    <div class="summary-card">
+      <div class="label">{% trans %}Open{% endtrans %}</div>
+      <div class="value gold" x-text="countByStatus('open')"></div>
+    </div>
+    <div class="summary-card">
+      <div class="label">{% trans %}Locked{% endtrans %}</div>
+      <div class="value orange" x-text="countByStatus('locked')"></div>
+    </div>
+    <div class="summary-card">
+      <div class="label">{% trans %}Closed{% endtrans %}</div>
+      <div class="value muted" x-text="countByStatus('closed')"></div>
+    </div>
+  </div>
+
+  {# Table card #}
+  <div class="card">
+    {# Toolbar #}
+    <div class="admin-versions-toolbar">
+      <select class="filter-select" x-model="filterProject">
+        <option value="">{% trans %}All projects{% endtrans %}</option>
+        <template x-for="p in projects" :key="p.key">
+          <option :value="p.key" x-text="p.name"></option>
+        </template>
+      </select>
+      <select class="filter-select" x-model="filterStatus">
+        <option value="">{% trans %}All statuses{% endtrans %}</option>
+        <option value="open">{% trans %}Open{% endtrans %}</option>
+        <option value="locked">{% trans %}Locked{% endtrans %}</option>
+        <option value="closed">{% trans %}Closed{% endtrans %}</option>
+      </select>
+      <div style="flex:1"></div>
+      <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="filtered.length + ' version' + (filtered.length !== 1 ? 's' : '')"></span>
+    </div>
+
+    {# Bulk actions bar #}
+    <template x-if="selected.length > 0">
+      <div class="admin-versions-bulk">
+        <span class="bulk-count" x-text="selected.length + ' selected'"></span>
+        <button class="sp-btn-sm" @click="bulkAction('closed')">{% trans %}Close{% endtrans %}</button>
+        <button class="sp-btn-sm" @click="bulkAction('locked')">{% trans %}Lock{% endtrans %}</button>
+        <button class="sp-btn-sm" @click="bulkAction('open')">{% trans %}Reopen{% endtrans %}</button>
+      </div>
+    </template>
+
+    {# Table #}
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th class="td-checkbox"><input type="checkbox" @change="toggleAll($event)" :checked="selected.length === filtered.length && filtered.length > 0"></th>
+          <th>{% trans %}Version{% endtrans %}</th>
+          <th>{% trans %}Project{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Due date{% endtrans %}</th>
+          <th>{% trans %}Progress{% endtrans %}</th>
+          <th>{% trans %}Issues{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-if="filtered.length === 0">
+          <tr>
+            <td colspan="8" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">{% trans %}No versions found.{% endtrans %}</td>
+          </tr>
+        </template>
+        <template x-for="v in filtered" :key="v.id">
+          <tr>
+            <td class="td-checkbox"><input type="checkbox" :value="v.id" x-model.number="selected"></td>
+            <td>
+              <a class="version-name-link" :href="'/projects/' + v.project_key + '/roadmap/'" x-text="v.name"></a>
+            </td>
+            <td>
+              <span class="badge-project"><span class="key" x-text="v.project_key"></span> <span x-text="v.project_name"></span></span>
+            </td>
+            <td>
+              <span class="badge-version" :class="v.status" x-text="v.status"></span>
+            </td>
+            <td>
+              <span class="date-val" :class="{'date-overdue': v.overdue}" x-text="v.due_date || '\u2014'"></span>
+            </td>
+            <td style="min-width:120px">
+              <div class="progress-wrap">
+                <div class="progress-track">
+                  <div class="progress-fill" :class="v.progress === 100 ? 'green' : 'gold'" :style="'width:' + v.progress + '%'"></div>
+                </div>
+                <span class="progress-text" x-text="v.progress + '%'"></span>
+              </div>
+            </td>
+            <td>
+              <div class="issue-counts">
+                <span class="open-count" x-text="v.open_count + ' open'"></span>
+                <span class="closed-count" x-text="v.closed_count + ' closed'"></span>
+              </div>
+            </td>
+            <td class="td-actions">
+              <a class="action-link" :href="'/projects/' + v.project_key + '/settings/#versions'" title="{% trans %}Edit{% endtrans %}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </a>
+              <button class="action-link danger" title="{% trans %}Delete{% endtrans %}" x-show="v.open_count + v.closed_count === 0" @click="deleteVersion(v)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+            </td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

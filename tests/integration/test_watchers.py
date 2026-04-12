@@ -65,7 +65,7 @@ async def _create_issue_via_api(
 
 @pytest_asyncio.fixture
 async def open_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -92,7 +92,7 @@ async def priority(db_session: AsyncSession) -> IssuePriority:
 
 @pytest_asyncio.fixture
 async def project(db_session: AsyncSession) -> Project:
-    proj = ProjectFactory.build(key="WCH", identifier="watcher-test")
+    proj = ProjectFactory.build(key="WCH", identifier="watcher-test", is_public=True)
     db_session.add(proj)
     await db_session.commit()
     await db_session.refresh(proj)

@@ -12,6 +12,7 @@ from specivo.schemas.metadata_schema import (
     MetadataSchemaCreate,
     MetadataSchemaOut,
     MetadataSchemaUpdate,
+    MetadataSchemaUsageOut,
 )
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.project_service import ProjectService
@@ -87,6 +88,23 @@ async def update_metadata_schema(
     return MetadataSchemaOut.model_validate(updated)
 
 
+@router.get(
+    "/admin/projects/{project_key}/metadata-schemas/{schema_id}/usage/",
+    response_model=MetadataSchemaUsageOut,
+)
+async def get_metadata_schema_usage(
+    project_key: str,
+    schema_id: int,
+    current_user: User = Depends(require_admin_api),
+    db: AsyncSession = Depends(get_db),
+) -> MetadataSchemaUsageOut:
+    """Return usage count for a metadata schema (admin only)."""
+    project = await _project_service.get_by_key(db, project_key.upper())
+    schema = await _schema_service.get_by_id(db, schema_id, project.id)
+    count = await _schema_service.count_usages(db, schema)
+    return MetadataSchemaUsageOut(schema_id=schema.id, name=schema.name, usage_count=count)
+
+
 @router.delete(
     "/admin/projects/{project_key}/metadata-schemas/{schema_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -97,7 +115,7 @@ async def delete_metadata_schema(
     current_user: User = Depends(require_admin_api),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete a metadata schema (admin only)."""
+    """Delete a metadata schema (admin only). Rejects if in use."""
     project = await _project_service.get_by_key(db, project_key.upper())
     schema = await _schema_service.get_by_id(db, schema_id, project.id)
-    await _schema_service.delete(db, schema)
+    await _schema_service.delete_safe(db, schema)

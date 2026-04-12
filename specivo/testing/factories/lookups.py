@@ -19,7 +19,7 @@ class StatusFactory(factory.Factory):
         model = IssueStatus
 
     name = factory.Sequence(lambda n: f"Status {n}")
-    is_closed = False
+    category = "backlog"
     position = factory.Sequence(lambda n: n + 1)
     default_done_ratio = None
 
@@ -27,8 +27,15 @@ class StatusFactory(factory.Factory):
 class ClosedStatusFactory(StatusFactory):
     """A StatusFactory variant that produces terminal (closed) statuses."""
 
-    is_closed = True
+    category = "closed"
     name = factory.Sequence(lambda n: f"Closed Status {n}")
+
+
+class DoneStatusFactory(StatusFactory):
+    """A StatusFactory variant that produces done (completed) statuses."""
+
+    category = "done"
+    name = factory.Sequence(lambda n: f"Done Status {n}")
 
 
 class TrackerFactory(factory.Factory):

@@ -12,8 +12,10 @@ Extended in M7.2/M7.3 with:
 
 from __future__ import annotations
 
+import html
 import json
 import logging
+import re
 from typing import Any
 
 from sqlalchemy import text
@@ -27,7 +29,26 @@ from specivo.core.constants import (
     SEARCH_SNIPPET_MAX_CHARS,
 )
 from specivo.models.user import User
-from specivo.schemas.search import SearchFilters, SearchResult
+from specivo.schemas.search import (
+    SOURCE_TYPE_TO_DISPLAY,
+    SearchFilters,
+    SearchResult,
+    SearchResultType,
+    SearchSourceType,
+)
+
+# Shortcuts for f-string interpolation into raw SQL. These expand to the
+# enum member's string value (e.g. ``_SST_ATTACHMENT == "attachment"``). Values
+# are constants — never user input — so f-string interpolation is safe.
+_SRT_ISSUE = SearchResultType.ISSUE.value
+_SRT_WIKI = SearchResultType.WIKI.value
+_SRT_COMMENT = SearchResultType.COMMENT.value
+_SRT_ATTACHMENT = SearchResultType.ATTACHMENT.value
+
+_SST_ISSUE = SearchSourceType.ISSUE.value
+_SST_WIKI_PAGE = SearchSourceType.WIKI_PAGE.value
+_SST_JOURNAL = SearchSourceType.JOURNAL.value
+_SST_ATTACHMENT = SearchSourceType.ATTACHMENT.value
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +68,75 @@ def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int
     for rank_0, item_id in enumerate(sem_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
     return sorted(scores, key=lambda x: scores[x], reverse=True)
+
+
+# Complete wiki links: [[target|display]] or [[target]]
+_WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
+# Partial wiki links truncated by ts_headline:
+#   "slug|Display Text]]"  (missing [[)
+#   "[[slug|Display Text"  (missing ]])
+#   "slug|Display Text"    (missing both)
+_PARTIAL_LINK_OPEN_RE = re.compile(r"\[\[([a-z0-9_-]+(?:\|[^\]]*?)?)$")
+_PARTIAL_LINK_CLOSE_RE = re.compile(r"^([^\[|]*?\|)?([^\]]*?)\]\]")
+_PARTIAL_LINK_MID_RE = re.compile(r"([a-z0-9_-]+)\|([A-Z][^\]]{0,60})\]\]")
+_BOLD_RE = re.compile(r"\*\*(.+?)\*\*")
+_ITALIC_RE = re.compile(r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)")
+_HEADING_RE = re.compile(r"^#{1,3}\s+", re.MULTILINE)
+
+
+def _clean_snippet(snippet: str | None) -> str | None:
+    """Strip wiki link markup and markdown formatting from search snippets.
+
+    Handles complete ``[[target|display]]`` links and partial links
+    truncated by ``ts_headline`` (e.g. ``slug|Display Text]]`` without
+    opening brackets, or ``[[slug|Display`` without closing brackets).
+
+    The result is HTML-escaped with only ``<mark>`` tags preserved for
+    search-term highlighting (safe for ``| safe`` in templates).
+    """
+    if not snippet:
+        return snippet
+    # Replace <mark> tags with unique placeholders so wiki link regex
+    # matches cleanly and HTML-escaping doesn't destroy them.
+    clean = snippet.replace("<mark>", "\x00MARK_OPEN\x00").replace("</mark>", "\x00MARK_CLOSE\x00")
+    # Complete links: [[target|display]] → display; [[target]] → target
+    clean = _WIKI_LINK_RE.sub(
+        lambda m: m.group(2) or m.group(1).replace("_", " "),
+        clean,
+    )
+    # Partial link at end: [[slug|Display... → Display...
+    clean = _PARTIAL_LINK_OPEN_RE.sub(
+        lambda m: m.group(1).split("|")[-1] if "|" in m.group(1) else "",
+        clean,
+    )
+    # Partial link at start: ...Display]] → Display
+    clean = _PARTIAL_LINK_CLOSE_RE.sub(
+        lambda m: m.group(2) if m.group(2) else "",
+        clean,
+    )
+    # Mid-snippet partial: slug|Display Text]] → Display Text
+    clean = _PARTIAL_LINK_MID_RE.sub(lambda m: m.group(2), clean)
+    # Strip bold/italic markdown and heading markers
+    clean = _BOLD_RE.sub(r"\1", clean)
+    clean = _ITALIC_RE.sub(r"\1", clean)
+    clean = _HEADING_RE.sub("", clean)
+    # HTML-escape to prevent XSS, then restore safe <mark> tags
+    clean = html.escape(clean)
+    clean = clean.replace("\x00MARK_OPEN\x00", "<mark>").replace("\x00MARK_CLOSE\x00", "</mark>")
+    return clean
+
+
+def _empty_type_counts(*, include_all: bool = False) -> dict[str, int]:
+    """Return a zeroed type_counts dict."""
+    counts = {
+        "issues": 0,
+        "wiki": 0,
+        "comments": 0,
+        "attachments": 0,
+    }
+    if include_all:
+        counts["all"] = 0
+    return counts
 
 
 class SearchService:
@@ -347,7 +437,7 @@ class SearchService:
         return f"""
             SELECT * FROM (
                 SELECT
-                    'attachment' as result_type,
+                    '{_SRT_ATTACHMENT}' as result_type,
                     att.id,
                     CASE
                         WHEN att.container_type = 'Issue' THEN
@@ -361,7 +451,7 @@ class SearchService:
                     ts_rank_cd(sc.search_vector, query) as score,
                     COALESCE(ai_p.key, aw_p.key) as project_key
                 FROM search_chunks sc
-                JOIN search_sources ss ON ss.id = sc.source_id AND ss.source_type = 'attachment'
+                JOIN search_sources ss ON ss.id = sc.source_id AND ss.source_type = '{_SST_ATTACHMENT}'
                 JOIN attachments att ON att.id = ss.entity_id
                 LEFT JOIN issues ai ON att.container_type = 'Issue' AND ai.id = att.container_id
                 LEFT JOIN projects ai_p ON ai_p.id = ai.project_id
@@ -389,7 +479,7 @@ class SearchService:
         return f"""
             SELECT COUNT(*) as cnt
             FROM search_chunks sc
-            JOIN search_sources ss ON ss.id = sc.source_id AND ss.source_type = 'attachment'
+            JOIN search_sources ss ON ss.id = sc.source_id AND ss.source_type = '{_SST_ATTACHMENT}'
             JOIN attachments att ON att.id = ss.entity_id
             LEFT JOIN issues ai ON att.container_type = 'Issue' AND ai.id = att.container_id
             LEFT JOIN wiki_pages awp ON att.container_type = 'WikiPage' AND awp.id = att.container_id
@@ -636,7 +726,7 @@ class SearchService:
             issue_sql = f"""
                 SELECT * FROM (
                     SELECT
-                        'issue' as result_type,
+                        '{_SRT_ISSUE}' as result_type,
                         i.id,
                         i.project_key || '-' || i.sequence_number as title,
                         i.subject as subtitle,
@@ -658,7 +748,7 @@ class SearchService:
             wiki_sql = f"""
                 SELECT * FROM (
                     SELECT
-                        'wiki' as result_type,
+                        '{_SRT_WIKI}' as result_type,
                         wp.id,
                         wp.title,
                         wp.slug as subtitle,
@@ -690,7 +780,7 @@ class SearchService:
             comment_sql = f"""
                 SELECT * FROM (
                     SELECT
-                        'comment' as result_type,
+                        '{_SRT_COMMENT}' as result_type,
                         j.id,
                         ci.project_key || '-' || ci.sequence_number as title,
                         left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as subtitle,
@@ -700,11 +790,11 @@ class SearchService:
                         ci.project_key
                     FROM search_chunks sc
                     JOIN search_sources ss ON ss.id = sc.source_id
-                    JOIN journals j ON j.id = ss.entity_id AND ss.source_type = 'journal'
+                    JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
                     JOIN issues ci ON ci.id = j.issue_id
                     CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
                     WHERE sc.search_vector @@ query
-                    AND ss.source_type = 'journal'
+                    AND ss.source_type = '{_SST_JOURNAL}'
                     {comment_project_filter}
                     {comment_visibility}
                     ORDER BY score DESC LIMIT :limit
@@ -748,11 +838,11 @@ class SearchService:
             SELECT COUNT(*) as cnt
             FROM search_chunks sc
             JOIN search_sources ss ON ss.id = sc.source_id
-            JOIN journals j ON j.id = ss.entity_id AND ss.source_type = 'journal'
+            JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
             JOIN issues ci ON ci.id = j.issue_id
             CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
             WHERE sc.search_vector @@ query
-            AND ss.source_type = 'journal'
+            AND ss.source_type = '{_SST_JOURNAL}'
             {comment_project_filter}
             {comment_visibility}
         """
@@ -781,7 +871,7 @@ class SearchService:
                 id=row._mapping["id"],
                 title=row._mapping["title"],
                 subtitle=row._mapping["subtitle"],
-                snippet=row._mapping["snippet"],
+                snippet=_clean_snippet(row._mapping["snippet"]),
                 score=float(row._mapping["score"]),
                 project_key=row._mapping["project_key"],
             )
@@ -915,16 +1005,20 @@ class SearchService:
             SELECT result_type, id, title, subtitle, snippet, score, project_key
             FROM (
                 SELECT DISTINCT ON (ss.source_type, ss.entity_id)
-                    ss.source_type as result_type,
+                    CASE ss.source_type
+                        WHEN '{_SST_WIKI_PAGE}' THEN '{_SRT_WIKI}'
+                        WHEN '{_SST_JOURNAL}' THEN '{_SRT_COMMENT}'
+                        ELSE ss.source_type
+                    END as result_type,
                     ss.entity_id as id,
                     CASE
-                        WHEN ss.source_type = 'issue' THEN
+                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
                             iss.project_key || '-' || iss.sequence_number
-                        WHEN ss.source_type = 'wiki_page' THEN
+                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
                             wp.title
-                        WHEN ss.source_type = 'journal' THEN
+                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
                             cmt_iss.project_key || '-' || cmt_iss.sequence_number
-                        WHEN ss.source_type = 'attachment' THEN
+                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
                             CASE
                                 WHEN att.container_type = 'Issue' THEN
                                     att_iss.project_key || '-' || CAST(att_iss.sequence_number AS text)
@@ -934,39 +1028,39 @@ class SearchService:
                         ELSE CAST(ss.entity_id AS text)
                     END as title,
                     CASE
-                        WHEN ss.source_type = 'issue' THEN
+                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
                             iss.subject
-                        WHEN ss.source_type = 'wiki_page' THEN
+                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
                             wp.slug
-                        WHEN ss.source_type = 'journal' THEN
+                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
                             left(sc.content, {SEARCH_SNIPPET_MAX_CHARS})
-                        WHEN ss.source_type = 'attachment' THEN
+                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
                             att.filename
                         ELSE NULL
                     END as subtitle,
                     left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as snippet,
                     n.score,
                     CASE
-                        WHEN ss.source_type = 'issue' THEN
+                        WHEN ss.source_type = '{_SST_ISSUE}' THEN
                             iss.project_key
-                        WHEN ss.source_type = 'wiki_page' THEN
+                        WHEN ss.source_type = '{_SST_WIKI_PAGE}' THEN
                             wp_proj.key
-                        WHEN ss.source_type = 'journal' THEN
+                        WHEN ss.source_type = '{_SST_JOURNAL}' THEN
                             cmt_iss.project_key
-                        WHEN ss.source_type = 'attachment' THEN
+                        WHEN ss.source_type = '{_SST_ATTACHMENT}' THEN
                             COALESCE(att_iss_p.key, att_wp_p.key)
                         ELSE ''
                     END as project_key
                 FROM nearest n
                 JOIN search_chunks sc ON sc.id = n.chunk_id
                 JOIN search_sources ss ON ss.id = sc.source_id
-                LEFT JOIN issues iss ON ss.source_type = 'issue' AND iss.id = ss.entity_id
-                LEFT JOIN wiki_pages wp ON ss.source_type = 'wiki_page' AND wp.id = ss.entity_id
+                LEFT JOIN issues iss ON ss.source_type = '{_SST_ISSUE}' AND iss.id = ss.entity_id
+                LEFT JOIN wiki_pages wp ON ss.source_type = '{_SST_WIKI_PAGE}' AND wp.id = ss.entity_id
                 LEFT JOIN wikis wp_w ON wp_w.id = wp.wiki_id
                 LEFT JOIN projects wp_proj ON wp_proj.id = wp_w.project_id
-                LEFT JOIN journals cmt_j ON ss.source_type = 'journal' AND cmt_j.id = ss.entity_id
+                LEFT JOIN journals cmt_j ON ss.source_type = '{_SST_JOURNAL}' AND cmt_j.id = ss.entity_id
                 LEFT JOIN issues cmt_iss ON cmt_iss.id = cmt_j.issue_id
-                LEFT JOIN attachments att ON ss.source_type = 'attachment' AND att.id = ss.entity_id
+                LEFT JOIN attachments att ON ss.source_type = '{_SST_ATTACHMENT}' AND att.id = ss.entity_id
                 LEFT JOIN issues att_iss ON att.container_type = 'Issue' AND att_iss.id = att.container_id
                 LEFT JOIN projects att_iss_p ON att_iss_p.id = att_iss.project_id
                 LEFT JOIN wiki_pages att_wp ON att.container_type = 'WikiPage' AND att_wp.id = att.container_id
@@ -975,26 +1069,26 @@ class SearchService:
                 WHERE 1=1
                 {project_filter}
                 AND (
-                    (ss.source_type = 'issue' AND EXISTS (
+                    (ss.source_type = '{_SST_ISSUE}' AND EXISTS (
                         SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
                         {issue_vis}
                     ))
                     OR
-                    (ss.source_type = 'wiki_page' AND EXISTS (
+                    (ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
                         SELECT 1 FROM wiki_pages wp2
                         JOIN wikis w2 ON w2.id = wp2.wiki_id
                         WHERE wp2.id = ss.entity_id
                         {wiki_vis}
                     ))
                     OR
-                    (ss.source_type = 'journal' AND EXISTS (
+                    (ss.source_type = '{_SST_JOURNAL}' AND EXISTS (
                         SELECT 1 FROM journals cj
                         JOIN issues ci2 ON ci2.id = cj.issue_id
                         WHERE cj.id = ss.entity_id
                         {comment_vis}
                     ))
                     OR
-                    (ss.source_type = 'attachment' AND att.id IS NOT NULL
+                    (ss.source_type = '{_SST_ATTACHMENT}' AND att.id IS NOT NULL
                      {att_sem_vis})
                 )
                 ORDER BY ss.source_type, ss.entity_id, n.score DESC
@@ -1032,33 +1126,33 @@ class SearchService:
                 FROM chunk_embeddings ce
                 JOIN search_chunks sc ON sc.id = ce.chunk_id
                 JOIN search_sources ss ON ss.id = sc.source_id
-                LEFT JOIN attachments att_c ON ss.source_type = 'attachment' AND att_c.id = ss.entity_id
+                LEFT JOIN attachments att_c ON ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id = ss.entity_id
                 LEFT JOIN issues att_c_iss ON att_c.container_type = 'Issue' AND att_c_iss.id = att_c.container_id
                 LEFT JOIN wiki_pages att_c_wp ON att_c.container_type = 'WikiPage' AND att_c_wp.id = att_c.container_id
                 LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
                 WHERE ce.model_id = :model_id
                 {project_filter}
                 AND (
-                    (ss.source_type = 'issue' AND EXISTS (
+                    (ss.source_type = '{_SST_ISSUE}' AND EXISTS (
                         SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
                         {issue_vis}
                     ))
                     OR
-                    (ss.source_type = 'wiki_page' AND EXISTS (
+                    (ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
                         SELECT 1 FROM wiki_pages wp2
                         JOIN wikis w2 ON w2.id = wp2.wiki_id
                         WHERE wp2.id = ss.entity_id
                         {wiki_vis}
                     ))
                     OR
-                    (ss.source_type = 'journal' AND EXISTS (
+                    (ss.source_type = '{_SST_JOURNAL}' AND EXISTS (
                         SELECT 1 FROM journals cj
                         JOIN issues ci2 ON ci2.id = cj.issue_id
                         WHERE cj.id = ss.entity_id
                         {comment_vis}
                     ))
                     OR
-                    (ss.source_type = 'attachment' AND att_c.id IS NOT NULL
+                    (ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id IS NOT NULL
                      {self._attachment_semantic_count_vis(user)})
                 )
             """
@@ -1116,11 +1210,13 @@ class SearchService:
         )
 
         if not fts_results and not sem_results:
-            return [], 0, {"issues": 0, "wiki": 0, "comments": 0, "attachments": 0, "all": 0}
+            return [], 0, _empty_type_counts(include_all=True)
 
-        # Build ID lists for RRF (using composite key: "type:id")
+        # Build ID lists and rank maps for RRF (using composite key: "type:id")
         fts_keys = [f"{r.result_type}:{r.id}" for r in fts_results]
         sem_keys = [f"{r.result_type}:{r.id}" for r in sem_results]
+        fts_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(fts_results)}
+        sem_rank_map = {f"{r.result_type}:{r.id}": i + 1 for i, r in enumerate(sem_results)}
 
         # Build lookup maps
         result_map: dict[str, SearchResult] = {}
@@ -1143,28 +1239,30 @@ class SearchService:
         sorted_keys = sorted(scores, key=lambda x: scores[x], reverse=True)
 
         # Compute per-type counts from the merged RRF results (not FTS alone)
-        type_counts: dict[str, int] = {"issues": 0, "wiki": 0, "comments": 0, "attachments": 0}
+        _type_to_count_key = {
+            SearchResultType.ISSUE: "issues",
+            SearchResultType.WIKI: "wiki",
+            SearchResultType.COMMENT: "comments",
+            SearchResultType.ATTACHMENT: "attachments",
+        }
+        type_counts: dict[str, int] = _empty_type_counts()
         for key in sorted_keys:
-            r = result_map[key]
-            if r.result_type == "issue":
-                type_counts["issues"] += 1
-            elif r.result_type in ("wiki", "wiki_page"):
-                type_counts["wiki"] += 1
-            elif r.result_type in ("comment", "journal"):
-                type_counts["comments"] += 1
-            elif r.result_type == "attachment":
-                type_counts["attachments"] += 1
+            display = SOURCE_TYPE_TO_DISPLAY.get(result_map[key].result_type)
+            if display:
+                count_key = _type_to_count_key.get(display)
+                if count_key:
+                    type_counts[count_key] += 1
 
         # Apply scope filter to sorted_keys if not "all"
         if scope != "all":
-            scope_types = {
-                "issues": ("issue",),
-                "wiki": ("wiki", "wiki_page"),
-                "comments": ("comment", "journal"),
-                "attachments": ("attachment",),
+            scope_types: dict[str, set[str]] = {
+                "issues": {SearchResultType.ISSUE},
+                "wiki": {SearchResultType.WIKI},
+                "comments": {SearchResultType.COMMENT},
+                "attachments": {SearchResultType.ATTACHMENT},
             }
-            allowed = scope_types.get(scope, ())
-            sorted_keys = [k for k in sorted_keys if result_map[k].result_type in allowed]
+            allowed = scope_types.get(scope, set())
+            sorted_keys = [k for k in sorted_keys if SOURCE_TYPE_TO_DISPLAY.get(result_map[k].result_type) in allowed]
 
         total = len(sorted_keys)
         type_counts["all"] = sum(type_counts.values())
@@ -1184,6 +1282,8 @@ class SearchService:
                     snippet=r.snippet,
                     score=scores[key],
                     project_key=r.project_key,
+                    fts_rank=fts_rank_map.get(key),
+                    sem_rank=sem_rank_map.get(key),
                 )
             )
 

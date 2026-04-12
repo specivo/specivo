@@ -2,13 +2,15 @@
 
 Your team's knowledge, finally findable.
 
-Self-hosted project tracking, wiki, and search that understands what you wrote. Open source, no per-seat pricing.
+Self-hosted project tracker with wiki and semantic search. Open source. No per-seat pricing. Built for teams that also use AI agents.
 
 ## The problem
 
-Teams lose knowledge constantly. Decisions get made in Slack and vanish. Architecture docs end up in five different tools. Somebody leaves and takes half the context with them. AI agents make it worse by generating content faster than anyone can organize.
+Teams lose knowledge constantly. Decisions get made in chat and vanish. Architecture docs scatter across five tools. AI coding agents make it worse — they ship code in a black box. What was done, why, and how it connects to other work becomes impossible to track after the session ends.
 
-Specivo puts issues, wiki, and search in one place. The search part is the point: you wrote "login flow" in January and "auth sequence" in March, and keyword search can't connect the two. Specivo's hybrid search (full-text + semantic) can.
+Specivo fixes this by letting agents work inside the tracker, not outside it. Users plan sprints with help from agents, assign issues to people or agents, and review what was done in a familiar issue tracker UI. Agents create issues, update wiki pages, log time, and manage versions through 38 MCP tools — one config line, no glue code. Every action is tracked, searchable, and connected. Assign tasks to different models, track outcomes, and see which agents deliver quality and which produce slop that humans had to fix.
+
+You wrote "login flow" in January and "auth sequence" in March — keyword search cannot connect the two. Specivo's hybrid search (full-text + semantic) finds things by meaning, not just exact words.
 
 ## Quick start
 
@@ -31,19 +33,21 @@ For production, copy `.env.example` to `.env` and set a real `SECRET_KEY`.
 
 ## What's in it
 
-**Issues** with hierarchy (nested set, up to 16 levels), a workflow engine, time tracking, versions, relations, watchers, bulk operations.
+**Issues** — hierarchy up to 16 levels (nested set), workflow engine, time tracking, versions, relations (9 types), watchers, bulk operations, custom metadata schemas.
 
-**Wiki** with Markdown, full version history, page hierarchy, one-click revert. Every edit tracked.
+**Wiki** — Markdown, full version history, page hierarchy, one-click revert. Every edit tracked. Cross-linked with issues.
 
-**Search** across issues, wiki, comments, and attachments. Full-text via PostgreSQL tsvector, semantic via pgvector embeddings, fused with RRF. Finds things by meaning, not just exact words. Attachments are searchable by their description — find that architecture diagram by what it shows, not just its filename.
+**Hybrid search** — full-text via PostgreSQL tsvector, semantic via pgvector embeddings, fused with Reciprocal Rank Fusion. Searches issues, wiki, comments, and attachments. Attachment descriptions are searchable: find that architecture diagram by what it shows, not its filename.
 
-**MCP server** with 11 tools. Works with Claude Code, Codex, or anything that speaks MCP. One config line and the agent stops guessing.
+**MCP server** — 38 Model Context Protocol tools. Works with Claude Code, Codex, or anything that speaks MCP. Issues, wiki pages, comments, and attachment descriptions become searchable context that agents can pull and update — automatically or on user confirmation. One config line to connect.
 
-**AI is optional.** Works fine without it. Turn on semantic search when you want it, using the bundled model (multilingual-e5-small, 100 languages, runs on CPU) or your own API key.
+**Sprint management** — backlog, sprint planning, start/complete cycles. Issues move between sprints with full history preserved.
 
-**i18n** via .po files. Ships with English and Thai.
+**Custom metadata schemas** — define structured fields per project or issue type. Preset schemas for common workflows. More flexible than static custom fields.
 
-**Themes.** Bootstrap-based, CSS custom properties. Override or build your own.
+**AI is optional.** Works fine without it. Enable semantic search when you want it, using the bundled model (multilingual-e5-small, runs on CPU, 100 languages) or your own API key (BYOK).
+
+**i18n** — ships with English and Thai. Extensible via .po files.
 
 ## Tech
 
@@ -51,6 +55,8 @@ For production, copy `.env.example` to `.env` and set a real `SECRET_KEY`.
 - PostgreSQL 18 with ltree and pgvector, Redis
 - Celery for background jobs
 - Jinja2, Alpine.js, htmx on the frontend
+
+No Elasticsearch. No external search service. Search runs entirely inside PostgreSQL.
 
 ## Development
 
@@ -64,6 +70,10 @@ make test             # run tests
 make lint             # ruff + mypy
 make download-model   # embedding model (~393 MB)
 ```
+
+## Documentation
+
+[specivo.io/docs/specivo](https://specivo.io/docs/specivo/)
 
 ## License
 

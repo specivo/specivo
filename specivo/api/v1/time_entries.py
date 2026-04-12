@@ -103,6 +103,7 @@ async def create_time_entry(
 ) -> TimeEntryOut:
     """Create a time entry in the given project."""
     project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     entry = await _service.create(db, project.id, data, current_user)
     entry = await _service.get_by_id(db, entry.id)
     return _entry_out(entry)
@@ -124,6 +125,7 @@ async def list_time_entries(
 ) -> TimeEntryListResponse:
     """List time entries for a project with optional filters."""
     project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
     entries, total = await _service.list_for_project(
         db,
         project.id,
@@ -245,4 +247,5 @@ async def stop_timer(
     """Stop the current timer and create a time entry."""
     entry = await _service.stop_timer(db, current_user, data.activity_id)
     entry = await _service.get_by_id(db, entry.id)
+    await db.commit()  # commit before response to avoid reload race condition
     return _entry_out(entry)

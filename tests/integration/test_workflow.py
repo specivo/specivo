@@ -70,7 +70,7 @@ async def _create_issue(
 
 @pytest_asyncio.fixture
 async def new_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="New", position=1, is_closed=False)
+    s = StatusFactory.build(name="New", position=1, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -79,7 +79,7 @@ async def new_status(db_session: AsyncSession) -> IssueStatus:
 
 @pytest_asyncio.fixture
 async def in_progress_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="In Progress", position=2, is_closed=False)
+    s = StatusFactory.build(name="In Progress", position=2, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -88,7 +88,7 @@ async def in_progress_status(db_session: AsyncSession) -> IssueStatus:
 
 @pytest_asyncio.fixture
 async def resolved_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="Resolved", position=3, is_closed=False)
+    s = StatusFactory.build(name="Resolved", position=3, category="backlog")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -97,7 +97,7 @@ async def resolved_status(db_session: AsyncSession) -> IssueStatus:
 
 @pytest_asyncio.fixture
 async def closed_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="Closed", position=5, is_closed=True)
+    s = StatusFactory.build(name="Closed", position=5, category="closed")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)
@@ -106,7 +106,7 @@ async def closed_status(db_session: AsyncSession) -> IssueStatus:
 
 @pytest_asyncio.fixture
 async def rejected_status(db_session: AsyncSession) -> IssueStatus:
-    s = StatusFactory.build(name="Rejected", position=6, is_closed=True)
+    s = StatusFactory.build(name="Rejected", position=6, category="closed")
     db_session.add(s)
     await db_session.commit()
     await db_session.refresh(s)

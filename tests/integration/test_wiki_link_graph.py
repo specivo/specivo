@@ -290,7 +290,7 @@ async def test_delete_source_cascades(
     project: Project,
     link_user: User,
 ):
-    """Deleting a source page cascades and removes its outgoing links."""
+    """Soft-deleting a source page marks it as deleted; links remain (soft delete)."""
     wiki = await _wiki_service.get_or_create_wiki(db_session, project.id)
 
     page, _ = await _wiki_service.create_page(db_session, project.id, "Src Page", "[[Some Target]]", link_user)
@@ -304,22 +304,27 @@ async def test_delete_source_cascades(
     result = await db_session.execute(stmt)
     assert result.scalar_one_or_none() is not None
 
-    # Delete the source page
-    await _wiki_service.delete_page(db_session, page.id)
+    # Soft-delete the source page
+    page_id = page.id
+    await _wiki_service.delete_page(db_session, page_id, deleted_by=link_user)
     await db_session.commit()
 
-    # Links should be gone
-    result = await db_session.execute(stmt)
-    assert result.scalar_one_or_none() is None
+    # Page is soft-deleted (deleted_at set), links remain
+    from specivo.models.wiki import WikiPage
+
+    db_session.expire_all()
+    result = await db_session.execute(select(WikiPage).where(WikiPage.id == page_id))
+    deleted_page = result.scalar_one()
+    assert deleted_page.deleted_at is not None
 
 
 @pytest.mark.asyncio
-async def test_target_delete_nullifies(
+async def test_target_delete_soft_deletes(
     db_session: AsyncSession,
     project: Project,
     link_user: User,
 ):
-    """Deleting a target page sets target_page_id to NULL (SET NULL FK)."""
+    """Soft-deleting a target page marks it deleted; link FK remains (soft delete)."""
     wiki = await _wiki_service.get_or_create_wiki(db_session, project.id)
 
     source, _ = await _wiki_service.create_page(db_session, project.id, "Source", "[[Target]]", link_user)
@@ -335,12 +340,20 @@ async def test_target_delete_nullifies(
     link = result.scalar_one()
     assert link.target_page_id == target.id
 
-    # Delete the target page
-    await _wiki_service.delete_page(db_session, target.id)
+    # Soft-delete the target page
+    target_id = target.id
+    await _wiki_service.delete_page(db_session, target_id, deleted_by=link_user)
     await db_session.commit()
 
-    # Refresh and check — target_page_id should be NULL
+    # target_page_id still points to the soft-deleted page
     db_session.expire_all()
     result = await db_session.execute(stmt)
     link = result.scalar_one()
-    assert link.target_page_id is None
+    assert link.target_page_id == target_id
+
+    # But the target page is now soft-deleted
+    from specivo.models.wiki import WikiPage
+
+    result = await db_session.execute(select(WikiPage).where(WikiPage.id == target_id))
+    deleted_page = result.scalar_one()
+    assert deleted_page.deleted_at is not None

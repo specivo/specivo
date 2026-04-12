@@ -20,17 +20,14 @@
   <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin: 0 0 var(--sp-space-lg) 0;">
     These actions immediately revoke agent access. Use with caution.
   </p>
-  <div style="display: flex; gap: var(--sp-space-md); flex-wrap: wrap;" x-data="{ confirm: '' }">
-    <button class="btn" style="background: #f59e0b; color: white; border: none;"
-            @click="if(window.confirm('Kill specific agent? Enter agent user ID in next prompt.')) { confirm = 'agent'; }">
+  <div style="display: flex; gap: var(--sp-space-md); flex-wrap: wrap;">
+    <button class="btn" style="background: #f59e0b; color: white; border: none;" disabled title="Not yet implemented">
       Kill Agent
     </button>
-    <button class="btn" style="background: #ef4444; color: white; border: none;"
-            @click="if(window.confirm('Kill specific system? This will revoke all credentials for the system.')) { confirm = 'system'; }">
+    <button class="btn" style="background: #ef4444; color: white; border: none;" disabled title="Not yet implemented">
       Kill System
     </button>
-    <button class="btn" style="background: #991b1b; color: white; border: none; font-weight: 700;"
-            @click="if(window.confirm('KILL ALL AGENTS? This will deactivate ALL service account API keys and revoke ALL credentials. This action cannot be undone.')) { confirm = 'all'; }">
+    <button class="btn" style="background: #991b1b; color: white; border: none; font-weight: 700;" disabled title="Not yet implemented">
       Kill All
     </button>
   </div>

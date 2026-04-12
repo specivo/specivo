@@ -24,7 +24,7 @@ class ProjectFactory(factory.Factory):
     description = None
     parent_id = None
     path = factory.LazyAttribute(lambda obj: obj.identifier.replace("-", "_"))
-    is_public = True
+    is_public = False
     inherit_members = False
     status = 1
     issue_sequence = 0

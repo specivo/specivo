@@ -38,7 +38,7 @@
         <template x-for="u in users" :key="u.id">
           <tr :class="u.status === 'locked' ? 'sp-row-muted' : ''">
             <td style="display: flex; align-items: center; gap: var(--sp-space-sm);">
-              <span class="avatar-sm" :style="'background:' + (u.status === 'locked' ? 'var(--sp-text-muted)' : u.avatar_color)" x-text="u.display_name.split(' ').map(function(w){return w[0]}).join('').substring(0,2).toUpperCase()"></span>
+              <span class="avatar-sm" :style="'background:' + (u.status === 'locked' ? 'var(--sp-text-muted)' : u.avatar_color)" x-text="initials(u.display_name)"></span>
               <span>
                 <a :href="'/admin/users/' + u.id + '/'" :style="'font-weight:' + (u.status === 'locked' ? '400' : '500') + (u.status === 'locked' ? ';text-decoration:line-through' : '') + ';color:var(--sp-text-primary)'" x-text="u.display_name"></a><br>
                 <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="u.email"></span>
@@ -55,7 +55,7 @@
             <td>
               <span class="sp-user-status"
                 :class="'sp-user-status-' + u.status"
-                x-text="u.status.charAt(0).toUpperCase() + u.status.slice(1)"></span>
+                x-text="capitalize(u.status)"></span>
             </td>
             <td style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);" x-text="u.last_login_at ? timeAgo(u.last_login_at) : 'Never'"></td>
             <td style="white-space: nowrap; display: flex; gap: var(--sp-space-xs);">

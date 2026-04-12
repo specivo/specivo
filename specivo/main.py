@@ -24,10 +24,12 @@ from specivo.core.exceptions import (
     app_error_handler,
     http_exception_handler,
     request_validation_error_handler,
+    unhandled_exception_handler,
 )
 from specivo.core.logging import setup_logging
 from specivo.core.middleware import (
     AuditBatchMiddleware,
+    CSRFMiddleware,
     LocaleMiddleware,
     RateLimitHeaderMiddleware,
     RequestIDMiddleware,
@@ -160,6 +162,9 @@ def create_app() -> FastAPI:
     # Request ID — added first so it is outermost (runs before CORS).
     application.add_middleware(RequestIDMiddleware)
 
+    # CSRF — double-submit cookie pattern for state-changing requests.
+    application.add_middleware(CSRFMiddleware)
+
     # Audit batch — collects audit events during the request and flushes
     # them in a single batch INSERT after the response is sent.
     application.add_middleware(AuditBatchMiddleware)
@@ -211,6 +216,12 @@ def create_app() -> FastAPI:
     pm.service_registry.register("workflow", WorkflowService)
     pm.service_registry.register("notification", NotificationService)
 
+    # Initialize the metadata target registry with core targets so
+    # plugins can extend it in their on_startup hooks.
+    from specivo.core.metadata_targets import get_metadata_target_registry
+
+    get_metadata_target_registry()
+
     # Register notification channels
     from specivo.services.channels.email_channel import EmailChannel
     from specivo.services.channels.registry import get_channel, register_channel
@@ -257,6 +268,7 @@ def create_app() -> FastAPI:
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(AppError, app_error_handler)
     application.add_exception_handler(HTTPException, http_exception_handler)
+    application.add_exception_handler(Exception, unhandled_exception_handler)
 
     # robots.txt — always at root, not behind stealth prefix.
     # Overridable: admin settings key "robots_txt" > env ROBOTS_TXT > default (disallow all).

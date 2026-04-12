@@ -84,8 +84,9 @@ async def archive_project(
     """Archive a project. Superadmin only."""
     project = await _service.get_by_key(db, key.upper())
     project.status = 9  # archived
-    await db.commit()
+    await db.flush()
     await db.refresh(project)
+    await db.commit()  # commit before response to avoid reload race condition
     return ProjectOut.model_validate(project)
 
 
@@ -98,6 +99,7 @@ async def unarchive_project(
     """Unarchive a project (restore to active). Superadmin only."""
     project = await _service.get_by_key(db, key.upper())
     project.status = 1  # active
-    await db.commit()
+    await db.flush()
     await db.refresh(project)
+    await db.commit()  # commit before response to avoid reload race condition
     return ProjectOut.model_validate(project)

@@ -2,7 +2,7 @@
        test test-serial test-all test-unit test-integration test-service test-cov lint format \
        migrate migrate-gen migrate-merge seed \
        test-db-up test-db-down test-db-reset test-ci \
-       test-e2e test-e2e-headed test-e2e-debug playwright-install \
+       test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
        install sync lock download-model \
        build bundle
 
@@ -59,7 +59,7 @@ status:
 # Development mode (build from source, hot-reload, direct port 8000)
 dev-up:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml build api
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+	GIT_COMMIT=$$(git rev-parse --short HEAD) docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 dev-down:
 	docker compose down
@@ -132,6 +132,9 @@ test-e2e-headed:
 
 test-e2e-debug:
 	PWDEBUG=1 $(RUN) pytest tests/e2e/ -m e2e -n 0 --headed
+
+test-e2e-update-snapshots:
+	UPDATE_SNAPSHOTS=1 $(RUN) pytest tests/e2e/test_visual_regression.py -m e2e -n 0
 
 playwright-install:
 	$(RUN) playwright install chromium

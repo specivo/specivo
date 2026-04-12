@@ -7,6 +7,7 @@ import logging
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError
 from specivo.core.utils import utcnow
@@ -152,6 +153,29 @@ class ProjectService:
             raise NotFoundError(f"Project '{key}' not found")
         return project
 
+    async def require_project_access(self, session: AsyncSession, project: Project, user: User) -> None:
+        """Raise NotFoundError if non-admin user cannot access this project.
+
+        Public projects: accessible to all authenticated users.
+        Private projects: accessible only to members.
+        Returns 404 (not 403) to prevent project key enumeration.
+        """
+        if user.is_admin:
+            return
+        if project.is_public:
+            return
+        stmt = (
+            select(Member.id)
+            .where(
+                Member.project_id == project.id,
+                Member.user_id == user.id,
+            )
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        if result.scalar_one_or_none() is None:
+            raise NotFoundError(f"Project '{project.key}' not found")
+
     async def get_parent_key(self, session: AsyncSession, project: Project) -> str | None:
         """Resolve the parent project's key, or None for root projects."""
         if project.parent_id is None:
@@ -200,7 +224,12 @@ class ProjectService:
         project: Project,
         data: ProjectUpdate,
     ) -> Project:
-        """Apply partial update to an existing project."""
+        """Apply partial update to an existing project.
+
+        When ``parent_id`` is present in the request payload (detected via
+        ``model_fields_set``), the project is reparented.  A value of ``None``
+        moves the project to root; an integer value sets a new parent.
+        """
         if data.name is not None:
             project.name = data.name
         if data.description is not None:
@@ -211,6 +240,78 @@ class ProjectService:
             project.status = data.status
         if data.color is not None:
             project.color = data.color
+
+        if "parent_id" in data.model_fields_set:
+            project = await self._reparent(session, project, data.parent_id)
+            return project
+
+        session.add(project)
+        await session.flush()
+        await session.refresh(project)
+        return project
+
+    async def _reparent(
+        self,
+        session: AsyncSession,
+        project: Project,
+        new_parent_id: int | None,
+    ) -> Project:
+        """Change the parent of *project*, updating ltree paths for it and all descendants.
+
+        Validates:
+        - new_parent_id is not the project itself (self-loop).
+        - new_parent_id is not a descendant of the project (cycle).
+        - new_parent_id references an existing project (or is None for root).
+        """
+        from sqlalchemy import text
+
+        from specivo.core.exceptions import AppError, NotFoundError
+
+        # Self-assignment check
+        if new_parent_id is not None and new_parent_id == project.id:
+            raise AppError(
+                code="invalid_parent",
+                message="A project cannot be its own parent",
+                status_code=400,
+            )
+
+        new_parent: Project | None = None
+        if new_parent_id is not None:
+            result = await session.execute(select(Project).where(Project.id == new_parent_id))
+            new_parent = result.scalar_one_or_none()
+            if new_parent is None:
+                raise NotFoundError(f"Parent project with id {new_parent_id} not found")
+
+            # Cycle detection: new_parent must not be a descendant of project.
+            # A project is a descendant if its path starts with project.path + "." or equals it.
+            old_path = project.path
+            if new_parent.path == old_path or new_parent.path.startswith(old_path + "."):
+                raise AppError(
+                    code="cycle_detected",
+                    message="Cannot set a descendant as parent (would create a cycle)",
+                    status_code=400,
+                )
+
+        old_path = project.path
+        new_path = self._build_path(project.identifier, new_parent.path if new_parent else None)
+
+        # Bulk-update descendants first (before changing project.path)
+        if old_path != new_path:
+            await session.execute(
+                text(
+                    "UPDATE projects "
+                    "SET path = :new_prefix || substring(path FROM length(:old_prefix) + 1) "
+                    "WHERE path::text LIKE :old_prefix_dot"
+                ),
+                {
+                    "new_prefix": new_path,
+                    "old_prefix": old_path,
+                    "old_prefix_dot": f"{old_path}.%",
+                },
+            )
+
+        project.parent_id = new_parent_id
+        project.path = new_path
 
         session.add(project)
         await session.flush()
@@ -236,16 +337,12 @@ class ProjectService:
 
         if new_key and new_key != project.key:
             # Check conflict with live projects
-            conflict = await session.execute(
-                select(Project.id).where(Project.key == new_key, Project.id != project.id)
-            )
+            conflict = await session.execute(select(Project.id).where(Project.key == new_key, Project.id != project.id))
             if conflict.scalar_one_or_none() is not None:
                 raise ConflictError(message=f"Project key '{new_key}' is already in use")
 
             # Check conflict with aliases
-            alias_conflict = await session.execute(
-                select(ProjectKeyAlias).where(ProjectKeyAlias.old_key == new_key)
-            )
+            alias_conflict = await session.execute(select(ProjectKeyAlias).where(ProjectKeyAlias.old_key == new_key))
             existing_alias = alias_conflict.scalar_one_or_none()
             if existing_alias is not None:
                 if existing_alias.project_id == project.id:
@@ -255,19 +352,17 @@ class ProjectService:
                     raise ConflictError(message=f"Key '{new_key}' is a retired key of another project")
 
             # Store old key as alias
-            session.add(ProjectKeyAlias(
-                old_key=project.key,
-                project_id=project.id,
-                renamed_at=utcnow(),
-                renamed_by_id=admin_user.id,
-            ))
+            session.add(
+                ProjectKeyAlias(
+                    old_key=project.key,
+                    project_id=project.id,
+                    renamed_at=utcnow(),
+                    renamed_by_id=admin_user.id,
+                )
+            )
 
             # Bulk re-key all issues
-            rekey_stmt = (
-                update(Issue)
-                .where(Issue.project_id == project.id)
-                .values(project_key=new_key)
-            )
+            rekey_stmt = update(Issue).where(Issue.project_id == project.id).values(project_key=new_key)
             result = await session.execute(rekey_stmt)
             issues_rekeyed = result.rowcount
 
@@ -276,9 +371,7 @@ class ProjectService:
         if new_identifier and new_identifier != project.identifier:
             # Check conflict
             id_conflict = await session.execute(
-                select(Project.id).where(
-                    Project.identifier == new_identifier, Project.id != project.id
-                )
+                select(Project.id).where(Project.identifier == new_identifier, Project.id != project.id)
             )
             if id_conflict.scalar_one_or_none() is not None:
                 raise ConflictError(message=f"Identifier '{new_identifier}' is already in use")
@@ -410,9 +503,7 @@ class ProjectService:
             raise NotFoundError(f"Roles not found: {sorted(missing)}")
 
         # Delete existing roles and replace
-        await session.execute(
-            delete(MemberRole).where(MemberRole.member_id == member.id)
-        )
+        await session.execute(delete(MemberRole).where(MemberRole.member_id == member.id))
         for role_id in role_ids:
             session.add(MemberRole(member_id=member.id, role_id=role_id))
 
@@ -439,57 +530,62 @@ class ProjectService:
         await session.delete(member)
         await session.flush()
 
+    async def count_members(self, session: AsyncSession, project: Project) -> int:
+        """Return the total number of members in a project."""
+        result = await session.execute(select(func.count()).select_from(Member).where(Member.project_id == project.id))
+        return result.scalar_one()
+
     async def list_members(
         self,
         session: AsyncSession,
         project: Project,
+        limit: int | None = None,
     ) -> list[dict]:
         """Return project members with their roles.
 
-        Returns a list of dicts: {user_id, login, display_name, roles: [name]}.
+        Returns a list of dicts sorted by last login (most recent first).
+        Pass ``limit`` to cap the number of results (useful for overview cards).
         """
-        # Load members + their user info
-        members_result = await session.execute(select(Member).where(Member.project_id == project.id))
-        members = members_result.scalars().all()
+        stmt = (
+            select(Member)
+            .where(Member.project_id == project.id)
+            .options(
+                selectinload(Member.user),
+                selectinload(Member.member_roles).joinedload(MemberRole.role),
+            )
+        )
+        members_result = await session.execute(stmt)
+        members = list(members_result.scalars().all())
 
         if not members:
             return []
 
-        member_ids = [m.id for m in members]
-        user_ids = [m.user_id for m in members]
-
-        # Batch load users
-        users_result = await session.execute(select(User).where(User.id.in_(user_ids)))
-        users_by_id = {u.id: u for u in users_result.scalars().all()}
-
-        # Batch load member_roles + roles
-        mr_result = await session.execute(select(MemberRole).where(MemberRole.member_id.in_(member_ids)))
-        member_roles = mr_result.scalars().all()
-
-        role_ids = list({mr.role_id for mr in member_roles})
-        roles_result = await session.execute(select(Role).where(Role.id.in_(role_ids)))
-        roles_by_id = {r.id: r for r in roles_result.scalars().all()}
-
-        # Group roles by member_id
-        roles_by_member: dict[int, list[str]] = {}
-        for mr in member_roles:
-            role = roles_by_id.get(mr.role_id)
-            if role:
-                roles_by_member.setdefault(mr.member_id, []).append(role.name)
-
         out = []
         for member in members:
-            user = users_by_id.get(member.user_id)
+            user = member.user
             if user is None:
                 continue
+            role_names = [mr.role.name for mr in member.member_roles if mr.role is not None]
+            role_ids = [mr.role.id for mr in member.member_roles if mr.role is not None]
             out.append(
                 {
                     "user_id": user.id,
                     "login": user.login,
                     "display_name": user.display_name,
-                    "roles": roles_by_member.get(member.id, []),
+                    "avatar_url": user.avatar_url,
+                    "avatar_color": (user.preferences or {}).get("avatar_color", ""),
+                    "_last_login_at": user.last_login_at,
+                    "roles": role_names,
+                    "role_ids": role_ids,
                 }
             )
+        # Sort by last active (most recent first), None values last
+        out.sort(key=lambda m: (m["_last_login_at"] is not None, m["_last_login_at"]), reverse=True)
+        # Remove sort key — it's a datetime that can't be JSON-serialized
+        for m in out:
+            del m["_last_login_at"]
+        if limit is not None:
+            out = out[:limit]
         return out
 
     # -----------------------------------------------------------------------
@@ -586,21 +682,23 @@ class ProjectService:
         if not project_ids:
             return stats
 
-        # --- Issue counts (open vs closed) ---
-        is_closed_sub = select(IssueStatus.id).where(IssueStatus.is_closed.is_(True)).scalar_subquery()
+        # --- Issue counts (open vs done/closed) ---
+        done_sub = select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
         issue_stmt = (
             select(
                 Issue.project_id,
-                func.count().filter(Issue.status_id.not_in(is_closed_sub)).label("open_count"),
-                func.count().filter(Issue.status_id.in_(is_closed_sub)).label("closed_count"),
+                func.count().label("total"),
+                func.count().filter(Issue.status_id.in_(done_sub)).label("done_count"),
             )
             .where(Issue.project_id.in_(project_ids))
             .group_by(Issue.project_id)
         )
         issue_rows = (await session.execute(issue_stmt)).all()
         for row in issue_rows:
-            stats[row.project_id]["open_count"] = row.open_count
-            stats[row.project_id]["closed_count"] = row.closed_count
+            done = row.done_count or 0
+            total = row.total or 0
+            stats[row.project_id]["open_count"] = total - done
+            stats[row.project_id]["closed_count"] = done
 
         # --- Member counts + member details (first 6 per project) ---
         member_stmt = (
@@ -609,6 +707,7 @@ class ProjectService:
                 User.id.label("user_id"),
                 User.display_name,
                 User.avatar_url,
+                User.preferences,
             )
             .join(User, Member.user_id == User.id)
             .where(Member.project_id.in_(project_ids))
@@ -617,11 +716,13 @@ class ProjectService:
         member_rows = (await session.execute(member_stmt)).all()
         members_by_project: dict[int, list[dict]] = {}
         for row in member_rows:
+            prefs = row.preferences or {}
             members_by_project.setdefault(row.project_id, []).append(
                 {
                     "user_id": row.user_id,
                     "display_name": row.display_name,
                     "avatar_url": row.avatar_url,
+                    "avatar_color": prefs.get("avatar_color", ""),
                 }
             )
         for pid, members in members_by_project.items():
@@ -640,9 +741,8 @@ class ProjectService:
             stats[row.project_id]["wiki_page_count"] = row.page_count
 
         # --- Enabled modules ---
-        module_stmt = (
-            select(EnabledModule.project_id, EnabledModule.name)
-            .where(EnabledModule.project_id.in_(project_ids))
+        module_stmt = select(EnabledModule.project_id, EnabledModule.name).where(
+            EnabledModule.project_id.in_(project_ids)
         )
         module_rows = (await session.execute(module_stmt)).all()
         for row in module_rows:

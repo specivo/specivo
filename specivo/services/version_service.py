@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 
 from sqlalchemy import case, func, select
@@ -103,6 +104,81 @@ class VersionService:
         await session.flush()
 
     # -----------------------------------------------------------------------
+    # Admin: cross-project listing
+    # -----------------------------------------------------------------------
+
+    async def list_all(
+        self,
+        session: AsyncSession,
+    ) -> list[dict]:
+        """List all versions across all projects with issue counts (admin only).
+
+        Returns a list of dicts with version fields, project key/name, and
+        open/closed issue counts suitable for the admin versions page.
+        """
+        # Fetch all versions with their project info
+        stmt = (
+            select(Version, Project.key, Project.name.label("project_name"))
+            .join(Project, Project.id == Version.project_id)
+            .order_by(Project.name.asc(), Version.effective_date.asc().nullslast(), Version.name.asc())
+        )
+        rows = (await session.execute(stmt)).all()
+
+        if not rows:
+            return []
+
+        version_ids = [row[0].id for row in rows]
+
+        # Aggregate open / closed counts
+        counts_stmt = (
+            select(
+                Issue.fixed_version_id,
+                func.count().label("total"),
+                func.sum(case((IssueStatus.category.in_(["done", "closed"]), 1), else_=0)).label("closed_count"),
+            )
+            .join(IssueStatus, IssueStatus.id == Issue.status_id)
+            .where(Issue.fixed_version_id.in_(version_ids))
+            .group_by(Issue.fixed_version_id)
+        )
+        count_rows = (await session.execute(counts_stmt)).all()
+        counts: dict[int, dict] = {
+            row.fixed_version_id: {
+                "total": row.total,
+                "closed_count": int(row.closed_count or 0),
+            }
+            for row in count_rows
+        }
+
+        result: list[dict] = []
+        for version, project_key, project_name in rows:
+            c = counts.get(version.id, {"total": 0, "closed_count": 0})
+            total = c["total"]
+            closed = c["closed_count"]
+            open_count = total - closed
+            progress = int(closed / total * 100) if total > 0 else 0
+            overdue = (
+                version.effective_date is not None
+                and version.status != "closed"
+                and version.effective_date < datetime.date.today()
+            )
+
+            result.append(
+                {
+                    "id": version.id,
+                    "name": version.name,
+                    "project_key": project_key,
+                    "project_name": project_name,
+                    "status": version.status,
+                    "due_date": version.effective_date.isoformat() if version.effective_date else None,
+                    "progress": progress,
+                    "open_count": open_count,
+                    "closed_count": closed,
+                    "overdue": overdue,
+                }
+            )
+        return result
+
+    # -----------------------------------------------------------------------
     # Roadmap
     # -----------------------------------------------------------------------
 
@@ -118,7 +194,7 @@ class VersionService:
 
         Each entry carries:
         - ``open_count``  — issues whose status is NOT closed
-        - ``closed_count`` — issues whose status IS closed
+        - ``closed_count`` — issues whose status is done or closed
         - ``progress_percent`` — closed / total * 100 (0 if total == 0)
         """
         versions = await self.list_for_project(session, project.id)
@@ -128,14 +204,12 @@ class VersionService:
         version_ids = [v.id for v in versions]
 
         # Aggregate open / closed counts in a single query
-        # CASE WHEN is_closed = TRUE THEN 1 ELSE 0 END gives per-row 0/1 for SUM
+        # done + closed categories count toward progress
         stmt = (
             select(
                 Issue.fixed_version_id,
                 func.count().label("total"),
-                func.sum(
-                    case((IssueStatus.is_closed == True, 1), else_=0)  # noqa: E712
-                ).label("closed_count"),
+                func.sum(case((IssueStatus.category.in_(["done", "closed"]), 1), else_=0)).label("closed_count"),
             )
             .join(IssueStatus, IssueStatus.id == Issue.status_id)
             .where(Issue.fixed_version_id.in_(version_ids))
