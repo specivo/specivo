@@ -24,7 +24,7 @@ def test_no_console_errors(admin_page: Page) -> None:
 def test_dashboard_renders(admin_page: Page) -> None:
     """Dashboard page loads and title contains 'Dashboard'."""
     admin_page.goto("/")
-    expect(admin_page.locator("h1, .page-header, .status-banner").first).to_be_visible()
+    expect(admin_page.locator("h1, .page-header, .sp-greeting").first).to_be_visible()
 
 
 def test_global_sidebar_items(admin_page: Page) -> None:

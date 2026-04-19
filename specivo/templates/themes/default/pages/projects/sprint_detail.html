@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
+
+{% block title %}{{ sprint.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": "Home", "url": "/"},
+  {"label": project.name, "url": "/projects/" ~ project.key},
+  {"label": "Sprints", "url": "/projects/" ~ project.key ~ "/sprints/"},
+  {"label": sprint.name}
+]) }}
+
+{# ============ SPRINT HERO HEADER ============ #}
+<div class="sp-sprint-hero">
+  <div class="sp-sprint-hero-meta">
+    <div class="sp-sprint-hero-eyebrow">
+      {% if sprint.status == 'active' %}
+        <span class="badge-status in-progress">Active</span>
+      {% elif sprint.status == 'completed' %}
+        <span class="badge-status closed">Completed</span>
+      {% else %}
+        <span class="badge-status new">Planned</span>
+      {% endif %}
+      {% if sprint.start_date and sprint.end_date %}
+      <span class="sp-sprint-hero-dates">
+        {{ sprint.start_date.strftime('%b %-d') }} &mdash; {{ sprint.end_date.strftime('%b %-d, %Y') }}
+        {% if duration_days %}&middot; {{ duration_days }} day{{ 's' if duration_days != 1 }}{% endif %}
+      </span>
+      {% elif sprint.start_date or sprint.end_date %}
+      <span class="sp-sprint-hero-dates">
+        {{ sprint.start_date or 'no start' }} &mdash; {{ sprint.end_date or 'no end' }}
+      </span>
+      {% else %}
+      <span class="sp-sprint-hero-dates">No dates set</span>
+      {% endif %}
+    </div>
+    <h1 class="sp-sprint-hero-title">{{ sprint.name }}</h1>
+    {% if sprint.goal %}
+    <p class="sp-sprint-hero-goal">&ldquo;{{ sprint.goal }}&rdquo;</p>
+    {% endif %}
+  </div>
+
+  <div class="sp-sprint-hero-actions">
+    <a href="/projects/{{ project.key }}/sprints/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 18l-6-6 6-6"/></svg>
+      Sprints
+    </a>
+    {% if total_issues > 0 %}
+    <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="7" height="18" rx="1"/><rect x="14" y="3" width="7" height="10" rx="1"/></svg>
+      Board
+    </a>
+    {% endif %}
+    {% if can_manage_sprint %}
+    <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Edit
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+{# ============ METRIC CARDS ============ #}
+<div class="analytics-stats">
+  <div class="analytics-stat-card">
+    <div class="analytics-stat-value">{{ total_issues }}</div>
+    <div class="analytics-stat-label">Committed Issues</div>
+    {% if sprint.status == 'completed' and sprint.velocity_snapshot %}
+    <div class="sp-sprint-stat-trend flat">Snapshot</div>
+    {% elif in_progress_issues %}
+    <div class="sp-sprint-stat-trend flat">{{ in_progress_issues }} in progress</div>
+    {% endif %}
+  </div>
+
+  <div class="analytics-stat-card">
+    <div class="analytics-stat-value" style="color:var(--sp-success)">{{ completed_issues }}</div>
+    <div class="analytics-stat-label">Completed</div>
+    {% if remaining_issues > 0 %}
+    <div class="sp-sprint-stat-trend flat">{{ remaining_issues }} remaining</div>
+    {% elif total_issues > 0 %}
+    <div class="sp-sprint-stat-trend up">All done</div>
+    {% endif %}
+  </div>
+
+  <div class="analytics-stat-card">
+    <div class="analytics-stat-value" style="color:{% if completion_pct >= 90 %}var(--sp-success){% elif completion_pct >= 50 %}var(--sp-accent){% else %}var(--sp-warning){% endif %}">{{ completion_pct }}%</div>
+    <div class="analytics-stat-label">Completion Rate</div>
+    {% if total_issues > 0 %}
+    <div class="sp-sprint-progress-thin">
+      <div class="sp-sprint-progress-thin-fill" style="width:{{ completion_pct }}%;background:{% if completion_pct >= 90 %}var(--sp-success){% elif completion_pct >= 50 %}var(--sp-accent){% else %}var(--sp-warning){% endif %}"></div>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="analytics-stat-card">
+    {% if sprint.status == 'active' and days_left is not none %}
+    <div class="analytics-stat-value" style="color:var(--sp-accent)">{{ days_left }}<span style="font-size:var(--sp-font-size-lg);font-weight:500;color:var(--sp-text-muted);margin-left:2px">d</span></div>
+    <div class="analytics-stat-label">Days Remaining</div>
+    {% if duration_days %}
+    <div class="sp-sprint-stat-trend flat">of {{ duration_days }} day{{ 's' if duration_days != 1 }}</div>
+    {% endif %}
+    {% elif sprint.status == 'completed' %}
+    <div class="analytics-stat-value">{{ duration_days or '–' }}{% if duration_days %}<span style="font-size:var(--sp-font-size-lg);font-weight:500;color:var(--sp-text-muted);margin-left:2px">d</span>{% endif %}</div>
+    <div class="analytics-stat-label">Total Duration</div>
+    <div class="sp-sprint-stat-trend flat">Closed</div>
+    {% else %}
+    <div class="analytics-stat-value">{{ duration_days or '–' }}{% if duration_days %}<span style="font-size:var(--sp-font-size-lg);font-weight:500;color:var(--sp-text-muted);margin-left:2px">d</span>{% endif %}</div>
+    <div class="analytics-stat-label">Planned Duration</div>
+    {% if avg_velocity and avg_velocity > 0 %}
+    <div class="sp-sprint-stat-trend flat">Avg velocity {{ '%.1f' | format(avg_velocity | float) }}</div>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{# ============ ISSUE LIST ============ #}
+{% if total_issues == 0 %}
+<div class="sp-sprint-issues-empty">
+  <div class="sp-sprint-issues-empty-title">No issues in this sprint yet</div>
+  <div class="sp-sprint-issues-empty-text">Assign issues from the backlog to get started.</div>
+  <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">Open backlog &rarr;</a>
+</div>
+{% else %}
+<div class="sp-sprint-issues">
+  <div class="sp-sprint-issues-header">
+    <h2>Issues</h2>
+    <span class="sp-sprint-issues-count">{{ total_issues }} total</span>
+  </div>
+
+  {% set groups = [
+    ("To Do", grouped_issues.todo, "var(--sp-text-muted)"),
+    ("In Progress", grouped_issues.active, "var(--sp-accent)"),
+    ("Done", grouped_issues.done, "var(--sp-success)"),
+  ] %}
+
+  {% for label, items, color in groups %}
+    {% if items %}
+    <div class="sp-sprint-issue-group">
+      <div class="sp-sprint-issue-group-header">
+        <span class="sp-sprint-issue-group-dot" style="background:{{ color }}"></span>
+        <span class="sp-sprint-issue-group-label">{{ label }}</span>
+        <span class="sp-sprint-issue-group-count">{{ items | length }}</span>
+      </div>
+      <div class="sp-sprint-issue-list">
+        {% for issue in items %}
+        <a href="/issue/{{ issue.display_key }}/" class="sp-sprint-issue-row">
+          <span class="sp-sprint-issue-key">{{ issue.display_key }}</span>
+          <span class="sp-sprint-issue-tracker">{{ tracker_badge(issue.tracker.name if issue.tracker else '') }}</span>
+          <span class="sp-sprint-issue-subject">{{ issue.subject }}</span>
+          <span class="sp-sprint-issue-meta">
+            {{ status_badge(issue.status.name if issue.status else '') }}
+            {{ priority_badge(issue.priority.name if issue.priority else 'Normal') }}
+          </span>
+          <span class="sp-sprint-issue-assignee">
+            {% if issue.assigned_to %}
+            {{ avatar(issue.assigned_to.login, size='xs', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
+            {% else %}
+            <span class="sp-sprint-issue-assignee-empty" title="Unassigned">&mdash;</span>
+            {% endif %}
+          </span>
+          <span class="sp-sprint-issue-done" title="{{ issue.done_ratio or 0 }}% done">
+            <span class="sp-sprint-issue-done-track">
+              <span class="sp-sprint-issue-done-fill" style="width:{{ issue.done_ratio or 0 }}%"></span>
+            </span>
+            <span class="sp-sprint-issue-done-text">{{ issue.done_ratio or 0 }}%</span>
+          </span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

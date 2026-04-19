@@ -131,12 +131,20 @@ class Settings(BaseSettings):
     # Agent sessions
     agent_session_timeout: int = 1800
 
+    # MCP transport session metadata (Redis-backed).
+    # Sliding TTL refreshed on every session access; entries are dropped
+    # automatically after this many seconds of inactivity.
+    mcp_session_ttl_seconds: int = 7 * 24 * 60 * 60
+
     # i18n
     default_language: str = "en"
     available_languages: list[str] = ["en", "th"]
 
     # Plugins — dotted paths to PluginConfig subclasses
     installed_plugins: list[str] = []
+
+    # Rate limiting — disable for E2E / load testing environments
+    rate_limit_enabled: bool = True
 
     # Trusted proxies — CIDRs whose X-Forwarded-For header is trusted
     trusted_proxies: list[str] = []

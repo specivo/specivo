@@ -292,3 +292,69 @@ async def test_reset_password_exempt_from_csrf(client: AsyncClient):
     )
     # Should get 400/422 (bad token), not 403 (CSRF)
     assert resp.status_code != 403
+
+
+# ---------------------------------------------------------------------------
+# Secret stability: tokens must survive process restart and multi-worker deploys
+# ---------------------------------------------------------------------------
+
+
+def test_csrf_secret_derived_from_settings_survives_restart(monkeypatch):
+    """Tokens minted by one middleware instance validate under another.
+
+    Regression for the bug where CSRFMiddleware.__init__ called
+    ``secrets.token_hex(32)`` to seed the HMAC secret, so every container
+    restart (or worker fork) invalidated every outstanding csrf_token cookie,
+    surfacing as ``403 {"detail": "CSRF validation failed"}`` on the first
+    mutating request from any long-open browser tab.
+    """
+    from specivo.core.config import get_settings
+    from specivo.core.middleware import CSRFMiddleware
+
+    # Force a cache miss on get_settings so both instances observe the same
+    # (already-loaded) settings regardless of test ordering.
+    settings = get_settings()
+    assert settings.secret_key, "test env must provide SECRET_KEY"
+
+    async def _noop(scope, receive, send):  # pragma: no cover - never called
+        pass
+
+    mw_a = CSRFMiddleware(_noop)
+    mw_b = CSRFMiddleware(_noop)
+
+    token = mw_a._generate_token()
+    assert mw_a._validate_token(token)
+    assert mw_b._validate_token(token), (
+        "token minted by one CSRFMiddleware instance must validate under "
+        "another instance backed by the same settings.secret_key"
+    )
+
+
+def test_csrf_secret_rotates_when_settings_secret_key_changes(monkeypatch):
+    """A token minted under one secret_key must not validate under another.
+
+    Proves the secret is actually key-bound and not a hardcoded constant.
+    """
+    from specivo.core.config import get_settings
+    from specivo.core.middleware import CSRFMiddleware
+
+    async def _noop(scope, receive, send):  # pragma: no cover - never called
+        pass
+
+    settings = get_settings()
+    original_key = settings.secret_key
+
+    mw_a = CSRFMiddleware(_noop)
+    token = mw_a._generate_token()
+    assert mw_a._validate_token(token)
+
+    try:
+        # Mutate settings in place; CSRFMiddleware reads it during __init__.
+        object.__setattr__(settings, "secret_key", "x" * 64)
+        mw_b = CSRFMiddleware(_noop)
+        assert not mw_b._validate_token(token), (
+            "rotating settings.secret_key must invalidate tokens signed "
+            "under the previous key"
+        )
+    finally:
+        object.__setattr__(settings, "secret_key", original_key)

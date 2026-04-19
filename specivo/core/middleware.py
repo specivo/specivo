@@ -77,16 +77,20 @@ class CSRFMiddleware:
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
-        self._secret = secrets.token_hex(32)
-        # Resolve exempt prefixes once at startup (stealth prefix + suffix)
         from specivo.core.config import get_settings
 
-        sp = get_settings().stealth_prefix.rstrip("/")
+        settings = get_settings()
+        self._secret = hmac.new(
+            settings.secret_key.encode(),
+            b"csrf-middleware-v1",
+            hashlib.sha256,
+        ).digest()
+        sp = settings.stealth_prefix.rstrip("/")
         self._exempt_prefixes = tuple(sp + s for s in _CSRF_EXEMPT_SUFFIXES)
 
     def _generate_token(self) -> str:
         nonce = secrets.token_hex(16)
-        sig = hmac.new(self._secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()[:32]
+        sig = hmac.new(self._secret, nonce.encode(), hashlib.sha256).hexdigest()[:32]
         return f"{nonce}.{sig}"
 
     def _validate_token(self, token: str) -> bool:
@@ -94,7 +98,7 @@ class CSRFMiddleware:
         if len(parts) != 2:
             return False
         nonce, sig = parts
-        expected = hmac.new(self._secret.encode(), nonce.encode(), hashlib.sha256).hexdigest()[:32]
+        expected = hmac.new(self._secret, nonce.encode(), hashlib.sha256).hexdigest()[:32]
         return hmac.compare_digest(sig, expected)
 
     def _needs_csrf(self, path: str, headers: dict[bytes, bytes]) -> bool:

@@ -51,41 +51,96 @@
       {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
     </div>
 
-    {# Version #}
-    {% if versions is defined and versions %}
+    {# Version — autocomplete #}
     <div>
       <label style="{{ lbl }}">Version</label>
-      <select style="{{ sel }}" @change="onSelectInt('fixed_version_id', $event)">
-        <option value="">-- No version --</option>
-        {% for v in versions %}
-        <option value="{{ v.id }}" {{ 'selected' if issue.fixed_version_id == v.id }}>{{ v.name }}</option>
-        {% endfor %}
-      </select>
+      <div x-data='entityAutocomplete({
+             endpoint: "/api/v1/projects/{{ project.key }}/versions/search/",
+             field: "fixed_version_id",
+             displayKey: {{ issue.display_key | tojson }},
+             lockVersion: {{ issue.lock_version }},
+             currentId: {{ (issue.fixed_version.id if issue.fixed_version else "null") }},
+             currentLabel: {{ (issue.fixed_version.name if issue.fixed_version else "") | tojson }},
+             currentStatus: {{ (issue.fixed_version.status if issue.fixed_version else "") | tojson }},
+             kind: "version"
+           })' class="sp-ac">
+        <input type="text" class="sp-ac-input" style="{{ sel }}"
+               x-model="query"
+               @focus="onFocus()"
+               @keydown.down.prevent="moveDown()"
+               @keydown.up.prevent="moveUp()"
+               @keydown.enter.prevent="confirm()"
+               @keydown.escape.prevent="cancel()"
+               @blur="onBlur()"
+               placeholder="-- No version --">
+        <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
+          <template x-if="!loading && results.length === 0">
+            <div class="sp-ac-empty">No matches</div>
+          </template>
+          <template x-for="(item, idx) in results" :key="item.id">
+            <div class="sp-ac-row"
+                 :class="{'sp-ac-row-active': idx === activeIndex, 'sp-ac-row-muted': item.status && item.status !== 'open'}"
+                 @mouseenter="activeIndex = idx"
+                 @click="select(item)">
+              <span class="sp-ac-name" x-text="item.name"></span>
+              <span class="sp-ac-suffix" x-show="item.status && item.status !== 'open'"
+                    x-text="item.status ? '(' + item.status + ')' : ''"></span>
+              <span class="sp-ac-date" x-show="item.effective_date" x-text="item.effective_date"></span>
+            </div>
+          </template>
+        </div>
+        <button type="button" class="sp-ac-clear" x-show="selectedId" @click="clearSelection()"
+                style="background:none;border:none;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);cursor:pointer;padding:var(--sp-space-xs) 0;">
+          Clear
+        </button>
+      </div>
     </div>
-    {% elif issue.fixed_version %}
-    <div>
-      <label style="{{ lbl }}">Version</label>
-      <span style="font-size: var(--sp-font-size-sm);">{{ issue.fixed_version.name }}</span>
-    </div>
-    {% endif %}
 
-    {# Sprint #}
-    {% if sprints is defined and sprints %}
+    {# Sprint — autocomplete #}
     <div>
       <label style="{{ lbl }}">Sprint</label>
-      <select style="{{ sel }}" @change="onSelectInt('sprint_id', $event)">
-        <option value="">-- No sprint --</option>
-        {% for sp in sprints %}
-        <option value="{{ sp.id }}" {{ 'selected' if issue.sprint_id == sp.id }}>{{ sp.name }}{% if sp.status == 'active' %} ●{% endif %}</option>
-        {% endfor %}
-      </select>
+      <div x-data='entityAutocomplete({
+             endpoint: "/api/v1/projects/{{ project.key }}/sprints/search/",
+             field: "sprint_id",
+             displayKey: {{ issue.display_key | tojson }},
+             lockVersion: {{ issue.lock_version }},
+             currentId: {{ (current_sprint.id if current_sprint is defined and current_sprint else "null") }},
+             currentLabel: {{ (current_sprint.name if current_sprint is defined and current_sprint else "") | tojson }},
+             currentStatus: {{ (current_sprint.status if current_sprint is defined and current_sprint else "") | tojson }},
+             kind: "sprint"
+           })' class="sp-ac">
+        <input type="text" class="sp-ac-input" style="{{ sel }}"
+               x-model="query"
+               @focus="onFocus()"
+               @keydown.down.prevent="moveDown()"
+               @keydown.up.prevent="moveUp()"
+               @keydown.enter.prevent="confirm()"
+               @keydown.escape.prevent="cancel()"
+               @blur="onBlur()"
+               placeholder="-- No sprint --">
+        <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
+          <template x-if="!loading && results.length === 0">
+            <div class="sp-ac-empty">No matches</div>
+          </template>
+          <template x-for="(item, idx) in results" :key="item.id">
+            <div class="sp-ac-row"
+                 :class="{'sp-ac-row-active': idx === activeIndex, 'sp-ac-row-muted': item.status === 'completed'}"
+                 @mouseenter="activeIndex = idx"
+                 @click="select(item)">
+              <span class="sp-ac-name" x-text="item.name"></span>
+              <span class="sp-ac-suffix"
+                    x-show="item.status === 'active' || item.status === 'completed'"
+                    x-text="item.status === 'active' ? '●' : '(completed)'"></span>
+              <span class="sp-ac-date" x-show="item.start_date" x-text="item.start_date"></span>
+            </div>
+          </template>
+        </div>
+        <button type="button" class="sp-ac-clear" x-show="selectedId" @click="clearSelection()"
+                style="background:none;border:none;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);cursor:pointer;padding:var(--sp-space-xs) 0;">
+          Clear
+        </button>
+      </div>
     </div>
-    {% elif issue.sprint_id %}
-    <div>
-      <label style="{{ lbl }}">Sprint</label>
-      <span style="font-size: var(--sp-font-size-sm);">Sprint #{{ issue.sprint_id }}</span>
-    </div>
-    {% endif %}
   </div>
 </div>
 

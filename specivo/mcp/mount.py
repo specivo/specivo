@@ -36,6 +36,9 @@ from starlette.routing import Mount, Route, request_response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from specivo.mcp.auth import SpvTokenVerifier
+from specivo.mcp.persistent_session_manager import (
+    PersistentStreamableHTTPSessionManager,
+)
 from specivo.mcp.server import mcp
 
 logger = logging.getLogger(__name__)
@@ -77,6 +80,26 @@ class _StripWWWAuthenticate:
 _session_manager: StreamableHTTPSessionManager | None = None
 
 
+async def _default_store_provider():  # type: ignore[no-untyped-def]
+    """Lazy provider for the Redis-backed session store.
+
+    Imports inside the body to avoid pulling redis at module-import time,
+    and so that tests can swap the session store singleton without touching
+    this module.
+    """
+    from specivo.mcp.session_store import get_mcp_session_store
+
+    try:
+        return await get_mcp_session_store()
+    except Exception:
+        logger.warning(
+            "Unable to construct Redis-backed MCP session store; "
+            "sessions will not survive api restarts",
+            exc_info=True,
+        )
+        return None
+
+
 def get_mcp_session_manager() -> StreamableHTTPSessionManager | None:
     """Return the session manager created by ``mount_mcp``.
 
@@ -104,11 +127,17 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
     # Streamable HTTP  (primary transport at {prefix}/)
     # ------------------------------------------------------------------
 
-    _session_manager = StreamableHTTPSessionManager(
+    # Stateful, with Redis-backed session continuity. See
+    # ``PersistentStreamableHTTPSessionManager`` for the rehydration design
+    # — this is how a Claude Code client that was talking to the server
+    # before an api restart gets to keep using the same Mcp-Session-Id
+    # without a client-side reconnect.
+    _session_manager = PersistentStreamableHTTPSessionManager(
         app=mcp._mcp_server,
         event_store=None,
         json_response=False,
-        stateless=True,
+        stateless=False,
+        store_provider=_default_store_provider,
     )
     mcp._session_manager = _session_manager
 

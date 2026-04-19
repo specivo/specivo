@@ -170,6 +170,72 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> User:
 
 
 # ---------------------------------------------------------------------------
+# Silent refresh helper (shared between get_current_user and
+# get_current_user_optional)
+# ---------------------------------------------------------------------------
+
+
+async def try_silent_refresh(request: Request, db: AsyncSession) -> User | None:
+    """Attempt a silent JWT refresh using the ``refresh_token`` cookie.
+
+    Returns the refreshed ``User`` and stores the new tokens on
+    ``request.state.refreshed_tokens`` so ``TokenRefreshMiddleware`` can
+    attach ``Set-Cookie`` headers to the outgoing response.
+
+    Returns ``None`` when:
+    - no ``refresh_token`` cookie is present
+    - the refresh token is expired/invalid/revoked
+    - the underlying ``AuthService.refresh`` call fails for any reason
+
+    This helper is only meaningful for cookie-based sessions.  Callers on
+    the ``Authorization: Bearer`` path (JWT or API key) should not invoke
+    it — those clients manage their own tokens.
+    """
+    refresh_token_raw = request.cookies.get("refresh_token")
+    if not refresh_token_raw:
+        return None
+
+    try:
+        from specivo.core.config import get_settings
+        from specivo.services.auth_service import AuthService
+
+        settings = get_settings()
+
+        # Carry forward the "remember me" preference from the (expired)
+        # access token if we can still decode it without verifying exp.
+        remember = True
+        old_access = request.cookies.get("access_token")
+        if old_access:
+            try:
+                payload = jwt.decode(
+                    old_access,
+                    settings.secret_key,
+                    algorithms=[JWT_ALGORITHM],
+                    options={"verify_exp": False},
+                )
+                remember = payload.get("rem", True)
+            except Exception:
+                pass
+
+        svc = AuthService()
+        access_token, new_refresh_token, refreshed_user = await svc.refresh(
+            session=db,
+            refresh_token_raw=refresh_token_raw,
+            remember=remember,
+        )
+
+        request.state.refreshed_tokens = {
+            "access_token": access_token,
+            "refresh_token": new_refresh_token,
+            "remember": remember,
+        }
+        return refreshed_user
+    except Exception:
+        logger.debug("Silent token refresh failed", exc_info=True)
+        return None
+
+
+# ---------------------------------------------------------------------------
 # Main dependency
 # ---------------------------------------------------------------------------
 
@@ -185,6 +251,8 @@ async def get_current_user(
        - Starts with ``spv_`` → API key auth
        - Otherwise → JWT auth
     2. ``access_token`` cookie → JWT auth
+       - If the cookie is missing or the JWT has expired, attempt a silent
+         refresh using the ``refresh_token`` cookie.
     3. Neither → 401 Unauthorized
 
     Returns the authenticated ``User`` model instance.
@@ -193,6 +261,7 @@ async def get_current_user(
     auth_header = request.headers.get("Authorization", "")
     token: str | None = None
     use_api_key = False
+    from_cookie = False
 
     if auth_header.startswith("Bearer "):
         token = auth_header[len("Bearer ") :]
@@ -200,8 +269,16 @@ async def get_current_user(
     else:
         # Fall back to cookie
         token = request.cookies.get("access_token")
+        from_cookie = True
 
     if not token:
+        # Cookie-based sessions may still recover via silent refresh
+        # (browser dropped the short-lived access_token cookie but kept
+        # the long-lived refresh_token).
+        if from_cookie:
+            refreshed = await try_silent_refresh(request, db)
+            if refreshed is not None:
+                return refreshed
         await _log_auth_failure(db, "no_credentials", request)
         raise AppError(
             code="unauthorized",
@@ -237,7 +314,14 @@ async def get_current_user(
 
     try:
         return await _authenticate_jwt(token, db)
-    except AppError:
+    except AppError as exc:
+        # Silent refresh for cookie-based sessions when the JWT is
+        # present but expired.  Never invoked on the Authorization:
+        # Bearer path — those callers manage their own tokens.
+        if from_cookie and exc.code == "auth_token_expired":
+            refreshed = await try_silent_refresh(request, db)
+            if refreshed is not None:
+                return refreshed
         await _log_auth_failure(db, "invalid_jwt", request)
         raise
 

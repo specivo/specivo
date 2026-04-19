@@ -440,6 +440,49 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     templates.env.filters["localtime"] = _localtime
     templates.env.filters["localdt"] = _localdt
 
+    # Metadata diff formatting for activity log
+    def _format_metadata_diff(
+        old_json: str | None, new_json: str | None
+    ) -> list[dict[str, str]]:
+        """Parse two metadata JSON blobs and return per-key diffs.
+
+        Returns a list of dicts with keys: ``key``, ``old``, ``new``.
+        Only keys that actually changed are included.
+        """
+        import json as _json
+
+        def _parse(raw: str | None) -> dict:
+            if not raw:
+                return {}
+            try:
+                return _json.loads(raw)
+            except (ValueError, TypeError):
+                return {}
+
+        def _truncate(val: object, limit: int = 80) -> str:
+            s = _json.dumps(val, separators=(",", ":"), default=str) if not isinstance(val, str) else val
+            if len(s) > limit:
+                return s[:limit] + "\u2026"
+            return s
+
+        old_d = _parse(old_json)
+        new_d = _parse(new_json)
+        all_keys = sorted(set(old_d) | set(new_d))
+        diffs: list[dict[str, str]] = []
+        for k in all_keys:
+            ov = old_d.get(k)
+            nv = new_d.get(k)
+            if ov != nv:
+                diffs.append({
+                    "key": k,
+                    "old": _truncate(ov) if ov is not None else "",
+                    "new": _truncate(nv) if nv is not None else "",
+                })
+        return diffs
+
+    templates.env.filters["metadata_diff"] = _format_metadata_diff
+    templates.env.globals["metadata_diff"] = _format_metadata_diff
+
     return templates
 
 
@@ -503,62 +546,11 @@ async def get_current_user_optional(
 
     try:
         return await get_current_user(request, db)
-    except AppError as exc:
-        # Silent refresh applies when:
-        # - "auth_token_expired": JWT is present but expired
-        # - "unauthorized": no access_token cookie at all (browser deleted it after max_age)
-        # In both cases, a valid refresh_token cookie can restore the session.
-        if exc.code not in ("auth_token_expired", "unauthorized"):
-            return None
-
-        # Access token expired or missing — attempt silent refresh using
-        # the refresh_token cookie (if present).
-        refresh_token_raw = request.cookies.get("refresh_token")
-        if not refresh_token_raw:
-            return None
-
-        try:
-            import jwt as pyjwt
-
-            from specivo.core.config import get_settings
-            from specivo.services.auth_service import AuthService
-
-            # Read "remember me" preference from the expired access token
-            # so we can carry it forward to the refreshed cookies.
-            settings = get_settings()
-            remember = True  # backward compat default
-            old_access = request.cookies.get("access_token")
-            if old_access:
-                try:
-                    payload = pyjwt.decode(
-                        old_access,
-                        settings.secret_key,
-                        algorithms=["HS256"],
-                        options={"verify_exp": False},
-                    )
-                    remember = payload.get("rem", True)
-                except Exception:
-                    pass
-
-            svc = AuthService()
-            access_token, new_refresh_token, refreshed_user = await svc.refresh(
-                session=db,
-                refresh_token_raw=refresh_token_raw,
-                remember=remember,
-            )
-
-            # Store tokens so TokenRefreshMiddleware can set cookies.
-            request.state.refreshed_tokens = {
-                "access_token": access_token,
-                "refresh_token": new_refresh_token,
-                "remember": remember,
-            }
-
-            # The refresh() call already looked up the user to mint the token,
-            # so we return it directly rather than re-querying.
-            return refreshed_user
-        except Exception:
-            logger.debug("Silent token refresh failed", exc_info=True)
-            return None
+    except AppError:
+        # get_current_user now performs silent refresh internally for the
+        # cookie-based paths ("auth_token_expired" + missing access_token).
+        # Any other AppError (invalid/revoked token, locked/deactivated
+        # account) falls through to rendering the page as anonymous.
+        return None
     except Exception:
         return None

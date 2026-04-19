@@ -109,8 +109,8 @@
             </div>
             <div class="form-group">
               <label class="form-label">{% trans %}Project key{% endtrans %}</label>
-              <input class="form-input" type="text" x-model="form.key" required placeholder="BACK" maxlength="10" style="text-transform: uppercase;" :disabled="editMode">
-              <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); display: block;">{% trans %}2-10 uppercase letters/digits{% endtrans %}</span>
+              <input class="form-input" type="text" x-model="form.key" required placeholder="BACK" maxlength="128" style="text-transform: uppercase;" :disabled="editMode">
+              <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); display: block;">{% trans %}2-128 uppercase letters/digits{% endtrans %}</span>
             </div>
           </div>
 

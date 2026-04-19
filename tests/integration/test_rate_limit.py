@@ -185,3 +185,22 @@ async def test_x_ratelimit_limit_header_present(client: AsyncClient):
     limit_header = resp.headers.get("X-RateLimit-Limit")
     assert limit_header is not None
     assert int(limit_header) == 10
+
+
+@pytest.mark.asyncio
+async def test_rate_limit_disabled_allows_all_requests(client: AsyncClient):
+    """With RATE_LIMIT_ENABLED=false, no 429 should occur regardless of request count."""
+    from specivo.core.config import get_settings
+
+    settings = get_settings()
+    original = settings.rate_limit_enabled
+    settings.rate_limit_enabled = False
+    try:
+        payload = {"login": "x", "password": "x"}
+        for i in range(15):
+            resp = await client.post("/api/v1/auth/login/", json=payload)
+            assert resp.status_code != 429, f"Request {i + 1} got 429 with rate limiting disabled"
+            # No rate limit headers when disabled
+            assert "X-RateLimit-Limit" not in resp.headers
+    finally:
+        settings.rate_limit_enabled = original

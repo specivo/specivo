@@ -188,6 +188,163 @@ class TestJwtAuth:
 
 
 # ---------------------------------------------------------------------------
+# Silent JWT refresh on API endpoints
+# ---------------------------------------------------------------------------
+
+
+def _make_jwt_with_remember(user_id: int, *, expired: bool = False, remember: bool = True) -> str:
+    """Craft a JWT carrying the ``rem`` claim, matching AuthService output."""
+    now = int(time.time())
+    exp = now - 10 if expired else now + 900
+    payload = {
+        "sub": str(user_id),
+        "iat": now,
+        "exp": exp,
+        "jti": str(uuid.uuid4()),
+        "rem": remember,
+    }
+    return jwt.encode(payload, _SECRET_KEY, algorithm=_ALGORITHM)
+
+
+class TestSilentRefreshOnApi:
+    """API endpoints recover from expired/missing access_token cookie
+    when a valid refresh_token cookie is present, mirroring the silent
+    refresh behaviour that full-page renders already enjoy.
+    """
+
+    async def test_expired_access_cookie_plus_valid_refresh_cookie_refreshes(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await _create_user(db_session, login="silent_refresh_expired")
+        login_resp = await _login(client, "silent_refresh_expired")
+        refresh_token = login_resp.cookies["refresh_token"]
+
+        # Replace the fresh access_token cookie with an expired one for
+        # this user — refresh cookie remains valid.
+        expired_access = _make_jwt_with_remember(user.id, expired=True, remember=True)
+
+        resp = await client.get(
+            _PROBE,
+            cookies={"access_token": expired_access, "refresh_token": refresh_token},
+        )
+        assert resp.status_code == 200
+        # TokenRefreshMiddleware attaches fresh Set-Cookie headers.
+        set_cookies = resp.headers.get_list("set-cookie")
+        joined = "\n".join(set_cookies)
+        assert "access_token=" in joined
+        assert "refresh_token=" in joined
+        # "remember" was True → Max-Age must be present
+        assert "Max-Age=" in joined
+
+    async def test_missing_access_cookie_plus_valid_refresh_cookie_refreshes(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        await _create_user(db_session, login="silent_refresh_missing")
+        login_resp = await _login(client, "silent_refresh_missing")
+        refresh_token = login_resp.cookies["refresh_token"]
+
+        # Simulate a browser that dropped the short-lived access_token cookie
+        # after Max-Age expired, but still has the long-lived refresh cookie.
+        resp = await client.get(_PROBE, cookies={"refresh_token": refresh_token})
+        assert resp.status_code == 200
+        set_cookies = resp.headers.get_list("set-cookie")
+        joined = "\n".join(set_cookies)
+        assert "access_token=" in joined
+        assert "refresh_token=" in joined
+
+    async def test_expired_access_no_refresh_returns_401(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await _create_user(db_session, login="silent_refresh_no_refresh")
+        expired_access = _make_jwt_with_remember(user.id, expired=True)
+
+        resp = await client.get(_PROBE, cookies={"access_token": expired_access})
+        assert resp.status_code == 401
+        assert resp.json()["errors"][0]["code"] == "auth_token_expired"
+
+    async def test_expired_access_invalid_refresh_returns_401(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        user = await _create_user(db_session, login="silent_refresh_bad_refresh")
+        expired_access = _make_jwt_with_remember(user.id, expired=True)
+
+        resp = await client.get(
+            _PROBE,
+            cookies={
+                "access_token": expired_access,
+                "refresh_token": "not-a-real-refresh-token",
+            },
+        )
+        assert resp.status_code == 401
+        # Fall through to the original expired-token failure code.
+        assert resp.json()["errors"][0]["code"] == "auth_token_expired"
+
+    async def test_api_key_path_ignores_refresh_cookie(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """Bearer <api_key> requests must not trigger silent refresh —
+        callers on the header path manage their own tokens.
+        """
+        await _create_user(db_session, login="silent_refresh_apikey")
+        jwt_token = (await _login(client, "silent_refresh_apikey")).json()["access_token"]
+
+        created = await client.post(
+            "/api/v1/my/api-keys/",
+            json={"name": "silent-refresh-apikey"},
+            headers={"Authorization": f"Bearer {jwt_token}"},
+        )
+        raw_key = created.json()["raw_key"]
+
+        # Even with a valid refresh_token cookie in the jar, the API-key
+        # bearer path must succeed without the middleware rewriting cookies.
+        login_resp = await _login(client, "silent_refresh_apikey")
+        refresh_token = login_resp.cookies["refresh_token"]
+
+        resp = await client.get(
+            _PROBE,
+            headers={"Authorization": f"Bearer {raw_key}"},
+            cookies={"refresh_token": refresh_token},
+        )
+        assert resp.status_code == 200
+        # Silent refresh must NOT have fired — no fresh auth Set-Cookie.
+        set_cookies = resp.headers.get_list("set-cookie")
+        joined = "\n".join(set_cookies)
+        assert "access_token=" not in joined
+        assert "refresh_token=" not in joined
+
+    async def test_remember_false_produces_session_cookies(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """When the old access_token carried rem=False, the refreshed
+        cookies are session cookies (no Max-Age)."""
+        user = await _create_user(db_session, login="silent_refresh_nomember")
+        login_resp = await client.post(
+            "/api/v1/auth/login/",
+            json={
+                "login": "silent_refresh_nomember",
+                "password": TEST_PASSWORD,
+                "remember": False,
+            },
+        )
+        assert login_resp.status_code == 200
+        refresh_token = login_resp.cookies["refresh_token"]
+
+        expired_access = _make_jwt_with_remember(user.id, expired=True, remember=False)
+
+        resp = await client.get(
+            _PROBE,
+            cookies={"access_token": expired_access, "refresh_token": refresh_token},
+        )
+        assert resp.status_code == 200
+        set_cookies = resp.headers.get_list("set-cookie")
+        # Find auth cookies (not any unrelated Set-Cookie such as csrf).
+        auth_cookies = [c for c in set_cookies if c.startswith(("access_token=", "refresh_token="))]
+        assert len(auth_cookies) == 2
+        for cookie in auth_cookies:
+            assert "Max-Age=" not in cookie, f"Expected session cookie, got: {cookie}"
+
+
+# ---------------------------------------------------------------------------
 # API key authentication
 # ---------------------------------------------------------------------------
 

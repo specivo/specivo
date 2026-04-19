@@ -72,6 +72,36 @@ class SprintService:
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
+    async def search_for_project(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> list[Sprint]:
+        """Search sprints for a project.
+
+        - Empty query returns the 10 most recent sprints ordered by
+          ``start_date DESC NULLS LAST, name DESC`` regardless of status.
+        - Non-empty query performs a case-insensitive substring match on name,
+          capped at ``limit`` rows.
+        """
+        stmt = select(Sprint).where(Sprint.project_id == project_id)
+        q = (query or "").strip()
+        if q:
+            stmt = stmt.where(Sprint.name.ilike(f"%{q}%"))
+            stmt = stmt.order_by(
+                Sprint.start_date.desc().nullslast(),
+                Sprint.name.desc(),
+            ).limit(limit)
+        else:
+            stmt = stmt.order_by(
+                Sprint.start_date.desc().nullslast(),
+                Sprint.name.desc(),
+            ).limit(10)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
     async def update(
         self,
         session: AsyncSession,

@@ -1,0 +1,88 @@
+{# Partial: My Open Issues table with pagination.
+   Loaded via HTMX into the #my-issues-container div.
+   Context: my_issues, my_issues_total, my_issues_offset, my_issues_limit
+#}
+{% set total = my_issues_total | default(0) %}
+{% set offset = my_issues_offset | default(0) %}
+{% set limit = my_issues_limit | default(10) %}
+{% set current_page = (offset // limit) + 1 %}
+{% set total_pages = ((total - 1) // limit) + 1 if total > 0 else 1 %}
+
+{# Page size toolbar #}
+{% if total > 0 %}
+<div class="sp-issues-toolbar">
+  <div class="sp-issues-toolbar-info">{{ offset + 1 }}&ndash;{{ [offset + limit, total] | min }} {% trans %}of{% endtrans %} {{ total }}</div>
+  <div class="sp-issues-toolbar-size">
+    <label>{% trans %}Show{% endtrans %}</label>
+    <select data-my-issues-limit>
+      {% for size in [10, 25, 50] %}
+      <option value="{{ size }}" {{ 'selected' if limit == size else '' }}>{{ size }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+{% endif %}
+
+{% if my_issues %}
+<table class="issue-table">
+  <thead>
+    <tr>
+      <th style="width:12px"></th>
+      <th>{% trans %}Key{% endtrans %}</th>
+      <th>{% trans %}Subject{% endtrans %}</th>
+      <th>{% trans %}Status{% endtrans %}</th>
+      <th>{% trans %}Type{% endtrans %}</th>
+      <th>{% trans %}Project{% endtrans %}</th>
+      <th>{% trans %}Updated{% endtrans %}</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for issue in my_issues %}
+    <tr>
+      <td><span class="badge-priority {{ issue.priority.name | lower | replace(' ', '-') if issue.priority else 'normal' }}"></span></td>
+      <td><a class="issue-key" href="/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a></td>
+      <td class="issue-subject">{{ issue.subject }}</td>
+      <td><span class="badge-status {{ issue.status.name | lower | replace(' ', '-') if issue.status else '' }}">{{ issue.status.name if issue.status else '' }}</span></td>
+      <td><span class="badge-tracker {{ issue.tracker.name | lower if issue.tracker else '' }}">{{ issue.tracker.name if issue.tracker else '' }}</span></td>
+      <td style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">{{ issue.project_name if issue.project_name is defined else '' }}</td>
+      <td class="issue-updated">{{ issue.updated_at | timeago(user.timezone if user is defined else 'UTC') }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <div style="padding:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted)">{% trans %}No open issues assigned to you.{% endtrans %}</div>
+{% endif %}
+
+{# Pagination #}
+{% if total_pages > 1 %}
+<div class="sp-issues-pager">
+  {% if current_page > 1 %}
+    <a href="#"
+       hx-get="/partials/dashboard/my-issues/?offset={{ (current_page - 2) * limit }}&limit={{ limit }}"
+       hx-target="#my-issues-container"
+       hx-swap="innerHTML"
+       class="sp-page-link">&laquo;</a>
+  {% endif %}
+  {% for page in range(1, total_pages + 1) %}
+    {% if page == current_page %}
+      <span class="sp-page-link active">{{ page }}</span>
+    {% elif page <= 2 or page >= total_pages - 1 or (page >= current_page - 2 and page <= current_page + 2) %}
+      <a href="#"
+         hx-get="/partials/dashboard/my-issues/?offset={{ (page - 1) * limit }}&limit={{ limit }}"
+         hx-target="#my-issues-container"
+         hx-swap="innerHTML"
+         class="sp-page-link">{{ page }}</a>
+    {% elif page == 3 or page == total_pages - 2 %}
+      <span class="sp-page-link dots">&hellip;</span>
+    {% endif %}
+  {% endfor %}
+  {% if current_page < total_pages %}
+    <a href="#"
+       hx-get="/partials/dashboard/my-issues/?offset={{ current_page * limit }}&limit={{ limit }}"
+       hx-target="#my-issues-container"
+       hx-swap="innerHTML"
+       class="sp-page-link">&raquo;</a>
+  {% endif %}
+</div>
+{% endif %}

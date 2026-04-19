@@ -497,3 +497,109 @@ async def sprint_analytics(
             "active_sprint_id": active_sprint_id,
         },
     )
+
+
+# Registered AFTER /sprints/analytics/ so that literal path matches first;
+# otherwise FastAPI would try to parse "analytics" as int and fail validation.
+@router.get("/projects/{project_key}/sprints/{sprint_id}/", response_class=HTMLResponse)
+async def sprint_detail(
+    project_key: str,
+    sprint_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render a single sprint's detail page: header, metrics, and issue list."""
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+
+    try:
+        project = await _project_svc.get_by_key(db, project_key)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Project not found")
+    await _project_svc.require_project_access(db, project, user)
+
+    try:
+        sprint = await _sprint_svc.get_by_id(db, sprint_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Sprint not found")
+
+    if sprint.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Sprint not found in this project")
+
+    # Load issues in this sprint with relations eager-loaded to avoid N+1
+    issue_stmt = (
+        select(Issue)
+        .where(Issue.sprint_id == sprint.id)
+        .options(
+            selectinload(Issue.status),
+            selectinload(Issue.tracker),
+            selectinload(Issue.priority),
+            selectinload(Issue.assigned_to),
+        )
+        .order_by(Issue.id.asc())
+    )
+    issues_in_sprint = list((await db.execute(issue_stmt)).scalars().all())
+
+    total_issues = len(issues_in_sprint)
+    completed_issues = sum(
+        1 for i in issues_in_sprint if i.status and i.status.category in ("done", "closed")
+    )
+    in_progress_issues = sum(
+        1 for i in issues_in_sprint if i.status and i.status.category == "active"
+    )
+    remaining_issues = total_issues - completed_issues
+    completion_pct = round(completed_issues * 100 / total_issues) if total_issues else 0
+
+    # Duration and days-left math. For completed sprints we show "Closed".
+    duration_days: int | None = None
+    days_left: int | None = None
+    if sprint.start_date and sprint.end_date:
+        duration_days = (sprint.end_date - sprint.start_date).days + 1
+    if sprint.status == "active" and sprint.end_date:
+        days_left = max(0, (sprint.end_date - date.today()).days)
+
+    # Average velocity across prior completed sprints in this project, for context.
+    avg_velocity = await _sprint_svc.average_velocity(db, project.id)
+
+    # Group issues by status category for the issue list (To Do / In Progress / Done).
+    grouped: dict[str, list[Issue]] = {"todo": [], "active": [], "done": []}
+    for issue in issues_in_sprint:
+        category = (issue.status.category if issue.status else "backlog") or "backlog"
+        if category in ("done", "closed"):
+            grouped["done"].append(issue)
+        elif category == "active":
+            grouped["active"].append(issue)
+        else:
+            grouped["todo"].append(issue)
+
+    can_manage = user.is_admin or await check_permission(
+        user, project.id, Permission.MANAGE_SPRINTS, db
+    )
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/projects/sprint_detail.html",
+        context={
+            "user": user,
+            "active_page": "sprints",
+            "active_project": project,
+            "project": project,
+            "sprint": sprint,
+            "issues_in_sprint": issues_in_sprint,
+            "grouped_issues": grouped,
+            "total_issues": total_issues,
+            "completed_issues": completed_issues,
+            "in_progress_issues": in_progress_issues,
+            "remaining_issues": remaining_issues,
+            "completion_pct": completion_pct,
+            "duration_days": duration_days,
+            "days_left": days_left,
+            "avg_velocity": avg_velocity,
+            "can_manage_sprint": can_manage,
+            "active_sprint_id": sprint.id if sprint.status == "active" else None,
+            "today": date.today(),
+        },
+    )

@@ -3,6 +3,28 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.9] - 2026-04-19
+
+### Added
+- **Dashboard v2** — project stats, recent releases, wiki activity, paginated issues with sprints and agent activity feed
+- **Sprint detail page** — sprint metrics, rich issue list layout
+- **Autocomplete selects** — version and sprint sidebar selects with search, closed versions and completed sprints remain selectable
+- **MCP session persistence** — sessions stored in Redis with sliding TTL so clients survive API restarts
+- **MCP tools** — `specivo_list_comments`, comment count on `show_issue`, `get` op for `specivo_metadata`, search defaults to hybrid mode with configurable `mode` param
+- **Admin MCP config** — Codex CLI option added to MCP configuration card
+- **Project key length** — raised from 12 to 128 characters
+
+### Fixed
+- Activity log shows sprint and version names instead of raw IDs
+- Metadata changes render as per-key diffs in activity log
+- CSRF HMAC secret derived from `settings.secret_key` instead of separate value
+- Silent JWT refresh on API endpoints (was only on page routes)
+- Styled 404 page for routes unmatched by the router
+- Codex MCP config uses native streamable HTTP
+
+### Security
+- CSRF secret derivation hardened — tied to application secret key
+
 ## [0.1.8] - 2026-04-12
 
 ### Added

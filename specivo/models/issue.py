@@ -94,7 +94,7 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
 
     # Denormalised from projects.key — immutable once set.
     # Allows display key construction without a JOIN.
-    project_key: Mapped[str] = mapped_column(String(12), nullable=False)
+    project_key: Mapped[str] = mapped_column(String(128), nullable=False)
 
     # Per-project sequential number; assigned atomically on create
     sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)

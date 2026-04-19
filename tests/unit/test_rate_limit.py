@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from specivo.core.rate_limit import RateLimiter, _get_client_ip
+from specivo.core.rate_limit import RateLimiter, _get_client_ip, rate_limit
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -260,3 +260,54 @@ class TestGetClientIp:
     def test_returns_unknown_when_no_info(self):
         req = self._make_request()
         assert _get_client_ip(req) == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# rate_limit_enabled setting
+# ---------------------------------------------------------------------------
+
+
+class TestRateLimitEnabledSetting:
+    def _make_request_response(self):
+        request = MagicMock()
+        request.client = MagicMock()
+        request.client.host = "127.0.0.1"
+        request.state = MagicMock(spec=[])
+        response = MagicMock()
+        response.headers = {}
+        return request, response
+
+    @pytest.mark.asyncio
+    async def test_disabled_skips_limiter_check(self):
+        """When rate_limit_enabled=False, the dependency returns immediately."""
+        dep = rate_limit("test", max_requests=1, window_seconds=60)
+        request, response = self._make_request_response()
+
+        settings_mock = MagicMock()
+        settings_mock.rate_limit_enabled = False
+
+        with patch("specivo.core.config.get_settings", return_value=settings_mock):
+            # Should not raise even though max_requests=1 and we call twice
+            await dep(request, response)
+            await dep(request, response)
+
+        # No rate limit headers should be set
+        assert "X-RateLimit-Limit" not in response.headers
+
+    @pytest.mark.asyncio
+    async def test_enabled_enforces_limiter(self):
+        """When rate_limit_enabled=True (default), the limiter runs normally."""
+        dep = rate_limit("test", max_requests=10, window_seconds=60)
+        request, response = self._make_request_response()
+
+        redis_mock, _ = _make_redis_mock(count_before=0)
+        settings_mock = MagicMock()
+        settings_mock.rate_limit_enabled = True
+
+        with (
+            patch("specivo.core.config.get_settings", return_value=settings_mock),
+            patch("specivo.core.redis.get_redis", AsyncMock(return_value=redis_mock)),
+        ):
+            await dep(request, response)
+
+        assert response.headers["X-RateLimit-Limit"] == "10"

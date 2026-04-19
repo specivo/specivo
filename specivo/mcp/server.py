@@ -35,6 +35,7 @@ from specivo.mcp.tools import (
     _delete_wiki,
     _edit_description,
     _edit_wiki,
+    _list_comments,
     _list_issues,
     _list_lookups,
     _list_members,
@@ -291,18 +292,34 @@ async def specivo_edit_description(
 
 @mcp.tool()
 async def specivo_search(
-    query: Annotated[str, Field(description="Search query (full-text).")],
+    query: Annotated[str, Field(description="Search query.")],
     project_key: Annotated[str | None, Field(description="Limit to this project. Uppercase, e.g. ACME.")] = None,
     scope: Annotated[str, Field(description="'all', 'issues', or 'wiki'.")] = "all",
     limit: Annotated[int, Field(description="Max results to return (1-50).")] = 10,
+    mode: Annotated[
+        str,
+        Field(
+            description=(
+                "Search mode: 'hybrid' (default, FTS + semantic with RRF fusion), "
+                "'keyword' (tsvector FTS only — fast, exact-match), "
+                "'semantic' (pgvector embeddings — conceptual matches). "
+                "Use 'hybrid' unless you need a specific behavior."
+            )
+        ),
+    ] = "hybrid",
 ) -> str:
-    """Full-text search across issues and wiki pages.
+    """Search across issues and wiki pages.
+
+    Defaults to hybrid search, which fuses full-text (tsvector) and semantic
+    (pgvector) results via reciprocal-rank fusion — best general-purpose recall.
+    Use mode='keyword' for exact-text/identifier queries or mode='semantic'
+    for conceptual lookups.
 
     Returns results with type, title, subtitle, and snippet.
     Use project_key to narrow results to a single project.
     """
     async with _get_session_and_user() as (session, user):
-        return await _search(session, user, query, project_key, scope, limit)
+        return await _search(session, user, query, project_key, scope, limit, mode)
 
 
 @mcp.tool()
@@ -429,6 +446,23 @@ async def specivo_add_comment(
     """
     async with _get_session_and_user() as (session, user):
         return await _add_comment(session, user, issue_ref, notes)
+
+
+@mcp.tool()
+async def specivo_list_comments(
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12.")],
+    limit: Annotated[int, Field(description="Max comments to return (1..50).", ge=1, le=50)] = 10,
+    offset: Annotated[int, Field(description="Pagination offset (>=0).", ge=0)] = 0,
+    order: Annotated[str, Field(description="Order by created_at: 'asc' or 'desc'.")] = "desc",
+) -> str:
+    """List comments (notes-only journals) on an issue, paginated.
+
+    Pure field-change journals are excluded; only real user comments are
+    returned. Use specivo_show_issue to see the total count first, then
+    page through with limit/offset.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_comments(session, user, issue_ref, limit, offset, order)
 
 
 @mcp.tool()
@@ -565,7 +599,7 @@ async def specivo_metadata(
     key: Annotated[str, Field(description="Metadata key to mutate.")],
     op: Annotated[
         str,
-        Field(description="One of: set, delete, append, remove."),
+        Field(description="One of: set, get, delete, append, remove."),
     ],
     value: Annotated[
         Any,
@@ -573,21 +607,24 @@ async def specivo_metadata(
             default=None,
             description=(
                 "Value to apply. For 'set', any JSON value. "
-                "For 'append'/'remove', a scalar or list. Ignored for 'delete'."
+                "For 'append'/'remove', a scalar or list. Ignored for 'get' and 'delete'."
             ),
         ),
     ] = None,
 ) -> str:
-    """Mutate a single metadata key on an entity.
+    """Read or mutate a single metadata key on an entity.
 
     Supported operations:
     - set: metadata[key] = value (any JSON value)
+    - get: return metadata[key] as JSON, or '(not set)' if missing
     - delete: remove key (silent no-op if missing)
     - append: append to a list at key (missing key -> new list)
     - remove: drop matching items from a list at key
 
-    Use specivo_list_metadata_schemas first to discover available
-    fields. Recoverable errors are returned as 'Error: ...' strings.
+    The 'get' op is read-only and requires only view_issues permission;
+    all other ops require edit_issues. Use specivo_list_metadata_schemas
+    first to discover available fields. Recoverable errors are returned
+    as 'Error: ...' strings.
     """
     async with _get_session_and_user() as (session, user):
         return await _metadata(session, user, target_ref, key, op, value)

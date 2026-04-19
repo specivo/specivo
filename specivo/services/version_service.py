@@ -71,6 +71,36 @@ class VersionService:
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
+    async def search_for_project(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> list[Version]:
+        """Search versions for a project.
+
+        - Empty query returns the 10 most recent versions ordered by
+          ``effective_date DESC NULLS LAST, name DESC`` regardless of status.
+        - Non-empty query performs a case-insensitive substring match on name,
+          capped at ``limit`` rows.
+        """
+        stmt = select(Version).where(Version.project_id == project_id)
+        q = (query or "").strip()
+        if q:
+            stmt = stmt.where(Version.name.ilike(f"%{q}%"))
+            stmt = stmt.order_by(
+                Version.effective_date.desc().nullslast(),
+                Version.name.desc(),
+            ).limit(limit)
+        else:
+            stmt = stmt.order_by(
+                Version.effective_date.desc().nullslast(),
+                Version.name.desc(),
+            ).limit(10)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
     async def update(
         self,
         session: AsyncSession,

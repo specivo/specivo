@@ -180,6 +180,59 @@ async def test_detail_page_renders_with_sidebar(
 
 
 @pytest.mark.integration
+async def test_detail_page_keeps_closed_version_and_completed_sprint_selectable(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: dict,
+    _project: Project,
+    _issue: object,
+) -> None:
+    """Regression: closed versions and completed sprints must still appear
+    in the issue sidebar dropdown if the issue is linked to them, so users
+    can see the current assignment instead of a silent fallback to "-- No ... --".
+    """
+    from specivo.models.sprint import Sprint
+    from specivo.models.version import Version
+
+    closed_version = Version(
+        project_id=_project.id,
+        name="v0.9-closed",
+        status="closed",
+        sharing="none",
+    )
+    db_session.add(closed_version)
+    completed_sprint = Sprint(
+        project_id=_project.id,
+        name="Sprint 1 done",
+        status="completed",
+    )
+    db_session.add(completed_sprint)
+    await db_session.flush()
+
+    _issue.fixed_version_id = closed_version.id
+    _issue.sprint_id = completed_sprint.id
+    await db_session.commit()
+
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/issue/{_issue.display_key}/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+
+    # The sidebar is now an autocomplete; the currently-assigned entity is
+    # pinned as the initial input value via entityAutocomplete's currentLabel.
+    assert "v0.9-closed" in html
+    assert f"currentId: {closed_version.id}" in html
+    assert "Sprint 1 done" in html
+    assert f"currentId: {completed_sprint.id}" in html
+    # Both selects should reference the search endpoints
+    assert f"/api/v1/projects/{_project.key}/versions/search/" in html
+    assert f"/api/v1/projects/{_project.key}/sprints/search/" in html
+
+
+@pytest.mark.integration
 async def test_detail_page_shows_progress_select(
     admin_client: AsyncClient,
     db_session: AsyncSession,

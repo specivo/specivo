@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from specivo.api.v1.router import api_router
 from specivo.core.config import get_settings
@@ -88,6 +89,19 @@ async def lifespan(app: FastAPI):
 
     redis = await get_redis()
     await redis.ping()
+
+    # Warn (do not fail) if Redis is running without AOF persistence.
+    # In that configuration, MCP session metadata does not survive a
+    # Redis restart, so attribution and telemetry will have gaps.
+    from specivo.mcp.session_store import check_redis_persistence
+
+    if not await check_redis_persistence(redis):
+        logging.getLogger(__name__).warning(
+            "Redis AOF persistence is disabled (appendonly=no). "
+            "MCP session metadata will not survive a Redis restart. "
+            "Enable AOF with 'redis-server --appendonly yes' to keep "
+            "attribution and telemetry intact across restarts."
+        )
 
     # Load brand_name from DB settings for template rendering
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -267,6 +281,7 @@ def create_app() -> FastAPI:
     # Error handlers — register most specific first.
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(AppError, app_error_handler)
+    application.add_exception_handler(StarletteHTTPException, http_exception_handler)
     application.add_exception_handler(HTTPException, http_exception_handler)
     application.add_exception_handler(Exception, unhandled_exception_handler)
 

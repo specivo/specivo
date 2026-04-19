@@ -261,18 +261,19 @@ async def issue_detail(
     all_journals = await _journal_svc.list_for_issue(db, issue.id, include_private=user.is_admin)
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
-    versions_result = await db.execute(
-        select(Version)
-        .where(Version.project_id == project.id, Version.status == "open")
-        .order_by(Version.effective_date.asc().nullslast(), Version.name.asc())
+    # Load the current sprint (if any) for the sidebar autocomplete to pin it.
+    # Versions and sprints lists are no longer prefetched — the sidebar uses
+    # the /api/v1/projects/{key}/versions/search/ and /sprints/search/ endpoints
+    # for autocomplete.
+    current_sprint: Sprint | None = None
+    if issue.sprint_id is not None:
+        current_sprint = await db.get(Sprint, issue.sprint_id)
+    # Derive the current active sprint for project-wide UI bits (e.g. sprint
+    # badge on activity) with a single targeted query.
+    active_sprint_id_result = await db.execute(
+        select(Sprint.id).where(Sprint.project_id == project.id, Sprint.status == "active")
     )
-    versions = list(versions_result.scalars().all())
-    sprints_result = await db.execute(
-        select(Sprint)
-        .where(Sprint.project_id == project.id, Sprint.status.in_(["active", "planned"]))
-        .order_by(Sprint.status.desc(), Sprint.start_date.asc().nullslast(), Sprint.name.asc())
-    )
-    sprints = list(sprints_result.scalars().all())
+    active_sprint_id = active_sprint_id_result.scalar_one_or_none()
     issue_schemas = await schema_svc.list_for_project(db, project.id)
     # Attachments are lazy-loaded via htmx when the Attachments tab is opened
     # (see /partials/issues/{key}/attachments/). Time entries stay eager because
@@ -315,14 +316,48 @@ async def issue_detail(
         for jid, groups in reactions_by_journal_raw.items()
     }
 
-    # Derive active sprint id from the already-loaded list to avoid a second query
-    active_sprint_id = next((s.id for s in sprints if s.status == "active"), None)
-
     # Filter to applicable schemas (project-wide + issue's tracker)
     applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas]
 
-    # Build lookup maps for human-readable activity details
+    # Build lookup maps for human-readable activity details.
+    # Collect all sprint/version IDs referenced in journal details so we can
+    # bulk-load names instead of showing raw IDs.
+    referenced_sprint_ids: set[int] = set()
+    referenced_version_ids: set[int] = set()
+    for j in all_journals:
+        for d in j.details:
+            if d.prop_key == "sprint_id":
+                for v in (d.old_value, d.new_value):
+                    if v is not None:
+                        try:
+                            referenced_sprint_ids.add(int(v))
+                        except (ValueError, TypeError):
+                            pass
+            elif d.prop_key == "fixed_version_id":
+                for v in (d.old_value, d.new_value):
+                    if v is not None:
+                        try:
+                            referenced_version_ids.add(int(v))
+                        except (ValueError, TypeError):
+                            pass
+    if issue.sprint_id is not None:
+        referenced_sprint_ids.add(issue.sprint_id)
+
+    sprint_lookup: dict[str, str] = {}
+    if referenced_sprint_ids:
+        sprint_rows = (await db.execute(
+            select(Sprint.id, Sprint.name).where(Sprint.id.in_(referenced_sprint_ids))
+        )).all()
+        sprint_lookup = {str(r.id): r.name for r in sprint_rows}
+
+    version_lookup: dict[str, str] = {}
+    if referenced_version_ids:
+        version_rows = (await db.execute(
+            select(Version.id, Version.name).where(Version.id.in_(referenced_version_ids))
+        )).all()
+        version_lookup = {str(r.id): r.name for r in version_rows}
+
     lookup_maps: dict[str, dict[str, str]] = {
         "status_id": {str(s.id): s.name for s in lookups["statuses"]},
         "tracker_id": {str(t.id): t.name for t in lookups["trackers"]},
@@ -330,7 +365,8 @@ async def issue_detail(
         "assigned_to_id": {
             str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members
         },
-        "sprint_id": {str(sp.id): sp.name for sp in sprints},
+        "sprint_id": sprint_lookup,
+        "fixed_version_id": version_lookup,
     }
 
     # Derive from the already-loaded watchers list (list[User])
@@ -356,8 +392,7 @@ async def issue_detail(
             "reactions_by_journal": reactions_by_journal,
             **tab_ctx,
             "relation_count": relation_count,
-            "versions": versions,
-            "sprints": sprints,
+            "current_sprint": current_sprint,
             "relations": relations,
             "metadata_schemas_data": metadata_schemas_data,
             "issue_metadata": issue.issue_metadata or {},

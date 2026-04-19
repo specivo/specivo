@@ -331,9 +331,7 @@ class TestMcpEditDescription:
 
 
 class TestMcpSearch:
-    async def test_search(self, db_session: AsyncSession, admin: User, seed: dict):
-        from specivo.mcp.tools import _search
-
+    async def _seed_banana(self, db_session: AsyncSession, admin: User, seed: dict) -> None:
         svc = IssueService()
         await svc.create(
             db_session,
@@ -347,8 +345,45 @@ class TestMcpSearch:
         )
         await db_session.commit()
 
-        result = await _search(db_session, admin, query="banana")
+    async def test_search_keyword(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _search
+
+        await self._seed_banana(db_session, admin, seed)
+
+        result = await _search(db_session, admin, query="banana", mode="keyword")
         assert "banana" in result.lower()
+        assert "mode=keyword" in result
+
+    async def test_search_default_is_hybrid(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _search
+
+        await self._seed_banana(db_session, admin, seed)
+
+        result = await _search(db_session, admin, query="banana")
+        assert "mode=hybrid" in result
+
+    async def test_search_hybrid_explicit(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _search
+
+        await self._seed_banana(db_session, admin, seed)
+
+        result = await _search(db_session, admin, query="banana", mode="hybrid")
+        assert "mode=hybrid" in result
+
+    async def test_search_semantic_mode_runs(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _search
+
+        await self._seed_banana(db_session, admin, seed)
+
+        result = await _search(db_session, admin, query="banana", mode="semantic")
+        assert "mode=semantic" in result
+
+    async def test_search_invalid_mode(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.core.exceptions import ValidationError
+        from specivo.mcp.tools import _search
+
+        with pytest.raises(ValidationError):
+            await _search(db_session, admin, query="banana", mode="bogus")
 
 
 class TestMcpWiki:
@@ -580,6 +615,179 @@ class TestMcpAddComment:
         assert "ACME-1" in result
 
 
+class TestMcpListComments:
+    """Tests for ``_list_comments`` and comment-count in ``_show_issue``."""
+
+    async def _make_issue(self, db_session, admin, seed, subject="List comments test"):
+        svc = IssueService()
+        issue = await svc.create(
+            db_session,
+            seed["project"],
+            IssueCreate(
+                project_key="ACME",
+                tracker_id=seed["tracker"].id,
+                subject=subject,
+            ),
+            admin,
+        )
+        await db_session.commit()
+        return issue
+
+    async def test_happy_path_desc_default(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _add_comment, _list_comments
+
+        issue = await self._make_issue(db_session, admin, seed)
+        for i in range(3):
+            await _add_comment(db_session, admin, issue.display_key, f"comment {i}")
+            await db_session.commit()
+
+        result = await _list_comments(db_session, admin, issue.display_key)
+        assert "3 total" in result
+        assert "comment 0" in result
+        assert "comment 1" in result
+        assert "comment 2" in result
+        # Default order is desc — newest first. "comment 2" should appear before "comment 0".
+        assert result.index("comment 2") < result.index("comment 0")
+
+    async def test_pagination(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _add_comment, _list_comments
+
+        issue = await self._make_issue(db_session, admin, seed)
+        for i in range(5):
+            await _add_comment(db_session, admin, issue.display_key, f"c{i}")
+            await db_session.commit()
+
+        page1 = await _list_comments(db_session, admin, issue.display_key, limit=2, offset=0, order="asc")
+        assert "5 total" in page1
+        assert "c0" in page1 and "c1" in page1
+        assert "c2" not in page1
+        assert "offset=2" in page1  # more hint
+
+        page2 = await _list_comments(db_session, admin, issue.display_key, limit=2, offset=2, order="asc")
+        assert "c2" in page2 and "c3" in page2
+        assert "c0" not in page2
+
+    async def test_asc_ordering(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _add_comment, _list_comments
+
+        issue = await self._make_issue(db_session, admin, seed)
+        await _add_comment(db_session, admin, issue.display_key, "first")
+        await db_session.commit()
+        await _add_comment(db_session, admin, issue.display_key, "second")
+        await db_session.commit()
+
+        result = await _list_comments(db_session, admin, issue.display_key, order="asc")
+        assert result.index("first") < result.index("second")
+
+    async def test_show_issue_includes_comments_count(
+        self, db_session: AsyncSession, admin: User, seed: dict
+    ):
+        from specivo.mcp.tools import _add_comment, _show_issue
+
+        issue = await self._make_issue(db_session, admin, seed)
+        out_before = await _show_issue(db_session, admin, issue.display_key)
+        assert "Comments: 0" in out_before
+
+        await _add_comment(db_session, admin, issue.display_key, "hello")
+        await db_session.commit()
+        await _add_comment(db_session, admin, issue.display_key, "world")
+        await db_session.commit()
+
+        out_after = await _show_issue(db_session, admin, issue.display_key)
+        assert "Comments: 2" in out_after
+
+    async def test_empty_case(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _list_comments
+
+        issue = await self._make_issue(db_session, admin, seed)
+        result = await _list_comments(db_session, admin, issue.display_key)
+        assert "0 total" in result
+        assert "(none)" in result
+
+    async def test_field_change_only_journals_excluded(
+        self, db_session: AsyncSession, admin: User, seed: dict, closed_status: IssueStatus
+    ):
+        """Field-change-only journals (no notes body) must not count as comments."""
+        from specivo.mcp.tools import _list_comments, _show_issue
+        from specivo.services.journal_service import JournalService
+
+        issue = await self._make_issue(db_session, admin, seed)
+        jsvc = JournalService()
+        # Simulate a pure field-change (status update, notes=None).
+        old_attrs = {"status_id": issue.status_id}
+        new_attrs = {"status_id": closed_status.id}
+        issue.status_id = closed_status.id
+        await jsvc.record_change(db_session, issue, admin, old_attrs, new_attrs, notes=None)
+        await db_session.commit()
+
+        out = await _show_issue(db_session, admin, issue.display_key)
+        assert "Comments: 0" in out
+
+        result = await _list_comments(db_session, admin, issue.display_key)
+        assert "0 total" in result
+
+    async def test_invalid_limit(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.core.exceptions import ValidationError
+        from specivo.mcp.tools import _list_comments
+
+        issue = await self._make_issue(db_session, admin, seed)
+        with pytest.raises(ValidationError):
+            await _list_comments(db_session, admin, issue.display_key, limit=0)
+        with pytest.raises(ValidationError):
+            await _list_comments(db_session, admin, issue.display_key, limit=51)
+
+    async def test_invalid_offset(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.core.exceptions import ValidationError
+        from specivo.mcp.tools import _list_comments
+
+        issue = await self._make_issue(db_session, admin, seed)
+        with pytest.raises(ValidationError):
+            await _list_comments(db_session, admin, issue.display_key, offset=-1)
+
+    async def test_invalid_order(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.core.exceptions import ValidationError
+        from specivo.mcp.tools import _list_comments
+
+        issue = await self._make_issue(db_session, admin, seed)
+        with pytest.raises(ValidationError):
+            await _list_comments(db_session, admin, issue.display_key, order="sideways")
+
+    async def test_permission_denied_for_non_member_on_private_project(
+        self, db_session: AsyncSession, admin: User, seed: dict
+    ):
+        """Non-admin, non-member user on a private project is denied."""
+        from specivo.core.exceptions import NotFoundError, PermissionDeniedError
+        from specivo.mcp.tools import _add_comment, _list_comments
+
+        # Private project owned by admin.
+        priv = ProjectFactory.build(key="PRIV", identifier="priv-app", is_public=False)
+        db_session.add(priv)
+        await db_session.commit()
+        await db_session.refresh(priv)
+
+        svc = IssueService()
+        issue = await svc.create(
+            db_session,
+            priv,
+            IssueCreate(project_key="PRIV", tracker_id=seed["tracker"].id, subject="secret"),
+            admin,
+        )
+        await db_session.commit()
+        await _add_comment(db_session, admin, issue.display_key, "top secret")
+        await db_session.commit()
+
+        intruder = UserFactory.build(login="intruder", status="active", is_admin=False)
+        db_session.add(intruder)
+        await db_session.commit()
+        await db_session.refresh(intruder)
+
+        # Either PermissionDeniedError (explicit) or NotFoundError (visibility filter
+        # hides the issue from non-members) is an acceptable denial — the key
+        # contract is that no comment data leaks.
+        with pytest.raises((PermissionDeniedError, NotFoundError)):
+            await _list_comments(db_session, intruder, issue.display_key)
+
+
 class TestMcpDeleteVersion:
     async def test_delete_version(self, db_session: AsyncSession, admin: User, project: Project):
         from specivo.mcp.tools import _create_version, _delete_version, _list_versions
@@ -709,3 +917,180 @@ class TestMcpUpdateIssueFixedVersion:
 
         await db_session.refresh(issue)
         assert issue.fixed_version_id == version_ids["v5.0.0"]
+
+
+class TestMcpUpdateIssuePreservesUnrelatedFields:
+    """Regression tests: omitted fields must not wipe existing sprint/version.
+
+    Pydantic V2 adds every kwarg to ``model_fields_set`` regardless of value,
+    and ``IssueService.update`` uses that set to distinguish "not provided"
+    from "explicitly cleared" for ``fixed_version_id`` and ``sprint_id``.
+    The MCP wrapper must only forward kwargs the caller actually supplied.
+    """
+
+    async def test_update_preserves_version_and_sprint_when_omitted(
+        self, db_session: AsyncSession, admin: User, seed: dict
+    ):
+        from specivo.mcp.tools import (
+            _create_issue,
+            _create_version,
+            _list_versions,
+            _update_issue,
+        )
+
+        # Create version
+        await _create_version(db_session, admin, "ACME", "v6.0.0")
+        versions_result = await _list_versions(db_session, admin, "ACME")
+        version_id: int | None = None
+        for line in versions_result.splitlines():
+            if "v6.0.0" in line:
+                version_id = int(line.strip().split()[0])
+                break
+        assert version_id is not None
+
+        # Create sprint directly via service to get its id
+        from specivo.schemas.sprint import SprintCreate
+        from specivo.services.sprint_service import SprintService
+        sprint_svc = SprintService()
+        sprint = await sprint_svc.create(
+            db_session, seed["project"], SprintCreate(name="Sprint A")
+        )
+        await db_session.commit()
+        sprint_id = sprint.id
+
+        # Create issue with both version and sprint assigned
+        await _create_issue(
+            session=db_session,
+            user=admin,
+            project_key="ACME",
+            tracker_id=seed["tracker"].id,
+            subject="Has version and sprint",
+            fixed_version_id=version_id,
+            sprint_id=sprint_id,
+        )
+        await db_session.commit()
+
+        svc = IssueService()
+        issue = await svc.get_by_display_key(db_session, "ACME-1", user=admin)
+        assert issue.fixed_version_id == version_id
+        assert issue.sprint_id == sprint_id
+
+        # Update unrelated fields only — version and sprint MUST be preserved
+        await _update_issue(
+            db_session,
+            admin,
+            "ACME-1",
+            status_id=seed["status"].id,
+            done_ratio=50,
+            notes="progress update",
+        )
+        await db_session.commit()
+
+        await db_session.refresh(issue)
+        assert issue.fixed_version_id == version_id, (
+            "fixed_version_id was wiped by an update that did not mention it"
+        )
+        assert issue.sprint_id == sprint_id, (
+            "sprint_id was wiped by an update that did not mention it"
+        )
+        assert issue.done_ratio == 50
+
+    async def test_update_can_still_set_version_and_sprint_explicitly(
+        self, db_session: AsyncSession, admin: User, seed: dict
+    ):
+        from specivo.mcp.tools import (
+            _create_issue,
+            _create_version,
+            _list_versions,
+            _update_issue,
+        )
+        from specivo.schemas.sprint import SprintCreate
+        from specivo.services.sprint_service import SprintService
+
+        await _create_version(db_session, admin, "ACME", "v7.0.0")
+        versions_result = await _list_versions(db_session, admin, "ACME")
+        new_version_id: int | None = None
+        for line in versions_result.splitlines():
+            if "v7.0.0" in line:
+                new_version_id = int(line.strip().split()[0])
+                break
+        assert new_version_id is not None
+
+        sprint_svc = SprintService()
+        new_sprint = await sprint_svc.create(
+            db_session, seed["project"], SprintCreate(name="Sprint B")
+        )
+        await db_session.commit()
+
+        await _create_issue(
+            session=db_session,
+            user=admin,
+            project_key="ACME",
+            tracker_id=seed["tracker"].id,
+            subject="Will receive version and sprint",
+        )
+        await db_session.commit()
+
+        await _update_issue(
+            db_session,
+            admin,
+            "ACME-1",
+            fixed_version_id=new_version_id,
+            sprint_id=new_sprint.id,
+        )
+        await db_session.commit()
+
+        svc = IssueService()
+        issue = await svc.get_by_display_key(db_session, "ACME-1", user=admin)
+        assert issue.fixed_version_id == new_version_id
+        assert issue.sprint_id == new_sprint.id
+
+    async def test_edit_description_preserves_version_and_sprint(
+        self, db_session: AsyncSession, admin: User, seed: dict
+    ):
+        from specivo.mcp.tools import (
+            _create_issue,
+            _create_version,
+            _edit_description,
+            _list_versions,
+        )
+        from specivo.schemas.sprint import SprintCreate
+        from specivo.services.sprint_service import SprintService
+
+        await _create_version(db_session, admin, "ACME", "v8.0.0")
+        versions_result = await _list_versions(db_session, admin, "ACME")
+        version_id: int | None = None
+        for line in versions_result.splitlines():
+            if "v8.0.0" in line:
+                version_id = int(line.strip().split()[0])
+                break
+        assert version_id is not None
+
+        sprint_svc = SprintService()
+        sprint = await sprint_svc.create(
+            db_session, seed["project"], SprintCreate(name="Sprint C")
+        )
+        await db_session.commit()
+
+        await _create_issue(
+            session=db_session,
+            user=admin,
+            project_key="ACME",
+            tracker_id=seed["tracker"].id,
+            subject="Edit desc preserves version",
+            description="original body text",
+            fixed_version_id=version_id,
+            sprint_id=sprint.id,
+        )
+        await db_session.commit()
+
+        await _edit_description(db_session, admin, "ACME-1", "original", "replaced")
+        await db_session.commit()
+
+        svc = IssueService()
+        issue = await svc.get_by_display_key(db_session, "ACME-1", user=admin)
+        assert "replaced" in (issue.description or "")
+        assert issue.fixed_version_id == version_id, (
+            "edit_description wiped fixed_version_id"
+        )
+        assert issue.sprint_id == sprint.id, "edit_description wiped sprint_id"

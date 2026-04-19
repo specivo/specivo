@@ -32,13 +32,31 @@
         {% elif d.prop_key == 'description' %}
         <strong class="sp-change-label">Description</strong> updated
         <a href="/issue/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">View changes</a>
+        {% elif d.prop_key == 'issue_metadata' %}
+        {% set diffs = metadata_diff(d.old_value, d.new_value) %}
+        {% for md in diffs %}
+        <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
+          <strong class="sp-change-label">Issue Metadata</strong>
+          <code style="font-size:var(--sp-font-size-xs);">{{ md.key }}</code>
+          {% if md.old and md.new %}
+          changed from <span class="sp-change-old sp-change-wrap">{{ md.old }}</span>
+          to <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
+          {% elif md.new %}
+          set to <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
+          {% else %}
+          <span class="sp-change-old">removed</span>
+          {% endif %}
+        </div>
+        {% endfor %}
         {% else %}
         {% set field_label = d.prop_key | replace('_id', '') | replace('_', ' ') | title %}
-        {% set old_name = lookup_maps.get(d.prop_key, {}).get(d.old_value|string, d.old_value) if lookup_maps is defined else d.old_value %}
-        {% set new_name = lookup_maps.get(d.prop_key, {}).get(d.new_value|string, d.new_value) if lookup_maps is defined else d.new_value %}
+        {% set old_resolved = lookup_maps.get(d.prop_key, {}).get(d.old_value|string) if lookup_maps is defined and d.old_value is not none else none %}
+        {% set old_name = old_resolved if old_resolved is not none else d.old_value %}
+        {% set new_resolved = lookup_maps.get(d.prop_key, {}).get(d.new_value|string) if lookup_maps is defined and d.new_value is not none else none %}
+        {% set new_name = new_resolved if new_resolved is not none else d.new_value %}
         <strong class="sp-change-label">{{ field_label }}</strong>
-        changed from <span class="sp-change-old">{{ old_name or 'unassigned' }}</span>
-        to <span class="sp-change-new">{{ new_name }}</span>
+        changed from <span class="sp-change-old">{{ old_name if old_name is not none and old_name != 'None' else '(none)' }}</span>
+        to <span class="sp-change-new">{{ new_name if new_name is not none and new_name != 'None' else '(none)' }}</span>
         {% endif %}
       </div>
       {% endfor %}

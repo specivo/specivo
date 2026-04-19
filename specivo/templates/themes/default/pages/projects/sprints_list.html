@@ -79,7 +79,8 @@
     <div class="sprint-list-goal">"{{ sprint.goal }}"</div>
     {% endif %}
     <div class="sprint-list-footer">
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/">Open board &rarr;</a>
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/">Details &rarr;</a>
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" style="margin-left:var(--sp-space-md)">Open board &rarr;</a>
     </div>
   </div>
   {% endfor %}
@@ -112,8 +113,9 @@
     <div class="sprint-list-goal">"{{ sprint.goal }}"</div>
     {% endif %}
     <div class="sprint-list-footer">
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/">Details &rarr;</a>
       {% if can_manage_sprint %}
-      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/">Edit sprint &rarr;</a>
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" style="margin-left:var(--sp-space-md)">Edit &rarr;</a>
       {% endif %}
     </div>
   </div>
@@ -158,6 +160,9 @@
       </div>
     </div>
     {% endif %}
+    <div class="sprint-list-footer">
+      <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/">Details &rarr;</a>
+    </div>
   </div>
   {% endfor %}
 </div>

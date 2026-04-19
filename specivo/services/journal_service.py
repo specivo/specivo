@@ -332,6 +332,61 @@ class JournalService:
         await session.flush()
         return journal
 
+    async def count_comments(self, session: AsyncSession, issue_id: int) -> int:
+        """Count journals for an issue that have a non-empty ``notes`` body.
+
+        Pure field-change journals (``notes`` NULL or empty) are excluded —
+        only real user comments are counted.
+        """
+        stmt = select(func.count(Journal.id)).where(
+            Journal.issue_id == issue_id,
+            Journal.notes.is_not(None),
+            func.length(func.trim(Journal.notes)) > 0,
+            Journal.is_private.is_(False),
+        )
+        result = await session.execute(stmt)
+        return int(result.scalar_one())
+
+    async def list_comments(
+        self,
+        session: AsyncSession,
+        issue_id: int,
+        limit: int = 10,
+        offset: int = 0,
+        order: str = "desc",
+    ) -> tuple[list[Journal], int]:
+        """Return a page of comment journals for an issue plus total count.
+
+        Filters to journals with a non-empty ``notes`` body (real comments,
+        not pure field-change entries). Eagerly loads the author.
+
+        ``order`` must be ``"asc"`` or ``"desc"`` (by ``created_at``).
+        """
+        if order not in ("asc", "desc"):
+            raise ValidationError("order must be 'asc' or 'desc'")
+
+        base_where = (
+            Journal.issue_id == issue_id,
+            Journal.notes.is_not(None),
+            func.length(func.trim(Journal.notes)) > 0,
+            Journal.is_private.is_(False),
+        )
+
+        total_stmt = select(func.count(Journal.id)).where(*base_where)
+        total = int((await session.execute(total_stmt)).scalar_one())
+
+        order_col = Journal.created_at.asc() if order == "asc" else Journal.created_at.desc()
+        stmt = (
+            select(Journal)
+            .where(*base_where)
+            .options(joinedload(Journal.user))
+            .order_by(order_col, Journal.id.asc() if order == "asc" else Journal.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await session.execute(stmt)
+        return list(result.scalars().all()), total
+
     async def list_for_issue(
         self,
         session: AsyncSession,

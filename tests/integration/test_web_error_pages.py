@@ -140,6 +140,54 @@ async def test_404_returns_json_for_api_client(
 
 
 # ---------------------------------------------------------------------------
+# Tests: unmatched-route 404 (raised by Starlette's router, not in-app code)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_unmatched_route_returns_html_for_browser(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _project: Project,
+):
+    """URL that does not match any registered route still returns styled HTML.
+
+    The router raises starlette.exceptions.HTTPException(404) before reaching
+    any view, so this exercises the exception handler's registration against
+    the Starlette parent class (not just fastapi.HTTPException).
+    """
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/projects/{_project.key}/wiki/parent-slug/child-slug/",
+        cookies={"access_token": token},
+        headers=BROWSER_HEADERS,
+    )
+    assert resp.status_code == 404
+    assert "text/html" in resp.headers.get("content-type", "")
+    assert '"detail"' not in resp.text, "Should not return raw Starlette JSON"
+    assert '"errors"' not in resp.text, "Should not return API JSON envelope"
+
+
+@pytest.mark.integration
+async def test_unmatched_route_returns_json_for_api_client(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _project: Project,
+):
+    """Same unmatched URL with Accept: application/json returns the app's JSON envelope."""
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/projects/{_project.key}/wiki/parent-slug/child-slug/",
+        cookies={"access_token": token},
+        headers=API_HEADERS,
+    )
+    assert resp.status_code == 404
+    body = resp.json()
+    assert "errors" in body, "Unmatched route should use the app's error envelope, not raw {detail: ...}"
+    assert body["errors"][0]["code"] == "not_found"
+
+
+# ---------------------------------------------------------------------------
 # Tests: error page structure
 # ---------------------------------------------------------------------------
 

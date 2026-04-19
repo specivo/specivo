@@ -615,3 +615,79 @@ async def test_manage_sprints_alone_can_run_full_lifecycle(
         f"/api/v1/projects/{project.key}/sprints/{sprint_id}/",
     )
     assert delete.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# Tests: Sprint search endpoint (autocomplete)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_api_search_sprints_empty_returns_recent_10(
+    authed_client: AsyncClient,
+    project: Project,
+) -> None:
+    """Empty query returns up to 10 most recent sprints, newest first by start_date."""
+    import datetime as _dt
+
+    for i in range(12):
+        await authed_client.post(
+            f"/api/v1/projects/{project.key}/sprints/",
+            json={
+                "name": f"Sprint {i:02d}",
+                "start_date": (_dt.date(2026, 1, 1) + _dt.timedelta(days=i)).isoformat(),
+                "end_date": (_dt.date(2026, 1, 15) + _dt.timedelta(days=i)).isoformat(),
+            },
+        )
+
+    resp = await authed_client.get(
+        f"/api/v1/projects/{project.key}/sprints/search/",
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert len(data) == 10
+    assert data[0]["name"] == "Sprint 11"
+    assert data[-1]["name"] == "Sprint 02"
+    assert {"id", "name", "status", "start_date", "end_date"} <= set(data[0].keys())
+
+
+@pytest.mark.integration
+async def test_api_search_sprints_substring_match(
+    authed_client: AsyncClient,
+    project: Project,
+) -> None:
+    """Non-empty query performs case-insensitive substring match on name."""
+    for name in ["Alpha one", "alpha two", "Beta one"]:
+        await authed_client.post(
+            f"/api/v1/projects/{project.key}/sprints/",
+            json={"name": name},
+        )
+
+    resp = await authed_client.get(
+        f"/api/v1/projects/{project.key}/sprints/search/?q=ALPHA",
+    )
+    assert resp.status_code == 200, resp.text
+    names = {s["name"] for s in resp.json()}
+    assert names == {"Alpha one", "alpha two"}
+
+
+@pytest.mark.integration
+async def test_api_search_sprints_viewer_allowed(
+    viewer_client: AsyncClient,
+    project: Project,
+) -> None:
+    """A view_issues-only member can search sprints."""
+    resp = await viewer_client.get(
+        f"/api/v1/projects/{project.key}/sprints/search/",
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == []
+
+
+@pytest.mark.integration
+async def test_api_search_sprints_requires_auth(
+    client: AsyncClient,
+    project: Project,
+) -> None:
+    resp = await client.get(f"/api/v1/projects/{project.key}/sprints/search/")
+    assert resp.status_code == 401

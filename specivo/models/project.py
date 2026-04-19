@@ -33,7 +33,7 @@ class Project(Base, TimestampMixin):
     can use ltree operators for ancestor/descendant queries.
 
     ``key``: uppercase project key (e.g. ``SPV``).  Used as issue prefix:
-    ``SPV-42``.  Constrained to ``^[A-Z][A-Z0-9]{1,9}$`` via CHECK.
+    ``SPV-42``.  Constrained to ``^[A-Z][A-Z0-9]{1,127}$`` via CHECK.
 
     ``issue_sequence``: monotonically-increasing counter for issue numbers
     within this project.  Updated atomically via UPDATE … RETURNING.
@@ -47,7 +47,7 @@ class Project(Base, TimestampMixin):
         Index("ix_projects_identifier", "identifier"),
         Index("ix_projects_parent_id", "parent_id"),
         CheckConstraint(
-            "key ~ '^[A-Z][A-Z0-9]{1,9}$'",
+            "key ~ '^[A-Z][A-Z0-9]{1,127}$'",
             name="ck_projects_key_format",
         ),
         CheckConstraint(
@@ -64,7 +64,7 @@ class Project(Base, TimestampMixin):
     identifier: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
 
     # Uppercase project key used as issue prefix (SPV, ACME, …)
-    key: Mapped[str] = mapped_column(String(12), nullable=False, unique=True)
+    key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
 
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -136,7 +136,7 @@ class ProjectKeyAlias(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    old_key: Mapped[str] = mapped_column(String(12), nullable=False, unique=True)
+    old_key: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
 
     project_id: Mapped[int] = mapped_column(
         ForeignKey("projects.id", ondelete="CASCADE"),

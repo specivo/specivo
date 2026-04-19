@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
@@ -93,6 +93,37 @@ async def list_sprints(
     await _require_view_issues(project, current_user, db)
     sprints = await _sprint_service.list_for_project(db, project.id)
     return [SprintOut.model_validate(s) for s in sprints]
+
+
+@router.get(
+    "/projects/{project_key}/sprints/search/",
+)
+async def search_sprints(
+    project_key: str,
+    q: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Autocomplete search for sprints.
+
+    Empty/missing ``q`` returns the 10 most recent sprints. Non-empty ``q``
+    performs a case-insensitive substring match on name, capped at ``limit``.
+    Requires ``view_issues`` on the project.
+    """
+    project = await _get_project(project_key, current_user, db)
+    await _require_view_issues(project, current_user, db)
+    sprints = await _sprint_service.search_for_project(db, project.id, q, limit=limit)
+    return [
+        {
+            "id": s.id,
+            "name": s.name,
+            "status": s.status,
+            "start_date": s.start_date.isoformat() if s.start_date else None,
+            "end_date": s.end_date.isoformat() if s.end_date else None,
+        }
+        for s in sprints
+    ]
 
 
 @router.get(

@@ -768,3 +768,89 @@ async def test_status_is_done_property() -> None:
     ]:
         s = StatusFactory.build(category=cat)
         assert s.is_done is expected, f"category={cat} -> is_done should be {expected}"
+
+
+# ---------------------------------------------------------------------------
+# Tests: Version search endpoint (autocomplete)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_versions_empty_query_returns_recent_10(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+) -> None:
+    """With no query, search returns up to 10 most recent versions, newest first."""
+    for i in range(12):
+        await _make_version(
+            db_session,
+            project,
+            name=f"v{i:02d}",
+            effective_date=datetime.date(2026, 1, 1) + datetime.timedelta(days=i),
+        )
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/versions/search/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert len(data) == 10
+    # Newest (highest effective_date) first
+    assert data[0]["name"] == "v11"
+    assert data[-1]["name"] == "v02"
+    assert {"id", "name", "status", "effective_date"} <= set(data[0].keys())
+
+
+@pytest.mark.asyncio
+async def test_search_versions_query_substring_match(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+) -> None:
+    """Non-empty query performs a case-insensitive substring match."""
+    await _make_version(db_session, project, name="Release 1.0")
+    await _make_version(db_session, project, name="Release 2.0")
+    await _make_version(db_session, project, name="Hotfix 9.9")
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/versions/search/?q=release",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    names = {v["name"] for v in resp.json()}
+    assert names == {"Release 1.0", "Release 2.0"}
+
+
+@pytest.mark.asyncio
+async def test_search_versions_returns_all_statuses(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+) -> None:
+    """Search returns versions regardless of status (open/locked/closed)."""
+    await _make_version(db_session, project, name="open-v", status="open")
+    await _make_version(db_session, project, name="locked-v", status="locked")
+    await _make_version(db_session, project, name="closed-v", status="closed")
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/versions/search/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    statuses = {v["status"] for v in resp.json()}
+    assert statuses == {"open", "locked", "closed"}
+
+
+@pytest.mark.asyncio
+async def test_search_versions_requires_auth(
+    client: AsyncClient,
+    project: Project,
+) -> None:
+    """Unauthenticated users cannot search versions."""
+    resp = await client.get(f"/api/v1/projects/{project.key}/versions/search/")
+    assert resp.status_code == 401

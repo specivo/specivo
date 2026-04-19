@@ -12,7 +12,7 @@ from pydantic import BaseModel, field_validator, model_validator
 # ---------------------------------------------------------------------------
 
 _IDENTIFIER_RE = re.compile(r"^[a-z][a-z0-9-]{0,98}[a-z0-9]$|^[a-z]$")
-_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,11}$")
+_KEY_RE = re.compile(r"^[A-Z][A-Z0-9]{1,127}$")
 
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -53,7 +53,7 @@ class ProjectCreate(BaseModel):
         v = v.strip().upper()
         if not _KEY_RE.match(v):
             raise ValueError(
-                "key must be 2–12 uppercase characters, start with a letter, and contain only letters and digits"
+                "key must be 2–128 uppercase characters, start with a letter, and contain only letters and digits"
             )
         return v
 
@@ -142,7 +142,7 @@ class ProjectRenameRequest(BaseModel):
         if v is not None:
             v = v.strip().upper()
             if not _KEY_RE.match(v):
-                raise ValueError("new_key must be 2-12 uppercase chars, start with a letter")
+                raise ValueError("new_key must be 2-128 uppercase chars, start with a letter")
         return v
 
     @field_validator("new_identifier")

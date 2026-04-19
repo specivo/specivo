@@ -27,6 +27,7 @@ from playwright.sync_api import BrowserContext, Page
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://specivo:specivo@localhost:5433/specivo_test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6380/0")
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-minimum-32-bytes-for-hs256-signing")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("KILL_TOKEN", "test-kill-token-secret")
 os.environ.setdefault("INSTALLED_PLUGINS", "[]")
 # DEBUG=true disables Secure flag on cookies so http://127.0.0.1 works.

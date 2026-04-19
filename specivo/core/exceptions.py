@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import HTTPException, Request, status
+from fastapi import Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +204,7 @@ async def app_error_handler(request: Request, exc: AppError) -> JSONResponse | H
     )
 
 
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse | HTMLResponse:
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse | HTMLResponse:
     # Skip HTML rendering for redirect responses (302, 307, etc.)
     if 300 <= exc.status_code < 400:
         return JSONResponse(

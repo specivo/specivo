@@ -193,6 +193,10 @@ def rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
     limiter = RateLimiter(key_prefix, max_requests, window_seconds)
 
     async def _dependency(request: Request, response: Response) -> None:
+        from specivo.core.config import get_settings
+
+        if not get_settings().rate_limit_enabled:
+            return
         # Prefer an authenticated user ID if one has been resolved upstream.
         # For auth endpoints (login) we use IP because the user is not yet known.
         user_id: str | None = getattr(request.state, "rate_limit_user_id", None)

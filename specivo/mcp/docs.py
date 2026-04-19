@@ -22,7 +22,8 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_update_issue": "Update issue fields; lock_version handled automatically",
     "specivo_edit_description": "Search-and-replace in issue description (token-efficient)",
     "specivo_add_comment": "Add a journal comment to an issue",
-    "specivo_search": "Full-text search across issues and wiki",
+    "specivo_list_comments": "List comments on an issue, paginated (limit, offset, order)",
+    "specivo_search": "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'",
     "specivo_list_wiki_pages": "List wiki pages for a project",
     "specivo_read_wiki": "Read a wiki page by slug",
     "specivo_create_wiki": "Create a new wiki page (slug auto-derived from title)",
@@ -81,9 +82,18 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: FastMCP | None = None
 ## Standard workflows
 
 ### Find context before coding
-1. `specivo_search(query, project_key)` -- find relevant issues/wiki
-2. `specivo_show_issue(issue_ref)` -- read issue details
-3. `specivo_read_wiki(project_key, slug)` -- read knowledge base
+1. `specivo_search(query, project_key)` -- relevant issues/wiki (default `mode="hybrid"`)
+2. `specivo_show_issue(issue_ref)` -- read issue details (includes `Comments: N` count)
+3. `specivo_list_comments(issue_ref)` -- page through comment history when `Comments: N` > 0
+4. `specivo_read_wiki(project_key, slug)` -- read knowledge base
+
+### Search modes
+- `mode="hybrid"` *(default)* -- FTS + pgvector semantic via RRF fusion.
+  Best general-purpose recall. Use this unless you have a reason not to.
+- `mode="keyword"` -- tsvector FTS only. Fastest; best for exact identifiers
+  or literal strings when semantic recall adds noise.
+- `mode="semantic"` -- pgvector embeddings only. Best for conceptual queries
+  where wording varies (requires embeddings to be populated).
 
 ### Create an issue
 1. `specivo_list_lookups()` -- get tracker_id, priority_id
@@ -183,6 +193,8 @@ def _format_footer(fmt: str) -> str:
         return """
 ## Connection
 
+### Claude Code / Cursor / Windsurf / Cline (JSON, native SSE)
+
 ```json
 {
   "mcpServers": {
@@ -193,7 +205,27 @@ def _format_footer(fmt: str) -> str:
     }
   }
 }
-```"""
+```
+
+### Codex CLI (TOML, native Streamable HTTP)
+
+Codex CLI supports Streamable HTTP natively. Add to `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.specivo]
+url = "https://your-specivo-host/mcp/"
+bearer_token_env_var = "SPECIVO_API_KEY"
+```
+
+Then export the API key in your shell before running `codex`:
+
+```bash
+export SPECIVO_API_KEY=spv_your_api_key_here
+```
+
+Codex will send `Authorization: Bearer $SPECIVO_API_KEY` on every request.
+No `mcp-remote` bridge needed — connects straight to `/mcp/`.
+"""
     return ""
 
 

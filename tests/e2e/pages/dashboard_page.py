@@ -8,7 +8,7 @@ from playwright.sync_api import Page, expect
 class DashboardPage:
     def __init__(self, page: Page) -> None:
         self.page = page
-        self.status_banner = page.locator(".status-banner")
+        self.status_banner = page.locator(".sp-greeting")
         self.project_cards = page.locator(".project-compact")
         self.sidebar = page.locator("nav.sidebar")
         self.sidebar_brand = page.locator(".sidebar-brand")

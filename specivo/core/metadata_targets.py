@@ -36,6 +36,7 @@ class MetadataTarget(Protocol):
     scheme: str
     content_type: str
     permission: str
+    read_permission: str
 
     async def resolve(
         self,
@@ -138,6 +139,7 @@ class IssueMetadataTarget:
     scheme = "issue"
     content_type = "issue"
     permission = "edit_issues"
+    read_permission = "view_issues"
 
     async def resolve(
         self,

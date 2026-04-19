@@ -64,7 +64,7 @@ class TestIssueRefAutolink:
         assert _autolink("PROJ-1") == "[PROJ-1](/issue/PROJ-1/)"
 
     def test_numeric_in_project_key(self):
-        assert _autolink("SPV093X-42") == "[SPV093X-42](/issue/SPV093X-42/)"
+        assert _autolink("ABC123X-42") == "[ABC123X-42](/issue/ABC123X-42/)"
 
     def test_no_text_no_crash(self):
         assert _autolink("") == ""

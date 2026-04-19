@@ -192,6 +192,8 @@ async def _show_issue(
     if issue.issue_metadata:
         lines.append(f"Metadata: {issue.issue_metadata}")
     lines.append(f"Lock version: {issue.lock_version}")
+    comments_count = await _journal_svc.count_comments(session, issue.id)
+    lines.append(f"Comments: {comments_count}")
 
     if not metadata_only:
         description = issue.description or ""
@@ -296,17 +298,29 @@ async def _update_issue(
 ) -> str:
     issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue.project_id, "edit_issues")
-    data = IssueUpdate(
-        subject=subject,
-        description=description,
-        status_id=status_id,
-        priority_id=priority_id,
-        assigned_to_id=assigned_to_id,
-        done_ratio=done_ratio,
-        fixed_version_id=fixed_version_id,
-        sprint_id=sprint_id,
-        lock_version=issue.lock_version,
-    )
+    # Only forward kwargs the caller actually supplied. Pydantic V2 adds every
+    # explicit kwarg to ``model_fields_set`` regardless of value, and the
+    # service layer uses that set to distinguish "not provided" from
+    # "explicitly cleared" for fixed_version_id / sprint_id. Including None
+    # for an omitted field would otherwise wipe it.
+    supplied: dict[str, Any] = {}
+    if subject is not None:
+        supplied["subject"] = subject
+    if description is not None:
+        supplied["description"] = description
+    if status_id is not None:
+        supplied["status_id"] = status_id
+    if priority_id is not None:
+        supplied["priority_id"] = priority_id
+    if assigned_to_id is not None:
+        supplied["assigned_to_id"] = assigned_to_id
+    if done_ratio is not None:
+        supplied["done_ratio"] = done_ratio
+    if fixed_version_id is not None:
+        supplied["fixed_version_id"] = fixed_version_id
+    if sprint_id is not None:
+        supplied["sprint_id"] = sprint_id
+    data = IssueUpdate(**supplied, lock_version=issue.lock_version)
     updated = await _issue_svc.update(session, issue, data, user, notes=notes)
     await session.flush()
     await _log_tool(session, user, AuditEvent.ISSUE_UPDATED, "update_issue", {"issue_ref": issue_ref})
@@ -329,12 +343,12 @@ async def _edit_description(
             f"Description length: {len(current)} chars."
         )
     new_description = current.replace(search_text, replace_text, 1)
-    data = IssueUpdate(
-        subject=None,
-        description=new_description,
-        done_ratio=None,
-        lock_version=issue.lock_version,
-    )
+    # Only set ``description`` — omitting every other field keeps
+    # ``model_fields_set`` minimal so the service does not touch
+    # fixed_version_id / sprint_id. Use ``**`` to avoid mypy insisting on
+    # every other optional field being passed explicitly.
+    supplied: dict[str, Any] = {"description": new_description}
+    data = IssueUpdate(**supplied, lock_version=issue.lock_version)
     updated = await _issue_svc.update(session, issue, data, user)
     await session.flush()
     await _log_tool(session, user, AuditEvent.ISSUE_UPDATED, "edit_description", {"issue_ref": issue_ref})
@@ -350,6 +364,9 @@ async def _edit_description(
 # ---------------------------------------------------------------------------
 
 
+SEARCH_MODES = ("hybrid", "keyword", "semantic")
+
+
 async def _search(
     session: AsyncSession,
     user: User,
@@ -357,16 +374,36 @@ async def _search(
     project_key: str | None = None,
     scope: str = "all",
     limit: int = 10,
+    mode: str = "hybrid",
 ) -> str:
+    if mode not in SEARCH_MODES:
+        raise ValidationError(f"Invalid mode '{mode}'. Must be one of: {', '.join(SEARCH_MODES)}")
+
     project_id: int | None = None
     if project_key:
         project = await _project_svc.get_by_key(session, project_key)
         project_id = project.id
 
-    results, total, _type_counts = await _search_svc.search(
-        session, query, user=user, project_id=project_id, scope=scope, limit=limit
-    )
-    lines = [f"Search results for '{query}' ({total} total):", ""]
+    if mode == "hybrid":
+        results, total, _type_counts = await _search_svc.hybrid_search(
+            session, query, user=user, project_id=project_id, scope=scope, limit=limit
+        )
+    elif mode == "semantic":
+        results, total = await _search_svc.semantic_search(
+            session, query, user=user, project_id=project_id, limit=limit
+        )
+        if scope != "all":
+            scope_map = {"issues": "issue", "wiki": "wiki", "comments": "comment", "attachments": "attachment"}
+            target = scope_map.get(scope)
+            if target:
+                results = [r for r in results if r.result_type == target]
+                total = len(results)
+    else:
+        results, total, _type_counts = await _search_svc.search(
+            session, query, user=user, project_id=project_id, scope=scope, limit=limit
+        )
+
+    lines = [f"Search results for '{query}' [mode={mode}] ({total} total):", ""]
     for r in results:
         lines.append(f"  [{r.result_type}] {r.title}  —  {r.subtitle or ''}")
         if r.snippet:
@@ -378,7 +415,7 @@ async def _search(
         user,
         AuditEvent.SEARCH_QUERY,
         "search",
-        {"query": query, "scope": scope, "result_count": total},
+        {"query": query, "scope": scope, "mode": mode, "result_count": total},
     )
     return "\n".join(lines)
 
@@ -558,6 +595,66 @@ async def _add_comment(
     await session.flush()
     await _log_tool(session, user, AuditEvent.COMMENT_ADDED, "add_comment", {"issue_ref": issue_ref})
     return f"Added comment to {issue.display_key} (journal #{journal.sequence}).\nNotes: {notes[:100]}"
+
+
+async def _list_comments(
+    session: AsyncSession,
+    user: User,
+    issue_ref: str,
+    limit: int = 10,
+    offset: int = 0,
+    order: str = "desc",
+) -> str:
+    """Return a paginated, formatted list of comments for an issue.
+
+    Only journals with a non-empty ``notes`` body are returned; pure
+    field-change journals are excluded.
+    """
+    # Validate inputs up front — fail fast before DB work.
+    if not isinstance(limit, int) or limit < 1 or limit > 50:
+        raise ValidationError("limit must be an integer between 1 and 50")
+    if not isinstance(offset, int) or offset < 0:
+        raise ValidationError("offset must be a non-negative integer")
+    if order not in ("asc", "desc"):
+        raise ValidationError("order must be 'asc' or 'desc'")
+
+    issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
+    # Permission check BEFORE any data is returned.
+    await _require_permission(session, user, issue.project_id, "view_issues")
+
+    comments, total = await _journal_svc.list_comments(
+        session, issue.id, limit=limit, offset=offset, order=order
+    )
+
+    end = offset + len(comments)
+    header = (
+        f"Comments for {issue.display_key} ({total} total, "
+        f"showing {offset}..{end}):"
+    )
+    lines: list[str] = [header, ""]
+
+    if not comments:
+        lines.append("  (none)")
+    else:
+        for j in comments:
+            author = j.user.display_name if j.user else "(unknown)"
+            lines.append(f"[#{j.id}] {author}  {j.created_at}")
+            body = j.notes or ""
+            for body_line in body.splitlines() or [""]:
+                lines.append(f"  {body_line}")
+            lines.append("")
+
+    if end < total:
+        lines.append(f"(more: use offset={end})")
+
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.ISSUE_READ,
+        "list_comments",
+        {"issue_ref": issue_ref, "limit": limit, "offset": offset, "order": order},
+    )
+    return "\n".join(lines).rstrip() + "\n"
 
 
 # ---------------------------------------------------------------------------
@@ -1048,6 +1145,8 @@ async def _metadata(
     Supported ops:
 
     * ``set``     -- ``metadata[key] = value`` (any JSON value).
+    * ``get``     -- return ``metadata[key]`` as a JSON-serialized string,
+      or the literal ``"(not set)"`` if the key is missing.  Read-only.
     * ``delete``  -- pop *key*; silent no-op if missing.
     * ``append``  -- append to a list at *key*.  Scalar values push one
       element; list values extend.  Missing key creates a new list.
@@ -1076,7 +1175,7 @@ async def _metadata(
     if not key:
         return "Error: key must be a non-empty string"
 
-    valid_ops = {"set", "delete", "append", "remove"}
+    valid_ops = {"set", "get", "delete", "append", "remove"}
     if op not in valid_ops:
         return f"Error: invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}"
 
@@ -1085,9 +1184,19 @@ async def _metadata(
         entity = await target.resolve(session, ref, user)
     except NotFoundError:
         return f"Error: {scheme} '{ref}' not found"
-    await _require_permission(session, user, target.project_id_of(entity), target.permission)
+    required_permission = target.read_permission if op == "get" else target.permission
+    await _require_permission(session, user, target.project_id_of(entity), required_permission)
 
     metadata = target.get_metadata(entity)
+
+    # Read-only path — return without mutating, flushing, or journaling.
+    if op == "get":
+        if key not in metadata:
+            return "(not set)"
+        try:
+            return json.dumps(metadata[key], default=str, ensure_ascii=False)
+        except TypeError:
+            return f"Error: value at key '{key}' is not JSON-serializable"
 
     # Apply op to a local copy.
     if op == "set":

@@ -334,6 +334,111 @@ class TestMetadataErrors:
 # ---------------------------------------------------------------------------
 
 
+class TestMetadataGet:
+    async def test_metadata_get_returns_value_when_set(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        await _metadata(db_session, admin, issue.display_key, "owner", "set", "alice")
+        result = await _metadata(db_session, admin, issue.display_key, "owner", "get")
+        assert result == '"alice"'
+
+    async def test_metadata_get_returns_not_set_when_missing(
+        self, db_session, admin, issue
+    ):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(db_session, admin, issue.display_key, "nope", "get")
+        assert result == "(not set)"
+
+    async def test_metadata_get_returns_complex_value_as_json(
+        self, db_session, admin, issue
+    ):
+        import json
+
+        from specivo.mcp.tools import _metadata
+
+        await _metadata(
+            db_session, admin, issue.display_key, "tags", "set", ["a", "b"]
+        )
+        await _metadata(
+            db_session, admin, issue.display_key, "obj", "set", {"x": 1}
+        )
+
+        list_result = await _metadata(
+            db_session, admin, issue.display_key, "tags", "get"
+        )
+        dict_result = await _metadata(
+            db_session, admin, issue.display_key, "obj", "get"
+        )
+        assert json.loads(list_result) == ["a", "b"]
+        assert json.loads(dict_result) == {"x": 1}
+
+    async def test_metadata_get_uses_read_permission_not_edit(
+        self, db_session, admin, limited_user, role_view_only, project, issue
+    ):
+        """A user with only view_issues (not edit_issues) can read metadata.
+
+        This proves the 'get' op is gated on read_permission rather than the
+        write permission that mutating ops require.
+        """
+        from specivo.mcp.tools import _metadata
+
+        await _metadata(db_session, admin, issue.display_key, "owner", "set", "alice")
+        await _add_member(db_session, project, limited_user, role_view_only)
+
+        # View-only user must NOT be able to set.
+        with pytest.raises(PermissionDeniedError, match="edit_issues"):
+            await _metadata(
+                db_session, limited_user, issue.display_key, "owner", "set", "bob"
+            )
+
+        # But they MUST be able to get.
+        result = await _metadata(
+            db_session, limited_user, issue.display_key, "owner", "get"
+        )
+        assert result == '"alice"'
+
+    async def test_metadata_get_does_not_bump_lock_version(
+        self, db_session, admin, issue
+    ):
+        from specivo.mcp.tools import _metadata
+
+        await _metadata(db_session, admin, issue.display_key, "k", "set", "v")
+        await db_session.refresh(issue)
+        before = issue.lock_version
+
+        await _metadata(db_session, admin, issue.display_key, "k", "get")
+        await db_session.refresh(issue)
+        assert issue.lock_version == before
+
+    async def test_metadata_get_does_not_write_audit_log(
+        self, db_session, admin, issue
+    ):
+        from sqlalchemy import func, select
+
+        from specivo.mcp.tools import _metadata
+        from specivo.models.security_audit import SecurityAuditLog
+
+        await _metadata(db_session, admin, issue.display_key, "k", "set", "v")
+        await db_session.flush()
+
+        before = (
+            await db_session.execute(
+                select(func.count()).select_from(SecurityAuditLog)
+            )
+        ).scalar_one()
+
+        await _metadata(db_session, admin, issue.display_key, "k", "get")
+        await db_session.flush()
+
+        after = (
+            await db_session.execute(
+                select(func.count()).select_from(SecurityAuditLog)
+            )
+        ).scalar_one()
+        assert after == before
+
+
 class TestMetadataJournal:
     async def test_set_creates_journal_entry(self, db_session, admin, issue):
         from sqlalchemy import select

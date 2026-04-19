@@ -14,6 +14,7 @@ class _DummyTarget:
     scheme = "dummy"
     content_type = "dummy"
     permission = "view_issues"
+    read_permission = "view_issues"
 
     async def resolve(self, session, ref, user):  # pragma: no cover - trivial
         return {"ref": ref}
