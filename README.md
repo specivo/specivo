@@ -1,3 +1,7 @@
+<p align="center">
+  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og-cover.jpg" alt="Specivo — your team's knowledge, finally findable" width="820"></a>
+</p>
+
 # Specivo
 
 Your team's knowledge, finally findable.
@@ -39,7 +43,7 @@ For production, copy `.env.example` to `.env` and set a real `SECRET_KEY`.
 
 **Hybrid search** — full-text via PostgreSQL tsvector, semantic via pgvector embeddings, fused with Reciprocal Rank Fusion. Searches issues, wiki, comments, and attachments. Attachment descriptions are searchable: find that architecture diagram by what it shows, not its filename.
 
-**MCP server** — 38 Model Context Protocol tools. Works with Claude Code, Codex, or anything that speaks MCP. Issues, wiki pages, comments, and attachment descriptions become searchable context that agents can pull and update — automatically or on user confirmation. One config line to connect.
+**MCP server** — 38 Model Context Protocol tools. Works with Claude Code, Codex, or anything that speaks MCP. Issues, wiki pages, comments, and attachment descriptions become searchable context that agents can pull and update — automatically or on user confirmation. One config line to connect. Ready-made agent instructions for Claude Code, Codex, and Cursor live in [**specivo-agent-skills**](https://github.com/specivo/specivo-agent-skills).
 
 **Sprint management** — backlog, sprint planning, start/complete cycles. Issues move between sprints with full history preserved.
 
@@ -47,7 +51,7 @@ For production, copy `.env.example` to `.env` and set a real `SECRET_KEY`.
 
 **AI is optional.** Works fine without it. Enable semantic search when you want it, using the bundled model (multilingual-e5-small, runs on CPU, 100 languages) or your own API key (BYOK).
 
-**i18n** — ships with English and Thai. Extensible via .po files.
+**i18n** — ships with English; additional languages via standard `.po` translation files.
 
 ## Tech
 
@@ -74,6 +78,8 @@ make download-model   # embedding model (~393 MB)
 ## Documentation
 
 [specivo.io/docs/specivo](https://specivo.io/docs/specivo/)
+
+**For AI agents:** [specivo-agent-skills](https://github.com/specivo/specivo-agent-skills) — drop-in conventions that teach Claude Code, Codex, Cursor, and any MCP client to use Specivo's tools well.
 
 ## License
 
