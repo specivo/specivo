@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from specivo.schemas.common import IdName, PaginatedResponse
 
@@ -38,6 +38,15 @@ class IssueCreate(BaseModel):
     is_private: bool = False
     metadata: dict = Field(default_factory=dict)
 
+    @field_validator("subject")
+    @classmethod
+    def _strip_subject(cls, v: str) -> str:
+        """Trim surrounding whitespace and reject blank subjects."""
+        v = v.strip()
+        if not v:
+            raise ValueError("subject must not be empty or whitespace only")
+        return v
+
 
 class IssueUpdate(BaseModel):
     """Payload for partial update of an issue (PATCH semantics).
@@ -69,6 +78,21 @@ class IssueUpdate(BaseModel):
     is_private: bool | None = None
     metadata: dict | None = None
     lock_version: int  # REQUIRED — must match current DB value
+
+    @field_validator("subject")
+    @classmethod
+    def _strip_subject(cls, v: str | None) -> str | None:
+        """Trim surrounding whitespace and reject blank subjects.
+
+        ``None`` is preserved (means "do not change"); an explicitly provided
+        subject must contain at least one non-whitespace character.
+        """
+        if v is None:
+            return None
+        v = v.strip()
+        if not v:
+            raise ValueError("subject must not be empty or whitespace only")
+        return v
 
 
 class IssueFilters(BaseModel):

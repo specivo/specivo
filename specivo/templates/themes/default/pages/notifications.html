@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Notifications - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Notifications{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <span class="current">Notifications</span>
+  <span class="current">{% trans %}Notifications{% endtrans %}</span>
 </div>
 
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
-  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">Notifications</h1>
+  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Notifications{% endtrans %}</h1>
   {% if unread_count > 0 %}
   <form method="post" action="/api/v1/notifications/mark-all-read/" style="margin: 0;">
-    <button type="submit" class="sp-btn sp-btn-ghost">Mark all read</button>
+    <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Mark all read{% endtrans %}</button>
   </form>
   {% endif %}
 </div>
@@ -23,12 +23,12 @@
   <a href="/my/notifications/"
      class="btn"
      style="{{ 'border-bottom: 2px solid var(--sp-accent); font-weight: 600;' if not unread_only else 'opacity: 0.6;' }}">
-    All ({{ total }})
+    {% trans count=total %}All (%(count)s){% endtrans %}
   </a>
   <a href="/my/notifications/?unread_only=true"
      class="btn"
      style="{{ 'border-bottom: 2px solid var(--sp-accent); font-weight: 600;' if unread_only else 'opacity: 0.6;' }}">
-    Unread ({{ unread_count }})
+    {% trans count=unread_count %}Unread (%(count)s){% endtrans %}
   </a>
 </div>
 
@@ -73,16 +73,16 @@
 {% if total > limit %}
 <div style="display: flex; justify-content: center; gap: var(--sp-space-md); margin-top: var(--sp-space-xl);">
   {% if offset > 0 %}
-  <a href="/my/notifications/?offset={{ offset - limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="sp-btn sp-btn-ghost">Previous</a>
+  <a href="/my/notifications/?offset={{ offset - limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="sp-btn sp-btn-ghost">{% trans %}Previous{% endtrans %}</a>
   {% endif %}
   {% if offset + limit < total %}
-  <a href="/my/notifications/?offset={{ offset + limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="sp-btn sp-btn-ghost">Next</a>
+  <a href="/my/notifications/?offset={{ offset + limit }}&limit={{ limit }}{{ '&unread_only=true' if unread_only else '' }}" class="sp-btn sp-btn-ghost">{% trans %}Next{% endtrans %}</a>
   {% endif %}
 </div>
 {% endif %}
 {% else %}
 <div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
-  No notifications.
+  {% trans %}No notifications.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

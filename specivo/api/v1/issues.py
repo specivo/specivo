@@ -197,6 +197,11 @@ async def create_issue(
     # Override project_key in body to match path param
     data = data.model_copy(update={"project_key": project.key})
     issue = await _service.create(db, project, data, current_user)
+    # Commit before responding so the new issue is immediately visible to
+    # follow-up requests (e.g. a PATCH right after create). Without this the
+    # get_db dependency commits only after the response is sent, so a fast
+    # follow-up request on a fresh session can 404 on the just-created issue.
+    await db.commit()
     # Reload with relationships for response
     issue = await _service.get_with_relations(db, issue.id)
     return _issue_out(issue)

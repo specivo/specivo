@@ -1,25 +1,25 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}History: {{ wiki_page.title }} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans name=wiki_page.title %}History: %(name)s{% endtrans %} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
   {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
-  {"label": "History"}
+  {"label": _("History")}
 ]) }}
 
 <div class="history-page-header">
-  <h1 class="history-page-title">History: {{ wiki_page.title }}</h1>
-  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/" class="sp-btn sp-btn-ghost">Back to page</a>
+  <h1 class="history-page-title">{% trans name=wiki_page.title %}History: %(name)s{% endtrans %}</h1>
+  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/" class="sp-btn sp-btn-ghost">{% trans %}Back to page{% endtrans %}</a>
 </div>
 
 <div class="compare-toolbar">
-  <span class="compare-hint">Select two versions to compare</span>
-  <button class="sp-btn sp-btn-compare" id="btn-compare">Compare Selected</button>
+  <span class="compare-hint">{% trans %}Select two versions to compare{% endtrans %}</span>
+  <button class="sp-btn sp-btn-compare" id="btn-compare">{% trans %}Compare Selected{% endtrans %}</button>
 </div>
 
 {% if versions %}
@@ -27,11 +27,11 @@
   <thead>
     <tr>
       <th></th>
-      <th>Version</th>
-      <th>Author</th>
-      <th>Date</th>
-      <th>Comment</th>
-      <th>Actions</th>
+      <th>{% trans %}Version{% endtrans %}</th>
+      <th>{% trans %}Author{% endtrans %}</th>
+      <th>{% trans %}Date{% endtrans %}</th>
+      <th>{% trans %}Comment{% endtrans %}</th>
+      <th>{% trans %}Actions{% endtrans %}</th>
     </tr>
   </thead>
   <tbody>
@@ -40,21 +40,21 @@
       <td style="text-align:center"><input type="checkbox" class="version-check" value="{{ v.version }}" style="accent-color:var(--sp-accent);width:18px;height:18px;cursor:pointer;"></td>
       <td>
         <span class="version-num">#{{ v.version }}</span>
-        {% if loop.first %}<span class="version-current-badge">Current</span>{% endif %}
+        {% if loop.first %}<span class="version-current-badge">{% trans %}Current{% endtrans %}</span>{% endif %}
       </td>
       <td>
         <div class="version-author">
           <span class="avatar-sm" style="width:24px;height:24px;font-size:9px;{% if v.author and v.author.avatar_url %}background-image:url('{{ v.author.avatar_url }}');background-size:cover;background-position:center;color:transparent;{% elif v.author and v.author.preferences.avatar_color|default('') %}background:{{ v.author.preferences.avatar_color }};{% endif %}">{{ (v.author.display_name or v.author.login)[:2] | upper if v.author else '?' }}</span>
-          <span class="version-author-name">{{ v.author.display_name or v.author.login if v.author else 'Unknown' }}</span>
+          <span class="version-author-name">{{ v.author.display_name or v.author.login if v.author else _('Unknown') }}</span>
         </div>
       </td>
       <td><span class="version-date">{{ v.created_at | localtime(user.timezone) if v.created_at else '' }}</span></td>
       <td><span class="version-comment">{{ v.comments or '' }}</span></td>
       <td>
         <div class="version-actions">
-          <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/?version={{ v.version }}">View</a>
+          <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/?version={{ v.version }}">{% trans %}View{% endtrans %}</a>
           {% if not loop.first %}
-          <a href="#" class="restore-link">Restore</a>
+          <a href="#" class="restore-link">{% trans %}Restore{% endtrans %}</a>
           {% endif %}
         </div>
       </td>
@@ -64,7 +64,7 @@
 </table>
 {% else %}
 <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  No version history available.
+  {% trans %}No version history available.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

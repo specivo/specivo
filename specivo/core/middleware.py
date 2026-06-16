@@ -363,8 +363,11 @@ class LocaleMiddleware:
 
     def _detect_locale(self, scope: Scope, settings: object) -> str:
         """Determine the best locale for this request."""
+        from specivo.core.runtime_settings import get_default_language_override
+
         available = getattr(settings, "available_languages", ["en"])
-        default = getattr(settings, "default_language", "en")
+        # The admin workspace override (DB-backed) wins over the config default.
+        default = get_default_language_override() or getattr(settings, "default_language", "en")
         headers = dict(scope.get("headers", []))
 
         # 1. Check specivo_lang cookie
@@ -384,7 +387,8 @@ class LocaleMiddleware:
             if best:
                 return best
 
-        return default
+        # Guard against a stale/invalid default leaking through.
+        return default if default in available else "en"
 
     @staticmethod
     def _parse_accept_language(header: str, available: list[str]) -> str | None:

@@ -230,7 +230,7 @@ async def issue_create_form(
 async def issue_detail(
     issue_ref: str,
     request: Request,
-    activity_page: int = Query(1, ge=1),
+    activity_page: int | None = Query(None, ge=1),
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the issue detail page."""
@@ -295,7 +295,14 @@ async def issue_detail(
 
     activity_total = len(all_journals)
     activity_total_pages = max(1, (activity_total + activity_per_page - 1) // activity_per_page)
-    if activity_page > activity_total_pages:
+    # When the caller does not pin a page, default to the LAST one — that's
+    # where the newest journal entry lives in the ascending feed. The
+    # description editor's save() does window.location.reload() with no
+    # query params, so without this default the user would land on page 1
+    # (oldest entries) and conclude that history was not updated.
+    if activity_page is None:
+        activity_page = activity_total_pages
+    elif activity_page > activity_total_pages:
         activity_page = activity_total_pages
 
     activity_start = (activity_page - 1) * activity_per_page

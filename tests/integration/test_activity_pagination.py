@@ -283,3 +283,140 @@ async def test_default_per_page_used_when_no_preference(
     )
     assert resp.status_code == 200, resp.text
     assert "Pagination test issue" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Tests: implicit "show newest entry" default when no activity_page is given
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+async def test_no_activity_page_param_lands_on_last_page(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: dict,
+    _project: Project,
+    _issue: object,
+) -> None:
+    """When no ?activity_page is given and the feed spans multiple pages,
+    the response must show the LAST (newest) page.
+
+    Regression: after the user saves an edit, the JS reloads the URL with no
+    ``activity_page`` param. The default used to be page 1, which on a long
+    feed showed the OLDEST entries — making it look like the new edit had
+    not been recorded. The implicit default must follow the user's mental
+    model: "land on whatever contains the change I just made".
+    """
+    user = admin_client.state.user
+
+    # Generate enough comments to span 2 pages with the default per-page (25).
+    # Make the LAST one a unique sentinel string to assert it's visible.
+    sentinel = "ZZZ-newest-entry-sentinel"
+    for i in range(25):
+        await _journal_svc.add_comment(db_session, _issue, user, f"old-comment-{i:02d}")
+    await _journal_svc.add_comment(db_session, _issue, user, sentinel)
+    await db_session.commit()
+
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/issue/{_issue.display_key}/",  # no activity_page param
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200, resp.text
+    assert sentinel in resp.text, (
+        "Sentinel comment from the newest journal must appear when no "
+        "activity_page is provided — but it did not. The default page is "
+        "still the OLDEST page, hiding fresh edits behind pagination."
+    )
+
+
+@pytest.mark.integration
+async def test_explicit_activity_page_1_still_shows_oldest(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: dict,
+    _project: Project,
+    _issue: object,
+) -> None:
+    """An explicit ?activity_page=1 must still serve page 1 (oldest entries).
+
+    Only the IMPLICIT default changes; explicit pagination URLs keep working
+    so the Previous/Next links remain meaningful.
+    """
+    user = admin_client.state.user
+
+    oldest_sentinel = "AAA-oldest-entry-sentinel"
+    await _journal_svc.add_comment(db_session, _issue, user, oldest_sentinel)
+    for i in range(25):
+        await _journal_svc.add_comment(db_session, _issue, user, f"newer-comment-{i:02d}")
+    await db_session.commit()
+
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/issue/{_issue.display_key}/?activity_page=1",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200, resp.text
+    assert oldest_sentinel in resp.text, (
+        "Explicit ?activity_page=1 must show the oldest entries — pagination "
+        "navigation must remain monotonic."
+    )
+
+
+@pytest.mark.integration
+async def test_no_activity_page_param_single_page_unchanged(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: dict,
+    _project: Project,
+    _issue: object,
+) -> None:
+    """When the feed fits in one page, omitting activity_page renders that page.
+
+    Sanity check: the "default to last page" tweak must not break the common
+    case where everything fits on a single page.
+    """
+    user = admin_client.state.user
+    await _journal_svc.add_comment(db_session, _issue, user, "only comment")
+    await db_session.commit()
+
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/issue/{_issue.display_key}/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200, resp.text
+    assert "only comment" in resp.text
+
+
+@pytest.mark.integration
+async def test_activity_partial_no_activity_page_lands_on_last_page(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: dict,
+    _project: Project,
+    _issue: object,
+) -> None:
+    """The htmx /partials/issues/{key}/activity/ endpoint must mirror the
+    detail-page default: omitting ?activity_page returns the newest page.
+
+    The detail page and its htmx partial share pagination semantics; if they
+    diverge, lazy-refresh updates would still land on the wrong page.
+    """
+    user = admin_client.state.user
+    sentinel = "PARTIAL-newest-entry-sentinel"
+    for i in range(25):
+        await _journal_svc.add_comment(db_session, _issue, user, f"old-comment-{i:02d}")
+    await _journal_svc.add_comment(db_session, _issue, user, sentinel)
+    await db_session.commit()
+
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/partials/issues/{_issue.display_key}/activity/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200, resp.text
+    assert sentinel in resp.text, (
+        "Activity partial must default to the newest page when no "
+        "activity_page query parameter is supplied."
+    )

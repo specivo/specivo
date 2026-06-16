@@ -5,9 +5,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
   {"label": wiki_page.title}
 ]) }}
 
@@ -19,35 +19,35 @@
       <div class="wiki-page-actions">
         <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-          All pages
+          {% trans %}All pages{% endtrans %}
         </a>
         <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-          History
+          {% trans %}History{% endtrans %}
         </a>
         {% if can_manage_wiki %}
         <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/edit/" class="sp-btn sp-btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Edit
+          {% trans %}Edit{% endtrans %}
         </a>
         {% endif %}
       </div>
       <div class="wiki-page-meta">
         {% if content.author %}
-        Last edited by <strong>{{ content.author.display_name or content.author.login }}</strong>
+        {% trans author=content.author.display_name or content.author.login %}Last edited by <strong>%(author)s</strong>{% endtrans %}
         {% endif %}
         {% if content.created_at %}
         &middot; {{ content.created_at | localtime(user.timezone) }}
         {% endif %}
-        &middot; Version {{ content.version }}
+        &middot; {% trans version=content.version %}Version %(version)s{% endtrans %}
       </div>
     </div>
 
     <div class="wiki-version-bar">
-      <span>Version <span class="version-num">{{ content.version }}</span></span>
+      <span>{% trans %}Version{% endtrans %} <span class="version-num">{{ content.version }}</span></span>
       <span>&middot;</span>
       {% if content.author %}
-      <span>Edited by {{ content.author.display_name or content.author.login }}</span>
+      <span>{% trans author=content.author.display_name or content.author.login %}Edited by %(author)s{% endtrans %}</span>
       <span>&middot;</span>
       {% endif %}
       {% if content.created_at %}
@@ -71,13 +71,13 @@
       <div class="attachments-header">
         <div class="attachments-title">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-          Attachments
+          {% trans %}Attachments{% endtrans %}
           <span class="attachments-count" x-text="attachments.length"></span>
         </div>
         {% if can_manage_wiki %}
         <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="showUpload = !showUpload">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-          Upload
+          {% trans %}Upload{% endtrans %}
         </button>
         {% endif %}
       </div>
@@ -91,8 +91,8 @@
              @drop.prevent="handleDrop($event)"
              @click="$refs.fileInput.click()">
           <svg class="upload-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-          <div class="upload-zone-text"><strong>Drop files here</strong> or click to browse</div>
-          <div class="upload-zone-hint">Images, PDFs, documents up to 50 MB</div>
+          <div class="upload-zone-text">{% trans %}<strong>Drop files here</strong> or click to browse{% endtrans %}</div>
+          <div class="upload-zone-hint">{% trans %}Images, PDFs, documents up to 50 MB{% endtrans %}</div>
           <input type="file" x-ref="fileInput" multiple class="sp-hidden" @change="handleFiles($event.target.files)">
         </div>
 
@@ -120,14 +120,14 @@
                 <span class="attachment-thumb-name" x-text="att.filename"></span>
               </div>
               <div class="attachment-thumb-actions">
-                <button class="thumb-action" title="Copy markdown link" @click.stop="copyLink(att)">
+                <button class="thumb-action" title="{{ _('Copy markdown link') }}" @click.stop="copyLink(att)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
                 </button>
-                <button class="thumb-action" title="Download" @click.stop="downloadFile(att)">
+                <button class="thumb-action" title="{{ _('Download') }}" @click.stop="downloadFile(att)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
                 </button>
                 {% if can_manage_wiki %}
-                <button class="thumb-action" title="Delete" @click.stop="confirmDelete(att)">
+                <button class="thumb-action" title="{{ _('Delete') }}" @click.stop="confirmDelete(att)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                 </button>
                 {% endif %}
@@ -153,18 +153,18 @@
                 </div>
               </div>
               <div class="file-actions">
-                <button class="file-action copy" title="Copy markdown link" @click="copyLink(att)">
+                <button class="file-action copy" title="{{ _('Copy markdown link') }}" @click="copyLink(att)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-13"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-                  Link
+                  {% trans %}Link{% endtrans %}
                 </button>
-                <button class="file-action" title="Download" @click="downloadFile(att)">
+                <button class="file-action" title="{{ _('Download') }}" @click="downloadFile(att)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-13"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-                  Download
+                  {% trans %}Download{% endtrans %}
                 </button>
                 {% if can_manage_wiki %}
-                <button class="file-action delete" title="Delete" @click="confirmDelete(att)">
+                <button class="file-action delete" title="{{ _('Delete') }}" @click="confirmDelete(att)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-13"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-                  Delete
+                  {% trans %}Delete{% endtrans %}
                 </button>
                 {% endif %}
               </div>
@@ -176,7 +176,7 @@
       {# Empty state when no attachments #}
       <template x-if="attachments.length === 0 && !showUpload">
         <div class="sp-empty-center">
-          No attachments yet.
+          {% trans %}No attachments yet.{% endtrans %}
         </div>
       </template>
 
@@ -195,13 +195,13 @@
       <template x-if="deleteTarget">
         <div class="lightbox" @click="deleteTarget = null" @keydown.escape.window="deleteTarget = null">
           <div class="att-delete-modal" @click.stop>
-            <h3>Delete attachment?</h3>
-            <p>Are you sure you want to delete <strong x-text="deleteTarget.filename"></strong>? This cannot be undone.</p>
+            <h3>{% trans %}Delete attachment?{% endtrans %}</h3>
+            <p>{% trans %}Are you sure you want to delete{% endtrans %} <strong x-text="deleteTarget.filename"></strong>{% trans %}? This cannot be undone.{% endtrans %}</p>
             <div class="sp-flex-end-sm-mt-lg">
-              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="deleteTarget = null">Cancel</button>
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="deleteTarget = null">{% trans %}Cancel{% endtrans %}</button>
               <button class="sp-btn sp-btn-danger sp-btn-sm" @click="doDelete()" :disabled="deleting">
-                <span x-show="!deleting">Delete</span>
-                <span x-show="deleting">Deleting...</span>
+                <span x-show="!deleting">{% trans %}Delete{% endtrans %}</span>
+                <span x-show="deleting">{% trans %}Deleting...{% endtrans %}</span>
               </button>
             </div>
           </div>
@@ -214,7 +214,7 @@
   <div class="wiki-sidebar">
     {# Table of contents (auto-generated from headers) #}
     <div class="wiki-tree-card" id="wiki-toc" x-data="wikiToc()" x-show="headings.length > 0" x-cloak>
-      <div class="wiki-tree-title sp-toc-label">On this page</div>
+      <div class="wiki-tree-title sp-toc-label">{% trans %}On this page{% endtrans %}</div>
       <nav class="sp-sticky-top-xl">
         <template x-for="h in headings" :key="h.id">
           <a :href="'#' + h.id"
@@ -231,7 +231,7 @@
     {% if page_tree %}
     <button class="wiki-pages-trigger" x-data @click="$dispatch('wiki-panel-open')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-      Pages
+      {% trans %}Pages{% endtrans %}
       <span class="wiki-pages-count">{{ pages|length }}</span>
     </button>
     {% endif %}
@@ -252,7 +252,7 @@
       {% endif %}
       <a href="/projects/{{ project.key }}/wiki/{{ p.slug }}/"{% if p.id == wiki_page.id %} class="active"{% endif %}>{{ p.title }}</a>
       {% if can_manage_wiki %}
-      <a href="/projects/{{ project.key }}/wiki/new/?parent={{ p.id }}" class="wiki-tree-add" title="Add child page">
+      <a href="/projects/{{ project.key }}/wiki/new/?parent={{ p.id }}" class="wiki-tree-add" title="{{ _('Add child page') }}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       </a>
       {% endif %}
@@ -273,7 +273,7 @@
   <div class="wiki-panel-scrim" @click="open = false"></div>
   <div class="wiki-panel">
     <div class="wiki-panel-header">
-      <h2>Pages</h2>
+      <h2>{% trans %}Pages{% endtrans %}</h2>
       <button class="sp-modal-close" @click="open = false">&times;</button>
     </div>
     <div class="wiki-panel-body">
@@ -285,7 +285,7 @@
     <div class="wiki-panel-footer">
       <a href="/projects/{{ project.key }}/wiki/new/" class="sp-btn sp-btn-ghost sp-btn-block-center">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
-        New page
+        {% trans %}New page{% endtrans %}
       </a>
     </div>
     {% endif %}

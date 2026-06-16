@@ -71,6 +71,91 @@ async def test_ensure_partitions_creates_future_months():
 
 
 @pytest.mark.asyncio
+async def test_ensure_partitions_includes_current_month():
+    """The current month's partition must be created, not just future months.
+
+    On a fresh deploy mid-month with no existing partitions, audit inserts
+    must have a partition to land in *immediately*. If the task only ever
+    creates next-month and beyond, current-month inserts route to the
+    default partition until the next monthly tick — which is a silent
+    data-routing bug.
+
+    Concretely, with months_ahead=3 and today = 2026-03-22, the task must
+    create partitions for 2026-03 (current), 2026-04, 2026-05, and 2026-06
+    — four total, including the current month.
+    """
+    mock_session = AsyncMock()
+    mock_execute = AsyncMock()
+    mock_session.execute = mock_execute
+
+    fixed_today = date(2026, 3, 22)
+    with patch("specivo.tasks.partition_management.date") as mock_date:
+        mock_date.today.return_value = fixed_today
+        mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+
+        await ensure_partitions(session=mock_session, months_ahead=3)
+
+    sql_strings = [str(c.args[0]) if c.args else "" for c in mock_execute.call_args_list]
+
+    # Current month MUST be present.
+    assert any("security_audit_logs_2026_03" in sql for sql in sql_strings), (
+        "Current month partition (security_audit_logs_2026_03) was not created. "
+        f"Executed SQL: {sql_strings}"
+    )
+
+    # And the next three months must also be present.
+    for partition_name in (
+        "security_audit_logs_2026_04",
+        "security_audit_logs_2026_05",
+        "security_audit_logs_2026_06",
+    ):
+        assert any(partition_name in sql for sql in sql_strings), (
+            f"Expected partition '{partition_name}' to be created. "
+            f"Executed SQL: {sql_strings}"
+        )
+
+    # And there should be exactly 4 partition CREATE statements
+    # (current + 3 future) — no more, no less.
+    partition_creates = [s for s in sql_strings if "PARTITION OF security_audit_logs" in s]
+    assert len(partition_creates) == 4, (
+        f"Expected exactly 4 partition CREATE statements (current + 3 ahead), "
+        f"got {len(partition_creates)}: {partition_creates}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_ensure_partitions_current_month_at_year_boundary():
+    """Year rollover must work for the current-month partition too.
+
+    With today = 2026-12-15 and months_ahead=3, partitions must be created
+    for 2026-12 (current), 2027-01, 2027-02, 2027-03.
+    """
+    mock_session = AsyncMock()
+    mock_execute = AsyncMock()
+    mock_session.execute = mock_execute
+
+    fixed_today = date(2026, 12, 15)
+    with patch("specivo.tasks.partition_management.date") as mock_date:
+        mock_date.today.return_value = fixed_today
+        mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+
+        await ensure_partitions(session=mock_session, months_ahead=3)
+
+    sql_strings = [str(c.args[0]) if c.args else "" for c in mock_execute.call_args_list]
+
+    for partition_name in (
+        "security_audit_logs_2026_12",
+        "security_audit_logs_2027_01",
+        "security_audit_logs_2027_02",
+        "security_audit_logs_2027_03",
+    ):
+        assert any(partition_name in sql for sql in sql_strings), (
+            f"Expected partition '{partition_name}' to be created. "
+            f"Executed SQL: {sql_strings}"
+        )
+
+
+@pytest.mark.asyncio
 async def test_ensure_partitions_is_idempotent():
     """Running ensure_partitions twice should not error.
 

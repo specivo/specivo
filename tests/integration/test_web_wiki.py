@@ -113,6 +113,40 @@ async def test_wiki_edit_page(
     assert "Edit Test" in resp.text
 
 
+@pytest.mark.integration
+async def test_wiki_edit_page_uses_markdown_editor(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _wiki_project: Project,
+):
+    """Wiki edit page wires the EasyMDE-based markdownEditor wrapper.
+
+    The wrapper must:
+      - Be registered as an Alpine component named ``markdownEditor``.
+      - Point at the server-side preview endpoint ``/api/v1/markdown/preview/``.
+      - Pass ``context: "wiki"`` so the server applies wiki rendering rules.
+      - Expose a paste/drop hook to the parent ``wikiForm`` for image upload.
+    """
+    user = admin_client.state.user
+    page, _content = await _wiki_svc.create_page(db_session, _wiki_project.id, "Editor Wrapper Test", "body", user)
+    await db_session.commit()
+
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/projects/{_wiki_project.key}/wiki/{page.slug}/edit/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    assert "markdownEditor(" in body
+    assert "/api/v1/markdown/preview/" in body
+    assert 'data-md-context="wiki"' in body
+    assert "handleEditorPasteDrop" in body
+    # The vendored EasyMDE asset must be loaded on the page.
+    assert "easymde.2.18.0.min.js" in body
+    assert "easymde.2.18.0.min.css" in body
+
+
 # ---------------------------------------------------------------------------
 # Tests: wiki history page
 # ---------------------------------------------------------------------------

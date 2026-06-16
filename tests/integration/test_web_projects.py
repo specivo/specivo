@@ -107,6 +107,43 @@ async def test_project_settings_page(
 
 
 @pytest.mark.integration
+async def test_project_settings_modals_have_open_scrim(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """Modal scrims on the settings page must carry the ``open`` class.
+
+    The ``.sp-scrim`` CSS rule defaults to ``display: none`` and only becomes
+    visible via ``.sp-scrim.open`` (``display: flex``). Modals on this page
+    are conditionally rendered with ``<template x-if="...">``, so their
+    scrim ``div`` needs the ``open`` class at template time — otherwise
+    clicking the button that flips the state has no visible effect.
+
+    Regression guard: without ``open``, clicks on Edit / Delete buttons in
+    the metadata schemas table did nothing.
+    """
+    import re
+
+    user = admin_client.state.user
+    project = await _create_project(db_session, user, key="WSM", identifier="web-settings-modal")
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/projects/{project.key}/settings/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200
+
+    # Every sp-scrim rendered inside an Alpine <template x-if> block on the
+    # settings page needs the "open" class. Find all scrim divs and confirm.
+    scrims = re.findall(r'<div[^>]*class="sp-scrim[^"]*"[^>]*>', resp.text)
+    assert len(scrims) >= 5, f"Expected at least 5 scrims on settings page, found {len(scrims)}"
+    for scrim in scrims:
+        assert "sp-scrim open" in scrim or "sp-scrim " in scrim and "open" in scrim, (
+            f"Scrim missing 'open' class (would render display:none): {scrim}"
+        )
+
+
+@pytest.mark.integration
 async def test_project_settings_requires_admin(
     auth_client: AsyncClient,
     db_session: AsyncSession,

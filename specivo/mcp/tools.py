@@ -124,6 +124,30 @@ async def _list_projects(
 # ---------------------------------------------------------------------------
 
 
+def _parse_metadata_filters(raw: list[str] | None) -> list[tuple[str, str]]:
+    """Parse `["key=value", ...]` MCP input into validated `(key, value)` pairs.
+
+    Returns an empty list when *raw* is None or empty. Raises ``ValueError``
+    with a caller-actionable message when any item is malformed (no ``=``,
+    empty key, etc.) — surfaced to the agent via the standard ``Error: ...``
+    return path in the calling tool.
+    """
+    if not raw:
+        return []
+    pairs: list[tuple[str, str]] = []
+    for item in raw:
+        if not isinstance(item, str) or "=" not in item:
+            raise ValueError(
+                f"metadata filter {item!r} must be a 'key=value' string"
+            )
+        key, _, value = item.partition("=")
+        key = key.strip()
+        if not key:
+            raise ValueError(f"metadata filter {item!r} has an empty key")
+        pairs.append((key, value))
+    return pairs
+
+
 async def _list_issues(
     session: AsyncSession,
     user: User,
@@ -133,12 +157,19 @@ async def _list_issues(
     offset: int = 0,
     limit: int = 25,
     sprint_id: int | None = None,
+    metadata_filters: list[str] | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     filters: dict = {"status": status}
     if sprint_id is not None:
         filters["sprint_id"] = sprint_id
+    try:
+        parsed_metadata = _parse_metadata_filters(metadata_filters)
+    except ValueError as exc:
+        return f"Error: {exc}"
+    if parsed_metadata:
+        filters["metadata_filters"] = parsed_metadata
     issues, total = await _issue_svc.list_issues(
         session,
         project_id=project.id,
@@ -151,6 +182,8 @@ async def _list_issues(
     scope = f"filter={status}"
     if sprint_id is not None:
         scope += f", sprint_id={sprint_id}"
+    if parsed_metadata:
+        scope += ", metadata=" + ",".join(f"{k}={v}" for k, v in parsed_metadata)
     lines = [f"Issues for {project.key} ({total} total, {scope}):", ""]
     for i in issues:
         lines.append(f"  {i.display_key}  [{i.status.name}]  {i.subject}")
@@ -622,15 +655,10 @@ async def _list_comments(
     # Permission check BEFORE any data is returned.
     await _require_permission(session, user, issue.project_id, "view_issues")
 
-    comments, total = await _journal_svc.list_comments(
-        session, issue.id, limit=limit, offset=offset, order=order
-    )
+    comments, total = await _journal_svc.list_comments(session, issue.id, limit=limit, offset=offset, order=order)
 
     end = offset + len(comments)
-    header = (
-        f"Comments for {issue.display_key} ({total} total, "
-        f"showing {offset}..{end}):"
-    )
+    header = f"Comments for {issue.display_key} ({total} total, showing {offset}..{end}):"
     lines: list[str] = [header, ""]
 
     if not comments:
@@ -1108,7 +1136,7 @@ async def _list_metadata_schemas(
     for s in schemas:
         scope = f"tracker_id={s.tracker_id}" if s.tracker_id else "all trackers"
         preset = f"  (preset: {s.preset_slug})" if s.preset_slug else ""
-        lines.append(f"  [{s.content_type}] {s.name} ({scope}){preset}")
+        lines.append(f"  id={s.id}  [{s.content_type}] {s.name} ({scope}){preset}")
         props = s.schema_definition.get("properties", {})
         for field_name, field_def in props.items():
             ftype = field_def.get("type", "any")
@@ -1122,6 +1150,170 @@ async def _list_metadata_schemas(
 
 
 # ---------------------------------------------------------------------------
+# Metadata schema management (create/update/delete)
+# ---------------------------------------------------------------------------
+
+
+async def _create_metadata_schema(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    name: str,
+    schema: dict,
+    content_type: str = "issue",
+    tracker_id: int | None = None,
+    description: str | None = None,
+) -> str:
+    """Create a metadata schema for a project.
+
+    Requires the ``manage_project`` permission on the target project.
+    The mutation is recorded in the security audit log
+    (``METADATA_SCHEMA_CREATED``).
+
+    *schema* is the full JSON Schema body (the ``schema_definition``
+    field on the underlying model). Use specivo_list_metadata_schemas
+    to inspect existing schemas first.
+    """
+    from specivo.schemas.metadata_schema import MetadataSchemaCreate
+    from specivo.services.metadata_schema_service import MetadataSchemaService
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_project")
+
+    payload = MetadataSchemaCreate(
+        name=name,
+        tracker_id=tracker_id,
+        content_type=content_type,
+        description=description,
+        schema_definition=schema,
+    )
+    svc = MetadataSchemaService()
+    created = await svc.create(session, project.id, payload)
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.METADATA_SCHEMA_CREATED,
+        "create_metadata_schema",
+        {
+            "project_key": project.key,
+            "schema_id": created.id,
+            "name": created.name,
+            "tracker_id": created.tracker_id,
+        },
+        project_id=project.id,
+    )
+    return (
+        f"Created metadata schema id={created.id} name='{created.name}' "
+        f"content_type={created.content_type} tracker_id={created.tracker_id} "
+        f"in project {project.key}."
+    )
+
+
+async def _update_metadata_schema(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    schema_id: int,
+    name: str | None = None,
+    tracker_id: int | None = None,
+    schema: dict | None = None,
+    description: str | None = None,
+) -> str:
+    """Patch a metadata schema.
+
+    Requires the ``manage_project`` permission on the target project.
+    The mutation is recorded in the security audit log
+    (``METADATA_SCHEMA_UPDATED``).
+
+    Only provided fields are changed. To inspect the current
+    definition before patching, call specivo_list_metadata_schemas.
+    """
+    from specivo.schemas.metadata_schema import MetadataSchemaUpdate
+    from specivo.services.metadata_schema_service import MetadataSchemaService
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_project")
+
+    svc = MetadataSchemaService()
+    existing = await svc.get_by_id(session, schema_id, project.id)
+
+    update_kwargs: dict[str, Any] = {}
+    if name is not None:
+        update_kwargs["name"] = name
+    if tracker_id is not None:
+        update_kwargs["tracker_id"] = tracker_id
+    if schema is not None:
+        update_kwargs["schema_definition"] = schema
+    if description is not None:
+        update_kwargs["description"] = description
+    if not update_kwargs:
+        return "Error: no fields provided to update"
+
+    payload = MetadataSchemaUpdate(**update_kwargs)
+    updated = await svc.update(session, existing, payload)
+    changed_fields = sorted(update_kwargs.keys())
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.METADATA_SCHEMA_UPDATED,
+        "update_metadata_schema",
+        {
+            "project_key": project.key,
+            "schema_id": updated.id,
+            "name": updated.name,
+            "tracker_id": updated.tracker_id,
+            "changed_fields": changed_fields,
+        },
+        project_id=project.id,
+    )
+    return (
+        f"Updated metadata schema id={updated.id} name='{updated.name}' "
+        f"in project {project.key}. Changed: {', '.join(changed_fields)}."
+    )
+
+
+async def _delete_metadata_schema(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    schema_id: int,
+) -> str:
+    """Delete a metadata schema.
+
+    Requires the ``manage_project`` permission on the target project.
+    The mutation is recorded in the security audit log
+    (``METADATA_SCHEMA_DELETED``).
+
+    Fails with a conflict error if any issue still has metadata
+    matching the schema's defined keys.
+    """
+    from specivo.services.metadata_schema_service import MetadataSchemaService
+
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_project")
+
+    svc = MetadataSchemaService()
+    existing = await svc.get_by_id(session, schema_id, project.id)
+    schema_name = existing.name
+    schema_tracker_id = existing.tracker_id
+    await svc.delete_safe(session, existing)
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.METADATA_SCHEMA_DELETED,
+        "delete_metadata_schema",
+        {
+            "project_key": project.key,
+            "schema_id": schema_id,
+            "name": schema_name,
+            "tracker_id": schema_tracker_id,
+        },
+        project_id=project.id,
+    )
+    return f"Deleted metadata schema id={schema_id} name='{schema_name}' from project {project.key}."
+
+
+# ---------------------------------------------------------------------------
 # Metadata (per-key set/delete/append/remove)
 # ---------------------------------------------------------------------------
 
@@ -1130,6 +1322,36 @@ async def _list_metadata_schemas(
 # after the op is applied — prevents unbounded growth via repeated
 # ``append`` calls.
 _METADATA_MAX_BYTES = 16 * 1024
+
+
+def _detect_lossy_number(value: Any) -> str | None:
+    """Detect a numeric value that has lost precision via JSON parsing.
+
+    When an MCP client emits an identifier-shaped token like ``49830031...e9999``
+    without quoting it, the JSON-RPC layer parses it as a Python ``float`` (often
+    ``inf`` or scientific notation). The original lexical form is unrecoverable.
+    Return a human-readable description of the offending value, or ``None`` if
+    the value is safe.
+    """
+    import math
+
+    if isinstance(value, list):
+        for item in value:
+            offender = _detect_lossy_number(item)
+            if offender is not None:
+                return offender
+        return None
+    if isinstance(value, float):
+        if math.isinf(value) or math.isnan(value):
+            return repr(value)
+        # Floats serialized in scientific notation are the exact ambiguity we
+        # care about — a quoted string would never have produced this shape.
+        import json as _json
+
+        rendered = _json.dumps(value)
+        if "e" in rendered.lower():
+            return rendered
+    return None
 
 
 async def _metadata(
@@ -1179,6 +1401,16 @@ async def _metadata(
     if op not in valid_ops:
         return f"Error: invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}"
 
+    if op in {"set", "append", "remove"}:
+        offender = _detect_lossy_number(value)
+        if offender is not None:
+            return (
+                f"Error: value {offender} arrived as a number with lost precision "
+                "(scientific notation, inf, or nan). Identifier-like inputs "
+                "(commit hashes, PR ids, tokens) must be passed as JSON strings — "
+                "quote the value, e.g. \"4983e31...\" instead of 4983e31..."
+            )
+
     # Resolve & permission check
     try:
         entity = await target.resolve(session, ref, user)
@@ -1213,10 +1445,7 @@ async def _metadata(
             else:
                 existing.append(value)
         else:
-            return (
-                f"Error: cannot append to key '{key}': existing value is "
-                f"{type(existing).__name__}, expected array"
-            )
+            return f"Error: cannot append to key '{key}': existing value is {type(existing).__name__}, expected array"
     elif op == "remove":
         existing = metadata.get(key)
         if existing is None:
@@ -1226,10 +1455,7 @@ async def _metadata(
             drop = value if isinstance(value, list) else [value]
             metadata[key] = [item for item in existing if item not in drop]
         else:
-            return (
-                f"Error: cannot remove from key '{key}': existing value is "
-                f"{type(existing).__name__}, expected array"
-            )
+            return f"Error: cannot remove from key '{key}': existing value is {type(existing).__name__}, expected array"
 
     # Size cap (serialized JSON, post-op)
     try:
@@ -1237,10 +1463,7 @@ async def _metadata(
     except (TypeError, ValueError) as exc:
         return f"Error: metadata value is not JSON-serializable: {exc}"
     if len(serialized.encode("utf-8")) > _METADATA_MAX_BYTES:
-        return (
-            f"Error: metadata blob would exceed {_METADATA_MAX_BYTES} bytes "
-            f"after this operation"
-        )
+        return f"Error: metadata blob would exceed {_METADATA_MAX_BYTES} bytes after this operation"
 
     # Persist through the target.
     try:
@@ -1573,8 +1796,12 @@ async def _list_sprints(session: AsyncSession, user: User, project_key: str) -> 
     if not sprints:
         lines.append("  (none)")
     await _log_tool(
-        session, user, AuditEvent.RESOURCE_ACCESS, "list_sprints",
-        {"project_key": project_key}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "list_sprints",
+        {"project_key": project_key},
+        project_id=project.id,
     )
     return "\n".join(lines)
 
@@ -1594,7 +1821,10 @@ async def _create_sprint(
     sprint = await _sprint_svc.create(session, project, data)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.RESOURCE_ACCESS, "create_sprint",
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "create_sprint",
         {"project_key": project_key, "name": name, "sprint_id": sprint.id},
         project_id=project.id,
     )
@@ -1620,7 +1850,10 @@ async def _update_sprint(
     sprint = await _sprint_svc.update(session, sprint, data)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.RESOURCE_ACCESS, "update_sprint",
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "update_sprint",
         {"project_key": project_key, "sprint_id": sprint_id},
         project_id=project.id,
     )
@@ -1641,7 +1874,10 @@ async def _start_sprint(
     sprint = await _sprint_svc.start_sprint(session, sprint)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.RESOURCE_ACCESS, "start_sprint",
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "start_sprint",
         {"project_key": project_key, "sprint_id": sprint_id},
         project_id=project.id,
     )
@@ -1664,7 +1900,10 @@ async def _complete_sprint(
     await session.flush()
     vel = sprint.velocity_snapshot or {}
     await _log_tool(
-        session, user, AuditEvent.RESOURCE_ACCESS, "complete_sprint",
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "complete_sprint",
         {"project_key": project_key, "sprint_id": sprint_id, "velocity": vel},
         project_id=project.id,
     )
@@ -1699,7 +1938,10 @@ async def _list_sprint_issues(
 
     if is_backlog:
         issues, total = await _sprint_svc.backlog_issues(
-            session, project.id, offset=offset, limit=limit,
+            session,
+            project.id,
+            offset=offset,
+            limit=limit,
         )
         header = f"Backlog issues for {project.key} ({total} total, showing {offset}..{offset + len(issues)}):"
     else:
@@ -1711,9 +1953,7 @@ async def _list_sprint_issues(
         # Query issues for this sprint
         base_where = [Issue.project_id == project.id, Issue.sprint_id == sprint_id]
 
-        count_result = await session.execute(
-            select(func.count(Issue.id)).where(*base_where)
-        )
+        count_result = await session.execute(select(func.count(Issue.id)).where(*base_where))
         total = count_result.scalar_one()
 
         stmt = (
@@ -1732,8 +1972,7 @@ async def _list_sprint_issues(
         result = await session.execute(stmt)
         issues = list(result.scalars().all())
         header = (
-            f'Issues in Sprint {sprint.id} "{sprint.name}" '
-            f"({total} total, showing {offset}..{offset + len(issues)}):"
+            f'Issues in Sprint {sprint.id} "{sprint.name}" ({total} total, showing {offset}..{offset + len(issues)}):'
         )
 
     lines = [header, ""]
@@ -1746,10 +1985,7 @@ async def _list_sprint_issues(
             status_name = i.status.name if i.status else "?"
             tracker_name = i.tracker.name if i.tracker else "?"
             priority_name = i.priority.name if i.priority else "?"
-            lines.append(
-                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
-                f"{i.subject}{assigned}"
-            )
+            lines.append(f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  {i.subject}{assigned}")
         else:  # full
             assigned = f" \u2192 {i.assigned_to.display_name}" if i.assigned_to else ""
             status_name = i.status.name if i.status else "?"
@@ -1758,12 +1994,8 @@ async def _list_sprint_issues(
             desc_preview = ""
             if i.description:
                 desc_preview = i.description[:200].replace("\n", " ")
-            lines.append(
-                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
-                f"{i.subject}{assigned}"
-            )
-            lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  "
-                         f"version_id={i.fixed_version_id}")
+            lines.append(f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  {i.subject}{assigned}")
+            lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  version_id={i.fixed_version_id}")
             if i.issue_metadata:
                 lines.append(f"    metadata={i.issue_metadata}")
             if desc_preview:
@@ -1774,7 +2006,10 @@ async def _list_sprint_issues(
         lines.append("  (none)")
 
     await _log_tool(
-        session, user, AuditEvent.RESOURCE_ACCESS, "list_sprint_issues",
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "list_sprint_issues",
         {"project_key": project_key, "sprint_id": sprint_id, "fields": fields},
         project_id=project.id,
     )
@@ -1813,9 +2048,7 @@ async def _list_version_issues(
         base_where = [Issue.project_id == project.id, Issue.fixed_version_id == version_id]
         header_prefix = f'Issues in version {version.id} "{version.name}"'
 
-    count_result = await session.execute(
-        select(func.count(Issue.id)).where(*base_where)
-    )
+    count_result = await session.execute(select(func.count(Issue.id)).where(*base_where))
     total = count_result.scalar_one()
 
     stmt = (
@@ -1845,10 +2078,7 @@ async def _list_version_issues(
             status_name = i.status.name if i.status else "?"
             tracker_name = i.tracker.name if i.tracker else "?"
             priority_name = i.priority.name if i.priority else "?"
-            lines.append(
-                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
-                f"{i.subject}{assigned}"
-            )
+            lines.append(f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  {i.subject}{assigned}")
         else:  # full
             assigned = f" \u2192 {i.assigned_to.display_name}" if i.assigned_to else ""
             status_name = i.status.name if i.status else "?"
@@ -1857,12 +2087,8 @@ async def _list_version_issues(
             desc_preview = ""
             if i.description:
                 desc_preview = i.description[:200].replace("\n", " ")
-            lines.append(
-                f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  "
-                f"{i.subject}{assigned}"
-            )
-            lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  "
-                         f"version_id={i.fixed_version_id}")
+            lines.append(f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  {i.subject}{assigned}")
+            lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  version_id={i.fixed_version_id}")
             if i.issue_metadata:
                 lines.append(f"    metadata={i.issue_metadata}")
             if desc_preview:
@@ -1873,7 +2099,10 @@ async def _list_version_issues(
         lines.append("  (none)")
 
     await _log_tool(
-        session, user, AuditEvent.RESOURCE_ACCESS, "list_version_issues",
+        session,
+        user,
+        AuditEvent.RESOURCE_ACCESS,
+        "list_version_issues",
         {"project_key": project_key, "version_id": version_id, "fields": fields},
         project_id=project.id,
     )

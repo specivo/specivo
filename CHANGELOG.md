@@ -3,6 +3,26 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.10] - 2026-06-14
+
+### Added
+- **Multi-language UI** — Russian, Chinese, French, Spanish and Thai, with a workspace default language and a per-user override
+- **Markdown editor** (EasyMDE) for issue descriptions and wiki pages, plus a markdown preview endpoint
+- Edit issue title and description together from a single button
+- MCP — metadata schema management tools; filter `list_issues` by metadata key=value
+
+### Fixed
+- Sidebar fills the full content height on long pages
+- Workflow admin — transition checkboxes now persist; styled tracker/role selects
+- Issue creation commits before responding, fixing an intermittent 404 on an immediate follow-up request
+- Metadata schema CRUD endpoints wired up and secured
+- `specivo_metadata` rejects lossy numeric inputs
+- Markdown editor stability — CodeMirror/EasyMDE refresh and toolbar fixes
+- Content-hashed CSS/JS filenames to bust stale browser caches
+- Issue activity feed opens on the latest page
+- Celery tasks registered correctly with monthly partitioning
+- Project settings modal and add-member autocomplete clipping
+
 ## [0.1.9] - 2026-04-19
 
 ### Added

@@ -5,19 +5,19 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
   {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
-  {"label": "History", "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/history"},
-  {"label": "Diff"}
+  {"label": _("History"), "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/history"},
+  {"label": _("Diff")}
 ]) }}
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-space-xl);">
   <h1 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-xl);font-weight:700;">
-    Comparing version {{ from_version }} → {{ to_version }}
+    {% trans from_version=from_version, to_version=to_version %}Comparing version %(from_version)s → %(to_version)s{% endtrans %}
   </h1>
-  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">Back to history</a>
+  <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/history/" class="sp-btn sp-btn-ghost">{% trans %}Back to history{% endtrans %}</a>
 </div>
 
 {% if diff_lines %}
@@ -28,7 +28,7 @@
 </div>
 {% else %}
 <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  No differences between version {{ from_version }} and version {{ to_version }}.
+  {% trans from_version=from_version, to_version=to_version %}No differences between version %(from_version)s and version %(to_version)s.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

@@ -94,7 +94,7 @@ async def issue_table_partial(
 async def issue_activity_partial(
     issue_ref: str,
     request: Request,
-    activity_page: int = Query(1, ge=1),
+    activity_page: int | None = Query(None, ge=1),
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Return the activity/journal list as an HTML fragment for htmx swapping."""
@@ -119,7 +119,12 @@ async def issue_activity_partial(
 
     activity_total = len(all_journals)
     activity_total_pages = max(1, (activity_total + activity_per_page - 1) // activity_per_page)
-    if activity_page > activity_total_pages:
+    # See pages/issues.py::issue_detail for the rationale: when the caller
+    # does not pin a page, default to the last (newest) one so freshly
+    # written journal entries are visible after a save -> reload.
+    if activity_page is None:
+        activity_page = activity_total_pages
+    elif activity_page > activity_total_pages:
         activity_page = activity_total_pages
 
     activity_start = (activity_page - 1) * activity_per_page

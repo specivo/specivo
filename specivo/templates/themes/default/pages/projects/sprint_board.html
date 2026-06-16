@@ -5,9 +5,9 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Backlog", "url": "/projects/" ~ project.key ~ "/backlog/"},
+  {"label": _("Backlog"), "url": "/projects/" ~ project.key ~ "/backlog/"},
   {"label": sprint.name}
 ]) }}
 
@@ -16,11 +16,11 @@
     <div style="display:flex;align-items:center;gap:var(--sp-space-md);">
       <h1 style="margin:0;">{{ sprint.name }}</h1>
       {% if sprint.status == 'active' %}
-      <span class="badge-status in-progress">Active</span>
+      <span class="badge-status in-progress">{% trans %}Active{% endtrans %}</span>
       {% elif sprint.status == 'completed' %}
-      <span class="badge-status closed">Completed</span>
+      <span class="badge-status closed">{% trans %}Completed{% endtrans %}</span>
       {% else %}
-      <span class="badge-status new">Planned</span>
+      <span class="badge-status new">{% trans %}Planned{% endtrans %}</span>
       {% endif %}
     </div>
     <div style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-top:var(--sp-space-xs);">
@@ -35,48 +35,48 @@
   <div class="page-header-actions">
     <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 18l-6-6 6-6"/></svg>
-      Backlog
+      {% trans %}Backlog{% endtrans %}
     </a>
     {% if can_manage_sprint %}
     <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/edit/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-      Edit
+      {% trans %}Edit{% endtrans %}
     </a>
     {% endif %}
     {% if sprint.status == 'active' and can_manage_sprint %}
     <div x-data="{ showComplete: false }">
       <button class="sp-btn sp-btn-success sp-btn-sm" @click="showComplete = true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Complete Sprint
+        {% trans %}Complete Sprint{% endtrans %}
       </button>
       <div x-show="showComplete" x-cloak style="position:fixed;inset:0;z-index:1050;">
         <div class="sp-scrim" @click="showComplete = false"></div>
         <div class="sp-modal" style="max-width:440px;">
           <div class="sp-modal-header">
-            <h2>Complete Sprint</h2>
+            <h2>{% trans %}Complete Sprint{% endtrans %}</h2>
             <button class="sp-modal-close" @click="showComplete = false">&times;</button>
           </div>
           <div class="sp-modal-body">
             <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-lg);">
-              Incomplete issues will be moved to the selected sprint or back to the backlog.
+              {% trans %}Incomplete issues will be moved to the selected sprint or back to the backlog.{% endtrans %}
             </p>
             <form x-data="sprintComplete">
-              <label style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Move incomplete issues to</label>
+              <label style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Move incomplete issues to{% endtrans %}</label>
               <select x-model="moveToSprint" style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);margin-bottom:var(--sp-space-lg);">
-                <option value="">Backlog (no sprint)</option>
+                <option value="">{% trans %}Backlog (no sprint){% endtrans %}</option>
                 {% for s in other_sprints %}
                 <option value="{{ s.id }}">{{ s.name }}</option>
                 {% endfor %}
               </select>
               <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);">
-                <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="showComplete = false">Cancel</button>
+                <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="showComplete = false">{% trans %}Cancel{% endtrans %}</button>
                 <button type="button" class="sp-btn sp-btn-primary sp-btn-sm"
                         hx-post="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/complete/"
                         :hx-vals="getHxVals()"
                         hx-headers='{"Content-Type": "application/json"}'
                         hx-swap="none"
                         data-hx-redirect="/projects/{{ project.key }}/backlog/">
-                  Complete
+                  {% trans %}Complete{% endtrans %}
                 </button>
               </div>
             </form>
@@ -91,13 +91,13 @@
 {# ============ Kanban Board ============ #}
 {% if total_issues > 0 %}
 <div class="kanban-toolbar">
-  <label>Cards per column:</label>
+  <label>{% trans %}Cards per column:{% endtrans %}</label>
   <select data-board-per-col>
     {% for n in [10, 25, 50] %}
     <option value="{{ n }}" {{ 'selected' if board_per_col == n }}>{{ n }}</option>
     {% endfor %}
   </select>
-  <span class="kanban-footer-info" style="margin-left:auto;">{{ total_issues }} issue{{ 's' if total_issues != 1 }} total</span>
+  <span class="kanban-footer-info" style="margin-left:auto;">{% trans count=total_issues %}%(count)s issue total{% pluralize %}%(count)s issues total{% endtrans %}</span>
 </div>
 
 {# Segmented progress bar by status #}
@@ -125,7 +125,7 @@
     </div>
   </div>
   {% set done_count = (board.get('Resolved', []) | length) + (board.get('Closed', []) | length) %}
-  <span class="board-progress-text">{{ done_count }} of {{ total_issues }} done</span>
+  <span class="board-progress-text">{% trans done=done_count, total=total_issues %}%(done)s of %(total)s done{% endtrans %}</span>
 </div>
 
 <div class="kanban-wrap" x-data="kanbanScroll()">
@@ -176,7 +176,7 @@
         {% endfor %}
         {% if col_total == 0 %}
         <div style="padding:var(--sp-space-xl) var(--sp-space-md);text-align:center;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);">
-          No issues
+          {% trans %}No issues{% endtrans %}
         </div>
         {% endif %}
       </div>
@@ -186,11 +186,11 @@
         <div class="kanban-pager">
           {# First page #}
           {% if col_page > 1 %}
-          <a href="{{ col_page_url(st.id, 0) }}" class="kanban-pager-btn" title="First page">
+          <a href="{{ col_page_url(st.id, 0) }}" class="kanban-pager-btn" title="{{ _('First page') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
           </a>
           {# Previous page #}
-          <a href="{{ col_page_url(st.id, [col_offset - board_per_col, 0] | max) }}" class="kanban-pager-btn" title="Previous">
+          <a href="{{ col_page_url(st.id, [col_offset - board_per_col, 0] | max) }}" class="kanban-pager-btn" title="{{ _('Previous') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
           </a>
           {% else %}
@@ -198,15 +198,15 @@
           <span class="kanban-pager-btn disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></span>
           {% endif %}
 
-          <span class="kanban-footer-info">{{ col_offset + 1 }}–{{ [col_offset + board_per_col, col_total] | min }} of {{ col_total }}</span>
+          <span class="kanban-footer-info">{% trans first=col_offset + 1, last=[col_offset + board_per_col, col_total] | min, total=col_total %}%(first)s–%(last)s of %(total)s{% endtrans %}</span>
 
           {# Next page #}
           {% if col_page < col_pages %}
-          <a href="{{ col_page_url(st.id, col_offset + board_per_col) }}" class="kanban-pager-btn" title="Next">
+          <a href="{{ col_page_url(st.id, col_offset + board_per_col) }}" class="kanban-pager-btn" title="{{ _('Next') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </a>
           {# Last page #}
-          <a href="{{ col_page_url(st.id, (col_pages - 1) * board_per_col) }}" class="kanban-pager-btn" title="Last page">
+          <a href="{{ col_page_url(st.id, (col_pages - 1) * board_per_col) }}" class="kanban-pager-btn" title="{{ _('Last page') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
           </a>
           {% else %}
@@ -215,7 +215,7 @@
           {% endif %}
         </div>
         {% else %}
-        <span class="kanban-footer-info">{{ col_total }} issue{{ 's' if col_total != 1 }}</span>
+        <span class="kanban-footer-info">{% trans count=col_total %}%(count)s issue{% pluralize %}%(count)s issues{% endtrans %}</span>
         {% endif %}
       </div>
       {% endif %}
@@ -229,7 +229,7 @@
 </div>
 {% else %}
 <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  No issues in this sprint. Assign issues from the backlog to get started.
+  {% trans %}No issues in this sprint. Assign issues from the backlog to get started.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

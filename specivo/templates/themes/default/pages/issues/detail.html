@@ -14,43 +14,71 @@
 <div class="issue-detail-layout">
   {# Main content #}
   <div>
-    <div class="issue-header">
-      <div class="issue-key-line">
-        <span class="key">{{ issue.display_key }}</span>
-        {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
-        {{ status_badge(issue.status.name if issue.status else '') }}
+    <div x-data='descriptionEditor({ subject: {{ issue.subject | tojson }}, description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }} })'>
+      <div class="issue-header">
+        <div class="issue-key-line">
+          <span class="key">{{ issue.display_key }}</span>
+          {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
+          {{ status_badge(issue.status.name if issue.status else '') }}
+        </div>
+        <h1 class="issue-title" x-show="!editing">{{ issue.subject }}</h1>
+        <div x-show="editing" x-cloak class="sp-issue-title-edit">
+          <input
+            type="text"
+            class="sp-issue-title-input"
+            x-model="subjectDraft"
+            maxlength="1024"
+            @keydown.escape="cancelEdit()"
+            @keydown.enter.prevent="save()"
+            x-ref="subjectInput"
+          >
+          <div class="sp-issue-title-error" x-show="error" x-text="error" x-cloak></div>
+        </div>
       </div>
-      <h1 class="issue-title">{{ issue.subject }}</h1>
-    </div>
 
-    <div x-data='descriptionEditor({ description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }} })'>
       <div x-show="!editing" class="description-card" style="position:relative;">
         <div class="description-actions">
           {% set desc_edits = [] %}
           {% for j in journals if journals is defined %}{% for d in j.details if d.prop_key == 'description' %}{% if desc_edits.append(j) %}{% endif %}{% endfor %}{% endfor %}
           {% if desc_edits %}
-          <a href="/issue/{{ issue.display_key }}/versions/{{ desc_edits[-1].id }}/" class="sp-btn sp-btn-sm sp-btn-ghost" style="font-size:var(--sp-font-size-xs);">History ({{ desc_edits | length }})</a>
+          <a href="/issue/{{ issue.display_key }}/versions/{{ desc_edits[-1].id }}/" class="sp-btn sp-btn-sm sp-btn-ghost" style="font-size:var(--sp-font-size-xs);">{% trans count=desc_edits | length %}History (%(count)s){% endtrans %}</a>
           {% endif %}
-          <button class="sp-btn sp-btn-sm sp-btn-primary" @click="startEdit()">Edit</button>
+          <button class="sp-btn sp-btn-sm sp-btn-primary" @click="startEdit()">{% trans %}Edit{% endtrans %}</button>
         </div>
         <div class="description-body">
         {% if issue.description %}
         {{ issue.description | wiki_markdown(project.key) }}
         {% else %}
-        <span style="color:var(--sp-text-muted);font-style:italic;">No description.</span>
+        <span style="color:var(--sp-text-muted);font-style:italic;">{% trans %}No description.{% endtrans %}</span>
         {% endif %}
         </div>
       </div>
-      <div x-show="editing" x-cloak>
-        <div class="description-card" style="padding:var(--sp-space-md);">
-          <textarea x-model="draft" style="width:100%;min-height:200px;padding:var(--sp-space-sm) var(--sp-space-md);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm);line-height:1.7;background:var(--sp-bg-input);color:var(--sp-text-primary);resize:vertical;outline:none;box-sizing:border-box;" @keydown.escape="cancelEdit()"></textarea>
-          <div class="form-hint" style="margin-bottom:var(--sp-space-sm);">Supports Markdown. Use @username to mention.</div>
-          <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);">
-            <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="cancelEdit()">Cancel</button>
-            <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="saving" @click="save()">Save</button>
+      {# x-if (not x-show) so the EasyMDE/CodeMirror editor only mounts in a       #}
+      {# visible DOM context. CodeMirror caches DOM measurements at instantiation; #}
+      {# inside a display:none ancestor those measurements are zero and the line   #}
+      {# height tree corrupts permanently — typing then jumps content to the       #}
+      {# bottom of the pane. x-if removes the subtree until the user clicks Edit.  #}
+      <template x-if="editing">
+        <div>
+          <div class="description-card" style="padding:var(--sp-space-md);">
+            {# EasyMDE-wrapped editor — see markdownEditor in specivo.js. The inner #}
+            {# component exposes its current value via x-modelable, bound to the    #}
+            {# outer descriptionEditor's `draft` state.                             #}
+            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue" })'
+                 x-modelable="value"
+                 x-model="draft"
+                 data-preview-url="/api/v1/markdown/preview/"
+                 data-md-context="issue">
+              <textarea x-ref="textarea" @keydown.escape="cancelEdit()"></textarea>
+            </div>
+            <div class="form-hint" style="margin-bottom:var(--sp-space-sm);">{% trans %}Supports Markdown. Use @username to mention.{% endtrans %}</div>
+            <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);">
+              <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="cancelEdit()">{% trans %}Cancel{% endtrans %}</button>
+              <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="saving" @click="save()">{% trans %}Save{% endtrans %}</button>
+            </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
 
     {# Metadata panel -- collapsible, between description and activity #}
@@ -60,7 +88,7 @@
       <button class="sp-metadata-toggle" :class="{ open: expanded }" @click="expanded = !expanded" type="button">
         <svg class="sp-mt-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
         <svg class="sp-mt-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-        <span>Metadata</span>
+        <span>{% trans %}Metadata{% endtrans %}</span>
         <div class="sp-mt-schemas">
           <template x-for="name in schemaNames" :key="name">
             <span class="sp-mt-schema-badge" x-text="name"></span>
@@ -137,7 +165,7 @@
                     </template>
                     <input type="text" :placeholder="(metadata[field.key] || []).length === 0 ? 'Type and press Enter...' : 'Add more...'" @keydown.enter.prevent="addTag(field.key, $event)" @keydown.comma.prevent="addTag(field.key, $event)" @keydown.backspace="removeLastTag(field.key, $event)">
                   </div>
-                  <div class="form-hint">Press Enter or comma to add</div>
+                  <div class="form-hint">{% trans %}Press Enter or comma to add{% endtrans %}</div>
                 </div>
               </template>
 
@@ -163,15 +191,15 @@
           <template x-for="name in schemaNames" :key="name">
             <div class="sp-schema-source">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              <span>from <strong x-text="name"></strong> schema</span>
+              <span>{% trans %}from{% endtrans %} <strong x-text="name"></strong> {% trans %}schema{% endtrans %}</span>
             </div>
           </template>
         </div>
 
         {# Save bar #}
         <div class="sp-metadata-save" x-show="dirty">
-          <span class="sp-save-hint" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-right:auto">You have unsaved metadata changes</span>
-          <button class="sp-btn sp-btn-ghost sp-btn-sm" type="button" @click="revert()">Discard</button>
+          <span class="sp-save-hint" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-right:auto">{% trans %}You have unsaved metadata changes{% endtrans %}</span>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" type="button" @click="revert()">{% trans %}Discard{% endtrans %}</button>
           <button class="sp-btn sp-btn-primary sp-btn-sm" type="button" :disabled="saving" @click="save()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
             <span x-text="saving ? 'Saving...' : 'Save Metadata'"></span>
@@ -184,10 +212,10 @@
     {# Activity tabs #}
     <div class="activity-tabs" x-data="{ tab: 'activity' }">
       <div class="activity-tabs-header">
-        <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">Activity <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
-        <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">Time{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
-        <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">Relations{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
-        <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">Attachments</a>
+        <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
+        <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
+        <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">{% trans %}Attachments{% endtrans %}</a>
       </div>
 
       {# Activity content #}
@@ -197,7 +225,7 @@
           <select style="padding:var(--sp-space-xs);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-xs);background:var(--sp-bg-surface);color:var(--sp-text-muted);"
                   data-activity-per-page>
             {% for opt in activity_per_page_options %}
-            <option value="{{ opt }}" {{ 'selected' if activity_per_page == opt }}>{{ opt }} per page</option>
+            <option value="{{ opt }}" {{ 'selected' if activity_per_page == opt }}>{% trans opt=opt %}%(opt)s per page{% endtrans %}</option>
             {% endfor %}
           </select>
         </div>
@@ -214,15 +242,15 @@
         {% if activity_total_pages is defined and activity_total_pages > 1 %}
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:var(--sp-space-lg);padding-top:var(--sp-space-md);border-top:1px solid var(--sp-border);">
           <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">
-            Showing {{ ((activity_page - 1) * activity_per_page) + 1 }}–{{ [activity_page * activity_per_page, activity_total] | min }} of {{ activity_total }}
+            {% trans from=((activity_page - 1) * activity_per_page) + 1, to=[activity_page * activity_per_page, activity_total] | min, total=activity_total %}Showing %(from)s–%(to)s of %(total)s{% endtrans %}
           </div>
           <div style="display:flex;align-items:center;gap:var(--sp-space-md);">
             {% if activity_page > 1 %}
-            <a href="?activity_page={{ activity_page - 1 }}" class="sp-btn sp-btn-sm sp-btn-ghost">Previous</a>
+            <a href="?activity_page={{ activity_page - 1 }}" class="sp-btn sp-btn-sm sp-btn-ghost">{% trans %}Previous{% endtrans %}</a>
             {% endif %}
-            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">Page {{ activity_page }} of {{ activity_total_pages }}</span>
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">{% trans page=activity_page, total=activity_total_pages %}Page %(page)s of %(total)s{% endtrans %}</span>
             {% if activity_page < activity_total_pages %}
-            <a href="?activity_page={{ activity_page + 1 }}" class="sp-btn sp-btn-sm sp-btn-ghost">Next</a>
+            <a href="?activity_page={{ activity_page + 1 }}" class="sp-btn sp-btn-sm sp-btn-ghost">{% trans %}Next{% endtrans %}</a>
             {% endif %}
           </div>
         </div>
@@ -242,38 +270,38 @@
             <div class="card" style="padding:var(--sp-space-md);">
               <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:var(--sp-space-sm);">
                 <div>
-                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Hours</label>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Hours{% endtrans %}</label>
                   <input type="number" step="1" min="0" x-model="hours" placeholder="0"
                          style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
                 </div>
                 <div>
-                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Minutes</label>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Minutes{% endtrans %}</label>
                   <input type="number" step="1" min="0" max="59" x-model="minutes" placeholder="0"
                          style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
                 </div>
                 <div>
-                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Activity</label>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Activity{% endtrans %}</label>
                   <select x-model="activityId"
                           style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
-                    <option value="">-- Select --</option>
+                    <option value="">{% trans %}-- Select --{% endtrans %}</option>
                     {% for a in activities if activities is defined %}
                     <option value="{{ a.id }}">{{ a.name }}</option>
                     {% endfor %}
                   </select>
                 </div>
                 <div>
-                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Date</label>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Date{% endtrans %}</label>
                   <input type="date" x-model="spentOn"
                          style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
                 </div>
               </div>
               <div style="margin-top:var(--sp-space-sm);">
-                <input type="text" x-model="comments" placeholder="Comment (optional)"
+                <input type="text" x-model="comments" placeholder="{{ _('Comment (optional)') }}"
                        style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
               </div>
               <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-sm);">
                 <template x-if="error"><span style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);" x-text="error"></span></template>
-                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || totalHours <= 0 || !activityId" @click="submit()">Save</button>
+                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="submitting || totalHours <= 0 || !activityId" @click="submit()">{% trans %}Save{% endtrans %}</button>
               </div>
             </div>
           </div>
@@ -283,11 +311,11 @@
         <table class="sp-table" style="width: 100%; margin-top: var(--sp-space-md);">
           <thead>
             <tr>
-              <th>Date</th>
-              <th>User</th>
-              <th>Hours</th>
-              <th>Activity</th>
-              <th>Comment</th>
+              <th>{% trans %}Date{% endtrans %}</th>
+              <th>{% trans %}User{% endtrans %}</th>
+              <th>{% trans %}Hours{% endtrans %}</th>
+              <th>{% trans %}Activity{% endtrans %}</th>
+              <th>{% trans %}Comment{% endtrans %}</th>
             </tr>
           </thead>
           <tbody>
@@ -297,7 +325,7 @@
               <td style="font-size:var(--sp-font-size-sm);">
                 <div style="display:flex;align-items:center;gap:var(--sp-space-xs);">
                   {{ avatar(te.user.login if te.user else '?', size='xs', color=te.user.preferences.avatar_color|default('') if te.user else '', avatar_url=te.user.avatar_url|default('') if te.user else '') }}
-                  {{ te.user.login if te.user else 'Unknown' }}
+                  {{ te.user.login if te.user else _('Unknown') }}
                 </div>
               </td>
               <td style="font-size:var(--sp-font-size-sm);font-family:var(--sp-font-mono);font-weight:600;">{{ te.hours }}h</td>
@@ -310,15 +338,15 @@
           </tbody>
           <tfoot>
             <tr>
-              <td colspan="2" style="font-weight:600;font-size:var(--sp-font-size-sm);">Total</td>
-              <td style="font-family:var(--sp-font-mono);font-weight:600;font-size:var(--sp-font-size-sm);">{{ time_logged if time_logged is defined else '0.0' }}h / {{ '%.1f' | format(issue.estimated_hours) if issue.estimated_hours else '--' }}h est.</td>
+              <td colspan="2" style="font-weight:600;font-size:var(--sp-font-size-sm);">{% trans %}Total{% endtrans %}</td>
+              <td style="font-family:var(--sp-font-mono);font-weight:600;font-size:var(--sp-font-size-sm);">{{ time_logged if time_logged is defined else '0.0' }}h / {{ '%.1f' | format(issue.estimated_hours) if issue.estimated_hours else '--' }}{% trans %}h est.{% endtrans %}</td>
               <td colspan="2"></td>
             </tr>
           </tfoot>
         </table>
         {% else %}
         <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
-          No time entries logged.
+          {% trans %}No time entries logged.{% endtrans %}
         </div>
         {% endif %}
       </div>
@@ -337,11 +365,11 @@
             {% if rel.issue_to_status is defined and rel.issue_to_status %}
             <span class="badge-status sp-rel-status">{{ rel.issue_to_status }}</span>
             {% endif %}
-            {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">({{ rel.delay }} days)</span>{% endif %}
+            {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans count=rel.delay %}(%(count)s days){% endtrans %}</span>{% endif %}
             <a class="sp-rel-remove"
                hx-delete="/api/v1/relations/{{ rel.id }}/"
                hx-swap="none"
-               hx-confirm="Remove this relation?"
+               hx-confirm="{{ _('Remove this relation?') }}"
                data-hx-reload>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </a>
@@ -350,14 +378,14 @@
         </div>
         {% else %}
         <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
-          No relations.
+          {% trans %}No relations.{% endtrans %}
         </div>
         {% endif %}
 
         <div x-data='relationForm({ issueKey: "{{ issue.display_key }}" })' style="margin-top:var(--sp-space-lg);">
           <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showForm = !showForm">
-            <template x-if="!showForm"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px;"><path d="M12 5v14M5 12h14"/></svg> Add relation</span></template>
-            <template x-if="showForm"><span>Cancel</span></template>
+            <template x-if="!showForm"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px;"><path d="M12 5v14M5 12h14"/></svg> {% trans %}Add relation{% endtrans %}</span></template>
+            <template x-if="showForm"><span>{% trans %}Cancel{% endtrans %}</span></template>
           </button>
 
           {# Inline add relation form #}
@@ -365,8 +393,8 @@
             <div class="card" style="padding:var(--sp-space-md);">
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-space-sm);">
                 <div style="position:relative;">
-                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Related Issue</label>
-                  <input type="text" x-model="issueToKey" placeholder="e.g. PROJ-42" autocomplete="off"
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Related Issue{% endtrans %}</label>
+                  <input type="text" x-model="issueToKey" placeholder="{{ _('e.g. PROJ-42') }}" autocomplete="off"
                          @keydown="onKeydown($event)" @blur="closeSuggestions()"
                          style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
                   {# Autocomplete dropdown #}
@@ -383,28 +411,28 @@
                       </div>
                     </template>
                     <template x-if="searching">
-                      <div style="padding:var(--sp-space-sm) var(--sp-space-md);font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">Searching...</div>
+                      <div style="padding:var(--sp-space-sm) var(--sp-space-md);font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">{% trans %}Searching...{% endtrans %}</div>
                     </template>
                   </div>
                 </div>
                 <div>
-                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Type</label>
+                  <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Type{% endtrans %}</label>
                   <select x-model="relationType"
                           style="width:100%;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
-                    <option value="relates">Relates to</option>
-                    <option value="blocks">Blocks</option>
-                    <option value="blocked">Blocked by</option>
-                    <option value="duplicates">Duplicates</option>
-                    <option value="precedes">Precedes</option>
-                    <option value="follows">Follows</option>
-                    <option value="copied_to">Copied to</option>
-                    <option value="copied_from">Copied from</option>
+                    <option value="relates">{% trans %}Relates to{% endtrans %}</option>
+                    <option value="blocks">{% trans %}Blocks{% endtrans %}</option>
+                    <option value="blocked">{% trans %}Blocked by{% endtrans %}</option>
+                    <option value="duplicates">{% trans %}Duplicates{% endtrans %}</option>
+                    <option value="precedes">{% trans %}Precedes{% endtrans %}</option>
+                    <option value="follows">{% trans %}Follows{% endtrans %}</option>
+                    <option value="copied_to">{% trans %}Copied to{% endtrans %}</option>
+                    <option value="copied_from">{% trans %}Copied from{% endtrans %}</option>
                   </select>
                 </div>
               </div>
               <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-sm);">
                 <template x-if="error"><span style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);" x-text="error"></span></template>
-                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="!canSubmit" @click="submit()">Add</button>
+                <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="!canSubmit" @click="submit()">{% trans %}Add{% endtrans %}</button>
               </div>
             </div>
           </div>
@@ -418,20 +446,20 @@
            hx-trigger="sp-show-tab-attachments from:body once"
            hx-swap="innerHTML">
         <div style="text-align:center;padding:var(--sp-space-xl);color:var(--sp-text-muted);font-size:var(--sp-font-size-sm);">
-          Loading attachments…
+          {% trans %}Loading attachments…{% endtrans %}
         </div>
       </div>
     </div>
 
     {# Comment form #}
     <div class="comment-form" x-data='commentForm({ displayKey: {{ issue.display_key | tojson }} })'>
-      <textarea x-model="notes" placeholder="Write a comment (Markdown supported)..."></textarea>
+      <textarea x-model="notes" placeholder="{{ _('Write a comment (Markdown supported)...') }}"></textarea>
       <div class="comment-form-footer">
-        <span class="hint">Supports Markdown. Use @username to mention.</span>
+        <span class="hint">{% trans %}Supports Markdown. Use @username to mention.{% endtrans %}</span>
         <button class="sp-btn sp-btn-primary"
                 :disabled="!canSubmit"
                 @click="submit()">
-          Comment
+          {% trans %}Comment{% endtrans %}
         </button>
       </div>
     </div>

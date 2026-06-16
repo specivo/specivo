@@ -136,6 +136,40 @@ async def test_issue_detail_page(
     assert "Detail page bug" in resp.text
 
 
+@pytest.mark.integration
+async def test_issue_detail_uses_markdown_editor(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: tuple,
+    _project: Project,
+):
+    """Issue detail edit-mode wraps description in EasyMDE-based markdownEditor.
+
+    The wrapper must be nested inside ``descriptionEditor`` (preserving the
+    joint title + description edit flow), point at the server preview
+    endpoint, and request ``context: "issue"`` so KEY-123 autolinks render.
+    """
+    _, tracker, _ = _lookups
+    user = admin_client.state.user
+    issue = await _create_issue(db_session, _project, user, tracker, subject="Editor wrapper")
+    token = admin_client.state.token
+    resp = await admin_client.get(
+        f"/issue/{issue.display_key}/",
+        cookies={"access_token": token},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    # Outer descriptionEditor (joint title + description edit) still present.
+    assert "descriptionEditor(" in body
+    # Inner markdownEditor wraps the description textarea.
+    assert "markdownEditor(" in body
+    assert "/api/v1/markdown/preview/" in body
+    assert 'data-md-context="issue"' in body
+    # Vendored EasyMDE asset is loaded on the page.
+    assert "easymde.2.18.0.min.js" in body
+    assert "easymde.2.18.0.min.css" in body
+
+
 # ---------------------------------------------------------------------------
 # Tests: issue create form
 # ---------------------------------------------------------------------------

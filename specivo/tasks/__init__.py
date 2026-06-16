@@ -33,3 +33,22 @@ celery_app.config_from_object(
         },
     }
 )
+
+# Eagerly import every task module so that @celery_app.task decorators
+# run at worker startup. The worker entry point is
+# ``celery -A specivo.tasks worker`` which only triggers import of this
+# package's __init__; submodules must be imported here, or the worker
+# starts with zero tasks registered and rejects every dispatched task
+# with "Received unregistered task".
+#
+# Explicit imports preferred over autodiscover_tasks(...) — clearer and
+# avoids autodiscover edge cases. partition_management is a pure helper
+# (no @celery_app.task) and is imported on demand by cleanup, so it
+# does not need a top-level import here.
+from specivo.tasks import (  # noqa: E402, F401
+    cleanup,
+    embeddings,
+    notifications,
+    webhooks,
+    wiki_links,
+)

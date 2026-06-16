@@ -261,6 +261,130 @@ class TestMcpListIssues:
         assert "Second issue" in result
 
 
+class TestMcpListIssuesMetadataFilters:
+    async def _seed_three(self, db_session: AsyncSession, admin: User, seed: dict):
+        svc = IssueService()
+        a = await svc.create(
+            db_session,
+            seed["project"],
+            IssueCreate(project_key="ACME", tracker_id=seed["tracker"].id, subject="alpha"),
+            admin,
+        )
+        b = await svc.create(
+            db_session,
+            seed["project"],
+            IssueCreate(project_key="ACME", tracker_id=seed["tracker"].id, subject="bravo"),
+            admin,
+        )
+        c = await svc.create(
+            db_session,
+            seed["project"],
+            IssueCreate(project_key="ACME", tracker_id=seed["tracker"].id, subject="charlie"),
+            admin,
+        )
+        # alpha: scalar match; bravo: array match; charlie: no match
+        a.issue_metadata = {"component": "frontend"}
+        b.issue_metadata = {"component": ["frontend", "backend"], "tag": "p0"}
+        c.issue_metadata = {"component": "backend"}
+        await db_session.commit()
+        return a, b, c
+
+    async def test_filter_scalar_equality(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        a, b, c = await self._seed_three(db_session, admin, seed)
+        result = await _list_issues(
+            db_session, admin, project_key="ACME", metadata_filters=["component=frontend"]
+        )
+        assert a.display_key in result
+        assert b.display_key in result  # array contains "frontend"
+        assert c.display_key not in result
+        assert "metadata=component=frontend" in result
+
+    async def test_filter_array_containment_only(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        _a, b, _c = await self._seed_three(db_session, admin, seed)
+        result = await _list_issues(
+            db_session, admin, project_key="ACME", metadata_filters=["component=backend"]
+        )
+        # Only bravo has "backend" in its component array; charlie has component="backend"
+        # as a scalar so also matches.
+        assert b.display_key in result
+        assert _c.display_key in result
+        assert _a.display_key not in result
+
+    async def test_multiple_filters_anded(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        _a, b, _c = await self._seed_three(db_session, admin, seed)
+        result = await _list_issues(
+            db_session,
+            admin,
+            project_key="ACME",
+            metadata_filters=["component=frontend", "tag=p0"],
+        )
+        assert b.display_key in result
+        assert _a.display_key not in result  # has component=frontend but no tag=p0
+        assert _c.display_key not in result
+
+    async def test_no_match_returns_none(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        await self._seed_three(db_session, admin, seed)
+        result = await _list_issues(
+            db_session, admin, project_key="ACME", metadata_filters=["component=nonexistent"]
+        )
+        assert "(none)" in result
+
+    async def test_empty_filter_list_is_noop(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        a, b, c = await self._seed_three(db_session, admin, seed)
+        result = await _list_issues(
+            db_session, admin, project_key="ACME", metadata_filters=[]
+        )
+        assert a.display_key in result
+        assert b.display_key in result
+        assert c.display_key in result
+
+    async def test_malformed_filter_returns_error(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        await self._seed_three(db_session, admin, seed)
+        result = await _list_issues(
+            db_session, admin, project_key="ACME", metadata_filters=["no-equals-sign"]
+        )
+        assert result.startswith("Error")
+        assert "key=value" in result
+
+    async def test_empty_key_returns_error(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        await self._seed_three(db_session, admin, seed)
+        result = await _list_issues(
+            db_session, admin, project_key="ACME", metadata_filters=["=value"]
+        )
+        assert result.startswith("Error")
+        assert "empty key" in result
+
+    async def test_value_with_special_chars_safely_escaped(self, db_session, admin, seed):
+        from specivo.mcp.tools import _list_issues
+
+        # A value with quotes/backslashes must not allow SQL injection nor break
+        # the JSONB literal builder.
+        a, _b, _c = await self._seed_three(db_session, admin, seed)
+        a.issue_metadata = {"name": 'has "quotes" and \\ backslash'}
+        await db_session.commit()
+        result = await _list_issues(
+            db_session,
+            admin,
+            project_key="ACME",
+            metadata_filters=['name=has "quotes" and \\ backslash'],
+        )
+        assert a.display_key in result
+
+
 class TestMcpUpdateIssue:
     async def test_update_issue(self, db_session: AsyncSession, admin: User, seed: dict):
         from specivo.mcp.tools import _update_issue

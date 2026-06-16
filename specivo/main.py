@@ -45,17 +45,16 @@ from specivo.web.router import web_router
 
 
 def _create_versioned_static_files() -> dict[str, str]:
-    """Create versioned copies of CSS/JS files and return the filenames.
+    """Create content-hashed copies of CSS/JS files and return the filenames.
 
-    e.g. specivo.css -> specivo.0.1.0.css
-    Templates reference the versioned filename so CDN/proxy caches
-    bust automatically on version bumps. No build step needed.
-    Uses copies instead of symlinks for Docker bind-mount compatibility.
+    e.g. specivo.css -> specivo.<sha8>.css. Hash is the first 8 chars of the
+    file's SHA-256, so any source edit produces a new URL and browser caches
+    invalidate without manual intervention. Uses copies instead of symlinks
+    for Docker bind-mount compatibility.
     """
+    import hashlib
     import shutil
 
-    settings = get_settings()
-    version = settings.version
     static_dir = Path(__file__).resolve().parent / "static"
     versioned = {}
 
@@ -64,14 +63,16 @@ def _create_versioned_static_files() -> dict[str, str]:
         ("js", "specivo", ".js"),
     ]:
         source = static_dir / subdir / f"{base}{ext}"
-        target = static_dir / subdir / f"{base}.{version}{ext}"
-        if source.exists():
-            # Remove old versioned copies
-            for old in source.parent.glob(f"{base}.*{ext}"):
-                if old != source:
-                    old.unlink()
-            shutil.copy2(source, target)
-            versioned[f"{base}{ext}"] = f"{base}.{version}{ext}"
+        if not source.exists():
+            continue
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()[:8]
+        target = static_dir / subdir / f"{base}.{digest}{ext}"
+        # Remove stale hashed copies (anything matching base.*.ext that isn't the source or target).
+        for old in source.parent.glob(f"{base}.*{ext}"):
+            if old not in (source, target):
+                old.unlink()
+        shutil.copy2(source, target)
+        versioned[f"{base}{ext}"] = f"{base}.{digest}{ext}"
 
     return versioned
 
@@ -117,6 +118,17 @@ async def lifespan(app: FastAPI):
         row = result.scalar_one_or_none()
         if row and row.value:
             set_brand_name(row.value)
+
+        # Seed the workspace default-language override from DB settings so the
+        # LocaleMiddleware resolver honours the admin choice from the first request.
+        from specivo.core.locales import get_available_locales
+        from specivo.core.runtime_settings import set_default_language_override
+        from specivo.services.settings_service import SettingsService
+
+        all_settings = await SettingsService().get_all(session)
+        default_lang = all_settings.get("default_language")
+        if default_lang and default_lang in get_available_locales():
+            set_default_language_override(default_lang)
 
     # Start the MCP session manager (Streamable HTTP transport needs an
     # active task group).  Must be entered before ``yield`` so it is live

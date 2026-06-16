@@ -1,21 +1,21 @@
 {% extends "base.html" %}
 
-{% block title %}API Keys - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}API Keys{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <span class="current">API Keys</span>
+  <span class="current">{% trans %}API Keys{% endtrans %}</span>
 </div>
 
 <div x-data="apiKeyManager">
 
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
-    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">API Keys</h1>
+    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}API Keys{% endtrans %}</h1>
     <button class="sp-btn sp-btn-primary" @click="showCreate = !showCreate; newKey = null;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      New API Key
+      {% trans %}New API Key{% endtrans %}
     </button>
   </div>
 
@@ -23,7 +23,7 @@
   <template x-if="newKey">
     <div class="flash flash-success" style="margin-bottom: var(--sp-space-lg);">
       <div style="flex: 1;">
-        <strong>API key created.</strong> Copy it now — you will not see it again.
+        <strong>{% trans %}API key created.{% endtrans %}</strong> {% trans %}Copy it now — you will not see it again.{% endtrans %}
         <div style="margin-top: var(--sp-space-sm); display: flex; align-items: center; gap: var(--sp-space-sm);">
           <code style="
             flex: 1;
@@ -38,7 +38,7 @@
           <button class="sp-btn-sm" @click="copyKey()" x-text="copied ? 'Copied!' : 'Copy'"></button>
         </div>
       </div>
-      <button class="sp-btn-sm" @click="dismissNewKey()" style="align-self: start;">Dismiss</button>
+      <button class="sp-btn-sm" @click="dismissNewKey()" style="align-self: start;">{% trans %}Dismiss{% endtrans %}</button>
     </div>
   </template>
 
@@ -46,12 +46,12 @@
   <div x-show="showCreate && !newKey" x-transition class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-lg);">
     <form @submit.prevent="createKey()">
       <div class="form-group" style="margin-bottom: var(--sp-space-md);">
-        <label class="form-label" for="key-name">Key name</label>
+        <label class="form-label" for="key-name">{% trans %}Key name{% endtrans %}</label>
         <input
           id="key-name"
           class="form-input"
           type="text"
-          placeholder="e.g. CI/CD pipeline"
+          placeholder="{{ _('e.g. CI/CD pipeline') }}"
           x-model="newKeyName"
           required
           style="max-width: 400px;"
@@ -60,7 +60,7 @@
       <div x-show="error" class="flash flash-error" style="margin-bottom: var(--sp-space-md);" x-text="error"></div>
       <div style="display: flex; gap: var(--sp-space-sm);">
         <button class="sp-btn sp-btn-primary" type="submit" :disabled="loading" x-text="loading ? 'Creating...' : 'Create key'"></button>
-        <button class="sp-btn sp-btn-ghost" type="button" @click="showCreate = false; error = '';">Cancel</button>
+        <button class="sp-btn sp-btn-ghost" type="button" @click="showCreate = false; error = '';">{% trans %}Cancel{% endtrans %}</button>
       </div>
     </form>
   </div>
@@ -70,19 +70,19 @@
     <table class="issue-table">
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Key prefix</th>
-          <th>Created</th>
-          <th>Last used</th>
-          <th>Status</th>
-          <th>Actions</th>
+          <th>{% trans %}Name{% endtrans %}</th>
+          <th>{% trans %}Key prefix{% endtrans %}</th>
+          <th>{% trans %}Created{% endtrans %}</th>
+          <th>{% trans %}Last used{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Actions{% endtrans %}</th>
         </tr>
       </thead>
       <tbody>
         <template x-if="keys.length === 0">
           <tr>
             <td colspan="6" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">
-              No API keys yet. Create one to get started.
+              {% trans %}No API keys yet. Create one to get started.{% endtrans %}
             </td>
           </tr>
         </template>
@@ -110,7 +110,7 @@
               <button
                 class="sp-btn-sm danger"
                 @click="deleteKey(key.id)"
-              >Delete</button>
+              >{% trans %}Delete{% endtrans %}</button>
             </td>
           </tr>
         </template>

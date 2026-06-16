@@ -10,7 +10,7 @@
 
     {# Status #}
     <div>
-      <label style="{{ lbl }}">Status</label>
+      <label style="{{ lbl }}">{% trans %}Status{% endtrans %}</label>
       <select style="{{ sel }}" @change="onSelectIntRequired('status_id', $event)">
         {% for s in statuses %}
         <option value="{{ s.id }}" {{ 'selected' if issue.status_id == s.id }}>{{ s.name }}</option>
@@ -20,7 +20,7 @@
 
     {# Assignee #}
     <div>
-      <label style="{{ lbl }}">Assignee</label>
+      <label style="{{ lbl }}">{% trans %}Assignee{% endtrans %}</label>
       {% if issue.assigned_to %}
       <div style="display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-xs);">
         {{ avatar(issue.assigned_to.login, size='sm', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
@@ -28,7 +28,7 @@
       </div>
       {% endif %}
       <select style="{{ sel }}" @change="onSelectInt('assigned_to_id', $event)">
-        <option value="">-- Unassigned --</option>
+        <option value="">{% trans %}-- Unassigned --{% endtrans %}</option>
         {% for m in members %}
         <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if issue.assigned_to_id == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
         {% endfor %}
@@ -37,7 +37,7 @@
 
     {# Priority #}
     <div>
-      <label style="{{ lbl }}">Priority</label>
+      <label style="{{ lbl }}">{% trans %}Priority{% endtrans %}</label>
       <select style="{{ sel }}" @change="onSelectIntRequired('priority_id', $event)">
         {% for p in priorities %}
         <option value="{{ p.id }}" {{ 'selected' if issue.priority_id == p.id }}>{{ p.name }}</option>
@@ -47,13 +47,13 @@
 
     {# Tracker #}
     <div>
-      <label style="{{ lbl }}">Tracker</label>
+      <label style="{{ lbl }}">{% trans %}Tracker{% endtrans %}</label>
       {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
     </div>
 
     {# Version — autocomplete #}
     <div>
-      <label style="{{ lbl }}">Version</label>
+      <label style="{{ lbl }}">{% trans %}Version{% endtrans %}</label>
       <div x-data='entityAutocomplete({
              endpoint: "/api/v1/projects/{{ project.key }}/versions/search/",
              field: "fixed_version_id",
@@ -72,10 +72,10 @@
                @keydown.enter.prevent="confirm()"
                @keydown.escape.prevent="cancel()"
                @blur="onBlur()"
-               placeholder="-- No version --">
+               placeholder="{{ _('-- No version --') }}">
         <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
           <template x-if="!loading && results.length === 0">
-            <div class="sp-ac-empty">No matches</div>
+            <div class="sp-ac-empty">{% trans %}No matches{% endtrans %}</div>
           </template>
           <template x-for="(item, idx) in results" :key="item.id">
             <div class="sp-ac-row"
@@ -91,14 +91,14 @@
         </div>
         <button type="button" class="sp-ac-clear" x-show="selectedId" @click="clearSelection()"
                 style="background:none;border:none;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);cursor:pointer;padding:var(--sp-space-xs) 0;">
-          Clear
+          {% trans %}Clear{% endtrans %}
         </button>
       </div>
     </div>
 
     {# Sprint — autocomplete #}
     <div>
-      <label style="{{ lbl }}">Sprint</label>
+      <label style="{{ lbl }}">{% trans %}Sprint{% endtrans %}</label>
       <div x-data='entityAutocomplete({
              endpoint: "/api/v1/projects/{{ project.key }}/sprints/search/",
              field: "sprint_id",
@@ -117,10 +117,10 @@
                @keydown.enter.prevent="confirm()"
                @keydown.escape.prevent="cancel()"
                @blur="onBlur()"
-               placeholder="-- No sprint --">
+               placeholder="{{ _('-- No sprint --') }}">
         <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
           <template x-if="!loading && results.length === 0">
-            <div class="sp-ac-empty">No matches</div>
+            <div class="sp-ac-empty">{% trans %}No matches{% endtrans %}</div>
           </template>
           <template x-for="(item, idx) in results" :key="item.id">
             <div class="sp-ac-row"
@@ -137,7 +137,7 @@
         </div>
         <button type="button" class="sp-ac-clear" x-show="selectedId" @click="clearSelection()"
                 style="background:none;border:none;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);cursor:pointer;padding:var(--sp-space-xs) 0;">
-          Clear
+          {% trans %}Clear{% endtrans %}
         </button>
       </div>
     </div>
@@ -150,7 +150,7 @@
 
     {# Progress #}
     <div>
-      <label style="{{ lbl }}">Progress</label>
+      <label style="{{ lbl }}">{% trans %}Progress{% endtrans %}</label>
       <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
         <div style="flex:1;background: var(--sp-bg-muted, #e5e7eb); border-radius: var(--sp-radius-sm); height: 8px; overflow: hidden;">
           <div style="background: var(--sp-accent); height: 100%; width: {{ issue.done_ratio }}%; transition: width 0.3s;"></div>
@@ -166,7 +166,7 @@
 
     {# Start Date #}
     <div>
-      <label style="{{ lbl }}">Start Date</label>
+      <label style="{{ lbl }}">{% trans %}Start Date{% endtrans %}</label>
       <input type="date" value="{{ issue.start_date.strftime('%Y-%m-%d') if issue.start_date else '' }}"
              style="{{ sel }}"
              @change="onInputChange('start_date', $event)">
@@ -174,7 +174,7 @@
 
     {# Due Date #}
     <div>
-      <label style="{{ lbl }}">Due Date</label>
+      <label style="{{ lbl }}">{% trans %}Due Date{% endtrans %}</label>
       <input type="date" value="{{ issue.due_date.strftime('%Y-%m-%d') if issue.due_date else '' }}"
              style="{{ sel }}"
              @change="onInputChange('due_date', $event)">
@@ -182,7 +182,7 @@
 
     {# Estimated #}
     <div>
-      <label style="{{ lbl }}">Estimated</label>
+      <label style="{{ lbl }}">{% trans %}Estimated{% endtrans %}</label>
       {% set est_h = (issue.estimated_hours | int) if issue.estimated_hours else '' %}
       {% set est_m = (((issue.estimated_hours - (issue.estimated_hours | int)) * 60) | round | int) if issue.estimated_hours else '' %}
       <div style="display:flex;gap:var(--sp-space-xs);align-items:stretch;">
@@ -193,13 +193,13 @@
                style="width:50px;padding:var(--sp-space-xs) var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);font-family:var(--sp-font-mono);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
         <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);align-self:center;">m</span>
         <button style="padding:0 var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-xs);background:var(--sp-bg-surface);color:var(--sp-text-secondary);cursor:pointer;"
-                @click="saveEstimate()">Save</button>
+                @click="saveEstimate()">{% trans %}Save{% endtrans %}</button>
       </div>
     </div>
 
     {# Time Logged #}
     <div>
-      <label style="{{ lbl }}">Time Logged</label>
+      <label style="{{ lbl }}">{% trans %}Time Logged{% endtrans %}</label>
       <span style="font-size: var(--sp-font-size-sm); font-family: var(--sp-font-mono);">{{ '%.1f' | format(time_logged) if time_logged is defined else '0.0' }}h</span>
     </div>
   </div>
@@ -211,7 +211,7 @@
 
     {# Watchers #}
     <div>
-      <label style="{{ lbl }}">Watchers</label>
+      <label style="{{ lbl }}">{% trans %}Watchers{% endtrans %}</label>
       <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-xs);align-items:center;">
         {% for w in watchers if watchers is defined %}
         <span class="sp-watcher-chip">
@@ -230,7 +230,7 @@
     {# Relations #}
     {% if relations is defined and relations %}
     <div>
-      <label style="{{ lbl }}">Relations</label>
+      <label style="{{ lbl }}">{% trans %}Relations{% endtrans %}</label>
       <div style="display:flex;flex-direction:column;gap:var(--sp-space-xs);">
         {% for rel in relations %}
         <div style="display:flex;align-items:baseline;gap:var(--sp-space-sm);font-size:var(--sp-font-size-sm);">
@@ -250,9 +250,9 @@
 {# Footer: Created / Updated #}
 <div style="padding: 0 var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); line-height: 1.8;">
   <div title="{{ issue.created_at | localtime(user.timezone) if issue.created_at else '' }}">
-    Created {{ issue.created_at | timeago(user.timezone) }}{% if issue.author %} by {{ issue.author.display_name or issue.author.login }}{% endif %}
+    {% trans ago=issue.created_at | timeago(user.timezone) %}Created %(ago)s{% endtrans %}{% if issue.author %} {% trans name=issue.author.display_name or issue.author.login %}by %(name)s{% endtrans %}{% endif %}
   </div>
   <div title="{{ (last_activity_at or issue.updated_at) | localtime(user.timezone) if (last_activity_at or issue.updated_at) else '' }}">
-    Updated {{ (last_activity_at or issue.updated_at) | timeago(user.timezone) }}
+    {% trans ago=(last_activity_at or issue.updated_at) | timeago(user.timezone) %}Updated %(ago)s{% endtrans %}
   </div>
 </div>

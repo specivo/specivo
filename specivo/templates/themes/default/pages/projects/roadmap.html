@@ -5,19 +5,19 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Roadmap"}
+  {"label": _("Roadmap")}
 ]) }}
 
 <div class="page-header">
-  <h1>Roadmap</h1>
+  <h1>{% trans %}Roadmap{% endtrans %}</h1>
   <div class="page-header-actions">
     <div class="filter-tabs">
       <a href="/projects/{{ project.key }}/roadmap/?show=open"
-         class="filter-tab{{ ' active' if show is not defined or show == 'open' else '' }}">Open</a>
+         class="filter-tab{{ ' active' if show is not defined or show == 'open' else '' }}">{% trans %}Open{% endtrans %}</a>
       <a href="/projects/{{ project.key }}/roadmap/?show=all"
-         class="filter-tab{{ ' active' if show is defined and show == 'all' else '' }}">All</a>
+         class="filter-tab{{ ' active' if show is defined and show == 'all' else '' }}">{% trans %}All{% endtrans %}</a>
     </div>
   </div>
 </div>
@@ -31,7 +31,7 @@
       <div class="version-meta">
         <span class="version-badge {{ 'open' if entry.version.status == 'open' else 'vclosed' }}">{{ entry.version.status }}</span>
         {% if entry.version.effective_date %}
-        <span>Due: {{ entry.version.effective_date }}</span>
+        <span>{% trans date=entry.version.effective_date %}Due: %(date)s{% endtrans %}</span>
         {% endif %}
         {% if entry.version.description %}
         <span>{{ entry.version.description }}</span>
@@ -47,15 +47,15 @@
       </div>
 
       <div class="version-counts">
-        <span class="count-open">{{ entry.open_count }} open</span>
-        <span class="count-closed">{{ entry.closed_count }} closed</span>
+        <span class="count-open">{% trans count=entry.open_count %}%(count)s open{% endtrans %}</span>
+        <span class="count-closed">{% trans count=entry.closed_count %}%(count)s closed{% endtrans %}</span>
       </div>
     </div>
 
     {% if entry.total > 0 %}
     <div class="version-issues" x-show="expanded" x-cloak>
       <p style="padding:var(--sp-space-lg) var(--sp-space-xl);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
-        View issues on the <a href="/projects/{{ project.key }}/issues/?fixed_version_id={{ entry.version.id }}">issues page</a>.
+        {% trans issues_url="/projects/" ~ project.key ~ "/issues/?fixed_version_id=" ~ entry.version.id %}View issues on the <a href="%(issues_url)s">issues page</a>.{% endtrans %}
       </p>
     </div>
     {% endif %}
@@ -64,7 +64,7 @@
 </div>
 {% else %}
 <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  No versions found for this project. Create versions to track your roadmap.
+  {% trans %}No versions found for this project. Create versions to track your roadmap.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

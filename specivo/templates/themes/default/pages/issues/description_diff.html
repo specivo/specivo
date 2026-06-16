@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, avatar %}
 
-{% block title %}Description Changes - {{ issue.display_key }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Description Changes{% endtrans %} - {{ issue.display_key }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -12,7 +12,7 @@
   {"label": "Description Changes"}
 ]) }}
 
-<h1 class="page-title" style="font-size:var(--sp-font-size-xl);">Description Changes — {{ issue.display_key }} <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-md);">Version #{{ selected_num }}</span></h1>
+<h1 class="page-title" style="font-size:var(--sp-font-size-xl);">{% trans key=issue.display_key %}Description Changes — %(key)s{% endtrans %} <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-md);">{% trans num=selected_num %}Version #%(num)s{% endtrans %}</span></h1>
 
 {% if selected_num > 1 %}
 {# Diff and side-by-side comparison — only for versions after the first #}
@@ -32,47 +32,47 @@
     {%- endif -%}
     {%- endfor -%}
     {% if not diff_lines %}
-    <div style="color:var(--sp-text-muted);text-align:center;padding:var(--sp-space-xl);">No differences found.</div>
+    <div style="color:var(--sp-text-muted);text-align:center;padding:var(--sp-space-xl);">{% trans %}No differences found.{% endtrans %}</div>
     {% endif %}
   </div>
 </div>
 
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-space-xl);">
   <div>
-    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-danger);">Version #{{ prev_num }} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">(before)</span></h3>
+    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-danger);">{% trans num=prev_num %}Version #%(num)s{% endtrans %} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">{% trans %}(before){% endtrans %}</span></h3>
     <div class="card" style="padding:var(--sp-space-lg);">
-      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ old_text | wiki_markdown(project.key) if old_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ old_text | wiki_markdown(project.key) if old_text else '<em style="color:var(--sp-text-muted);">' ~ _('Empty') ~ '</em>' }}</div>
     </div>
   </div>
   <div>
-    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-success);">Version #{{ selected_num }} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">(after)</span></h3>
+    <h3 style="font-size:var(--sp-font-size-md);font-weight:600;margin-bottom:var(--sp-space-md);color:var(--sp-success);">{% trans num=selected_num %}Version #%(num)s{% endtrans %} <span style="font-weight:400;font-size:var(--sp-font-size-sm);">{% trans %}(after){% endtrans %}</span></h3>
     <div class="card" style="padding:var(--sp-space-lg);">
-      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | wiki_markdown(project.key) if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+      <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | wiki_markdown(project.key) if new_text else '<em style="color:var(--sp-text-muted);">' ~ _('Empty') ~ '</em>' }}</div>
     </div>
   </div>
 </div>
 {% else %}
 {# First version — just show the content #}
 <div class="card" style="padding:var(--sp-space-lg);margin-bottom:var(--sp-space-xl);">
-  <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-md);">This is the first recorded description edit. No previous version to compare against.</p>
-  <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | wiki_markdown(project.key) if new_text else '<em style="color:var(--sp-text-muted);">Empty</em>' }}</div>
+  <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-md);">{% trans %}This is the first recorded description edit. No previous version to compare against.{% endtrans %}</p>
+  <div class="prose" style="font-size:var(--sp-font-size-sm);">{{ new_text | wiki_markdown(project.key) if new_text else '<em style="color:var(--sp-text-muted);">' ~ _('Empty') ~ '</em>' }}</div>
 </div>
 {% endif %}
 
 {# Version History Table #}
 {% if versions is defined and versions %}
 <div style="margin-top:var(--sp-space-2xl);">
-  <h2 style="font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-md);">Version History</h2>
+  <h2 style="font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-md);">{% trans %}Version History{% endtrans %}</h2>
 
   <div class="card" style="overflow:hidden;">
     <table class="sp-table">
       <thead>
         <tr>
-          <th style="width:180px;">Version</th>
-          <th>Author</th>
-          <th>Date</th>
-          <th>Comment</th>
-          <th style="width:140px;">Actions</th>
+          <th style="width:180px;">{% trans %}Version{% endtrans %}</th>
+          <th>{% trans %}Author{% endtrans %}</th>
+          <th>{% trans %}Date{% endtrans %}</th>
+          <th>{% trans %}Comment{% endtrans %}</th>
+          <th style="width:140px;">{% trans %}Actions{% endtrans %}</th>
         </tr>
       </thead>
       <tbody>
@@ -87,9 +87,9 @@
               <span style="color:var(--sp-text-muted);font-weight:600;">#{{ v.num }}</span>
               {% endif %}
               {% if v.is_current %}
-              <span style="background:var(--sp-accent-subtle);color:var(--sp-accent);font-size:var(--sp-font-size-xs);font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--sp-accent);">Current</span>
+              <span style="background:var(--sp-accent-subtle);color:var(--sp-accent);font-size:var(--sp-font-size-xs);font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--sp-accent);">{% trans %}Current{% endtrans %}</span>
               {% elif v.get('is_synthetic') %}
-              <span style="background:var(--sp-bg-input);color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);font-weight:500;padding:1px 8px;border-radius:10px;">Original</span>
+              <span style="background:var(--sp-bg-input);color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);font-weight:500;padding:1px 8px;border-radius:10px;">{% trans %}Original{% endtrans %}</span>
               {% endif %}
             </div>
           </td>
@@ -100,13 +100,13 @@
             </div>
           </td>
           <td style="color:var(--sp-text-muted);">{{ v.date | localtime(user.timezone) if v.date else '' }}</td>
-          <td style="color:var(--sp-text-muted);">{% if v.get('is_synthetic') %}Initial description{% endif %}</td>
+          <td style="color:var(--sp-text-muted);">{% if v.get('is_synthetic') %}{% trans %}Initial description{% endtrans %}{% endif %}</td>
           <td>
             {% if v.journal_id %}
-            <a href="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);">View</a>
+            <a href="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/" style="color:var(--sp-accent);">{% trans %}View{% endtrans %}</a>
             {% if not v.is_current %}
             <form method="POST" action="/issue/{{ issue.display_key }}/versions/{{ v.journal_id }}/restore/" style="display:inline;margin-left:var(--sp-space-sm);">
-              <button type="submit" style="background:none;border:none;color:var(--sp-text-secondary);cursor:pointer;font-size:inherit;font-family:inherit;padding:0;" data-confirm="Restore this version of the description?">Restore</button>
+              <button type="submit" style="background:none;border:none;color:var(--sp-text-secondary);cursor:pointer;font-size:inherit;font-family:inherit;padding:0;" data-confirm="{{ _('Restore this version of the description?') }}">{% trans %}Restore{% endtrans %}</button>
             </form>
             {% endif %}
             {% endif %}
@@ -120,6 +120,6 @@
 {% endif %}
 
 <div style="margin-top:var(--sp-space-xl);">
-  <a href="/issue/{{ issue.display_key }}/" class="sp-btn sp-btn-ghost">← Back to issue</a>
+  <a href="/issue/{{ issue.display_key }}/" class="sp-btn sp-btn-ghost">{% trans %}← Back to issue{% endtrans %}</a>
 </div>
 {% endblock %}

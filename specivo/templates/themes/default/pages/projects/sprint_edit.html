@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge %}
 
-{% block title %}Edit {{ sprint.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans name=sprint.name %}Edit %(name)s{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Backlog", "url": "/projects/" ~ project.key ~ "/backlog/"},
-  {"label": "Edit " ~ sprint.name}
+  {"label": _("Backlog"), "url": "/projects/" ~ project.key ~ "/backlog/"},
+  {"label": _("Edit") ~ " " ~ sprint.name}
 ]) }}
 
 <div class="page-header">
@@ -20,16 +20,16 @@
     {% if sprint.status in ('active', 'planned') %}
     <a href="/projects/{{ project.key }}/sprints/{{ sprint.id }}/board/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Board
+      {% trans %}Board{% endtrans %}
     </a>
     {% endif %}
     <a href="/projects/{{ project.key }}/sprints/analytics/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-      Analytics
+      {% trans %}Analytics{% endtrans %}
     </a>
     <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M15 18l-6-6 6-6"/></svg>
-      Backlog
+      {% trans %}Backlog{% endtrans %}
     </a>
   </div>
 </div>
@@ -47,28 +47,28 @@
           hx-swap="none"
           @htmx:before-request="saving = true; saved = false; error = ''"
           @htmx:after-request="onSaveResponse(event)">
-      <h2>Sprint Details</h2>
+      <h2>{% trans %}Sprint Details{% endtrans %}</h2>
 
       <div class="form-group">
-        <label class="form-label sprint-edit-label" for="sprint-name">Name</label>
+        <label class="form-label sprint-edit-label" for="sprint-name">{% trans %}Name{% endtrans %}</label>
         <input type="text" id="sprint-name" name="name" class="form-input" value="{{ sprint.name }}">
       </div>
 
       <div class="form-group">
-        <label class="form-label sprint-edit-label" for="sprint-goal">Goal</label>
+        <label class="form-label sprint-edit-label" for="sprint-goal">{% trans %}Goal{% endtrans %}</label>
         <textarea id="sprint-goal" name="goal" class="form-input" rows="3">{{ sprint.goal or '' }}</textarea>
-        <div class="form-hint">Describe what this sprint should accomplish. Visible to the team on the board.</div>
+        <div class="form-hint">{% trans %}Describe what this sprint should accomplish. Visible to the team on the board.{% endtrans %}</div>
       </div>
 
       <div class="form-row">
         <div class="form-group">
-          <label class="form-label sprint-edit-label" for="sprint-start">Start Date</label>
+          <label class="form-label sprint-edit-label" for="sprint-start">{% trans %}Start Date{% endtrans %}</label>
           <input type="date" id="sprint-start" name="start_date" class="form-input"
                  value="{{ sprint.start_date.isoformat() if sprint.start_date else '' }}"
                  x-model="startDate">
         </div>
         <div class="form-group">
-          <label class="form-label sprint-edit-label" for="sprint-end">End Date</label>
+          <label class="form-label sprint-edit-label" for="sprint-end">{% trans %}End Date{% endtrans %}</label>
           <input type="date" id="sprint-end" name="end_date" class="form-input"
                  value="{{ sprint.end_date.isoformat() if sprint.end_date else '' }}"
                  x-model="endDate">
@@ -76,19 +76,19 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label sprint-edit-label">Duration</label>
+        <label class="form-label sprint-edit-label">{% trans %}Duration{% endtrans %}</label>
         <input type="text" class="form-input" :value="duration" readonly>
-        <div class="form-hint">Calculated from start and end dates.</div>
+        <div class="form-hint">{% trans %}Calculated from start and end dates.{% endtrans %}</div>
       </div>
 
       <div class="form-actions" style="justify-content:space-between">
         <button type="submit" class="sp-btn sp-btn-primary" :disabled="saving">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-          <span x-show="!saving && !saved">Save Changes</span>
-          <span x-show="saving" x-cloak>Saving...</span>
-          <span x-show="saved" x-cloak style="color:#15803D">Saved</span>
+          <span x-show="!saving && !saved">{% trans %}Save Changes{% endtrans %}</span>
+          <span x-show="saving" x-cloak>{% trans %}Saving...{% endtrans %}</span>
+          <span x-show="saved" x-cloak style="color:#15803D">{% trans %}Saved{% endtrans %}</span>
         </button>
-        <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost">Cancel</a>
+        <a href="/projects/{{ project.key }}/backlog/" class="sp-btn sp-btn-ghost">{% trans %}Cancel{% endtrans %}</a>
       </div>
       <template x-if="error">
         <div style="color:var(--sp-danger);font-size:var(--sp-font-size-xs);margin-top:var(--sp-space-sm)" x-text="error"></div>

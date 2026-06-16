@@ -1,28 +1,28 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}{% if mode == 'create' %}New Page{% else %}Edit {{ wiki_page.title }}{% endif %} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% if mode == 'create' %}{% trans %}New Page{% endtrans %}{% else %}{% trans name=wiki_page.title %}Edit %(name)s{% endtrans %}{% endif %} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {% if mode == 'edit' %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
   {"label": wiki_page.title, "url": "/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug},
-  {"label": "Edit"}
+  {"label": _("Edit")}
 ]) }}
 {% else %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Wiki", "url": "/projects/" ~ project.key ~ "/wiki"},
-  {"label": "New Page"}
+  {"label": _("Wiki"), "url": "/projects/" ~ project.key ~ "/wiki"},
+  {"label": _("New Page")}
 ]) }}
 {% endif %}
 
 <h1 class="wiki-page-title" style="margin-bottom:var(--sp-space-xl)">
-  {% if mode == 'create' %}New Wiki Page{% else %}Editing: {{ wiki_page.title }}{% endif %}
+  {% if mode == 'create' %}{% trans %}New Wiki Page{% endtrans %}{% else %}{% trans name=wiki_page.title %}Editing: %(name)s{% endtrans %}{% endif %}
 </h1>
 
 <div class="{{ 'wiki-layout' if pages is defined and pages else '' }}"
@@ -31,6 +31,7 @@
        projectKey: {{ project.key | tojson }},
        slug: {{ (wiki_page.slug if wiki_page else "") | tojson }},
        lockVersion: {{ wiki_page.lock_version if wiki_page else 0 }},
+       pageId: {{ (wiki_page.id if wiki_page else 0) }},
        title: {{ (wiki_page.title if wiki_page else "") | tojson }},
        text: {{ (content.text if content else "") | tojson }},
        parentSlug: {{ (preselect_parent_slug if preselect_parent_slug is defined else "") | tojson }},
@@ -48,42 +49,37 @@
 
       <div class="editor-card">
         {# Title field (for new pages) #}
-        <input type="text" class="editor-title-input" placeholder="Page title..." x-model="title" required>
+        <input type="text" class="editor-title-input" placeholder="{{ _('Page title...') }}" x-model="title" required>
 
-        {# Toolbar #}
-        <div class="editor-toolbar">
-          <button type="button" class="toolbar-btn" title="Bold"><strong>B</strong></button>
-          <button type="button" class="toolbar-btn" title="Italic"><em>I</em></button>
-          <button type="button" class="toolbar-btn" title="Code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg></button>
-          <button type="button" class="toolbar-btn" title="Link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg></button>
-          <div class="toolbar-sep"></div>
-          <div class="toolbar-spacer"></div>
-          <button type="button" class="toolbar-btn toolbar-btn-preview" @click="preview = !preview" x-text="preview ? 'Edit' : 'Preview'">Preview</button>
+        {# EasyMDE-wrapped editor (toolbar + preview live inside the wrapper). #}
+        {# The wikiForm parent owns `text`; the wrapper's `value` is bound via #}
+        {# x-modelable. `onPasteDrop` routes paste/drop events back to         #}
+        {# wikiForm.handleEditorPasteDrop for image upload.                    #}
+        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", onPasteDrop: "handleEditorPasteDrop" })'
+             x-modelable="value"
+             x-model="text"
+             data-preview-url="/api/v1/markdown/preview/"
+             data-md-context="wiki">
+          <textarea x-ref="textarea" placeholder="{{ _('Write your content here (Markdown)...') }}"></textarea>
         </div>
-
-        {# Editor textarea #}
-        <textarea class="editor-textarea" x-show="!preview" x-model="text" placeholder="Write your content here (Markdown)..." style="display:block;"></textarea>
-
-        {# Preview panel #}
-        <div class="editor-preview" x-show="preview" x-cloak x-html="text"></div>
       </div>
 
       {# Edit metadata #}
       <div class="edit-metadata">
         <div>
-          <label class="modal-label">Edit summary</label>
-          <input type="text" class="modal-input" x-model="comments" placeholder="Describe your changes...">
+          <label class="modal-label">{% trans %}Edit summary{% endtrans %}</label>
+          <input type="text" class="modal-input" x-model="comments" placeholder="{{ _('Describe your changes...') }}">
         </div>
         {% if page_tree is defined and page_tree %}
         <div x-data="{ pickerOpen: false, treeExpanded: {} }" style="position:relative;">
-          <label class="modal-label">Parent page</label>
+          <label class="modal-label">{% trans %}Parent page{% endtrans %}</label>
           <button type="button" class="modal-input wiki-parent-picker-btn" @click="pickerOpen = !pickerOpen">
             <span x-text="parentTitle || '(none)'" :style="parentTitle ? '' : 'color:var(--sp-text-muted)'"></span>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;flex-shrink:0;color:var(--sp-text-muted);"><path d="M6 9l6 6 6-6"/></svg>
           </button>
           <div x-show="pickerOpen" x-cloak @click.outside="pickerOpen = false" class="wiki-parent-picker-dropdown">
             <div class="wiki-parent-picker-option" :class="{ 'selected': !parentSlug }" @click="parentSlug = ''; parentTitle = ''; pickerOpen = false">
-              <span style="color:var(--sp-text-muted);">(none — root level)</span>
+              <span style="color:var(--sp-text-muted);">{% trans %}(none — root level){% endtrans %}</span>
             </div>
             {% macro render_picker_tree(parent_id, depth=0) %}
               {% for p in page_tree.get(parent_id, []) %}
@@ -95,7 +91,10 @@
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px;"><path d="M9 6l6 6-6 6"/></svg>
                 </button>
                 {% endif %}
-                <span @click="parentSlug = '{{ p.slug }}'; parentTitle = {{ p.title | tojson }}; pickerOpen = false" style="cursor:pointer;flex:1;">{{ p.title }}</span>
+                {# tojson must be forceescape'd before embedding inside a double-quoted #}
+                {# HTML attribute: tojson wraps the title in `"..."` and the inner `"` #}
+                {# would otherwise terminate the @click attribute prematurely.         #}
+                <span @click="parentSlug = '{{ p.slug }}'; parentTitle = {{ p.title | tojson | forceescape }}; pickerOpen = false" style="cursor:pointer;flex:1;">{{ p.title }}</span>
               </div>
               {% if has_children %}
               <div x-show="treeExpanded[{{ p.id }}]">
@@ -115,10 +114,10 @@
         <button type="button" class="sp-btn sp-btn-primary"
                 :disabled="!canSubmit"
                 @click="submitForm()">
-          <span x-show="!submitting">Save</span>
-          <span x-show="submitting">Saving...</span>
+          <span x-show="!submitting">{% trans %}Save{% endtrans %}</span>
+          <span x-show="submitting">{% trans %}Saving...{% endtrans %}</span>
         </button>
-        <a href="{% if mode == 'edit' %}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/{% else %}/projects/{{ project.key }}/wiki/{% endif %}" class="cancel-link">Cancel</a>
+        <a href="{% if mode == 'edit' %}/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/{% else %}/projects/{{ project.key }}/wiki/{% endif %}" class="cancel-link">{% trans %}Cancel{% endtrans %}</a>
       </div>
     </form>
   </div>
@@ -127,7 +126,7 @@
   <div>
     {% if pages is defined and pages %}
     <div class="wiki-tree-card">
-      <div class="wiki-tree-title">Pages</div>
+      <div class="wiki-tree-title">{% trans %}Pages{% endtrans %}</div>
       <ul class="wiki-tree">
         {% for p in pages %}
         <li>

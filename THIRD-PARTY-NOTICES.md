@@ -11,6 +11,11 @@ Copyright 2019-2024 Caleb Porzio
 ## htmx — BSD 2-Clause License
 Copyright 2020 Big Sky Software
 
+## EasyMDE — MIT License
+Copyright 2015 Sparksuite, Inc.; 2017 Jeroen Akkerman
+Markdown editor (CodeMirror 5 based) used for wiki and issue description editing.
+https://github.com/Ionaru/easy-markdown-editor
+
 ## Observable Plot — ISC License
 Copyright 2020-2024 Observable, Inc.
 

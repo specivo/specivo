@@ -46,7 +46,14 @@ _STRUCTURED_VALUE_MAX_CHARS = 500
 
 
 def _to_str(value: object) -> str | None:
-    """Serialize a field value to string for storage in journal_details.
+    """Serialize a field value to its canonical string form.
+
+    Used as the equality key when diffing old vs new attribute snapshots —
+    so the result MUST NOT be lossily truncated, otherwise two distinct
+    structured values that share a long prefix would falsely compare equal
+    and silently skip the journal detail.  Storage truncation lives in
+    ``_truncate_for_storage`` and is applied only when persisting the
+    detail row.
 
     None is preserved as None (means "field was not set / cleared").
     Empty string remains empty string (different from None).
@@ -58,15 +65,22 @@ def _to_str(value: object) -> str | None:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, (dict, list)):
-        # Structured values (e.g. issue_metadata) are stored as a
-        # compact JSON string, capped to ``_STRUCTURED_VALUE_MAX_CHARS``
-        # to avoid blowing up the journal_details table with large
-        # blobs.  The full value lives on the issue row itself.
-        serialized = json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
-        if len(serialized) > _STRUCTURED_VALUE_MAX_CHARS:
-            serialized = serialized[: _STRUCTURED_VALUE_MAX_CHARS - 3] + "..."
-        return serialized
+        # Structured values (e.g. issue_metadata) serialize to a deterministic
+        # compact JSON string.  Full length — caller decides whether to cap
+        # before persisting.
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
     return str(value)
+
+
+def _truncate_for_storage(value: str | None) -> str | None:
+    """Cap a serialized value at ``_STRUCTURED_VALUE_MAX_CHARS`` for storage.
+
+    Prevents a single bulky metadata blob from bloating the journal_details
+    table or the UI diff view.  The full value lives on the issue row itself.
+    """
+    if value is None or len(value) <= _STRUCTURED_VALUE_MAX_CHARS:
+        return value
+    return value[: _STRUCTURED_VALUE_MAX_CHARS - 3] + "..."
 
 
 class JournalService:
@@ -126,7 +140,9 @@ class JournalService:
             new_str = _to_str(new_raw)
 
             if old_str != new_str:
-                details.append(("attr", prop_key, old_str, new_str))
+                details.append(
+                    ("attr", prop_key, _truncate_for_storage(old_str), _truncate_for_storage(new_str))
+                )
 
         if not details and not notes:
             return None

@@ -1,60 +1,60 @@
 {% extends "base.html" %}
 
-{% block title %}Settings - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Settings{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/projects/">Projects</a>
+  <a href="/projects/">{% trans %}Projects{% endtrans %}</a>
   <span class="sep">/</span>
   <a href="/projects/{{ project.key }}/">{{ project.name }}</a>
   <span class="sep">/</span>
-  <span class="current">Settings</span>
+  <span class="current">{% trans %}Settings{% endtrans %}</span>
 </div>
 
-<h1 class="sp-page-h1">Settings</h1>
+<h1 class="sp-page-h1">{% trans %}Settings{% endtrans %}</h1>
 
 <!-- Settings tabs -->
 <div x-data="{ tab: 'general' }" class="sp-mb-xl">
   <div class="filter-tabs">
-    <a class="filter-tab" :class="{ active: tab === 'general' }" @click.prevent="tab = 'general'" href="#">General</a>
-    <a class="filter-tab" :class="{ active: tab === 'members' }" @click.prevent="tab = 'members'" href="#">Members</a>
-    <a class="filter-tab" :class="{ active: tab === 'modules' }" @click.prevent="tab = 'modules'" href="#">Modules</a>
-    <a class="filter-tab" :class="{ active: tab === 'versions' }" @click.prevent="tab = 'versions'" href="#">Versions</a>
-    <a class="filter-tab" :class="{ active: tab === 'metadata' }" @click.prevent="tab = 'metadata'" href="#">Metadata</a>
+    <a class="filter-tab" :class="{ active: tab === 'general' }" @click.prevent="tab = 'general'" href="#">{% trans %}General{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'members' }" @click.prevent="tab = 'members'" href="#">{% trans %}Members{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'modules' }" @click.prevent="tab = 'modules'" href="#">{% trans %}Modules{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'versions' }" @click.prevent="tab = 'versions'" href="#">{% trans %}Versions{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'metadata' }" @click.prevent="tab = 'metadata'" href="#">{% trans %}Metadata{% endtrans %}</a>
   </div>
 
   <!-- General tab -->
   <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }} })'>
     <div class="card sp-card-pad">
       <div class="form-group sp-form-group-mb-md">
-        <label class="form-label">Name</label>
+        <label class="form-label">{% trans %}Name{% endtrans %}</label>
         <input class="form-input" type="text" x-model="name">
       </div>
       <div class="form-group sp-form-group-mb-md">
-        <label class="form-label">Identifier</label>
+        <label class="form-label">{% trans %}Identifier{% endtrans %}</label>
         <input class="form-input sp-input-disabled" type="text" value="{{ project.identifier }}" disabled>
       </div>
       <div class="form-group sp-form-group-mb-md">
-        <label class="form-label">Key</label>
+        <label class="form-label">{% trans %}Key{% endtrans %}</label>
         <input class="form-input sp-input-disabled" type="text" value="{{ project.key }}" disabled>
       </div>
       <div class="form-group sp-form-group-mb-md">
-        <label class="form-label">Parent project</label>
+        <label class="form-label">{% trans %}Parent project{% endtrans %}</label>
         <select class="form-input" x-model.number="parentId" name="parent_id">
-          <option :value="null">(none — root project)</option>
+          <option :value="null">{% trans %}(none — root project){% endtrans %}</option>
           <template x-for="p in availableParents" :key="p.id">
             <option :value="p.id" x-text="p.name + ' (' + p.key + ')'"></option>
           </template>
         </select>
       </div>
       <div class="form-group sp-form-group-mb-md">
-        <label class="form-label">Description</label>
+        <label class="form-label">{% trans %}Description{% endtrans %}</label>
         <textarea class="form-input" rows="4" x-model="description"></textarea>
       </div>
       <div x-show="message" class="flash sp-mb-md" x-text="message"></div>
-      <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">Save</button>
+      <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">{% trans %}Save{% endtrans %}</button>
     </div>
   </div>
 
@@ -63,11 +63,11 @@
 
     <!-- Add member form -->
     <div class="card sp-card-pad-mb-md">
-      <h3 class="sp-card-h3">Add Member</h3>
+      <h3 class="sp-card-h3">{% trans %}Add Member{% endtrans %}</h3>
       <div class="sp-form-row-end-wrap">
         <div class="sp-suggest-field">
-          <label class="form-label">User</label>
-          <input class="form-input" type="text" placeholder="Search by name or login..."
+          <label class="form-label">{% trans %}User{% endtrans %}</label>
+          <input class="form-input" type="text" placeholder="{{ _('Search by name or login...') }}"
             x-model="userQuery" @input.debounce.300ms="searchUsers()" @focus="searchUsers()"
             @click.outside="showSuggestions = false" autocomplete="off">
           <div class="sp-suggest-panel" x-show="showSuggestions && suggestions.length > 0">
@@ -81,9 +81,9 @@
           </div>
         </div>
         <div class="sp-field-min-160">
-          <label class="form-label">Role</label>
+          <label class="form-label">{% trans %}Role{% endtrans %}</label>
           <select class="form-input" x-model="selectedRoleId">
-            <option value="">Select role...</option>
+            <option value="">{% trans %}Select role...{% endtrans %}</option>
             <template x-for="r in roles" :key="r.id">
               <option :value="r.id" x-text="r.name"></option>
             </template>
@@ -91,8 +91,8 @@
         </div>
         <div>
           <button class="sp-btn sp-btn-primary sp-btn-nowrap-wide" @click="addMember()" :disabled="!selectedUserId || !selectedRoleId || adding">
-            <span x-show="!adding">Add</span>
-            <span x-show="adding">Adding...</span>
+            <span x-show="!adding">{% trans %}Add{% endtrans %}</span>
+            <span x-show="adding">{% trans %}Adding...{% endtrans %}</span>
           </button>
         </div>
       </div>
@@ -102,19 +102,19 @@
 
     <!-- Members list -->
     <div class="card sp-card-pad">
-      <h3 class="sp-card-h3">Project Members</h3>
+      <h3 class="sp-card-h3">{% trans %}Project Members{% endtrans %}</h3>
       <table class="issue-table">
         <thead>
           <tr>
-            <th>User</th>
-            <th>Roles</th>
-            <th>Actions</th>
+            <th>{% trans %}User{% endtrans %}</th>
+            <th>{% trans %}Roles{% endtrans %}</th>
+            <th>{% trans %}Actions{% endtrans %}</th>
           </tr>
         </thead>
         <tbody>
           <template x-if="members.length === 0">
             <tr>
-              <td colspan="3" class="sp-empty-td">No members.</td>
+              <td colspan="3" class="sp-empty-td">{% trans %}No members.{% endtrans %}</td>
             </tr>
           </template>
           <template x-for="m in members" :key="m.user_id">
@@ -125,11 +125,11 @@
               </td>
               <td>
                 <a href="#" class="sp-text-link" @click.prevent="openEditRoles(m)" x-text="joinRoles(m)"
-                  title="Click to edit roles"></a>
+                  title="{{ _('Click to edit roles') }}"></a>
               </td>
               <td class="sp-td-actions-inline">
-                <button class="sp-btn-sm" @click="openEditRoles(m)">Edit roles</button>
-                <button class="sp-btn-sm danger" @click="removeMember(m.user_id)">Remove</button>
+                <button class="sp-btn-sm" @click="openEditRoles(m)">{% trans %}Edit roles{% endtrans %}</button>
+                <button class="sp-btn-sm danger" @click="removeMember(m.user_id)">{% trans %}Remove{% endtrans %}</button>
               </td>
             </tr>
           </template>
@@ -141,7 +141,7 @@
     <div class="sp-modal-overlay" x-show="editModal" x-cloak
       @click.self="editModal = false" @keydown.escape.window="editModal = false">
       <div class="sp-modal" @click.stop>
-        <h2>Edit Roles &mdash; <span x-text="editMember?.display_name"></span></h2>
+        <h2>{% trans %}Edit Roles{% endtrans %} &mdash; <span x-text="editMember?.display_name"></span></h2>
         <div class="sp-mb-md">
           <template x-for="r in roles" :key="r.id">
             <label class="sp-label-check-row">
@@ -152,10 +152,10 @@
         </div>
         <div x-show="editError" class="sp-msg-danger-mb-sm" x-text="editError"></div>
         <div class="sp-modal-actions">
-          <button class="sp-btn" @click="editModal = false">Cancel</button>
+          <button class="sp-btn" @click="editModal = false">{% trans %}Cancel{% endtrans %}</button>
           <button class="sp-btn sp-btn-primary" @click="saveRoles()" :disabled="editRoleIds.length === 0 || editSaving">
-            <span x-show="!editSaving">Save</span>
-            <span x-show="editSaving">Saving...</span>
+            <span x-show="!editSaving">{% trans %}Save{% endtrans %}</span>
+            <span x-show="editSaving">{% trans %}Saving...{% endtrans %}</span>
           </button>
         </div>
       </div>
@@ -165,7 +165,7 @@
   <!-- Modules tab -->
   <div x-show="tab === 'modules'" x-data='projectModules({ modules: {{ modules | tojson }}, projectKey: {{ project.key | tojson }} })'>
     <div class="card sp-card-pad">
-      <h3 class="sp-card-h3">Enabled Modules</h3>
+      <h3 class="sp-card-h3">{% trans %}Enabled Modules{% endtrans %}</h3>
       <template x-for="(enabled, name) in modules" :key="name">
         <div class="sp-module-row">
           <input type="checkbox" :checked="enabled" @change="toggleModule(name)" :disabled="saving" class="sp-checkbox-accent-pointer">
@@ -191,12 +191,12 @@
     <div class="card">
       <div class="sp-listcard-header">
         <div>
-          <span class="sp-listcard-title">Versions</span>
+          <span class="sp-listcard-title">{% trans %}Versions{% endtrans %}</span>
           <span class="sp-text-muted-xs-ml-sm" x-text="'(' + versions.length + ')'"></span>
         </div>
         <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
-          New version
+          {% trans %}New version{% endtrans %}
         </button>
       </div>
 
@@ -204,11 +204,11 @@
       <template x-if="versions.length === 0">
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
-          <h3>No versions yet</h3>
+          <h3>{% trans %}No versions yet{% endtrans %}</h3>
           <p x-text="canManage ? 'Create versions to organize your issues into releases and milestones.' : 'No versions have been created for this project yet.'"></p>
           <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
-            Create first version
+            {% trans %}Create first version{% endtrans %}
           </button>
         </div>
       </template>
@@ -219,11 +219,11 @@
           <thead>
             <tr>
               <th class="sp-col-28"></th>
-              <th>Version</th>
-              <th>Status</th>
-              <th>Due date</th>
-              <th>Progress</th>
-              <th>Issues</th>
+              <th>{% trans %}Version{% endtrans %}</th>
+              <th>{% trans %}Status{% endtrans %}</th>
+              <th>{% trans %}Due date{% endtrans %}</th>
+              <th>{% trans %}Progress{% endtrans %}</th>
+              <th>{% trans %}Issues{% endtrans %}</th>
               <th></th>
             </tr>
           </thead>
@@ -258,10 +258,10 @@
                   </div>
                 </td>
                 <td class="td-actions sp-td-actions-right" x-show="canManage">
-                  <button class="action-link" @click="openEdit(v)" title="Edit">
+                  <button class="action-link" @click="openEdit(v)" title="{{ _('Edit') }}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
                   </button>
-                  <button class="action-link danger" @click="confirmDelete(v)" title="Delete" x-show="v.open_count + v.closed_count === 0">
+                  <button class="action-link danger" @click="confirmDelete(v)" title="{{ _('Delete') }}" x-show="v.open_count + v.closed_count === 0">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                   </button>
                 </td>
@@ -274,7 +274,7 @@
 
     <!-- Create / Edit Modal -->
     <template x-if="showModal">
-      <div class="sp-scrim" @click.self="showModal = false" x-cloak>
+      <div class="sp-scrim open" @click.self="showModal = false" x-cloak>
         <div class="sp-modal">
           <div class="sp-modal-header">
             <h2 x-text="editingVersion ? 'Edit version' : 'New version'"></h2>
@@ -284,36 +284,36 @@
           </div>
           <div class="sp-modal-body">
             <div class="form-group">
-              <label class="form-label">Name</label>
-              <input class="form-input" type="text" x-model="form.name" placeholder="e.g. v1.0.0, Sprint 12, Q2 2026">
-              <div class="form-hint">The version name shown in roadmap and issue dropdowns.</div>
+              <label class="form-label">{% trans %}Name{% endtrans %}</label>
+              <input class="form-input" type="text" x-model="form.name" placeholder="{{ _('e.g. v1.0.0, Sprint 12, Q2 2026') }}">
+              <div class="form-hint">{% trans %}The version name shown in roadmap and issue dropdowns.{% endtrans %}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">Description</label>
-              <textarea class="form-input sp-textarea-vert" x-model="form.description" placeholder="Optional summary of what this version includes..." rows="3"></textarea>
+              <label class="form-label">{% trans %}Description{% endtrans %}</label>
+              <textarea class="form-input sp-textarea-vert" x-model="form.description" placeholder="{{ _('Optional summary of what this version includes...') }}" rows="3"></textarea>
             </div>
             <div class="form-row">
               <div class="form-group">
-                <label class="form-label">Status</label>
+                <label class="form-label">{% trans %}Status{% endtrans %}</label>
                 <select class="form-input" x-model="form.status">
-                  <option value="open">Open</option>
-                  <option value="locked">Locked</option>
-                  <option value="closed">Closed</option>
+                  <option value="open">{% trans %}Open{% endtrans %}</option>
+                  <option value="locked">{% trans %}Locked{% endtrans %}</option>
+                  <option value="closed">{% trans %}Closed{% endtrans %}</option>
                 </select>
-                <div class="form-hint">Locked versions cannot receive new issues.</div>
+                <div class="form-hint">{% trans %}Locked versions cannot receive new issues.{% endtrans %}</div>
               </div>
               <div class="form-group">
-                <label class="form-label">Due date</label>
+                <label class="form-label">{% trans %}Due date{% endtrans %}</label>
                 <input class="form-input" type="date" x-model="form.due_date">
               </div>
             </div>
           </div>
           <div class="sp-modal-footer">
-            <button class="sp-btn sp-btn-ghost" @click="showModal = false">Cancel</button>
+            <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
             <button class="sp-btn sp-btn-primary" @click="saveVersion()" :disabled="!canSaveVersion">
               <span x-show="saving" class="sp-spinner-inline">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-spinner-svg"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                Saving...
+                {% trans %}Saving...{% endtrans %}
               </span>
               <span x-show="!saving" x-text="editingVersion ? 'Save changes' : 'Create version'"></span>
             </button>
@@ -324,24 +324,24 @@
 
     <!-- Delete confirmation modal -->
     <template x-if="showDeleteModal">
-      <div class="sp-scrim" @click.self="showDeleteModal = false" x-cloak>
+      <div class="sp-scrim open" @click.self="showDeleteModal = false" x-cloak>
         <div class="sp-modal sp-modal--xs">
           <div class="sp-modal-header">
-            <h2>Delete version</h2>
+            <h2>{% trans %}Delete version{% endtrans %}</h2>
             <button class="sp-modal-close" @click="showDeleteModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
           </div>
           <div class="sp-modal-body">
             <p class="sp-modal-lead">
-              Are you sure you want to delete version <strong x-text="deletingVersion?.name"></strong>? This action cannot be undone.
+              {% trans %}Are you sure you want to delete version{% endtrans %} <strong x-text="deletingVersion?.name"></strong>{% trans %}? This action cannot be undone.{% endtrans %}
             </p>
           </div>
           <div class="sp-modal-footer">
-            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">Cancel</button>
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
             <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="deleting">
-              <span x-show="deleting">Deleting...</span>
-              <span x-show="!deleting">Delete version</span>
+              <span x-show="deleting">{% trans %}Deleting...{% endtrans %}</span>
+              <span x-show="!deleting">{% trans %}Delete version{% endtrans %}</span>
             </button>
           </div>
         </div>
@@ -353,8 +353,8 @@
   <div x-show="tab === 'metadata'" x-data='projectMetadataSettings({ presets: {{ presets_data | tojson }}, enabledSlugs: {{ enabled_slugs | tojson }}, schemas: {{ schemas_data | tojson }}, trackers: {{ trackers_data | tojson }}, projectKey: {{ project.key | tojson }} })'>
 
     <!-- Available Presets section -->
-    <div class="sp-section-label">Available Presets</div>
-    <p class="sp-section-lead">Enable presets to add predefined metadata fields to issues in this project. Each preset can be scoped to all trackers or a specific one.</p>
+    <div class="sp-section-label">{% trans %}Available Presets{% endtrans %}</div>
+    <p class="sp-section-lead">{% trans %}Enable presets to add predefined metadata fields to issues in this project. Each preset can be scoped to all trackers or a specific one.{% endtrans %}</p>
 
     <div class="sp-preset-enable-grid">
       <template x-for="preset in presets" :key="preset.slug">
@@ -379,21 +379,21 @@
               <div class="sp-justify-between-full">
                 <span class="sp-pe-badge-enabled">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
-                  Enabled
+                  {% trans %}Enabled{% endtrans %}
                   <span class="sp-pe-scope" x-text="getEnabledScope(preset.slug)"></span>
                 </span>
-                <button class="sp-btn sp-btn-sm sp-btn-danger-subtle" @click="disablePreset(preset.slug)">Remove</button>
+                <button class="sp-btn sp-btn-sm sp-btn-danger-subtle" @click="disablePreset(preset.slug)">{% trans %}Remove{% endtrans %}</button>
               </div>
             </template>
             <template x-if="!isEnabled(preset.slug)">
               <div class="sp-cluster-center-sm sp-w-full">
                 <button class="sp-btn sp-btn-sm sp-btn-success-subtle sp-flex-1" @click="enablePreset(preset.slug)">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
-                  Enable
+                  {% trans %}Enable{% endtrans %}
                 </button>
                 <div class="sp-scope-select">
                   <select x-model="enableScope[preset.slug]">
-                    <option value="">All trackers</option>
+                    <option value="">{% trans %}All trackers{% endtrans %}</option>
                     <template x-for="t in trackers" :key="t.id">
                       <option :value="t.id" x-text="t.name"></option>
                     </template>
@@ -407,14 +407,14 @@
     </div>
 
     <!-- Custom Schemas section -->
-    <div class="sp-section-label">Custom Schemas</div>
+    <div class="sp-section-label">{% trans %}Custom Schemas{% endtrans %}</div>
 
     <div class="card">
       <div class="card-header">
-        <h3>Project-specific metadata schemas</h3>
+        <h3>{% trans %}Project-specific metadata schemas{% endtrans %}</h3>
         <button class="sp-btn sp-btn-sm sp-btn-primary" @click="openCreateSchema()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg>
-          New Schema
+          {% trans %}New Schema{% endtrans %}
         </button>
       </div>
 
@@ -423,10 +423,10 @@
         <table class="sp-schema-table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Scope</th>
-              <th>Fields</th>
-              <th>Usage</th>
+              <th>{% trans %}Name{% endtrans %}</th>
+              <th>{% trans %}Scope{% endtrans %}</th>
+              <th>{% trans %}Fields{% endtrans %}</th>
+              <th>{% trans %}Usage{% endtrans %}</th>
               <th class="sp-col-100"></th>
             </tr>
           </thead>
@@ -442,7 +442,7 @@
                 <td>
                   <span class="sp-schema-scope">
                     <template x-if="!schema.tracker_id">
-                      <span>All trackers</span>
+                      <span>{% trans %}All trackers{% endtrans %}</span>
                     </template>
                     <template x-if="schema.tracker_id">
                       <span>
@@ -464,15 +464,15 @@
                     <span class="sp-schema-usage in-use" x-text="schema.usage_count + ' issues'"></span>
                   </template>
                   <template x-if="schema.usage_count === 0">
-                    <span class="sp-schema-usage no-use">No usage</span>
+                    <span class="sp-schema-usage no-use">{% trans %}No usage{% endtrans %}</span>
                   </template>
                 </td>
                 <td>
                   <div class="sp-schema-actions">
-                    <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="openEditSchema(schema)" title="Edit">
+                    <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="openEditSchema(schema)" title="{{ _('Edit') }}">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                     </button>
-                    <button class="sp-btn sp-btn-sm sp-btn-danger-subtle" @click="confirmDeleteSchema(schema)" title="Delete" :disabled="schema.usage_count > 0">
+                    <button class="sp-btn sp-btn-sm sp-btn-danger-subtle" @click="confirmDeleteSchema(schema)" title="{{ _('Delete') }}" :disabled="schema.usage_count > 0">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     </button>
                   </div>
@@ -487,15 +487,15 @@
       <template x-if="schemas.length === 0">
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-          <h3>No metadata schemas</h3>
-          <p>Enable a preset above or create a custom schema to add metadata fields to issues.</p>
+          <h3>{% trans %}No metadata schemas{% endtrans %}</h3>
+          <p>{% trans %}Enable a preset above or create a custom schema to add metadata fields to issues.{% endtrans %}</p>
         </div>
       </template>
     </div>
 
     <!-- Create/Edit Schema Modal -->
     <template x-if="showSchemaModal">
-      <div class="sp-scrim" @click.self="showSchemaModal = false" x-cloak>
+      <div class="sp-scrim open" @click.self="showSchemaModal = false" x-cloak>
         <div class="sp-modal">
           <div class="sp-modal-header">
             <h2 x-text="editingSchema ? 'Edit Schema' : 'New Custom Schema'"></h2>
@@ -505,21 +505,21 @@
           </div>
           <div class="sp-modal-body">
             <div class="form-group">
-              <label class="form-label">Name</label>
-              <input class="form-input" type="text" x-model="schemaForm.name" placeholder="e.g. Deployment Tracking">
+              <label class="form-label">{% trans %}Name{% endtrans %}</label>
+              <input class="form-input" type="text" x-model="schemaForm.name" placeholder="{{ _('e.g. Deployment Tracking') }}">
             </div>
             <div class="form-group">
-              <label class="form-label">Tracker Scope</label>
+              <label class="form-label">{% trans %}Tracker Scope{% endtrans %}</label>
               <select class="form-input" x-model="schemaForm.tracker_id">
-                <option value="">All trackers</option>
+                <option value="">{% trans %}All trackers{% endtrans %}</option>
                 <template x-for="t in trackers" :key="t.id">
                   <option :value="t.id" x-text="t.name"></option>
                 </template>
               </select>
-              <div class="form-hint">Limit this schema to a specific tracker, or leave as "All trackers" for project-wide.</div>
+              <div class="form-hint">{% trans %}Limit this schema to a specific tracker, or leave as "All trackers" for project-wide.{% endtrans %}</div>
             </div>
             <div class="form-group">
-              <label class="form-label">Schema Definition (JSON)</label>
+              <label class="form-label">{% trans %}Schema Definition (JSON){% endtrans %}</label>
               <textarea class="form-input mono" :class="{ error: schemaError }" rows="10" x-model="schemaForm.schema_definition_raw" @blur="validateSchema()" placeholder='{"type": "object", "properties": {"field": {"type": "string"}}}'></textarea>
               <template x-if="schemaError">
                 <div class="form-error">
@@ -528,13 +528,13 @@
                 </div>
               </template>
               <template x-if="!schemaError">
-                <div class="form-hint">JSON Schema with "type": "object" and "properties" defining the fields.</div>
+                <div class="form-hint">{% trans %}JSON Schema with "type": "object" and "properties" defining the fields.{% endtrans %}</div>
               </template>
             </div>
           </div>
           <div class="sp-modal-footer">
-            <button class="sp-btn sp-btn-ghost" @click="showSchemaModal = false">Cancel</button>
-            <button class="sp-btn sp-btn-primary" @click="saveSchema()" :disabled="schemaError">
+            <button class="sp-btn sp-btn-ghost" @click="showSchemaModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-primary" @click="saveSchema()" :disabled="!!schemaError">
               <span x-text="editingSchema ? 'Save Changes' : 'Create Schema'"></span>
             </button>
           </div>
@@ -544,18 +544,18 @@
 
     <!-- Delete Schema Confirmation Modal -->
     <template x-if="showDeleteModal">
-      <div class="sp-scrim" @click.self="showDeleteModal = false" x-cloak>
+      <div class="sp-scrim open" @click.self="showDeleteModal = false" x-cloak>
         <div class="sp-modal sp-modal--sm">
           <div class="sp-modal-body sp-modal-body--center">
             <div class="sp-danger-circle">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-24"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><path d="M10 11v6M14 11v6"/></svg>
             </div>
-            <h3 class="sp-modal-heading-md">Delete schema?</h3>
-            <p class="sp-modal-lead">This will permanently remove <strong x-text="deleteTarget?.name"></strong> from this project. Issues that already have metadata will retain their data.</p>
+            <h3 class="sp-modal-heading-md">{% trans %}Delete schema?{% endtrans %}</h3>
+            <p class="sp-modal-lead">{% trans %}This will permanently remove{% endtrans %} <strong x-text="deleteTarget?.name"></strong> {% trans %}from this project. Issues that already have metadata will retain their data.{% endtrans %}</p>
           </div>
           <div class="sp-modal-footer sp-modal-footer--center">
-            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">Cancel</button>
-            <button class="sp-btn sp-btn-danger" @click="doDeleteSchema()">Delete Schema</button>
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-danger" @click="doDeleteSchema()">{% trans %}Delete Schema{% endtrans %}</button>
           </div>
         </div>
       </div>
@@ -563,19 +563,19 @@
 
     <!-- Disable Warning Modal -->
     <template x-if="showDisableWarning">
-      <div class="sp-scrim" @click.self="showDisableWarning = false" x-cloak>
+      <div class="sp-scrim open" @click.self="showDisableWarning = false" x-cloak>
         <div class="sp-modal sp-modal--md">
           <div class="sp-modal-body sp-modal-body--pad-2xl">
             <div class="sp-warning-banner sp-mb-lg">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4m0 4h.01"/></svg>
               <div>
-                <strong>Cannot remove this preset</strong><br>
+                <strong>{% trans %}Cannot remove this preset{% endtrans %}</strong><br>
                 <span x-text="disableWarningMsg"></span>
               </div>
             </div>
           </div>
           <div class="sp-modal-footer sp-modal-footer--center">
-            <button class="sp-btn sp-btn-ghost" @click="showDisableWarning = false">Understood</button>
+            <button class="sp-btn sp-btn-ghost" @click="showDisableWarning = false">{% trans %}Understood{% endtrans %}</button>
           </div>
         </div>
       </div>

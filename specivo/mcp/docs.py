@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_whoami": "Return authenticated user identity (user_id, login, etc.)",
     "specivo_list_projects": "List all visible projects",
-    "specivo_list_issues": "List issues with filtering, sorting, and optional sprint_id scope",
+    "specivo_list_issues": "List issues with status/sprint/metadata filters, sorting, pagination",
     "specivo_show_issue": "Show issue details; use search= for section extraction",
     "specivo_create_issue": "Create an issue (call list_lookups first for IDs)",
     "specivo_update_issue": "Update issue fields; lock_version handled automatically",
@@ -36,7 +36,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_replace_wiki_section": "Replace a section body in a wiki page (heading preserved)",
     "specivo_list_lookups": "Get tracker/status/priority/activity IDs for this instance",
     "specivo_list_members": "List project members with roles and user IDs",
-    "specivo_list_metadata_schemas": "Discover custom metadata fields for a project",
+    "specivo_list_metadata_schemas": "Discover custom metadata fields for a project (returns schema id)",
+    "specivo_create_metadata_schema": "Create a metadata schema (manage_project; audited)",
+    "specivo_update_metadata_schema": "Patch a metadata schema (manage_project; audited)",
+    "specivo_delete_metadata_schema": "Delete a metadata schema, safe-delete (manage_project; audited)",
     "specivo_list_relations": "List relations for an issue",
     "specivo_add_relation": "Create a relation between two issues",
     "specivo_remove_relation": "Remove a relation by ID",
@@ -118,6 +121,17 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: FastMCP | None = None
 1. `specivo_read_wiki_section(project_key, slug, heading="## Design")` -- read one section
 2. `specivo_replace_wiki_section(project_key, slug, heading="## Design", text="...")` -- replace body
 
+### Filter issues by metadata
+`specivo_list_issues` accepts `metadata_filters=["key=value", ...]`. Pairs are
+AND-combined. Each pair matches when the issue's metadata satisfies either:
+- scalar equality: `issue_metadata->>'key' = 'value'`, OR
+- array containment: `issue_metadata->'key' @> '["value"]'` (the array stored
+  at *key* contains *value*).
+
+So `metadata_filters=["component=frontend"]` matches both
+`component: "frontend"` and `component: ["frontend", "backend"]`. Discover
+available keys with `specivo_list_metadata_schemas(project_key)`.
+
 ## File uploads (attachments)
 
 MCP tools work with text. For binary file uploads (images, PDFs, etc.), use the REST API directly via shell.
@@ -155,6 +169,22 @@ All API URLs require a trailing slash.
 curl -H "Authorization: Bearer spv_YOUR_API_KEY" \\
   https://YOUR-SPECIVO-HOST/api/v1/projects/ACME/wiki/
 ```
+
+## Permissions and audit log
+
+All write tools enforce the underlying project permission and write a row to
+the security audit log. Notable cases:
+
+- `specivo_create_metadata_schema`, `specivo_update_metadata_schema`,
+  `specivo_delete_metadata_schema` -- require **`manage_project`** on the
+  target project. Each call emits a `METADATA_SCHEMA_CREATED/UPDATED/DELETED`
+  audit event tagged with `source=mcp`.
+- Issue and wiki mutations require the matching `add_*` / `edit_*`
+  permission and emit `ISSUE_*` / `WIKI_*` audit events.
+
+If a tool returns a permission error, the caller's API key user lacks the
+required role on that project. Audit rows are visible to project managers
+in the project security log.
 
 ## Anti-patterns
 

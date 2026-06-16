@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -314,13 +314,52 @@ async def admin_settings(
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the settings management page."""
+    from specivo.core.locales import LANGUAGE_LABELS, get_available_locales
+
     settings = await _settings_svc.get_all(db)
+    available = get_available_locales()
+    language_choices = [(code, LANGUAGE_LABELS.get(code, code)) for code in available]
+    current_default = settings.get("default_language") or get_settings().default_language
+    if current_default not in available:
+        current_default = "en"
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/admin/settings.html",
-        context={"user": user, "active_page": "admin", "settings": settings},
+        context={
+            "user": user,
+            "active_page": "admin",
+            "settings": settings,
+            "language_choices": language_choices,
+            "current_default_language": current_default,
+        },
     )
+
+
+@router.post("/admin/settings/language/", response_model=None)
+async def admin_settings_language(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    default_language: str = Form(""),
+) -> Response:
+    """Persist the workspace default language and update the runtime override.
+
+    Validates the submitted code against the installed locales; an unknown
+    code is rejected (the setting is left unchanged) and the admin is
+    redirected back without applying it.
+    """
+    from specivo.core.locales import get_available_locales
+    from specivo.core.runtime_settings import set_default_language_override
+
+    code = default_language.strip()
+    if code in get_available_locales():
+        await _settings_svc.set_many(db, {"default_language": code})
+        await db.commit()
+        set_default_language_override(code)
+
+    return RedirectResponse("/admin/settings/", status_code=303)
 
 
 # ---------------------------------------------------------------------------

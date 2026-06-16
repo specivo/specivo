@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar, pagination, empty_state %}
 
-{% block title %}Issues - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Issues{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
@@ -11,11 +11,11 @@
 ]) }}
 
 <div class="page-header">
-  <h1>Issues</h1>
+  <h1>{% trans %}Issues{% endtrans %}</h1>
   <div class="page-header-actions">
     <a href="/projects/{{ project.key }}/issues/new/" class="sp-btn sp-btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px;"><path d="M12 5v14M5 12h14"/></svg>
-      New Issue
+      {% trans %}New Issue{% endtrans %}
     </a>
   </div>
 </div>
@@ -37,43 +37,43 @@
 {# Filter bar #}
 <form method="get" action="/projects/{{ project.key }}/issues/" class="filter-bar">
   <select name="status" class="filter-select">
-    <option value="open" {{ 'selected' if filters.status == 'open' }}>Open</option>
-    <option value="closed" {{ 'selected' if filters.status == 'closed' }}>Closed</option>
-    <option value="all" {{ 'selected' if filters.status == 'all' }}>All</option>
+    <option value="open" {{ 'selected' if filters.status == 'open' }}>{% trans %}Open{% endtrans %}</option>
+    <option value="closed" {{ 'selected' if filters.status == 'closed' }}>{% trans %}Closed{% endtrans %}</option>
+    <option value="all" {{ 'selected' if filters.status == 'all' }}>{% trans %}All{% endtrans %}</option>
   </select>
 
   <select name="tracker_id" class="filter-select">
-    <option value="">All Trackers</option>
+    <option value="">{% trans %}All Trackers{% endtrans %}</option>
     {% for t in trackers %}
     <option value="{{ t.id }}" {{ 'selected' if filters.get('tracker_id') == t.id }}>{{ t.name }}</option>
     {% endfor %}
   </select>
 
   <select name="assigned_to_id" class="filter-select">
-    <option value="">All Assignees</option>
+    <option value="">{% trans %}All Assignees{% endtrans %}</option>
     {% for m in members %}
     <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if filters.get('assigned_to_id') == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
     {% endfor %}
   </select>
 
   <select name="priority_id" class="filter-select">
-    <option value="">All Priorities</option>
+    <option value="">{% trans %}All Priorities{% endtrans %}</option>
     {% for p in priorities %}
     <option value="{{ p.id }}" {{ 'selected' if filters.get('priority_id') == p.id }}>{{ p.name }}</option>
     {% endfor %}
   </select>
 
-  <button type="submit" class="sp-btn sp-btn-ghost">Apply</button>
+  <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Apply{% endtrans %}</button>
 
   <input type="hidden" name="view" value="{{ view }}">
   <div class="view-toggle">
     <button type="submit" name="view" value="list" class="view-toggle-btn{{ ' active' if view == 'list' }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-      List
+      {% trans %}List{% endtrans %}
     </button>
     <button type="submit" name="view" value="board" class="view-toggle-btn{{ ' active' if view == 'board' }}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      Board
+      {% trans %}Board{% endtrans %}
     </button>
   </div>
 </form>
@@ -86,13 +86,13 @@
 {% if view == 'board' %}
 {# ============ BOARD VIEW ============ #}
 <div class="kanban-toolbar">
-  <label>Cards per column:</label>
+  <label>{% trans %}Cards per column:{% endtrans %}</label>
   <select data-board-per-col>
     {% for n in [10, 25, 50] %}
     <option value="{{ n }}" {{ 'selected' if board_per_col == n }}>{{ n }}</option>
     {% endfor %}
   </select>
-  <span class="kanban-footer-info" style="margin-left:auto;">{{ total }} issue{{ 's' if total != 1 }} total</span>
+  <span class="kanban-footer-info" style="margin-left:auto;">{% trans count=total %}%(count)s issue total{% pluralize %}%(count)s issues total{% endtrans %}</span>
 </div>
 
 {# Segmented progress bar by status #}
@@ -121,7 +121,7 @@
     </div>
   </div>
   {% set done_count = issues | selectattr('status') | selectattr('status.category', 'in', ['done', 'closed']) | list | length %}
-  <span class="board-progress-text">{{ done_count }} of {{ total }} done</span>
+  <span class="board-progress-text">{% trans done_count=done_count, total=total %}%(done_count)s of %(total)s done{% endtrans %}</span>
 </div>
 {% endif %}
 
@@ -173,7 +173,7 @@
         {% endfor %}
         {% if col_total == 0 %}
         <div style="padding:var(--sp-space-xl) var(--sp-space-md);text-align:center;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);">
-          No issues
+          {% trans %}No issues{% endtrans %}
         </div>
         {% endif %}
       </div>
@@ -183,11 +183,11 @@
         <div class="kanban-pager">
           {# First page #}
           {% if col_page > 1 %}
-          <a href="{{ col_page_url(st.id, 0) }}" class="kanban-pager-btn" title="First page">
+          <a href="{{ col_page_url(st.id, 0) }}" class="kanban-pager-btn" title="{{ _('First page') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 17l-5-5 5-5M18 17l-5-5 5-5"/></svg>
           </a>
           {# Previous page #}
-          <a href="{{ col_page_url(st.id, [col_offset - board_per_col, 0] | max) }}" class="kanban-pager-btn" title="Previous">
+          <a href="{{ col_page_url(st.id, [col_offset - board_per_col, 0] | max) }}" class="kanban-pager-btn" title="{{ _('Previous') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
           </a>
           {% else %}
@@ -195,15 +195,15 @@
           <span class="kanban-pager-btn disabled"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg></span>
           {% endif %}
 
-          <span class="kanban-footer-info">{{ col_offset + 1 }}–{{ [col_offset + board_per_col, col_total] | min }} of {{ col_total }}</span>
+          <span class="kanban-footer-info">{% trans from=col_offset + 1, to=[col_offset + board_per_col, col_total] | min, total=col_total %}%(from)s–%(to)s of %(total)s{% endtrans %}</span>
 
           {# Next page #}
           {% if col_page < col_pages %}
-          <a href="{{ col_page_url(st.id, col_offset + board_per_col) }}" class="kanban-pager-btn" title="Next">
+          <a href="{{ col_page_url(st.id, col_offset + board_per_col) }}" class="kanban-pager-btn" title="{{ _('Next') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
           </a>
           {# Last page #}
-          <a href="{{ col_page_url(st.id, (col_pages - 1) * board_per_col) }}" class="kanban-pager-btn" title="Last page">
+          <a href="{{ col_page_url(st.id, (col_pages - 1) * board_per_col) }}" class="kanban-pager-btn" title="{{ _('Last page') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 17l5-5-5-5M6 17l5-5-5-5"/></svg>
           </a>
           {% else %}
@@ -212,7 +212,7 @@
           {% endif %}
         </div>
         {% else %}
-        <span class="kanban-footer-info">{{ col_total }} issue{{ 's' if col_total != 1 }}</span>
+        <span class="kanban-footer-info">{% trans count=col_total %}%(count)s issue{% pluralize %}%(count)s issues{% endtrans %}</span>
         {% endif %}
       </div>
       {% endif %}
@@ -233,12 +233,12 @@
       <tr>
         {% if has_feature("bulk_operations") %}<th class="td-checkbox"><input type="checkbox" /></th>{% endif %}
         <th></th>
-        <th>Key</th>
-        <th>Subject</th>
-        <th>Status</th>
-        <th>Tracker</th>
-        <th>Assignee</th>
-        <th>Updated</th>
+        <th>{% trans %}Key{% endtrans %}</th>
+        <th>{% trans %}Subject{% endtrans %}</th>
+        <th>{% trans %}Status{% endtrans %}</th>
+        <th>{% trans %}Tracker{% endtrans %}</th>
+        <th>{% trans %}Assignee{% endtrans %}</th>
+        <th>{% trans %}Updated{% endtrans %}</th>
       </tr>
     </thead>
     <tbody id="issue-table-body"
@@ -254,6 +254,6 @@
 {% endif %}
 
 {% else %}
-{{ empty_state("No issues found", "Create your first issue to get started.") }}
+{{ empty_state(_("No issues found"), _("Create your first issue to get started.")) }}
 {% endif %}
 {% endblock %}

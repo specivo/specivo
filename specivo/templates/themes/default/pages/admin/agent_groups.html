@@ -1,19 +1,19 @@
 {% extends "base.html" %}
 
-{% block title %}Agent Groups - Admin - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Agent Groups{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {% if has_feature("agent_groups") %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">Admin</a>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <span class="current">Agent Groups</span>
+  <span class="current">{% trans %}Agent Groups{% endtrans %}</span>
 </div>
 
 <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
-  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">Agent Groups</h1>
+  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Agent Groups{% endtrans %}</h1>
 </div>
 
 {% if groups %}
@@ -25,19 +25,19 @@
     <p style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); margin: 0 0 var(--sp-space-md) 0;">{{ group.description }}</p>
     {% endif %}
     <div style="display: flex; gap: var(--sp-space-sm);">
-      <a href="/admin/agent-groups/{{ group.id }}/" class="sp-btn sp-btn-ghost" style="font-size: var(--sp-font-size-xs);">Manage</a>
+      <a href="/admin/agent-groups/{{ group.id }}/" class="sp-btn sp-btn-ghost" style="font-size: var(--sp-font-size-xs);">{% trans %}Manage{% endtrans %}</a>
     </div>
   </div>
   {% endfor %}
 </div>
 {% else %}
 <div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
-  No agent groups configured. Create one to manage agent access policies.
+  {% trans %}No agent groups configured. Create one to manage agent access policies.{% endtrans %}
 </div>
 {% endif %}
 {% else %}
 <div class="card" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
-  This feature requires the Pro or Enterprise tier.
+  {% trans %}This feature requires the Pro or Enterprise tier.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

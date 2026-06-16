@@ -1,34 +1,34 @@
 {% extends "base.html" %}
 
-{% block title %}Workflows - Admin - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Workflows{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">Admin</a>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <span class="current">Workflows</span>
+  <span class="current">{% trans %}Workflows{% endtrans %}</span>
 </div>
 
-<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">Workflow Transitions</h1>
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">{% trans %}Workflow Transitions{% endtrans %}</h1>
 
 <div class="card" style="padding: var(--sp-space-lg);" x-data="workflowEditor()" x-init="init()">
   <!-- Selectors -->
   <div style="display: flex; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); flex-wrap: wrap;">
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Tracker</label>
-      <select x-model="selectedTracker" @change="loadTransitions()" class="input" style="font-size: var(--sp-font-size-sm);">
-        <option value="">Select tracker...</option>
+      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">{% trans %}Tracker{% endtrans %}</label>
+      <select x-model="selectedTracker" @change="loadTransitions()" class="form-input" style="max-width: 260px;">
+        <option value="">{% trans %}Select tracker...{% endtrans %}</option>
         {% for t in trackers %}
         <option value="{{ t.id }}">{{ t.name }}</option>
         {% endfor %}
       </select>
     </div>
     <div>
-      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">Role</label>
-      <select x-model="selectedRole" @change="loadTransitions()" class="input" style="font-size: var(--sp-font-size-sm);">
-        <option value="">Select role...</option>
+      <label style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); display: block; margin-bottom: var(--sp-space-xs);">{% trans %}Role{% endtrans %}</label>
+      <select x-model="selectedRole" @change="loadTransitions()" class="form-input" style="max-width: 260px;">
+        <option value="">{% trans %}Select role...{% endtrans %}</option>
         {% for r in roles %}
         <option value="{{ r.id }}">{{ r.name }}</option>
         {% endfor %}
@@ -39,12 +39,12 @@
   <!-- Transition matrix -->
   <div x-show="selectedTracker && selectedRole" style="overflow-x: auto;">
     <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md);">
-      Check the boxes to allow transitions from row status to column status.
+      {% trans %}Check the boxes to allow transitions from row status to column status.{% endtrans %}
     </p>
     <table style="width: 100%; border-collapse: collapse; font-size: var(--sp-font-size-sm);">
       <thead>
         <tr>
-          <th style="text-align: left; padding: var(--sp-space-sm); border-bottom: 2px solid var(--sp-border, #e5e7eb); color: var(--sp-text-muted);">From \ To</th>
+          <th style="text-align: left; padding: var(--sp-space-sm); border-bottom: 2px solid var(--sp-border, #e5e7eb); color: var(--sp-text-muted);">{% trans %}From \ To{% endtrans %}</th>
           {% for s in statuses %}
           <th style="text-align: center; padding: var(--sp-space-sm); border-bottom: 2px solid var(--sp-border, #e5e7eb); color: var(--sp-text-muted); font-size: var(--sp-font-size-xs);">{{ s.name }}</th>
           {% endfor %}
@@ -72,7 +72,7 @@
   </div>
 
   <div x-show="!selectedTracker || !selectedRole" style="padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted);">
-    Select a tracker and role to manage workflow transitions.
+    {% trans %}Select a tracker and role to manage workflow transitions.{% endtrans %}
   </div>
 </div>
 {% endblock %}
@@ -102,7 +102,46 @@ function workflowEditor() {
       return false;
     },
     async toggleTransition(fromId, toId, checked) {
-      // Managed via API — placeholder for full implementation
+      if (!this.selectedTracker || !this.selectedRole) return;
+      if (checked) {
+        try {
+          var resp = await spFetch('/api/v1/admin/workflows/transitions/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tracker_id: parseInt(this.selectedTracker, 10),
+              role_id: parseInt(this.selectedRole, 10),
+              old_status_id: fromId,
+              new_status_id: toId
+            })
+          });
+          if (resp.ok) {
+            var created = await resp.json();
+            this.transitions = this.transitions.concat([created]);
+          } else {
+            await this.loadTransitions();  // revert checkbox to server state
+          }
+        } catch (e) {
+          await this.loadTransitions();
+        }
+      } else {
+        var existing = null;
+        for (var i = 0; i < this.transitions.length; i++) {
+          var t = this.transitions[i];
+          if (t.old_status_id === fromId && t.new_status_id === toId) { existing = t; break; }
+        }
+        if (!existing) return;
+        try {
+          var del = await spFetch('/api/v1/admin/workflows/transitions/' + existing.id + '/', { method: 'DELETE' });
+          if (del.ok || del.status === 204) {
+            this.transitions = this.transitions.filter(function (x) { return x.id !== existing.id; });
+          } else {
+            await this.loadTransitions();
+          }
+        } catch (e) {
+          await this.loadTransitions();
+        }
+      }
     }
   };
 }

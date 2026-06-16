@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, pagination %}
 
-{% block title %}Search{% if query %} - {{ query }}{% endif %} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Search{% endtrans %}{% if query %} - {{ query }}{% endif %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
-  {"label": "Search"}
+  {"label": _("Home"), "url": "/"},
+  {"label": _("Search")}
 ]) }}
 
 <div class="page-header">
-  <h1>Search</h1>
+  <h1>{% trans %}Search{% endtrans %}</h1>
 </div>
 
 {# Search box #}
@@ -21,16 +21,17 @@
 
   <div class="search-box">
     <svg class="search-icon-lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
-    <input type="text" name="q" value="{{ query }}" placeholder="Search everything..." autofocus>
-    <button type="submit" class="search-submit-btn" :disabled="submitting">Search</button>
+    <input type="text" name="q" value="{{ query }}" placeholder="{{ _('Search everything...') }}" autofocus>
+    <button type="submit" class="search-submit-btn" :disabled="submitting">{% trans %}Search{% endtrans %}</button>
   </div>
 
   <div class="search-controls">
     {# Mode toggle #}
     <div class="mode-toggle">
+      {% set mode_labels = {'hybrid': _('Hybrid'), 'keyword': _('Keyword')} %}
       {% for m in ['hybrid', 'keyword'] %}
       <button type="button" class="mode-toggle-btn{{ ' active' if mode == m else '' }}" :disabled="submitting"
-              @click="$refs.modeInput.value = '{{ m }}'; submitting = true; $el.closest('form').submit()">{{ m | capitalize }}</button>
+              @click="$refs.modeInput.value = '{{ m }}'; submitting = true; $el.closest('form').submit()">{{ mode_labels[m] }}</button>
       {% endfor %}
     </div>
 
@@ -38,11 +39,11 @@
     <div class="scope-tabs">
       {% set tc = type_counts if type_counts is defined else {} %}
       {% set tab_defs = [
-        ('all', 'All', tc.get('all', total)),
-        ('issues', 'Issues', tc.get('issues', '')),
-        ('wiki', 'Wiki', tc.get('wiki', '')),
-        ('comments', 'Comments', tc.get('comments', '')),
-        ('attachments', 'Attachments', tc.get('attachments', ''))
+        ('all', _('All'), tc.get('all', total)),
+        ('issues', _('Issues'), tc.get('issues', '')),
+        ('wiki', _('Wiki'), tc.get('wiki', '')),
+        ('comments', _('Comments'), tc.get('comments', '')),
+        ('attachments', _('Attachments'), tc.get('attachments', ''))
       ] %}
       {% set tab_icons = {
         'all': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>',
@@ -61,7 +62,7 @@
     </div>
 
     {% if project_key %}
-    <span class="search-project-label">Project: {{ project_key }}</span>
+    <span class="search-project-label">{% trans key=project_key %}Project: %(key)s{% endtrans %}</span>
     {% endif %}
   </div>
 </form>
@@ -69,7 +70,7 @@
 {% if query %}
 {# Results header #}
 <div class="search-results-header">
-  {{ total }} result{{ 's' if total != 1 else '' }} for &ldquo;{{ query }}&rdquo;
+  {% trans count=total, query=query %}%(count)s result for &ldquo;%(query)s&rdquo;{% pluralize %}%(count)s results for &ldquo;%(query)s&rdquo;{% endtrans %}
 </div>
 
 {# SVG icon macros for result types #}
@@ -105,11 +106,11 @@
     {% if r.result_type in ('comment', 'journal') %}
     <div class="comment-header">
       {{ icon_comment | safe }}
-      <a class="result-title" href="/issue/{{ r.title }}/">Comment on {{ r.title }}</a>
+      <a class="result-title" href="/issue/{{ r.title }}/">{% trans title=r.title %}Comment on %(title)s{% endtrans %}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
-      <span>Comment</span>
+      <span>{% trans %}Comment{% endtrans %}</span>
     </div>
 
     {# --- Issue result (scope=issues view with expanded detail) --- #}
@@ -130,7 +131,7 @@
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
-      <span>Issue</span>
+      <span>{% trans %}Issue{% endtrans %}</span>
     </div>
 
     {# --- Wiki / Wiki Page result (scope=wiki view with expanded detail) --- #}
@@ -145,22 +146,22 @@
     {% elif r.result_type in ('wiki', 'wiki_page') %}
     <div class="result-header">
       {{ icon_wiki | safe }}
-      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or 'Wiki Page' }}</a>
+      <a class="result-title" href="/projects/{{ r.project_key }}/wiki/{{ r.subtitle or r.title }}/">{{ (r.title | replace('_', ' ')) if r.title else (r.subtitle | replace('_', ' ')) or _('Wiki Page') }}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
-      <span>Wiki Page</span>
+      <span>{% trans %}Wiki Page{% endtrans %}</span>
     </div>
 
     {# --- Attachment result --- #}
     {% elif r.result_type == 'attachment' %}
     <div class="result-header">
       {{ icon_attachment | safe }}
-      <a class="result-title" href="#">{{ r.subtitle or r.title or 'Attachment' }}</a>
+      <a class="result-title" href="#">{{ r.subtitle or r.title or _('Attachment') }}</a>
     </div>
     <div class="result-subtitle">
       <span class="project-key">{{ r.project_key }}</span>
-      <span>Attachment</span>
+      <span>{% trans %}Attachment{% endtrans %}</span>
     </div>
 
     {# --- Fallback for unknown result types --- #}
@@ -183,7 +184,7 @@
 
     {# Footer with score #}
     <div class="result-footer">
-      <span class="result-score">Score: {{ '%.4f' | format(r.score) }}{% if r.fts_rank is not none or r.sem_rank is not none %} ({% if r.fts_rank is not none %}FTS #{{ r.fts_rank }}{% endif %}{% if r.fts_rank is not none and r.sem_rank is not none %}, {% endif %}{% if r.sem_rank is not none %}Sem #{{ r.sem_rank }}{% endif %}){% endif %}</span>
+      <span class="result-score">{% trans %}Score:{% endtrans %} {{ '%.4f' | format(r.score) }}{% if r.fts_rank is not none or r.sem_rank is not none %} ({% if r.fts_rank is not none %}FTS #{{ r.fts_rank }}{% endif %}{% if r.fts_rank is not none and r.sem_rank is not none %}, {% endif %}{% if r.sem_rank is not none %}Sem #{{ r.sem_rank }}{% endif %}){% endif %}</span>
     </div>
   </div>
   {% endfor %}
@@ -195,7 +196,7 @@
 {% set total_pages = ((total - 1) // limit) + 1 %}
 {% set pbase = "/search/?q=" ~ query ~ "&mode=" ~ mode ~ "&scope=" ~ scope ~ ("&project_key=" ~ project_key if project_key else "") %}
 <div class="sp-pagination">
-  <div class="sp-pagination-info">{{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total }}</div>
+  <div class="sp-pagination-info">{% trans start=offset + 1, end=[offset + limit, total] | min, total=total %}%(start)s–%(end)s of %(total)s{% endtrans %}</div>
   {% if total_pages > 1 %}
   <div class="sp-pagination-pages">
     {% if current_page > 1 %}
@@ -216,7 +217,7 @@
   </div>
   {% endif %}
   <div class="sp-pagination-size">
-    <label>Show</label>
+    <label>{% trans %}Show{% endtrans %}</label>
     <select data-search-limit="{{ pbase }}">
       {% for size in [10, 25, 50] %}
       <option value="{{ size }}" {{ 'selected' if limit == size else '' }}>{{ size }}</option>
@@ -228,13 +229,13 @@
 
 {% else %}
 <div class="card search-empty">
-  No results found for &ldquo;{{ query }}&rdquo;. Try different keywords or search mode.
+  {% trans query=query %}No results found for &ldquo;%(query)s&rdquo;. Try different keywords or search mode.{% endtrans %}
 </div>
 {% endif %}
 
 {% else %}
 <div class="card search-empty">
-  Enter a search query to find issues, wiki pages, and comments.
+  {% trans %}Enter a search query to find issues, wiki pages, and comments.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

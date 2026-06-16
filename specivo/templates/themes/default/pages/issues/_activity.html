@@ -11,9 +11,9 @@
     </div>
     <div style="flex:1;min-width:0;width:100%;">
       <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-bottom:var(--sp-space-xs);">
-        <strong style="font-size:var(--sp-font-size-sm);">{{ j.user.display_name or j.user.login if j.user else 'Unknown' }}</strong>
+        <strong style="font-size:var(--sp-font-size-sm);">{{ j.user.display_name or j.user.login if j.user else _('Unknown') }}</strong>
         {% if j.api_key_id %}
-        <span class="badge-status" style="font-size:var(--sp-font-size-xs);">Agent</span>
+        <span class="badge-status" style="font-size:var(--sp-font-size-xs);">{% trans %}Agent{% endtrans %}</span>
         {% endif %}
         <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);">#{{ j.sequence }}</span>
         <span style="color:var(--sp-text-muted);font-size:var(--sp-font-size-xs);margin-left:auto;">{{ j.created_at | timeago(user.timezone) }}</span>
@@ -25,26 +25,26 @@
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'relation' %}
         {% if d.new_value and not d.old_value %}
-        Added <strong>{{ d.prop_key }}</strong> relation to <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
+        {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
         {% elif d.old_value and not d.new_value %}
-        Removed <strong>{{ d.prop_key }}</strong> relation to <a href="/issue/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.old_value }}</a>
+        {% trans %}Removed{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.old_value }}</a>
         {% endif %}
         {% elif d.prop_key == 'description' %}
-        <strong class="sp-change-label">Description</strong> updated
-        <a href="/issue/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">View changes</a>
+        <strong class="sp-change-label">{% trans %}Description{% endtrans %}</strong> {% trans %}updated{% endtrans %}
+        <a href="/issue/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">{% trans %}View changes{% endtrans %}</a>
         {% elif d.prop_key == 'issue_metadata' %}
         {% set diffs = metadata_diff(d.old_value, d.new_value) %}
         {% for md in diffs %}
         <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
-          <strong class="sp-change-label">Issue Metadata</strong>
+          <strong class="sp-change-label">{% trans %}Issue Metadata{% endtrans %}</strong>
           <code style="font-size:var(--sp-font-size-xs);">{{ md.key }}</code>
           {% if md.old and md.new %}
-          changed from <span class="sp-change-old sp-change-wrap">{{ md.old }}</span>
-          to <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
+          {% trans %}changed from{% endtrans %} <span class="sp-change-old sp-change-wrap">{{ md.old }}</span>
+          {% trans %}to{% endtrans %} <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
           {% elif md.new %}
-          set to <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
+          {% trans %}set to{% endtrans %} <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
           {% else %}
-          <span class="sp-change-old">removed</span>
+          <span class="sp-change-old">{% trans %}removed{% endtrans %}</span>
           {% endif %}
         </div>
         {% endfor %}
@@ -55,8 +55,8 @@
         {% set new_resolved = lookup_maps.get(d.prop_key, {}).get(d.new_value|string) if lookup_maps is defined and d.new_value is not none else none %}
         {% set new_name = new_resolved if new_resolved is not none else d.new_value %}
         <strong class="sp-change-label">{{ field_label }}</strong>
-        changed from <span class="sp-change-old">{{ old_name if old_name is not none and old_name != 'None' else '(none)' }}</span>
-        to <span class="sp-change-new">{{ new_name if new_name is not none and new_name != 'None' else '(none)' }}</span>
+        {% trans %}changed from{% endtrans %} <span class="sp-change-old">{{ old_name if old_name is not none and old_name != 'None' else _('(none)') }}</span>
+        {% trans %}to{% endtrans %} <span class="sp-change-new">{{ new_name if new_name is not none and new_name != 'None' else _('(none)') }}</span>
         {% endif %}
       </div>
       {% endfor %}
@@ -73,7 +73,7 @@
       {% if j.is_resolved %}
       <div class="sp-resolved-banner">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
-        Resolved by {{ j.resolved_by.display_name or j.resolved_by.login if j.resolved_by else 'Unknown' }}
+        {% trans name=j.resolved_by.display_name or j.resolved_by.login if j.resolved_by else _('Unknown') %}Resolved by %(name)s{% endtrans %}
         {% if j.resolved_summary %} — "{{ j.resolved_summary }}"{% endif %}
       </div>
       {% endif %}
@@ -82,23 +82,23 @@
       {% if j.notes %}
       <div x-data='replyForm({ displayKey: "{{ issue.display_key }}", journalId: {{ j.id }} })'>
         <div class="sp-journal-actions">
-          <a @click="showReply = !showReply" style="cursor:pointer;">↩ Reply</a>
+          <a @click="showReply = !showReply" style="cursor:pointer;">{% trans %}↩ Reply{% endtrans %}</a>
           {% if depth == 0 %}
           {% if j.is_resolved %}
           <a hx-post="/api/v1/issues/{{ issue.display_key }}/journals/{{ j.id }}/unresolve/"
              hx-swap="none"
              data-hx-reload
-             style="cursor:pointer;">Unresolve</a>
+             style="cursor:pointer;">{% trans %}Unresolve{% endtrans %}</a>
           {% else %}
-          <a @click="$dispatch('open-resolve', { journalId: {{ j.id }} })" style="cursor:pointer;">Resolve</a>
+          <a @click="$dispatch('open-resolve', { journalId: {{ j.id }} })" style="cursor:pointer;">{% trans %}Resolve{% endtrans %}</a>
           {% endif %}
           {% endif %}
         </div>
         <div x-show="showReply" x-cloak style="margin-top:var(--sp-space-sm);width:100%;">
-          <textarea x-model="replyText" placeholder="Write a reply..." style="display:block;width:100%;min-height:100px;padding:var(--sp-space-sm) var(--sp-space-md);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm);line-height:1.6;background:var(--sp-bg-input);color:var(--sp-text-primary);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+          <textarea x-model="replyText" placeholder="{{ _('Write a reply...') }}" style="display:block;width:100%;min-height:100px;padding:var(--sp-space-sm) var(--sp-space-md);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-family:var(--sp-font-body);font-size:var(--sp-font-size-sm);line-height:1.6;background:var(--sp-bg-input);color:var(--sp-text-primary);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
           <div style="display:flex;justify-content:flex-end;gap:var(--sp-space-sm);margin-top:var(--sp-space-xs);">
-            <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showReply = false; replyText = ''">Cancel</button>
-            <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="!canSubmitReply" @click="submitReply()">Reply</button>
+            <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showReply = false; replyText = ''">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-sm sp-btn-primary" :disabled="!canSubmitReply" @click="submitReply()">{% trans %}Reply{% endtrans %}</button>
           </div>
         </div>
       </div>
@@ -120,15 +120,15 @@
             </button>
           </template>
           <div style="position:relative;">
-            <button class="sp-reaction-btn" @click="showPicker = !showPicker" title="React">☺ React</button>
+            <button class="sp-reaction-btn" @click="showPicker = !showPicker" title="{{ _('React') }}">☺ {% trans %}React{% endtrans %}</button>
             <div x-show="showPicker" x-cloak @click.outside="showPicker = false"
                  style="position:absolute;bottom:100%;left:0;margin-bottom:4px;display:flex;gap:2px;padding:4px 6px;background:var(--sp-bg-surface);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);box-shadow:var(--sp-shadow-md);z-index:10;">
-              <button class="sp-reaction-btn" @click="toggle('thumbs_up'); showPicker = false" title="Thumbs up">👍</button>
-              <button class="sp-reaction-btn" @click="toggle('thumbs_down'); showPicker = false" title="Thumbs down">👎</button>
-              <button class="sp-reaction-btn" @click="toggle('heart'); showPicker = false" title="Heart">❤️</button>
-              <button class="sp-reaction-btn" @click="toggle('rocket'); showPicker = false" title="Rocket">🚀</button>
-              <button class="sp-reaction-btn" @click="toggle('eyes'); showPicker = false" title="Eyes">👀</button>
-              <button class="sp-reaction-btn" @click="toggle('tada'); showPicker = false" title="Tada">🎉</button>
+              <button class="sp-reaction-btn" @click="toggle('thumbs_up'); showPicker = false" title="{{ _('Thumbs up') }}">👍</button>
+              <button class="sp-reaction-btn" @click="toggle('thumbs_down'); showPicker = false" title="{{ _('Thumbs down') }}">👎</button>
+              <button class="sp-reaction-btn" @click="toggle('heart'); showPicker = false" title="{{ _('Heart') }}">❤️</button>
+              <button class="sp-reaction-btn" @click="toggle('rocket'); showPicker = false" title="{{ _('Rocket') }}">🚀</button>
+              <button class="sp-reaction-btn" @click="toggle('eyes'); showPicker = false" title="{{ _('Eyes') }}">👀</button>
+              <button class="sp-reaction-btn" @click="toggle('tada'); showPicker = false" title="{{ _('Tada') }}">🎉</button>
             </div>
           </div>
         </div>
@@ -150,7 +150,7 @@
 </div>
 {% else %}
 <div style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">
-  No activity yet.
+  {% trans %}No activity yet.{% endtrans %}
 </div>
 {% endif %}
 
@@ -161,18 +161,18 @@
     <div class="sp-scrim" @click="showModal = false"></div>
     <div class="sp-modal">
       <div class="sp-modal-header">
-        <h2>Resolve Thread</h2>
+        <h2>{% trans %}Resolve Thread{% endtrans %}</h2>
         <button class="sp-modal-close" @click="showModal = false">&times;</button>
       </div>
       <div class="sp-modal-body">
-        <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-md);">Mark this discussion thread as resolved.</p>
-        <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">Summary (optional)</label>
-        <input type="text" x-model="summary" placeholder="e.g. Agreed on approach"
+        <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-md);">{% trans %}Mark this discussion thread as resolved.{% endtrans %}</p>
+        <label style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);display:block;margin-bottom:var(--sp-space-xs);">{% trans %}Summary (optional){% endtrans %}</label>
+        <input type="text" x-model="summary" placeholder="{{ _('e.g. Agreed on approach') }}"
                style="width:100%;padding:var(--sp-space-sm);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);font-size:var(--sp-font-size-sm);background:var(--sp-bg-surface);color:var(--sp-text-primary);">
       </div>
       <div class="sp-modal-footer">
-        <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showModal = false">Cancel</button>
-        <button class="sp-btn sp-btn-sm sp-btn-primary" @click="resolve()">Resolve</button>
+        <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
+        <button class="sp-btn sp-btn-sm sp-btn-primary" @click="resolve()">{% trans %}Resolve{% endtrans %}</button>
       </div>
     </div>
   </div>

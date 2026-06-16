@@ -217,21 +217,19 @@ body {
    ============================================================ */
 .app-layout {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: var(--sp-sidebar-width) 1fr;
   grid-template-rows: var(--sp-header-height) 1fr;
   min-height: 100vh;
-  margin-left: var(--sp-sidebar-width);
 }
 
 /* ============================================================
    SIDEBAR
    ============================================================ */
 .sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  bottom: 0;
-  width: var(--sp-sidebar-width);
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  min-width: 0;
   background: var(--sp-bg-sidebar);
   color: var(--sp-text-sidebar);
   display: flex;
@@ -943,6 +941,10 @@ textarea.modal-input { font-family: var(--sp-font-body); }
 .issue-key-line { display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm); }
 .issue-key-line .key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); font-weight: 500; }
 .issue-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+.sp-issue-title-edit { display: flex; flex-direction: column; gap: var(--sp-space-xs); }
+.sp-issue-title-input { width: 100%; box-sizing: border-box; font-family: var(--sp-font-display); font-size: var(--sp-font-size-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; padding: var(--sp-space-xs) var(--sp-space-sm); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-input); color: var(--sp-text-primary); outline: none; }
+.sp-issue-title-input:focus { border-color: var(--sp-accent); }
+.sp-issue-title-error { color: var(--sp-danger); font-size: var(--sp-font-size-xs); }
 .description-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-left: 3px solid var(--sp-accent); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-xl); margin-bottom: var(--sp-space-xl); box-shadow: var(--sp-shadow-sm); min-width: 0; overflow-wrap: break-word; overflow-x: auto; }
 .description-actions { display: flex; gap: var(--sp-space-xs); justify-content: flex-end; margin-bottom: var(--sp-space-sm); }
 .description-card p { color: var(--sp-text-secondary); line-height: 1.7; margin-bottom: var(--sp-space-md); }
@@ -1609,7 +1611,6 @@ body.standalone::before { content: ''; position: fixed; top: 0; left: 0; right: 
 
 @media (max-width: 768px) {
   .app-layout {
-    margin-left: 0;
     grid-template-columns: 1fr;
     grid-template-rows: var(--sp-header-height) 1fr;
   }
@@ -2447,7 +2448,7 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 /* Card paddings (use on existing .card to add a symmetric gutter) */
 .sp-card-pad { padding: var(--sp-space-lg); }
 .sp-card-pad-mb { padding: var(--sp-space-lg); margin-bottom: var(--sp-space-lg); }
-.sp-card-pad-mb-md { padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md); }
+.sp-card-pad-mb-md { padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md); overflow: visible; position: relative; z-index: 2; }
 
 /* Sub-nav tab bar (project detail overview tabs). Not the same as existing
    .filter-tabs; this is a pure hand-rolled row with bottom border. */
@@ -2543,8 +2544,8 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 .sp-btn-nowrap-wide { white-space: nowrap; padding: 10px 18px; }
 
 /* Member dropdown suggestions (settings > members) */
-.sp-suggest-field { flex: 1; min-width: 200px; position: relative; }
-.sp-suggest-panel { position: absolute; top: 100%; left: 0; right: 0; z-index: 10; background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); box-shadow: var(--sp-shadow-lg); max-height: 200px; overflow-y: auto; }
+.sp-suggest-field { flex: 1; min-width: 200px; position: relative; z-index: 3; }
+.sp-suggest-panel { position: absolute; top: 100%; left: 0; right: 0; z-index: 1040; background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); box-shadow: var(--sp-shadow-lg); max-height: 200px; overflow-y: auto; }
 .sp-suggest-item { padding: var(--sp-space-sm) var(--sp-space-md); cursor: pointer; display: flex; gap: var(--sp-space-sm); }
 .sp-suggest-name { font-weight: 500; }
 .sp-field-min-160 { min-width: 160px; }
@@ -2956,3 +2957,79 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
+
+/* --- Markdown editor (EasyMDE wrapper) ---------------------------------- */
+/* Namespace overrides under .sp-md-editor so they only affect the wiki/    */
+/* issue Markdown editors and never the EasyMDE defaults shipped elsewhere. */
+.sp-md-editor.EasyMDEContainer .CodeMirror {
+  font-family: var(--sp-font-mono);
+  font-size: var(--sp-font-size-sm);
+  line-height: 1.6;
+  background: var(--sp-bg-input);
+  color: var(--sp-text-primary);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-border-radius);
+  min-height: 240px;
+  padding: var(--sp-space-xs);
+}
+.sp-md-editor.EasyMDEContainer .CodeMirror-cursor {
+  border-left-color: var(--sp-text-primary);
+}
+.sp-md-editor.EasyMDEContainer .CodeMirror-selected {
+  background: var(--sp-accent-subtle, rgba(99, 102, 241, 0.18));
+}
+.sp-md-editor.EasyMDEContainer .editor-toolbar {
+  border: 1px solid var(--sp-border);
+  border-bottom: none;
+  border-radius: var(--sp-border-radius) var(--sp-border-radius) 0 0;
+  background: var(--sp-bg-surface);
+  /* Allow horizontal scroll on small viewports rather than wrapping. */
+  overflow-x: auto;
+  white-space: nowrap;
+  flex-wrap: nowrap;
+}
+.sp-md-editor.EasyMDEContainer .editor-toolbar button {
+  color: var(--sp-text-secondary);
+  border-radius: var(--sp-border-radius);
+}
+.sp-md-editor.EasyMDEContainer .editor-toolbar button:hover {
+  background: var(--sp-bg-input);
+  border-color: var(--sp-border);
+  color: var(--sp-text-primary);
+}
+.sp-md-editor.EasyMDEContainer .editor-toolbar button.active {
+  background: var(--sp-accent-subtle, rgba(99, 102, 241, 0.18));
+  border-color: var(--sp-border);
+}
+.sp-md-editor.EasyMDEContainer .editor-toolbar i.separator {
+  border-color: var(--sp-border);
+}
+.sp-md-editor.EasyMDEContainer .CodeMirror-fullscreen,
+.sp-md-editor.EasyMDEContainer .editor-toolbar.fullscreen,
+.sp-md-editor.EasyMDEContainer .editor-preview-side {
+  background: var(--sp-bg-page, var(--sp-bg-surface));
+}
+.sp-md-editor.EasyMDEContainer .editor-preview,
+.sp-md-editor.EasyMDEContainer .editor-preview-side {
+  background: var(--sp-bg-surface);
+  color: var(--sp-text-primary);
+  font-family: var(--sp-font-body);
+  font-size: var(--sp-font-size-sm);
+  line-height: 1.7;
+  padding: var(--sp-space-md);
+  border: 1px solid var(--sp-border);
+}
+.sp-md-editor.EasyMDEContainer .editor-statusbar {
+  font-family: var(--sp-font-mono);
+  font-size: var(--sp-font-size-xs);
+  color: var(--sp-text-muted);
+}
+@media (max-width: 600px) {
+  .sp-md-editor.EasyMDEContainer .editor-toolbar {
+    /* Compact spacing keeps the bar usable when scrolling horizontally. */
+    padding: 4px 6px;
+  }
+  .sp-md-editor.EasyMDEContainer .editor-toolbar button {
+    margin: 0 1px;
+  }
+}

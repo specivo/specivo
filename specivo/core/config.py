@@ -3,8 +3,20 @@
 from functools import lru_cache
 from importlib.metadata import version as _pkg_version
 
-from pydantic import field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _default_available_languages() -> list[str]:
+    """Default factory for ``available_languages``.
+
+    Returns the language codes with a compiled core catalog (en, es, fr,
+    ru, zh). Imported lazily inside the function to avoid an import cycle
+    between ``core.config`` and ``core.locales``.
+    """
+    from specivo.core.locales import get_available_locales
+
+    return get_available_locales()
 
 _ALLOWED_FTS_LANGUAGES: frozenset[str] = frozenset(
     {
@@ -138,7 +150,7 @@ class Settings(BaseSettings):
 
     # i18n
     default_language: str = "en"
-    available_languages: list[str] = ["en", "th"]
+    available_languages: list[str] = Field(default_factory=_default_available_languages)
 
     # Plugins — dotted paths to PluginConfig subclasses
     installed_plugins: list[str] = []

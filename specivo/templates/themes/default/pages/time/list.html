@@ -1,46 +1,47 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}Time Entries - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Time Entries{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Time Entries"}
+  {"label": _("Time Entries")}
 ]) }}
 
 <div class="page-header">
-  <h1>Time Entries</h1>
+  <h1>{% trans %}Time Entries{% endtrans %}</h1>
   <div class="page-header-actions">
     <a href="/projects/{{ project.key }}/time-entries/new/" class="sp-btn sp-btn-primary">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
-      Log Time
+      {% trans %}Log Time{% endtrans %}
     </a>
   </div>
 </div>
 
 {# Filters #}
 <form method="get" action="/projects/{{ project.key }}/time-entries/" class="filter-bar">
-  <span class="filter-label">From</span>
+  <span class="filter-label">{% trans %}From{% endtrans %}</span>
   <input type="date" name="from_date" value="{{ filters.from_date or '' }}" class="filter-input">
-  <span class="filter-label">To</span>
+  <span class="filter-label">{% trans %}To{% endtrans %}</span>
   <input type="date" name="to_date" value="{{ filters.to_date or '' }}" class="filter-input">
   <select name="user_id" class="filter-select">
-    <option value="">All Users</option>
+    <option value="">{% trans %}All Users{% endtrans %}</option>
     {% if members is defined %}
     {% for m in members %}
     <option value="{{ m.user_id }}" {{ 'selected' if filters.user_id is defined and filters.user_id == m.user_id else '' }}>{{ m.user_id }}</option>
     {% endfor %}
     {% endif %}
   </select>
-  <button type="submit" class="sp-btn sp-btn-ghost">Filter</button>
+  <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Filter{% endtrans %}</button>
 </form>
 
 {# Summary #}
 <div class="summary-box">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-  Total: {{ total_hours if total_hours is defined else '0' }}h ({{ total if total is defined else 0 }} entries)
+  {% set entry_count = total if total is defined else 0 %}
+  {% trans hours=total_hours if total_hours is defined else '0', count=entry_count %}Total: %(hours)sh (%(count)s entry){% pluralize %}Total: %(hours)sh (%(count)s entries){% endtrans %}
 </div>
 
 {% if entries is defined and entries %}
@@ -48,12 +49,12 @@
   <table class="time-table">
     <thead>
       <tr>
-        <th>Date</th>
-        <th>Hours</th>
-        <th>Issue</th>
-        <th>Activity</th>
-        <th>User</th>
-        <th>Comments</th>
+        <th>{% trans %}Date{% endtrans %}</th>
+        <th>{% trans %}Hours{% endtrans %}</th>
+        <th>{% trans %}Issue{% endtrans %}</th>
+        <th>{% trans %}Activity{% endtrans %}</th>
+        <th>{% trans %}User{% endtrans %}</th>
+        <th>{% trans %}Comments{% endtrans %}</th>
         <th></th>
       </tr>
     </thead>
@@ -79,7 +80,7 @@
         <td>{{ entry.user.display_name if entry.user else '-' }}</td>
         <td class="comment-cell">{{ entry.comments or '' }}</td>
         <td>
-          <button class="action-btn" title="Edit">
+          <button class="action-btn" title="{{ _('Edit') }}">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           </button>
         </td>
@@ -90,7 +91,7 @@
 </div>
 {% else %}
 <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  No time entries yet. Log time to start tracking.
+  {% trans %}No time entries yet. Log time to start tracking.{% endtrans %}
 </div>
 {% endif %}
 {% endblock %}

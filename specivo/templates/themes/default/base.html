@@ -10,6 +10,10 @@
   <meta name="mobile-web-app-capable" content="yes">
   <link rel="apple-touch-icon" href="/static/img/favicon.svg">
   <link rel="stylesheet" href="/static/vendor/bootstrap.5.3.6.min.css">
+  {# Font Awesome 4.7.0 — required by EasyMDE for toolbar icons (fa fa-bold etc.). See specivo/static/vendor/font-awesome.VENDOR.md. #}
+  <link rel="stylesheet" href="/static/vendor/font-awesome/4.7.0/css/font-awesome.min.css">
+  {# EasyMDE 2.18.0 — vendored Markdown editor (CodeMirror 5). See specivo/static/vendor/easymde.VENDOR.md. #}
+  <link rel="stylesheet" href="/static/vendor/easymde.2.18.0.min.css">
   <link rel="stylesheet" href="/static/css/{{ versioned['specivo.css'] }}">
   {% block plugin_css %}
   {% for css_url in plugin_css_files %}
@@ -73,6 +77,8 @@
       </footer>
     </main>
   </div>
+  {# EasyMDE 2.18.0 — must load before specivo.js so the markdownEditor component sees window.EasyMDE. #}
+  <script src="/static/vendor/easymde.2.18.0.min.js"></script>
   <script src="/static/js/{{ versioned['specivo.js'] }}" defer></script>
   <script src="/static/vendor/alpine.3.14.min.js" defer></script>
   <script src="/static/vendor/htmx.2.0.min.js"></script>

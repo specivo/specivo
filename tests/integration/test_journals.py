@@ -435,6 +435,184 @@ async def test_first_description_edit_has_diff_baseline(
 
 
 # ---------------------------------------------------------------------------
+# Tests: subject editing alongside description
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_subject_change_creates_journal_detail(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """Updating subject creates a journal detail with old → new values."""
+    issue_data = await _create_issue_via_api(
+        client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Original title"
+    )
+    issue_key = issue_data["key"]
+    lock_version = issue_data["lock_version"]
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"subject": "Renamed title", "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["subject"] == "Renamed title"
+
+    result = await db_session.execute(
+        select(JournalDetail)
+        .join(Journal, JournalDetail.journal_id == Journal.id)
+        .where(Journal.issue_id == issue_data["id"], JournalDetail.prop_key == "subject")
+    )
+    details = list(result.scalars().all())
+    assert len(details) == 1
+    assert details[0].old_value == "Original title"
+    assert details[0].new_value == "Renamed title"
+
+
+@pytest.mark.asyncio
+async def test_subject_and_description_change_recorded_as_distinct_details(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """A combined subject+description edit produces two journal details in one journal."""
+    issue_data = await _create_issue_via_api(
+        client,
+        admin_token,
+        project.key,
+        tracker.id,
+        open_status.id,
+        priority.id,
+        "Old title",
+        description="Old body.",
+    )
+    issue_key = issue_data["key"]
+    # Initial creation already produced a description journal — re-fetch lock_version.
+    show = await client.get(
+        f"/api/v1/issues/{issue_key}/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    lock_version = show.json()["lock_version"]
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"subject": "New title", "description": "New body.", "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    result = await db_session.execute(
+        select(Journal)
+        .options(selectinload(Journal.details))
+        .where(Journal.issue_id == issue_data["id"])
+        .order_by(Journal.sequence)
+    )
+    journals = list(result.scalars().all())
+    # Latest journal carries both changes.
+    latest = journals[-1]
+    by_key = {d.prop_key: d for d in latest.details}
+    assert "subject" in by_key
+    assert "description" in by_key
+    assert by_key["subject"].old_value == "Old title"
+    assert by_key["subject"].new_value == "New title"
+    assert by_key["description"].old_value == "Old body."
+    assert by_key["description"].new_value == "New body."
+
+
+@pytest.mark.asyncio
+async def test_subject_empty_string_rejected(
+    client: AsyncClient,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """An empty subject is rejected with a validation error."""
+    issue_data = await _create_issue_via_api(
+        client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Some title"
+    )
+    issue_key = issue_data["key"]
+    lock_version = issue_data["lock_version"]
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"subject": "", "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert "errors" in body
+    # field path identifies subject
+    assert any(err.get("field") == "subject" for err in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_subject_whitespace_only_rejected(
+    client: AsyncClient,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """A whitespace-only subject is rejected with a validation error."""
+    issue_data = await _create_issue_via_api(
+        client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Some title"
+    )
+    issue_key = issue_data["key"]
+    lock_version = issue_data["lock_version"]
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"subject": "   \t\n  ", "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert "errors" in body
+    assert any(err.get("field") == "subject" for err in body["errors"])
+
+
+@pytest.mark.asyncio
+async def test_subject_surrounding_whitespace_trimmed(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """Surrounding whitespace is trimmed before persistence."""
+    issue_data = await _create_issue_via_api(
+        client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Original"
+    )
+    issue_key = issue_data["key"]
+    lock_version = issue_data["lock_version"]
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"subject": "  Trimmed title  ", "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["subject"] == "Trimmed title"
+
+
+# ---------------------------------------------------------------------------
 # Tests: add_comment endpoint
 # ---------------------------------------------------------------------------
 
@@ -689,3 +867,94 @@ async def test_metadata_change_is_journaled(
     assert meta_details[0].old_value in (None, "{}")
     assert "severity" in meta_details[0].new_value
     assert "high" in meta_details[0].new_value
+
+
+@pytest.mark.asyncio
+async def test_metadata_change_journaled_when_truncated_prefix_collides(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_user: User,
+    admin_token: str,
+    project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """A metadata change must be journaled even when the serialized old/new
+    forms share the first ~497 chars (the truncation cap) and only diverge
+    afterwards.  Truncating before the equality compare conflates two distinct
+    blobs and silently drops the audit detail.
+    """
+    import json as _json
+
+    # Build two large metadata dicts that serialize identically up to the
+    # truncation cap and only differ near the end of the JSON.  ``aaa*`` keys
+    # sort first, so the differing ``zzz_a`` key sorts after them.
+    base = {f"aaa{i:03d}": "x" * 10 for i in range(40)}
+    old_meta = dict(base, zzz_a="A")
+    new_meta = dict(base, zzz_a="B")
+
+    s_old = _json.dumps(old_meta, sort_keys=True, separators=(",", ":"))
+    s_new = _json.dumps(new_meta, sort_keys=True, separators=(",", ":"))
+
+    # Sanity: prefix must collide at the truncation cap, but the values must
+    # actually differ.  If a future change drops the cap below 500 the test
+    # would silently no-op without this guard.
+    assert len(s_old) > 500, "test data must exceed the truncation cap"
+    assert len(s_new) > 500, "test data must exceed the truncation cap"
+    assert s_old[:497] == s_new[:497], "first 497 chars must collide"
+    assert s_old != s_new, "full serializations must differ"
+
+    issue_data = await _create_issue_via_api(
+        client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Truncation collision"
+    )
+    issue_key = issue_data["key"]
+    lock_version = issue_data["lock_version"]
+
+    # Seed the issue with the "old" metadata so the next PATCH is the change
+    # we want to assert on.
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"metadata": old_meta, "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    lock_version = resp.json()["lock_version"]
+
+    # Now change to "new" metadata — same prefix, different tail.
+    resp = await client.patch(
+        f"/api/v1/issues/{issue_key}/",
+        json={"metadata": new_meta, "lock_version": lock_version},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    # Pull every journal/detail for this issue, then look for the
+    # issue_metadata detail produced by the second PATCH (the one whose
+    # old_value reflects ``old_meta``, not the seed-from-empty PATCH).
+    result = await db_session.execute(
+        select(Journal)
+        .options(selectinload(Journal.details))
+        .where(Journal.issue_id == issue_data["id"])
+        .order_by(Journal.sequence)
+    )
+    journals = list(result.scalars().all())
+    meta_details = [d for j in journals for d in j.details if d.prop_key == "issue_metadata"]
+
+    # Expect 2 metadata journal details: empty -> old_meta, then old_meta -> new_meta.
+    assert len(meta_details) == 2, (
+        f"Expected 2 issue_metadata journal details (seed + change), got {len(meta_details)}. "
+        f"Missing detail = silent audit loss when truncated prefixes collide."
+    )
+
+    # Storage cap stays at 500 chars — both stored values must be the truncated forms.
+    change_detail = meta_details[1]
+    assert change_detail.old_value is not None
+    assert change_detail.new_value is not None
+    assert len(change_detail.old_value) <= 500
+    assert len(change_detail.new_value) <= 500
+    assert change_detail.old_value.endswith("...")
+    assert change_detail.new_value.endswith("...")
+    # And the truncated prefixes must match the truncated forms of the source dicts.
+    assert change_detail.old_value == s_old[:497] + "..."
+    assert change_detail.new_value == s_new[:497] + "..."

@@ -6,12 +6,12 @@
   <div class="attachments-header">
     <div class="attachments-title">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-      Attachments
+      {% trans %}Attachments{% endtrans %}
       <span class="attachments-count" x-text="attachments.length"></span>
     </div>
     <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="showUpload = !showUpload">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-      Upload
+      {% trans %}Upload{% endtrans %}
     </button>
   </div>
 
@@ -23,8 +23,8 @@
          @drop.prevent="handleDrop($event)"
          @click="$refs.fileInput.click()">
       <svg class="upload-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
-      <div class="upload-zone-text"><strong>Drop files here</strong> or click to browse</div>
-      <div class="upload-zone-hint">Images, PDFs, documents up to 50 MB</div>
+      <div class="upload-zone-text"><strong>{% trans %}Drop files here{% endtrans %}</strong> {% trans %}or click to browse{% endtrans %}</div>
+      <div class="upload-zone-hint">{% trans %}Images, PDFs, documents up to 50 MB{% endtrans %}</div>
       <input type="file" x-ref="fileInput" multiple style="display:none" @change="handleFiles($event.target.files)">
     </div>
     <template x-for="u in uploads" :key="u.name">
@@ -49,13 +49,13 @@
             <span class="attachment-thumb-name" x-text="att.filename"></span>
           </div>
           <div class="attachment-thumb-actions">
-            <button class="thumb-action" title="Copy markdown link" @click.stop="copyLink(att)">
+            <button class="thumb-action" title="{{ _('Copy markdown link') }}" @click.stop="copyLink(att)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
             </button>
-            <button class="thumb-action" title="Download" @click.stop="downloadFile(att)">
+            <button class="thumb-action" title="{{ _('Download') }}" @click.stop="downloadFile(att)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
             </button>
-            <button class="thumb-action" title="Delete" @click.stop="confirmDelete(att)">
+            <button class="thumb-action" title="{{ _('Delete') }}" @click.stop="confirmDelete(att)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
             </button>
           </div>
@@ -80,17 +80,17 @@
             </div>
           </div>
           <div class="file-actions">
-            <button class="file-action copy" title="Copy markdown link" @click="copyLink(att)">
+            <button class="file-action copy" title="{{ _('Copy markdown link') }}" @click="copyLink(att)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
-              Link
+              {% trans %}Link{% endtrans %}
             </button>
-            <button class="file-action" title="Download" @click="downloadFile(att)">
+            <button class="file-action" title="{{ _('Download') }}" @click="downloadFile(att)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
-              Download
+              {% trans %}Download{% endtrans %}
             </button>
-            <button class="file-action delete" title="Delete" @click="confirmDelete(att)">
+            <button class="file-action delete" title="{{ _('Delete') }}" @click="confirmDelete(att)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-              Delete
+              {% trans %}Delete{% endtrans %}
             </button>
           </div>
         </div>
@@ -101,7 +101,7 @@
   {# Empty state #}
   <template x-if="attachments.length === 0 && !showUpload">
     <div style="text-align:center;padding:var(--sp-space-xl);color:var(--sp-text-muted);font-size:var(--sp-font-size-sm);">
-      No attachments yet.
+      {% trans %}No attachments yet.{% endtrans %}
     </div>
   </template>
 
@@ -120,13 +120,13 @@
   <template x-if="deleteTarget">
     <div class="lightbox" @click="deleteTarget = null" @keydown.escape.window="deleteTarget = null">
       <div class="att-delete-modal" @click.stop>
-        <h3>Delete attachment?</h3>
-        <p>Are you sure you want to delete <strong x-text="deleteTarget.filename"></strong>? This cannot be undone.</p>
+        <h3>{% trans %}Delete attachment?{% endtrans %}</h3>
+        <p>{% trans %}Are you sure you want to delete{% endtrans %} <strong x-text="deleteTarget.filename"></strong>? {% trans %}This cannot be undone.{% endtrans %}</p>
         <div style="display:flex;gap:var(--sp-space-sm);justify-content:flex-end;margin-top:var(--sp-space-lg)">
-          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="deleteTarget = null">Cancel</button>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="deleteTarget = null">{% trans %}Cancel{% endtrans %}</button>
           <button class="sp-btn sp-btn-danger sp-btn-sm" @click="doDelete()" :disabled="deleting">
-            <span x-show="!deleting">Delete</span>
-            <span x-show="deleting">Deleting...</span>
+            <span x-show="!deleting">{% trans %}Delete{% endtrans %}</span>
+            <span x-show="deleting">{% trans %}Deleting...{% endtrans %}</span>
           </button>
         </div>
       </div>

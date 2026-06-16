@@ -273,154 +273,19 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     # Git commit hash (debug only, resolved once at import time)
     templates.env.globals["git_commit"] = _git_commit if settings.debug else ""
 
-    # Markdown filter for wiki content
-    import markdown as _md
-    import markupsafe
-    import nh3
+    # Markdown filters — both bind to the shared renderer in
+    # specivo.services.markdown_service so saved-content rendering and the
+    # editor preview endpoint cannot drift.
+    from specivo.services.markdown_service import (
+        render_plain_markdown,
+        render_wiki_markdown,
+    )
 
-    allowed_tags = {
-        "p",
-        "br",
-        "hr",
-        "a",
-        "strong",
-        "em",
-        "b",
-        "i",
-        "u",
-        "s",
-        "del",
-        "code",
-        "pre",
-        "blockquote",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "ul",
-        "ol",
-        "li",
-        "table",
-        "thead",
-        "tbody",
-        "tfoot",
-        "tr",
-        "th",
-        "td",
-        "img",
-        "div",
-        "span",
-        "mark",
-        "sup",
-        "sub",
-        "dl",
-        "dt",
-        "dd",
-    }
-    allowed_attributes: dict[str, set[str]] = {
-        "a": {"href", "title", "id"},
-        "img": {"src", "alt", "title", "width", "height"},
-        "th": {"align", "colspan", "rowspan"},
-        "td": {"align", "colspan", "rowspan"},
-        "code": {"class"},
-        "pre": {"class"},
-        "div": {"class"},
-        "span": {"class"},
-        "h1": {"id"},
-        "h2": {"id"},
-        "h3": {"id"},
-        "h4": {"id"},
-        "h5": {"id"},
-        "h6": {"id"},
-    }
-
-    def _sanitize_html(html_str: str) -> str:
-        return nh3.clean(
-            html_str,
-            tags=allowed_tags,
-            attributes=allowed_attributes,
-            link_rel="noopener noreferrer",
-            url_schemes={"http", "https", "mailto"},
-        )
-
-    def _render_markdown(text: str) -> markupsafe.Markup:
-        html = _md.markdown(
-            text or "",
-            extensions=["fenced_code", "tables", "toc", "codehilite"],
-            extension_configs={
-                "codehilite": {"css_class": "codehilite", "guess_lang": False},
-            },
-        )
-        return markupsafe.Markup(_sanitize_html(html))
-
-    templates.env.filters["markdown"] = _render_markdown
-
-    _wiki_link_re = __import__("re").compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
-
-    _img_src_re = __import__("re").compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-
-    # Issue reference: PROJ-123, but not inside markdown links or wiki links
-    _issue_ref_re = __import__("re").compile(r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b")
-
-    def _render_wiki_markdown(
-        text: str,
-        project_key: str = "",
-        attachment_map: dict | None = None,
-    ) -> markupsafe.Markup:
-        """Render markdown with wiki [[Page Name]] link support.
-
-        ``attachment_map``: optional dict mapping filenames to attachment
-        download URLs.  When provided, bare-filename image references like
-        ``![alt](chart.png)`` are rewritten to the attachment URL.
-        """
-        if not text:
-            return markupsafe.Markup("")
-
-        from specivo.services.wiki_utils import slugify as wiki_slugify
-
-        def _replace_wiki_link(m):
-            target = m.group(1).strip()
-            display = m.group(2)
-            if display:
-                display = display.strip()
-                display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-            else:
-                display = target
-                display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-            slug = wiki_slugify(target)
-            url = f"/projects/{project_key}/wiki/{slug}/"
-            return f"[{display}]({url})"
-
-        processed = _wiki_link_re.sub(_replace_wiki_link, text)
-
-        # Rewrite bare-filename image references to attachment URLs
-        if attachment_map:
-
-            def _resolve_image(m):
-                alt, src = m.group(1), m.group(2)
-                if src in attachment_map:
-                    return f"![{alt}]({attachment_map[src]})"
-                return m.group(0)
-
-            processed = _img_src_re.sub(_resolve_image, processed)
-
-        # Auto-link issue references: PROJ-123 → [PROJ-123](/issue/PROJ-123/)
-        processed = _issue_ref_re.sub(r"[\1](/issue/\1/)", processed)
-
-        rendered = _md.markdown(
-            processed,
-            extensions=["fenced_code", "tables", "toc", "codehilite"],
-            extension_configs={
-                "codehilite": {"css_class": "codehilite", "guess_lang": False},
-            },
-        )
-        return markupsafe.Markup(_sanitize_html(rendered))
-
-    templates.env.filters["wiki_markdown"] = _render_wiki_markdown
+    templates.env.filters["markdown"] = render_plain_markdown
+    templates.env.filters["wiki_markdown"] = render_wiki_markdown
 
     # Syntax highlighting filter for raw code strings (e.g. SQL debug panel)
+    import markupsafe
     from pygments import highlight as _pygments_highlight
     from pygments.formatters import HtmlFormatter as _HtmlFormatter
     from pygments.lexers import SqlLexer as _SqlLexer
@@ -545,7 +410,7 @@ async def get_current_user_optional(
     from specivo.core.security import get_current_user
 
     try:
-        return await get_current_user(request, db)
+        user_obj = await get_current_user(request, db)
     except AppError:
         # get_current_user now performs silent refresh internally for the
         # cookie-based paths ("auth_token_expired" + missing access_token).
@@ -554,3 +419,19 @@ async def get_current_user_optional(
         return None
     except Exception:
         return None
+
+    # Per-user locale override: the LocaleMiddleware runs before auth, so the
+    # user's saved language preference is not yet known when it activates a
+    # locale. Now that the authenticated user is resolved, re-activate their
+    # preferred language so it wins over the middleware-detected default. The
+    # middleware's `finally: deactivate()` still resets the contextvar after
+    # the request completes.
+    user_language = getattr(user_obj, "language", None)
+    if user_language:
+        from specivo.core.i18n import activate
+        from specivo.core.locales import get_available_locales
+
+        if user_language in get_available_locales():
+            activate(user_language)
+
+    return user_obj

@@ -5,18 +5,18 @@
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
+  {"label": _("Home"), "url": "/"},
   {"label": project.name, "url": "/projects/" ~ project.key},
-  {"label": "Sprints", "url": "/projects/" ~ project.key ~ "/sprints/"},
-  {"label": "Analytics"}
+  {"label": _("Sprints"), "url": "/projects/" ~ project.key ~ "/sprints/"},
+  {"label": _("Analytics")}
 ]) }}
 
 <div class="page-header">
-  <h1>Sprint Analytics</h1>
+  <h1>{% trans %}Sprint Analytics{% endtrans %}</h1>
   <div class="page-header-actions">
     <a href="/projects/{{ project.key }}/sprints/" class="sp-btn sp-btn-ghost sp-btn-sm">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polyline points="15 18 9 12 15 6"/></svg>
-      Back to Sprints
+      {% trans %}Back to Sprints{% endtrans %}
     </a>
   </div>
 </div>
@@ -25,19 +25,19 @@
 <div class="analytics-stats">
   <div class="analytics-stat-card">
     <div class="analytics-stat-value">{{ avg_velocity }}</div>
-    <div class="analytics-stat-label">Avg Velocity</div>
+    <div class="analytics-stat-label">{% trans %}Avg Velocity{% endtrans %}</div>
   </div>
   <div class="analytics-stat-card">
     <div class="analytics-stat-value">{{ num_completed }}</div>
-    <div class="analytics-stat-label">Sprints Completed</div>
+    <div class="analytics-stat-label">{% trans %}Sprints Completed{% endtrans %}</div>
   </div>
   <div class="analytics-stat-card">
     <div class="analytics-stat-value">{{ avg_completion_rate }}%</div>
-    <div class="analytics-stat-label">Avg Completion Rate</div>
+    <div class="analytics-stat-label">{% trans %}Avg Completion Rate{% endtrans %}</div>
   </div>
   <div class="analytics-stat-card">
     <div class="analytics-stat-value">{{ avg_duration }}d</div>
-    <div class="analytics-stat-label">Avg Sprint Duration</div>
+    <div class="analytics-stat-label">{% trans %}Avg Sprint Duration{% endtrans %}</div>
   </div>
 </div>
 
@@ -45,7 +45,7 @@
 <div class="analytics-layout">
   {# Left: Velocity chart (CSS bar chart) #}
   <div class="analytics-chart-card">
-    <h2>Velocity</h2>
+    <h2>{% trans %}Velocity{% endtrans %}</h2>
     {% if velocity_data %}
     {% set max_val = namespace(v=1) %}
     {% for s in velocity_data %}
@@ -57,10 +57,10 @@
         {% for s in velocity_data %}
         <div class="velocity-chart-group">
           <div class="velocity-chart-pair">
-            <div class="velocity-chart-bar velocity-chart-committed" style="height:{{ (s.committed * 100 / max_val.v) | round }}%" title="Committed: {{ s.committed }}">
+            <div class="velocity-chart-bar velocity-chart-committed" style="height:{{ (s.committed * 100 / max_val.v) | round }}%" title="{{ _('Committed:') }} {{ s.committed }}">
               <span class="velocity-chart-bar-label">{{ s.committed }}</span>
             </div>
-            <div class="velocity-chart-bar velocity-chart-completed" style="height:{{ (s.completed * 100 / max_val.v) | round }}%" title="Completed: {{ s.completed }}">
+            <div class="velocity-chart-bar velocity-chart-completed" style="height:{{ (s.completed * 100 / max_val.v) | round }}%" title="{{ _('Completed:') }} {{ s.completed }}">
               <span class="velocity-chart-bar-label">{{ s.completed }}</span>
             </div>
           </div>
@@ -71,28 +71,28 @@
       {# Average line overlay #}
       {% if avg_velocity > 0 and max_val.v > 0 %}
       <div class="velocity-chart-avg" style="bottom:{{ (avg_velocity * 100 / max_val.v) | round }}%">
-        <span class="velocity-chart-avg-label">avg {{ avg_velocity }}</span>
+        <span class="velocity-chart-avg-label">{% trans value=avg_velocity %}avg %(value)s{% endtrans %}</span>
       </div>
       {% endif %}
     </div>
     <div class="velocity-chart-legend">
-      <span class="velocity-legend-item"><span class="velocity-legend-swatch velocity-legend-committed"></span> Committed</span>
-      <span class="velocity-legend-item"><span class="velocity-legend-swatch velocity-legend-completed"></span> Completed</span>
+      <span class="velocity-legend-item"><span class="velocity-legend-swatch velocity-legend-committed"></span> {% trans %}Committed{% endtrans %}</span>
+      <span class="velocity-legend-item"><span class="velocity-legend-swatch velocity-legend-completed"></span> {% trans %}Completed{% endtrans %}</span>
     </div>
     {% else %}
-    <div class="analytics-empty">No sprint data available yet.</div>
+    <div class="analytics-empty">{% trans %}No sprint data available yet.{% endtrans %}</div>
     {% endif %}
   </div>
 
   {# Right: Burndown placeholder #}
   <div class="analytics-chart-card analytics-chart-placeholder">
-    <h2>Burndown</h2>
+    <h2>{% trans %}Burndown{% endtrans %}</h2>
     <div class="analytics-coming-soon">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:48px;height:48px;opacity:0.3">
         <path d="M3 3v18h18"/><polyline points="18 9 12 15 9 12 3 18"/>
       </svg>
-      <div>Coming soon</div>
-      <div class="analytics-coming-soon-sub">Daily burndown tracking will be available in a future update.</div>
+      <div>{% trans %}Coming soon{% endtrans %}</div>
+      <div class="analytics-coming-soon-sub">{% trans %}Daily burndown tracking will be available in a future update.{% endtrans %}</div>
     </div>
   </div>
 </div>
@@ -100,18 +100,18 @@
 {# ============ SPRINT HISTORY TABLE ============ #}
 {% if velocity_data %}
 <div class="analytics-table-card">
-  <h2>Sprint History</h2>
+  <h2>{% trans %}Sprint History{% endtrans %}</h2>
   <div class="analytics-table-wrap">
     <table class="velocity-table">
       <thead>
         <tr>
-          <th>Sprint</th>
-          <th>Status</th>
-          <th>Duration</th>
-          <th class="text-right">Committed</th>
-          <th class="text-right">Completed</th>
-          <th>Completion</th>
-          <th class="text-right">Velocity</th>
+          <th>{% trans %}Sprint{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Duration{% endtrans %}</th>
+          <th class="text-right">{% trans %}Committed{% endtrans %}</th>
+          <th class="text-right">{% trans %}Completed{% endtrans %}</th>
+          <th>{% trans %}Completion{% endtrans %}</th>
+          <th class="text-right">{% trans %}Velocity{% endtrans %}</th>
         </tr>
       </thead>
       <tbody>
@@ -123,9 +123,9 @@
           </td>
           <td>
             {% if s.get('active') %}
-            <span class="badge-status in-progress">Active</span>
+            <span class="badge-status in-progress">{% trans %}Active{% endtrans %}</span>
             {% else %}
-            <span class="badge-status closed">Completed</span>
+            <span class="badge-status closed">{% trans %}Completed{% endtrans %}</span>
             {% endif %}
           </td>
           <td>{{ s.duration }}d</td>
@@ -147,7 +147,7 @@
       {% if num_completed > 0 %}
       <tfoot>
         <tr>
-          <td style="font-weight:600">Average</td>
+          <td style="font-weight:600">{% trans %}Average{% endtrans %}</td>
           <td></td>
           <td>{{ avg_duration }}d</td>
           <td class="text-right">{{ avg_committed }}</td>

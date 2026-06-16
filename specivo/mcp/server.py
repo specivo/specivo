@@ -28,9 +28,11 @@ from specivo.mcp.tools import (
     _append_wiki,
     _complete_sprint,
     _create_issue,
+    _create_metadata_schema,
     _create_sprint,
     _create_version,
     _create_wiki,
+    _delete_metadata_schema,
     _delete_version,
     _delete_wiki,
     _edit_description,
@@ -58,6 +60,7 @@ from specivo.mcp.tools import (
     _show_issue,
     _start_sprint,
     _update_issue,
+    _update_metadata_schema,
     _update_sprint,
     _update_version,
     _update_wiki_metadata,
@@ -172,14 +175,30 @@ async def specivo_list_issues(
             ),
         ),
     ] = None,
+    metadata_filters: Annotated[
+        list[str] | None,
+        Field(
+            default=None,
+            description=(
+                "Filter by metadata as 'key=value' strings, e.g. "
+                "['component=frontend', 'priority-tag=p0']. AND-combined. Each "
+                "pair matches when the metadata value at *key* equals *value* "
+                "(scalar) or when the array stored at *key* contains *value*. "
+                "Discover available keys via specivo_list_metadata_schemas."
+            ),
+        ),
+    ] = None,
 ) -> str:
     """List issues for a project with filtering and sorting.
 
     Use status='open' (default) for active issues, 'all' for everything.
     Pass sprint_id to narrow the results to a single sprint.
+    Pass metadata_filters to narrow by JSONB metadata (e.g. component=frontend).
     """
     async with _get_session_and_user() as (session, user):
-        return await _list_issues(session, user, project_key, status, sort, offset, limit, sprint_id)
+        return await _list_issues(
+            session, user, project_key, status, sort, offset, limit, sprint_id, metadata_filters,
+        )
 
 
 @mcp.tool()
@@ -529,9 +548,7 @@ async def specivo_delete_wiki(
 async def specivo_restore_wiki(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     slug: Annotated[str, Field(description="Slug of the deleted wiki page to restore.")],
-    cascade: Annotated[
-        bool, Field(description="If true (default), also restore co-deleted child pages.")
-    ] = True,
+    cascade: Annotated[bool, Field(description="If true (default), also restore co-deleted child pages.")] = True,
 ) -> str:
     """Restore a soft-deleted wiki page from trash.
 
@@ -583,6 +600,106 @@ async def specivo_list_metadata_schemas(
     """
     async with _get_session_and_user() as (session, user):
         return await _list_metadata_schemas(session, user, project_key, tracker_id, content_type)
+
+
+@mcp.tool()
+async def specivo_create_metadata_schema(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    name: Annotated[str, Field(description="Human-readable schema name, unique per (project, tracker, content_type).")],
+    schema: Annotated[
+        dict,
+        Field(description="Full JSON Schema body (the schema_definition). Must be a valid Draft 2020-12 schema."),
+    ],
+    content_type: Annotated[
+        str,
+        Field(description="Entity type the schema applies to. Defaults to 'issue'."),
+    ] = "issue",
+    tracker_id: Annotated[
+        int | None,
+        Field(description="Restrict schema to a single tracker ID. None = applies to all trackers in the project."),
+    ] = None,
+    description: Annotated[
+        str | None,
+        Field(description="Optional human description shown in admin UI."),
+    ] = None,
+) -> str:
+    """Create a metadata schema for a project.
+
+    Requires the 'manage_project' permission on the target project.
+    The mutation is recorded in the security audit log
+    (METADATA_SCHEMA_CREATED event).
+
+    Use specivo_list_metadata_schemas first to see existing schemas
+    and avoid duplicate names.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _create_metadata_schema(
+            session,
+            user,
+            project_key,
+            name,
+            schema,
+            content_type=content_type,
+            tracker_id=tracker_id,
+            description=description,
+        )
+
+
+@mcp.tool()
+async def specivo_update_metadata_schema(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    schema_id: Annotated[int, Field(description="Numeric schema ID from specivo_list_metadata_schemas.")],
+    name: Annotated[str | None, Field(description="New name. Omit to keep current.")] = None,
+    tracker_id: Annotated[
+        int | None,
+        Field(description="New tracker_id. Omit to keep current. Pass null to clear (project-wide)."),
+    ] = None,
+    schema: Annotated[
+        dict | None,
+        Field(description="Replacement JSON Schema body. Omit to keep current."),
+    ] = None,
+    description: Annotated[
+        str | None,
+        Field(description="New description. Omit to keep current."),
+    ] = None,
+) -> str:
+    """Patch a metadata schema.
+
+    Requires the 'manage_project' permission on the target project.
+    The mutation is recorded in the security audit log
+    (METADATA_SCHEMA_UPDATED event).
+
+    Only provided fields are applied; omitted fields are left unchanged.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _update_metadata_schema(
+            session,
+            user,
+            project_key,
+            schema_id,
+            name=name,
+            tracker_id=tracker_id,
+            schema=schema,
+            description=description,
+        )
+
+
+@mcp.tool()
+async def specivo_delete_metadata_schema(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    schema_id: Annotated[int, Field(description="Numeric schema ID from specivo_list_metadata_schemas.")],
+) -> str:
+    """Delete a metadata schema.
+
+    Requires the 'manage_project' permission on the target project.
+    The mutation is recorded in the security audit log
+    (METADATA_SCHEMA_DELETED event).
+
+    Fails with a conflict error if any issue still has metadata
+    matching the schema's defined keys (safe-delete behaviour).
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _delete_metadata_schema(session, user, project_key, schema_id)
 
 
 @mcp.tool()

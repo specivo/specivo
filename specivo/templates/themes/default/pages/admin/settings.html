@@ -1,31 +1,49 @@
 {% extends "base.html" %}
 
-{% block title %}Settings - Admin - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Settings{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/admin/">Admin</a>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
   <span class="sep">/</span>
-  <span class="current">Settings</span>
+  <span class="current">{% trans %}Settings{% endtrans %}</span>
 </div>
 
-<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">Settings</h1>
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">{% trans %}Settings{% endtrans %}</h1>
+
+<div class="card sp-settings-language" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 480px;">
+  <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Default language{% endtrans %}</h2>
+  <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
+    {% trans %}The fallback language for anonymous visitors and users without a saved preference.{% endtrans %}
+  </p>
+  <form method="post" action="/admin/settings/language/">
+    <div class="form-group" style="margin-bottom: var(--sp-space-lg);">
+      <label class="form-label" for="default_language">{% trans %}Language{% endtrans %}</label>
+      <select id="default_language" name="default_language" class="form-input" style="max-width: 300px;">
+        {% for code, label in language_choices %}
+        <option value="{{ code }}" {{ 'selected' if current_default_language == code else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Save default language{% endtrans %}</button>
+  </form>
+</div>
 
 <div class="card" style="padding: var(--sp-space-lg);" x-data='adminSettings({{ settings | tojson }})'>
   <table class="issue-table">
     <thead>
       <tr>
-        <th>Key</th>
-        <th>Value</th>
-        <th>Actions</th>
+        <th>{% trans %}Key{% endtrans %}</th>
+        <th>{% trans %}Value{% endtrans %}</th>
+        <th>{% trans %}Actions{% endtrans %}</th>
       </tr>
     </thead>
     <tbody>
       <template x-if="!hasItems">
         <tr>
-          <td colspan="3" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">No settings configured.</td>
+          <td colspan="3" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">{% trans %}No settings configured.{% endtrans %}</td>
         </tr>
       </template>
       <template x-for="key in itemKeys" :key="key">
@@ -37,11 +55,11 @@
           </td>
           <td style="white-space: nowrap;">
             <template x-if="editingKey !== key">
-              <button class="sp-btn-sm" @click="startEdit(key)">Edit</button>
+              <button class="sp-btn-sm" @click="startEdit(key)">{% trans %}Edit{% endtrans %}</button>
             </template>
             <template x-if="editingKey === key">
               <span style="display: flex; gap: var(--sp-space-xs);">
-                <button class="sp-btn-sm" @click="cancelEdit()">Cancel</button>
+                <button class="sp-btn-sm" @click="cancelEdit()">{% trans %}Cancel{% endtrans %}</button>
                 <button class="sp-btn-sm" style="background: var(--sp-accent); color: var(--sp-accent-text);" @click="save(key)" :disabled="saving" x-text="saving ? 'Saving...' : 'Save'"></button>
               </span>
             </template>

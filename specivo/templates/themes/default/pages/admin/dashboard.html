@@ -1,16 +1,16 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}Admin - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
-  {"label": "Admin"}
+  {"label": _("Home"), "url": "/"},
+  {"label": _("Admin")}
 ]) }}
 
 <div class="page-header">
-  <h1>Admin Dashboard</h1>
+  <h1>{% trans %}Admin Dashboard{% endtrans %}</h1>
 </div>
 
 {# Stats cards #}
@@ -19,21 +19,21 @@
     <div class="stat-icon gold">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
     </div>
-    <div class="stat-label">Total Users</div>
+    <div class="stat-label">{% trans %}Total Users{% endtrans %}</div>
     <div class="stat-value">{{ stats.total_users if stats is defined else 0 }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-icon violet">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
     </div>
-    <div class="stat-label">Active Projects</div>
+    <div class="stat-label">{% trans %}Active Projects{% endtrans %}</div>
     <div class="stat-value">{{ stats.active_projects if stats is defined else 0 }}</div>
   </div>
   <div class="stat-card">
     <div class="stat-icon info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a10 10 0 100 20 10 10 0 000-20z"/><path d="M2 12h20"/></svg>
     </div>
-    <div class="stat-label">Agent Sessions</div>
+    <div class="stat-label">{% trans %}Agent Sessions{% endtrans %}</div>
     <div class="stat-value">{{ stats.agent_sessions if stats is defined else 0 }}</div>
   </div>
   {% if has_feature("kill_switch") %}
@@ -41,14 +41,14 @@
     <div class="stat-icon success">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
     </div>
-    <div class="stat-label">Kill Events</div>
+    <div class="stat-label">{% trans %}Kill Events{% endtrans %}</div>
     <div class="stat-value">{{ stats.kill_events if stats is defined else 0 }}</div>
   </div>
   {% endif %}
 </div>
 
 {# Admin sections #}
-<h2 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-lg);">Administration</h2>
+<h2 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-lg);">{% trans %}Administration{% endtrans %}</h2>
 
 <div class="admin-grid">
   <a href="/admin/users/" class="admin-card" style="text-decoration:none;color:inherit;">
@@ -56,9 +56,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Users</h3>
-      <p>Manage user accounts, create users, reset passwords.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Users{% endtrans %}</h3>
+      <p>{% trans %}Manage user accounts, create users, reset passwords.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   <a href="/admin/projects/" class="admin-card" style="text-decoration:none;color:inherit;">
@@ -66,9 +66,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Projects</h3>
-      <p>Create and manage projects, keys, members.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Projects{% endtrans %}</h3>
+      <p>{% trans %}Create and manage projects, keys, members.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   <a href="/admin/versions/" class="admin-card" style="text-decoration:none;color:inherit;">
@@ -76,9 +76,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Versions</h3>
-      <p>Manage versions and milestones across all projects.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Versions{% endtrans %}</h3>
+      <p>{% trans %}Manage versions and milestones across all projects.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   <a href="/admin/workflows/" class="admin-card" style="text-decoration:none;color:inherit;">
@@ -86,9 +86,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Workflows</h3>
-      <p>Manage status transitions and field rules per tracker and role.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Workflows{% endtrans %}</h3>
+      <p>{% trans %}Manage status transitions and field rules per tracker and role.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   <a href="/admin/metadata-presets/" class="admin-card" style="text-decoration:none;color:inherit;">
@@ -96,9 +96,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Metadata Presets</h3>
-      <p>Manage reusable metadata field schemas for projects.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Metadata Presets{% endtrans %}</h3>
+      <p>{% trans %}Manage reusable metadata field schemas for projects.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   <a href="/admin/settings/" class="admin-card" style="text-decoration:none;color:inherit;">
@@ -106,9 +106,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Settings</h3>
-      <p>Global application settings and configuration.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Settings{% endtrans %}</h3>
+      <p>{% trans %}Global application settings and configuration.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   <a href="/admin/email/" class="admin-card" style="text-decoration:none;color:inherit;">
@@ -116,9 +116,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Email</h3>
-      <p>SMTP configuration and test email delivery.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Email{% endtrans %}</h3>
+      <p>{% trans %}SMTP configuration and test email delivery.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   {% if has_feature("agent_groups") %}
@@ -127,9 +127,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Agent Groups</h3>
-      <p>Manage agent groups, members, and access policies.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Agent Groups{% endtrans %}</h3>
+      <p>{% trans %}Manage agent groups, members, and access policies.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   {% endif %}
@@ -139,9 +139,9 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4m0 12v4m-7-7H2m20 0h-3m-1.3-5.7l2.1-2.1M4.2 19.8l2.1-2.1M19.8 19.8l-2.1-2.1M6.3 6.3L4.2 4.2"/></svg>
     </div>
     <div class="admin-card-body">
-      <h3>Kill Switch</h3>
-      <p>Emergency agent access revocation and event log.</p>
-      <span class="manage-link">Manage &rarr;</span>
+      <h3>{% trans %}Kill Switch{% endtrans %}</h3>
+      <p>{% trans %}Emergency agent access revocation and event log.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
   {% endif %}

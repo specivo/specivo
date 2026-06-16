@@ -812,6 +812,30 @@ class IssueService:
             stmt = stmt.where(Issue.updated_at <= filters["updated_before"])
 
         # ------------------------------------------------------------------
+        # Metadata filters (key=value, AND-combined across pairs)
+        #
+        # Each pair matches an issue when either:
+        #   * issue_metadata->>'key' = value          (scalar equality)
+        #   * issue_metadata->'key' @> '["value"]'    (array contains the value)
+        # so callers don't have to know whether the schema stores the key as a
+        # scalar string or as a list of strings.
+        # ------------------------------------------------------------------
+        metadata_pairs = filters.get("metadata_filters")
+        if metadata_pairs:
+            for key, value in metadata_pairs:
+                value_str = str(value)
+                # Build a JSONB array literal `[value]` via a parameterised
+                # jsonb_build_array() so the value is properly escaped even when
+                # it contains quotes, backslashes or unicode.
+                array_literal = func.jsonb_build_array(value_str)
+                stmt = stmt.where(
+                    or_(
+                        Issue.issue_metadata[key].astext == value_str,
+                        Issue.issue_metadata[key].op("@>")(array_literal),
+                    )
+                )
+
+        # ------------------------------------------------------------------
         # Total count (before pagination)
         # ------------------------------------------------------------------
         count_stmt = select(func.count()).select_from(stmt.subquery())

@@ -21,7 +21,7 @@
 ]) }}
 {% endif %}
 
-<h1 class="page-title">{% if mode == 'edit' %}Edit {{ issue.display_key }}{% else %}New Issue{% endif %}</h1>
+<h1 class="page-title">{% if mode == 'edit' %}{% trans key=issue.display_key %}Edit %(key)s{% endtrans %}{% else %}{% trans %}New Issue{% endtrans %}{% endif %}</h1>
 
 <div class="form-card"
      x-data='issueForm({
@@ -46,13 +46,13 @@
   <form @submit.prevent>
     {# Subject #}
     <div class="form-group">
-      <label class="modal-label" for="subject">Subject</label>
-      <input type="text" id="subject" class="input-subject" x-model="subject" placeholder="Brief summary of the issue..." autofocus>
+      <label class="modal-label" for="subject">{% trans %}Subject{% endtrans %}</label>
+      <input type="text" id="subject" class="input-subject" x-model="subject" placeholder="{{ _('Brief summary of the issue...') }}" autofocus>
     </div>
 
     {# Tracker #}
     <div class="form-group">
-      <label class="modal-label" for="tracker">Tracker</label>
+      <label class="modal-label" for="tracker">{% trans %}Tracker{% endtrans %}</label>
       <select id="tracker" class="modal-input" x-model.number="tracker_id">
         {% for t in trackers %}
         <option value="{{ t.id }}">{{ t.name }}</option>
@@ -62,9 +62,9 @@
 
     {# Description #}
     <div class="form-group">
-      <label class="modal-label" for="description">Description</label>
-      <textarea id="description" class="input-description" x-model="description" placeholder="Describe the issue in detail..."></textarea>
-      <div class="form-hint">Supports Markdown. Use @username to mention team members.</div>
+      <label class="modal-label" for="description">{% trans %}Description{% endtrans %}</label>
+      <textarea id="description" class="input-description" x-model="description" placeholder="{{ _('Describe the issue in detail...') }}"></textarea>
+      <div class="form-hint">{% trans %}Supports Markdown. Use @username to mention team members.{% endtrans %}</div>
     </div>
 
     <div class="form-divider"></div>
@@ -73,7 +73,7 @@
     <div class="form-row">
       <div>
         <div class="form-group">
-          <label class="modal-label" for="status">Status</label>
+          <label class="modal-label" for="status">{% trans %}Status{% endtrans %}</label>
           <select id="status" class="modal-input" x-model.number="status_id">
             {% for s in statuses %}
             <option value="{{ s.id }}">{{ s.name }}</option>
@@ -81,18 +81,18 @@
           </select>
         </div>
         <div class="form-group">
-          <label class="modal-label" for="priority">Priority</label>
+          <label class="modal-label" for="priority">{% trans %}Priority{% endtrans %}</label>
           <select id="priority" class="modal-input" x-model.number="priority_id">
-            <option value="0">-- Default --</option>
+            <option value="0">{% trans %}-- Default --{% endtrans %}</option>
             {% for p in priorities %}
             <option value="{{ p.id }}">{{ p.name }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <label class="modal-label" for="assignee">Assignee</label>
+          <label class="modal-label" for="assignee">{% trans %}Assignee{% endtrans %}</label>
           <select id="assignee" class="modal-input" x-model="assigned_to_id">
-            <option value="">Unassigned</option>
+            <option value="">{% trans %}Unassigned{% endtrans %}</option>
             {% for m in members %}
             <option value="{{ m.user_id if m.user_id is defined else m.id }}">{{ m.user.login if m.user is defined else m.login }}</option>
             {% endfor %}
@@ -101,24 +101,24 @@
       </div>
       <div>
         <div class="form-group">
-          <label class="modal-label" for="version">Version</label>
+          <label class="modal-label" for="version">{% trans %}Version{% endtrans %}</label>
           <select id="version" class="modal-input" x-model.number="version_id">
-            <option value="">-- None --</option>
+            <option value="">{% trans %}-- None --{% endtrans %}</option>
             {% for v in versions if versions is defined %}
             <option value="{{ v.id }}">{{ v.name }}</option>
             {% endfor %}
           </select>
         </div>
         <div class="form-group">
-          <label class="modal-label" for="start_date">Start Date</label>
+          <label class="modal-label" for="start_date">{% trans %}Start Date{% endtrans %}</label>
           <input type="date" id="start_date" class="modal-input" x-model="start_date">
         </div>
         <div class="form-group">
-          <label class="modal-label" for="due_date">Due Date</label>
+          <label class="modal-label" for="due_date">{% trans %}Due Date{% endtrans %}</label>
           <input type="date" id="due_date" class="modal-input" x-model="due_date">
         </div>
         <div class="form-group">
-          <label class="modal-label">Estimated</label>
+          <label class="modal-label">{% trans %}Estimated{% endtrans %}</label>
           <div style="display:flex;gap:var(--sp-space-sm);align-items:center;">
             <input type="number" class="modal-input" x-model="est_hours" min="0" step="1" placeholder="0" style="width:80px;font-family:var(--sp-font-mono);">
             <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);">h</span>
@@ -138,7 +138,7 @@
           <div class="sp-metadata-section" style="padding-left: var(--sp-space-xl);">
             <div class="sp-metadata-heading">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--sp-info)"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              <h3>Metadata</h3>
+              <h3>{% trans %}Metadata{% endtrans %}</h3>
               <span class="sp-meta-badge" x-text="schemaNameLabel()"></span>
             </div>
 
@@ -198,7 +198,7 @@
                         </template>
                         <input type="text" :placeholder="(metadata[field.key] || []).length === 0 ? field.placeholder : 'Add more...'" @keydown.enter.prevent="addTag(field.key, $event)" @keydown.comma.prevent="addTag(field.key, $event)" @keydown.backspace="removeLastTag(field.key, $event)">
                       </div>
-                      <div class="form-hint">Press Enter or comma to add. Backspace to remove last.</div>
+                      <div class="form-hint">{% trans %}Press Enter or comma to add. Backspace to remove last.{% endtrans %}</div>
                     </div>
                   </template>
 
@@ -224,7 +224,7 @@
               <template x-for="name in currentSchemaNames" :key="name">
                 <div class="sp-schema-source">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                  <span>from <strong x-text="name"></strong> schema</span>
+                  <span>{% trans %}from{% endtrans %} <strong x-text="name"></strong> {% trans %}schema{% endtrans %}</span>
                 </div>
               </template>
             </div>
@@ -238,20 +238,20 @@
 
     {# Relations #}
     <div class="form-group">
-      <label class="modal-label">Relations</label>
+      <label class="modal-label">{% trans %}Relations{% endtrans %}</label>
       <template x-for="(rel, i) in pendingRelations" :key="i">
         <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-bottom:var(--sp-space-xs);font-size:var(--sp-font-size-sm);">
           <span x-text="rel.type_label"></span>
           <strong x-text="rel.issue_key"></strong>
-          <a @click="pendingRelations.splice(i, 1)" style="color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);">Remove</a>
+          <a @click="pendingRelations.splice(i, 1)" style="color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);">{% trans %}Remove{% endtrans %}</a>
         </div>
       </template>
       <template x-if="showRelationForm">
       <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-sm);align-items:end;margin-top:var(--sp-space-xs);">
         <div style="flex:1;min-width:200px;" x-data='issueAutocomplete({ value: "" })'>
-          <label class="modal-label" style="font-size:var(--sp-font-size-xs);">Related Issue</label>
+          <label class="modal-label" style="font-size:var(--sp-font-size-xs);">{% trans %}Related Issue{% endtrans %}</label>
           <div style="position:relative;">
-            <input type="text" class="modal-input" x-model="query" @input="search()" @focus="showResults && (showResults = true)" placeholder="Search issues..." autocomplete="off">
+            <input type="text" class="modal-input" x-model="query" @input="search()" @focus="showResults && (showResults = true)" placeholder="{{ _('Search issues...') }}" autocomplete="off">
             <div x-show="showResults" x-cloak @click.outside="showResults = false" style="position:absolute;top:100%;left:0;right:0;background:var(--sp-bg-surface);border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);max-height:220px;overflow-y:auto;z-index:100;box-shadow:var(--sp-shadow-lg);">
               <template x-for="item in results" :key="item.key">
                 <div @click="select(item); $dispatch('relation-issue-selected', { key: item.key })" style="padding:var(--sp-space-sm) var(--sp-space-md);cursor:pointer;font-size:var(--sp-font-size-sm);border-bottom:1px solid var(--sp-border);" @mouseenter="$el.style.background='var(--sp-bg-input)'" @mouseleave="$el.style.background=''">
@@ -262,39 +262,39 @@
           </div>
         </div>
         <div>
-          <label class="modal-label" style="font-size:var(--sp-font-size-xs);">Type</label>
+          <label class="modal-label" style="font-size:var(--sp-font-size-xs);">{% trans %}Type{% endtrans %}</label>
           <select class="modal-input" x-model="newRelationType">
-            <option value="relates">Relates to</option>
-            <option value="blocks">Blocks</option>
-            <option value="blocked">Blocked by</option>
-            <option value="duplicates">Duplicates</option>
-            <option value="duplicated">Duplicated by</option>
-            <option value="precedes">Precedes</option>
-            <option value="follows">Follows</option>
+            <option value="relates">{% trans %}Relates to{% endtrans %}</option>
+            <option value="blocks">{% trans %}Blocks{% endtrans %}</option>
+            <option value="blocked">{% trans %}Blocked by{% endtrans %}</option>
+            <option value="duplicates">{% trans %}Duplicates{% endtrans %}</option>
+            <option value="duplicated">{% trans %}Duplicated by{% endtrans %}</option>
+            <option value="precedes">{% trans %}Precedes{% endtrans %}</option>
+            <option value="follows">{% trans %}Follows{% endtrans %}</option>
           </select>
         </div>
-        <button class="sp-btn sp-btn-ghost" type="button" @click="addPendingRelation()" :disabled="!newRelationKey">Add</button>
+        <button class="sp-btn sp-btn-ghost" type="button" @click="addPendingRelation()" :disabled="!newRelationKey">{% trans %}Add{% endtrans %}</button>
       </div>
       </template>
-      <button class="sp-btn sp-btn-ghost" type="button" x-show="!showRelationForm" @click="showRelationForm = true" style="margin-top:var(--sp-space-xs);">+ Add Relation</button>
+      <button class="sp-btn sp-btn-ghost" type="button" x-show="!showRelationForm" @click="showRelationForm = true" style="margin-top:var(--sp-space-xs);">{% trans %}+ Add Relation{% endtrans %}</button>
     </div>
 
     <div class="form-divider"></div>
 
     {# Attachments #}
     <div class="form-group">
-      <label class="modal-label">Attachments</label>
+      <label class="modal-label">{% trans %}Attachments{% endtrans %}</label>
       <div class="drop-zone" @click="$refs.fileInput.click()" @dragover.prevent="dragover = true" @dragleave="dragover = false" @drop.prevent="handleDrop($event)" :class="{ dragover: dragover }">
         <div class="drop-zone-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:32px;height:32px;"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg></div>
-        <div class="drop-zone-text"><strong>Click to upload</strong> or drag and drop</div>
-        <div class="drop-zone-hint">PNG, JPG, PDF, or any file up to 10 MB</div>
+        <div class="drop-zone-text"><strong>{% trans %}Click to upload{% endtrans %}</strong> {% trans %}or drag and drop{% endtrans %}</div>
+        <div class="drop-zone-hint">{% trans %}PNG, JPG, PDF, or any file up to 10 MB{% endtrans %}</div>
       </div>
       <input type="file" x-ref="fileInput" multiple style="display:none" @change="addFiles($event.target.files)">
       <template x-for="(f, i) in files" :key="i">
         <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-top:var(--sp-space-xs);font-size:var(--sp-font-size-sm);">
           <span x-text="f.name"></span>
           <span style="color:var(--sp-text-muted);" x-text="fileSizeKB(f)"></span>
-          <a @click="files.splice(i, 1)" style="color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);">Remove</a>
+          <a @click="files.splice(i, 1)" style="color:var(--sp-danger);cursor:pointer;font-size:var(--sp-font-size-xs);">{% trans %}Remove{% endtrans %}</a>
         </div>
       </template>
     </div>
@@ -304,13 +304,13 @@
       <button class="sp-btn sp-btn-primary"
               :disabled="!canSubmit"
               @click="submitForm()">
-        {% if mode == 'edit' %}Save{% else %}Create Issue{% endif %}
+        {% if mode == 'edit' %}{% trans %}Save{% endtrans %}{% else %}{% trans %}Create Issue{% endtrans %}{% endif %}
       </button>
       {% if mode != 'edit' %}
-      <button class="sp-btn sp-btn-ghost" :disabled="!canSubmit" @click="submitForm(true)">+ Create and Continue</button>
+      <button class="sp-btn sp-btn-ghost" :disabled="!canSubmit" @click="submitForm(true)">{% trans %}+ Create and Continue{% endtrans %}</button>
       {% endif %}
       <a href="/projects/{{ project.key }}/issues{% if mode == 'edit' %}/{{ issue.display_key }}{% endif %}/"
-         class="cancel-link">Cancel</a>
+         class="cancel-link">{% trans %}Cancel{% endtrans %}</a>
     </div>
   </form>
 </div>

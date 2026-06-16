@@ -330,6 +330,101 @@ class TestMetadataErrors:
 
 
 # ---------------------------------------------------------------------------
+# Lossy-number guard (identifier-shaped tokens parsed as JSON numbers)
+# ---------------------------------------------------------------------------
+
+
+class TestMetadataLossyNumberGuard:
+    async def test_set_scientific_float_rejected(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(db_session, admin, issue.display_key, "commits", "set", 4.983e31)
+        assert result.startswith("Error")
+        assert "lost precision" in result
+        await db_session.refresh(issue)
+        assert "commits" not in issue.issue_metadata
+
+    async def test_append_scientific_float_rejected(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(
+            db_session, admin, issue.display_key, "commits", "append", 1.0e20
+        )
+        assert result.startswith("Error")
+        assert "lost precision" in result
+        await db_session.refresh(issue)
+        assert "commits" not in issue.issue_metadata
+
+    async def test_inf_rejected(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(
+            db_session, admin, issue.display_key, "k", "set", float("inf")
+        )
+        assert result.startswith("Error")
+        assert "lost precision" in result
+
+    async def test_nan_rejected(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(
+            db_session, admin, issue.display_key, "k", "set", float("nan")
+        )
+        assert result.startswith("Error")
+        assert "lost precision" in result
+
+    async def test_list_with_scientific_float_rejected(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(
+            db_session,
+            admin,
+            issue.display_key,
+            "commits",
+            "append",
+            ["abc1234567", 4.983e31],
+        )
+        assert result.startswith("Error")
+        assert "lost precision" in result
+        await db_session.refresh(issue)
+        assert "commits" not in issue.issue_metadata
+
+    async def test_integer_passes_through(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(db_session, admin, issue.display_key, "score", "set", 42)
+        assert "Error" not in result
+        await db_session.refresh(issue)
+        assert issue.issue_metadata == {"score": 42}
+
+    async def test_plain_float_passes_through(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        result = await _metadata(db_session, admin, issue.display_key, "ratio", "set", 1.5)
+        assert "Error" not in result
+        await db_session.refresh(issue)
+        assert issue.issue_metadata == {"ratio": 1.5}
+
+    async def test_quoted_sha_string_passes_through(self, db_session, admin, issue):
+        from specivo.mcp.tools import _metadata
+
+        # The agent's correct workaround: pass the SHA-shaped token as a string.
+        result = await _metadata(
+            db_session,
+            admin,
+            issue.display_key,
+            "tags",
+            "append",
+            "49830031000000000000000000000000000e99999",
+        )
+        assert "Error" not in result
+        await db_session.refresh(issue)
+        assert issue.issue_metadata == {
+            "tags": ["49830031000000000000000000000000000e99999"]
+        }
+
+
+# ---------------------------------------------------------------------------
 # Journal integration
 # ---------------------------------------------------------------------------
 

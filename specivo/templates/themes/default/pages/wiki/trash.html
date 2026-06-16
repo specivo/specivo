@@ -1,29 +1,29 @@
 {% extends "base.html" %}
 
-{% block title %}Wiki Trash - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Wiki Trash{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
   <a href="/projects/{{ project.key }}/">{{ project.name }}</a>
   <span class="sep">/</span>
-  <a href="/projects/{{ project.key }}/wiki/">Wiki</a>
+  <a href="/projects/{{ project.key }}/wiki/">{% trans %}Wiki{% endtrans %}</a>
   <span class="sep">/</span>
-  <span>Trash</span>
+  <span>{% trans %}Trash{% endtrans %}</span>
 </div>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--sp-space-lg);">
-  <h1 style="font-size:var(--sp-font-size-xl);font-weight:700;">Deleted Wiki Pages</h1>
-  <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">Back to Wiki</a>
+  <h1 style="font-size:var(--sp-font-size-xl);font-weight:700;">{% trans %}Deleted Wiki Pages{% endtrans %}</h1>
+  <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">{% trans %}Back to Wiki{% endtrans %}</a>
 </div>
 
 {% if deleted_pages %}
 <table class="sp-table" style="width:100%;">
   <thead>
     <tr>
-      <th>Title</th>
-      <th>Deleted</th>
+      <th>{% trans %}Title{% endtrans %}</th>
+      <th>{% trans %}Deleted{% endtrans %}</th>
       <th style="width:100px;"></th>
     </tr>
   </thead>
@@ -36,7 +36,7 @@
       </td>
       <td>
         <form method="POST" action="/projects/{{ project.key }}/wiki/trash/{{ page.id }}/restore/" style="display:inline;">
-          <button type="submit" class="sp-btn sp-btn-sm sp-btn-primary">Restore</button>
+          <button type="submit" class="sp-btn sp-btn-sm sp-btn-primary">{% trans %}Restore{% endtrans %}</button>
         </form>
       </td>
     </tr>
@@ -44,6 +44,6 @@
   </tbody>
 </table>
 {% else %}
-<p style="color:var(--sp-text-muted);font-style:italic;">No deleted pages.</p>
+<p style="color:var(--sp-text-muted);font-style:italic;">{% trans %}No deleted pages.{% endtrans %}</p>
 {% endif %}
 {% endblock %}
