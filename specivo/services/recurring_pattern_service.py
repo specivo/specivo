@@ -850,6 +850,34 @@ class RecurringPatternService:
     # Generator entrypoint helpers (for the future scheduler / Celery beat)
     # ------------------------------------------------------------------
 
+    async def list_enabled(
+        self,
+        session: AsyncSession,
+        *,
+        offset: int = 0,
+        limit: int | None = None,
+    ) -> list[RecurringPattern]:
+        """Return enabled patterns ordered by id, optionally paginated.
+
+        The Celery beat poller iterates this in fixed-size batches so a large
+        number of patterns is never loaded into memory at once. The partial
+        index ``ix_recurring_patterns_enabled WHERE enabled = true`` backs the
+        filter. Ordering by ``id`` gives a stable, gap-free pagination cursor.
+        Exceptions are eager-loaded so :meth:`materialize` does not issue an
+        extra round-trip per pattern.
+        """
+        stmt = (
+            select(RecurringPattern)
+            .where(RecurringPattern.enabled.is_(True))
+            .options(selectinload(RecurringPattern.exceptions))
+            .order_by(RecurringPattern.id.asc())
+            .offset(offset)
+        )
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await session.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_due_patterns(self, session: AsyncSession) -> list[RecurringPattern]:
         """Return all enabled patterns (the scheduler iterates and materialises).
 
