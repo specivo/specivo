@@ -1986,6 +1986,7 @@ dev = [
     { name = "pytest-playwright" },
     { name = "pytest-xdist" },
     { name = "types-jsonschema" },
+    { name = "types-python-dateutil" },
 ]
 
 [package.metadata]
@@ -2032,6 +2033,7 @@ dev = [
     { name = "pytest-playwright", specifier = ">=0.6.2" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "types-jsonschema", specifier = ">=4.26.0.20260324" },
+    { name = "types-python-dateutil", specifier = ">=2.9" },
 ]
 
 [[package]]
@@ -2195,6 +2197,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/f9/c5/321a1e073ff9c778929aef264f9b8ac33f2e56c5096ac779faecf4603c0c/types_jsonschema-4.26.0.20260324.tar.gz", hash = "sha256:a889ea6ada67ab9704d584e3cf5f433e528bd125d7aef4b42a7420155267b0a6", size = 16333, upload-time = "2026-03-24T04:06:38.96Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/5f/69/2f7c5ff7c6ce32c92bd1becfe5e01d126444f8333ab74546a8573ea86c2d/types_jsonschema-4.26.0.20260324-py3-none-any.whl", hash = "sha256:358ce11ee402b676eba208a69416ca1d1de360736c46960239fcf2138cb597ae", size = 16064, upload-time = "2026-03-24T04:06:37.813Z" },
+]
+
+[[package]]
+name = "types-python-dateutil"
+version = "2.9.0.20260518"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/e8/c01bdf0d7c3659428c091fbd693177093639565bcbc86bc20098e6d37cc6/types_python_dateutil-2.9.0.20260518.tar.gz", hash = "sha256:51f02dc03b61c7f6a07df45797d4dfe8a1aa47f0b7db9ad89f6fd3a1a70e1b51", size = 17082, upload-time = "2026-05-18T06:05:24.508Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/36/22/169273273ca34e9ab0ae2f387ba72ed7e09faaaf834da01d6b89c2bea71a/types_python_dateutil-2.9.0.20260518-py3-none-any.whl", hash = "sha256:d6a9c5bd0de61460c8fdef8ab2b400f956a1a1075cce08d4e2b4434e478c50b8", size = 18431, upload-time = "2026-05-18T06:05:23.641Z" },
 ]
 
 [[package]]

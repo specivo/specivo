@@ -59,6 +59,7 @@ dev = [
     "pytest-playwright>=0.6.2",
     "pytest-xdist>=3.8.0",
     "types-jsonschema>=4.26.0.20260324",
+    "types-python-dateutil>=2.9",
 ]
 
 [tool.pytest.ini_options]
