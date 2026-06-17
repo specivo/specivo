@@ -13,13 +13,24 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from typing import Literal
+from zoneinfo import available_timezones
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 _FREQ = Literal["daily", "weekly", "monthly", "yearly"]
 _ANCHOR = Literal["fixed", "flexible"]
 _BASE_STRATEGY = Literal["scheduled", "completion"]
 _WORKING_DAY_ADJUSTMENT = Literal["none", "nearest", "next", "previous"]
+
+# Cache the IANA timezone set once (the call walks the tz database on disk).
+_AVAILABLE_TIMEZONES = available_timezones()
+
+
+def _validate_timezone(value: str) -> str:
+    """Reject non-IANA timezone names early (mirrors the engine's ZoneInfo use)."""
+    if value not in _AVAILABLE_TIMEZONES:
+        raise ValueError(f"Unknown IANA timezone: {value!r}")
+    return value
 
 
 class RecurringPatternCreate(BaseModel):
@@ -74,6 +85,11 @@ class RecurringPatternCreate(BaseModel):
     start_offset_days: int | None = None
     due_offset_days: int | None = None
 
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, value: str) -> str:
+        return _validate_timezone(value)
+
 
 class RecurringPatternUpdate(BaseModel):
     """Partial update for a recurring pattern (PATCH semantics).
@@ -124,3 +140,123 @@ class RecurringPatternUpdate(BaseModel):
     assignee_rotation: dict | None = None
     start_offset_days: int | None = None
     due_offset_days: int | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def _check_timezone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return _validate_timezone(value)
+
+
+class RecurringPatternOut(BaseModel):
+    """Full representation of a recurring pattern.
+
+    ``project_key`` is derived in the router (mirroring ``VersionOut``); every
+    other field maps 1:1 to an ORM column, so the response builder constructs
+    this with ``model_validate(pattern)`` after setting ``project_key``.
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    project_key: str
+    name: str
+    enabled: bool
+
+    anchor_mode: str
+    base_date_strategy: str
+
+    # --- Recurrence rule ---
+    freq: str
+    rrule_interval: int
+    byday: list[str] | None
+    bymonthday: list[int] | None
+    bymonth: list[int] | None
+    bysetpos: list[int] | None
+    rrule_count: int | None
+    until: datetime | None
+    rrule_raw: str | None
+    dtstart: datetime
+    timezone: str
+
+    # --- Working-day handling ---
+    working_day_adjustment: str
+    working_days: list[int]
+    holiday_calendar: list[str] | None
+    creation_lead_time_days: int
+
+    # --- Issue template ---
+    template_tracker_id: int
+    template_status_id: int | None
+    template_priority_id: int | None
+    template_category_id: int | None
+    template_assigned_to_id: int | None
+    template_fixed_version_id: int | None
+    template_sprint_id: int | None
+    template_subject: str
+    template_description: str | None
+    template_estimated_hours: Decimal | None
+    template_metadata: dict
+    is_private: bool
+
+    # --- Carry-over / reset / rotation ---
+    carry_over: dict
+    reset_checklist: bool
+    assignee_rotation: dict | None
+    rotation_index: int
+    start_offset_days: int | None
+    due_offset_days: int | None
+
+    # --- Bookkeeping ---
+    last_run_at: datetime | None
+    last_generated_occurrence_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    lock_version: int
+
+
+class RecurrenceExceptionOut(BaseModel):
+    """A skip / override exception attached to a recurring pattern."""
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    occurrence_at: datetime
+    kind: str
+    override_payload: dict | None
+    materialized_issue_id: int | None
+
+
+class OccurrencePreview(BaseModel):
+    """A DB-free preview of upcoming occurrences (tz-aware UTC instants)."""
+
+    occurrences: list[datetime]
+    count: int
+
+
+class SkipOccurrenceRequest(BaseModel):
+    """Body for the skip endpoint — the scheduled occurrence to drop (EXDATE)."""
+
+    occurrence_at: datetime
+
+
+class OverrideOccurrenceRequest(BaseModel):
+    """Body for the override endpoint — per-occurrence field overrides."""
+
+    occurrence_at: datetime
+    payload: dict = Field(default_factory=dict)
+
+
+class SplitFromRequest(BaseModel):
+    """Body for the this-and-future split endpoint.
+
+    ``occurrence_at`` is the boundary: the old series is terminated just before
+    it and ``new_pattern`` becomes a fresh series anchored at the boundary. The
+    service overrides ``new_pattern.dtstart`` with ``occurrence_at``, so the
+    ``dtstart`` supplied here is a placeholder (kept required to reuse the
+    ``RecurringPatternCreate`` shape ``split_from`` expects).
+    """
+
+    occurrence_at: datetime
+    new_pattern: RecurringPatternCreate
