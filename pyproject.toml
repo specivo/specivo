@@ -1,6 +1,6 @@
 [project]
 name = "specivo"
-version = "0.1.10"
+version = "0.2.0"
 description = "Your team's knowledge, finally findable. Self-hosted project tracking, wiki, and search that understands what you wrote."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -31,6 +31,8 @@ dependencies = [
     "nh3>=0.3.4",
     "onnxruntime>=1.17",
     "tokenizers>=0.19",
+    "python-dateutil>=2.9",
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]
