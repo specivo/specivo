@@ -8,6 +8,7 @@ from specivo.web.pages.dashboard import router as dashboard_pages
 from specivo.web.pages.issues import router as issue_pages
 from specivo.web.pages.issues import short_router as issue_short_pages
 from specivo.web.pages.projects import router as project_pages
+from specivo.web.pages.recurring import router as recurring_pages
 from specivo.web.pages.search import router as search_pages
 from specivo.web.pages.sprints import router as sprint_pages
 from specivo.web.pages.time import router as time_pages
@@ -26,6 +27,7 @@ web_router.include_router(issue_short_pages)
 web_router.include_router(issue_partials)
 web_router.include_router(dashboard_partials)
 web_router.include_router(sprint_pages)
+web_router.include_router(recurring_pages)
 web_router.include_router(time_pages)
 web_router.include_router(search_pages)
 web_router.include_router(admin_pages)

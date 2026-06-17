@@ -2579,6 +2579,68 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 .sp-modal--xs { max-width: 400px; }
 .sp-modal--sm { max-width: 420px; }
 .sp-modal--md { max-width: 440px; }
+.sp-modal--lg { max-width: 680px; }
+
+/* Recurring tasks UI */
+.sp-recurring-note {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-space-sm);
+  padding: var(--sp-space-md);
+  margin: var(--sp-space-md) 0;
+  background: var(--sp-bg-input);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-border-radius);
+  color: var(--sp-text-secondary);
+  font-size: var(--sp-font-size-xs);
+}
+.sp-recurring-note .sp-icon-14 { flex: 0 0 auto; margin-top: 2px; }
+.sp-occurrence-list { list-style: none; margin: 0; padding: 0; }
+.sp-occurrence-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-space-sm) 0;
+  border-bottom: 1px solid var(--sp-border);
+}
+.sp-occurrence-row:last-child { border-bottom: none; }
+.sp-weekday-row { display: flex; flex-wrap: wrap; gap: var(--sp-space-xs); }
+.sp-weekday-btn {
+  min-width: 44px;
+  min-height: 36px;
+  padding: var(--sp-space-xs) var(--sp-space-sm);
+  border: 1px solid var(--sp-border-strong);
+  border-radius: var(--sp-border-radius);
+  background: var(--sp-bg-surface);
+  color: var(--sp-text-secondary);
+  font-size: var(--sp-font-size-xs);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.sp-weekday-btn:hover { border-color: var(--sp-accent); }
+.sp-weekday-btn:focus-visible {
+  outline: none;
+  border-color: var(--sp-border-focus);
+  box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.25);
+}
+.sp-weekday-btn.active {
+  background: var(--sp-accent);
+  border-color: var(--sp-accent);
+  color: #fff;
+}
+/* Recurring modal: stack paired inputs and tighten weekday targets on narrow screens. */
+@media (max-width: 600px) {
+  .sp-modal--lg .form-row { grid-template-columns: 1fr; gap: var(--sp-space-lg); }
+  .sp-weekday-row .sp-weekday-btn { flex: 1 1 auto; }
+}
+.sp-card-pad-0-overflow { padding: 0; overflow: hidden; }
+.sp-card-pad-center-muted {
+  padding: var(--sp-space-xl);
+  text-align: center;
+  color: var(--sp-text-muted);
+}
+.sp-col-90 { width: 90px; }
 .sp-modal-body--center { text-align: center; padding: var(--sp-space-2xl); }
 .sp-modal-body--pad-2xl { padding: var(--sp-space-2xl); }
 .sp-modal-footer--center { justify-content: center; }

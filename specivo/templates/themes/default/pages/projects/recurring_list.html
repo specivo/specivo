@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}{% trans %}Recurring tasks{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Projects"), "url": "/projects/"},
+  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": _("Recurring tasks")}
+]) }}
+
+<h1 class="sp-page-h1">{% trans %}Recurring tasks{% endtrans %}</h1>
+
+<div x-data='recurringPatterns({
+    patterns: {{ patterns_json | tojson }},
+    projectKey: {{ project.key | tojson }},
+    canManage: {{ can_manage_recurring | tojson }},
+    members: {{ members | tojson }},
+    trackers: {{ trackers_data | tojson }},
+    statuses: {{ statuses_data | tojson }},
+    priorities: {{ priorities_data | tojson }}
+  })'>
+
+  {# Flash #}
+  <template x-if="message">
+    <div class="flash" :class="messageType === 'success' ? 'flash-success' : 'flash-error'">
+      <span x-text="message"></span>
+    </div>
+  </template>
+
+  <div class="card">
+    <div class="sp-listcard-header">
+      <div>
+        <span class="sp-listcard-title">{% trans %}Patterns{% endtrans %}</span>
+        <span class="sp-text-muted-xs-ml-sm" x-text="'(' + patterns.length + ')'"></span>
+      </div>
+      <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+        {% trans %}New pattern{% endtrans %}
+      </button>
+    </div>
+
+    {# Empty state #}
+    <template x-if="patterns.length === 0">
+      <div class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
+        <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
+        <p x-text="canManage ? 'Create a pattern to generate issues automatically on a schedule.' : 'No recurring patterns have been created for this project yet.'"></p>
+        <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+          {% trans %}Create first pattern{% endtrans %}
+        </button>
+      </div>
+    </template>
+
+    {# Table #}
+    <template x-if="patterns.length > 0">
+      <table class="version-table">
+        <thead>
+          <tr>
+            <th>{% trans %}Name{% endtrans %}</th>
+            <th>{% trans %}Schedule{% endtrans %}</th>
+            <th>{% trans %}Mode{% endtrans %}</th>
+            <th>{% trans %}Status{% endtrans %}</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="p in patterns" :key="p.id">
+            <tr>
+              <td>
+                <a class="version-name" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/'" x-text="p.name"></a>
+              </td>
+              <td>
+                <span class="date-val" x-text="scheduleLabel(p)"></span>
+              </td>
+              <td>
+                <span class="date-val" x-text="p.anchor_mode"></span>
+              </td>
+              <td>
+                <span class="badge-version" :class="p.enabled ? 'open' : 'closed'" x-text="p.enabled ? 'Enabled' : 'Disabled'"></span>
+              </td>
+              <td class="td-actions sp-td-actions-right" x-show="canManage">
+                <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'" :aria-label="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 11-12.77.04"/></svg>
+                </button>
+                <button type="button" class="action-link" @click="openEdit(p)" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                </button>
+                <button type="button" class="action-link danger" @click="confirmDelete(p)" title="{{ _('Delete') }}" aria-label="{{ _('Delete') }}">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                </button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </template>
+  </div>
+
+  {# Delete confirmation #}
+  <template x-if="showDeleteModal">
+    <div class="sp-scrim open" @click.self="showDeleteModal = false" @keydown.escape.window="showDeleteModal = false" x-cloak>
+      <div class="sp-modal sp-modal--xs" role="dialog" aria-modal="true" aria-labelledby="sp-rp-delete-title">
+        <div class="sp-modal-header">
+          <h2 id="sp-rp-delete-title">{% trans %}Delete pattern{% endtrans %}</h2>
+          <button type="button" class="sp-modal-close" @click="showDeleteModal = false" aria-label="{{ _('Close') }}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="sp-modal-body">
+          <p class="sp-modal-lead">
+            {% trans %}Delete recurring pattern{% endtrans %} <strong x-text="deleting?.name"></strong>{% trans %}? Already-generated issues are kept; only the pattern is removed.{% endtrans %}
+          </p>
+        </div>
+        <div class="sp-modal-footer">
+          <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
+          <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="deletingBusy">
+            <span x-show="deletingBusy">{% trans %}Deleting...{% endtrans %}</span>
+            <span x-show="!deletingBusy">{% trans %}Delete pattern{% endtrans %}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  {# Create / edit modal (shared RRULE builder) #}
+  {% include "pages/projects/_recurring_form_modal.html" %}
+</div>
+{% endblock %}

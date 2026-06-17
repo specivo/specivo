@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}{{ pattern.name }} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Projects"), "url": "/projects/"},
+  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": _("Recurring tasks"), "url": "/projects/" ~ project.key ~ "/recurring-patterns/"},
+  {"label": pattern.name}
+]) }}
+
+{# Hero #}
+<div class="version-hero"
+  x-data='recurringPatternDetail({
+    pattern: {{ pattern_json | tojson }},
+    projectKey: {{ project.key | tojson }},
+    canManage: {{ can_manage_recurring | tojson }},
+    members: {{ members | tojson }},
+    trackers: {{ trackers_data | tojson }},
+    statuses: {{ statuses_data | tojson }},
+    priorities: {{ priorities_data | tojson }}
+  })'>
+  <div class="version-hero-left">
+    <div class="version-title">
+      {{ pattern.name }}
+      {% if pattern.enabled %}
+      <span class="badge-version open">{% trans %}Enabled{% endtrans %}</span>
+      {% else %}
+      <span class="badge-version closed">{% trans %}Disabled{% endtrans %}</span>
+      {% endif %}
+    </div>
+    <div class="version-meta-row">
+      <div class="version-meta-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
+        {% trans %}Every{% endtrans %}
+        <strong>
+          {% if pattern.rrule_interval and pattern.rrule_interval > 1 %}{{ pattern.rrule_interval }} {% endif %}{{ pattern.freq }}
+        </strong>
+      </div>
+      <div class="version-meta-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        {% trans %}Mode{% endtrans %} <strong>{{ pattern.anchor_mode }}</strong>
+      </div>
+    </div>
+  </div>
+  <div class="version-hero-actions" x-show="canManage">
+    <button type="button" class="sp-btn sp-btn-ghost" @click="openEdit()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+      {% trans %}Edit{% endtrans %}
+    </button>
+  </div>
+
+  {# Flash #}
+  <template x-if="message">
+    <div class="flash" :class="messageType === 'success' ? 'flash-success' : 'flash-error'">
+      <span x-text="message"></span>
+    </div>
+  </template>
+
+  {# Edit affects future only — default behaviour note #}
+  <div class="sp-recurring-note">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+    <span>{% trans %}Editing a pattern affects future instances only. Already-generated issues keep the values they were created with.{% endtrans %}</span>
+  </div>
+
+  {# Two-column layout #}
+  <div class="vd-layout">
+    {# Left: occurrences + generated instances #}
+    <div>
+      <div class="vd-section-header">
+        <h2 class="vd-section-title">{% trans %}Upcoming occurrences{% endtrans %}</h2>
+      </div>
+      <div class="card sp-card-pad">
+        {% if upcoming_occurrences %}
+        <ul class="sp-occurrence-list">
+          {% for occ in upcoming_occurrences %}
+          <li class="sp-occurrence-row">
+            <span class="mono">{{ occ | localdt(pattern.timezone, '%b %d, %Y at %H:%M') }}</span>
+            {% if can_manage_recurring %}
+            <button type="button" class="sp-btn-sm sp-btn-ghost" @click="skipOccurrence({{ occ.isoformat() | tojson }})" aria-label="{{ _('Skip this occurrence') }}">
+              {% trans %}Skip{% endtrans %}
+            </button>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% if upcoming_total > upcoming_occurrences | length %}
+        <p class="sp-text-muted-xs">{% trans %}Showing the next occurrences within the look-ahead window.{% endtrans %}</p>
+        {% endif %}
+        {% else %}
+        <p class="vd-changelog-empty">{% trans %}No upcoming occurrences within the look-ahead window.{% endtrans %}</p>
+        {% endif %}
+      </div>
+
+      {# Live preview driven by the occurrences REST endpoint #}
+      <div class="vd-section-header sp-mt-lg">
+        <h2 class="vd-section-title">{% trans %}Live preview{% endtrans %}</h2>
+        <button type="button" class="sp-btn-sm sp-btn-ghost" @click="loadPreview()" :disabled="previewLoading">{% trans %}Refresh{% endtrans %}</button>
+      </div>
+      <div class="card sp-card-pad">
+        <template x-if="previewLoading">
+          <p class="sp-text-muted-xs">{% trans %}Loading...{% endtrans %}</p>
+        </template>
+        <template x-if="!previewLoading && previewError">
+          <p class="vd-changelog-empty">{% trans %}Could not load the preview. Try refreshing.{% endtrans %}</p>
+        </template>
+        <template x-if="!previewLoading && !previewError && preview.length === 0">
+          <p class="vd-changelog-empty">{% trans %}No occurrences in the preview window.{% endtrans %}</p>
+        </template>
+        <ul class="sp-occurrence-list" x-show="!previewLoading && !previewError">
+          <template x-for="occ in preview" :key="occ">
+            <li class="sp-occurrence-row"><span class="mono" x-text="occ"></span></li>
+          </template>
+        </ul>
+      </div>
+
+      <div class="vd-section-header sp-mt-lg">
+        <h2 class="vd-section-title">{% trans %}Generated instances{% endtrans %}</h2>
+      </div>
+      {% if instances %}
+      <div class="card sp-card-pad-0-overflow">
+        <table class="issue-table">
+          <thead>
+            <tr>
+              <th class="sp-col-90">{% trans %}Key{% endtrans %}</th>
+              <th>{% trans %}Subject{% endtrans %}</th>
+              <th class="sp-col-100">{% trans %}Status{% endtrans %}</th>
+              <th>{% trans %}Occurrence{% endtrans %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for issue in instances %}
+            <tr>
+              <td><a class="issue-key" href="/issues/{{ issue.id }}/">#{{ issue.id }}</a></td>
+              <td><div class="issue-subject"><a href="/issues/{{ issue.id }}/">{{ issue.subject }}</a></div></td>
+              <td>
+                {% if issue.status %}<span class="badge-status">{{ issue.status.name }}</span>{% endif %}
+              </td>
+              <td>
+                <span class="mono">
+                  {% if issue.original_occurrence_at %}{{ issue.original_occurrence_at | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}{% else %}&mdash;{% endif %}
+                </span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="card sp-card-pad-center-muted">
+        {% trans %}No issues have been generated from this pattern yet.{% endtrans %}
+      </div>
+      {% endif %}
+    </div>
+
+    {# Right: details sidebar #}
+    <div>
+      <div class="card vd-info-card sp-mb-lg">
+        <h3>{% trans %}Schedule{% endtrans %}</h3>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Frequency{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.freq }}</span>
+        </div>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Interval{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.rrule_interval }}</span>
+        </div>
+        {% if pattern.byday %}
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Weekdays{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.byday | join(', ') }}</span>
+        </div>
+        {% endif %}
+        {% if pattern.bymonthday %}
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Month days{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.bymonthday | join(', ') }}</span>
+        </div>
+        {% endif %}
+        {% if pattern.bysetpos %}
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Set position{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.bysetpos | join(', ') }}</span>
+        </div>
+        {% endif %}
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Anchor mode{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.anchor_mode }}</span>
+        </div>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Timezone{% endtrans %}</span>
+          <span class="vd-info-value"><span class="mono">{{ pattern.timezone }}</span></span>
+        </div>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Lead time{% endtrans %}</span>
+          <span class="vd-info-value">{% trans count=pattern.creation_lead_time_days %}%(count)s day{% pluralize %}%(count)s days{% endtrans %}</span>
+        </div>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Start{% endtrans %}</span>
+          <span class="vd-info-value"><span class="mono">{{ pattern.dtstart | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
+        </div>
+        {% if pattern.until %}
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Until{% endtrans %}</span>
+          <span class="vd-info-value"><span class="mono">{{ pattern.until | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="card vd-info-card sp-mb-lg">
+        <h3>{% trans %}Template{% endtrans %}</h3>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Subject{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.template_subject }}</span>
+        </div>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Carry over{% endtrans %}</span>
+          <span class="vd-info-value">{{ pattern.carry_over.keys() | join(', ') if pattern.carry_over else _('defaults') }}</span>
+        </div>
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Reset checklist{% endtrans %}</span>
+          <span class="vd-info-value">{{ _('Yes') if pattern.reset_checklist else _('No') }}</span>
+        </div>
+        {% if pattern.assignee_rotation and pattern.assignee_rotation.get('user_ids') %}
+        <div class="vd-info-row">
+          <span class="vd-info-label">{% trans %}Rotation{% endtrans %}</span>
+          <span class="vd-info-value">{% trans count=(pattern.assignee_rotation.get('user_ids') | length) %}%(count)s assignee{% pluralize %}%(count)s assignees{% endtrans %}</span>
+        </div>
+        {% endif %}
+      </div>
+
+      {% if pattern.template_description %}
+      <div class="card vd-info-card">
+        <h3>{% trans %}Description template{% endtrans %}</h3>
+        <div class="prose">{{ pattern.template_description | markdown }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  {# Edit modal — reuses the shared recurring pattern form component #}
+  {% include "pages/projects/_recurring_form_modal.html" %}
+</div>
+{% endblock %}
