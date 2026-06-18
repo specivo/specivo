@@ -1351,10 +1351,14 @@ document.addEventListener('alpine:init', function () {
                     var res = await spFetch('/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + p.id + '/', {
                         method: 'PATCH',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({enabled: !p.enabled})
+                        body: JSON.stringify({enabled: !p.enabled, lock_version: p.lock_version})
                     });
                     if (res.ok) {
-                        p.enabled = !p.enabled;
+                        // Refresh enabled + lock_version from the response so a
+                        // subsequent toggle does not hit a stale-version 409.
+                        var updated = await res.json();
+                        p.enabled = updated.enabled;
+                        p.lock_version = updated.lock_version;
                         this.flash('Pattern ' + (p.enabled ? 'enabled' : 'disabled') + '.', 'success');
                     } else {
                         this.flash('Failed to update pattern.', 'error');
