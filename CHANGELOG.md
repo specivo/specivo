@@ -17,6 +17,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Fixed
 - Metadata presets — the "Create preset" action no longer silently fails; the name and identifier are validated with inline errors, and the modal title and Create/Save labels are now translated
 
+### Security
+- Dependency updates — bumped cryptography, idna, Mako, pillow, Pygments, PyJWT, pytest, python-multipart, starlette and urllib3 to their patched releases, resolving all outstanding dependency advisories
+
 ## [0.1.10] - 2026-06-14
 
 ### Added
