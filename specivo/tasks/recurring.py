@@ -23,6 +23,7 @@ import logging
 import os
 
 import redis.asyncio as aioredis
+from redis.exceptions import LockError, LockNotOwnedError
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_RECURRING
 from specivo.tasks import celery_app
@@ -78,9 +79,9 @@ async def _generate_recurring_async() -> None:
             factory = get_session_factory()
             async with factory() as session:
                 await _generate_for_session(session, now)
-    except aioredis.exceptions.LockNotOwnedError:
+    except LockNotOwnedError:
         logger.debug("Recurring task generation skipped — lock lost mid-run")
-    except aioredis.exceptions.LockError:
+    except LockError:
         logger.debug("Recurring task generation skipped — another worker holds the lock")
     finally:
         await r.aclose()
