@@ -1,8 +1,8 @@
 """Integration tests for the multi-language workspace settings.
 
 Covers:
-- Admin POST /admin/settings/language/ persists the default and updates
-  the runtime override; an unavailable code is rejected.
+- Admin POST /admin/settings/defaults/ persists the default language (and
+  timezone) and updates the runtime override; an unavailable code is rejected.
 - Preferences POST saves user.language and rejects an unavailable code.
 - The authenticated user's language preference wins over the admin default
   when rendering a user-facing HTML page.
@@ -40,7 +40,7 @@ async def _get_default_language(db: AsyncSession) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Admin POST /admin/settings/language/
+# Admin POST /admin/settings/defaults/
 # ---------------------------------------------------------------------------
 
 
@@ -49,7 +49,7 @@ async def test_admin_sets_default_language(admin_client: AsyncClient, db_session
     from specivo.core.runtime_settings import get_default_language_override
 
     resp = await admin_client.post(
-        "/admin/settings/language/",
+        "/admin/settings/defaults/",
         data={"default_language": "fr"},
         cookies={"access_token": admin_client.state.token},
         follow_redirects=False,
@@ -66,7 +66,7 @@ async def test_admin_rejects_unavailable_language(admin_client: AsyncClient, db_
     from specivo.core.runtime_settings import get_default_language_override
 
     resp = await admin_client.post(
-        "/admin/settings/language/",
+        "/admin/settings/defaults/",
         data={"default_language": "de"},
         cookies={"access_token": admin_client.state.token},
         follow_redirects=False,
@@ -75,6 +75,25 @@ async def test_admin_rejects_unavailable_language(admin_client: AsyncClient, db_
 
     assert await _get_default_language(db_session) is None
     assert get_default_language_override() is None
+
+
+async def test_admin_saves_language_and_timezone_together(
+    admin_client: AsyncClient, db_session: AsyncSession
+):
+    """A single POST persists both the default language and timezone."""
+    resp = await admin_client.post(
+        "/admin/settings/defaults/",
+        data={"default_language": "th", "default_timezone": "Asia/Bangkok"},
+        cookies={"access_token": admin_client.state.token},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+
+    assert await _get_default_language(db_session) == "th"
+    row = (
+        await db_session.execute(select(Setting).where(Setting.key == "default_timezone"))
+    ).scalar_one_or_none()
+    assert row is not None and row.value == "Asia/Bangkok"
 
 
 async def test_admin_settings_page_renders_language_select(admin_client: AsyncClient):
@@ -159,19 +178,19 @@ async def test_preferences_rejects_unavailable_language(
 async def test_user_language_beats_admin_default_on_render(
     admin_client: AsyncClient, db_session: AsyncSession
 ):
-    """With admin default 'fr' but user.language 'ru', the page renders Russian.
+    """With admin default 'fr' but user.language 'th', the page renders Thai.
 
     The preferences page contains a {% trans %}Save{% endtrans %} string;
-    'ru' translates it to 'Сохранить' while 'fr' would render 'Enregistrer'.
+    'th' translates it to 'บันทึก' while 'fr' would render 'Enregistrer'.
     """
     from specivo.core.runtime_settings import set_default_language_override
 
     # Workspace default is French.
     set_default_language_override("fr")
 
-    # The authenticated admin prefers Russian.
+    # The authenticated admin prefers Thai.
     user: User = admin_client.state.user
-    user.language = "ru"
+    user.language = "th"
     db_session.add(user)
     await db_session.commit()
 
@@ -179,5 +198,5 @@ async def test_user_language_beats_admin_default_on_render(
         "/my/preferences/", cookies={"access_token": admin_client.state.token}
     )
     assert resp.status_code == 200
-    assert "Сохранить" in resp.text  # Russian "Save"
+    assert "บันทึก" in resp.text  # Thai "Save"
     assert "Enregistrer" not in resp.text  # not French
