@@ -814,3 +814,116 @@ async def test_plain_update_leaves_open_instance_unchanged(
     assert refreshed.subject == "Original"
     # But the pattern template did change.
     assert pattern.template_subject == "Renamed template"
+
+
+# ---------------------------------------------------------------------------
+# Template macros + provenance journal
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_materialize_expands_template_macros(
+    db_session: AsyncSession,
+    service: RecurringPatternService,
+    project: Project,
+    tracker: Tracker,
+    status_open: IssueStatus,
+    priority: IssuePriority,
+    author: User,
+) -> None:
+    """{{date}} macros in the subject expand per occurrence's local date."""
+    dtstart = datetime(2026, 6, 18, 9, 0, tzinfo=UTC)  # a Thursday
+    now = dtstart + timedelta(days=1, hours=1)
+    data = _daily_create(
+        tracker,
+        status_open,
+        priority,
+        dtstart=dtstart,
+        timezone="Asia/Bangkok",
+        creation_lead_time_days=1,
+        template_subject="Report {{day}} {{month}} {{year}}",
+    )
+    pattern = await service.create(db_session, project, data, author)
+    await db_session.commit()
+
+    created = await service.materialize(db_session, pattern, now)
+    await db_session.commit()
+
+    # Daily occurrences on the 18th–20th — each subject reflects its own day.
+    subjects = [i.subject for i in created]
+    assert subjects == [
+        "Report 18 June 2026",
+        "Report 19 June 2026",
+        "Report 20 June 2026",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_materialize_localizes_macros(
+    db_session: AsyncSession,
+    service: RecurringPatternService,
+    project: Project,
+    tracker: Tracker,
+    status_open: IssueStatus,
+    priority: IssuePriority,
+    author: User,
+) -> None:
+    """Month/weekday macros follow the supplied workspace locale (Thai here)."""
+    dtstart = datetime(2026, 6, 18, 9, 0, tzinfo=UTC)
+    now = dtstart + timedelta(hours=1)
+    data = _daily_create(
+        tracker,
+        status_open,
+        priority,
+        dtstart=dtstart,
+        timezone="Asia/Bangkok",
+        creation_lead_time_days=1,
+        template_subject="{{month}} {{year}}",
+    )
+    pattern = await service.create(db_session, project, data, author)
+    await db_session.commit()
+
+    created = await service.materialize(db_session, pattern, now, locale="th")
+    await db_session.commit()
+
+    assert created[0].subject == "มิถุนายน 2026"
+
+
+@pytest.mark.asyncio
+async def test_materialize_records_recurring_provenance(
+    db_session: AsyncSession,
+    service: RecurringPatternService,
+    project: Project,
+    tracker: Tracker,
+    status_open: IssueStatus,
+    priority: IssuePriority,
+    author: User,
+) -> None:
+    """Each generated issue gets a 'recurring' provenance journal detail."""
+    from specivo.models.journal import Journal, JournalDetail
+
+    dtstart = datetime(2026, 6, 18, 9, 0, tzinfo=UTC)
+    now = dtstart + timedelta(hours=1)
+    data = _daily_create(
+        tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1
+    )
+    pattern = await service.create(db_session, project, data, author)
+    await db_session.commit()
+
+    created = await service.materialize(db_session, pattern, now)
+    await db_session.commit()
+    assert created
+
+    # Every generated issue carries exactly one 'recurring' provenance detail
+    # linking back to the pattern (id in old_value, name in new_value).
+    for issue in created:
+        result = await db_session.execute(
+            select(JournalDetail)
+            .join(Journal, JournalDetail.journal_id == Journal.id)
+            .where(Journal.issue_id == issue.id, JournalDetail.property == "recurring")
+        )
+        details = list(result.scalars().all())
+        assert len(details) == 1
+        assert details[0].prop_key == "pattern"
+        assert details[0].old_value == str(pattern.id)
+        assert details[0].new_value == pattern.name

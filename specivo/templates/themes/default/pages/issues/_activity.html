@@ -23,7 +23,10 @@
       {% if j.details %}
       {% for d in j.details %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
-        {% if d.property == 'relation' %}
+        {% if d.property == 'recurring' %}
+        ⟳ {% trans %}Created from recurring pattern{% endtrans %}
+        «<a href="/projects/{{ issue.project_key }}/recurring-patterns/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>»
+        {% elif d.property == 'relation' %}
         {% if d.new_value and not d.old_value %}
         {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
         {% elif d.old_value and not d.new_value %}

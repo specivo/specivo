@@ -17,10 +17,12 @@ from specivo.services.recurrence.engine import (
     expand_occurrences,
     spec_from_mapping,
 )
+from specivo.services.recurrence.macros import expand_macros
 from specivo.services.recurrence.rotation import next_assignee
 
 __all__ = [
     "RecurrenceSpec",
+    "expand_macros",
     "expand_occurrences",
     "next_assignee",
     "spec_from_mapping",

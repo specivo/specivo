@@ -959,7 +959,14 @@ async def specivo_create_recurring_pattern(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     name: Annotated[str, Field(description="Human-readable pattern name, e.g. 'Weekly status report'.")],
     template_subject: Annotated[
-        str, Field(description="Subject line for every generated issue.")
+        str,
+        Field(
+            description=(
+                "Subject line for every generated issue. Supports date macros that "
+                "expand per occurrence: {{year}}, {{quarter}}, {{month}}, "
+                "{{month_num}}, {{day}}, {{weekday}} — e.g. '{{month}} {{year}} report'."
+            )
+        ),
     ],
     template_tracker_id: Annotated[
         int, Field(description="Tracker ID for generated issues (from specivo_list_lookups).")
@@ -1034,7 +1041,13 @@ async def specivo_create_recurring_pattern(
         ),
     ] = "UTC",
     template_description: Annotated[
-        str | None, Field(description="Description applied to every generated issue.")
+        str | None,
+        Field(
+            description=(
+                "Description applied to every generated issue. Supports the same date "
+                "macros as template_subject ({{year}}, {{month}}, {{weekday}}, ...)."
+            )
+        ),
     ] = None,
     template_priority_id: Annotated[
         int | None, Field(description="Priority ID for generated issues (from specivo_list_lookups).")
@@ -1059,6 +1072,11 @@ async def specivo_create_recurring_pattern(
     the structured freq/rrule_interval/byday fields for common rules; byday is a
     comma-separated token list ('MO,WE,FR'). For rules the structured fields
     cannot express, pass a full RFC 5545 string via rrule_raw.
+
+    The template_subject and template_description support date macros that expand
+    for each generated occurrence (in the pattern timezone), so issues are not
+    identical duplicates: {{year}}, {{quarter}}, {{month}}, {{month_num}}, {{day}},
+    {{weekday}}. Month and weekday names are localized to the workspace language.
     """
     async with _get_session_and_user() as (session, user):
         return await _create_recurring_pattern(

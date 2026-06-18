@@ -207,6 +207,10 @@
     <div class="form-group">
       <label class="form-label" for="sp-rp-subject">{% trans %}Subject{% endtrans %}</label>
       <input id="sp-rp-subject" class="form-input" type="text" x-model="form.template_subject" placeholder="{{ _('Subject of generated issues') }}">
+      <div class="form-hint">
+        {% trans %}Date macros expand per occurrence:{% endtrans %}
+        {% raw %}<code>{{year}}</code> <code>{{quarter}}</code> <code>{{month}}</code> <code>{{month_num}}</code> <code>{{day}}</code> <code>{{weekday}}</code>{% endraw %}
+      </div>
     </div>
 
     <div class="form-row">
@@ -253,6 +257,7 @@
     <div class="form-group">
       <label class="form-label" for="sp-rp-desc">{% trans %}Description template{% endtrans %}</label>
       <textarea id="sp-rp-desc" class="form-input sp-textarea-vert" rows="3" x-model="form.template_description"></textarea>
+      <div class="form-hint">{% trans %}Supports the same date macros as the subject.{% endtrans %}</div>
     </div>
 
     {# ----- Carry-over / reset ----- #}
