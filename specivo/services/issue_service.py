@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, or_, select, update
@@ -278,12 +279,23 @@ class IssueService:
         data: IssueCreate,
         author: User,
         api_key_id: int | None = None,
+        *,
+        recurring_pattern_id: int | None = None,
+        original_occurrence_at: datetime | None = None,
     ) -> Issue:
         """Create an issue with an atomic per-project sequence number.
 
         Sequence assignment uses UPDATE … RETURNING so the increment and
         read are a single atomic database operation — no race condition
         is possible even under high concurrency.
+
+        ``recurring_pattern_id`` / ``original_occurrence_at`` are set only by the
+        recurring-pattern generator (RecurringPatternService.materialize). They
+        are keyword-only and default to ``None`` so this purely additive change
+        leaves every existing call site — and the public ``IssueCreate`` schema
+        — untouched. Together they form the idempotency key for generated issues
+        (a partial unique index on the issues table enforces one issue per
+        ``(recurring_pattern_id, original_occurrence_at)``).
         """
         # Resolve optional fields to defaults before writing anything
         status_id = data.status_id
@@ -353,6 +365,9 @@ class IssueService:
             estimated_hours=data.estimated_hours,
             done_ratio=data.done_ratio,
             is_private=data.is_private,
+            # Recurrence provenance — set only by the recurring-pattern generator.
+            recurring_pattern_id=recurring_pattern_id,
+            original_occurrence_at=original_occurrence_at,
         )
         session.add(issue)
         await session.flush()  # obtain issue.id

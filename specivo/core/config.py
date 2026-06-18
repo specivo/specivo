@@ -140,6 +140,15 @@ class Settings(BaseSettings):
     # Cache
     workflow_cache_ttl: int = 3600
 
+    # Recurring tasks — the Celery beat poller that materialises due patterns.
+    # ``beat_interval_seconds`` is the scheduler cadence; ``default_lead_time_days``
+    # / ``max_lead_time_days`` cap the per-pattern look-ahead the service/schema
+    # may enforce; ``batch_size`` bounds how many patterns are loaded per query.
+    recurring_tasks_beat_interval_seconds: int = 3600
+    recurring_tasks_default_lead_time_days: int = 30
+    recurring_tasks_max_lead_time_days: int = 90
+    recurring_tasks_batch_size: int = 100
+
     # Agent sessions
     agent_session_timeout: int = 1800
 

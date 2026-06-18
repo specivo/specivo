@@ -902,6 +902,102 @@ class SearchService:
 
         return results, total, type_counts
 
+    async def filter_issues(
+        self,
+        session: AsyncSession,
+        user: User | None = None,
+        project_id: int | None = None,
+        project_ids: list[int] | None = None,
+        offset: int = 0,
+        limit: int = 25,
+        filters: SearchFilters | None = None,
+    ) -> tuple[list[SearchResult], int, dict[str, int]]:
+        """List issues by metadata/attribute filters with no full-text term.
+
+        Used for metadata-only discovery (e.g. clicking a metadata tag on an
+        issue). Results are ordered by recency. Visibility is enforced with the
+        EXACT same clauses as :meth:`search`, so a user can never see issues in
+        projects they cannot access — the metadata predicate only narrows the
+        already-visible set.
+
+        Returns the same ``(results, total, type_counts)`` shape as
+        :meth:`search` (only the ``issues`` scope is meaningful here).
+        """
+        params: dict[str, Any] = {}
+        if user is not None:
+            params["current_user_id"] = user.id
+
+        cte_prefix = self._visibility_cte_sql(user)
+        issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
+        issue_filter_sql = self._build_issue_filters(filters, params)
+
+        issue_project_filter = ""
+        if project_ids is not None:
+            issue_project_filter = "AND i.project_id = ANY(:project_ids)"
+            params["project_ids"] = project_ids
+        elif project_id is not None:
+            issue_project_filter = "AND i.project_id = :project_id"
+            params["project_id"] = project_id
+
+        where_sql = f"""
+            WHERE 1=1
+            {issue_project_filter}
+            {issue_visibility}
+            {issue_filter_sql}
+        """
+
+        count_sql = f"""
+            {cte_prefix}
+            SELECT COUNT(*) as cnt
+            FROM issues i
+            {where_sql}
+        """
+        count_result = await session.execute(text(count_sql), params)
+        total = int(count_result.scalar_one())
+
+        type_counts = {
+            "issues": total,
+            "wiki": 0,
+            "comments": 0,
+            "attachments": 0,
+            "all": total,
+        }
+
+        if total == 0:
+            return [], 0, type_counts
+
+        params["limit"] = limit
+        params["offset"] = offset
+        list_sql = f"""
+            {cte_prefix}
+            SELECT
+                '{_SRT_ISSUE}' as result_type,
+                i.id,
+                i.project_key || '-' || i.sequence_number as title,
+                i.subject as subtitle,
+                NULL as snippet,
+                0.0 as score,
+                i.project_key
+            FROM issues i
+            {where_sql}
+            ORDER BY i.updated_at DESC, i.id DESC
+            LIMIT :limit OFFSET :offset
+        """
+        result = await session.execute(text(list_sql), params)
+        results = [
+            SearchResult(
+                result_type=row._mapping["result_type"],
+                id=row._mapping["id"],
+                title=row._mapping["title"],
+                subtitle=row._mapping["subtitle"],
+                snippet=None,
+                score=float(row._mapping["score"]),
+                project_key=row._mapping["project_key"],
+            )
+            for row in result
+        ]
+        return results, total, type_counts
+
     async def semantic_search(
         self,
         session: AsyncSession,

@@ -1,0 +1,341 @@
+{% extends "base.html" %}
+{% from "components/macros.html" import breadcrumbs %}
+
+{% block title %}{% if mode == 'edit' %}{% trans %}Edit recurring pattern{% endtrans %}{% else %}{% trans %}New recurring pattern{% endtrans %}{% endif %} - {{ project.name }} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+{{ breadcrumbs([
+  {"label": _("Projects"), "url": "/projects/"},
+  {"label": project.name, "url": "/projects/" ~ project.key ~ "/"},
+  {"label": _("Recurring tasks"), "url": "/projects/" ~ project.key ~ "/recurring-patterns/"},
+  {"label": _("Edit") if mode == 'edit' else _("New pattern")}
+]) }}
+
+{#
+  Translated, user-facing strings consumed by the recurringPatternForm Alpine
+  component are passed in via `labels` so no English is hardcoded in JS.
+#}
+<div class="sp-rp-form-page"
+  x-data='recurringPatternForm({
+    mode: {{ mode | tojson }},
+    pattern: {{ pattern_json | tojson if pattern_json else "null" }},
+    projectKey: {{ project.key | tojson }},
+    canManage: {{ can_manage_recurring | default(true) | tojson }},
+    members: {{ members | tojson }},
+    trackers: {{ trackers_data | tojson }},
+    statuses: {{ statuses_data | tojson }},
+    priorities: {{ priorities_data | tojson }},
+    timezones: {{ timezone_options | tojson }},
+    defaultTimezone: {{ default_timezone | default("UTC") | tojson }},
+    labels: {
+      conflict: {{ _("This pattern was changed by someone else. Reload and try again.") | tojson }},
+      saveFailed: {{ _("Failed to save pattern.") | tojson }},
+      connectFailed: {{ _("Unable to connect.") | tojson }},
+      tzSearch: {{ _("Search timezones...") | tojson }},
+      tzNoMatch: {{ _("No matching timezones") | tojson }},
+      weekdays: {
+        MO: {{ _("Monday") | tojson }}, TU: {{ _("Tuesday") | tojson }},
+        WE: {{ _("Wednesday") | tojson }}, TH: {{ _("Thursday") | tojson }},
+        FR: {{ _("Friday") | tojson }}, SA: {{ _("Saturday") | tojson }},
+        SU: {{ _("Sunday") | tojson }}
+      }
+    }
+  })'>
+
+  <div class="sp-rp-form-head">
+    <div class="version-title">
+      {% if mode == 'edit' %}{% trans %}Edit recurring pattern{% endtrans %}{% else %}{% trans %}New recurring pattern{% endtrans %}{% endif %}
+    </div>
+    <div class="version-meta-row">
+      <a class="sp-back-link" href="{% if mode == 'edit' %}/projects/{{ project.key }}/recurring-patterns/{{ pattern.id }}/{% else %}/projects/{{ project.key }}/recurring-patterns/{% endif %}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+        {% if mode == 'edit' %}{% trans %}Back to pattern{% endtrans %}{% else %}{% trans %}Back to recurring tasks{% endtrans %}{% endif %}
+      </a>
+    </div>
+  </div>
+
+  {# Edit affects future only — default behaviour note #}
+  {% if mode == 'edit' %}
+  <div class="sp-recurring-note">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+    <span>{% trans %}Editing a pattern affects future instances only. Already-generated issues keep the values they were created with.{% endtrans %}</span>
+  </div>
+  {% endif %}
+
+  <div class="card sp-card-pad sp-rp-form-card">
+
+    {# Name + enabled #}
+    <div class="form-group">
+      <label class="form-label" for="sp-rp-name">{% trans %}Name{% endtrans %}</label>
+      <input id="sp-rp-name" class="form-input" type="text" x-model="form.name" placeholder="{{ _('e.g. Weekly status report') }}">
+    </div>
+    <div class="form-group">
+      <label class="sp-label-check-row">
+        <input type="checkbox" x-model="form.enabled" class="sp-checkbox-accent">
+        <span>{% trans %}Enabled{% endtrans %}</span>
+      </label>
+    </div>
+
+    {# ----- Schedule (RRULE builder) ----- #}
+    <div class="sp-section-label">{% trans %}Schedule{% endtrans %}</div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="sp-rp-freq">{% trans %}Frequency{% endtrans %}</label>
+        <select id="sp-rp-freq" class="form-input" x-model="form.freq" @change="refreshFormPreview()">
+          <option value="daily">{% trans %}Daily{% endtrans %}</option>
+          <option value="weekly">{% trans %}Weekly{% endtrans %}</option>
+          <option value="monthly">{% trans %}Monthly{% endtrans %}</option>
+          <option value="yearly">{% trans %}Yearly{% endtrans %}</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sp-rp-interval">{% trans %}Repeat every{% endtrans %}</label>
+        <input id="sp-rp-interval" class="form-input" type="number" min="1" x-model.number="form.rrule_interval" @change="refreshFormPreview()">
+        <div class="form-hint">
+          <span x-show="form.freq === 'daily'">{% trans %}Number of days between occurrences.{% endtrans %}</span>
+          <span x-show="form.freq === 'weekly'">{% trans %}Number of weeks between occurrences.{% endtrans %}</span>
+          <span x-show="form.freq === 'monthly'">{% trans %}Number of months between occurrences.{% endtrans %}</span>
+          <span x-show="form.freq === 'yearly'">{% trans %}Number of years between occurrences.{% endtrans %}</span>
+        </div>
+      </div>
+    </div>
+
+    {# Weekday multi-select — weekly picks the days; monthly/yearly combine
+       with "set position" below to express nth-weekday rules (e.g. 2nd Tuesday). #}
+    <div class="form-group" x-show="form.freq === 'weekly' || form.freq === 'monthly' || form.freq === 'yearly'">
+      <label class="form-label" id="sp-rp-weekday-label">{% trans %}On weekdays{% endtrans %}</label>
+      <div class="sp-weekday-row" role="group" aria-labelledby="sp-rp-weekday-label">
+        <template x-for="day in ['MO','TU','WE','TH','FR','SA','SU']" :key="day">
+          <button type="button" class="sp-weekday-btn"
+            :class="{ active: form.byday.includes(day) }"
+            :aria-pressed="form.byday.includes(day) ? 'true' : 'false'"
+            :aria-label="weekdayName(day)"
+            @click="toggleByday(day)" x-text="day"></button>
+        </template>
+      </div>
+      <div class="form-hint" x-show="form.freq === 'weekly'">{% trans %}Leave empty to repeat on the start date's weekday.{% endtrans %}</div>
+      <div class="form-hint" x-show="form.freq === 'monthly' || form.freq === 'yearly'">{% trans %}Combine a weekday with a set position below to schedule e.g. "the 2nd Tuesday".{% endtrans %}</div>
+    </div>
+
+    {# Month-day — only for monthly #}
+    <div class="form-group" x-show="form.freq === 'monthly'">
+      <label class="form-label" for="sp-rp-bymonthday">{% trans %}On days of month{% endtrans %}</label>
+      <input id="sp-rp-bymonthday" class="form-input" type="text" inputmode="numeric" x-model="form.bymonthday" @change="refreshFormPreview()" placeholder="{{ _('e.g. 1, 15, -1 (last day)') }}">
+      <div class="form-hint">{% trans %}Comma-separated day numbers. Negative counts from the month end (-1 = last day). Leave empty if using weekday + set position.{% endtrans %}</div>
+    </div>
+
+    {# Set position — for monthly / yearly nth-weekday patterns #}
+    <div class="form-group" x-show="form.freq === 'monthly' || form.freq === 'yearly'">
+      <label class="form-label" for="sp-rp-bysetpos">{% trans %}Set position (nth occurrence){% endtrans %}</label>
+      <input id="sp-rp-bysetpos" class="form-input" type="text" inputmode="numeric" x-model="form.bysetpos" @change="refreshFormPreview()" placeholder="{{ _('e.g. 1 (first), 2 (second), -1 (last)') }}">
+      <div class="form-hint">{% trans %}Pick the nth weekday within each period. Requires at least one weekday selected above (e.g. weekday Tuesday + position 2 = "2nd Tuesday").{% endtrans %}</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="sp-rp-dtstart">{% trans %}Start{% endtrans %}</label>
+        <input id="sp-rp-dtstart" class="form-input" type="datetime-local" x-model="form.dtstart" @change="refreshFormPreview()">
+        <div class="form-hint">{% trans %}First date the schedule is anchored to.{% endtrans %}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" id="sp-rp-tz-label">{% trans %}Timezone{% endtrans %}</label>
+        {# Searchable timezone select (combobox): a button shows the current value
+           and opens a panel with a filter input over the full IANA list. The list
+           is passed into the Alpine component and filtered client-side. Selecting
+           an option binds form.timezone, so save behaviour is unchanged. #}
+        <div class="sp-tz-combobox" @keydown.escape.stop="tzClose()" @click.outside="tzClose()">
+          <button type="button" id="sp-rp-timezone" class="form-input sp-tz-trigger"
+            role="combobox" aria-haspopup="listbox" aria-controls="sp-rp-tz-listbox"
+            aria-labelledby="sp-rp-tz-label sp-rp-timezone"
+            :aria-expanded="tzOpen ? 'true' : 'false'"
+            @click="tzToggle()" @keydown="tzTriggerKeydown($event)">
+            <span class="sp-tz-value" x-text="tzLabel(form.timezone || 'UTC')"></span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14 sp-tz-caret" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div class="sp-tz-panel" x-show="tzOpen" x-cloak>
+            <input type="text" class="form-input sp-tz-search" x-ref="tzSearch"
+              x-model="tzQuery" @input="tzActiveIndex = 0" @keydown="tzSearchKeydown($event)"
+              :placeholder="labels.tzSearch" :aria-label="labels.tzSearch"
+              aria-controls="sp-rp-tz-listbox" autocomplete="off" spellcheck="false">
+            <ul class="sp-tz-listbox" id="sp-rp-tz-listbox" role="listbox" aria-labelledby="sp-rp-tz-label">
+              <template x-for="(tz, i) in tzFiltered()" :key="tz">
+                <li class="sp-tz-option" role="option"
+                  :id="'sp-tz-opt-' + i"
+                  :class="{ 'sp-tz-option--active': i === tzActiveIndex, 'sp-tz-option--selected': tz === form.timezone }"
+                  :aria-selected="tz === form.timezone ? 'true' : 'false'"
+                  @click="tzSelect(tz)" @mousemove="tzActiveIndex = i"
+                  x-text="tzLabel(tz)"></li>
+              </template>
+              <li class="sp-tz-empty" x-show="tzFiltered().length === 0" x-text="labels.tzNoMatch"></li>
+            </ul>
+          </div>
+        </div>
+        <div class="form-hint">{% trans %}IANA timezone, e.g. Europe/London. Defaults to your browser's timezone.{% endtrans %}</div>
+      </div>
+    </div>
+
+    {# Anchor mode toggle #}
+    <div class="form-group">
+      <label class="form-label" for="sp-rp-anchor">{% trans %}Anchor mode{% endtrans %}</label>
+      <select id="sp-rp-anchor" class="form-input" x-model="form.anchor_mode">
+        <option value="fixed">{% trans %}Fixed — generate on schedule regardless of completion{% endtrans %}</option>
+        <option value="flexible">{% trans %}Flexible — wait for the previous instance to close{% endtrans %}</option>
+      </select>
+      <div class="form-hint" x-show="form.anchor_mode === 'fixed'">{% trans %}Every occurrence is created on its scheduled date; overdue ones stack up.{% endtrans %}</div>
+      <div class="form-hint" x-show="form.anchor_mode === 'flexible'">{% trans %}Only the next occurrence is created, and only once the previous instance is closed.{% endtrans %}</div>
+    </div>
+
+    <div class="form-group" x-show="form.anchor_mode === 'flexible'">
+      <label class="form-label" for="sp-rp-basedate">{% trans %}Base date{% endtrans %}</label>
+      <select id="sp-rp-basedate" class="form-input" x-model="form.base_date_strategy">
+        <option value="scheduled">{% trans %}Scheduled date{% endtrans %}</option>
+        <option value="completion">{% trans %}Completion date{% endtrans %}</option>
+      </select>
+      <div class="form-hint">{% trans %}Whether the next occurrence is measured from the scheduled date or the actual completion date of the previous instance.{% endtrans %}</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="sp-rp-leadtime">{% trans %}Creation lead time (days){% endtrans %}</label>
+      <input id="sp-rp-leadtime" class="form-input" type="number" min="1" x-model.number="form.creation_lead_time_days" @change="refreshFormPreview()">
+      <div class="form-hint">{% trans %}How far ahead issues are generated.{% endtrans %}</div>
+    </div>
+
+    {# ----- Issue template ----- #}
+    <div class="sp-section-label sp-section-label--major">{% trans %}Issue template{% endtrans %}</div>
+
+    <div class="form-group">
+      <label class="form-label" for="sp-rp-subject">{% trans %}Subject{% endtrans %}</label>
+      <input id="sp-rp-subject" class="form-input" type="text" x-model="form.template_subject" placeholder="{{ _('Subject of generated issues') }}">
+      <div class="form-hint">
+        {% trans %}Date macros expand per occurrence:{% endtrans %}
+        {% raw %}<code>{{year}}</code> <code>{{quarter}}</code> <code>{{month}}</code> <code>{{month_num}}</code> <code>{{day}}</code> <code>{{weekday}}</code>{% endraw %}
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="sp-rp-tracker">{% trans %}Tracker{% endtrans %}</label>
+        <select id="sp-rp-tracker" class="form-input" x-model.number="form.template_tracker_id">
+          <template x-for="t in trackers" :key="t.id">
+            <option :value="t.id" x-text="t.name"></option>
+          </template>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sp-rp-status">{% trans %}Status{% endtrans %}</label>
+        <select id="sp-rp-status" class="form-input" x-model.number="form.template_status_id">
+          <option :value="null">{% trans %}Tracker default{% endtrans %}</option>
+          <template x-for="s in statuses" :key="s.id">
+            <option :value="s.id" x-text="s.name"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label" for="sp-rp-priority">{% trans %}Priority{% endtrans %}</label>
+        <select id="sp-rp-priority" class="form-input" x-model.number="form.template_priority_id">
+          <option :value="null">{% trans %}Default{% endtrans %}</option>
+          <template x-for="p in priorities" :key="p.id">
+            <option :value="p.id" x-text="p.name"></option>
+          </template>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sp-rp-assignee">{% trans %}Default assignee{% endtrans %}</label>
+        <select id="sp-rp-assignee" class="form-input" x-model.number="form.template_assigned_to_id">
+          <option :value="null">{% trans %}Unassigned{% endtrans %}</option>
+          <template x-for="m in members" :key="m.user_id">
+            <option :value="m.user_id" x-text="m.display_name"></option>
+          </template>
+        </select>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="sp-rp-desc">{% trans %}Description template{% endtrans %}</label>
+      <textarea id="sp-rp-desc" class="form-input sp-textarea-vert" rows="3" x-model="form.template_description"></textarea>
+      <div class="form-hint">{% trans %}Supports the same date macros as the subject.{% endtrans %}</div>
+    </div>
+
+    {# ----- Carry-over / reset ----- #}
+    <div class="sp-section-label sp-section-label--major">{% trans %}Carry over &amp; reset{% endtrans %}</div>
+    <div class="form-group">
+      <label class="sp-label-check-row">
+        <input type="checkbox" x-model="form.carry_over.description" class="sp-checkbox-accent">
+        <span>{% trans %}Carry over description{% endtrans %}</span>
+      </label>
+      <label class="sp-label-check-row">
+        <input type="checkbox" x-model="form.carry_over.assignee" class="sp-checkbox-accent">
+        <span>{% trans %}Carry over assignee{% endtrans %}</span>
+      </label>
+      <label class="sp-label-check-row">
+        <input type="checkbox" x-model="form.carry_over.metadata" class="sp-checkbox-accent">
+        <span>{% trans %}Carry over metadata{% endtrans %}</span>
+      </label>
+      <label class="sp-label-check-row">
+        <input type="checkbox" x-model="form.carry_over.estimated_hours" class="sp-checkbox-accent">
+        <span>{% trans %}Carry over estimated hours{% endtrans %}</span>
+      </label>
+      <label class="sp-label-check-row">
+        <input type="checkbox" x-model="form.reset_checklist" class="sp-checkbox-accent">
+        <span>{% trans %}Reset checklist on each instance{% endtrans %}</span>
+      </label>
+    </div>
+
+    {# ----- Assignee rotation ----- #}
+    <div class="sp-section-label sp-section-label--major" id="sp-rp-rotation-label">{% trans %}Assignee rotation{% endtrans %}</div>
+    <p class="sp-section-lead">{% trans %}Rotate the assignee across these members on each occurrence (overrides the default assignee).{% endtrans %}</p>
+    <div class="form-group">
+      <select id="sp-rp-rotation" class="form-input sp-multiselect" multiple size="6"
+        x-model.number="form.rotation_user_ids" aria-labelledby="sp-rp-rotation-label">
+        <template x-for="m in members" :key="m.user_id">
+          <option :value="m.user_id" x-text="m.display_name"></option>
+        </template>
+      </select>
+      <div class="form-hint">{% trans %}Hold Ctrl (Cmd on Mac) to select or deselect multiple members. Leave empty for no rotation.{% endtrans %}</div>
+    </div>
+
+    {# ----- Live next-5 preview ----- #}
+    <div class="sp-section-label">{% trans %}Next occurrences{% endtrans %}</div>
+    <div class="sp-recurring-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      <span>{% trans %}Edits affect future instances only — issues already generated keep their original values.{% endtrans %}</span>
+    </div>
+    <template x-if="previewLoading">
+      <p class="sp-text-muted-xs">{% trans %}Calculating...{% endtrans %}</p>
+    </template>
+    <template x-if="!previewLoading && previewError">
+      <p class="sp-text-muted-xs">{% trans %}Could not calculate the schedule. Check the rule above and try again.{% endtrans %}</p>
+    </template>
+    <template x-if="!previewLoading && !previewError && !editing">
+      <p class="sp-text-muted-xs">{% trans %}Save the pattern to preview its schedule.{% endtrans %}</p>
+    </template>
+    <template x-if="!previewLoading && !previewError && editing && previewForm.length === 0">
+      <p class="sp-text-muted-xs">{% trans %}No occurrences within the look-ahead window.{% endtrans %}</p>
+    </template>
+    <ul class="sp-occurrence-list" x-show="!previewLoading && !previewError">
+      <template x-for="occ in previewForm" :key="occ">
+        <li class="sp-occurrence-row"><span class="mono" x-text="occ"></span></li>
+      </template>
+    </ul>
+
+    <template x-if="formError">
+      <div class="form-error sp-mt-md" role="alert">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
+        <span x-text="formError"></span>
+      </div>
+    </template>
+
+    <div class="sp-rp-form-actions">
+      <a class="sp-btn sp-btn-ghost" href="{% if mode == 'edit' %}/projects/{{ project.key }}/recurring-patterns/{{ pattern.id }}/{% else %}/projects/{{ project.key }}/recurring-patterns/{% endif %}">{% trans %}Cancel{% endtrans %}</a>
+      <button type="button" class="sp-btn sp-btn-primary" @click="saveForm()" :disabled="saving || !canSaveForm">
+        <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+        <span x-show="!saving">{% if mode == 'edit' %}{% trans %}Save changes{% endtrans %}{% else %}{% trans %}Create pattern{% endtrans %}{% endif %}</span>
+      </button>
+    </div>
+  </div>
+</div>
+{% endblock %}

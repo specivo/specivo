@@ -66,4 +66,5 @@ From here you typically branch out to:
 
 - [Versions & roadmap](versions.md) — group issues toward releases and watch progress.
 - [Sprints](sprints.md) — plan and run time-boxed iterations.
+- [Recurring tasks](recurring-tasks.md) — patterns that generate issues automatically on a schedule.
 - [Time tracking](time-tracking.md) — log hours and read reports.

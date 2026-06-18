@@ -3,6 +3,26 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] - 2026-06-18
+
+### Added
+- **Recurring tasks** — define repeating issues with RRULE patterns: occurrence-expansion engine, generation service with edit-scope handling, a Celery beat generator, REST API with permission wiring, MCP tools with audit events, and a dedicated localized create/edit page with management list
+- **Recurring template macros** — the issue subject and description support per-occurrence date macros (`{{year}}`, `{{quarter}}`, `{{month}}`, `{{month_num}}`, `{{day}}`, `{{weekday}}`) so generated issues are distinct; month and weekday names are localized to the workspace language, and the macros work for patterns created via the web UI, REST API, and MCP
+- **Recurring provenance** — each generated issue records a "Created from recurring pattern" entry in its activity log that links back to the pattern
+- **Filter issues by metadata** — array metadata values on an issue render as clickable tag-links that open a metadata-filtered issue search across every project you can access; the search page shows the applied metadata filter in a collapsible panel
+- Remaining project, sprint and wiki UI strings marked and translated
+
+### Changed
+- **Admin settings** — the workspace default language and timezone now save together from a single button via one endpoint, instead of two separate forms
+- Metadata preset identifiers are unique case-insensitively — slugs are normalized (lowercase/dashes) and backed by a database-level unique index
+
+### Fixed
+- Metadata presets — the "Create preset" action no longer silently fails; the name and identifier are validated with inline errors, and the modal title and Create/Save labels are now translated
+- Recurring patterns — fixes across the new feature: form saving (timezone anchoring), the enable/disable toggle, the Skip action, the detail-page layout, and the list Name column
+
+### Security
+- Dependency updates — bumped cryptography, idna, Mako, pillow, Pygments, PyJWT, pytest, python-multipart, starlette and urllib3 to their patched releases, resolving all outstanding dependency advisories
+
 ## [0.1.10] - 2026-06-14
 
 ### Added

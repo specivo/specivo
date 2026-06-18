@@ -56,7 +56,7 @@
       <button type="button" class="scope-tab{{ ' active' if scope == s_val else '' }}" :disabled="submitting"
               @click="$refs.scopeInput.value = '{{ s_val }}'; submitting = true; $el.closest('form').submit()">
         <span class="scope-tab-icon">{{ tab_icons[s_val] | safe }}</span>
-        {{ s_label }}{% if query and s_count is not none and s_count != '' %} ({{ s_count }}){% endif %}
+        {{ s_label }}{% if (query or mf) and s_count is not none and s_count != '' %} ({{ s_count }}){% endif %}
       </button>
       {% endfor %}
     </div>
@@ -67,10 +67,27 @@
   </div>
 </form>
 
-{% if query %}
+{# Applied metadata filter — collapsed by default, only shown when a filter is active #}
+{% if mf %}
+<div class="search-applied-filters" x-data="{ open: false }">
+  <button type="button" class="search-applied-toggle" @click="open = !open" :aria-expanded="open">
+    <svg class="search-applied-chevron" :class="{ open: open }" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+    {% trans %}Applied metadata filter{% endtrans %}
+  </button>
+  <div x-show="open" x-cloak>
+    <textarea class="search-applied-text" readonly rows="2">{{ mf }} = {{ mv }}</textarea>
+  </div>
+</div>
+{% endif %}
+
+{% if query or mf %}
 {# Results header #}
 <div class="search-results-header">
+  {% if query %}
   {% trans count=total, query=query %}%(count)s result for &ldquo;%(query)s&rdquo;{% pluralize %}%(count)s results for &ldquo;%(query)s&rdquo;{% endtrans %}
+  {% else %}
+  {% trans count=total, field=mf, value=mv %}%(count)s issue where %(field)s = %(value)s{% pluralize %}%(count)s issues where %(field)s = %(value)s{% endtrans %}
+  {% endif %}
 </div>
 
 {# SVG icon macros for result types #}
@@ -194,7 +211,7 @@
 {% if total > 0 %}
 {% set current_page = (offset // limit) + 1 %}
 {% set total_pages = ((total - 1) // limit) + 1 %}
-{% set pbase = "/search/?q=" ~ query ~ "&mode=" ~ mode ~ "&scope=" ~ scope ~ ("&project_key=" ~ project_key if project_key else "") %}
+{% set pbase = "/search/?q=" ~ query ~ "&mode=" ~ mode ~ "&scope=" ~ scope ~ ("&project_key=" ~ project_key if project_key else "") ~ ("&mf=" ~ (mf | urlencode) ~ "&mv=" ~ (mv | urlencode) ~ "&ma=" ~ ma if mf else "") %}
 <div class="sp-pagination">
   <div class="sp-pagination-info">{% trans start=offset + 1, end=[offset + limit, total] | min, total=total %}%(start)s–%(end)s of %(total)s{% endtrans %}</div>
   {% if total_pages > 1 %}
@@ -229,7 +246,11 @@
 
 {% else %}
 <div class="card search-empty">
+  {% if query %}
   {% trans query=query %}No results found for &ldquo;%(query)s&rdquo;. Try different keywords or search mode.{% endtrans %}
+  {% else %}
+  {% trans field=mf, value=mv %}No issues found where %(field)s = %(value)s.{% endtrans %}
+  {% endif %}
 </div>
 {% endif %}
 

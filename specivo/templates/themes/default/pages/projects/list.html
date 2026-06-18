@@ -1,23 +1,23 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, avatar %}
 
-{% block title %}Projects - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Projects{% endtrans %} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([
-  {"label": "Home", "url": "/"},
-  {"label": "Projects"}
+  {"label": _("Home"), "url": "/"},
+  {"label": _("Projects")}
 ]) }}
 
 <div x-data="{ showCreate: false }">
 
 <div class="page-header">
-  <h1>Projects</h1>
+  <h1>{% trans %}Projects{% endtrans %}</h1>
   {% if user is defined and user and user.is_admin %}
   <div class="page-header-actions">
     <button class="sp-btn sp-btn-primary" @click="showCreate = true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M12 5v14M5 12h14"/></svg>
-      New Project
+      {% trans %}New Project{% endtrans %}
     </button>
   </div>
   {% endif %}
@@ -47,7 +47,7 @@
           <div class="form-group">
             <label class="form-label">{% trans %}Project key{% endtrans %}</label>
             <input class="form-input" type="text" x-model="key" required placeholder="BACK" maxlength="128" style="text-transform:uppercase">
-            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs);display:block">2-128 uppercase letters/digits</span>
+            <span style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs);display:block">{% trans %}2-128 uppercase letters/digits{% endtrans %}</span>
           </div>
         </div>
 
@@ -108,7 +108,7 @@
     <div class="subprojects-header" :class="{ 'open': open }" @click="open = !open">
       <span class="subprojects-label">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-        Subprojects ({{ children | length }})
+        {% trans count=children | length %}Subprojects (%(count)s){% endtrans %}
       </span>
     </div>
     <div class="subproject-list" x-show="open" x-transition>
@@ -152,11 +152,11 @@
       {% endif %}
       <div class="project-card-stats">
         <div class="project-stats-header">
-          <span class="project-stats-title">Issues</span>
+          <span class="project-stats-title">{% trans %}Issues{% endtrans %}</span>
           <span class="project-stats-meta">
-            {{ item.member_count }} member{{ 's' if item.member_count != 1 else '' }}
+            {% trans count=item.member_count %}%(count)s member{% pluralize %}%(count)s members{% endtrans %}
             {% if item.wiki_page_count > 0 %}
-            <span>&middot;</span>{{ item.wiki_page_count }} wiki page{{ 's' if item.wiki_page_count != 1 else '' }}
+            <span>&middot;</span>{% trans count=item.wiki_page_count %}%(count)s wiki page{% pluralize %}%(count)s wiki pages{% endtrans %}
             {% endif %}
           </span>
         </div>
@@ -164,7 +164,7 @@
           <div class="project-card-progress-bar" style="width:{{ item.closed_pct }}%;background:{{ project_color }}"></div>
         </div>
         <div class="project-stats-breakdown">
-          <strong>{{ item.open_count }}</strong> open<span>&middot;</span><strong>{{ item.closed_count }}</strong> closed
+          <strong>{{ item.open_count }}</strong> {% trans %}open{% endtrans %}<span>&middot;</span><strong>{{ item.closed_count }}</strong> {% trans %}closed{% endtrans %}
         </div>
       </div>
     </a>
@@ -179,13 +179,13 @@
       </div>
       <div class="module-badges">
         {% if item.modules.get('issue_tracking') %}
-        <a href="/projects/{{ p.key }}/issues/" class="module-badge enabled" style="text-decoration:none">Issues</a>
+        <a href="/projects/{{ p.key }}/issues/" class="module-badge enabled" style="text-decoration:none">{% trans %}Issues{% endtrans %}</a>
         {% endif %}
         {% if item.modules.get('wiki') %}
-        <a href="/projects/{{ p.key }}/wiki/" class="module-badge enabled" style="text-decoration:none">Wiki</a>
+        <a href="/projects/{{ p.key }}/wiki/" class="module-badge enabled" style="text-decoration:none">{% trans %}Wiki{% endtrans %}</a>
         {% endif %}
         {% if item.modules.get('time_tracking') %}
-        <a href="/projects/{{ p.key }}/time/" class="module-badge enabled" style="text-decoration:none">Time</a>
+        <a href="/projects/{{ p.key }}/time/" class="module-badge enabled" style="text-decoration:none">{% trans %}Time{% endtrans %}</a>
         {% endif %}
       </div>
     </div>
@@ -195,7 +195,7 @@
 </div>
 {% else %}
 <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  No projects yet. {% if user is defined and user and user.is_admin %}Create one to get started.{% endif %}
+  {% trans %}No projects yet.{% endtrans %} {% if user is defined and user and user.is_admin %}{% trans %}Create one to get started.{% endtrans %}{% endif %}
 </div>
 {% endif %}
 {% endblock %}

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}Diff: v{{ from_version }} → v{{ to_version }} - {{ wiki_page.title }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans from_version=from_version, to_version=to_version %}Diff: v%(from_version)s → v%(to_version)s{% endtrans %} - {{ wiki_page.title }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([

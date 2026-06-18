@@ -14,6 +14,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -79,6 +80,16 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
         Index("ix_issues_updated_at", "updated_at"),
         # GIN index on metadata JSONB for key/value queries
         Index("ix_issues_metadata_gin", "issue_metadata", postgresql_using="gin"),
+        Index("ix_issues_recurring_pattern_id", "recurring_pattern_id"),
+        # DB-level idempotency guard: at most one issue per (pattern, occurrence).
+        # Partial so non-recurring issues (NULL pattern) are unconstrained.
+        Index(
+            "uq_issue_occurrence",
+            "recurring_pattern_id",
+            "original_occurrence_at",
+            unique=True,
+            postgresql_where=text("recurring_pattern_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -202,6 +213,27 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
     is_private: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     # ------------------------------------------------------------------
+    # Recurrence
+    # ------------------------------------------------------------------
+
+    # Pattern that generated this issue; SET NULL if the pattern is deleted so
+    # the materialised issue survives. use_alter defers the constraint, mirroring
+    # fixed_version_id / sprint_id.
+    recurring_pattern_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "recurring_patterns.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_issues_recurring_pattern_id",
+        ),
+        nullable=True,
+    )
+
+    # The scheduled occurrence datetime this issue was generated for (UTC);
+    # combined with recurring_pattern_id it is the idempotency key.
+    original_occurrence_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # ------------------------------------------------------------------
     # Relationships (lazy="raise" — always use selectinload explicitly)
     # ------------------------------------------------------------------
 
@@ -214,6 +246,7 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
     fixed_version = relationship("Version", foreign_keys=[fixed_version_id], lazy="raise")
     sprint = relationship("Sprint", foreign_keys=[sprint_id], lazy="raise")
     project = relationship("Project", foreign_keys=[project_id], lazy="raise")
+    recurring_pattern = relationship("RecurringPattern", foreign_keys=[recurring_pattern_id], lazy="raise")
 
     # ------------------------------------------------------------------
     # Computed property

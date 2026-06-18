@@ -282,9 +282,28 @@ async def project_settings(
         sd["usage_count"] = await schema_svc.count_usages(db, s)
         schemas_data.append(sd)
 
-    # Trackers for scope dropdown
+    # Trackers / statuses / priorities for scope + recurring-task form dropdowns
+    from specivo.models.lookups import IssuePriority, IssueStatus
+
     trackers_result = await db.execute(select(Tracker).order_by(Tracker.position))
     trackers_data = [{"id": t.id, "name": t.name} for t in trackers_result.scalars().all()]
+
+    statuses_result = await db.execute(select(IssueStatus).order_by(IssueStatus.position))
+    statuses_data = [{"id": s.id, "name": s.name} for s in statuses_result.scalars().all()]
+
+    priorities_result = await db.execute(select(IssuePriority).order_by(IssuePriority.position))
+    priorities_data = [{"id": p.id, "name": p.name} for p in priorities_result.scalars().all()]
+
+    # Recurring patterns management section (reuses the recurring web helpers)
+    from specivo.services.recurring_pattern_service import RecurringPatternService
+    from specivo.web.pages.recurring import _pattern_summary
+
+    recurring_svc = RecurringPatternService()
+    recurring_patterns = await recurring_svc.list_for_project(db, project.id)
+    recurring_patterns_data = [_pattern_summary(p) for p in recurring_patterns]
+    can_manage_recurring = user.is_admin or await check_permission(
+        user, project.id, "manage_recurring_tasks", db
+    )
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -306,6 +325,10 @@ async def project_settings(
             "enabled_slugs": enabled_slugs,
             "schemas_data": schemas_data,
             "trackers_data": trackers_data,
+            "statuses_data": statuses_data,
+            "priorities_data": priorities_data,
+            "recurring_patterns_data": recurring_patterns_data,
+            "can_manage_recurring": can_manage_recurring,
         },
     )
 

@@ -65,7 +65,7 @@
 {% if total > 0 %}
 <div class="sp-pagination">
   <div class="sp-pagination-info">
-    {{ offset + 1 }}–{{ [offset + limit, total] | min }} of {{ total }}
+    {% trans first=offset + 1, last=[offset + limit, total] | min, total=total %}%(first)s–%(last)s of %(total)s{% endtrans %}
   </div>
   {% if total_pages > 1 %}
   <div class="sp-pagination-pages">
@@ -87,7 +87,7 @@
   </div>
   {% endif %}
   <div class="sp-pagination-size">
-    <label>Show</label>
+    <label>{% trans %}Show{% endtrans %}</label>
     <select data-pagination-limit data-base-url="{{ base_url }}" style="accent-color:var(--sp-accent);">
       {% for size in [10, 25, 50] %}
       <option value="{{ size }}" {{ 'selected' if limit == size else '' }}>{{ size }}</option>

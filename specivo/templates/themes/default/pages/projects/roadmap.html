@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs %}
 
-{% block title %}Roadmap - {{ project.name }} - {{ brand_name }}{% endblock %}
+{% block title %}{% trans %}Roadmap{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
 {% block content %}
 {{ breadcrumbs([

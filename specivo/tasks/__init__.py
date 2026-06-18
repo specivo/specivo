@@ -12,6 +12,12 @@ from celery import Celery
 # pydantic-settings validation (which requires SECRET_KEY etc.) at import time.
 _broker = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 
+# Beat cadence for the recurring-task poller. Mirrors
+# Settings.recurring_tasks_beat_interval_seconds (default 3600); kept as a
+# literal here to avoid importing pydantic Settings at module import time
+# (which would force SECRET_KEY etc. to be set just to load the worker).
+_RECURRING_BEAT_INTERVAL_SECONDS = int(os.environ.get("RECURRING_TASKS_BEAT_INTERVAL_SECONDS", "3600"))
+
 celery_app = Celery("specivo")
 celery_app.config_from_object(
     {
@@ -29,6 +35,10 @@ celery_app.config_from_object(
             "ensure-audit-partitions": {
                 "task": "specivo.tasks.cleanup.ensure_audit_partitions",
                 "schedule": 86400,  # daily
+            },
+            "generate-recurring-tasks": {
+                "task": "specivo.tasks.recurring.generate_recurring_tasks",
+                "schedule": _RECURRING_BEAT_INTERVAL_SECONDS,
             },
         },
     }
@@ -49,6 +59,7 @@ from specivo.tasks import (  # noqa: E402, F401
     cleanup,
     embeddings,
     notifications,
+    recurring,
     webhooks,
     wiki_links,
 )

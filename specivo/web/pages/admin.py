@@ -314,6 +314,8 @@ async def admin_settings(
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the settings management page."""
+    from zoneinfo import available_timezones
+
     from specivo.core.locales import LANGUAGE_LABELS, get_available_locales
 
     settings = await _settings_svc.get_all(db)
@@ -322,6 +324,9 @@ async def admin_settings(
     current_default = settings.get("default_language") or get_settings().default_language
     if current_default not in available:
         current_default = "en"
+
+    timezone_choices = sorted(available_timezones())
+    current_default_timezone = settings.get("default_timezone") or "UTC"
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -333,31 +338,45 @@ async def admin_settings(
             "settings": settings,
             "language_choices": language_choices,
             "current_default_language": current_default,
+            "timezone_choices": timezone_choices,
+            "current_default_timezone": current_default_timezone,
         },
     )
 
 
-@router.post("/admin/settings/language/", response_model=None)
-async def admin_settings_language(
+@router.post("/admin/settings/defaults/", response_model=None)
+async def admin_settings_defaults(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
     default_language: str = Form(""),
+    default_timezone: str = Form(""),
 ) -> Response:
-    """Persist the workspace default language and update the runtime override.
+    """Persist the workspace default language and timezone in a single save.
 
-    Validates the submitted code against the installed locales; an unknown
-    code is rejected (the setting is left unchanged) and the admin is
-    redirected back without applying it.
+    Each field is validated independently — language against the installed
+    locales, timezone against the IANA database. Unknown values are ignored
+    (left unchanged) while valid values are saved. The runtime language
+    override is refreshed whenever the language is updated.
     """
+    from zoneinfo import available_timezones
+
     from specivo.core.locales import get_available_locales
     from specivo.core.runtime_settings import set_default_language_override
 
+    to_set: dict[str, str | None] = {}
     code = default_language.strip()
-    if code in get_available_locales():
-        await _settings_svc.set_many(db, {"default_language": code})
+    if code and code in get_available_locales():
+        to_set["default_language"] = code
+    tz = default_timezone.strip()
+    if tz and tz in available_timezones():
+        to_set["default_timezone"] = tz
+
+    if to_set:
+        await _settings_svc.set_many(db, to_set)
         await db.commit()
-        set_default_language_override(code)
+        if "default_language" in to_set:
+            set_default_language_override(to_set["default_language"])
 
     return RedirectResponse("/admin/settings/", status_code=303)
 

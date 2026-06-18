@@ -7,7 +7,7 @@ row linked back via ``preset_slug``.
 Admins can also create custom presets via the API.
 """
 
-from sqlalchemy import Boolean, Index, String, Text
+from sqlalchemy import Boolean, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,7 +23,12 @@ class MetadataPreset(Base, TimestampMixin):
 
     __tablename__ = "metadata_presets"
 
-    __table_args__ = (Index("ix_metadata_presets_slug", "slug", unique=True),)
+    __table_args__ = (
+        Index("ix_metadata_presets_slug", "slug", unique=True),
+        # Case-insensitive uniqueness guarantee at the DB level, even if a write
+        # path skips slug normalization.
+        Index("ix_metadata_presets_slug_lower", text("lower(slug)"), unique=True),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
 

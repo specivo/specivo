@@ -127,6 +127,24 @@ class TestCreateCustomPreset:
             )
         assert exc_info.value.status_code == 409
 
+    async def test_rejects_case_insensitive_duplicate_slug(
+        self,
+        db_session: AsyncSession,
+        custom_preset: MetadataPreset,
+    ):
+        """A slug differing only by case is rejected (case-insensitive uniqueness)."""
+        svc = MetadataPresetService()
+        with pytest.raises(AppError, match="already exists") as exc_info:
+            await svc.create_custom(
+                db_session,
+                slug="Custom-Test",  # same as custom_preset modulo case
+                name="Another name",
+                description=None,
+                icon="x",
+                schema_definition={"type": "object"},
+            )
+        assert exc_info.value.status_code == 409
+
 
 # ---------------------------------------------------------------------------
 # Service-level tests — update_preset
@@ -197,6 +215,25 @@ class TestUpdatePreset:
                 slug="new-slug",
             )
         assert exc_info.value.status_code == 403
+
+    async def test_rejects_case_insensitive_duplicate_slug_on_update(
+        self,
+        db_session: AsyncSession,
+        custom_preset: MetadataPreset,
+    ):
+        """Updating a custom preset's slug to collide (case-insensitively) is rejected."""
+        svc = MetadataPresetService()
+        other = await svc.create_custom(
+            db_session,
+            slug="other-custom",
+            name="Other Custom",
+            description=None,
+            icon="x",
+            schema_definition={"type": "object"},
+        )
+        with pytest.raises(AppError, match="already exists") as exc_info:
+            await svc.update_preset(db_session, other, slug="CUSTOM-TEST")
+        assert exc_info.value.status_code == 409
 
 
 # ---------------------------------------------------------------------------
@@ -282,6 +319,37 @@ class TestPresetCRUDAPI:
             "/api/v1/admin/metadata-presets/",
             json={
                 "slug": "custom-test",
+                "name": "Duplicate",
+                "icon": "x",
+                "schema_definition": {"type": "object"},
+            },
+        )
+        assert resp.status_code == 409
+
+    async def test_create_preset_normalizes_slug(self, admin_client: AsyncClient):
+        """Slug is normalized to lowercase/dashes on create."""
+        resp = await admin_client.post(
+            "/api/v1/admin/metadata-presets/",
+            json={
+                "slug": "My Cool Fields",
+                "name": "My Cool Fields",
+                "icon": "star",
+                "schema_definition": {"type": "object", "properties": {"f": {"type": "string"}}},
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["slug"] == "my-cool-fields"
+
+    async def test_create_preset_rejects_case_insensitive_duplicate_slug(
+        self,
+        admin_client: AsyncClient,
+        custom_preset: MetadataPreset,
+    ):
+        """POST rejects a slug that duplicates an existing one case-insensitively."""
+        resp = await admin_client.post(
+            "/api/v1/admin/metadata-presets/",
+            json={
+                "slug": "CUSTOM-TEST",
                 "name": "Duplicate",
                 "icon": "x",
                 "schema_definition": {"type": "object"},

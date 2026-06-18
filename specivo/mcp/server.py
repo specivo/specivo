@@ -29,10 +29,12 @@ from specivo.mcp.tools import (
     _complete_sprint,
     _create_issue,
     _create_metadata_schema,
+    _create_recurring_pattern,
     _create_sprint,
     _create_version,
     _create_wiki,
     _delete_metadata_schema,
+    _delete_recurring_pattern,
     _delete_version,
     _delete_wiki,
     _edit_description,
@@ -43,6 +45,8 @@ from specivo.mcp.tools import (
     _list_members,
     _list_metadata_schemas,
     _list_projects,
+    _list_recurrence_occurrences,
+    _list_recurring_patterns,
     _list_relations,
     _list_sprint_issues,
     _list_sprints,
@@ -58,9 +62,11 @@ from specivo.mcp.tools import (
     _restore_wiki,
     _search,
     _show_issue,
+    _skip_recurrence_occurrence,
     _start_sprint,
     _update_issue,
     _update_metadata_schema,
+    _update_recurring_pattern,
     _update_sprint,
     _update_version,
     _update_wiki_metadata,
@@ -928,6 +934,300 @@ async def specivo_delete_version(
     """
     async with _get_session_and_user() as (session, user):
         return await _delete_version(session, user, project_key, version_id)
+
+
+# ---------------------------------------------------------------------------
+# Recurring patterns
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def specivo_list_recurring_patterns(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+) -> str:
+    """List recurring task patterns for a project with rule, anchor mode and next occurrence.
+
+    Requires the 'view_issues' permission. Use a pattern ID with the other
+    recurring-pattern tools (update, delete, skip, list occurrences).
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_recurring_patterns(session, user, project_key)
+
+
+@mcp.tool()
+async def specivo_create_recurring_pattern(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    name: Annotated[str, Field(description="Human-readable pattern name, e.g. 'Weekly status report'.")],
+    template_subject: Annotated[
+        str,
+        Field(
+            description=(
+                "Subject line for every generated issue. Supports date macros that "
+                "expand per occurrence: {{year}}, {{quarter}}, {{month}}, "
+                "{{month_num}}, {{day}}, {{weekday}} — e.g. '{{month}} {{year}} report'."
+            )
+        ),
+    ],
+    template_tracker_id: Annotated[
+        int, Field(description="Tracker ID for generated issues (from specivo_list_lookups).")
+    ],
+    freq: Annotated[
+        str,
+        Field(description="Recurrence frequency: one of daily, weekly, monthly, yearly."),
+    ],
+    dtstart: Annotated[
+        str,
+        Field(
+            description=(
+                "Series anchor as an ISO-8601 datetime, e.g. '2026-01-05T09:00:00'. "
+                "Interpreted in the pattern timezone; naive input is treated as UTC."
+            )
+        ),
+    ],
+    rrule_interval: Annotated[
+        int, Field(description="Interval between occurrences (e.g. 2 = every other week).")
+    ] = 1,
+    byday: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Comma-separated weekday tokens for weekly/monthly rules, e.g. 'MO,WE,FR' "
+                "or positional '1MO,-1FR'. Leave empty for daily/simple rules."
+            )
+        ),
+    ] = None,
+    rrule_count: Annotated[
+        int | None, Field(description="Total number of occurrences before the series ends.")
+    ] = None,
+    rrule_raw: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Escape hatch: a full RFC 5545 RRULE string (e.g. "
+                "'FREQ=MONTHLY;BYDAY=3WE'). When set it overrides the structured "
+                "BY* fields. Prefer the structured params unless you need a rule "
+                "they cannot express."
+            )
+        ),
+    ] = None,
+    anchor_mode: Annotated[
+        str,
+        Field(
+            description=(
+                "'fixed' = occurrences fire on the calendar schedule regardless of "
+                "completion (overdue instances stack up). 'flexible' = the next "
+                "instance is only generated after the previous one is closed. Choose "
+                "deliberately: 'fixed' for calendar events, 'flexible' for chores."
+            )
+        ),
+    ] = "fixed",
+    base_date_strategy: Annotated[
+        str,
+        Field(
+            description=(
+                "For flexible mode: 'scheduled' anchors the next occurrence on the "
+                "schedule; 'completion' anchors it on when the prior instance closed."
+            )
+        ),
+    ] = "scheduled",
+    timezone: Annotated[
+        str,
+        Field(
+            description=(
+                "IANA timezone for occurrence computation, e.g. 'America/New_York'. "
+                "Set this correctly: it determines local occurrence dates and DST "
+                "handling. Defaults to UTC."
+            )
+        ),
+    ] = "UTC",
+    template_description: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Description applied to every generated issue. Supports the same date "
+                "macros as template_subject ({{year}}, {{month}}, {{weekday}}, ...)."
+            )
+        ),
+    ] = None,
+    template_priority_id: Annotated[
+        int | None, Field(description="Priority ID for generated issues (from specivo_list_lookups).")
+    ] = None,
+    template_assigned_to_id: Annotated[
+        int | None, Field(description="User ID to assign generated issues to.")
+    ] = None,
+    creation_lead_time_days: Annotated[
+        int,
+        Field(description="How many days ahead occurrences are materialised into issues."),
+    ] = 30,
+    enabled: Annotated[
+        bool, Field(description="Whether the pattern actively generates issues.")
+    ] = True,
+) -> str:
+    """Create a recurring task pattern that generates issues on a schedule.
+
+    Requires the 'manage_recurring_tasks' permission.
+
+    Set anchor_mode deliberately ('fixed' for calendar-driven series, 'flexible'
+    for complete-then-recur chores) and timezone to the correct IANA zone. Use
+    the structured freq/rrule_interval/byday fields for common rules; byday is a
+    comma-separated token list ('MO,WE,FR'). For rules the structured fields
+    cannot express, pass a full RFC 5545 string via rrule_raw.
+
+    The template_subject and template_description support date macros that expand
+    for each generated occurrence (in the pattern timezone), so issues are not
+    identical duplicates: {{year}}, {{quarter}}, {{month}}, {{month_num}}, {{day}},
+    {{weekday}}. Month and weekday names are localized to the workspace language.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _create_recurring_pattern(
+            session,
+            user,
+            project_key,
+            name,
+            template_subject,
+            template_tracker_id,
+            freq,
+            dtstart,
+            rrule_interval,
+            byday,
+            rrule_count,
+            rrule_raw,
+            anchor_mode,
+            base_date_strategy,
+            timezone,
+            template_description,
+            template_priority_id,
+            template_assigned_to_id,
+            creation_lead_time_days,
+            enabled,
+        )
+
+
+@mcp.tool()
+async def specivo_update_recurring_pattern(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
+    name: Annotated[str | None, Field(description="New pattern name.")] = None,
+    template_subject: Annotated[
+        str | None, Field(description="New subject for generated issues.")
+    ] = None,
+    template_description: Annotated[
+        str | None, Field(description="New description for generated issues.")
+    ] = None,
+    freq: Annotated[
+        str | None, Field(description="New frequency: daily, weekly, monthly, or yearly.")
+    ] = None,
+    rrule_interval: Annotated[int | None, Field(description="New interval between occurrences.")] = None,
+    byday: Annotated[
+        str | None,
+        Field(description="New comma-separated weekday tokens, e.g. 'MO,WE,FR'."),
+    ] = None,
+    rrule_count: Annotated[int | None, Field(description="New total occurrence count.")] = None,
+    rrule_raw: Annotated[
+        str | None, Field(description="New raw RFC 5545 RRULE string (overrides BY* fields).")
+    ] = None,
+    anchor_mode: Annotated[
+        str | None, Field(description="New anchor mode: 'fixed' or 'flexible'.")
+    ] = None,
+    base_date_strategy: Annotated[
+        str | None, Field(description="New base-date strategy: 'scheduled' or 'completion'.")
+    ] = None,
+    dtstart: Annotated[
+        str | None, Field(description="New ISO-8601 series anchor datetime.")
+    ] = None,
+    timezone: Annotated[str | None, Field(description="New IANA timezone.")] = None,
+    creation_lead_time_days: Annotated[
+        int | None, Field(description="New look-ahead window in days.")
+    ] = None,
+    enabled: Annotated[bool | None, Field(description="Enable or disable the pattern.")] = None,
+) -> str:
+    """Update a recurring task pattern. Only pass fields you want to change.
+
+    Requires the 'manage_recurring_tasks' permission. Editing a pattern affects
+    future occurrences only; issues already generated are left untouched.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _update_recurring_pattern(
+            session,
+            user,
+            project_key,
+            pattern_id,
+            name,
+            template_subject,
+            template_description,
+            freq,
+            rrule_interval,
+            byday,
+            rrule_count,
+            rrule_raw,
+            anchor_mode,
+            base_date_strategy,
+            dtstart,
+            timezone,
+            creation_lead_time_days,
+            enabled,
+        )
+
+
+@mcp.tool()
+async def specivo_delete_recurring_pattern(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
+) -> str:
+    """Delete a recurring task pattern.
+
+    Requires the 'manage_recurring_tasks' permission. Issues already generated by
+    the pattern survive (their link is cleared); skip/override exceptions are removed.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _delete_recurring_pattern(session, user, project_key, pattern_id)
+
+
+@mcp.tool()
+async def specivo_skip_recurrence_occurrence(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
+    occurrence_at: Annotated[
+        str,
+        Field(
+            description=(
+                "The scheduled occurrence to skip, as an ISO-8601 datetime matching "
+                "a value from specivo_list_recurrence_occurrences."
+            )
+        ),
+    ],
+) -> str:
+    """Skip a single scheduled occurrence (EXDATE) of a recurring pattern.
+
+    Requires the 'manage_recurring_tasks' permission. The occurrence will not be
+    generated and does not count as a completion. If an untouched issue was
+    already generated for it, that issue is removed.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _skip_recurrence_occurrence(session, user, project_key, pattern_id, occurrence_at)
+
+
+@mcp.tool()
+async def specivo_list_recurrence_occurrences(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
+    days: Annotated[
+        int | None,
+        Field(
+            description=(
+                "Look-ahead window in days from now. Defaults to the pattern's "
+                "creation_lead_time_days; capped at the server's configured maximum."
+            )
+        ),
+    ] = None,
+) -> str:
+    """Preview upcoming occurrences of a recurring pattern without generating issues.
+
+    Requires the 'view_issues' permission. Skipped occurrences (EXDATEs) are
+    excluded so the preview matches what generation would produce.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_recurrence_occurrences(session, user, project_key, pattern_id, days)
 
 
 @mcp.tool()

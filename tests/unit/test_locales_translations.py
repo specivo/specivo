@@ -69,7 +69,7 @@ def test_expected_native_translations():
     expected = {
         "es": "Guardar",
         "fr": "Enregistrer",
-        "ru": "Сохранить",
+        "th": "บันทึก",
         "zh": "保存",
     }
     for locale, word in expected.items():

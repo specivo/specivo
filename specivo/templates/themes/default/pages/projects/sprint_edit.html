@@ -97,7 +97,7 @@
 
     {# Card 2: Sprint Lifecycle #}
     <div class="edit-card" style="margin-top:var(--sp-space-xl)">
-      <h2>Sprint Lifecycle</h2>
+      <h2>{% trans %}Sprint Lifecycle{% endtrans %}</h2>
       <div style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-lg)">
         {% if sprint.status == 'planned' %}
         This sprint is currently <strong>Planned</strong>. Start it when the team is ready to begin work.
@@ -108,11 +108,11 @@
         {% endif %}
       </div>
       <div style="display:flex;align-items:center;gap:var(--sp-space-sm)">
-        <span class="badge-status planned">Planned</span>
+        <span class="badge-status planned">{% trans %}Planned{% endtrans %}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-text-muted)" stroke-width="2" style="width:16px;height:16px"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        <span class="badge-status active">Active</span>
+        <span class="badge-status active">{% trans %}Active{% endtrans %}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="var(--sp-text-muted)" stroke-width="2" style="width:16px;height:16px"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-        <span class="badge-status completed">Completed</span>
+        <span class="badge-status completed">{% trans %}Completed{% endtrans %}</span>
       </div>
       <div class="status-actions">
         {% if sprint.status == 'planned' %}
@@ -121,7 +121,7 @@
                 hx-swap="none"
                 data-hx-reload>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-          Start Sprint
+          {% trans %}Start Sprint{% endtrans %}
         </button>
         {% elif sprint.status == 'active' %}
         <button class="sp-btn sp-btn-success"
@@ -129,7 +129,7 @@
                 hx-swap="none"
                 data-hx-reload>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M20 6L9 17l-5-5"/></svg>
-          Complete Sprint
+          {% trans %}Complete Sprint{% endtrans %}
         </button>
         {% endif %}
       </div>
@@ -138,18 +138,18 @@
     {# Card 3: Danger Zone #}
     {% if sprint.status != 'active' %}
     <div class="edit-card danger-zone" style="margin-top:var(--sp-space-xl)">
-      <h2 style="color:var(--sp-danger)">Danger Zone</h2>
+      <h2 style="color:var(--sp-danger)">{% trans %}Danger Zone{% endtrans %}</h2>
       <div class="danger-text">
-        Deleting a sprint will unassign all issues back to the backlog. This action cannot be undone.
-        {% if sprint.status == 'active' %}Active sprints must be completed before deletion.{% endif %}
+        {% trans %}Deleting a sprint will unassign all issues back to the backlog. This action cannot be undone.{% endtrans %}
+        {% if sprint.status == 'active' %}{% trans %}Active sprints must be completed before deletion.{% endtrans %}{% endif %}
       </div>
       <button class="sp-btn sp-btn-danger sp-btn-sm"
               hx-delete="/api/v1/projects/{{ project.key }}/sprints/{{ sprint.id }}/"
-              hx-confirm="Are you sure you want to delete this sprint? All issues will be moved to the backlog."
+              hx-confirm="{{ _('Are you sure you want to delete this sprint? All issues will be moved to the backlog.') }}"
               hx-swap="none"
               data-hx-redirect="/projects/{{ project.key }}/backlog/">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
-        Delete Sprint
+        {% trans %}Delete Sprint{% endtrans %}
       </button>
     </div>
     {% endif %}
@@ -159,34 +159,34 @@
   <div>
     {# Sprint Info #}
     <div class="sidebar-card">
-      <h3>Sprint Info</h3>
+      <h3>{% trans %}Sprint Info{% endtrans %}</h3>
       <div class="info-row">
-        <span class="info-label">Status</span>
+        <span class="info-label">{% trans %}Status{% endtrans %}</span>
         <span class="badge-status {{ sprint.status }}">{{ sprint.status | capitalize }}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">Created</span>
+        <span class="info-label">{% trans %}Created{% endtrans %}</span>
         <span class="info-value">{{ sprint.created_at | localdt(user.timezone, '%b %-d, %Y') }}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">Updated</span>
+        <span class="info-label">{% trans %}Updated{% endtrans %}</span>
         <span class="info-value">{{ sprint.updated_at | localdt(user.timezone, '%b %-d, %Y') }}</span>
       </div>
       {% if sprint.start_date and sprint.end_date %}
       <div class="info-row">
-        <span class="info-label">Duration</span>
-        <span class="info-value">{{ (sprint.end_date - sprint.start_date).days }} days</span>
+        <span class="info-label">{% trans %}Duration{% endtrans %}</span>
+        <span class="info-value">{% trans count=(sprint.end_date - sprint.start_date).days %}%(count)s days{% endtrans %}</span>
       </div>
       {% endif %}
       <div class="info-row">
-        <span class="info-label">Issues</span>
+        <span class="info-label">{% trans %}Issues{% endtrans %}</span>
         <span class="info-value">{{ total_issue_count }}</span>
       </div>
     </div>
 
     {# Issues in Sprint #}
     <div class="sidebar-card">
-      <h3>Issues in Sprint <span style="font-weight:400;color:var(--sp-text-muted)">({{ total_issue_count }})</span></h3>
+      <h3>{% trans %}Issues in Sprint{% endtrans %} <span style="font-weight:400;color:var(--sp-text-muted)">({{ total_issue_count }})</span></h3>
 
       {% if total_issue_count > 0 %}
       {% set pct = (completed_issue_count / total_issue_count * 100) | int if total_issue_count > 0 else 0 %}
@@ -194,7 +194,7 @@
         <div class="progress-mini-bar">
           <div class="progress-mini-fill" style="width:{{ pct }}%"></div>
         </div>
-        <span class="progress-mini-text">{{ completed_issue_count }} of {{ total_issue_count }}</span>
+        <span class="progress-mini-text">{% trans completed=completed_issue_count, total=total_issue_count %}%(completed)s of %(total)s{% endtrans %}</span>
       </div>
 
       <div class="sprint-issues-list">
@@ -203,13 +203,13 @@
           <a href="/issue/{{ issue.display_key }}/" class="sprint-issue-key">{{ issue.display_key }}</a>
           <span class="sprint-issue-subject" title="{{ issue.subject }}">{{ issue.subject }}</span>
           {{ status_badge(issue.status.name) }}
-          <button class="sprint-issue-remove" title="Remove from sprint"
+          <button class="sprint-issue-remove" title="{{ _('Remove from sprint') }}"
                   hx-patch="/api/v1/issues/{{ issue.display_key }}/"
                   hx-headers='{"Content-Type": "application/json"}'
                   hx-vals='{"sprint_id": null, "lock_version": {{ issue.lock_version }}}'
                   hx-ext="json-enc"
                   hx-swap="none"
-                  hx-confirm="Remove {{ issue.display_key }} from this sprint?"
+                  hx-confirm="{{ _('Remove %(key)s from this sprint?') % {'key': issue.display_key} }}"
                   data-hx-reload>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
@@ -218,45 +218,45 @@
       </div>
       {% else %}
       <div style="text-align:center;padding:var(--sp-space-lg);color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">
-        No issues in this sprint yet.
+        {% trans %}No issues in this sprint yet.{% endtrans %}
       </div>
       {% endif %}
 
       <div style="margin-top:var(--sp-space-md)">
-        <a href="/projects/{{ project.key }}/backlog/" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-link)">+ Add issues from backlog</a>
+        <a href="/projects/{{ project.key }}/backlog/" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-link)">{% trans %}+ Add issues from backlog{% endtrans %}</a>
       </div>
     </div>
 
     {# Velocity (completed sprints only) #}
     <div class="sidebar-card"{% if sprint.status != 'completed' %} style="opacity:0.5;pointer-events:none"{% endif %}>
-      <h3>Velocity {% if sprint.status != 'completed' %}<span style="font-weight:400;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">(after completion)</span>{% endif %}</h3>
+      <h3>{% trans %}Velocity{% endtrans %} {% if sprint.status != 'completed' %}<span style="font-weight:400;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">{% trans %}(after completion){% endtrans %}</span>{% endif %}</h3>
       <div class="velocity-card">
         {% if sprint.status == 'completed' and sprint.velocity_snapshot %}
         <div class="velocity-grid">
           <div class="velocity-stat">
             <div class="velocity-stat-num">{{ sprint.velocity_snapshot.get('total_issues', 0) }}</div>
-            <div class="velocity-stat-label">Total</div>
+            <div class="velocity-stat-label">{% trans %}Total{% endtrans %}</div>
           </div>
           <div class="velocity-stat">
             <div class="velocity-stat-num" style="color:var(--sp-success)">{{ sprint.velocity_snapshot.get('completed_issues', 0) }}</div>
-            <div class="velocity-stat-label">Completed</div>
+            <div class="velocity-stat-label">{% trans %}Completed{% endtrans %}</div>
           </div>
         </div>
         {% else %}
         <div class="velocity-grid">
           <div class="velocity-stat">
             <div class="velocity-stat-num" style="color:var(--sp-text-muted)">&mdash;</div>
-            <div class="velocity-stat-label">Total</div>
+            <div class="velocity-stat-label">{% trans %}Total{% endtrans %}</div>
           </div>
           <div class="velocity-stat">
             <div class="velocity-stat-num" style="color:var(--sp-text-muted)">&mdash;</div>
-            <div class="velocity-stat-label">Completed</div>
+            <div class="velocity-stat-label">{% trans %}Completed{% endtrans %}</div>
           </div>
         </div>
         {% endif %}
       </div>
       {% if sprint.status != 'completed' %}
-      <div class="form-hint" style="margin-top:var(--sp-space-sm);text-align:center">Available after sprint is completed</div>
+      <div class="form-hint" style="margin-top:var(--sp-space-sm);text-align:center">{% trans %}Available after sprint is completed{% endtrans %}</div>
       {% endif %}
     </div>
   </div>

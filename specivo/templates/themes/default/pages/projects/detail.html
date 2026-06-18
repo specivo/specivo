@@ -5,9 +5,9 @@
 
 {% block content %}
 <div class="breadcrumbs">
-  <a href="/">Home</a>
+  <a href="/">{% trans %}Home{% endtrans %}</a>
   <span class="sep">/</span>
-  <a href="/projects/">Projects</a>
+  <a href="/projects/">{% trans %}Projects{% endtrans %}</a>
   <span class="sep">/</span>
   <span class="current">{{ project.name }}</span>
 </div>
@@ -29,7 +29,7 @@
   <div class="page-header-actions">
   <button class="sp-btn sp-btn-primary sp-text-nowrap" @click="showCreateSub = true">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-16"><path d="M12 5v14M5 12h14"/></svg>
-    New Subproject
+    {% trans %}New Subproject{% endtrans %}
   </button>
   </div>
   {% endif %}
@@ -37,19 +37,19 @@
 
 <!-- Sub-nav tabs -->
 <div class="sp-subnav">
-  <a href="/projects/{{ project.key }}/" class="active">Overview</a>
+  <a href="/projects/{{ project.key }}/" class="active">{% trans %}Overview{% endtrans %}</a>
   {% if modules.get('issue_tracking', false) %}
-  <a href="/projects/{{ project.key }}/issues/">Issues</a>
+  <a href="/projects/{{ project.key }}/issues/">{% trans %}Issues{% endtrans %}</a>
   {% endif %}
   {% if modules.get('wiki', false) %}
-  <a href="/projects/{{ project.key }}/wiki/">Wiki</a>
+  <a href="/projects/{{ project.key }}/wiki/">{% trans %}Wiki{% endtrans %}</a>
   {% endif %}
-  <a href="/projects/{{ project.key }}/roadmap/">Roadmap</a>
+  <a href="/projects/{{ project.key }}/roadmap/">{% trans %}Roadmap{% endtrans %}</a>
   {% if modules.get('time_tracking', false) %}
-  <a href="/projects/{{ project.key }}/time/">Time</a>
+  <a href="/projects/{{ project.key }}/time/">{% trans %}Time{% endtrans %}</a>
   {% endif %}
   {% if user.is_admin %}
-  <a href="/projects/{{ project.key }}/settings/">Settings</a>
+  <a href="/projects/{{ project.key }}/settings/">{% trans %}Settings{% endtrans %}</a>
   {% endif %}
 </div>
 
@@ -58,30 +58,30 @@
   <!-- Left column: recent activity -->
   <div>
     <div class="card sp-card-pad-mb">
-      <h3 class="sp-card-h3">Project Info</h3>
+      <h3 class="sp-card-h3">{% trans %}Project Info{% endtrans %}</h3>
       <table class="sp-info-table">
         <tr>
-          <td class="sp-info-table-label">Identifier</td>
+          <td class="sp-info-table-label">{% trans %}Identifier{% endtrans %}</td>
           <td><code>{{ project.identifier }}</code></td>
         </tr>
         <tr>
-          <td class="sp-info-table-label">Key</td>
+          <td class="sp-info-table-label">{% trans %}Key{% endtrans %}</td>
           <td><code>{{ project.key }}</code></td>
         </tr>
         <tr>
-          <td class="sp-info-table-label">Visibility</td>
-          <td>{{ "Public" if project.is_public else "Private" }}</td>
+          <td class="sp-info-table-label">{% trans %}Visibility{% endtrans %}</td>
+          <td>{{ _("Public") if project.is_public else _("Private") }}</td>
         </tr>
         <tr>
-          <td class="sp-info-table-label">Issues</td>
-          <td>{{ project.issue_sequence }} created</td>
+          <td class="sp-info-table-label">{% trans %}Issues{% endtrans %}</td>
+          <td>{% trans count=project.issue_sequence %}%(count)s created{% endtrans %}</td>
         </tr>
       </table>
     </div>
 
     {% if subprojects is defined and subprojects %}
     <div class="card sp-card-pad-mb">
-      <h3 class="sp-card-h3">Subprojects</h3>
+      <h3 class="sp-card-h3">{% trans %}Subprojects{% endtrans %}</h3>
       <div class="sp-stack-xs">
         {% for sub in subprojects %}
         <a href="/projects/{{ sub.key }}/" class="sp-row-hover sp-sub-link">
@@ -95,7 +95,7 @@
     {% endif %}
 
     <div class="card sp-card-pad">
-      <h3 class="sp-card-h3">Enabled Modules</h3>
+      <h3 class="sp-card-h3">{% trans %}Enabled Modules{% endtrans %}</h3>
       <div class="sp-cluster-sm">
         {% for mod_name, mod_enabled in modules.items() %}
         {% if mod_enabled %}
@@ -109,7 +109,7 @@
   <!-- Right column: members -->
   <div>
     <div class="card sp-card-pad">
-      <h3 class="sp-card-h3">Members</h3>
+      <h3 class="sp-card-h3">{% trans %}Members{% endtrans %}</h3>
       {% if members %}
       <div class="sp-stack-sm">
         {% for m in members %}
@@ -124,11 +124,11 @@
         </div>
         {% endfor %}
         {% if member_count > 10 %}
-        <a href="/projects/{{ project.key }}/settings/" class="sp-member-more">... {{ member_count }} total</a>
+        <a href="/projects/{{ project.key }}/settings/" class="sp-member-more">{% trans count=member_count %}... %(count)s total{% endtrans %}</a>
         {% endif %}
       </div>
       {% else %}
-      <p class="sp-member-empty">No members yet.</p>
+      <p class="sp-member-empty">{% trans %}No members yet.{% endtrans %}</p>
       {% endif %}
     </div>
   </div>

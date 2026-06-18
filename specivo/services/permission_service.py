@@ -99,6 +99,7 @@ class Permission(StrEnum):
     MANAGE_MEMBERS = "manage_members"
     MANAGE_VERSIONS = "manage_versions"
     MANAGE_SPRINTS = "manage_sprints"
+    MANAGE_RECURRING_TASKS = "manage_recurring_tasks"
     VIEW_WIKI = "view_wiki"
     MANAGE_WIKI = "manage_wiki"
     DELETE_WIKI_PAGES = "delete_wiki_pages"
@@ -129,6 +130,7 @@ PERMISSIONS: dict[str, str] = {
     Permission.MANAGE_MEMBERS: "Manage project members",
     Permission.MANAGE_VERSIONS: "Manage versions",
     Permission.MANAGE_SPRINTS: "Manage sprints (create, start, complete, edit, delete)",
+    Permission.MANAGE_RECURRING_TASKS: "Manage recurring tasks (create, edit, skip, delete)",
     Permission.VIEW_WIKI: "View wiki pages",
     Permission.MANAGE_WIKI: "Manage wiki pages",
     Permission.DELETE_WIKI_PAGES: "Delete wiki pages",

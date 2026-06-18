@@ -235,6 +235,43 @@ class JournalService:
         )
         return journal
 
+    async def record_recurring_source(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        user: User,
+        pattern_id: int,
+        pattern_name: str,
+    ) -> Journal:
+        """Record that *issue* was generated from a recurring pattern.
+
+        Renders in the activity feed as a "Created from recurring pattern"
+        system line linking back to the pattern. ``old_value`` carries the
+        pattern id (for the link) and ``new_value`` its display name.
+        """
+        sequence = await self._next_sequence(session, issue.id)
+        journal = Journal(
+            issue_id=issue.id,
+            wiki_page_id=None,
+            project_id=issue.project_id,
+            user_id=user.id,
+            notes=None,
+            is_private=False,
+            sequence=sequence,
+        )
+        session.add(journal)
+        await session.flush()
+
+        detail = JournalDetail(
+            journal_id=journal.id,
+            property="recurring",
+            prop_key="pattern",
+            old_value=str(pattern_id),
+            new_value=pattern_name,
+        )
+        session.add(detail)
+        return journal
+
     async def add_comment(
         self,
         session: AsyncSession,
