@@ -11,6 +11,7 @@ import logging
 import os
 
 import redis.asyncio as aioredis
+from redis.exceptions import LockError, LockNotOwnedError
 
 from specivo.tasks import celery_app
 
@@ -90,9 +91,9 @@ async def _cleanup_async() -> None:
                         used_count,
                         refresh_count,
                     )
-    except aioredis.exceptions.LockNotOwnedError:
+    except LockNotOwnedError:
         logger.debug("Token cleanup skipped — another worker holds the lock")
-    except aioredis.exceptions.LockError:
+    except LockError:
         logger.debug("Token cleanup skipped — could not acquire lock")
     finally:
         await r.aclose()

@@ -3,6 +3,11 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.1] - 2026-06-18
+
+### Fixed
+- Recurring task generation and token cleanup no longer error when a Redis lock is contended or lost mid-run
+
 ## [0.2.0] - 2026-06-18
 
 ### Added
