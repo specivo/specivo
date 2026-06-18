@@ -2454,7 +2454,7 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 .sp-meta-toggle-row { display: flex; align-items: center; gap: var(--sp-space-sm); }
 
 /* ----------------------------------------------------------------------- */
-/* SPECIVO-87: template refactor utilities                                 */
+/* Template refactor utilities                                             */
 /* Classes extracted from repeated inline style="..." attributes across    */
 /* pages/projects/detail.html, pages/projects/settings.html,               */
 /* pages/wiki/show.html. Keeping them in one block so mobile media queries */
