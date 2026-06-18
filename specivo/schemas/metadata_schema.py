@@ -2,9 +2,25 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# A preset slug ("identifier") must be URL-safe: lowercase letters, digits and
+# dashes, starting with an alphanumeric. Uniqueness is enforced case-insensitively
+# at the service and DB layers, so we normalize to lowercase here.
+_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def _normalize_preset_slug(value: str) -> str:
+    """Normalize and validate a preset slug, raising ValueError if invalid."""
+    normalized = value.strip().lower().replace(" ", "-")
+    if not normalized:
+        raise ValueError("Identifier is required.")
+    if not _SLUG_RE.match(normalized):
+        raise ValueError("Use lowercase letters, numbers and dashes only.")
+    return normalized
 
 
 class MetadataSchemaCreate(BaseModel):
@@ -89,6 +105,11 @@ class MetadataPresetCreate(BaseModel):
     icon: str = Field(default="default", max_length=50)
     schema_definition: dict
 
+    @field_validator("slug")
+    @classmethod
+    def _validate_slug(cls, value: str) -> str:
+        return _normalize_preset_slug(value)
+
 
 class MetadataPresetUpdate(BaseModel):
     """Payload for partial update of a metadata preset."""
@@ -98,3 +119,8 @@ class MetadataPresetUpdate(BaseModel):
     description: str | None = None
     icon: str | None = Field(default=None, max_length=50)
     schema_definition: dict | None = None
+
+    @field_validator("slug")
+    @classmethod
+    def _validate_slug(cls, value: str | None) -> str | None:
+        return _normalize_preset_slug(value) if value is not None else None

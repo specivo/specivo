@@ -18,6 +18,7 @@ from specivo.models.member import Member, MemberRole
 from specivo.models.project import EnabledModule, Project
 from specivo.models.role import Role
 from specivo.models.user import User
+from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, UserFactory
@@ -502,3 +503,137 @@ async def test_filter_with_no_matches_returns_empty(
     )
     assert data["total_count"] == 0
     assert data["items"] == []
+
+
+# ---------------------------------------------------------------------------
+# Tests — Metadata-only filtering (no text query)
+# ---------------------------------------------------------------------------
+
+
+async def _get(client: AsyncClient, **params):
+    """Raw search request returning the response (no status assertion)."""
+    return await client.get(SEARCH_URL, params=params)
+
+
+@pytest.mark.asyncio
+async def test_metadata_only_search_no_query(
+    authed_client: AsyncClient,
+    project: Project,
+    lookups: dict,
+):
+    """Search with a metadata filter and no text query lists matching issues."""
+    await _create_issue(
+        authed_client,
+        project.key,
+        lookups["tracker_bug"].id,
+        "Metaonly alpha",
+        metadata={"env": "prod"},
+    )
+    await _create_issue(
+        authed_client,
+        project.key,
+        lookups["tracker_bug"].id,
+        "Metaonly beta",
+        metadata={"env": "staging"},
+    )
+
+    resp = await _get(authed_client, q="", scope="issues", metadata='{"env":"prod"}')
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total_count"] == 1
+    assert data["items"][0]["result_type"] == "issue"
+    assert "alpha" in data["items"][0]["subtitle"].lower()
+
+
+@pytest.mark.asyncio
+async def test_metadata_only_array_containment(
+    authed_client: AsyncClient,
+    project: Project,
+    lookups: dict,
+):
+    """Array metadata containment: {"tags":["x"]} matches an issue whose tags include x."""
+    await _create_issue(
+        authed_client,
+        project.key,
+        lookups["tracker_bug"].id,
+        "Metaonly gamma",
+        metadata={"tags": ["test1", "mysupertag"]},
+    )
+    await _create_issue(
+        authed_client,
+        project.key,
+        lookups["tracker_bug"].id,
+        "Metaonly delta",
+        metadata={"tags": ["other"]},
+    )
+
+    resp = await _get(authed_client, q="", scope="issues", metadata='{"tags":["mysupertag"]}')
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total_count"] == 1
+    assert "gamma" in data["items"][0]["subtitle"].lower()
+
+
+@pytest.mark.asyncio
+async def test_metadata_only_filter_respects_visibility(
+    db_session: AsyncSession,
+    authed_client: AsyncClient,
+    project: Project,
+    lookups: dict,
+    second_user: User,
+):
+    """A metadata-only filter must not surface issues in projects the user can't see."""
+    # Visible issue in the user's own project.
+    await _create_issue(
+        authed_client,
+        project.key,
+        lookups["tracker_bug"].id,
+        "Metaonly visible secret",
+        metadata={"clearance": "secret"},
+    )
+
+    # Hidden private project the authed user is NOT a member of, with a matching issue.
+    hidden = await _make_project(db_session, key="HID", identifier="hidden-project")
+    hidden_issue = IssueFactory.build(
+        project_id=hidden.id,
+        project_key=hidden.key,
+        tracker_id=lookups["tracker_bug"].id,
+        status_id=lookups["status_new"].id,
+        priority_id=lookups["priority_low"].id,
+        author_id=second_user.id,  # authored by someone who isn't the searcher
+        subject="Metaonly hidden secret",
+    )
+    hidden_issue.issue_metadata = {"clearance": "secret"}
+    db_session.add(hidden_issue)
+    await db_session.commit()
+
+    resp = await _get(authed_client, q="", scope="issues", metadata='{"clearance":"secret"}')
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    # Only the issue in the accessible project is returned.
+    assert data["total_count"] == 1
+    titles = " ".join(item.get("subtitle", "") for item in data["items"]).lower()
+    assert "visible" in titles
+    assert "hidden" not in titles
+
+
+@pytest.mark.asyncio
+async def test_metadata_filter_rejects_non_dict(authed_client: AsyncClient):
+    """A non-object metadata filter is rejected."""
+    resp = await _get(authed_client, q="", scope="issues", metadata='["env","prod"]')
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_metadata_filter_rejects_oversized(authed_client: AsyncClient):
+    """An oversized metadata filter payload is rejected."""
+    big = '{"k":"' + ("x" * 3000) + '"}'
+    resp = await _get(authed_client, q="", scope="issues", metadata=big)
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_search_requires_query_or_filter(authed_client: AsyncClient):
+    """An empty query with no filter is rejected."""
+    resp = await _get(authed_client, q="", scope="issues")
+    assert resp.status_code == 422, resp.text

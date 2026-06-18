@@ -1324,6 +1324,12 @@ textarea.modal-input { font-family: var(--sp-font-body); }
 .search-box .search-icon-lg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; color: var(--sp-text-muted); }
 .search-controls { display: flex; align-items: center; gap: var(--sp-space-xl); margin-bottom: var(--sp-space-xl); }
 .search-project-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.search-applied-filters { margin-bottom: var(--sp-space-lg); }
+.search-applied-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; cursor: pointer; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.search-applied-toggle:hover { color: var(--sp-text-secondary); }
+.search-applied-chevron { width: 14px; height: 14px; transition: transform 0.15s; }
+.search-applied-chevron.open { transform: rotate(90deg); }
+.search-applied-text { display: block; width: 100%; max-width: 480px; margin-top: var(--sp-space-xs); padding: var(--sp-space-xs) var(--sp-space-sm); font-family: var(--sp-font-mono, monospace); font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); background: var(--sp-bg-input); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); resize: vertical; }
 .search-results-header { margin-bottom: var(--sp-space-md); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); }
 
 /* Mode toggle */
@@ -2432,6 +2438,8 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 .sp-ms-chip .sp-ms-val { font-weight: 500; color: var(--sp-text-primary); }
 .sp-ms-chip.sp-ms-tag { background: var(--sp-info-subtle); border-color: rgba(37,99,235,0.15); color: var(--sp-info); }
 .sp-ms-chip.sp-ms-enum { background: var(--sp-accent-subtle); border-color: rgba(196,154,60,0.15); color: var(--sp-accent); }
+.sp-ms-chip .sp-ms-val-link { color: inherit; text-decoration: none; cursor: pointer; padding: 0 4px; border-radius: 3px; transition: background 0.12s; }
+.sp-ms-chip .sp-ms-val-link:hover { text-decoration: underline; background: rgba(0,0,0,0.06); }
 .sp-metadata-content { padding: 0 var(--sp-space-xl) var(--sp-space-xl); border-top: 1px solid var(--sp-border); }
 .sp-metadata-content .sp-metadata-grid { padding-top: var(--sp-space-xl); }
 .sp-metadata-save { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-space-sm); padding-top: var(--sp-space-lg); margin-top: var(--sp-space-lg); border-top: 1px solid var(--sp-border); }

@@ -25,11 +25,15 @@ router = APIRouter(tags=["search"])
 _service = SearchService()
 _audit_service = SecurityAuditService()
 
+# Bounds for the raw ``metadata`` containment filter, to keep crafted payloads small.
+_METADATA_FILTER_MAX_BYTES = 2048
+_METADATA_FILTER_MAX_KEYS = 10
+
 
 @router.get("/search/", response_model=SearchResponse)
 async def search(
     request: Request,
-    q: str = Query(..., min_length=1, description="Search query"),
+    q: str = Query("", description="Search query (optional when a metadata filter is given)"),
     project_key: str | None = Query(None, description="Scope to a specific project"),
     project_keys: str | None = Query(None, description="Comma-separated project keys for multi-project search"),
     scope: str = Query("all", pattern="^(all|issues|wiki|comments|attachments)$", description="Search scope"),
@@ -91,14 +95,28 @@ async def search(
 
     # Build metadata filters
     parsed_metadata: dict | None = None
-    if metadata is not None:
+    if metadata is not None and metadata.strip():
+        # Cap the raw payload size before parsing to bound resource use.
+        if len(metadata) > _METADATA_FILTER_MAX_BYTES:
+            raise ValidationError(message="Metadata filter is too large", field="metadata")
         try:
-            parsed_metadata = json.loads(metadata)
+            loaded = json.loads(metadata)
         except json.JSONDecodeError:
             raise ValidationError(
                 message="Invalid JSON in metadata filter",
                 field="metadata",
             )
+        if not isinstance(loaded, dict):
+            raise ValidationError(
+                message="Metadata filter must be a JSON object",
+                field="metadata",
+            )
+        if len(loaded) > _METADATA_FILTER_MAX_KEYS:
+            raise ValidationError(
+                message="Metadata filter has too many keys",
+                field="metadata",
+            )
+        parsed_metadata = loaded
 
     filters = SearchFilters(
         tracker_id=tracker_id,
@@ -135,7 +153,26 @@ async def search(
     )
     active_filters = filters if has_filters else None
 
-    if mode == "semantic":
+    has_query = bool(q.strip())
+    if not has_query and active_filters is None:
+        raise ValidationError(
+            message="Provide a search query or a filter",
+            field="q",
+        )
+
+    type_counts: dict[str, int] = {}
+    if not has_query:
+        # Metadata/attribute-only listing — no full-text term.
+        items, total_count, type_counts = await _service.filter_issues(
+            session=db,
+            user=user,
+            project_id=project_id,
+            project_ids=project_ids,
+            offset=offset,
+            limit=limit,
+            filters=active_filters,
+        )
+    elif mode == "semantic":
         items, total_count = await _service.semantic_search(
             session=db,
             query=q,

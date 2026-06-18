@@ -2389,6 +2389,11 @@ document.addEventListener('alpine:init', function () {
                 return count;
             },
 
+            metadataSearchUrl(slug, value, isArray) {
+                return '/search/?scope=issues&mf=' + encodeURIComponent(slug) +
+                    '&mv=' + encodeURIComponent(value) + '&ma=' + (isArray ? '1' : '0');
+            },
+
             get summaryChips() {
                 var chips = [];
                 for (var i = 0; i < this.fields.length; i++) {
@@ -2396,12 +2401,23 @@ document.addEventListener('alpine:init', function () {
                     var v = this.metadata[f.key];
                     if (v === '' || v === null || v === undefined) continue;
                     if (Array.isArray(v) && v.length === 0) continue;
-                    var display, cls = '';
-                    if (Array.isArray(v)) { display = v.join(', '); cls = 'sp-ms-tag'; }
-                    else if (typeof v === 'boolean') { display = v ? 'Yes' : 'No'; }
-                    else if (f.inputType === 'enum') { display = String(v); cls = 'sp-ms-enum'; }
-                    else { display = String(v); }
-                    chips.push({ key: f.key, label: f.label, display: display, chipClass: cls });
+                    var cls = '';
+                    var values = [];
+                    if (Array.isArray(v)) {
+                        // Each array element renders as its own clickable tag-link.
+                        cls = 'sp-ms-tag';
+                        for (var j = 0; j < v.length; j++) {
+                            values.push({ text: String(v[j]), href: this.metadataSearchUrl(f.key, v[j], true) });
+                        }
+                    } else if (typeof v === 'boolean') {
+                        values.push({ text: v ? 'Yes' : 'No', href: null });
+                    } else if (f.inputType === 'enum') {
+                        cls = 'sp-ms-enum';
+                        values.push({ text: String(v), href: this.metadataSearchUrl(f.key, v, false) });
+                    } else {
+                        values.push({ text: String(v), href: this.metadataSearchUrl(f.key, v, false) });
+                    }
+                    chips.push({ key: f.key, label: f.label, values: values, chipClass: cls });
                 }
                 return chips;
             },
@@ -4281,10 +4297,11 @@ document.addEventListener('alpine:init', function () {
         };
     });
 
-    Alpine.data('adminMetadataPresets', function (initialPresets) {
+    Alpine.data('adminMetadataPresets', function (initialPresets, initialLabels) {
         var _knownIcons = ['code', 'bug', 'megaphone', 'sprint', 'book'];
         return {
             presets: initialPresets || [],
+            labels: initialLabels || {},
 
             isKnownIcon(icon) {
                 return _knownIcons.indexOf(icon) !== -1;
@@ -4313,6 +4330,8 @@ document.addEventListener('alpine:init', function () {
             deleteTarget: null,
             saving: false,
             schemaError: '',
+            nameError: '',
+            slugError: '',
             form: {
                 slug: '',
                 name: '',
@@ -4324,6 +4343,8 @@ document.addEventListener('alpine:init', function () {
             openCreate: function () {
                 this.editingPreset = null;
                 this.schemaError = '';
+                this.nameError = '';
+                this.slugError = '';
                 this.form = {
                     slug: '',
                     name: '',
@@ -4337,6 +4358,8 @@ document.addEventListener('alpine:init', function () {
             openEdit: function (preset) {
                 this.editingPreset = preset;
                 this.schemaError = '';
+                this.nameError = '';
+                this.slugError = '';
                 this.form = {
                     slug: preset.slug,
                     name: preset.name,
@@ -4366,13 +4389,40 @@ document.addEventListener('alpine:init', function () {
                 }
             },
 
+            normalizeSlug: function (raw) {
+                return (raw || '').trim().toLowerCase().replace(/\s+/g, '-');
+            },
+
+            validateForm: function () {
+                var ok = true;
+                this.nameError = '';
+                this.slugError = '';
+                if (!this.form.name || !this.form.name.trim()) {
+                    this.nameError = this.labels.nameRequired || 'Name is required.';
+                    ok = false;
+                }
+                // Slug is read-only for built-in presets, so only validate when editable.
+                if (!(this.editingPreset && this.editingPreset.is_builtin)) {
+                    var slug = this.normalizeSlug(this.form.slug);
+                    if (!slug) {
+                        this.slugError = this.labels.slugRequired || 'Identifier is required.';
+                        ok = false;
+                    } else if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
+                        this.slugError = this.labels.slugInvalid || 'Use lowercase letters, numbers and dashes only.';
+                        ok = false;
+                    }
+                }
+                if (!this.validateSchema()) ok = false;
+                return ok;
+            },
+
             save: async function () {
-                if (!this.validateSchema()) return;
+                if (!this.validateForm()) return;
                 this.saving = true;
                 try {
                     var parsed = JSON.parse(this.form.schema_definition_raw);
                     var payload = {
-                        name: this.form.name,
+                        name: this.form.name.trim(),
                         description: this.form.description || null,
                         icon: this.form.icon,
                         schema_definition: parsed
@@ -4380,7 +4430,7 @@ document.addEventListener('alpine:init', function () {
                     var resp;
                     if (this.editingPreset) {
                         if (!this.editingPreset.is_builtin) {
-                            payload.slug = this.form.slug;
+                            payload.slug = this.normalizeSlug(this.form.slug);
                         }
                         resp = await spFetch('/api/v1/admin/metadata-presets/' + this.editingPreset.slug + '/', {
                             method: 'PATCH',
@@ -4388,7 +4438,7 @@ document.addEventListener('alpine:init', function () {
                             body: JSON.stringify(payload)
                         });
                     } else {
-                        payload.slug = this.form.slug;
+                        payload.slug = this.normalizeSlug(this.form.slug);
                         resp = await spFetch('/api/v1/admin/metadata-presets/', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },

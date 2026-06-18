@@ -135,8 +135,10 @@ class MetadataPresetService:
         """Create a custom (non-builtin) metadata preset."""
         validate_json_schema(schema_definition)
 
+        # Case-insensitive uniqueness: also guards against colliding with a
+        # built-in preset's slug.
         existing = await session.execute(
-            select(MetadataPreset).where(MetadataPreset.slug == slug)
+            select(MetadataPreset).where(func.lower(MetadataPreset.slug) == slug.lower())
         )
         if existing.scalar_one_or_none() is not None:
             raise AppError(
@@ -171,6 +173,20 @@ class MetadataPresetService:
                 message="Cannot change slug of a builtin preset",
                 status_code=403,
             )
+        new_slug = kwargs.get("slug")
+        if new_slug is not None and str(new_slug).lower() != preset.slug.lower():
+            duplicate = await session.execute(
+                select(MetadataPreset).where(
+                    func.lower(MetadataPreset.slug) == str(new_slug).lower(),
+                    MetadataPreset.id != preset.id,
+                )
+            )
+            if duplicate.scalar_one_or_none() is not None:
+                raise AppError(
+                    code="conflict",
+                    message=f"Preset with slug '{new_slug}' already exists",
+                    status_code=409,
+                )
         if "schema_definition" in kwargs and kwargs["schema_definition"] is not None:
             validate_json_schema(kwargs["schema_definition"])  # type: ignore[arg-type]
 
