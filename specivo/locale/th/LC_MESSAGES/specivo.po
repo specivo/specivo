@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-06-18 09:54+0200\n"
+"POT-Creation-Date: 2026-06-18 10:55+0200\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -212,6 +212,14 @@ msgstr "กฎฟิลด์ซ้ำ"
 msgid "Workflow field rule not found"
 msgstr "ไม่พบกฎฟิลด์"
 
+#: specivo/templates/themes/default/base.html:33
+msgid "Powered by"
+msgstr "ขับเคลื่อนโดย"
+
+#: specivo/templates/themes/default/components/header.html:2
+msgid "Menu"
+msgstr "เมนู"
+
 #: specivo/templates/themes/default/components/header.html:9
 msgid "Search issues, wiki, projects..."
 msgstr "ค้นหางาน วิกิ โปรเจกต์..."
@@ -299,6 +307,18 @@ msgstr "API Keys"
 msgid "Sign out"
 msgstr "ออกจากระบบ"
 
+#: specivo/templates/themes/default/components/macros.html:68
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:201
+#, python-format
+msgid "%(first)s–%(last)s of %(total)s"
+msgstr "%(first)s–%(last)s จาก %(total)s"
+
+#: specivo/templates/themes/default/components/macros.html:90
+#: specivo/templates/themes/default/pages/_my_issues.html:16
+#: specivo/templates/themes/default/pages/search.html:220
+msgid "Show"
+msgstr "แสดง"
+
 #: specivo/templates/themes/default/components/sidebar.html:20
 #: specivo/templates/themes/default/pages/dashboard.html:3
 #: specivo/templates/themes/default/pages/dashboard.html:8
@@ -313,6 +333,10 @@ msgstr "แดชบอร์ด"
 #: specivo/templates/themes/default/pages/admin/projects.html:11
 #: specivo/templates/themes/default/pages/admin/projects.html:16
 #: specivo/templates/themes/default/pages/dashboard.html:234
+#: specivo/templates/themes/default/pages/projects/detail.html:10
+#: specivo/templates/themes/default/pages/projects/list.html:4
+#: specivo/templates/themes/default/pages/projects/list.html:9
+#: specivo/templates/themes/default/pages/projects/list.html:15
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:8
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:8
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:8
@@ -327,10 +351,15 @@ msgstr "โปรเจกต์"
 #: specivo/templates/themes/default/pages/admin/versions.html:79
 #: specivo/templates/themes/default/pages/issues/list.html:4
 #: specivo/templates/themes/default/pages/issues/list.html:14
+#: specivo/templates/themes/default/pages/projects/detail.html:42
+#: specivo/templates/themes/default/pages/projects/detail.html:76
 #: specivo/templates/themes/default/pages/projects/list.html:84
+#: specivo/templates/themes/default/pages/projects/list.html:155
+#: specivo/templates/themes/default/pages/projects/list.html:182
 #: specivo/templates/themes/default/pages/projects/settings.html:227
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:100
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:127
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:182
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:56
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:109
 #: specivo/templates/themes/default/pages/projects/version_detail.html:81
@@ -356,7 +385,9 @@ msgstr "สปรินต์ปัจจุบัน"
 
 #: specivo/templates/themes/default/components/sidebar.html:48
 #: specivo/templates/themes/default/pages/admin/projects.html:152
+#: specivo/templates/themes/default/pages/projects/detail.html:45
 #: specivo/templates/themes/default/pages/projects/list.html:85
+#: specivo/templates/themes/default/pages/projects/list.html:185
 #: specivo/templates/themes/default/pages/search.html:44
 #: specivo/templates/themes/default/pages/wiki/diff.html:10
 #: specivo/templates/themes/default/pages/wiki/edit.html:11
@@ -371,6 +402,8 @@ msgid "Wiki"
 msgstr "วิกิ"
 
 #: specivo/templates/themes/default/components/sidebar.html:52
+#: specivo/templates/themes/default/pages/projects/detail.html:47
+#: specivo/templates/themes/default/pages/projects/roadmap.html:4
 #: specivo/templates/themes/default/pages/projects/roadmap.html:10
 #: specivo/templates/themes/default/pages/projects/roadmap.html:14
 #: specivo/templates/themes/default/pages/projects/version_detail.html:10
@@ -395,6 +428,7 @@ msgstr "งานที่เกิดซ้ำ"
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
+#: specivo/templates/themes/default/pages/projects/detail.html:52
 #: specivo/templates/themes/default/pages/projects/settings.html:3
 #: specivo/templates/themes/default/pages/projects/settings.html:13
 #: specivo/templates/themes/default/pages/projects/settings.html:16
@@ -457,15 +491,11 @@ msgstr "จัดการระบบ"
 msgid "of"
 msgstr "จาก"
 
-#: specivo/templates/themes/default/pages/_my_issues.html:16
-#: specivo/templates/themes/default/pages/search.html:220
-msgid "Show"
-msgstr "แสดง"
-
 #: specivo/templates/themes/default/pages/_my_issues.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:28
 #: specivo/templates/themes/default/pages/admin/settings.html:51
 #: specivo/templates/themes/default/pages/issues/list.html:236
+#: specivo/templates/themes/default/pages/projects/detail.html:68
 #: specivo/templates/themes/default/pages/projects/detail.html:160
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:123
 #: specivo/templates/themes/default/pages/projects/settings.html:41
@@ -501,6 +531,7 @@ msgstr "หัวข้อ"
 #: specivo/templates/themes/default/pages/projects/settings.html:298
 #: specivo/templates/themes/default/pages/projects/settings.html:394
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:109
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:164
 #: specivo/templates/themes/default/pages/projects/version_detail.html:97
 #: specivo/templates/themes/default/pages/projects/version_detail.html:140
 msgid "Status"
@@ -521,6 +552,7 @@ msgstr "โปรเจกต์"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:36
 #: specivo/templates/themes/default/pages/issues/list.html:241
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:172
 msgid "Updated"
 msgstr "อัปเดตเมื่อ"
 
@@ -628,6 +660,9 @@ msgstr "กำลังดำเนินการ"
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:21
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:21
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:78
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:115
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:242
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:253
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:128
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:138
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:147
@@ -672,6 +707,7 @@ msgstr "สปรินต์ทั้งหมด"
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:110
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:88
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:79
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:177
 msgid "Duration"
 msgstr "ระยะเวลา"
 
@@ -680,11 +716,13 @@ msgid "days"
 msgstr "วัน"
 
 #: specivo/templates/themes/default/pages/dashboard.html:241
+#: specivo/templates/themes/default/pages/projects/list.html:167
 #: specivo/templates/themes/default/pages/projects/version_detail.html:58
 msgid "open"
 msgstr "เปิดอยู่"
 
 #: specivo/templates/themes/default/pages/dashboard.html:245
+#: specivo/templates/themes/default/pages/projects/list.html:198
 msgid "No projects yet."
 msgstr "ยังไม่มีโปรเจกต์"
 
@@ -723,6 +761,8 @@ msgstr "ย้อนกลับ"
 #: specivo/templates/themes/default/pages/auth/preferences.html:7
 #: specivo/templates/themes/default/pages/auth/profile.html:7
 #: specivo/templates/themes/default/pages/notifications.html:7
+#: specivo/templates/themes/default/pages/projects/detail.html:8
+#: specivo/templates/themes/default/pages/projects/list.html:8
 #: specivo/templates/themes/default/pages/projects/roadmap.html:8
 #: specivo/templates/themes/default/pages/projects/settings.html:7
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:8
@@ -1131,6 +1171,8 @@ msgstr "เหตุผล"
 
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:49
 #: specivo/templates/themes/default/pages/issues/detail.html:216
+#: specivo/templates/themes/default/pages/projects/detail.html:49
+#: specivo/templates/themes/default/pages/projects/list.html:188
 msgid "Time"
 msgstr "เวลา"
 
@@ -1337,11 +1379,13 @@ msgstr "ลบพรีเซ็ต"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:19
 #: specivo/templates/themes/default/pages/admin/projects.html:95
+#: specivo/templates/themes/default/pages/projects/list.html:20
 #: specivo/templates/themes/default/pages/projects/list.html:32
 msgid "New Project"
 msgstr "โปรเจกต์ใหม่"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:30
+#: specivo/templates/themes/default/pages/projects/detail.html:112
 #: specivo/templates/themes/default/pages/projects/settings.html:22
 msgid "Members"
 msgstr "สมาชิก"
@@ -1350,6 +1394,7 @@ msgstr "สมาชิก"
 #: specivo/templates/themes/default/pages/admin/user_detail.html:58
 #: specivo/templates/themes/default/pages/admin/user_detail.html:110
 #: specivo/templates/themes/default/pages/auth/api_keys.html:75
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:168
 #: specivo/templates/themes/default/pages/projects/version_detail.html:150
 msgid "Created"
 msgstr "สร้างเมื่อ"
@@ -1375,6 +1420,7 @@ msgstr "ไม่มีโปรเจกต์"
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:64
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:19
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:19
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:113
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:35
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:51
 msgid "Active"
@@ -1417,6 +1463,7 @@ msgid "e.g. Backend API"
 msgstr "เช่น Backend API"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:107
+#: specivo/templates/themes/default/pages/projects/detail.html:64
 #: specivo/templates/themes/default/pages/projects/detail.html:156
 #: specivo/templates/themes/default/pages/projects/list.html:44
 #: specivo/templates/themes/default/pages/projects/settings.html:37
@@ -1429,6 +1476,7 @@ msgid "Project key"
 msgstr "รหัสโปรเจกต์"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:113
+#: specivo/templates/themes/default/pages/projects/list.html:50
 msgid "2-128 uppercase letters/digits"
 msgstr "ตัวอักษรพิมพ์ใหญ่/ตัวเลข 2-128 ตัว"
 
@@ -1816,6 +1864,8 @@ msgstr "กำลังรีเซ็ต..."
 #: specivo/templates/themes/default/pages/admin/versions.html:22
 #: specivo/templates/themes/default/pages/issues/detail.html:341
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:238
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:249
 msgid "Total"
 msgstr "ทั้งหมด"
 
@@ -2860,9 +2910,53 @@ msgstr "ไม่พบงาน"
 msgid "Create your first issue to get started."
 msgstr "สร้างงานแรกของคุณเพื่อเริ่มต้นใช้งาน"
 
+#: specivo/templates/themes/default/pages/projects/detail.html:32
 #: specivo/templates/themes/default/pages/projects/detail.html:141
 msgid "New Subproject"
 msgstr "โปรเจกต์ย่อยใหม่"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:40
+msgid "Overview"
+msgstr "ภาพรวม"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:61
+msgid "Project Info"
+msgstr "ข้อมูลโปรเจกต์"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:72
+msgid "Visibility"
+msgstr "การมองเห็น"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:73
+msgid "Public"
+msgstr "สาธารณะ"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:73
+msgid "Private"
+msgstr "ส่วนตัว"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:77
+#, python-format
+msgid "%(count)s created"
+msgstr "สร้างแล้ว%(count)sรายการ"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:84
+msgid "Subprojects"
+msgstr "โปรเจกต์ย่อย"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:98
+#: specivo/templates/themes/default/pages/projects/settings.html:169
+msgid "Enabled Modules"
+msgstr "โมดูลที่เปิดใช้งาน"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:127
+#, python-format
+msgid "... %(count)s total"
+msgstr "... ทั้งหมด%(count)sรายการ"
+
+#: specivo/templates/themes/default/pages/projects/detail.html:131
+msgid "No members yet."
+msgstr "ยังไม่มีสมาชิก"
 
 #: specivo/templates/themes/default/pages/projects/detail.html:148
 msgid "Parent project:"
@@ -2879,6 +2973,32 @@ msgstr "โปรเจกต์ย่อยนี้เกี่ยวกับ
 #: specivo/templates/themes/default/pages/projects/detail.html:172
 msgid "Create Subproject"
 msgstr "สร้างโปรเจกต์ย่อย"
+
+#: specivo/templates/themes/default/pages/projects/list.html:111
+#, python-format
+msgid "Subprojects (%(count)s)"
+msgstr "โปรเจกต์ย่อย(%(count)s)"
+
+#: specivo/templates/themes/default/pages/projects/list.html:157
+#, python-format
+msgid "%(count)s member"
+msgid_plural "%(count)s members"
+msgstr[0] "สมาชิก %(count)s คน"
+
+#: specivo/templates/themes/default/pages/projects/list.html:159
+#, python-format
+msgid "%(count)s wiki page"
+msgid_plural "%(count)s wiki pages"
+msgstr[0] "หน้าวิกิ %(count)s หน้า"
+
+#: specivo/templates/themes/default/pages/projects/list.html:167
+#: specivo/templates/themes/default/pages/projects/version_detail.html:59
+msgid "closed"
+msgstr "ปิดแล้ว"
+
+#: specivo/templates/themes/default/pages/projects/list.html:198
+msgid "Create one to get started."
+msgstr "สร้างขึ้นมาเพื่อเริ่มต้นใช้งาน"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:4
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:10
@@ -3108,10 +3228,10 @@ msgid "Rotation"
 msgstr "การหมุนเวียน"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:225
-#, fuzzy, python-format
+#, python-format
 msgid "%(count)s assignee"
 msgid_plural "%(count)s assignees"
-msgstr[0] "%(count)s issue"
+msgstr[0] "ผู้รับผิดชอบ %(count)s คน"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:232
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:254
@@ -3491,10 +3611,6 @@ msgstr "แก้ไขบทบาท"
 msgid "Edit Roles"
 msgstr "แก้ไขบทบาท"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:169
-msgid "Enabled Modules"
-msgstr "โมดูลที่เปิดใช้งาน"
-
 #: specivo/templates/themes/default/pages/projects/settings.html:200
 msgid "New version"
 msgstr "เวอร์ชันใหม่"
@@ -3676,6 +3792,7 @@ msgstr "ระยะเวลาสปรินต์เฉลี่ย"
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:48
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:114
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:179
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:232
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:68
 msgid "Velocity"
 msgstr "ความเร็ว"
@@ -3768,6 +3885,7 @@ msgstr "เสร็จสิ้นสปรินต์นี้หรือไ
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:81
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:50
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:56
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:132
 msgid "Complete Sprint"
 msgstr "ปิดสปรินต์"
 
@@ -3785,6 +3903,7 @@ msgid "%(count)s total"
 msgstr "ทั้งหมด %(count)s"
 
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:105
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:197
 #, python-format
 msgid "%(completed)s of %(total)s"
 msgstr "%(completed)s จาก %(total)s"
@@ -3819,6 +3938,7 @@ msgstr "สปรินต์ที่วางแผนไว้"
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:143
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:23
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:23
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:111
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:92
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:104
 msgid "Planned"
@@ -3826,6 +3946,7 @@ msgstr "วางแผนแล้ว"
 
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:166
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:169
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:124
 msgid "Start Sprint"
 msgstr "เริ่มสปรินต์"
 
@@ -3884,11 +4005,6 @@ msgstr "เสร็จสิ้น"
 #, python-format
 msgid "%(done)s of %(total)s done"
 msgstr "เสร็จแล้ว %(done)s จาก %(total)s"
-
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:201
-#, python-format
-msgid "%(first)s–%(last)s of %(total)s"
-msgstr "%(first)s–%(last)s จาก %(total)s"
 
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:232
 msgid "No issues in this sprint. Assign issues from the backlog to get started."
@@ -4004,6 +4120,74 @@ msgstr "บันทึกการเปลี่ยนแปลง"
 msgid "Saved"
 msgstr "บันทึกแล้ว"
 
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
+msgid "Sprint Lifecycle"
+msgstr "วงจรชีวิตสปรินต์"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:141
+msgid "Danger Zone"
+msgstr "พื้นที่อันตราย"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:143
+msgid ""
+"Deleting a sprint will unassign all issues back to the backlog. This "
+"action cannot be undone."
+msgstr ""
+"การลบสปรินต์จะย้ายงานทั้งหมดกลับไปยังแบ็กล็อก "
+"การกระทำนี้ไม่สามารถยกเลิกได้"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:144
+msgid "Active sprints must be completed before deletion."
+msgstr "สปรินต์ที่กำลังดำเนินอยู่ต้องเสร็จสิ้นก่อนจึงจะลบได้"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:148
+msgid ""
+"Are you sure you want to delete this sprint? All issues will be moved to "
+"the backlog."
+msgstr "คุณแน่ใจหรือไม่ว่าต้องการลบสปรินต์นี้? งานทั้งหมดจะถูกย้ายไปยังแบ็กล็อก"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:152
+msgid "Delete Sprint"
+msgstr "ลบสปรินต์"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:162
+msgid "Sprint Info"
+msgstr "ข้อมูลสปรินต์"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:178
+#, python-format
+msgid "%(count)s days"
+msgstr "%(count)sวัน"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:189
+msgid "Issues in Sprint"
+msgstr "งานในสปรินต์"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:206
+msgid "Remove from sprint"
+msgstr "นำออกจากสปรินต์"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:212
+#, python-format
+msgid "Remove %(key)s from this sprint?"
+msgstr "นำ%(key)sออกจากสปรินต์นี้?"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:221
+msgid "No issues in this sprint yet."
+msgstr "ยังไม่มีงานในสปรินต์นี้"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:226
+msgid "+ Add issues from backlog"
+msgstr "+ เพิ่มงานจากแบ็กล็อก"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:232
+msgid "(after completion)"
+msgstr "(หลังเสร็จสิ้น)"
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:259
+msgid "Available after sprint is completed"
+msgstr "ใช้งานได้หลังจากสปรินต์เสร็จสิ้น"
+
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:47
 #: specivo/templates/themes/default/pages/projects/version_detail.html:28
 #, python-format
@@ -4065,10 +4249,6 @@ msgstr "ครบกำหนดวันนี้"
 #: specivo/templates/themes/default/pages/projects/version_detail.html:37
 msgid "Created on"
 msgstr "สร้างเมื่อ"
-
-#: specivo/templates/themes/default/pages/projects/version_detail.html:59
-msgid "closed"
-msgstr "ปิดแล้ว"
 
 #: specivo/templates/themes/default/pages/projects/version_detail.html:60
 msgid "total"
@@ -4163,6 +4343,11 @@ msgstr[0] "รวม: %(hours)s ชม. (%(count)s รายการ)"
 #: specivo/templates/themes/default/pages/time/list.html:94
 msgid "No time entries yet. Log time to start tracking."
 msgstr "ยังไม่มีรายการเวลา บันทึกเวลาเพื่อเริ่มติดตาม"
+
+#: specivo/templates/themes/default/pages/wiki/diff.html:4
+#, python-format
+msgid "Diff: v%(from_version)s → v%(to_version)s"
+msgstr "ความแตกต่าง: v%(from_version)s → v%(to_version)s"
 
 #: specivo/templates/themes/default/pages/wiki/diff.html:12
 #: specivo/templates/themes/default/pages/wiki/history.html:12

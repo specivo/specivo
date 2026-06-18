@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-06-18 09:54+0200\n"
+"POT-Creation-Date: 2026-06-18 11:11+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -209,6 +209,14 @@ msgstr ""
 msgid "Workflow field rule not found"
 msgstr ""
 
+#: specivo/templates/themes/default/base.html:33
+msgid "Powered by"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:2
+msgid "Menu"
+msgstr ""
+
 #: specivo/templates/themes/default/components/header.html:9
 msgid "Search issues, wiki, projects..."
 msgstr ""
@@ -296,6 +304,18 @@ msgstr ""
 msgid "Sign out"
 msgstr ""
 
+#: specivo/templates/themes/default/components/macros.html:68
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:201
+#, python-format
+msgid "%(first)s–%(last)s of %(total)s"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html:90
+#: specivo/templates/themes/default/pages/_my_issues.html:16
+#: specivo/templates/themes/default/pages/search.html:220
+msgid "Show"
+msgstr ""
+
 #: specivo/templates/themes/default/components/sidebar.html:20
 #: specivo/templates/themes/default/pages/dashboard.html:3
 #: specivo/templates/themes/default/pages/dashboard.html:8
@@ -310,6 +330,10 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/projects.html:11
 #: specivo/templates/themes/default/pages/admin/projects.html:16
 #: specivo/templates/themes/default/pages/dashboard.html:234
+#: specivo/templates/themes/default/pages/projects/detail.html:10
+#: specivo/templates/themes/default/pages/projects/list.html:4
+#: specivo/templates/themes/default/pages/projects/list.html:9
+#: specivo/templates/themes/default/pages/projects/list.html:15
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:8
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:8
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:8
@@ -324,10 +348,15 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/versions.html:79
 #: specivo/templates/themes/default/pages/issues/list.html:4
 #: specivo/templates/themes/default/pages/issues/list.html:14
+#: specivo/templates/themes/default/pages/projects/detail.html:42
+#: specivo/templates/themes/default/pages/projects/detail.html:76
 #: specivo/templates/themes/default/pages/projects/list.html:84
+#: specivo/templates/themes/default/pages/projects/list.html:155
+#: specivo/templates/themes/default/pages/projects/list.html:182
 #: specivo/templates/themes/default/pages/projects/settings.html:227
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:100
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:127
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:182
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:56
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:109
 #: specivo/templates/themes/default/pages/projects/version_detail.html:81
@@ -353,7 +382,9 @@ msgstr ""
 
 #: specivo/templates/themes/default/components/sidebar.html:48
 #: specivo/templates/themes/default/pages/admin/projects.html:152
+#: specivo/templates/themes/default/pages/projects/detail.html:45
 #: specivo/templates/themes/default/pages/projects/list.html:85
+#: specivo/templates/themes/default/pages/projects/list.html:185
 #: specivo/templates/themes/default/pages/search.html:44
 #: specivo/templates/themes/default/pages/wiki/diff.html:10
 #: specivo/templates/themes/default/pages/wiki/edit.html:11
@@ -368,6 +399,8 @@ msgid "Wiki"
 msgstr ""
 
 #: specivo/templates/themes/default/components/sidebar.html:52
+#: specivo/templates/themes/default/pages/projects/detail.html:47
+#: specivo/templates/themes/default/pages/projects/roadmap.html:4
 #: specivo/templates/themes/default/pages/projects/roadmap.html:10
 #: specivo/templates/themes/default/pages/projects/roadmap.html:14
 #: specivo/templates/themes/default/pages/projects/version_detail.html:10
@@ -392,6 +425,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
+#: specivo/templates/themes/default/pages/projects/detail.html:52
 #: specivo/templates/themes/default/pages/projects/settings.html:3
 #: specivo/templates/themes/default/pages/projects/settings.html:13
 #: specivo/templates/themes/default/pages/projects/settings.html:16
@@ -454,15 +488,11 @@ msgstr ""
 msgid "of"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/_my_issues.html:16
-#: specivo/templates/themes/default/pages/search.html:220
-msgid "Show"
-msgstr ""
-
 #: specivo/templates/themes/default/pages/_my_issues.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:28
 #: specivo/templates/themes/default/pages/admin/settings.html:51
 #: specivo/templates/themes/default/pages/issues/list.html:236
+#: specivo/templates/themes/default/pages/projects/detail.html:68
 #: specivo/templates/themes/default/pages/projects/detail.html:160
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:123
 #: specivo/templates/themes/default/pages/projects/settings.html:41
@@ -498,6 +528,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:298
 #: specivo/templates/themes/default/pages/projects/settings.html:394
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:109
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:164
 #: specivo/templates/themes/default/pages/projects/version_detail.html:97
 #: specivo/templates/themes/default/pages/projects/version_detail.html:140
 msgid "Status"
@@ -518,6 +549,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/_my_issues.html:36
 #: specivo/templates/themes/default/pages/issues/list.html:241
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:172
 msgid "Updated"
 msgstr ""
 
@@ -625,6 +657,9 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:21
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:21
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:78
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:115
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:242
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:253
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:128
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:138
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:147
@@ -669,6 +704,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:110
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:88
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:79
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:177
 msgid "Duration"
 msgstr ""
 
@@ -677,11 +713,13 @@ msgid "days"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/dashboard.html:241
+#: specivo/templates/themes/default/pages/projects/list.html:167
 #: specivo/templates/themes/default/pages/projects/version_detail.html:58
 msgid "open"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/dashboard.html:245
+#: specivo/templates/themes/default/pages/projects/list.html:198
 msgid "No projects yet."
 msgstr ""
 
@@ -720,6 +758,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/auth/preferences.html:7
 #: specivo/templates/themes/default/pages/auth/profile.html:7
 #: specivo/templates/themes/default/pages/notifications.html:7
+#: specivo/templates/themes/default/pages/projects/detail.html:8
+#: specivo/templates/themes/default/pages/projects/list.html:8
 #: specivo/templates/themes/default/pages/projects/roadmap.html:8
 #: specivo/templates/themes/default/pages/projects/settings.html:7
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:8
@@ -1123,6 +1163,8 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:49
 #: specivo/templates/themes/default/pages/issues/detail.html:216
+#: specivo/templates/themes/default/pages/projects/detail.html:49
+#: specivo/templates/themes/default/pages/projects/list.html:188
 msgid "Time"
 msgstr ""
 
@@ -1323,11 +1365,13 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/projects.html:19
 #: specivo/templates/themes/default/pages/admin/projects.html:95
+#: specivo/templates/themes/default/pages/projects/list.html:20
 #: specivo/templates/themes/default/pages/projects/list.html:32
 msgid "New Project"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/projects.html:30
+#: specivo/templates/themes/default/pages/projects/detail.html:112
 #: specivo/templates/themes/default/pages/projects/settings.html:22
 msgid "Members"
 msgstr ""
@@ -1336,6 +1380,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/user_detail.html:58
 #: specivo/templates/themes/default/pages/admin/user_detail.html:110
 #: specivo/templates/themes/default/pages/auth/api_keys.html:75
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:168
 #: specivo/templates/themes/default/pages/projects/version_detail.html:150
 msgid "Created"
 msgstr ""
@@ -1361,6 +1406,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:64
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:19
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:19
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:113
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:35
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:51
 msgid "Active"
@@ -1403,6 +1449,7 @@ msgid "e.g. Backend API"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/projects.html:107
+#: specivo/templates/themes/default/pages/projects/detail.html:64
 #: specivo/templates/themes/default/pages/projects/detail.html:156
 #: specivo/templates/themes/default/pages/projects/list.html:44
 #: specivo/templates/themes/default/pages/projects/settings.html:37
@@ -1415,6 +1462,7 @@ msgid "Project key"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/projects.html:113
+#: specivo/templates/themes/default/pages/projects/list.html:50
 msgid "2-128 uppercase letters/digits"
 msgstr ""
 
@@ -1780,6 +1828,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/versions.html:22
 #: specivo/templates/themes/default/pages/issues/detail.html:341
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:238
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:249
 msgid "Total"
 msgstr ""
 
@@ -2822,8 +2872,52 @@ msgstr ""
 msgid "Create your first issue to get started."
 msgstr ""
 
+#: specivo/templates/themes/default/pages/projects/detail.html:32
 #: specivo/templates/themes/default/pages/projects/detail.html:141
 msgid "New Subproject"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:40
+msgid "Overview"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:61
+msgid "Project Info"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:72
+msgid "Visibility"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:73
+msgid "Public"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:73
+msgid "Private"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:77
+#, python-format
+msgid "%(count)s created"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:84
+msgid "Subprojects"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:98
+#: specivo/templates/themes/default/pages/projects/settings.html:169
+msgid "Enabled Modules"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:127
+#, python-format
+msgid "... %(count)s total"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/detail.html:131
+msgid "No members yet."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/detail.html:148
@@ -2840,6 +2934,34 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/detail.html:172
 msgid "Create Subproject"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/list.html:111
+#, python-format
+msgid "Subprojects (%(count)s)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/list.html:157
+#, python-format
+msgid "%(count)s member"
+msgid_plural "%(count)s members"
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/projects/list.html:159
+#, python-format
+msgid "%(count)s wiki page"
+msgid_plural "%(count)s wiki pages"
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/projects/list.html:167
+#: specivo/templates/themes/default/pages/projects/version_detail.html:59
+msgid "closed"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/list.html:198
+msgid "Create one to get started."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:4
@@ -3438,10 +3560,6 @@ msgstr ""
 msgid "Edit Roles"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:169
-msgid "Enabled Modules"
-msgstr ""
-
 #: specivo/templates/themes/default/pages/projects/settings.html:200
 msgid "New version"
 msgstr ""
@@ -3616,6 +3734,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:48
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:114
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:179
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:232
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:68
 msgid "Velocity"
 msgstr ""
@@ -3708,6 +3827,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:81
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:50
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:56
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:132
 msgid "Complete Sprint"
 msgstr ""
 
@@ -3725,6 +3845,7 @@ msgid "%(count)s total"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:105
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:197
 #, python-format
 msgid "%(completed)s of %(total)s"
 msgstr ""
@@ -3759,6 +3880,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:143
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:23
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:23
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:111
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:92
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:104
 msgid "Planned"
@@ -3766,6 +3888,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:166
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:169
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:124
 msgid "Start Sprint"
 msgstr ""
 
@@ -3823,11 +3946,6 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:128
 #, python-format
 msgid "%(done)s of %(total)s done"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:201
-#, python-format
-msgid "%(first)s–%(last)s of %(total)s"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:232
@@ -3945,6 +4063,72 @@ msgstr ""
 msgid "Saved"
 msgstr ""
 
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
+msgid "Sprint Lifecycle"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:141
+msgid "Danger Zone"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:143
+msgid ""
+"Deleting a sprint will unassign all issues back to the backlog. This "
+"action cannot be undone."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:144
+msgid "Active sprints must be completed before deletion."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:148
+msgid ""
+"Are you sure you want to delete this sprint? All issues will be moved to "
+"the backlog."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:152
+msgid "Delete Sprint"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:162
+msgid "Sprint Info"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:178
+#, python-format
+msgid "%(count)s days"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:189
+msgid "Issues in Sprint"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:206
+msgid "Remove from sprint"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:212
+#, python-format
+msgid "Remove %(key)s from this sprint?"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:221
+msgid "No issues in this sprint yet."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:226
+msgid "+ Add issues from backlog"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:232
+msgid "(after completion)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:259
+msgid "Available after sprint is completed"
+msgstr ""
+
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:47
 #: specivo/templates/themes/default/pages/projects/version_detail.html:28
 #, python-format
@@ -4007,10 +4191,6 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/version_detail.html:37
 msgid "Created on"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/projects/version_detail.html:59
-msgid "closed"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/version_detail.html:60
@@ -4106,6 +4286,11 @@ msgstr[1] ""
 
 #: specivo/templates/themes/default/pages/time/list.html:94
 msgid "No time entries yet. Log time to start tracking."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/wiki/diff.html:4
+#, python-format
+msgid "Diff: v%(from_version)s → v%(to_version)s"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/wiki/diff.html:12

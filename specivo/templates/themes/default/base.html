@@ -30,7 +30,7 @@
     <main class="main-content">
       {% block content %}{% endblock %}
       <footer class="app-footer">
-        Powered by <a href="https://specivo.io/" target="_blank">Specivo</a>{% if debug %} <span style="color:var(--sp-text-muted);font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);">v{{ app_version }}{% if git_commit %} <span style="opacity:0.6">{{ git_commit }}</span>{% endif %}</span>{% endif %}
+        {% trans %}Powered by{% endtrans %} <a href="https://specivo.io/" target="_blank">Specivo</a>{% if debug %} <span style="color:var(--sp-text-muted);font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);">v{{ app_version }}{% if git_commit %} <span style="opacity:0.6">{{ git_commit }}</span>{% endif %}</span>{% endif %}
         {% if debug and request.state.sql_debug_queries is defined %}
         {% set _sq = request.state.sql_debug_queries %}
         {% set _sql_ms = _sq | sum(attribute='duration_ms') %}
