@@ -204,6 +204,37 @@ async def test_create_weekly_pattern(
 
 
 @pytest.mark.asyncio
+async def test_create_with_naive_dtstart_anchors_to_timezone(
+    client: AsyncClient, db_session: AsyncSession, admin_token: str, project: Project, tracker: Tracker
+) -> None:
+    """A naive ``dtstart`` (as an HTML ``datetime-local`` input sends) plus a
+    separate ``timezone`` must be anchored to that timezone.
+
+    The recurrence engine requires a timezone-aware anchor; a naive value used
+    to fail with "spec.dtstart must be timezone-aware". The service interprets
+    the naive wall-clock in the supplied IANA ``timezone``.
+    """
+    resp = await client.post(
+        f"/api/v1/projects/{project.key}/recurring-patterns/",
+        json=_weekly_payload(
+            tracker.id,
+            freq="daily",
+            byday=None,
+            dtstart="2026-06-18T14:15:00",  # naive — no offset, like datetime-local
+            timezone="Asia/Bangkok",
+        ),
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 201, resp.text
+    stored = datetime.datetime.fromisoformat(resp.json()["dtstart"])
+    assert stored.tzinfo is not None, "dtstart must be stored timezone-aware"
+    # 14:15 wall-clock in Asia/Bangkok (UTC+7) is the instant 07:15 UTC.
+    assert stored.astimezone(datetime.UTC) == datetime.datetime(
+        2026, 6, 18, 7, 15, tzinfo=datetime.UTC
+    )
+
+
+@pytest.mark.asyncio
 async def test_create_bad_timezone_rejected(
     client: AsyncClient, db_session: AsyncSession, admin_token: str, project: Project, tracker: Tracker
 ) -> None:

@@ -109,9 +109,10 @@ class RecurringPatternService:
         await self._metadata_schema_service.validate_metadata(
             session, project.id, data.template_tracker_id, data.template_metadata
         )
+        dtstart = self._anchor_dtstart(data.dtstart, data.timezone)
         self._validate_rule(
             freq=data.freq,
-            dtstart=data.dtstart,
+            dtstart=dtstart,
             timezone=data.timezone,
             interval=data.rrule_interval,
             byday=data.byday,
@@ -156,7 +157,7 @@ class RecurringPatternService:
             rrule_raw=data.rrule_raw,
             anchor_mode=data.anchor_mode,
             base_date_strategy=data.base_date_strategy,
-            dtstart=data.dtstart,
+            dtstart=dtstart,
             timezone=data.timezone,
             working_day_adjustment=data.working_day_adjustment,
             working_days=data.working_days,
@@ -238,6 +239,12 @@ class RecurringPatternService:
             await self._metadata_schema_service.validate_metadata(
                 session, pattern.project_id, tracker_id, metadata
             )
+
+        # Anchor a newly-supplied naive dtstart to the effective timezone (the
+        # new one if it is also changing, otherwise the pattern's current one).
+        if updates.get("dtstart") is not None:
+            effective_tz = updates.get("timezone", pattern.timezone)
+            updates["dtstart"] = self._anchor_dtstart(updates["dtstart"], effective_tz)
 
         # Re-validate the recurrence rule against the merged state.
         self._validate_rule(
@@ -702,6 +709,21 @@ class RecurringPatternService:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _anchor_dtstart(dtstart: datetime, timezone: str) -> datetime:
+        """Make a naive ``dtstart`` timezone-aware by anchoring it to ``timezone``.
+
+        The web form and JSON API carry ``dtstart`` as a naive wall-clock value
+        (an HTML ``datetime-local`` input has no offset) alongside a separate
+        IANA ``timezone``. The recurrence engine requires a timezone-aware
+        anchor, so a naive value is interpreted as local wall-clock in that
+        timezone. Already-aware values denote an instant and pass through
+        unchanged (e.g. MCP/API callers that send an explicit offset).
+        """
+        if dtstart.tzinfo is None:
+            return dtstart.replace(tzinfo=ZoneInfo(timezone))
+        return dtstart
 
     def _validate_rule(self, **spec_fields: Any) -> None:
         """Validate recurrence-rule coherence by expanding a tiny window.
