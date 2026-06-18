@@ -48,7 +48,7 @@ Carry-over / reset
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -70,8 +70,14 @@ from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
 from specivo.services.issue_service import IssueService
+from specivo.services.journal_service import JournalService
 from specivo.services.metadata_schema_service import MetadataSchemaService
-from specivo.services.recurrence import RecurrenceSpec, expand_occurrences, next_assignee
+from specivo.services.recurrence import (
+    RecurrenceSpec,
+    expand_macros,
+    expand_occurrences,
+    next_assignee,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +92,7 @@ class RecurringPatternService:
     def __init__(self) -> None:
         # Composed sub-services, mirroring how IssueService composes its own.
         self._issue_service = IssueService()
+        self._journal_service = JournalService()
         self._metadata_schema_service = MetadataSchemaService()
 
     # ------------------------------------------------------------------
@@ -322,6 +329,8 @@ class RecurringPatternService:
         session: AsyncSession,
         pattern: RecurringPattern,
         now: datetime,
+        *,
+        locale: str = "en",
     ) -> list[Issue]:
         """Generate any due issues for *pattern* up to the look-ahead horizon.
 
@@ -331,6 +340,9 @@ class RecurringPatternService:
         (so overdue occurrences stack / catch up). Flexible mode generates at
         most one issue per run: the next occurrence, and only once the previous
         instance is closed.
+
+        ``locale`` is the workspace language used to localize ``{{month}}`` /
+        ``{{weekday}}`` template macros on generated issues.
         """
         if now.tzinfo is None:
             raise ValidationError(message="now must be timezone-aware")
@@ -346,11 +358,11 @@ class RecurringPatternService:
         created: list[Issue] = []
         if pattern.anchor_mode == "fixed":
             created = await self._materialize_fixed(
-                session, pattern, project, author, now, horizon, exdates, overrides
+                session, pattern, project, author, now, horizon, exdates, overrides, locale=locale
             )
         else:
             created = await self._materialize_flexible(
-                session, pattern, project, author, now, horizon, exdates, overrides
+                session, pattern, project, author, now, horizon, exdates, overrides, locale=locale
             )
 
         # Bookkeeping (observability only — never used for dedupe).
@@ -379,6 +391,8 @@ class RecurringPatternService:
         horizon: datetime,
         exdates: set[datetime],
         overrides: dict[datetime, RecurrenceException],
+        *,
+        locale: str = "en",
     ) -> list[Issue]:
         """Fixed-mode generation: fill in every missing in-window occurrence.
 
@@ -397,7 +411,9 @@ class RecurringPatternService:
         for occ in occurrences:
             if occ in existing:
                 continue
-            issue = await self._generate_issue(session, pattern, project, author, occ, overrides.get(occ))
+            issue = await self._generate_issue(
+                session, pattern, project, author, occ, overrides.get(occ), locale=locale
+            )
             created.append(issue)
         return created
 
@@ -411,6 +427,8 @@ class RecurringPatternService:
         horizon: datetime,
         exdates: set[datetime],
         overrides: dict[datetime, RecurrenceException],
+        *,
+        locale: str = "en",
     ) -> list[Issue]:
         """Flexible-mode generation: at most one next occurrence per run.
 
@@ -434,7 +452,9 @@ class RecurringPatternService:
             if not occurrences:
                 return []
             first = occurrences[0]
-            issue = await self._generate_issue(session, pattern, project, author, first, overrides.get(first))
+            issue = await self._generate_issue(
+                session, pattern, project, author, first, overrides.get(first), locale=locale
+            )
             return [issue]
 
         # An instance exists — only advance once it is done/closed.
@@ -463,7 +483,9 @@ class RecurringPatternService:
         if next_occ in existing:
             return []
 
-        issue = await self._generate_issue(session, pattern, project, author, next_occ, overrides.get(next_occ))
+        issue = await self._generate_issue(
+            session, pattern, project, author, next_occ, overrides.get(next_occ), locale=locale
+        )
         return [issue]
 
     # ------------------------------------------------------------------
@@ -478,6 +500,8 @@ class RecurringPatternService:
         author: User,
         occurrence: datetime,
         override: RecurrenceException | None,
+        *,
+        locale: str = "en",
     ) -> Issue:
         """Build one IssueCreate from the template and persist via IssueService."""
         carry = pattern.carry_over or {}
@@ -535,6 +559,12 @@ class RecurringPatternService:
             if "priority_id" in payload:
                 pass  # handled below via override_priority
 
+        # Expand {{date}} macros against this occurrence's local date, so each
+        # generated issue is distinct (e.g. "{{month}} {{year}}" review).
+        local_date = self._occurrence_local_date(pattern, occurrence)
+        subject = expand_macros(subject, local_date, locale) or subject
+        description = expand_macros(description, local_date, locale)
+
         start_date, due_date = self._compute_dates(pattern, occurrence)
 
         issue_create = IssueCreate(
@@ -570,12 +600,26 @@ class RecurringPatternService:
             original_occurrence_at=occurrence,
         )
 
+        # Record provenance in the activity log: "Created from recurring pattern".
+        await self._journal_service.record_recurring_source(
+            session, issue, author, pattern.id, pattern.name
+        )
+
         # If this occurrence had an override exception row, link the new issue.
         if override is not None:
             override.materialized_issue_id = issue.id
             session.add(override)
 
         return issue
+
+    @staticmethod
+    def _occurrence_local_date(pattern: RecurringPattern, occurrence: datetime) -> date:
+        """Return *occurrence*'s calendar date as seen in the pattern timezone."""
+        try:
+            tz = ZoneInfo(pattern.timezone)
+        except Exception:
+            tz = ZoneInfo("UTC")
+        return occurrence.astimezone(tz).date()
 
     def _compute_dates(
         self, pattern: RecurringPattern, occurrence: datetime
@@ -585,11 +629,7 @@ class RecurringPatternService:
         See the module docstring for the offset rules. The occurrence's *local*
         date (in the pattern timezone) is the anchor.
         """
-        try:
-            tz = ZoneInfo(pattern.timezone)
-        except Exception:
-            tz = ZoneInfo("UTC")
-        local_date = occurrence.astimezone(tz).date()
+        local_date = self._occurrence_local_date(pattern, occurrence)
 
         if pattern.due_offset_days is None:
             due_date = local_date

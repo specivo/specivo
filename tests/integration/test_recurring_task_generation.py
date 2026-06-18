@@ -272,10 +272,10 @@ async def test_one_failing_pattern_does_not_block_others(
     # real implementation otherwise.
     real_materialize = RecurringPatternService.materialize
 
-    async def flaky_materialize(self, session, pattern, now):  # type: ignore[no-untyped-def]
+    async def flaky_materialize(self, session, pattern, now, **kwargs):  # type: ignore[no-untyped-def]
         if pattern.id == bad.id:
             raise RuntimeError("boom")
-        return await real_materialize(self, session, pattern, now)
+        return await real_materialize(self, session, pattern, now, **kwargs)
 
     monkeypatch.setattr(RecurringPatternService, "materialize", flaky_materialize)
 

@@ -102,10 +102,15 @@ async def _generate_for_session(session, now, *, batch_size: int | None = None) 
     a test session.
     """
     from specivo.core.config import get_settings
+    from specivo.core.runtime_settings import get_default_language_override
     from specivo.services.recurring_pattern_service import RecurringPatternService
 
     if batch_size is None:
         batch_size = get_settings().recurring_tasks_batch_size
+
+    # Workspace language for localizing {{month}} / {{weekday}} template macros.
+    # No request context exists in a background job, so use the workspace default.
+    locale = get_default_language_override() or get_settings().default_language
 
     service = RecurringPatternService()
 
@@ -126,7 +131,7 @@ async def _generate_for_session(session, now, *, batch_size: int | None = None) 
             # the rest of the batch — one failure never poisons the others.
             savepoint = await session.begin_nested()
             try:
-                created = await service.materialize(session, pattern, now)
+                created = await service.materialize(session, pattern, now, locale=locale)
                 await savepoint.commit()
                 # Commit per pattern: a mid-run crash keeps already-generated
                 # issues, and the next beat tick resumes the rest (self-healing).
