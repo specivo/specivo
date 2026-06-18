@@ -3,6 +3,20 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.2.0] - 2026-06-18
+
+### Added
+- **Recurring tasks** — define repeating issues with RRULE patterns: occurrence-expansion engine, generation service with edit-scope handling, a Celery beat generator, REST API with permission wiring, MCP tools with audit events, and a dedicated localized create/edit page with management list
+- **Filter issues by metadata** — array metadata values on an issue render as clickable tag-links that open a metadata-filtered issue search across every project you can access; the search page shows the applied metadata filter in a collapsible panel
+- Remaining project, sprint and wiki UI strings marked and translated
+
+### Changed
+- **Admin settings** — the workspace default language and timezone now save together from a single button via one endpoint, instead of two separate forms
+- Metadata preset identifiers are unique case-insensitively — slugs are normalized (lowercase/dashes) and backed by a database-level unique index
+
+### Fixed
+- Metadata presets — the "Create preset" action no longer silently fails; the name and identifier are validated with inline errors, and the modal title and Create/Save labels are now translated
+
 ## [0.1.10] - 2026-06-14
 
 ### Added
