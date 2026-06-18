@@ -1282,6 +1282,13 @@ textarea.modal-input { font-family: var(--sp-font-body); }
 .version-table tbody tr:hover { background: var(--sp-accent-subtle); }
 .version-table tbody td { padding: var(--sp-space-md) var(--sp-space-lg); border-bottom: 1px solid var(--sp-border); vertical-align: middle; }
 .version-table tbody tr:last-child td { border-bottom: none; }
+/* Recurring-patterns variant: the first column is the Name, not a handle/checkbox/number.
+   Undo the shared 40px first-child sizing and give the Name a sensible minimum width so
+   ordinary two-word names stay on one line; let the trailing actions column take the slack. */
+.version-table--recurring thead th:first-child { width: auto; text-align: left; }
+.version-table--recurring thead th:first-child,
+.version-table--recurring tbody td:first-child { min-width: 14rem; white-space: nowrap; }
+.version-table--recurring thead th:last-child { width: 1%; }
 .version-num { font-family: var(--sp-font-mono); font-weight: 600; color: var(--sp-accent); font-size: var(--sp-font-size-sm); }
 .version-current-badge { display: inline-block; font-size: var(--sp-font-size-xs); padding: 1px 7px; border-radius: 10px; background: rgba(196, 154, 60, 0.12); color: var(--sp-accent); font-weight: 500; margin-left: var(--sp-space-sm); vertical-align: middle; }
 .version-author { display: flex; align-items: center; gap: var(--sp-space-sm); }
