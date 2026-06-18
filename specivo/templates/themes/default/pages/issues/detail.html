@@ -97,12 +97,22 @@
         <span class="sp-mt-count" x-text="filledCount + '/' + totalCount + ' fields'"></span>
       </button>
 
-      {# Summary chips (visible when collapsed) #}
+      {# Summary chips (visible when collapsed). Array values render as separate
+         clickable tag-links to the metadata-filtered search. #}
       <div class="sp-metadata-summary" x-show="!expanded">
         <template x-for="chip in summaryChips" :key="chip.key">
           <span class="sp-ms-chip" :class="chip.chipClass">
             <span class="sp-ms-key" x-text="chip.label + ':'"></span>
-            <span class="sp-ms-val" x-text="chip.display"></span>
+            <template x-for="(val, vi) in chip.values" :key="vi">
+              <template x-if="val.href">
+                <a class="sp-ms-val sp-ms-val-link" :href="val.href" @click.stop x-text="val.text"></a>
+              </template>
+            </template>
+            <template x-for="(val, vi) in chip.values" :key="'s' + vi">
+              <template x-if="!val.href">
+                <span class="sp-ms-val" x-text="val.text"></span>
+              </template>
+            </template>
           </span>
         </template>
       </div>

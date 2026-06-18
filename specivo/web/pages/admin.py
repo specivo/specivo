@@ -344,50 +344,39 @@ async def admin_settings(
     )
 
 
-@router.post("/admin/settings/language/", response_model=None)
-async def admin_settings_language(
+@router.post("/admin/settings/defaults/", response_model=None)
+async def admin_settings_defaults(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
     default_language: str = Form(""),
-) -> Response:
-    """Persist the workspace default language and update the runtime override.
-
-    Validates the submitted code against the installed locales; an unknown
-    code is rejected (the setting is left unchanged) and the admin is
-    redirected back without applying it.
-    """
-    from specivo.core.locales import get_available_locales
-    from specivo.core.runtime_settings import set_default_language_override
-
-    code = default_language.strip()
-    if code in get_available_locales():
-        await _settings_svc.set_many(db, {"default_language": code})
-        await db.commit()
-        set_default_language_override(code)
-
-    return RedirectResponse("/admin/settings/", status_code=303)
-
-
-@router.post("/admin/settings/timezone/", response_model=None)
-async def admin_settings_timezone(
-    request: Request,
-    user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
     default_timezone: str = Form(""),
 ) -> Response:
-    """Persist the instance-wide default timezone.
+    """Persist the workspace default language and timezone in a single save.
 
-    Validates the submitted value against the IANA timezone database; an unknown
-    zone is rejected (the setting is left unchanged) and the admin is redirected
-    back without applying it.
+    Each field is validated independently — language against the installed
+    locales, timezone against the IANA database. Unknown values are ignored
+    (left unchanged) while valid values are saved. The runtime language
+    override is refreshed whenever the language is updated.
     """
     from zoneinfo import available_timezones
 
+    from specivo.core.locales import get_available_locales
+    from specivo.core.runtime_settings import set_default_language_override
+
+    to_set: dict[str, str | None] = {}
+    code = default_language.strip()
+    if code and code in get_available_locales():
+        to_set["default_language"] = code
     tz = default_timezone.strip()
-    if tz in available_timezones():
-        await _settings_svc.set_many(db, {"default_timezone": tz})
+    if tz and tz in available_timezones():
+        to_set["default_timezone"] = tz
+
+    if to_set:
+        await _settings_svc.set_many(db, to_set)
         await db.commit()
+        if "default_language" in to_set:
+            set_default_language_override(to_set["default_language"])
 
     return RedirectResponse("/admin/settings/", status_code=303)
 

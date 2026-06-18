@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
@@ -9,10 +10,15 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
+from specivo.schemas.search import SearchFilters
 from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import SecurityAuditService
 from specivo.web.deps import get_current_user_optional, get_templates
+
+# Metadata filter slug charset and value length cap (defense against crafted input).
+_MF_SLUG_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
+_MV_MAX_LEN = 255
 
 if TYPE_CHECKING:
     from specivo.models.user import User
@@ -32,6 +38,9 @@ async def search_page(
     mode: str = Query("hybrid"),
     scope: str = Query("all"),
     project_key: str = Query(""),
+    mf: str = Query("", description="Metadata field slug to filter by"),
+    mv: str = Query("", description="Metadata value to filter by"),
+    ma: int = Query(0, description="1 if the metadata field is array-typed"),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
@@ -57,19 +66,44 @@ async def search_page(
         except NotFoundError:
             pass  # Ignore invalid project key, search globally
 
+    # Build an optional metadata containment filter from mf/mv/ma. Invalid or
+    # incomplete pairs are ignored (treated as "no filter").
+    active_filters = None
+    mf_clean = mf.strip()
+    mv_clean = mv.strip()
+    if mf_clean and mv_clean and _MF_SLUG_RE.match(mf_clean) and len(mv_clean) <= _MV_MAX_LEN:
+        containment = {mf_clean: [mv_clean]} if ma else {mf_clean: mv_clean}
+        active_filters = SearchFilters(metadata=containment)
+    else:
+        # Drop unusable filter inputs so the template doesn't show a stale chip.
+        mf_clean = mv_clean = ""
+
     if q.strip():
         search_fn = _search_svc.hybrid_search if mode == "hybrid" else _search_svc.search
         try:
             results, total, type_counts = await search_fn(
-                db, q, user=user, project_id=project_id, scope=scope, offset=offset, limit=limit
+                db, q, user=user, project_id=project_id, scope=scope, offset=offset, limit=limit, filters=active_filters
             )
         except Exception:
             import logging
 
             logging.getLogger(__name__).exception("Search failed for q=%r scope=%s mode=%s", q, scope, mode)
             results, total, type_counts = [], 0, {}
+    elif active_filters is not None:
+        # Metadata-only listing: force the issues scope (only issues carry metadata).
+        scope = "issues"
+        try:
+            results, total, type_counts = await _search_svc.filter_issues(
+                db, user=user, project_id=project_id, offset=offset, limit=limit, filters=active_filters
+            )
+        except Exception:
+            import logging
 
-        # Audit log the search query
+            logging.getLogger(__name__).exception("Metadata filter failed for mf=%r mv=%r", mf_clean, mv_clean)
+            results, total, type_counts = [], 0, {}
+
+    # Audit log the search/filter query
+    if q.strip() or active_filters is not None:
         try:
             await _audit_svc.log_search_query(
                 session=db,
@@ -95,6 +129,9 @@ async def search_page(
             "mode": mode,
             "scope": scope,
             "project_key": project_key,
+            "mf": mf_clean,
+            "mv": mv_clean,
+            "ma": ma,
             "results": results,
             "total": total,
             "offset": offset,
