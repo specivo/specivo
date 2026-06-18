@@ -11,13 +11,17 @@
   {"label": pattern.name}
 ]) }}
 
-{# Hero #}
-<div class="version-hero"
+{# Single full-width column: hero header, then info cards, then sections. The
+   Alpine component wraps the whole page (preview/skip handlers live below). #}
+<div
   x-data='recurringPatternDetail({
     pattern: {{ pattern_json | tojson }},
     projectKey: {{ project.key | tojson }},
     canManage: {{ can_manage_recurring | tojson }}
   })'>
+
+  {# Hero #}
+  <div class="version-hero">
   <div class="version-hero-left">
     <div class="version-title">
       {{ pattern.name }}
@@ -47,6 +51,8 @@
       {% trans %}Edit{% endtrans %}
     </a>
   </div>
+  </div>
+  {# /Hero #}
 
   {# Flash #}
   <template x-if="message">
@@ -61,13 +67,96 @@
     <span>{% trans %}Editing a pattern affects future instances only. Already-generated issues keep the values they were created with.{% endtrans %}</span>
   </div>
 
-  {# Two-column layout #}
-  <div class="vd-layout">
-    {# Left: occurrences + generated instances #}
-    <div>
-      <div class="vd-section-header">
-        <h2 class="vd-section-title">{% trans %}Upcoming occurrences{% endtrans %}</h2>
+  {# Info cards row: sits directly below the header, full width, wraps to one
+     column on narrow screens (sp-rp-info-grid). #}
+  <div class="sp-rp-info-grid">
+    <div class="card vd-info-card">
+      <h3>{% trans %}Schedule{% endtrans %}</h3>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Frequency{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.freq }}</span>
       </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Interval{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.rrule_interval }}</span>
+      </div>
+      {% if pattern.byday %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Weekdays{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.byday | join(', ') }}</span>
+      </div>
+      {% endif %}
+      {% if pattern.bymonthday %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Month days{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.bymonthday | join(', ') }}</span>
+      </div>
+      {% endif %}
+      {% if pattern.bysetpos %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Set position{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.bysetpos | join(', ') }}</span>
+      </div>
+      {% endif %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Anchor mode{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.anchor_mode }}</span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Timezone{% endtrans %}</span>
+        <span class="vd-info-value"><span class="mono">{{ pattern.timezone }}</span></span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Lead time{% endtrans %}</span>
+        <span class="vd-info-value">{% trans count=pattern.creation_lead_time_days %}%(count)s day{% pluralize %}%(count)s days{% endtrans %}</span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Start{% endtrans %}</span>
+        <span class="vd-info-value"><span class="mono">{{ pattern.dtstart | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
+      </div>
+      {% if pattern.until %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Until{% endtrans %}</span>
+        <span class="vd-info-value"><span class="mono">{{ pattern.until | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card vd-info-card">
+      <h3>{% trans %}Template{% endtrans %}</h3>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Subject{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.template_subject }}</span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Carry over{% endtrans %}</span>
+        <span class="vd-info-value">{{ pattern.carry_over.keys() | join(', ') if pattern.carry_over else _('defaults') }}</span>
+      </div>
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Reset checklist{% endtrans %}</span>
+        <span class="vd-info-value">{{ _('Yes') if pattern.reset_checklist else _('No') }}</span>
+      </div>
+      {% if pattern.assignee_rotation and pattern.assignee_rotation.get('user_ids') %}
+      <div class="vd-info-row">
+        <span class="vd-info-label">{% trans %}Rotation{% endtrans %}</span>
+        <span class="vd-info-value">{% trans count=(pattern.assignee_rotation.get('user_ids') | length) %}%(count)s assignee{% pluralize %}%(count)s assignees{% endtrans %}</span>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if pattern.template_description %}
+    <div class="card vd-info-card">
+      <h3>{% trans %}Description template{% endtrans %}</h3>
+      <div class="prose">{{ pattern.template_description | markdown }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {# Full-width sections: occurrences, live preview, generated instances #}
+  <div class="sp-rp-sections">
+    <div class="vd-section-header">
+      <h2 class="vd-section-title">{% trans %}Upcoming occurrences{% endtrans %}</h2>
+    </div>
       <div class="card sp-card-pad">
         {% if upcoming_occurrences %}
         <ul class="sp-occurrence-list">
@@ -75,7 +164,7 @@
           <li class="sp-occurrence-row">
             <span class="mono">{{ occ | localdt(pattern.timezone, '%b %d, %Y at %H:%M') }}</span>
             {% if can_manage_recurring %}
-            <button type="button" class="sp-btn-sm sp-btn-ghost" @click="skipOccurrence({{ occ.isoformat() | tojson }})" aria-label="{{ _('Skip this occurrence') }}">
+            <button type="button" class="sp-btn-sm sp-btn-ghost" @click="skipOccurrence('{{ occ.isoformat() }}')" aria-label="{{ _('Skip this occurrence') }}">
               {% trans %}Skip{% endtrans %}
             </button>
             {% endif %}
@@ -149,91 +238,6 @@
         {% trans %}No issues have been generated from this pattern yet.{% endtrans %}
       </div>
       {% endif %}
-    </div>
-
-    {# Right: details sidebar #}
-    <div>
-      <div class="card vd-info-card sp-mb-lg">
-        <h3>{% trans %}Schedule{% endtrans %}</h3>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Frequency{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.freq }}</span>
-        </div>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Interval{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.rrule_interval }}</span>
-        </div>
-        {% if pattern.byday %}
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Weekdays{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.byday | join(', ') }}</span>
-        </div>
-        {% endif %}
-        {% if pattern.bymonthday %}
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Month days{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.bymonthday | join(', ') }}</span>
-        </div>
-        {% endif %}
-        {% if pattern.bysetpos %}
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Set position{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.bysetpos | join(', ') }}</span>
-        </div>
-        {% endif %}
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Anchor mode{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.anchor_mode }}</span>
-        </div>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Timezone{% endtrans %}</span>
-          <span class="vd-info-value"><span class="mono">{{ pattern.timezone }}</span></span>
-        </div>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Lead time{% endtrans %}</span>
-          <span class="vd-info-value">{% trans count=pattern.creation_lead_time_days %}%(count)s day{% pluralize %}%(count)s days{% endtrans %}</span>
-        </div>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Start{% endtrans %}</span>
-          <span class="vd-info-value"><span class="mono">{{ pattern.dtstart | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
-        </div>
-        {% if pattern.until %}
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Until{% endtrans %}</span>
-          <span class="vd-info-value"><span class="mono">{{ pattern.until | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
-        </div>
-        {% endif %}
-      </div>
-
-      <div class="card vd-info-card sp-mb-lg">
-        <h3>{% trans %}Template{% endtrans %}</h3>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Subject{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.template_subject }}</span>
-        </div>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Carry over{% endtrans %}</span>
-          <span class="vd-info-value">{{ pattern.carry_over.keys() | join(', ') if pattern.carry_over else _('defaults') }}</span>
-        </div>
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Reset checklist{% endtrans %}</span>
-          <span class="vd-info-value">{{ _('Yes') if pattern.reset_checklist else _('No') }}</span>
-        </div>
-        {% if pattern.assignee_rotation and pattern.assignee_rotation.get('user_ids') %}
-        <div class="vd-info-row">
-          <span class="vd-info-label">{% trans %}Rotation{% endtrans %}</span>
-          <span class="vd-info-value">{% trans count=(pattern.assignee_rotation.get('user_ids') | length) %}%(count)s assignee{% pluralize %}%(count)s assignees{% endtrans %}</span>
-        </div>
-        {% endif %}
-      </div>
-
-      {% if pattern.template_description %}
-      <div class="card vd-info-card">
-        <h3>{% trans %}Description template{% endtrans %}</h3>
-        <div class="prose">{{ pattern.template_description | markdown }}</div>
-      </div>
-      {% endif %}
-    </div>
   </div>
 
 </div>
