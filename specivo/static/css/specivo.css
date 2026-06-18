@@ -2618,6 +2618,19 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
   font-size: var(--sp-font-size-xs);
 }
 .sp-recurring-note .sp-icon-14 { flex: 0 0 auto; margin-top: 2px; }
+/* Recurring pattern detail: full-width single column. Compact info cards sit
+   below the header as a responsive row that wraps to one column on narrow
+   screens; the occurrence/preview/instances sections then span full width. */
+.sp-rp-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--sp-space-lg);
+  align-items: start;
+  margin: var(--sp-space-lg) 0 var(--sp-space-xl);
+}
+@media (max-width: 600px) { .sp-rp-info-grid { grid-template-columns: 1fr; } }
+.sp-rp-info-grid .vd-info-card { margin: 0; }
+.sp-rp-sections { min-width: 0; }
 .sp-occurrence-list { list-style: none; margin: 0; padding: 0; }
 .sp-occurrence-row {
   display: flex;
