@@ -46,6 +46,12 @@ match:
 This is the payoff over free text: because the values are typed and consistent, the filter returns exactly
 the issues you mean.
 
+You can also reach a metadata-filtered search straight from any issue. When an issue has **array**
+metadata values (for example a `branches` or `tags` field), each value shows as a **clickable tag** in
+the issue's metadata. Clicking a tag opens a search filtered to that same value across **every project you
+can access** — a fast way to find everything tagged with a given branch, label, or category without
+starting from a project list.
+
 !!! tip "AI agents can set metadata too"
     Connected AI agents can read and update metadata through the built-in MCP server — for example appending
     a commit hash to a `commits` array or tagging an issue as it works. See
