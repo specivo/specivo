@@ -20,6 +20,7 @@ know the shape of what's possible.
 | **Relations** | Link issues with typed [relations](../issues/relations.md) — relates, blocks, duplicates, and so on — and remove them. |
 | **Versions** | List and manage versions (milestones/releases) and see which issues belong to each. |
 | **Sprints** | List sprints, see sprint issues, and manage the plan/start/complete lifecycle. |
+| **Recurring tasks** | Create, list, update, and delete [recurring task patterns](../projects/recurring-tasks.md); skip a single scheduled occurrence; preview upcoming occurrences. The template subject and description support date macros (`{{month}}`, `{{weekday}}`, …) that expand per occurrence in the pattern's timezone. |
 | **Time** | Log time against an issue or project with an activity. |
 | **Orientation** | `specivo_whoami` (which account the key is), `specivo_list_lookups` (tracker/status/priority IDs), and `specivo_setup_guide` (config help). |
 
