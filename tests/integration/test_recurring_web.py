@@ -178,6 +178,83 @@ async def test_recurring_detail_page_renders(
 
 
 @pytest.mark.integration
+async def test_recurring_create_form_page_renders(
+    manager_client: AsyncClient,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssuePriority],
+):
+    """The dedicated create form page returns 200 and wires the form component."""
+    resp = await manager_client.get(f"/projects/{project.key}/recurring-patterns/new/")
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    assert "New recurring pattern" in html
+    # The page form component (not a modal) is wired in.
+    assert "recurringPatternForm(" in html
+    # The searchable timezone combobox is wired in: a combobox trigger plus the
+    # filterable listbox, with the full IANA list passed into the component.
+    assert 'role="combobox"' in html
+    assert 'id="sp-rp-tz-listbox"' in html
+    assert "timezones:" in html
+    # The full IANA list is rendered into the component (UTC is always present).
+    assert "UTC" in html
+    # The old native datalist control is gone.
+    assert 'id="sp-tz-options"' not in html
+    assert "<datalist" not in html
+
+
+@pytest.mark.integration
+async def test_recurring_edit_form_page_renders(
+    manager_client: AsyncClient,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssuePriority],
+):
+    """The dedicated edit form page returns 200 and carries the pattern + lock_version."""
+    tracker, _status, _priority = lookups
+    pattern = await _create_pattern(manager_client, project.key, tracker.id)
+
+    resp = await manager_client.get(
+        f"/projects/{project.key}/recurring-patterns/{pattern['id']}/edit/"
+    )
+    assert resp.status_code == 200, resp.text
+    html = resp.text
+    assert "Edit recurring pattern" in html
+    assert "recurringPatternForm(" in html
+    # The edit page carries the optimistic-locking version for the PATCH body.
+    assert '"lock_version"' in html
+    assert "Weekly standup notes" in html
+
+
+@pytest.mark.integration
+async def test_recurring_edit_form_404_for_nonexistent_pattern(
+    manager_client: AsyncClient,
+    project: Project,
+):
+    """Editing a nonexistent pattern id returns 404."""
+    resp = await manager_client.get(
+        f"/projects/{project.key}/recurring-patterns/999999/edit/"
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.integration
+async def test_recurring_create_form_forbidden_for_non_manager(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssuePriority],
+):
+    """A view-only member cannot open the create form page (403)."""
+    user = await _make_user(db_session, login="recw_viewer")
+    await _add_member(db_session, project, user, ["view_issues"])
+    token = await _login(client, user.login)
+    client.headers["Authorization"] = f"Bearer {token}"
+    client.cookies.set("access_token", token)
+
+    resp = await client.get(f"/projects/{project.key}/recurring-patterns/new/")
+    assert resp.status_code == 403
+
+
+@pytest.mark.integration
 async def test_recurring_detail_404_for_nonexistent_pattern(
     manager_client: AsyncClient,
     project: Project,

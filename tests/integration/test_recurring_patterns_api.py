@@ -278,7 +278,12 @@ async def test_update_pattern(
     created = await _create_pattern(client, project, admin_token, tracker.id)
     resp = await client.patch(
         f"/api/v1/projects/{project.key}/recurring-patterns/{created['id']}/",
-        json={"name": "Renamed", "enabled": False, "rrule_interval": 2},
+        json={
+            "name": "Renamed",
+            "enabled": False,
+            "rrule_interval": 2,
+            "lock_version": created["lock_version"],
+        },
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200, resp.text
@@ -286,6 +291,59 @@ async def test_update_pattern(
     assert data["name"] == "Renamed"
     assert data["enabled"] is False
     assert data["rrule_interval"] == 2
+
+
+@pytest.mark.asyncio
+async def test_update_requires_lock_version(
+    client: AsyncClient, db_session: AsyncSession, admin_token: str, project: Project, tracker: Tracker
+) -> None:
+    """A PATCH without ``lock_version`` is rejected at validation (422)."""
+    created = await _create_pattern(client, project, admin_token, tracker.id)
+    resp = await client.patch(
+        f"/api/v1/projects/{project.key}/recurring-patterns/{created['id']}/",
+        json={"name": "No lock"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422, resp.text
+
+
+@pytest.mark.asyncio
+async def test_update_stale_lock_version_conflict(
+    client: AsyncClient, db_session: AsyncSession, admin_token: str, project: Project, tracker: Tracker
+) -> None:
+    """A concurrent edit with a stale ``lock_version`` is rejected with 409.
+
+    The first writer succeeds and bumps the version; the second writer, still
+    holding the original version, must get a 409 Conflict instead of silently
+    overwriting the first change.
+    """
+    created = await _create_pattern(client, project, admin_token, tracker.id)
+    stale_version = created["lock_version"]
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # First writer wins and bumps the lock_version.
+    first = await client.patch(
+        f"/api/v1/projects/{project.key}/recurring-patterns/{created['id']}/",
+        json={"name": "First writer", "lock_version": stale_version},
+        headers=headers,
+    )
+    assert first.status_code == 200, first.text
+    assert first.json()["lock_version"] != stale_version
+
+    # Second writer holds the now-stale version -> 409 Conflict.
+    second = await client.patch(
+        f"/api/v1/projects/{project.key}/recurring-patterns/{created['id']}/",
+        json={"name": "Second writer", "lock_version": stale_version},
+        headers=headers,
+    )
+    assert second.status_code == 409, second.text
+
+    # The first writer's change is intact.
+    detail = await client.get(
+        f"/api/v1/projects/{project.key}/recurring-patterns/{created['id']}/",
+        headers=headers,
+    )
+    assert detail.json()["name"] == "First writer"
 
 
 @pytest.mark.asyncio
@@ -365,7 +423,7 @@ async def test_viewer_can_read_but_not_mutate(
 
     update_resp = await client.patch(
         f"/api/v1/projects/{project.key}/recurring-patterns/{created['id']}/",
-        json={"name": "nope"},
+        json={"name": "nope", "lock_version": created["lock_version"]},
         headers=viewer_headers,
     )
     assert update_resp.status_code == 403

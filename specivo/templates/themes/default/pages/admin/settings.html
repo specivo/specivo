@@ -13,22 +13,35 @@
 
 <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">{% trans %}Settings{% endtrans %}</h1>
 
-<div class="card sp-settings-language" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 480px;">
-  <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Default language{% endtrans %}</h2>
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;">
+  <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Defaults{% endtrans %}</h2>
   <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
-    {% trans %}The fallback language for anonymous visitors and users without a saved preference.{% endtrans %}
+    {% trans %}Workspace-wide fallbacks for anonymous visitors and users without their own saved preference.{% endtrans %}
   </p>
-  <form method="post" action="/admin/settings/language/">
-    <div class="form-group" style="margin-bottom: var(--sp-space-lg);">
-      <label class="form-label" for="default_language">{% trans %}Language{% endtrans %}</label>
-      <select id="default_language" name="default_language" class="form-input" style="max-width: 300px;">
-        {% for code, label in language_choices %}
-        <option value="{{ code }}" {{ 'selected' if current_default_language == code else '' }}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Save default language{% endtrans %}</button>
-  </form>
+  <div class="sp-settings-grid">
+    <form method="post" action="/admin/settings/language/">
+      <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+        <label class="form-label" for="default_language">{% trans %}Language{% endtrans %}</label>
+        <select id="default_language" name="default_language" class="form-input">
+          {% for code, label in language_choices %}
+          <option value="{{ code }}" {{ 'selected' if current_default_language == code else '' }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Save{% endtrans %}</button>
+    </form>
+    <form method="post" action="/admin/settings/timezone/">
+      <div class="form-group" style="margin-bottom: var(--sp-space-md);">
+        <label class="form-label" for="default_timezone">{% trans %}Timezone{% endtrans %}</label>
+        <select id="default_timezone" name="default_timezone" class="form-input">
+          {% for tz in timezone_choices %}
+          <option value="{{ tz }}" {{ 'selected' if current_default_timezone == tz else '' }}>{{ tz.replace('_', ' ') }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Save{% endtrans %}</button>
+    </form>
+  </div>
 </div>
 
 <div class="card" style="padding: var(--sp-space-lg);" x-data='adminSettings({{ settings | tojson }})'>

@@ -351,7 +351,7 @@
   </div>
 
   <!-- Recurring tasks tab -->
-  <div x-show="tab === 'recurring'" x-data='recurringPatterns({ patterns: {{ recurring_patterns_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_recurring | tojson }}, members: {{ members | tojson }}, trackers: {{ trackers_data | tojson }}, statuses: {{ statuses_data | tojson }}, priorities: {{ priorities_data | tojson }} })'>
+  <div x-show="tab === 'recurring'" x-data='recurringPatterns({ patterns: {{ recurring_patterns_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_recurring | tojson }} })'>
 
     <!-- Flash messages -->
     <template x-if="message">
@@ -366,21 +366,21 @@
           <span class="sp-listcard-title">{% trans %}Recurring tasks{% endtrans %}</span>
           <span class="sp-text-muted-xs-ml-sm" x-text="'(' + patterns.length + ')'"></span>
         </div>
-        <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+        <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
           {% trans %}New pattern{% endtrans %}
-        </button>
+        </a>
       </div>
 
       <template x-if="patterns.length === 0">
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
-          <p x-text="canManage ? 'Create a pattern to generate issues automatically on a schedule.' : 'No recurring patterns have been created for this project yet.'"></p>
-          <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+          <p x-text="canManage ? '{{ _('Create a pattern to generate issues automatically on a schedule.') }}' : '{{ _('No recurring patterns have been created for this project yet.') }}'"></p>
+          <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
             {% trans %}Create first pattern{% endtrans %}
-          </button>
+          </a>
         </div>
       </template>
 
@@ -410,9 +410,9 @@
                   <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'" :aria-label="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 11-12.77.04"/></svg>
                   </button>
-                  <button type="button" class="action-link" @click="openEdit(p)" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
+                  <a class="action-link" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/edit/'" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-                  </button>
+                  </a>
                   <button type="button" class="action-link danger" @click="confirmDelete(p)" title="{{ _('Delete') }}" aria-label="{{ _('Delete') }}">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
                   </button>
@@ -450,7 +450,6 @@
       </div>
     </template>
 
-    {% include "pages/projects/_recurring_form_modal.html" %}
   </div>
 
   <!-- Metadata tab -->

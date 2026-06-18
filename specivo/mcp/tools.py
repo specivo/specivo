@@ -1973,6 +1973,11 @@ async def _update_recurring_pattern(
     if enabled is not None:
         updates["enabled"] = enabled
 
+    # Optimistic locking: the tool just loaded the pattern, so pass its current
+    # lock_version. The schema requires it (mirroring the web/REST edit path);
+    # a stale version raises ConflictError, surfaced to the agent as an error.
+    updates["lock_version"] = pattern.lock_version
+
     try:
         data = RecurringPatternUpdate(**updates)
     except ValueError as exc:

@@ -16,11 +16,7 @@
   x-data='recurringPatternDetail({
     pattern: {{ pattern_json | tojson }},
     projectKey: {{ project.key | tojson }},
-    canManage: {{ can_manage_recurring | tojson }},
-    members: {{ members | tojson }},
-    trackers: {{ trackers_data | tojson }},
-    statuses: {{ statuses_data | tojson }},
-    priorities: {{ priorities_data | tojson }}
+    canManage: {{ can_manage_recurring | tojson }}
   })'>
   <div class="version-hero-left">
     <div class="version-title">
@@ -46,10 +42,10 @@
     </div>
   </div>
   <div class="version-hero-actions" x-show="canManage">
-    <button type="button" class="sp-btn sp-btn-ghost" @click="openEdit()">
+    <a class="sp-btn sp-btn-ghost" href="/projects/{{ project.key }}/recurring-patterns/{{ pattern.id }}/edit/">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
       {% trans %}Edit{% endtrans %}
-    </button>
+    </a>
   </div>
 
   {# Flash #}
@@ -240,7 +236,5 @@
     </div>
   </div>
 
-  {# Edit modal — reuses the shared recurring pattern form component #}
-  {% include "pages/projects/_recurring_form_modal.html" %}
 </div>
 {% endblock %}

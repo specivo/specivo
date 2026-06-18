@@ -57,7 +57,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from specivo.core.exceptions import NotFoundError, ValidationError
+from specivo.core.exceptions import ConflictError, NotFoundError, ValidationError
+from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
@@ -210,8 +211,25 @@ class RecurringPatternService:
         going-forward behaviour while preserving history, use
         :meth:`split_from` (this-and-future). To touch a single occurrence, use
         :meth:`override_occurrence`.
+
+        Optimistic locking: ``data.lock_version`` must match the pattern's
+        current ``lock_version`` or a :class:`ConflictError` (409) is raised —
+        mirroring :meth:`IssueService.update`. This makes concurrent edits
+        safe: the second writer sees a clear conflict instead of clobbering the
+        first writer's change.
         """
-        updates = data.model_dump(exclude_unset=True)
+        if data.lock_version != pattern.lock_version:
+            raise ConflictError(
+                message=_(
+                    "This pattern was changed by someone else. "
+                    "Reload and try again."
+                ),
+                details={"current_lock_version": pattern.lock_version},
+            )
+
+        # ``lock_version`` is the optimistic-locking column managed by
+        # SQLAlchemy's ``version_id_col``; it is never a writable field.
+        updates = data.model_dump(exclude_unset=True, exclude={"lock_version"})
 
         # Validate metadata if the template metadata or tracker changed.
         if "template_metadata" in updates or "template_tracker_id" in updates:

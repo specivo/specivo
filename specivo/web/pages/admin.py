@@ -314,6 +314,8 @@ async def admin_settings(
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the settings management page."""
+    from zoneinfo import available_timezones
+
     from specivo.core.locales import LANGUAGE_LABELS, get_available_locales
 
     settings = await _settings_svc.get_all(db)
@@ -322,6 +324,9 @@ async def admin_settings(
     current_default = settings.get("default_language") or get_settings().default_language
     if current_default not in available:
         current_default = "en"
+
+    timezone_choices = sorted(available_timezones())
+    current_default_timezone = settings.get("default_timezone") or "UTC"
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -333,6 +338,8 @@ async def admin_settings(
             "settings": settings,
             "language_choices": language_choices,
             "current_default_language": current_default,
+            "timezone_choices": timezone_choices,
+            "current_default_timezone": current_default_timezone,
         },
     )
 
@@ -358,6 +365,29 @@ async def admin_settings_language(
         await _settings_svc.set_many(db, {"default_language": code})
         await db.commit()
         set_default_language_override(code)
+
+    return RedirectResponse("/admin/settings/", status_code=303)
+
+
+@router.post("/admin/settings/timezone/", response_model=None)
+async def admin_settings_timezone(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    default_timezone: str = Form(""),
+) -> Response:
+    """Persist the instance-wide default timezone.
+
+    Validates the submitted value against the IANA timezone database; an unknown
+    zone is rejected (the setting is left unchanged) and the admin is redirected
+    back without applying it.
+    """
+    from zoneinfo import available_timezones
+
+    tz = default_timezone.strip()
+    if tz in available_timezones():
+        await _settings_svc.set_many(db, {"default_timezone": tz})
+        await db.commit()
 
     return RedirectResponse("/admin/settings/", status_code=303)
 

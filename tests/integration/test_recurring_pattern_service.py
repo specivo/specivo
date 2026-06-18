@@ -801,7 +801,11 @@ async def test_plain_update_leaves_open_instance_unchanged(
     await db_session.commit()
     issue_id = created[0].id
 
-    await service.update(db_session, pattern, RecurringPatternUpdate(template_subject="Renamed template"))
+    await service.update(
+        db_session,
+        pattern,
+        RecurringPatternUpdate(template_subject="Renamed template", lock_version=pattern.lock_version),
+    )
     await db_session.commit()
 
     # The already-materialised issue keeps its original subject.

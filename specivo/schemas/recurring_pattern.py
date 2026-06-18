@@ -94,11 +94,18 @@ class RecurringPatternCreate(BaseModel):
 class RecurringPatternUpdate(BaseModel):
     """Partial update for a recurring pattern (PATCH semantics).
 
-    Every field is optional. ``None`` means "leave unchanged" for scalar fields;
-    to clear a nullable field, callers should use the dedicated edit-scope
-    methods or set it explicitly through a future field-mask. For 0.2.0 a plain
-    update touches only the fields that are provided (non-None).
+    Every content field is optional. ``None`` means "leave unchanged" for
+    scalar fields; to clear a nullable field, callers should use the dedicated
+    edit-scope methods or set it explicitly through a future field-mask. For
+    0.2.0 a plain update touches only the fields that are provided (non-None).
+
+    ``lock_version`` is REQUIRED for optimistic locking (mirrors
+    :class:`~specivo.schemas.issue.IssueUpdate`): the server rejects updates
+    whose submitted version does not match the current DB value with a 409
+    Conflict so two concurrent edits cannot silently lost-update each other.
     """
+
+    lock_version: int
 
     name: str | None = Field(default=None, min_length=1, max_length=255)
     enabled: bool | None = None

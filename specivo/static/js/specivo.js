@@ -958,7 +958,8 @@ document.addEventListener('alpine:init', function () {
             template_description: '',
             carry_over: {description: true, assignee: true, metadata: true, estimated_hours: true},
             reset_checklist: true,
-            rotation_user_ids: []
+            rotation_user_ids: [],
+            lock_version: 0
         };
     }
 
@@ -986,6 +987,7 @@ document.addEventListener('alpine:init', function () {
         f.carry_over = Object.assign(f.carry_over, p.carry_over || {});
         f.reset_checklist = p.reset_checklist !== false;
         f.rotation_user_ids = (p.assignee_rotation && p.assignee_rotation.user_ids) ? p.assignee_rotation.user_ids.slice() : [];
+        f.lock_version = (typeof p.lock_version === 'number') ? p.lock_version : 0;
         return f;
     }
 
@@ -1001,8 +1003,14 @@ document.addEventListener('alpine:init', function () {
         return out.length > 0 ? out : null;
     }
 
-    /** Assemble the REST payload (create/update shape) from a form. */
-    function _formToPayload(form) {
+    /**
+     * Assemble the REST payload from a form.
+     *
+     * When ``includeLock`` is true (the PATCH/edit path) the optimistic-locking
+     * ``lock_version`` is included so the server can reject a stale update with
+     * a 409 Conflict; the create (POST) path omits it.
+     */
+    function _formToPayload(form, includeLock) {
         var dtstart = form.dtstart;
         if (dtstart && dtstart.length === 16) {
             dtstart = dtstart + ':00';
@@ -1011,7 +1019,7 @@ document.addEventListener('alpine:init', function () {
         if (form.rotation_user_ids && form.rotation_user_ids.length > 0) {
             rotation = {user_ids: form.rotation_user_ids, strategy: 'round_robin'};
         }
-        return {
+        var payload = {
             name: form.name.trim(),
             enabled: form.enabled,
             freq: form.freq,
@@ -1036,6 +1044,10 @@ document.addEventListener('alpine:init', function () {
             reset_checklist: form.reset_checklist,
             assignee_rotation: rotation
         };
+        if (includeLock) {
+            payload.lock_version = form.lock_version;
+        }
+        return payload;
     }
 
     /** Human-readable schedule label for the list table ("Weekly", "Every 2 months"). */
@@ -1054,10 +1066,39 @@ document.addEventListener('alpine:init', function () {
     }
 
     /**
-     * Shared mixin: form state, toggles, save, and live preview. Mixed into
-     * both the list and detail components so the modal markup is identical.
+     * Recurring pattern create/edit — dedicated full-page form (RRULE builder).
+     *
+     * Replaces the old modal. Drives create (POST) and edit (PATCH) of a
+     * pattern through the REST API, then navigates to the pattern's detail page
+     * on success. Translated, user-facing strings are passed in via ``labels``
+     * from the template (CSP-safe; no hardcoded English in JS).
+     *
+     *   x-data="recurringPatternForm({ mode, pattern, projectKey, canManage,
+     *     members, trackers, statuses, priorities, labels })"
+     *
+     * Race safety:
+     *   - ``saving`` double-submit guard: the submit button is :disabled while a
+     *     request is in flight and the handler returns early if already saving,
+     *     so a duplicate POST can never create a duplicate pattern.
+     *   - On edit, ``form.lock_version`` rides along in the PATCH body; a stale
+     *     version is rejected server-side with 409 and surfaced here as a clear
+     *     "changed by someone else" message.
      */
-    function _recurringFormMixin(initial) {
+    Alpine.data('recurringPatternForm', function (initial) {
+        var labels = initial.labels || {};
+        var isEdit = initial.mode === 'edit';
+        var form;
+        if (isEdit && initial.pattern) {
+            form = _patternToForm(initial.pattern);
+        } else {
+            form = _blankRecurringForm();
+            if (initial.trackers && initial.trackers.length > 0) {
+                form.template_tracker_id = initial.trackers[0].id;
+            }
+            // New patterns default to the timezone resolved from the user's
+            // profile / instance settings (server-provided), fallback UTC.
+            form.timezone = initial.defaultTimezone || 'UTC';
+        }
         return {
             projectKey: initial.projectKey || '',
             canManage: initial.canManage !== false,
@@ -1065,16 +1106,120 @@ document.addEventListener('alpine:init', function () {
             trackers: initial.trackers || [],
             statuses: initial.statuses || [],
             priorities: initial.priorities || [],
-            showModal: false,
-            editing: null,
+            timezones: initial.timezones || [],
+            labels: labels,
+            editing: isEdit,
+            patternId: (isEdit && initial.pattern) ? initial.pattern.id : null,
             saving: false,
-            form: _blankRecurringForm(),
+            form: form,
             formError: '',
             previewForm: [],
             previewLoading: false,
             previewError: false,
-            message: '',
-            messageType: 'success',
+
+            // Timezone combobox state.
+            tzOpen: false,
+            tzQuery: '',
+            tzActiveIndex: 0,
+
+            init: function () {
+                if (this.editing) this.refreshFormPreview();
+            },
+
+            /**
+             * Case-insensitive filter over the IANA timezone list. Matches on the
+             * zone name (e.g. "Europe/London"); the full name already carries the
+             * region/city offset hint, so a plain substring match is enough.
+             */
+            /** Display label for a timezone: IANA id with underscores shown as
+             *  spaces (e.g. "America/El_Aaiun" -> "America/El Aaiun"). The stored
+             *  value (form.timezone) always keeps the canonical underscore form. */
+            tzLabel: function (tz) {
+                return (tz || '').replace(/_/g, ' ');
+            },
+
+            tzFiltered: function () {
+                // Match underscore-insensitively so typing "El Aaiun" finds
+                // "America/El_Aaiun".
+                var q = this.tzQuery.trim().toLowerCase().replace(/_/g, ' ');
+                if (!q) return this.timezones;
+                var out = [];
+                for (var i = 0; i < this.timezones.length; i++) {
+                    var hay = this.timezones[i].toLowerCase().replace(/_/g, ' ');
+                    if (hay.indexOf(q) !== -1) {
+                        out.push(this.timezones[i]);
+                    }
+                }
+                return out;
+            },
+
+            tzToggle: function () {
+                if (this.tzOpen) {
+                    this.tzClose();
+                } else {
+                    this.tzOpenPanel();
+                }
+            },
+
+            tzOpenPanel: function () {
+                this.tzOpen = true;
+                this.tzQuery = '';
+                // Position the active highlight on the current selection.
+                var list = this.tzFiltered();
+                var sel = list.indexOf(this.form.timezone);
+                this.tzActiveIndex = sel === -1 ? 0 : sel;
+                var self = this;
+                this.$nextTick(function () {
+                    if (self.$refs.tzSearch) self.$refs.tzSearch.focus();
+                });
+            },
+
+            tzClose: function () {
+                if (!this.tzOpen) return;
+                this.tzOpen = false;
+                // Return focus to the trigger for keyboard users.
+                var trigger = this.$el.querySelector('.sp-tz-trigger');
+                if (trigger) trigger.focus();
+            },
+
+            tzSelect: function (tz) {
+                this.form.timezone = tz;
+                this.refreshFormPreview();
+                this.tzClose();
+            },
+
+            /** Keyboard on the trigger button: open on arrow/enter/space. */
+            tzTriggerKeydown: function (e) {
+                if (e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    this.tzOpenPanel();
+                }
+            },
+
+            /** Keyboard inside the search input: navigate and choose options. */
+            tzSearchKeydown: function (e) {
+                var list = this.tzFiltered();
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    if (list.length) this.tzActiveIndex = (this.tzActiveIndex + 1) % list.length;
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    if (list.length) this.tzActiveIndex = (this.tzActiveIndex - 1 + list.length) % list.length;
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (list.length) this.tzSelect(list[this.tzActiveIndex]);
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    this.tzClose();
+                }
+                this.$nextTick(this._tzScrollActive.bind(this));
+            },
+
+            /** Keep the active option in view while arrow-navigating. */
+            _tzScrollActive: function () {
+                var opt = this.$el.querySelector('#sp-tz-opt-' + this.tzActiveIndex);
+                if (opt && opt.scrollIntoView) opt.scrollIntoView({ block: 'nearest' });
+            },
 
             get canSaveForm() {
                 return !this.saving
@@ -1084,35 +1229,9 @@ document.addEventListener('alpine:init', function () {
                     && !!this.form.dtstart;
             },
 
-            openCreate: function () {
-                if (!this.canManage) return;
-                this.editing = null;
-                this.form = _blankRecurringForm();
-                if (this.trackers.length > 0) this.form.template_tracker_id = this.trackers[0].id;
-                this.formError = '';
-                this.previewForm = [];
-                this.showModal = true;
-            },
-
-            openEdit: function (p) {
-                if (!this.canManage) return;
-                this.editing = p;
-                this.form = _patternToForm(p);
-                this.formError = '';
-                this.previewForm = [];
-                this.showModal = true;
-            },
-
-            closeModal: function () {
-                this.showModal = false;
-            },
-
             /** Full weekday name for the weekday-button aria-label. */
             weekdayName: function (code) {
-                var names = {
-                    MO: 'Monday', TU: 'Tuesday', WE: 'Wednesday', TH: 'Thursday',
-                    FR: 'Friday', SA: 'Saturday', SU: 'Sunday'
-                };
+                var names = this.labels.weekdays || {};
                 return names[code] || code;
             },
 
@@ -1126,28 +1245,13 @@ document.addEventListener('alpine:init', function () {
                 this.refreshFormPreview();
             },
 
-            toggleRotationMember: function (userId) {
-                var idx = this.form.rotation_user_ids.indexOf(userId);
-                if (idx === -1) {
-                    this.form.rotation_user_ids.push(userId);
-                } else {
-                    this.form.rotation_user_ids.splice(idx, 1);
-                }
-            },
-
-            flash: function (msg, type) {
-                this.message = msg;
-                this.messageType = type || 'success';
-                setTimeout(function () { this.message = ''; }.bind(this), 4000);
-            },
-
             /**
              * Live preview: the occurrences endpoint requires a persisted
-             * pattern, so when editing we query it directly. For a brand-new
-             * pattern the live count appears after the first save.
+             * pattern, so we query it only when editing. For a brand-new pattern
+             * the live count appears after the first save.
              */
             refreshFormPreview: async function () {
-                if (!this.editing) {
+                if (!this.editing || !this.patternId) {
                     this.previewForm = [];
                     this.previewError = false;
                     return;
@@ -1156,7 +1260,7 @@ document.addEventListener('alpine:init', function () {
                 this.previewError = false;
                 try {
                     var days = this.form.creation_lead_time_days || 30;
-                    var url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.editing.id + '/occurrences/?days=' + days;
+                    var url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/occurrences/?days=' + days;
                     var res = await spFetch(url);
                     if (res.ok) {
                         var data = await res.json();
@@ -1171,59 +1275,75 @@ document.addEventListener('alpine:init', function () {
             },
 
             saveForm: async function () {
-                if (!this.canSaveForm) return;
+                // Double-submit guard: bail if a request is already in flight.
+                if (this.saving || !this.canSaveForm) return;
                 this.saving = true;
                 this.formError = '';
                 try {
-                    var payload = _formToPayload(this.form);
                     var url, method;
                     if (this.editing) {
-                        url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.editing.id + '/';
+                        url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/' + this.patternId + '/';
                         method = 'PATCH';
                     } else {
                         url = '/api/v1/projects/' + this.projectKey + '/recurring-patterns/';
                         method = 'POST';
                     }
+                    var payload = _formToPayload(this.form, this.editing);
                     var res = await spFetch(url, {
                         method: method,
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify(payload)
                     });
                     if (res.ok) {
-                        this.showModal = false;
-                        this.onSaved(await res.json());
+                        // Navigate to the saved pattern's detail page. Stay in the
+                        // saving state so the button cannot be re-submitted while
+                        // the browser navigates away.
+                        var saved = await res.json();
+                        var id = saved.id || this.patternId;
+                        window.location = '/projects/' + this.projectKey + '/recurring-patterns/' + id + '/';
+                        return;
+                    }
+                    if (res.status === 409) {
+                        this.formError = this.labels.conflict || 'This pattern was changed by someone else. Reload and try again.';
                     } else {
                         var err = await res.json().catch(function () { return {}; });
-                        this.formError = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to save pattern.';
+                        this.formError = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || this.labels.saveFailed || 'Failed to save pattern.';
                     }
                 } catch (_e) {
-                    this.formError = 'Unable to connect.';
+                    this.formError = this.labels.connectFailed || 'Unable to connect.';
                 }
+                // Re-enable only on error (on success we navigate away).
                 this.saving = false;
             },
 
-            /** Overridden by each component to refresh its own view. */
-            onSaved: function () {},
-
             scheduleLabel: function (p) { return _scheduleLabel(p); }
         };
-    }
+    });
 
     /**
-     * Recurring tasks — management list (create / edit / enable-toggle / delete).
-     *   x-data="recurringPatterns({ patterns, projectKey, canManage, members, trackers, statuses, priorities })"
+     * Recurring tasks — management list (enable-toggle / delete).
+     * Create/edit now happen on dedicated form pages (see recurringPatternForm),
+     * so this component no longer carries any modal/form state.
+     *   x-data="recurringPatterns({ patterns, projectKey, canManage })"
      */
     Alpine.data('recurringPatterns', function (initial) {
-        var base = _recurringFormMixin(initial);
-        return Object.assign(base, {
+        return {
+            projectKey: initial.projectKey || '',
+            canManage: initial.canManage !== false,
             patterns: initial.patterns || [],
+            message: '',
+            messageType: 'success',
             showDeleteModal: false,
             deleting: null,
             deletingBusy: false,
 
-            onSaved: function () {
-                window.location.reload();
+            flash: function (msg, type) {
+                this.message = msg;
+                this.messageType = type || 'success';
+                setTimeout(function () { this.message = ''; }.bind(this), 4000);
             },
+
+            scheduleLabel: function (p) { return _scheduleLabel(p); },
 
             toggleEnabled: async function (p) {
                 if (!this.canManage) return;
@@ -1272,29 +1392,34 @@ document.addEventListener('alpine:init', function () {
                 }
                 this.deletingBusy = false;
             }
-        });
+        };
     });
 
     /**
-     * Recurring task detail — edit the pattern, skip occurrences, live preview.
-     *   x-data="recurringPatternDetail({ pattern, projectKey, canManage, members, trackers, statuses, priorities })"
+     * Recurring task detail — skip occurrences and live preview. Editing now
+     * happens on a dedicated form page (see recurringPatternForm), so this
+     * component carries no form/modal state.
+     *   x-data="recurringPatternDetail({ pattern, projectKey, canManage })"
      */
     Alpine.data('recurringPatternDetail', function (initial) {
-        var base = _recurringFormMixin(initial);
-        return Object.assign(base, {
+        return {
+            projectKey: initial.projectKey || '',
+            canManage: initial.canManage !== false,
             pattern: initial.pattern || {},
             preview: [],
+            previewLoading: false,
+            previewError: false,
+            message: '',
+            messageType: 'success',
 
             init: function () {
                 this.loadPreview();
             },
 
-            openEdit: function () {
-                base.openEdit.call(this, this.pattern);
-            },
-
-            onSaved: function () {
-                window.location.reload();
+            flash: function (msg, type) {
+                this.message = msg;
+                this.messageType = type || 'success';
+                setTimeout(function () { this.message = ''; }.bind(this), 4000);
             },
 
             loadPreview: async function () {
@@ -1334,7 +1459,7 @@ document.addEventListener('alpine:init', function () {
                     this.flash('Unable to connect.', 'error');
                 }
             }
-        });
+        };
     });
 
     /**

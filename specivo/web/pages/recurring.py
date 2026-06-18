@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from typing import TYPE_CHECKING, Any, cast
+from zoneinfo import available_timezones
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -32,6 +33,7 @@ from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.recurrence import expand_occurrences
 from specivo.services.recurring_pattern_service import RecurringPatternService
+from specivo.services.settings_service import SettingsService
 from specivo.web.deps import get_current_user_optional, get_templates
 
 if TYPE_CHECKING:
@@ -43,9 +45,29 @@ router = APIRouter(tags=["web-recurring"], include_in_schema=False)
 
 _project_svc = ProjectService()
 _pattern_svc = RecurringPatternService()
+_settings_svc = SettingsService()
+
+
+async def _default_timezone(user: User, db: AsyncSession) -> str:
+    """Resolve the timezone a new pattern should default to.
+
+    Priority: the user's own profile timezone (if they customised it away from
+    the UTC default), then the instance-wide ``default_timezone`` setting, then
+    UTC. The browser timezone is deliberately NOT used.
+    """
+    user_tz = user.timezone if user.timezone and user.timezone != "UTC" else None
+    if user_tz:
+        return user_tz
+    instance_tz = (await _settings_svc.get_all(db)).get("default_timezone")
+    return instance_tz or "UTC"
 
 # Number of upcoming occurrences shown in the server-rendered schedule summary.
 _PREVIEW_COUNT = 5
+
+# Full IANA timezone list, passed into the create/edit form's searchable
+# timezone combobox so it filters client-side (no JS round-trip, CSP-safe).
+# Sorted once at import time — the call walks the tz database on disk.
+_TIMEZONE_OPTIONS = sorted(available_timezones())
 
 
 async def _resolve_project(
@@ -109,6 +131,7 @@ def _pattern_summary(pattern: RecurringPattern) -> dict[str, Any]:
         "reset_checklist": pattern.reset_checklist,
         "assignee_rotation": pattern.assignee_rotation,
         "dtstart": pattern.dtstart.isoformat() if pattern.dtstart else None,
+        "lock_version": pattern.lock_version,
     }
 
 
@@ -150,6 +173,100 @@ async def recurring_list(
             "patterns_json": [_pattern_summary(p) for p in patterns],
             "can_manage_recurring": can_manage,
             "members": members,
+            **lookups,
+        },
+    )
+
+
+@router.get(
+    "/projects/{project_key}/recurring-patterns/new/",
+    response_class=HTMLResponse,
+)
+async def recurring_create_form(
+    project_key: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the dedicated create-pattern form page."""
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+
+    project = await _resolve_project(project_key, user, db)
+
+    if not await _can_manage(user, project, db):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    members = await _project_svc.list_members(db, project)
+    lookups = await _lookups_context(db)
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/projects/recurring_pattern_form.html",
+        context={
+            "user": user,
+            "active_page": "recurring",
+            "active_project": project,
+            "project": project,
+            "mode": "create",
+            "pattern": None,
+            "pattern_json": None,
+            "members": members,
+            "timezone_options": _TIMEZONE_OPTIONS,
+            "default_timezone": await _default_timezone(user, db),
+            **lookups,
+        },
+    )
+
+
+@router.get(
+    "/projects/{project_key}/recurring-patterns/{pattern_id}/edit/",
+    response_class=HTMLResponse,
+)
+async def recurring_edit_form(
+    project_key: str,
+    pattern_id: int,
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the dedicated edit-pattern form page (carries lock_version)."""
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+
+    project = await _resolve_project(project_key, user, db)
+
+    if not await _can_manage(user, project, db):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    try:
+        pattern = await _pattern_svc.get_by_id(db, pattern_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Recurring pattern not found")
+    if pattern.project_id != project.id:
+        raise HTTPException(status_code=404, detail="Recurring pattern not found")
+
+    members = await _project_svc.list_members(db, project)
+    lookups = await _lookups_context(db)
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/projects/recurring_pattern_form.html",
+        context={
+            "user": user,
+            "active_page": "recurring",
+            "active_project": project,
+            "project": project,
+            "mode": "edit",
+            "pattern": pattern,
+            "pattern_json": _pattern_summary(pattern),
+            "members": members,
+            "timezone_options": _TIMEZONE_OPTIONS,
+            "default_timezone": await _default_timezone(user, db),
             **lookups,
         },
     )
