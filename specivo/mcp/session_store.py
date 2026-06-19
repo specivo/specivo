@@ -28,24 +28,31 @@ window, Redis expires it automatically.
 
 What this module does **not** do
 --------------------------------
-It does **not** rehydrate live MCP transports after an api restart.
-On restart, any open client connections are forcibly reset: the
-anyio streams are closed, the task group is cancelled, and the
-in-memory ``_server_instances`` dict is cleared. The Redis entries
-for those sessions will still exist until TTL expiry, which means a
-client that re-issues its old ``Mcp-Session-Id`` after restart will
-find the SDK's in-memory dict empty and still receive a 404 from the
-SDK's stateful path. That is the SDK's behaviour and this layer
-does not change it.
+It does **not** persist the live MCP transports themselves. The anyio
+streams, the task driving ``Server.run``, and any in-flight JSON-RPC
+state are per-process and cannot be serialized; on restart they are
+all torn down and the in-memory ``_server_instances`` dict is cleared.
+
+What this module *enables*, though, is restart survival: because the
+durable session identity lives here, ``PersistentStreamableHTTPSessionManager``
+can look a session up by ``Mcp-Session-Id`` after an in-memory miss and
+**rehydrate** a fresh transport under the same id — seeded as
+already-initialized (``stateless=True`` on the SDK run path) so a client
+that finished its ``initialize`` handshake before the restart keeps
+working without a reconnect, instead of hitting the SDK's 404 path.
+This store provides the lookup; the manager does the rehydration.
 
 The value of the Redis layer is:
 
-1. **Attribution** — after a restart we still know which api key / user
+1. **Restart survival** — the manager uses ``get()`` to find a known
+   session after an in-memory miss and rehydrate it, so long-running
+   clients (and idle-evicted sessions) survive an api restart.
+2. **Attribution** — after a restart we still know which api key / user
    each recorded session belonged to, for audit trails and telemetry.
-2. **Foundation** — the upcoming MCP telemetry pipeline (wiki page
+3. **Foundation** — the upcoming MCP telemetry pipeline (wiki page
    ``mcp-tool-call-telemetry``) can read and extend these entries
    without needing a second storage layer.
-3. **Operational visibility** — ``exists()`` / ``get()`` let ops tools
+4. **Operational visibility** — ``exists()`` / ``get()`` let ops tools
    introspect session state without touching the SDK internals.
 
 Interaction with ``agent_sessions``
@@ -221,9 +228,10 @@ async def check_redis_persistence(redis: Redis) -> bool:
     Used by the startup hook to emit a warning when the bundled /
     external Redis instance is running without AOF. When persistence
     is off, every Redis restart drops MCP session metadata, which
-    means the attribution benefit of this store is lost across
-    restarts (though the live transports were going to die anyway, so
-    the user-visible effect is the same 404 path).
+    means both the attribution benefit and restart survival are lost:
+    without the persisted entry the manager can no longer rehydrate the
+    session, so a returning client falls back to the SDK's 404 path and
+    has to reinitialize.
 
     Gracefully returns ``True`` if the call fails for any reason —
     the goal is to warn the operator when we are **certain**
