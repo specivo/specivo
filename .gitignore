@@ -2,7 +2,9 @@
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
+# Python packaging artifacts (root only — do NOT ignore specivo/static/dist/,
+# which holds the committed esbuild bundles served at runtime).
+/dist/
 build/
 .eggs/
 
@@ -48,6 +50,8 @@ data/
 specivo-data/
 htmlcov/
 specivo/static/models/
-specivo/static/css/specivo.*.css
-specivo/static/js/specivo.*.js
 docs-site/
+
+# Frontend build (esbuild) — node_modules is dev-only; the built bundles under
+# specivo/static/dist/ ARE committed.
+frontend/node_modules/
