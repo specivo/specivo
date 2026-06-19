@@ -1,0 +1,13 @@
+/* ============================================================
+   ACTIVITY FEED
+   ============================================================ */
+.activity-feed { padding: 0 var(--sp-space-lg) var(--sp-space-lg); }
+.activity-item { display: flex; gap: var(--sp-space-md); padding: var(--sp-space-md) 0; border-bottom: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm); }
+.activity-item:last-child { border-bottom: none; }
+.activity-item .avatar-sm { margin-top: 2px; }
+.activity-content { flex: 1; }
+.activity-content .actor { font-weight: 600; color: var(--sp-text-primary); }
+.activity-content .action { color: var(--sp-text-secondary); }
+.activity-content .target { font-weight: 500; color: var(--sp-text-link); }
+.activity-time { color: var(--sp-text-muted); font-size: var(--sp-font-size-xs); margin-top: 2px; }
+

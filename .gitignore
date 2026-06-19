@@ -53,5 +53,6 @@ specivo/static/models/
 docs-site/
 
 # Frontend build (esbuild) — node_modules is dev-only; the built bundles under
-# specivo/static/dist/ ARE committed.
+# specivo/static/dist/ ARE committed (but never the dev sourcemaps).
 frontend/node_modules/
+specivo/static/dist/**/*.map

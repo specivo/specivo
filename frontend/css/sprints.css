@@ -1,0 +1,253 @@
+/* ============================================================
+   SPRINT BOARD
+   ============================================================ */
+.board-container { display: flex; gap: var(--sp-space-lg); overflow-x: auto; padding-bottom: var(--sp-space-lg); }
+.board-column { min-width: 260px; max-width: 300px; flex-shrink: 0; background: var(--sp-bg-secondary, #f5f4f0); border-radius: var(--sp-border-radius); padding: var(--sp-space-sm); }
+.board-column-header { font-weight: 600; font-size: var(--sp-font-size-sm); padding: var(--sp-space-sm); margin-bottom: var(--sp-space-sm); display: flex; justify-content: space-between; align-items: center; }
+.board-card { display: block; background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); padding: var(--sp-space-sm) var(--sp-space-md); margin-bottom: var(--sp-space-sm); transition: box-shadow 0.15s; }
+.board-card:hover { box-shadow: var(--sp-shadow-sm, 0 1px 3px rgba(0,0,0,0.08)); }
+.board-card .issue-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-accent); }
+
+/* ============================================================
+   SPRINT BACKLOG PAGE
+   ============================================================ */
+
+/* Active sprint hero card */
+.sprint-active { background: var(--sp-bg-surface); border: 2px solid var(--sp-accent); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-xl); margin-bottom: var(--sp-space-2xl); position: relative; overflow: hidden; }
+.sprint-active::before { content: ''; position: absolute; top: 0; right: 0; width: 200px; height: 100%; background: linear-gradient(135deg, transparent 60%, var(--sp-accent-subtle)); pointer-events: none; }
+.sprint-active-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: var(--sp-space-lg); }
+.sprint-active-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; }
+.sprint-active-meta { display: flex; gap: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); }
+.sprint-meta-item { display: flex; flex-direction: column; gap: 2px; }
+.sprint-meta-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.sprint-meta-value { font-size: var(--sp-font-size-sm); font-weight: 500; }
+.sprint-progress { display: flex; align-items: center; gap: var(--sp-space-md); }
+.sprint-progress-bar { flex: 1; height: 8px; background: var(--sp-bg-input); border-radius: 4px; overflow: hidden; }
+.sprint-progress-fill { height: 100%; background: var(--sp-accent); border-radius: 4px; transition: width 0.3s; }
+.sprint-progress-text { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); white-space: nowrap; min-width: 80px; text-align: right; }
+.sprint-goal { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); font-style: italic; padding: var(--sp-space-md); background: var(--sp-bg-input); border-radius: var(--sp-border-radius); margin-top: var(--sp-space-md); border-left: 3px solid var(--sp-accent); }
+
+/* Planned sprints */
+.sprint-planned { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md); }
+.sprint-planned-header { display: flex; align-items: center; justify-content: space-between; }
+.sprint-planned-title { font-weight: 600; font-size: var(--sp-font-size-sm); }
+.sprint-planned-dates { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sprint-planned-actions { display: flex; gap: var(--sp-space-xs); align-items: center; }
+
+/* Backlog section */
+.backlog-header { display: flex; align-items: center; justify-content: space-between; margin: var(--sp-space-2xl) 0 var(--sp-space-lg); }
+.backlog-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; }
+.backlog-count { font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-muted); background: var(--sp-bg-input); padding: 2px 10px; border-radius: 12px; margin-left: var(--sp-space-sm); }
+
+/* Issue row for backlog */
+.backlog-issue { display: flex; align-items: center; gap: var(--sp-space-md); padding: var(--sp-space-md) var(--sp-space-lg); border-bottom: 1px solid var(--sp-border); transition: background 0.1s; position: relative; overflow: visible; }
+.backlog-issue:hover { background: var(--sp-bg-input); }
+.backlog-issue:last-child { border-bottom: none; }
+.backlog-issue-drag { color: var(--sp-border-strong); cursor: grab; flex-shrink: 0; }
+.backlog-issue-drag:hover { color: var(--sp-text-muted); }
+.backlog-issue-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-link); font-weight: 500; flex-shrink: 0; min-width: 80px; }
+.backlog-issue-subject { flex: 1; font-size: var(--sp-font-size-sm); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backlog-issue-actions { display: flex; align-items: center; gap: var(--sp-space-sm); flex-shrink: 0; }
+.backlog-assign-btn { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); background: none; border: 1px dashed var(--sp-border); border-radius: var(--sp-border-radius); padding: 3px 8px; cursor: pointer; transition: all 0.15s; }
+.backlog-assign-btn:hover { border-color: var(--sp-accent); color: var(--sp-accent); background: var(--sp-accent-subtle); }
+
+/* Assignee column */
+.backlog-issue-assignee { flex-shrink: 0; width: 28px; display: flex; align-items: center; justify-content: center; }
+
+/* Unassigned button */
+.unassigned-btn { width: 22px; height: 22px; border-radius: 50%; border: 1.5px dashed var(--sp-border-strong); background: none; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--sp-text-muted); transition: all 0.15s; padding: 0; }
+.unassigned-btn:hover { border-color: var(--sp-accent); color: var(--sp-accent); background: var(--sp-accent-subtle); border-style: solid; }
+
+/* Assignee picker dropdown */
+.assignee-picker { position: relative; }
+.assignee-dropdown { display: none; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); margin-top: 6px; width: 200px; background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 200; overflow: hidden; }
+.assignee-dropdown.open { display: block; }
+.assignee-search { width: 100%; padding: 8px 10px; border: none; border-bottom: 1px solid var(--sp-border); font-family: var(--sp-font-body); font-size: var(--sp-font-size-xs); outline: none; background: var(--sp-bg-input); }
+.assignee-search::placeholder { color: var(--sp-text-muted); }
+.assignee-list { max-height: 160px; overflow-y: auto; }
+.assignee-option { display: flex; align-items: center; gap: var(--sp-space-sm); padding: 7px 10px; cursor: pointer; font-size: var(--sp-font-size-xs); transition: background 0.1s; }
+.assignee-option:hover { background: var(--sp-accent-subtle); }
+.assignee-option.hidden { display: none; }
+
+/* Sprint picker dropdown */
+.sprint-picker { position: relative; }
+.sprint-picker-dropdown { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; width: 260px; background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); box-shadow: 0 8px 24px rgba(0,0,0,0.12); z-index: 100; overflow: hidden; }
+.sprint-picker-dropdown.open { display: block; }
+.sprint-picker-item { display: flex; align-items: center; gap: var(--sp-space-sm); padding: 8px 12px; cursor: pointer; font-size: var(--sp-font-size-xs); transition: background 0.1s; }
+.sprint-picker-item:hover { background: var(--sp-accent-subtle); }
+
+/* Assigned flash animation */
+@keyframes flash-assigned { 0% { background: var(--sp-accent-subtle); } 100% { background: transparent; } }
+.backlog-issue.just-assigned { animation: flash-assigned 0.8s ease-out; }
+
+/* Sprint assigned badge */
+.sprint-assigned-badge { font-size: var(--sp-font-size-xs); color: var(--sp-success); background: #F0FDF4; padding: 2px 8px; border-radius: 10px; font-weight: 500; display: inline-flex; align-items: center; gap: 3px; }
+.sprint-assigned-badge svg { width: 10px; height: 10px; }
+
+/* No active sprint banner */
+.no-active-sprint { background: var(--sp-bg-surface); border: 1px dashed var(--sp-border-strong); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-3xl); text-align: center; margin-bottom: var(--sp-space-2xl); }
+.no-active-sprint-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-sm); }
+.no-active-sprint-text { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg); }
+
+/* Section divider */
+/* Sprint list cards */
+.sprint-list-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: var(--sp-space-lg); }
+.sprint-list-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-xl); transition: border-color 0.15s, box-shadow 0.15s; }
+.sprint-list-card:hover { border-color: var(--sp-border-strong); box-shadow: var(--sp-shadow-md); }
+.sprint-list-active { border-color: var(--sp-accent); border-width: 2px; }
+.sprint-list-empty { border-style: dashed; opacity: 0.7; }
+.sprint-list-empty:hover { opacity: 1; }
+.sprint-list-card-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: var(--sp-space-md); }
+.sprint-list-card-title { font-weight: 600; font-size: var(--sp-font-size-base); line-height: 1.3; }
+.sprint-list-card-dates { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-xs); }
+.sprint-list-stats { display: flex; gap: var(--sp-space-xl); margin-bottom: var(--sp-space-md); }
+.sprint-list-stat { display: flex; flex-direction: column; }
+.sprint-list-stat-value { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 700; line-height: 1; }
+.sprint-list-stat-label { font-size: 10px; color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
+.sprint-list-progress { margin-bottom: var(--sp-space-md); }
+.sprint-list-progress-bar { height: 6px; background: var(--sp-bg-input); border-radius: 3px; overflow: hidden; }
+.sprint-list-progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.sprint-list-progress-text { font-size: 10px; color: var(--sp-text-muted); margin-top: var(--sp-space-xs); }
+.sprint-list-goal { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); font-style: italic; border-left: 2px solid var(--sp-accent); padding-left: var(--sp-space-sm); margin-bottom: var(--sp-space-md); }
+.sprint-list-footer { padding-top: var(--sp-space-md); border-top: 1px solid var(--sp-bg-input); }
+.sprint-list-footer a { font-size: var(--sp-font-size-xs); color: var(--sp-text-link); }
+
+.section-divider { display: flex; align-items: center; gap: var(--sp-space-md); margin: var(--sp-space-xl) 0; }
+.section-divider::before, .section-divider::after { content: ''; flex: 1; height: 1px; background: var(--sp-border); }
+.section-divider span { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+
+/* Create sprint modal */
+.sp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1055; }
+.sp-modal { background: var(--sp-bg-surface); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-2xl); max-width: 480px; width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
+.sp-modal h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl); }
+.sp-modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-space-sm); margin-top: var(--sp-space-xl); }
+
+/* ============================================================
+   SPRINT EDIT PAGE
+   ============================================================ */
+
+/* Two-column layout: main + 320px sidebar */
+.edit-layout { display: grid; grid-template-columns: 1fr 320px; gap: var(--sp-space-2xl); align-items: start; }
+@media (max-width: 900px) { .edit-layout { grid-template-columns: 1fr; } }
+
+/* Main form cards */
+.edit-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-2xl); }
+.edit-card h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 700; margin-bottom: var(--sp-space-xl); padding-bottom: var(--sp-space-md); border-bottom: 1px solid var(--sp-border); }
+
+/* Sprint edit form labels — uppercase style matching prototype */
+.sprint-edit-label { font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* Read-only input style. Scope to real text fields only: <select>, <button>,
+   and other non-editable elements always match :read-only (they have no
+   readonly attribute) and would otherwise be rendered as disabled — e.g. a
+   <button class="form-input"> combobox trigger getting cursor: not-allowed. */
+input.form-input:read-only,
+textarea.form-input:read-only { background: var(--sp-bg-input); color: var(--sp-text-muted); cursor: not-allowed; }
+textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
+
+/* Sidebar info cards */
+.sidebar-card + .sidebar-card { margin-top: var(--sp-space-lg); }
+.sidebar-card h3 { font-size: var(--sp-font-size-sm); font-weight: 600; margin-bottom: var(--sp-space-lg); color: var(--sp-text-primary); }
+
+/* Key-value info rows */
+.info-row { display: flex; justify-content: space-between; align-items: center; padding: var(--sp-space-sm) 0; border-bottom: 1px solid var(--sp-bg-input); }
+.info-row:last-child { border-bottom: none; }
+.info-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.info-value { font-size: var(--sp-font-size-sm); font-weight: 500; }
+
+/* Velocity snapshot card */
+.velocity-card { background: var(--sp-bg-input); border-radius: var(--sp-border-radius); padding: var(--sp-space-lg); margin-top: var(--sp-space-lg); }
+.velocity-card h4 { font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: var(--sp-space-md); }
+.velocity-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-md); }
+.velocity-stat { text-align: center; }
+.velocity-stat-num { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; }
+.velocity-stat-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+
+/* Mini progress bar */
+.progress-mini { display: flex; align-items: center; gap: var(--sp-space-sm); margin-top: var(--sp-space-md); }
+.progress-mini-bar { flex: 1; height: 6px; background: var(--sp-bg-page); border-radius: 3px; overflow: hidden; }
+.progress-mini-fill { height: 100%; background: var(--sp-accent); border-radius: 3px; }
+.progress-mini-text { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); white-space: nowrap; }
+
+/* Issue list in sidebar */
+.sprint-issues-list { margin-top: var(--sp-space-md); max-height: 300px; overflow-y: auto; }
+.sprint-issue-row { display: flex; align-items: center; gap: var(--sp-space-sm); padding: 6px 0; border-bottom: 1px solid var(--sp-bg-input); font-size: var(--sp-font-size-xs); }
+.sprint-issue-row:last-child { border-bottom: none; }
+.sprint-issue-key { font-family: var(--sp-font-mono); color: var(--sp-text-link); font-weight: 500; flex-shrink: 0; text-decoration: none; }
+.sprint-issue-key:hover { text-decoration: underline; }
+.sprint-issue-subject { flex: 1; color: var(--sp-text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sprint-issue-remove { color: var(--sp-text-muted); cursor: pointer; flex-shrink: 0; padding: 2px; border-radius: 3px; transition: all 0.1s; background: none; border: none; }
+.sprint-issue-remove:hover { color: var(--sp-danger); background: #FEF2F2; }
+
+/* Danger zone card */
+.danger-zone { border-color: #FCA5A5; }
+.danger-zone h2 { color: var(--sp-danger); }
+.danger-text { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg); line-height: 1.6; }
+
+/* Status transition actions */
+.status-actions { display: flex; gap: var(--sp-space-sm); margin-top: var(--sp-space-lg); }
+
+/* ============================================================
+   SPRINT ANALYTICS PAGE
+   ============================================================ */
+
+/* Summary stats row */
+.analytics-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-space-lg); margin-bottom: var(--sp-space-2xl); }
+.analytics-stat-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-xl); text-align: center; }
+.analytics-stat-value { font-family: var(--sp-font-display); font-size: var(--sp-font-size-2xl); font-weight: 700; color: var(--sp-text-primary); line-height: 1.2; }
+.analytics-stat-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-top: var(--sp-space-xs); }
+@media (max-width: 768px) { .analytics-stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* Two-column chart layout */
+.analytics-layout { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-2xl); }
+@media (max-width: 900px) { .analytics-layout { grid-template-columns: 1fr; } }
+
+/* Chart cards */
+.analytics-chart-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-2xl); }
+.analytics-chart-card h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 700; margin-bottom: var(--sp-space-xl); }
+.analytics-empty { color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); text-align: center; padding: var(--sp-space-3xl) 0; }
+
+/* Coming soon placeholder */
+.analytics-coming-soon { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--sp-space-sm); padding: var(--sp-space-3xl) 0; color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); font-weight: 600; }
+.analytics-coming-soon-sub { font-weight: 400; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+
+/* CSS bar chart */
+.velocity-chart { position: relative; height: 220px; padding-bottom: 28px; }
+.velocity-chart-bars { display: flex; align-items: flex-end; gap: var(--sp-space-md); height: 100%; padding: 0 var(--sp-space-sm); }
+.velocity-chart-group { flex: 1; display: flex; flex-direction: column; align-items: center; min-width: 0; }
+.velocity-chart-pair { display: flex; align-items: flex-end; gap: 3px; height: 180px; width: 100%; justify-content: center; }
+.velocity-chart-bar { width: 20px; min-height: 4px; border-radius: 3px 3px 0 0; position: relative; transition: height 0.3s ease; }
+.velocity-chart-committed { background: var(--sp-bg-input); border: 1px solid var(--sp-border); }
+.velocity-chart-completed { background: var(--sp-accent); }
+.velocity-chart-bar-label { position: absolute; top: -18px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 600; color: var(--sp-text-muted); white-space: nowrap; }
+.velocity-chart-label { font-size: 10px; color: var(--sp-text-muted); margin-top: var(--sp-space-xs); text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+
+/* Average velocity line */
+.velocity-chart-avg { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--sp-accent); pointer-events: none; }
+.velocity-chart-avg-label { position: absolute; right: 0; top: -16px; font-size: 10px; font-weight: 600; color: var(--sp-accent); background: var(--sp-bg-surface); padding: 0 var(--sp-space-xs); }
+
+/* Chart legend */
+.velocity-chart-legend { display: flex; gap: var(--sp-space-lg); justify-content: center; margin-top: var(--sp-space-md); }
+.velocity-legend-item { display: flex; align-items: center; gap: var(--sp-space-xs); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.velocity-legend-swatch { width: 12px; height: 12px; border-radius: 2px; }
+.velocity-legend-committed { background: var(--sp-bg-input); border: 1px solid var(--sp-border); }
+.velocity-legend-completed { background: var(--sp-accent); }
+
+/* Sprint history table */
+.analytics-table-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-2xl); }
+.analytics-table-card h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 700; margin-bottom: var(--sp-space-xl); }
+.analytics-table-wrap { overflow-x: auto; }
+.velocity-table { width: 100%; border-collapse: collapse; font-size: var(--sp-font-size-sm); }
+.velocity-table th { font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.04em; padding: var(--sp-space-sm) var(--sp-space-md); border-bottom: 2px solid var(--sp-border); text-align: left; }
+.velocity-table td { padding: var(--sp-space-sm) var(--sp-space-md); border-bottom: 1px solid var(--sp-bg-input); color: var(--sp-text-secondary); }
+.velocity-table th.text-right, .velocity-table td.text-right { text-align: right; }
+.velocity-table tfoot td { font-weight: 600; border-top: 2px solid var(--sp-border); border-bottom: none; color: var(--sp-text-primary); }
+.velocity-table-link { color: var(--sp-text-link); text-decoration: none; font-weight: 500; }
+.velocity-table-link:hover { text-decoration: underline; }
+
+/* Inline completion bar in table */
+.velocity-table-bar-wrap { display: flex; align-items: center; gap: var(--sp-space-sm); }
+.velocity-table-bar { flex: 1; height: 6px; background: var(--sp-bg-input); border-radius: 3px; overflow: hidden; min-width: 60px; }
+.velocity-table-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.velocity-table-bar-text { font-size: 10px; color: var(--sp-text-muted); white-space: nowrap; min-width: 32px; }
+

@@ -4,25 +4,29 @@ Verifies static file serving, template infrastructure, and regression
 checks for existing API/health endpoints after adding the web layer.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 from httpx import AsyncClient
+
+_DIST = Path(__file__).resolve().parents[2] / "specivo" / "static" / "dist"
 
 
 @pytest.mark.integration
 async def test_static_css_served(unauth_client: AsyncClient):
-    """Main stylesheet is served from /static/css/specivo.css."""
-    resp = await unauth_client.get("/static/css/specivo.css")
+    """Main stylesheet bundle is served from /static/dist/css/."""
+    resp = await unauth_client.get("/static/dist/css/specivo.min.css")
     assert resp.status_code == 200
     assert "text/css" in resp.headers["content-type"]
 
 
 @pytest.mark.integration
 async def test_static_css_variables_served(unauth_client: AsyncClient):
-    """Design tokens are included in the main specivo.css stylesheet."""
-    resp = await unauth_client.get("/static/css/specivo.css")
+    """Design tokens are included in the main stylesheet bundle."""
+    resp = await unauth_client.get("/static/dist/css/specivo.min.css")
     assert resp.status_code == 200
     assert "text/css" in resp.headers["content-type"]
-    # Should contain our design tokens (merged from variables.css in FE-2)
     assert "--sp-accent" in resp.text
 
 
@@ -43,11 +47,26 @@ async def test_static_js_htmx_served(unauth_client: AsyncClient):
 
 
 @pytest.mark.integration
-async def test_static_js_specivo_served(unauth_client: AsyncClient):
-    """Custom specivo.js is served."""
-    resp = await unauth_client.get("/static/js/specivo.js")
+@pytest.mark.parametrize("bundle", ["alpine-init.min.js", "app.min.js"])
+async def test_static_js_bundles_served(unauth_client: AsyncClient, bundle: str):
+    """Custom JS bundles are served from /static/dist/js/."""
+    resp = await unauth_client.get(f"/static/dist/js/{bundle}")
     assert resp.status_code == 200
     assert "javascript" in resp.headers["content-type"]
+
+
+@pytest.mark.integration
+def test_asset_manifests_resolve():
+    """Every esbuild manifest entry points at a file that exists on disk."""
+    found = False
+    for sub in ("js", "css"):
+        manifest = _DIST / sub / "manifest.json"
+        if not manifest.exists():
+            continue
+        found = True
+        for logical, hashed in json.loads(manifest.read_text()).items():
+            assert (_DIST / sub / hashed).exists(), f"{logical} -> {hashed} missing"
+    assert found, "no esbuild manifests found — run `npm run build` in frontend/"
 
 
 @pytest.mark.integration

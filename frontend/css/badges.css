@@ -1,0 +1,85 @@
+/* ============================================================
+   STATUS, PRIORITY & TRACKER BADGES
+   ============================================================ */
+.badge-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: var(--sp-font-size-xs);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.badge-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+.badge-status.new { background: #EEF2FF; color: #4338CA; }
+.badge-status.new::before { background: var(--sp-status-new); }
+.badge-status.in-progress { background: var(--sp-accent-subtle); color: var(--sp-accent); }
+.badge-status.in-progress::before { background: var(--sp-status-in-progress); }
+.badge-status.resolved { background: var(--sp-success-subtle); color: #15803D; }
+.badge-status.resolved::before { background: var(--sp-status-resolved); }
+.badge-status.feedback { background: var(--sp-warning-subtle); color: #B45309; }
+.badge-status.feedback::before { background: var(--sp-status-feedback); }
+.badge-status.closed { background: #F3F4F6; color: #4B5563; }
+.badge-status.closed::before { background: var(--sp-status-closed); }
+.badge-status.rejected { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+.badge-status.rejected::before { background: var(--sp-status-rejected); }
+/* Sprint status badges */
+.badge-status.planned { background: #EEF2FF; color: #4F46E5; }
+.badge-status.planned::before { background: #6366F1; }
+.badge-status.active { background: var(--sp-accent-subtle); color: #92700a; }
+.badge-status.active::before { background: var(--sp-accent); }
+.badge-status.completed { background: #F0FDF4; color: #15803D; }
+.badge-status.completed::before { background: var(--sp-success); }
+
+/* User role pills */
+.sp-role { display: inline-flex; padding: 2px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; }
+.sp-role-admin { background: var(--sp-accent-subtle); color: var(--sp-accent); }
+.sp-role-member { background: var(--sp-bg-input); color: var(--sp-text-secondary); }
+.sp-role-viewer { background: var(--sp-info-subtle); color: var(--sp-info); }
+
+/* User account status */
+.sp-user-status { display: inline-flex; align-items: center; gap: var(--sp-space-xs); font-size: var(--sp-font-size-sm); }
+.sp-user-status::before { content: ''; width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.sp-user-status-active::before { background: var(--sp-success); }
+.sp-user-status-locked::before { background: var(--sp-danger); }
+.sp-user-status-locked { color: var(--sp-danger); }
+.sp-user-status-deactivated::before { background: var(--sp-warning); }
+
+/* Service account badge */
+.sp-badge-info { display: inline-flex; padding: 2px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; background: var(--sp-info-subtle); color: var(--sp-info); }
+
+/* Info rows (key-value pairs in detail cards) */
+.sp-info-row { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-space-md) 0; border-bottom: 1px solid var(--sp-border); }
+.sp-info-row:last-child { border-bottom: none; }
+.sp-info-label { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); min-width: 120px; }
+.sp-info-value { font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); font-weight: 500; }
+
+/* Key reveal banner (shown once after creating an API key) */
+.sp-key-reveal { background: var(--sp-success-subtle); border: 1px solid rgba(22,163,74,0.15); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); }
+.sp-key-reveal-label { font-size: var(--sp-font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sp-success); margin-bottom: var(--sp-space-sm); }
+.sp-key-reveal-value { margin-bottom: var(--sp-space-sm); }
+.sp-key-reveal-warn { font-size: var(--sp-font-size-xs); color: var(--sp-warning); }
+
+.badge-priority { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.badge-priority.low { background: var(--sp-priority-low); }
+.badge-priority.normal { background: var(--sp-priority-normal); }
+.badge-priority.high { background: var(--sp-priority-high); }
+.badge-priority.urgent { background: var(--sp-priority-urgent); }
+.badge-priority.immediate { background: var(--sp-priority-immediate); }
+
+.badge-tracker { font-size: var(--sp-font-size-xs); font-weight: 500; padding: 1px 6px; border-radius: 3px; white-space: nowrap; }
+.badge-tracker.bug { background: #FEF2F2; color: #B91C1C; }
+.badge-tracker.feature { background: #F5F3FF; color: #6D28D9; }
+.badge-tracker.task { background: var(--sp-accent-subtle); color: var(--sp-accent); }
+.badge-tracker.support { background: var(--sp-warning-subtle); color: #B45309; }
+
+/* ============================================================
+   AVATARS
+   ============================================================ */
+.avatar-xs { width: 18px; height: 18px; border-radius: 50%; background: var(--sp-accent); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 8px; font-weight: 600; flex-shrink: 0; }
+.avatar-sm { width: 22px; height: 22px; border-radius: 50%; background: var(--sp-accent); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0; }
+.avatar-md { width: 32px; height: 32px; border-radius: 50%; background: var(--sp-accent); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: var(--sp-font-size-sm); font-weight: 600; flex-shrink: 0; }
+.avatar-lg { width: 48px; height: 48px; border-radius: 50%; background: var(--sp-accent); color: white; display: inline-flex; align-items: center; justify-content: center; font-size: var(--sp-font-size-lg); font-weight: 600; flex-shrink: 0; }
+.avatar-img { border-radius: 50%; object-fit: cover; border: 1.5px solid var(--sp-border); }
+

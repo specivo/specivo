@@ -44,37 +44,25 @@ from specivo.schemas.common import HealthResponse
 from specivo.web.router import web_router
 
 
-def _create_versioned_static_files() -> dict[str, str]:
-    """Create content-hashed copies of CSS/JS files and return the filenames.
+def _load_asset_manifests() -> dict[str, str]:
+    """Load the esbuild bundle manifests into one logical->hashed name map.
 
-    e.g. specivo.css -> specivo.<sha8>.css. Hash is the first 8 chars of the
-    file's SHA-256, so any source edit produces a new URL and browser caches
-    invalidate without manual intervention. Uses copies instead of symlinks
-    for Docker bind-mount compatibility.
+    esbuild content-hashes each bundle at build time and writes a manifest.json
+    per output dir (specivo/static/dist/{js,css}/manifest.json) mapping the
+    logical name to the hashed one, e.g. ``{"app.min.js": "app.min.1a2b3c4d.js"}``.
+    Templates look up the served filename via the ``versioned`` global. Missing
+    manifests are skipped, so the un-hashed defaults in deps._versioned_assets
+    are used as a fallback (e.g. a dev checkout without a build).
     """
-    import hashlib
-    import shutil
+    import json
 
-    static_dir = Path(__file__).resolve().parent / "static"
-    versioned = {}
-
-    for subdir, base, ext in [
-        ("css", "specivo", ".css"),
-        ("js", "specivo", ".js"),
-    ]:
-        source = static_dir / subdir / f"{base}{ext}"
-        if not source.exists():
-            continue
-        digest = hashlib.sha256(source.read_bytes()).hexdigest()[:8]
-        target = static_dir / subdir / f"{base}.{digest}{ext}"
-        # Remove stale hashed copies (anything matching base.*.ext that isn't the source or target).
-        for old in source.parent.glob(f"{base}.*{ext}"):
-            if old not in (source, target):
-                old.unlink()
-        shutil.copy2(source, target)
-        versioned[f"{base}{ext}"] = f"{base}.{digest}{ext}"
-
-    return versioned
+    dist_dir = Path(__file__).resolve().parent / "static" / "dist"
+    merged: dict[str, str] = {}
+    for sub in ("js", "css"):
+        manifest = dist_dir / sub / "manifest.json"
+        if manifest.exists():
+            merged.update(json.loads(manifest.read_text()))
+    return merged
 
 
 @asynccontextmanager
@@ -278,10 +266,11 @@ def create_app() -> FastAPI:
                     name=f"static_{plugin.name}",
                 )
 
-    # Versioned static filenames for cache busting in templates.
+    # Content-hashed bundle filenames (from the esbuild manifests) for cache
+    # busting in templates.
     from specivo.web.deps import setup_plugin_assets, setup_versioned_assets
 
-    setup_versioned_assets(_create_versioned_static_files())
+    setup_versioned_assets(_load_asset_manifests())
 
     # Collect plugin CSS/JS asset URLs for auto-inclusion in base.html.
     setup_plugin_assets(pm.plugins)

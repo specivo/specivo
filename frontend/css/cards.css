@@ -1,0 +1,23 @@
+/* ============================================================
+   CARDS
+   ============================================================ */
+.card {
+  background: var(--sp-bg-surface);
+  border: 1px solid var(--sp-border);
+  border-radius: var(--sp-border-radius-lg);
+  box-shadow: var(--sp-shadow-sm);
+  overflow: hidden;
+}
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-space-lg) var(--sp-space-lg) var(--sp-space-md);
+}
+.card-header h2 { font-size: var(--sp-font-size-md); font-weight: 600; color: var(--sp-text-primary); }
+.card-header a { font-size: var(--sp-font-size-sm); color: var(--sp-text-link); }
+.card.accent-teal { border-left: 3px solid var(--sp-accent); }
+.card.accent-amber { border-left: 3px solid var(--sp-warning); }
+.card.accent-violet { border-left: 3px solid #7C3AED; }
+.card.accent-success { border-left: 3px solid var(--sp-success); }
+

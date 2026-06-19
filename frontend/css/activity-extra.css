@@ -1,0 +1,42 @@
+/* ============================================================
+   ACTIVITY FEED: color-coded changes, threading, reactions
+   ============================================================ */
+
+/* Activity: color-coded field changes */
+.sp-change-old { color: var(--sp-danger); text-decoration: line-through; font-weight: 500; }
+.sp-change-new { color: var(--sp-success); font-weight: 600; }
+.sp-change-label { color: var(--sp-text-secondary); font-weight: 500; }
+.sp-change-wrap { word-break: break-all; }
+
+/* Activity: threaded replies */
+.sp-reply-indent { margin-left: var(--sp-space-xl); padding-left: var(--sp-space-md); border-left: 2px solid var(--sp-accent); }
+
+/* Activity: resolved banner */
+.sp-resolved-banner { display: flex; align-items: center; gap: var(--sp-space-sm); padding: var(--sp-space-sm) var(--sp-space-md); margin-top: var(--sp-space-sm); background: var(--sp-success-subtle); border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); color: var(--sp-success); }
+.sp-resolved-banner svg { width: 14px; height: 14px; flex-shrink: 0; }
+
+/* Activity: reply/react links */
+.sp-journal-actions { display: flex; gap: var(--sp-space-md); margin-top: var(--sp-space-sm); font-size: var(--sp-font-size-xs); }
+.sp-journal-actions a { color: var(--sp-text-muted); cursor: pointer; text-decoration: none; }
+.sp-journal-actions a:hover { color: var(--sp-text-primary); }
+
+/* Emoji reactions */
+.sp-reaction-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: var(--sp-space-sm); }
+.sp-reaction-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; border: 1px solid var(--sp-border); background: var(--sp-bg-surface); font-size: var(--sp-font-size-xs); cursor: pointer; transition: all 0.15s; }
+.sp-reaction-btn:hover { border-color: var(--sp-accent); background: var(--sp-accent-subtle); }
+.sp-reaction-btn.sp-reaction-active { border-color: var(--sp-accent); background: var(--sp-accent-subtle); font-weight: 600; }
+.sp-reaction-btn .emoji { font-size: 14px; }
+.sp-reaction-btn .count { font-family: var(--sp-font-mono); color: var(--sp-text-secondary); }
+
+/* Inline forms (resolve, time log, etc.) */
+.sp-inline-form { display: flex; gap: var(--sp-space-sm); align-items: center; margin-top: var(--sp-space-sm); }
+.sp-inline-form input, .sp-inline-form select { padding: var(--sp-space-xs) var(--sp-space-sm); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); background: var(--sp-bg-surface); color: var(--sp-text-primary); }
+
+/* Watcher chips */
+.sp-watcher-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 16px; background: var(--sp-bg-muted); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-xs); font-weight: 500; white-space: nowrap; }
+.sp-watcher-toggle { cursor: pointer; color: var(--sp-text-muted); font-size: var(--sp-font-size-xs); text-decoration: none; }
+.sp-watcher-toggle:hover { color: var(--sp-text-primary); }
+
+/* File type icons */
+.sp-file-icon { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--sp-border-radius); background: var(--sp-bg-muted); font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-muted); flex-shrink: 0; text-transform: uppercase; }
+

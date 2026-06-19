@@ -1,0 +1,150 @@
+/* ============================================================
+   RESPONSIVE — Hamburger, Sidebar Overlay, Mobile & Tablet
+   ============================================================ */
+.hamburger { display: none; }
+.sidebar-overlay { display: none; }
+
+@media (max-width: 768px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--sp-header-height) 1fr;
+  }
+
+  /* Hamburger button */
+  .hamburger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #e8e4f0;
+    padding: 0;
+  }
+  .hamburger svg { width: 22px; height: 22px; }
+
+  /* Sidebar — off-canvas slide-in */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sp-sidebar-width);
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+  }
+  body.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  /* Overlay backdrop */
+  body.sidebar-open .sidebar-overlay {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .header {
+    padding: 0 var(--sp-space-md);
+    gap: var(--sp-space-sm);
+  }
+  .header-search { max-width: none; min-width: 0; }
+  .header-search kbd { display: none; }
+  .header-search input { padding-right: 40px; }
+  .header-search-btn { right: 6px; }
+  .header-user-name { display: none; }
+  .font-toggle { display: none; }
+  .main-content { padding: var(--sp-space-md); overflow-x: hidden; scrollbar-gutter: stable; }
+  .issue-table th:nth-child(5),
+  .issue-table td:nth-child(5),
+  .issue-table th:nth-child(6),
+  .issue-table td:nth-child(6) { display: none; }
+  .filter-tabs { overflow-x: auto; flex-wrap: nowrap; }
+  .search-controls { flex-wrap: wrap; gap: var(--sp-space-sm); }
+  .scope-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .search-result { padding: var(--sp-space-md); word-break: break-word; overflow-wrap: anywhere; }
+  .result-snippet { word-break: break-word; overflow-wrap: anywhere; }
+}
+
+@media (max-width: 480px) {
+  .header-search input { font-size: 16px; }
+  .status-banner { flex-direction: column; align-items: flex-start; }
+  .card-header { flex-direction: column; align-items: flex-start; gap: var(--sp-space-xs); }
+
+  /* Page header: stack title and actions vertically */
+  .page-header { flex-direction: column; align-items: flex-start; gap: var(--sp-space-md); }
+  .page-header-actions { flex-wrap: wrap; width: 100%; }
+
+  /* Breadcrumbs: allow wrap but keep compact */
+  .breadcrumbs { font-size: var(--sp-font-size-xs); word-break: break-word; }
+
+  /* Filter bar: wrap selects */
+  .filter-bar { flex-wrap: wrap; gap: var(--sp-space-sm); }
+  .filter-select { font-size: var(--sp-font-size-xs); padding: 5px 8px; }
+  .view-toggle { width: 100%; justify-content: flex-end; }
+
+  /* Issue table: hide more columns on very narrow screens */
+  .issue-table th:nth-child(7),
+  .issue-table td:nth-child(7),
+  .issue-table th:nth-child(8),
+  .issue-table td:nth-child(8) { display: none; }
+
+  /* Wiki page actions: wrap on narrow */
+  .wiki-page-actions { flex-wrap: wrap; }
+
+  /* Wiki layout: single column */
+  .wiki-layout { grid-template-columns: minmax(0, 1fr); }
+
+  /* Sprint active card meta: wrap */
+  .sprint-active-meta { flex-wrap: wrap; gap: var(--sp-space-md); }
+
+  /* Board progress stats: wrap */
+  .board-progress { flex-wrap: wrap; }
+  .board-progress-stats { flex-wrap: wrap; gap: var(--sp-space-sm); }
+
+  /* Kanban toolbar: wrap */
+  .kanban-toolbar { flex-wrap: wrap; }
+
+  /* Sprint list cards: single column */
+  .sprint-list-grid { grid-template-columns: 1fr; }
+  .sprint-list-stats { flex-wrap: wrap; }
+
+  /* Sprint backlog issues: truncate sprint button text */
+  .backlog-issue { flex-wrap: nowrap; overflow: hidden; }
+  .backlog-issue-subject { min-width: 0; }
+
+  /* Settings tabs: scroll horizontally */
+  .settings-tabs, .project-tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+
+  /* Version detail layout: single column */
+  .vd-layout { grid-template-columns: 1fr; }
+
+  /* Analytics stats: 2 columns on mobile */
+  .analytics-stats { grid-template-columns: 1fr 1fr; }
+  .analytics-layout { grid-template-columns: 1fr; }
+
+  /* Issue detail layout: single column */
+  .issue-detail-layout { grid-template-columns: 1fr; }
+
+  /* Settings versions table: wrap in scrollable container */
+  .card { overflow-x: auto; }
+
+  /* Backlog: hide status badge and sprint button on narrow screens */
+  .backlog-issue .badge-status { display: none; }
+  .backlog-issue .backlog-assign-btn { display: none; }
+  .backlog-issue-drag { display: none; }
+  .backlog-issue-key { min-width: 60px; }
+  .backlog-issue { padding: var(--sp-space-sm) var(--sp-space-md); gap: var(--sp-space-sm); }
+
+
+  /* Description card: reduce padding on mobile */
+  .description-card { padding: var(--sp-space-md); }
+  .wiki-content { padding: var(--sp-space-lg); }
+}
+

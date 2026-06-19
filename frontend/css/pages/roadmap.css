@@ -1,0 +1,30 @@
+/* ============================================================
+   ROADMAP
+   ============================================================ */
+.version-card.accent-gold { border-left: 3px solid var(--sp-accent); }
+.version-card.accent-green { border-left: 3px solid var(--sp-success); }
+.version-card.accent-muted { border-left: 3px solid var(--sp-text-muted); }
+.version-header { padding: var(--sp-space-xl); cursor: pointer; }
+.version-header h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; letter-spacing: -0.02em; margin-bottom: var(--sp-space-xs); }
+.version-meta { display: flex; align-items: center; gap: var(--sp-space-lg); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-md); }
+.version-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 12px; font-size: var(--sp-font-size-xs); font-weight: 500; }
+.version-badge.open { background: rgba(196, 154, 60, 0.1); color: var(--sp-accent); }
+.version-badge.vclosed { background: #F3F4F6; color: #4B5563; }
+.version-progress { display: flex; align-items: center; gap: var(--sp-space-md); }
+.progress-bar-track { flex: 1; height: 6px; background: var(--sp-bg-input); border-radius: 3px; overflow: hidden; }
+.progress-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.progress-bar-fill.gold { background: var(--sp-accent); }
+.progress-bar-fill.green { background: var(--sp-success); }
+.progress-bar-fill.muted { background: var(--sp-text-muted); }
+.progress-label { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); white-space: nowrap; font-weight: 500; }
+.version-counts { display: flex; gap: var(--sp-space-xl); margin-top: var(--sp-space-md); font-size: var(--sp-font-size-sm); }
+.version-counts .count-open { color: var(--sp-accent); font-weight: 500; }
+.version-counts .count-closed { color: var(--sp-text-muted); font-weight: 500; }
+.version-issues { border-top: 1px solid var(--sp-border); padding: 0; }
+.version-issues table { width: 100%; border-collapse: collapse; }
+.version-issues th { text-align: left; padding: var(--sp-space-sm) var(--sp-space-xl); font-size: var(--sp-font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--sp-text-muted); border-bottom: 1px solid var(--sp-border); }
+.version-issues td { padding: var(--sp-space-sm) var(--sp-space-xl); font-size: var(--sp-font-size-sm); border-bottom: 1px solid var(--sp-border); vertical-align: middle; }
+.version-issues tr:last-child td { border-bottom: none; }
+.version-issues tr:hover { background: var(--sp-bg-input); }
+.issue-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); font-weight: 500; color: var(--sp-text-link); white-space: nowrap; }
+

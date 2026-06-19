@@ -1,0 +1,88 @@
+/* ============================================================
+   SIDEBAR
+   ============================================================ */
+.sidebar {
+  grid-column: 1;
+  grid-row: 1 / -1;
+  align-self: stretch;
+  min-width: 0;
+  background: var(--sp-bg-sidebar);
+  color: var(--sp-text-sidebar);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  z-index: 100;
+}
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-space-sm);
+  padding: var(--sp-space-lg);
+  height: var(--sp-header-height);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sidebar-brand svg { width: 22px; height: 22px; }
+.sidebar-brand img { height: 20px; width: auto; }
+.sidebar-brand span {
+  font-family: var(--sp-font-body);
+  font-size: var(--sp-font-size-md);
+  font-weight: 500;
+  color: var(--sp-text-inverse);
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+.sidebar-section { padding: var(--sp-space-md) var(--sp-space-sm); }
+.sidebar-section-label {
+  font-size: var(--sp-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.55);
+  padding: var(--sp-space-xs) var(--sp-space-sm);
+  margin-bottom: var(--sp-space-xs);
+}
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-space-sm);
+  padding: 7px var(--sp-space-sm);
+  border-radius: var(--sp-border-radius);
+  font-size: var(--sp-font-size-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  color: var(--sp-text-sidebar);
+}
+.sidebar-item:hover {
+  background: var(--sp-bg-sidebar-hover);
+  color: var(--sp-text-sidebar-active);
+  text-decoration: none;
+}
+.sidebar-item.active {
+  background: var(--sp-bg-sidebar-active);
+  color: var(--sp-accent);
+  font-weight: 500;
+}
+.sidebar-item svg { width: 16px; height: 16px; opacity: 0.6; flex-shrink: 0; }
+.sidebar-item.active svg { opacity: 1; color: var(--sp-accent); }
+.sidebar-item .badge {
+  margin-left: auto;
+  background: rgba(196, 154, 60, 0.15);
+  color: var(--sp-accent);
+  font-size: var(--sp-font-size-xs);
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+}
+.sidebar-project-key {
+  font-family: var(--sp-font-mono);
+  font-size: var(--sp-font-size-xs);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.sidebar-spacer { flex: 1; }
+
