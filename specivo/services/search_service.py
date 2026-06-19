@@ -591,6 +591,37 @@ class SearchService:
     # Metadata filter builder
     # ------------------------------------------------------------------
 
+    def _tag_exists_clauses(
+        self,
+        filters: SearchFilters | None,
+        params: dict[str, Any],
+        link_col: str,
+        alias: str,
+    ) -> str:
+        """Build AND-logic tag filter clauses for an issue or wiki page.
+
+        Emits one correlated ``EXISTS`` per selected tag name so the entity must
+        carry *every* named tag (AND semantics). Matching is by lowercased name,
+        not id, so the filter spans projects (the same name maps to different tag
+        ids per project). ``link_col`` is ``issue_id`` or ``wiki_page_id`` and
+        ``alias`` is the entity table alias whose ``id`` the link references.
+
+        The param keys (``filter_tag_0`` …) are stable across calls with
+        different aliases, so calling this for both the issue and wiki sides of
+        one query reuses identical bind values without conflict.
+        """
+        if filters is None or not filters.tag_names:
+            return ""
+        out: list[str] = []
+        for idx, name in enumerate(filters.tag_names):
+            pname = f"filter_tag_{idx}"
+            out.append(
+                f"AND EXISTS (SELECT 1 FROM tag_links tl JOIN tags t ON t.id = tl.tag_id "
+                f"WHERE tl.{link_col} = {alias}.id AND lower(t.name) = lower(:{pname}))"
+            )
+            params[pname] = name
+        return "\n                ".join(out)
+
     def _build_issue_filters(self, filters: SearchFilters | None, params: dict[str, Any]) -> str:
         """Build SQL WHERE clauses for issue metadata filtering.
 
@@ -648,6 +679,10 @@ class SearchService:
         if filters.metadata is not None:
             clauses.append("AND i.issue_metadata @> CAST(:filter_metadata AS jsonb)")
             params["filter_metadata"] = json.dumps(filters.metadata)
+
+        tag_sql = self._tag_exists_clauses(filters, params, "issue_id", "i")
+        if tag_sql:
+            clauses.append(tag_sql)
 
         return "\n                ".join(clauses)
 
@@ -728,6 +763,12 @@ class SearchService:
 
         # Issue metadata filters
         issue_filter_sql = self._build_issue_filters(filters, params)
+        # Real-tag AND filter for wiki pages (issue side is folded into
+        # issue_filter_sql above). When a tag filter is active, only taggable
+        # entities (issues, wiki pages) can match — comments and attachments are
+        # excluded entirely.
+        wiki_tag_filter = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp")
+        tags_active = bool(filters and filters.tag_names)
 
         # --- Result parts: scope-gated (only fetch rows for the active scope) ---
 
@@ -780,6 +821,7 @@ class SearchService:
                     WHERE wc.search_vector @@ query
                     {wiki_project_filter}
                     {wiki_visibility}
+                    {wiki_tag_filter}
                     ORDER BY score DESC LIMIT :limit
                 ) wiki_sub
             """
@@ -787,7 +829,8 @@ class SearchService:
 
         # Comment keyword search: search search_chunks content for source_type='comment'
         # Comments inherit visibility from their parent issue via journals table.
-        if scope in ("all", "comments"):
+        # Skipped when a tag filter is active (comments are not taggable).
+        if scope in ("all", "comments") and not tags_active:
             comment_sql = f"""
                 SELECT * FROM (
                     SELECT
@@ -814,8 +857,9 @@ class SearchService:
             parts.append(comment_sql)
 
         # Attachment keyword search: search search_chunks for source_type='attachment'
+        # Skipped when a tag filter is active (attachments are not taggable).
         att_pf = issue_project_filter  # same params, different alias handled in helper
-        if scope in ("all", "attachments"):
+        if scope in ("all", "attachments") and not tags_active:
             parts.append(self._attachment_fts_sql(user, att_pf))
 
         # --- Count parts: ALWAYS build for all 4 types (single-query per-type counts) ---
@@ -844,22 +888,28 @@ class SearchService:
             WHERE wc.search_vector @@ query
             {wiki_project_filter}
             {wiki_visibility}
+            {wiki_tag_filter}
         """
 
-        count_parts["comments"] = f"""
-            SELECT COUNT(*) as cnt
-            FROM search_chunks sc
-            JOIN search_sources ss ON ss.id = sc.source_id
-            JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
-            JOIN issues ci ON ci.id = j.issue_id
-            CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(ci.project_id), :query) AS query
-            WHERE sc.search_vector @@ query
-            AND ss.source_type = '{_SST_JOURNAL}'
-            {comment_project_filter}
-            {comment_visibility}
-        """
+        if tags_active:
+            # Comments/attachments cannot carry tags — report zero for their tabs.
+            count_parts["comments"] = "SELECT 0 as cnt"
+            count_parts["attachments"] = "SELECT 0 as cnt"
+        else:
+            count_parts["comments"] = f"""
+                SELECT COUNT(*) as cnt
+                FROM search_chunks sc
+                JOIN search_sources ss ON ss.id = sc.source_id
+                JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
+                JOIN issues ci ON ci.id = j.issue_id
+                CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(ci.project_id), :query) AS query
+                WHERE sc.search_vector @@ query
+                AND ss.source_type = '{_SST_JOURNAL}'
+                {comment_project_filter}
+                {comment_visibility}
+            """
 
-        count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf)
+            count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf)
 
         if not parts:
             return [], 0, {}
@@ -1010,6 +1060,142 @@ class SearchService:
         ]
         return results, total, type_counts
 
+    async def filter_tagged(
+        self,
+        session: AsyncSession,
+        user: User | None = None,
+        project_id: int | None = None,
+        project_ids: list[int] | None = None,
+        scope: str = "all",
+        offset: int = 0,
+        limit: int = 25,
+        filters: SearchFilters | None = None,
+    ) -> tuple[list[SearchResult], int, dict[str, int]]:
+        """List tagged issues and/or wiki pages with no full-text term.
+
+        The filter-only counterpart to :meth:`search` for the real-tag filter.
+        Covers issues and wiki pages (the only taggable entities); comments and
+        attachments always count zero. Results are ordered by recency. Visibility
+        uses the same CTE clauses as :meth:`search`, so the tag predicate only
+        narrows the already-visible set.
+        """
+        params: dict[str, Any] = {}
+        if user is not None:
+            params["current_user_id"] = user.id
+
+        cte_prefix = self._visibility_cte_sql(user)
+        issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
+        wiki_visibility = self._wiki_visibility_cte_clause(user, alias="w")
+        # Issue side folds in tag clauses (+ any metadata filters); wiki side
+        # gets the tag clauses directly.
+        issue_filter_sql = self._build_issue_filters(filters, params)
+        wiki_tag_filter = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp")
+
+        issue_project_filter = ""
+        wiki_project_filter = ""
+        if project_ids is not None:
+            issue_project_filter = "AND i.project_id = ANY(:project_ids)"
+            wiki_project_filter = "AND w.project_id = ANY(:project_ids)"
+            params["project_ids"] = project_ids
+        elif project_id is not None:
+            issue_project_filter = "AND i.project_id = :project_id"
+            wiki_project_filter = "AND w.project_id = :project_id"
+            params["project_id"] = project_id
+
+        issue_where = f"""
+            WHERE 1=1
+            {issue_project_filter}
+            {issue_visibility}
+            {issue_filter_sql}
+        """
+        wiki_where = f"""
+            WHERE wp.deleted_at IS NULL
+            {wiki_project_filter}
+            {wiki_visibility}
+            {wiki_tag_filter}
+        """
+
+        # Per-type counts (always computed for both taggable types so the filter
+        # tabs are accurate regardless of the active scope).
+        issue_count_sql = f"{cte_prefix}\nSELECT COUNT(*) as cnt\nFROM issues i\n{issue_where}"
+        wiki_count_sql = (
+            f"{cte_prefix}\nSELECT COUNT(*) as cnt\nFROM wiki_pages wp\nJOIN wikis w ON w.id = wp.wiki_id\n{wiki_where}"
+        )
+        issue_total = int((await session.execute(text(issue_count_sql), params)).scalar_one())
+        wiki_total = int((await session.execute(text(wiki_count_sql), params)).scalar_one())
+
+        type_counts = {
+            "issues": issue_total,
+            "wiki": wiki_total,
+            "comments": 0,
+            "attachments": 0,
+            "all": issue_total + wiki_total,
+        }
+        total = type_counts["all"] if scope == "all" else type_counts.get(scope, 0)
+
+        if total == 0:
+            return [], total, type_counts
+
+        parts: list[str] = []
+        if scope in ("all", "issues"):
+            parts.append(f"""
+                SELECT
+                    '{_SRT_ISSUE}' as result_type,
+                    i.id,
+                    i.project_key || '-' || i.sequence_number as title,
+                    i.subject as subtitle,
+                    NULL as snippet,
+                    0.0 as score,
+                    i.project_key,
+                    i.updated_at as sort_ts
+                FROM issues i
+                {issue_where}
+            """)
+        if scope in ("all", "wiki"):
+            parts.append(f"""
+                SELECT
+                    '{_SRT_WIKI}' as result_type,
+                    wp.id,
+                    wp.title as title,
+                    wp.slug as subtitle,
+                    NULL as snippet,
+                    0.0 as score,
+                    p.key as project_key,
+                    wp.updated_at as sort_ts
+                FROM wiki_pages wp
+                JOIN wikis w ON w.id = wp.wiki_id
+                JOIN projects p ON p.id = w.project_id
+                {wiki_where}
+            """)
+
+        if not parts:
+            return [], total, type_counts
+
+        params["limit"] = limit
+        params["offset"] = offset
+        union_sql = " UNION ALL ".join(parts)
+        list_sql = f"""
+            {cte_prefix}
+            SELECT result_type, id, title, subtitle, snippet, score, project_key
+            FROM ({union_sql}) combined
+            ORDER BY sort_ts DESC, id DESC
+            LIMIT :limit OFFSET :offset
+        """
+        result = await session.execute(text(list_sql), params)
+        results = [
+            SearchResult(
+                result_type=row._mapping["result_type"],
+                id=row._mapping["id"],
+                title=row._mapping["title"],
+                subtitle=row._mapping["subtitle"],
+                snippet=None,
+                score=float(row._mapping["score"]),
+                project_key=row._mapping["project_key"],
+            )
+            for row in result
+        ]
+        return results, total, type_counts
+
     async def semantic_search(
         self,
         session: AsyncSession,
@@ -1020,12 +1206,17 @@ class SearchService:
         offset: int = 0,
         limit: int = 25,
         skip_count: bool = False,
+        filters: SearchFilters | None = None,
     ) -> tuple[list[SearchResult], int]:
         """Semantic-only search using pgvector cosine similarity.
 
         Generates an embedding for the query text, then finds the most
         similar chunks via cosine distance. Returns results mapped back
         to their source entities.
+
+        When ``filters.tag_names`` is set, only tagged issues and wiki pages can
+        match (comments and attachments are excluded), keeping hybrid results
+        consistent with the keyword path's tag filter.
         """
         from specivo.services.embedding_service import EmbeddingService
 
@@ -1080,6 +1271,44 @@ class SearchService:
         prefetch_limit = SEARCH_HYBRID_PREFETCH_LIMIT * 2  # over-fetch for visibility filtering
 
         att_sem_vis = self._attachment_semantic_vis(user)
+
+        # Real-tag AND filter (hybrid parity with the keyword path). When active,
+        # only tagged issues and wiki pages survive; comments/attachments drop out.
+        tags_active = bool(filters and filters.tag_names)
+        issue_tag_vis = self._tag_exists_clauses(filters, params, "issue_id", "i2")
+        wiki_tag_vis = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp2")
+
+        issue_branch = f"""(ss.source_type = '{_SST_ISSUE}' AND EXISTS (
+                        SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
+                        {issue_vis}
+                        {issue_tag_vis}
+                    ))"""
+        wiki_branch = f"""(ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
+                        SELECT 1 FROM wiki_pages wp2
+                        JOIN wikis w2 ON w2.id = wp2.wiki_id
+                        WHERE wp2.id = ss.entity_id
+                        {wiki_vis}
+                        {wiki_tag_vis}
+                    ))"""
+        comment_branch = f"""(ss.source_type = '{_SST_JOURNAL}' AND EXISTS (
+                        SELECT 1 FROM journals cj
+                        JOIN issues ci2 ON ci2.id = cj.issue_id
+                        WHERE cj.id = ss.entity_id
+                        {comment_vis}
+                    ))"""
+        att_branch = f"""(ss.source_type = '{_SST_ATTACHMENT}' AND att.id IS NOT NULL
+                     {att_sem_vis})"""
+        att_count_branch = f"""(ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id IS NOT NULL
+                     {self._attachment_semantic_count_vis(user)})"""
+
+        _or_join = "\n                    OR\n                    "
+        _result_branches = [issue_branch, wiki_branch]
+        _count_branches = [issue_branch, wiki_branch]
+        if not tags_active:
+            _result_branches += [comment_branch, att_branch]
+            _count_branches += [comment_branch, att_count_branch]
+        sem_where_or = "(\n                    " + _or_join.join(_result_branches) + "\n                )"
+        count_where_or = "(\n                    " + _or_join.join(_count_branches) + "\n                )"
 
         # Build CTE prefix: if user has visibility CTEs, comma-separate with nearest
         if cte_prefix:
@@ -1176,29 +1405,7 @@ class SearchService:
                 LEFT JOIN projects att_wp_p ON att_wp_p.id = att_w.project_id
                 WHERE 1=1
                 {project_filter}
-                AND (
-                    (ss.source_type = '{_SST_ISSUE}' AND EXISTS (
-                        SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
-                        {issue_vis}
-                    ))
-                    OR
-                    (ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
-                        SELECT 1 FROM wiki_pages wp2
-                        JOIN wikis w2 ON w2.id = wp2.wiki_id
-                        WHERE wp2.id = ss.entity_id
-                        {wiki_vis}
-                    ))
-                    OR
-                    (ss.source_type = '{_SST_JOURNAL}' AND EXISTS (
-                        SELECT 1 FROM journals cj
-                        JOIN issues ci2 ON ci2.id = cj.issue_id
-                        WHERE cj.id = ss.entity_id
-                        {comment_vis}
-                    ))
-                    OR
-                    (ss.source_type = '{_SST_ATTACHMENT}' AND att.id IS NOT NULL
-                     {att_sem_vis})
-                )
+                AND {sem_where_or}
                 ORDER BY ss.source_type, ss.entity_id, n.score DESC
             ) deduped
             ORDER BY score DESC
@@ -1240,29 +1447,7 @@ class SearchService:
                 LEFT JOIN wikis att_c_w ON att_c_w.id = att_c_wp.wiki_id
                 WHERE ce.model_id = :model_id
                 {project_filter}
-                AND (
-                    (ss.source_type = '{_SST_ISSUE}' AND EXISTS (
-                        SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
-                        {issue_vis}
-                    ))
-                    OR
-                    (ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
-                        SELECT 1 FROM wiki_pages wp2
-                        JOIN wikis w2 ON w2.id = wp2.wiki_id
-                        WHERE wp2.id = ss.entity_id
-                        {wiki_vis}
-                    ))
-                    OR
-                    (ss.source_type = '{_SST_JOURNAL}' AND EXISTS (
-                        SELECT 1 FROM journals cj
-                        JOIN issues ci2 ON ci2.id = cj.issue_id
-                        WHERE cj.id = ss.entity_id
-                        {comment_vis}
-                    ))
-                    OR
-                    (ss.source_type = '{_SST_ATTACHMENT}' AND att_c.id IS NOT NULL
-                     {self._attachment_semantic_count_vis(user)})
-                )
+                AND {count_where_or}
             """
             count_result = await session.execute(text(count_sql), params)
             total = count_result.scalar_one()
@@ -1315,6 +1500,7 @@ class SearchService:
             offset=0,
             limit=SEARCH_HYBRID_PREFETCH_LIMIT,
             skip_count=True,
+            filters=filters,
         )
 
         if not fts_results and not sem_results:

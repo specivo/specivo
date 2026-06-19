@@ -137,6 +137,21 @@ async def search_tags(
     return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
 
 
+@router.get("/tags/search/")
+async def search_tags_global(
+    q: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict]:
+    """Cross-project tag autocomplete, deduplicated by name.
+
+    Suggests distinct tag names across every project the caller can access
+    (member or public; admins see all). Used by the search-page tag filter.
+    """
+    return await _tag_service.search_across_projects(db, current_user, q, limit=limit)
+
+
 @router.post(
     "/projects/{project_key}/tags/",
     response_model=TagOut,
@@ -152,9 +167,7 @@ async def create_tag(
     project = await _get_project(project_key, current_user, db)
     await _require_manage(project, current_user, db)
     tag = await _tag_service.create(db, project, data)
-    await _log_tag(
-        db, request, AuditEvent.TAG_CREATED, current_user, project, tag.id, {"name": tag.name}
-    )
+    await _log_tag(db, request, AuditEvent.TAG_CREATED, current_user, project, tag.id, {"name": tag.name})
     return _tag_out(tag, project.key)
 
 
@@ -178,9 +191,7 @@ async def update_tag(
     await _require_manage(project, current_user, db)
     tag = await _get_project_tag(project, tag_id, db)
     tag = await _tag_service.update(db, tag, data)
-    await _log_tag(
-        db, request, AuditEvent.TAG_UPDATED, current_user, project, tag.id, {"name": tag.name}
-    )
+    await _log_tag(db, request, AuditEvent.TAG_UPDATED, current_user, project, tag.id, {"name": tag.name})
     return _tag_out(tag, project.key)
 
 
@@ -200,9 +211,7 @@ async def delete_tag(
     tag = await _get_project_tag(project, tag_id, db)
     name = tag.name
     await _tag_service.delete(db, tag)
-    await _log_tag(
-        db, request, AuditEvent.TAG_DELETED, current_user, project, tag_id, {"name": name}
-    )
+    await _log_tag(db, request, AuditEvent.TAG_DELETED, current_user, project, tag_id, {"name": name})
 
 
 # ---------------------------------------------------------------------------
@@ -242,12 +251,22 @@ async def set_issue_tags(
     diff = await _tag_service.set_issue_tags(db, project, issue.id, data.names, current_user)
     for name in diff["added"]:
         await _log_tag(
-            db, request, AuditEvent.TAG_ADDED, current_user, project, None,
+            db,
+            request,
+            AuditEvent.TAG_ADDED,
+            current_user,
+            project,
+            None,
             {"name": name, "issue_ref": issue.display_key},
         )
     for name in diff["removed"]:
         await _log_tag(
-            db, request, AuditEvent.TAG_REMOVED, current_user, project, None,
+            db,
+            request,
+            AuditEvent.TAG_REMOVED,
+            current_user,
+            project,
+            None,
             {"name": name, "issue_ref": issue.display_key},
         )
     tags = await _tag_service.tags_for_issue(db, issue.id)
@@ -270,7 +289,12 @@ async def add_issue_tag(
     tag, created = await _tag_service.add_to_issue(db, project, issue.id, data.name, current_user)
     if created:
         await _log_tag(
-            db, request, AuditEvent.TAG_ADDED, current_user, project, tag.id,
+            db,
+            request,
+            AuditEvent.TAG_ADDED,
+            current_user,
+            project,
+            tag.id,
             {"name": tag.name, "issue_ref": issue.display_key},
         )
     return _tag_out(tag, project.key)
@@ -291,7 +315,12 @@ async def remove_issue_tag(
     removed = await _tag_service.remove_from_issue(db, issue.id, tag_id)
     if removed:
         await _log_tag(
-            db, request, AuditEvent.TAG_REMOVED, current_user, project, tag_id,
+            db,
+            request,
+            AuditEvent.TAG_REMOVED,
+            current_user,
+            project,
+            tag_id,
             {"issue_ref": issue.display_key},
         )
 
@@ -328,12 +357,22 @@ async def set_wiki_tags(
     diff = await _tag_service.set_wiki_page_tags(db, project, page.id, data.names, current_user)
     for name in diff["added"]:
         await _log_tag(
-            db, request, AuditEvent.TAG_ADDED, current_user, project, None,
+            db,
+            request,
+            AuditEvent.TAG_ADDED,
+            current_user,
+            project,
+            None,
             {"name": name, "wiki_slug": page.slug},
         )
     for name in diff["removed"]:
         await _log_tag(
-            db, request, AuditEvent.TAG_REMOVED, current_user, project, None,
+            db,
+            request,
+            AuditEvent.TAG_REMOVED,
+            current_user,
+            project,
+            None,
             {"name": name, "wiki_slug": page.slug},
         )
     tags = await _tag_service.tags_for_wiki_page(db, page.id)
@@ -358,7 +397,12 @@ async def add_wiki_tag(
     tag, created = await _tag_service.add_to_wiki_page(db, project, page.id, data.name, current_user)
     if created:
         await _log_tag(
-            db, request, AuditEvent.TAG_ADDED, current_user, project, tag.id,
+            db,
+            request,
+            AuditEvent.TAG_ADDED,
+            current_user,
+            project,
+            tag.id,
             {"name": tag.name, "wiki_slug": page.slug},
         )
     return _tag_out(tag, project.key)
@@ -381,7 +425,12 @@ async def remove_wiki_tag(
     removed = await _tag_service.remove_from_wiki_page(db, page.id, tag_id)
     if removed:
         await _log_tag(
-            db, request, AuditEvent.TAG_REMOVED, current_user, project, tag_id,
+            db,
+            request,
+            AuditEvent.TAG_REMOVED,
+            current_user,
+            project,
+            tag_id,
             {"wiki_slug": page.slug},
         )
 
@@ -421,14 +470,24 @@ async def bulk_tag_issues(
     for name in data.add:
         added += await _tag_service.bulk_add_to_issues(db, project, valid_ids, name, current_user)
         await _log_tag(
-            db, request, AuditEvent.TAG_ADDED, current_user, project, None,
+            db,
+            request,
+            AuditEvent.TAG_ADDED,
+            current_user,
+            project,
+            None,
             {"name": name, "issue_count": len(valid_ids), "bulk": True},
         )
     removed = 0
     for tag_id in data.remove:
         removed += await _tag_service.bulk_remove_from_issues(db, valid_ids, tag_id)
         await _log_tag(
-            db, request, AuditEvent.TAG_REMOVED, current_user, project, tag_id,
+            db,
+            request,
+            AuditEvent.TAG_REMOVED,
+            current_user,
+            project,
+            tag_id,
             {"issue_count": len(valid_ids), "bulk": True},
         )
 

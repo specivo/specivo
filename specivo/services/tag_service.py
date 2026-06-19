@@ -10,10 +10,11 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import ConflictError, NotFoundError
+from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.tag import Tag, TagLink
 from specivo.models.user import User
@@ -53,9 +54,7 @@ class TagService:
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
-    async def list_with_usage(
-        self, session: AsyncSession, project_id: int
-    ) -> list[tuple[Tag, int, int]]:
+    async def list_with_usage(self, session: AsyncSession, project_id: int) -> list[tuple[Tag, int, int]]:
         """List tags with (issue_count, wiki_count) usage, ordered by name."""
         stmt = (
             select(
@@ -90,6 +89,34 @@ class TagService:
         stmt = stmt.order_by(func.lower(Tag.name)).limit(limit)
         result = await session.execute(stmt)
         return list(result.scalars().all())
+
+    async def search_across_projects(
+        self,
+        session: AsyncSession,
+        user: User,
+        query: str | None = None,
+        limit: int = 20,
+    ) -> list[dict]:
+        """Autocomplete tag names across every project the *user* can access.
+
+        Deduplicated case-insensitively by name (one row per distinct lowercased
+        name). Admins see all tags; other users see tags in projects they are a
+        member of or that are public. Returns ``[{id, name, color}]`` ordered by
+        name.
+        """
+        stmt = select(Tag)
+        if not user.is_admin:
+            member_projects = select(Member.project_id).where(Member.user_id == user.id).scalar_subquery()
+            public_projects = select(Project.id).where(Project.is_public.is_(True)).scalar_subquery()
+            stmt = stmt.where(or_(Tag.project_id.in_(member_projects), Tag.project_id.in_(public_projects)))
+        q = (query or "").strip()
+        if q:
+            stmt = stmt.where(Tag.name.ilike(f"%{q}%"))
+        # DISTINCT ON (lower(name)) collapses the same name across projects; the
+        # leading ORDER BY lower(name) is required for DISTINCT ON.
+        stmt = stmt.distinct(func.lower(Tag.name)).order_by(func.lower(Tag.name), Tag.id).limit(limit)
+        result = await session.execute(stmt)
+        return [{"id": t.id, "name": t.name, "color": t.color} for t in result.scalars().all()]
 
     # -----------------------------------------------------------------------
     # Vocabulary CRUD
@@ -175,9 +202,7 @@ class TagService:
 
     async def remove_from_issue(self, session: AsyncSession, issue_id: int, tag_id: int) -> bool:
         """Detach a tag from an issue. Returns True if a link was removed."""
-        result = await session.execute(
-            select(TagLink).where(TagLink.tag_id == tag_id, TagLink.issue_id == issue_id)
-        )
+        result = await session.execute(select(TagLink).where(TagLink.tag_id == tag_id, TagLink.issue_id == issue_id))
         link = result.scalar_one_or_none()
         if link is None:
             return False
@@ -231,15 +256,11 @@ class TagService:
         await session.flush()
         return created
 
-    async def bulk_remove_from_issues(
-        self, session: AsyncSession, issue_ids: list[int], tag_id: int
-    ) -> int:
+    async def bulk_remove_from_issues(self, session: AsyncSession, issue_ids: list[int], tag_id: int) -> int:
         """Detach a tag from many issues. Returns the number of removed links."""
         if not issue_ids:
             return 0
-        result = await session.execute(
-            select(TagLink).where(TagLink.tag_id == tag_id, TagLink.issue_id.in_(issue_ids))
-        )
+        result = await session.execute(select(TagLink).where(TagLink.tag_id == tag_id, TagLink.issue_id.in_(issue_ids)))
         links = list(result.scalars().all())
         for link in links:
             await session.delete(link)
@@ -275,9 +296,7 @@ class TagService:
         return tag, True
 
     async def remove_from_wiki_page(self, session: AsyncSession, page_id: int, tag_id: int) -> bool:
-        result = await session.execute(
-            select(TagLink).where(TagLink.tag_id == tag_id, TagLink.wiki_page_id == page_id)
-        )
+        result = await session.execute(select(TagLink).where(TagLink.tag_id == tag_id, TagLink.wiki_page_id == page_id))
         link = result.scalar_one_or_none()
         if link is None:
             return False

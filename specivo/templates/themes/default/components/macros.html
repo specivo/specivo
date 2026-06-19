@@ -47,10 +47,10 @@
    Usage: {{ tag_badge("backend", "#4f9d6c") }}
    Renders a tag chip with an optional color swatch. Color is optional.
 #}
-{% macro tag_badge(name, color='') %}
+{% macro tag_badge(name, color='', link='') %}
 <span class="sp-tag">
   {% if color %}<span class="sp-tag-swatch" style="background:{{ color }}"></span>{% endif %}
-  <span class="sp-tag-name">{{ name }}</span>
+  {% if link %}<a class="sp-tag-name" href="{{ link }}">{{ name }}</a>{% else %}<span class="sp-tag-name">{{ name }}</span>{% endif %}
 </span>
 {% endmacro %}
 
@@ -70,7 +70,8 @@
     <template x-for="(tag, i) in tags" :key="i">
       <span class="sp-meta-tag">
         <template x-if="tag.color"><span class="sp-tag-swatch" :style="'background:' + tag.color"></span></template>
-        <span x-text="tag.name"></span>
+        <a class="sp-meta-tag-name" :href="tagSearchUrl(tag.name)" x-text="tag.name"></a>
+        <span class="sp-meta-tag-divider" aria-hidden="true"></span>
         <span class="sp-meta-tag-remove" @click.stop="removeTag(i)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
         </span>

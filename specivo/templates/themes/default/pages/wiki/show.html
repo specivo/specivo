@@ -71,7 +71,7 @@
       {% else %}
       <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-xs);">
         {% for t in wiki_tags if wiki_tags is defined %}
-          {{ tag_badge(t.name, t.color or '') }}
+          {{ tag_badge(t.name, t.color or '', '/search/?scope=all&tag=' ~ (t.name | urlencode)) }}
         {% endfor %}
       </div>
       {% endif %}

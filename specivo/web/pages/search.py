@@ -20,6 +20,11 @@ from specivo.web.deps import get_current_user_optional, get_templates
 _MF_SLUG_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
 _MV_MAX_LEN = 255
 
+# Real-tag filter caps. Tag names are at most 64 chars (Tag.name column), and we
+# cap the number of simultaneously-applied tags to keep the AND query bounded.
+_TAG_VALUE_MAX = 64
+_TAG_MAX = 20
+
 if TYPE_CHECKING:
     from specivo.models.user import User
 
@@ -41,6 +46,7 @@ async def search_page(
     mf: str = Query("", description="Metadata field slug to filter by"),
     mv: str = Query("", description="Metadata value to filter by"),
     ma: int = Query(0, description="1 if the metadata field is array-typed"),
+    tag: list[str] = Query(default=[], description="Tag name(s) to filter by (AND logic)"),  # noqa: B006
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
@@ -78,6 +84,36 @@ async def search_page(
         # Drop unusable filter inputs so the template doesn't show a stale chip.
         mf_clean = mv_clean = ""
 
+    # Build the real-tag filter from repeated `tag=` params (also tolerate a
+    # comma-separated value). Names are stripped, length-capped, deduplicated
+    # case-insensitively, and clamped to a sane maximum.
+    tag_clean: list[str] = []
+    _seen_tags: set[str] = set()
+    for raw in tag:
+        for part in raw.split(",") if "," in raw else [raw]:
+            name = part.strip()
+            if not name or len(name) > _TAG_VALUE_MAX:
+                continue
+            key = name.lower()
+            if key in _seen_tags:
+                continue
+            _seen_tags.add(key)
+            tag_clean.append(name)
+            if len(tag_clean) >= _TAG_MAX:
+                break
+        if len(tag_clean) >= _TAG_MAX:
+            break
+
+    if tag_clean:
+        # Tags only attach to issues and wiki pages, so coerce non-taggable
+        # scopes to "all" (which the service narrows to issues + wiki).
+        if scope not in ("issues", "wiki"):
+            scope = "all"
+        if active_filters is None:
+            active_filters = SearchFilters(tag_names=tag_clean)
+        else:
+            active_filters = active_filters.model_copy(update={"tag_names": tag_clean})
+
     if q.strip():
         search_fn = _search_svc.hybrid_search if mode == "hybrid" else _search_svc.search
         try:
@@ -88,6 +124,17 @@ async def search_page(
             import logging
 
             logging.getLogger(__name__).exception("Search failed for q=%r scope=%s mode=%s", q, scope, mode)
+            results, total, type_counts = [], 0, {}
+    elif active_filters is not None and tag_clean:
+        # Tag-only listing: issues + wiki, ordered by recency, no full-text term.
+        try:
+            results, total, type_counts = await _search_svc.filter_tagged(
+                db, user=user, project_id=project_id, scope=scope, offset=offset, limit=limit, filters=active_filters
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).exception("Tag filter failed for tags=%r", tag_clean)
             results, total, type_counts = [], 0, {}
     elif active_filters is not None:
         # Metadata-only listing: force the issues scope (only issues carry metadata).
@@ -132,6 +179,7 @@ async def search_page(
             "mf": mf_clean,
             "mv": mv_clean,
             "ma": ma,
+            "tags": [{"name": n} for n in tag_clean],
             "results": results,
             "total": total,
             "offset": offset,
