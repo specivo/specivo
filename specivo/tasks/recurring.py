@@ -18,7 +18,6 @@ A Redis distributed lock prevents two workers from generating concurrently.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 
@@ -27,21 +26,13 @@ from redis.exceptions import LockError, LockNotOwnedError
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_RECURRING
 from specivo.tasks import celery_app
+from specivo.tasks._async import run_async
 
 logger = logging.getLogger(__name__)
 
 _LOCK_KEY = "specivo:generate_recurring_tasks"
 _LOCK_TIMEOUT = 600  # seconds — generous: a large backlog may take a while
 _LOCK_BLOCKING_TIMEOUT = 5  # seconds — give up quickly if another worker holds it
-
-
-def _run_async(coro):  # type: ignore[no-untyped-def]
-    """Run an async coroutine in a new event loop (for Celery sync tasks)."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_RECURRING)
@@ -53,7 +44,7 @@ def generate_recurring_tasks(self) -> None:  # type: ignore[no-untyped-def]
     failures are handled inside the run and never trigger a retry.
     """
     try:
-        _run_async(_generate_recurring_async())
+        run_async(_generate_recurring_async())
     except Exception as exc:
         logger.warning("Recurring task generation failed: %s", exc)
         raise self.retry(exc=exc)
@@ -67,8 +58,8 @@ async def _generate_recurring_async() -> None:
     work. The body is factored into :func:`_generate_for_session` so tests can
     drive it directly against a test session without the lock/broker.
     """
-    from specivo.core.database import get_session_factory
     from specivo.core.utils import utcnow
+    from specivo.tasks._async import task_session
 
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     r = aioredis.from_url(redis_url)
@@ -76,8 +67,7 @@ async def _generate_recurring_async() -> None:
     try:
         async with r.lock(_LOCK_KEY, timeout=_LOCK_TIMEOUT, blocking_timeout=_LOCK_BLOCKING_TIMEOUT):
             now = utcnow()
-            factory = get_session_factory()
-            async with factory() as session:
+            async with task_session() as session:
                 await _generate_for_session(session, now)
     except LockNotOwnedError:
         logger.debug("Recurring task generation skipped — lock lost mid-run")

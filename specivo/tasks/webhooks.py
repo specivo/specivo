@@ -33,17 +33,12 @@ def deliver_webhook(self, webhook_id: int, event: str, payload: dict) -> None:  
 
     from sqlalchemy import select
 
-    from specivo.core.database import get_engine
+    from specivo.tasks._async import task_session
 
     async def _deliver():
-        from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
-
         from specivo.models.webhook import Webhook, WebhookDelivery
 
-        engine = get_engine()
-        factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
-
-        async with factory() as session:
+        async with task_session() as session:
             result = await session.execute(select(Webhook).where(Webhook.id == webhook_id))
             webhook = result.scalar_one_or_none()
             if webhook is None:
