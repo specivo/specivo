@@ -26,9 +26,11 @@ This subclass hooks the ``_handle_stateful_request`` dispatch in three places:
 3. **On a request that carries a session id the in-memory dict does not know
    about** — before giving up with 404, ask Redis. If Redis has the session,
    mint a fresh ``StreamableHTTPServerTransport`` under the *same* session id,
-   register it in ``_server_instances``, start its server task, refresh the
-   TTL, and let the request proceed. From the client's point of view, the
-   session survived the restart.
+   register it in ``_server_instances``, start its server task **seeded as
+   already-initialized** (via ``stateless=True`` on the SDK run path), refresh
+   the TTL, and let the request proceed. A client that completed its
+   ``initialize`` handshake before the restart keeps working without a
+   reconnect — from its point of view, the session survived the restart.
 
 What is persistent vs ephemeral
 -------------------------------
@@ -37,6 +39,14 @@ Only the **identity** of a session is persistent across restarts: the
 the running task that drives ``Server.run``, and any in-flight JSON-RPC state
 on a per-connection basis are inherently per-process and **cannot** be
 serialized. That is a property of the SDK transport, not a choice we make.
+
+The one piece of per-process handshake state we *do* recover is the
+``initialize`` gate: a rehydrated session's run path is started with
+``stateless=True`` so the new ``ServerSession`` comes up ``Initialized``
+instead of ``NotInitialized``. Without this, a client that already finished
+its handshake before the restart — and therefore only sends regular requests,
+never a second ``initialize`` — would be permanently rejected with
+``-32602 / "Received request before initialization was complete"``.
 
 The practical consequence is: the *first* request after a restart that arrives
 on a previously known session id pays the cost of standing up a new transport
