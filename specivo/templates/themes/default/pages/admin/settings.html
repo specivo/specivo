@@ -13,29 +13,46 @@
 
 <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">{% trans %}Settings{% endtrans %}</h1>
 
-<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;">
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;"
+     x-data='ftsReindex({ baseUrl: "/api/v1/admin/search", isProject: false, canManage: true, language: {{ fts_language | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }} })'>
   <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Defaults{% endtrans %}</h2>
   <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
     {% trans %}Workspace-wide fallbacks for anonymous visitors and users without their own saved preference.{% endtrans %}
   </p>
   <form method="post" action="/admin/settings/defaults/">
-    <div class="sp-settings-grid">
-      <div class="form-group">
-        <label class="form-label" for="default_language">{% trans %}Language{% endtrans %}</label>
-        <select id="default_language" name="default_language" class="form-input">
-          {% for code, label in language_choices %}
-          <option value="{{ code }}" {{ 'selected' if current_default_language == code else '' }}>{{ label }}</option>
+    <div class="form-group">
+      <label class="form-label" for="default_language">{% trans %}Language{% endtrans %}</label>
+      <select id="default_language" name="default_language" class="form-input">
+        {% for code, label in language_choices %}
+        <option value="{{ code }}" {{ 'selected' if current_default_language == code else '' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="default_timezone">{% trans %}Timezone{% endtrans %}</label>
+      <select id="default_timezone" name="default_timezone" class="form-input">
+        {% for tz in timezone_choices %}
+        <option value="{{ tz }}" {{ 'selected' if current_default_timezone == tz else '' }}>{{ tz.replace('_', ' ') }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="fts_language">{% trans %}Search analyzer language{% endtrans %}</label>
+      <div class="sp-fts-inline">
+        <button type="button" class="sp-btn sp-btn-ghost sp-btn-auto" @click="reindex()"
+                x-show="canManage" :disabled="busy">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" :class="{ 'sp-spin': busy }"><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/></svg>
+          <span x-show="!busy">{% trans %}Reindex now{% endtrans %}</span>
+          <span x-show="busy">{% trans %}Reindexing...{% endtrans %}</span>
+        </button>
+        <select id="fts_language" name="fts_language" class="form-input" x-model="selected">
+          {% for l in fts_allowed %}
+          <option value="{{ l }}" {{ 'selected' if fts_language == l else '' }}>{{ l }}</option>
           {% endfor %}
         </select>
       </div>
-      <div class="form-group">
-        <label class="form-label" for="default_timezone">{% trans %}Timezone{% endtrans %}</label>
-        <select id="default_timezone" name="default_timezone" class="form-input">
-          {% for tz in timezone_choices %}
-          <option value="{{ tz }}" {{ 'selected' if current_default_timezone == tz else '' }}>{{ tz.replace('_', ' ') }}</option>
-          {% endfor %}
-        </select>
-      </div>
+      <div class="form-hint">{% trans %}Full-text search analyzer language for the whole instance. Projects can override this. Changing it does not update already-indexed content until you reindex.{% endtrans %}</div>
+      {% include "pages/_fts_reindex.html" %}
     </div>
     <button type="submit" class="sp-btn sp-btn-primary" style="margin-top: var(--sp-space-md);">{% trans %}Save{% endtrans %}</button>
   </form>

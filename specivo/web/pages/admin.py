@@ -328,6 +328,14 @@ async def admin_settings(
     timezone_choices = sorted(available_timezones())
     current_default_timezone = settings.get("default_timezone") or "UTC"
 
+    # Search indexing (FTS): seed the card minimally; the Alpine component
+    # fetches fresh state (running job, last result, reindex_needed) on init.
+    from specivo.core.config import _ALLOWED_FTS_LANGUAGES
+    from specivo.tasks.search import reindex_needed_key
+
+    fts_language = settings.get("search_fts_language") or get_settings().search_fts_language
+    fts_reindex_needed = settings.get(reindex_needed_key(None)) == "1"
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -340,6 +348,9 @@ async def admin_settings(
             "current_default_language": current_default,
             "timezone_choices": timezone_choices,
             "current_default_timezone": current_default_timezone,
+            "fts_language": fts_language,
+            "fts_allowed": sorted(_ALLOWED_FTS_LANGUAGES),
+            "fts_reindex_needed": fts_reindex_needed,
         },
     )
 
@@ -351,18 +362,24 @@ async def admin_settings_defaults(
     db: AsyncSession = Depends(get_db),  # noqa: B008
     default_language: str = Form(""),
     default_timezone: str = Form(""),
+    fts_language: str = Form(""),
 ) -> Response:
-    """Persist the workspace default language and timezone in a single save.
+    """Persist the workspace defaults (UI language, timezone, FTS analyzer
+    language) in a single save.
 
     Each field is validated independently — language against the installed
-    locales, timezone against the IANA database. Unknown values are ignored
-    (left unchanged) while valid values are saved. The runtime language
-    override is refreshed whenever the language is updated.
+    locales, timezone against the IANA database, FTS language against the
+    allowed regconfig list. Unknown values are ignored (left unchanged) while
+    valid values are saved. The runtime language override is refreshed whenever
+    the UI language is updated, and changing the FTS analyzer language flags a
+    reindex as needed.
     """
     from zoneinfo import available_timezones
 
+    from specivo.core.config import _ALLOWED_FTS_LANGUAGES
     from specivo.core.locales import get_available_locales
     from specivo.core.runtime_settings import set_default_language_override
+    from specivo.tasks.search import reindex_needed_key
 
     to_set: dict[str, str | None] = {}
     code = default_language.strip()
@@ -371,6 +388,12 @@ async def admin_settings_defaults(
     tz = default_timezone.strip()
     if tz and tz in available_timezones():
         to_set["default_timezone"] = tz
+    fts = fts_language.strip()
+    if fts and fts in _ALLOWED_FTS_LANGUAGES:
+        current_fts = (await _settings_svc.get(db, "search_fts_language")) or get_settings().search_fts_language
+        to_set["search_fts_language"] = fts
+        if fts != current_fts:
+            to_set[reindex_needed_key(None)] = "1"
 
     if to_set:
         await _settings_svc.set_many(db, to_set)

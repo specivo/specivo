@@ -21,7 +21,6 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.config import get_settings
 from specivo.core.constants import (
     RRF_K,
     SEARCH_FTS_HEADLINE_OPTIONS,
@@ -148,11 +147,12 @@ class SearchService:
 
     Weight A (title/subject) ranks higher than weight B (description/text).
 
-    SECURITY: The FTS language (regconfig) is always passed as a bind
-    parameter (``CAST(:fts_lang AS regconfig)``) rather than interpolated
-    into SQL strings. Although the language value is validated against an
-    allowlist at config load time, parameterized queries provide defense
-    in depth against SQL injection if the validation is ever bypassed.
+    SECURITY: The FTS language (regconfig) is resolved per-project inside
+    the database via ``specivo_fts_config(<project_id>)``, which takes an
+    integer argument and returns a validated ``regconfig``. The language is
+    therefore never interpolated into SQL strings nor passed as a string
+    bind parameter, so the query side is immune to language-based SQL
+    injection by construction.
     """
 
     # ------------------------------------------------------------------
@@ -426,11 +426,16 @@ class SearchService:
 
     def _attachment_fts_sql(
         self,
-        fts_lang: str,
         user: User | None,
         project_filter: str,
     ) -> str:
-        """Build the FTS UNION ALL branch for attachment search."""
+        """Build the FTS UNION ALL branch for attachment search.
+
+        The FTS analyzer language is resolved per-row from the attachment's
+        owning project: ``specivo_fts_config(COALESCE(ai.project_id,
+        aw.project_id))`` — issue container via the ``ai`` join, wiki-page
+        container via the ``aw`` join.
+        """
         att_vis = self._attachment_visibility_cte_clause(user)
         att_project_filter = self._att_project_filter(project_filter)
 
@@ -446,7 +451,8 @@ class SearchService:
                         ELSE CAST(att.container_id AS text)
                     END as title,
                     att.filename as subtitle,
-                    ts_headline(CAST(:fts_lang AS regconfig), sc.content, query,
+                    ts_headline(specivo_fts_config(COALESCE(ai.project_id, aw.project_id)),
+                        sc.content, query,
                         '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                     ts_rank_cd(sc.search_vector, query) as score,
                     COALESCE(ai_p.key, aw_p.key) as project_key
@@ -458,7 +464,8 @@ class SearchService:
                 LEFT JOIN wiki_pages awp ON att.container_type = 'WikiPage' AND awp.id = att.container_id
                 LEFT JOIN wikis aw ON aw.id = awp.wiki_id
                 LEFT JOIN projects aw_p ON aw_p.id = aw.project_id
-                CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+                CROSS JOIN LATERAL plainto_tsquery(
+                    specivo_fts_config(COALESCE(ai.project_id, aw.project_id)), :query) AS query
                 WHERE sc.search_vector @@ query
                 {att_vis}
                 {att_project_filter}
@@ -468,11 +475,14 @@ class SearchService:
 
     def _attachment_fts_count_sql(
         self,
-        fts_lang: str,
         user: User | None,
         project_filter: str,
     ) -> str:
-        """Build the FTS COUNT query for attachment search."""
+        """Build the FTS COUNT query for attachment search.
+
+        Uses the same per-row language resolution as
+        :meth:`_attachment_fts_sql` so counts match the result rows.
+        """
         att_vis = self._attachment_visibility_cte_clause(user)
         att_project_filter = self._att_project_filter(project_filter)
 
@@ -484,7 +494,8 @@ class SearchService:
             LEFT JOIN issues ai ON att.container_type = 'Issue' AND ai.id = att.container_id
             LEFT JOIN wiki_pages awp ON att.container_type = 'WikiPage' AND awp.id = att.container_id
             LEFT JOIN wikis aw ON aw.id = awp.wiki_id
-            CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+            CROSS JOIN LATERAL plainto_tsquery(
+                specivo_fts_config(COALESCE(ai.project_id, aw.project_id)), :query) AS query
             WHERE sc.search_vector @@ query
             {att_vis}
             {att_project_filter}
@@ -675,8 +686,6 @@ class SearchService:
             Tuple of (results, total count for current scope, per-type counts dict).
             The type_counts dict has keys: issues, wiki, comments, attachments, all.
         """
-        settings = get_settings()
-        fts_lang = settings.search_fts_language
         parts: list[str] = []
         # Per-type count SQL fragments, keyed by type name.
         # Always populated for all 4 types (regardless of scope) so that
@@ -686,7 +695,7 @@ class SearchService:
         # compound tokens (e.g. 'jwt-rotat') that fail to match individual
         # tsvector lexemes.
         normalized_query = query.replace("-", " ")
-        params: dict[str, Any] = {"query": normalized_query, "fts_lang": fts_lang}
+        params: dict[str, Any] = {"query": normalized_query}
 
         # Add user ID for visibility checks
         if user is not None:
@@ -730,11 +739,13 @@ class SearchService:
                         i.id,
                         i.project_key || '-' || i.sequence_number as title,
                         i.subject as subtitle,
-                        ts_headline(CAST(:fts_lang AS regconfig), coalesce(i.description, ''), query,
+                        ts_headline(specivo_fts_config(i.project_id),
+                            coalesce(i.description, ''), query,
                             '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                         ts_rank_cd(i.search_vector, query) as score,
                         i.project_key
-                    FROM issues i, plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+                    FROM issues i
+                    CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(i.project_id), :query) AS query
                     WHERE i.search_vector @@ query
                     {issue_project_filter}
                     {issue_visibility}
@@ -752,7 +763,7 @@ class SearchService:
                         wp.id,
                         wp.title,
                         wp.slug as subtitle,
-                        ts_headline(CAST(:fts_lang AS regconfig), wc.text, query,
+                        ts_headline(specivo_fts_config(w.project_id), wc.text, query,
                             '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                         ts_rank_cd(wc.search_vector, query) as score,
                         p.key as project_key
@@ -760,7 +771,7 @@ class SearchService:
                     JOIN wiki_pages wp ON wp.id = wc.page_id
                     JOIN wikis w ON w.id = wp.wiki_id
                     JOIN projects p ON p.id = w.project_id
-                    CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+                    CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(w.project_id), :query) AS query
                     JOIN (
                         SELECT page_id, MAX(version) as max_ver
                         FROM wiki_contents
@@ -784,7 +795,7 @@ class SearchService:
                         j.id,
                         ci.project_key || '-' || ci.sequence_number as title,
                         left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as subtitle,
-                        ts_headline(CAST(:fts_lang AS regconfig), sc.content, query,
+                        ts_headline(specivo_fts_config(ci.project_id), sc.content, query,
                             '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                         ts_rank_cd(sc.search_vector, query) as score,
                         ci.project_key
@@ -792,7 +803,7 @@ class SearchService:
                     JOIN search_sources ss ON ss.id = sc.source_id
                     JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
                     JOIN issues ci ON ci.id = j.issue_id
-                    CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+                    CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(ci.project_id), :query) AS query
                     WHERE sc.search_vector @@ query
                     AND ss.source_type = '{_SST_JOURNAL}'
                     {comment_project_filter}
@@ -805,13 +816,14 @@ class SearchService:
         # Attachment keyword search: search search_chunks for source_type='attachment'
         att_pf = issue_project_filter  # same params, different alias handled in helper
         if scope in ("all", "attachments"):
-            parts.append(self._attachment_fts_sql(fts_lang, user, att_pf))
+            parts.append(self._attachment_fts_sql(user, att_pf))
 
         # --- Count parts: ALWAYS build for all 4 types (single-query per-type counts) ---
 
         count_parts["issues"] = f"""
             SELECT COUNT(*) as cnt
-            FROM issues i, plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+            FROM issues i
+            CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(i.project_id), :query) AS query
             WHERE i.search_vector @@ query
             {issue_project_filter}
             {issue_visibility}
@@ -823,7 +835,7 @@ class SearchService:
             FROM wiki_contents wc
             JOIN wiki_pages wp ON wp.id = wc.page_id
             JOIN wikis w ON w.id = wp.wiki_id
-            CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+            CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(w.project_id), :query) AS query
             JOIN (
                 SELECT page_id, MAX(version) as max_ver
                 FROM wiki_contents
@@ -840,14 +852,14 @@ class SearchService:
             JOIN search_sources ss ON ss.id = sc.source_id
             JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
             JOIN issues ci ON ci.id = j.issue_id
-            CROSS JOIN plainto_tsquery(CAST(:fts_lang AS regconfig), :query) query
+            CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(ci.project_id), :query) AS query
             WHERE sc.search_vector @@ query
             AND ss.source_type = '{_SST_JOURNAL}'
             {comment_project_filter}
             {comment_visibility}
         """
 
-        count_parts["attachments"] = self._attachment_fts_count_sql(fts_lang, user, att_pf)
+        count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf)
 
         if not parts:
             return [], 0, {}

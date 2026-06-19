@@ -60,6 +60,7 @@ from specivo.tasks import (  # noqa: E402, F401
     embeddings,
     notifications,
     recurring,
+    search,
     webhooks,
     wiki_links,
 )

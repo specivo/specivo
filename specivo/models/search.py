@@ -6,7 +6,6 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     BigInteger,
     Boolean,
-    Computed,
     ForeignKey,
     Index,
     Integer,
@@ -102,11 +101,10 @@ class SearchChunk(Base, TimestampMixin):
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    search_vector = mapped_column(
-        TSVECTOR,
-        Computed("to_tsvector('english', content)", persisted=True),
-        nullable=True,
-    )
+    # Maintained by the trg_search_chunks_search_vector trigger using the
+    # per-project FTS language (see migration 0025). Previously a generated
+    # column hardcoded to 'english'.
+    search_vector = mapped_column(TSVECTOR, nullable=True)
     metadata_json: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
 
     source: Mapped[SearchSource] = relationship("SearchSource", back_populates="chunks", lazy="raise")
