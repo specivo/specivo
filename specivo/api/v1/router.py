@@ -36,6 +36,7 @@ from specivo.api.v1.relations import router as relations_router
 from specivo.api.v1.saved_filters import router as saved_filters_router
 from specivo.api.v1.search import router as search_router
 from specivo.api.v1.sprints import router as sprints_router
+from specivo.api.v1.tags import router as tags_router
 from specivo.api.v1.time_entries import router as time_entries_router
 from specivo.api.v1.users import router as users_router
 from specivo.api.v1.versions import router as versions_router
@@ -51,6 +52,7 @@ api_router.include_router(relations_router)
 api_router.include_router(versions_router)
 api_router.include_router(recurring_patterns_router)
 api_router.include_router(sprints_router)
+api_router.include_router(tags_router)
 api_router.include_router(attachments_router)
 api_router.include_router(time_entries_router)
 api_router.include_router(admin_settings_router)

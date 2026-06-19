@@ -18,6 +18,7 @@ from specivo.models.project import Project
 from specivo.models.time_entry import TimeEntry
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
+from specivo.services.tag_service import TagService
 from specivo.services.version_service import VersionService
 from specivo.web.deps import get_current_user_optional, get_templates
 
@@ -29,6 +30,7 @@ router = APIRouter(tags=["web-projects"], include_in_schema=False)
 _svc = ProjectService()
 _version_svc = VersionService()
 _issue_svc = IssueService()
+_tag_svc = TagService()
 
 # Status code -> label mapping
 _STATUS_LABELS = {1: "active", 5: "closed", 9: "archived"}
@@ -305,6 +307,19 @@ async def project_settings(
         user, project.id, "manage_recurring_tasks", db
     )
 
+    # Tag vocabulary with usage counts (create/edit/delete gated on manage_project)
+    can_manage_tags = user.is_admin or await check_permission(user, project.id, "manage_project", db)
+    tags_data = [
+        {
+            "id": tag.id,
+            "name": tag.name,
+            "color": tag.color,
+            "issue_count": issue_count,
+            "wiki_count": wiki_count,
+        }
+        for tag, issue_count, wiki_count in await _tag_svc.list_with_usage(db, project.id)
+    ]
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -329,6 +344,8 @@ async def project_settings(
             "priorities_data": priorities_data,
             "recurring_patterns_data": recurring_patterns_data,
             "can_manage_recurring": can_manage_recurring,
+            "tags_data": tags_data,
+            "can_manage_tags": can_manage_tags,
         },
     )
 

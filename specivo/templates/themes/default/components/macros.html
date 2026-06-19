@@ -43,6 +43,73 @@
 <span class="badge-tracker {{ slug }}">{{ name }}</span>
 {% endmacro %}
 
+{# --- Tag Badge ---
+   Usage: {{ tag_badge("backend", "#4f9d6c") }}
+   Renders a tag chip with an optional color swatch. Color is optional.
+#}
+{% macro tag_badge(name, color='') %}
+<span class="sp-tag">
+  {% if color %}<span class="sp-tag-swatch" style="background:{{ color }}"></span>{% endif %}
+  <span class="sp-tag-name">{{ name }}</span>
+</span>
+{% endmacro %}
+
+{# --- Tag Field (editable multi-select) ---
+   Renders a `tagField` Alpine widget: chips + autocomplete with create-on-type.
+   - search_endpoint: tag search URL (e.g. /api/v1/projects/FOO/tags/search/)
+   - save_url:        PUT entity-tags URL; pass '' for pending mode (host reads .tags)
+   - tags_json:       current tags as a JSON-serialised list [{id,name,color}]
+   - placeholder:     input placeholder text
+   Usage:
+     {{ tag_field_input(search_endpoint, save_url, tags | tojson, _('Add tags...')) }}
+#}
+{% macro tag_field_input(search_endpoint, save_url, tags_json, placeholder='Add tags...') %}
+<div class="sp-tag-field"
+     x-data='tagField({ endpoint: {{ search_endpoint | tojson }}, saveUrl: {{ save_url | tojson }}, tags: {{ tags_json }}, canEdit: true })'>
+  <div class="sp-meta-tags" @click="$refs.tagInput.focus()">
+    <template x-for="(tag, i) in tags" :key="i">
+      <span class="sp-meta-tag">
+        <template x-if="tag.color"><span class="sp-tag-swatch" :style="'background:' + tag.color"></span></template>
+        <span x-text="tag.name"></span>
+        <span class="sp-meta-tag-remove" @click.stop="removeTag(i)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </span>
+      </span>
+    </template>
+    <input type="text" x-ref="tagInput"
+           x-model="query"
+           @focus="onFocus()"
+           @blur="onBlur()"
+           @keydown.down.prevent="moveDown()"
+           @keydown.up.prevent="moveUp()"
+           @keydown.enter.prevent="confirm()"
+           @keydown.comma.prevent="commitTyped()"
+           @keydown.escape.prevent="cancel()"
+           @keydown.backspace="removeLast()"
+           :placeholder="tags.length === 0 ? '{{ placeholder }}' : '{{ _('Add more...') }}'">
+  </div>
+  <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
+    <template x-if="!loading && results.length === 0 && query.trim()">
+      <div class="sp-ac-row" @click="commitTyped()">
+        <span class="sp-ac-name">{% trans %}Create{% endtrans %} “<span x-text="query.trim()"></span>”</span>
+      </div>
+    </template>
+    <template x-if="!loading && results.length === 0 && !query.trim()">
+      <div class="sp-ac-empty">{% trans %}No tags yet — type to create one{% endtrans %}</div>
+    </template>
+    <template x-for="(item, idx) in results" :key="item.id">
+      <div class="sp-ac-row"
+           :class="{'sp-ac-row-active': idx === activeIndex}"
+           @mouseenter="activeIndex = idx"
+           @click="selectResult(item)">
+        <template x-if="item.color"><span class="sp-tag-ac-color" :style="'background:' + item.color"></span></template>
+        <span class="sp-ac-name" x-text="item.name"></span>
+      </div>
+    </template>
+  </div>
+</div>
+{% endmacro %}
+
 {# --- Avatar ---
    Usage: {{ avatar("John D", size="sm", color="#5B8C5A", avatar_url="/data/avatars/ab/abc.webp") }}
    Sizes: xs, sm, md, lg

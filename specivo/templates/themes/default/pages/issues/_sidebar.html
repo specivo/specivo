@@ -1,4 +1,4 @@
-{% from "components/macros.html" import status_badge, priority_badge, tracker_badge, avatar %}
+{% from "components/macros.html" import status_badge, priority_badge, tracker_badge, avatar, tag_badge, tag_field_input %}
 
 {# Sidebar label style helper #}
 {% set lbl = 'font-size: var(--sp-font-size-xs); color: var(--sp-accent); display: block; margin-bottom: var(--sp-space-xs); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;' %}
@@ -142,6 +142,27 @@
       </div>
     </div>
   </div>
+</div>
+
+{# Card: Tags #}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
+  <label style="{{ lbl }}">{% trans %}Tags{% endtrans %}</label>
+  {% if can_tag_issue | default(true) %}
+  {{ tag_field_input(
+       "/api/v1/projects/" ~ project.key ~ "/tags/search/",
+       "/api/v1/issues/" ~ issue.display_key ~ "/tags/",
+       (issue_tags if issue_tags is defined else []) | tojson,
+       _('Add tags...')
+     ) }}
+  {% else %}
+  <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-xs);">
+    {% for t in issue_tags if issue_tags is defined %}
+      {{ tag_badge(t.name, t.color or '') }}
+    {% else %}
+    <span class="sp-tag-empty">{% trans %}No tags{% endtrans %}</span>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 
 {# Card 2: Progress & Dates #}

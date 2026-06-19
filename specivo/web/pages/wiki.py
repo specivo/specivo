@@ -13,6 +13,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.permission_service import check_permission
 from specivo.services.project_service import ProjectService
+from specivo.services.tag_service import TagService
 from specivo.services.wiki_service import WikiService
 from specivo.web.deps import get_current_user_optional, get_templates
 
@@ -24,6 +25,12 @@ router = APIRouter(tags=["web-wiki"], include_in_schema=False)
 _project_svc = ProjectService()
 _wiki_svc = WikiService()
 _attachment_svc = AttachmentService()
+_tag_svc = TagService()
+
+
+def _wiki_tags_to_dicts(tags: list) -> list[dict]:
+    """Serialize Tag ORM objects to plain dicts for templates / x-data injection."""
+    return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
 
 
 @router.get("/projects/{project_key}/wiki/", response_class=HTMLResponse)
@@ -320,6 +327,8 @@ async def wiki_show(
     # Project-wide filename → download URL map for inline image resolution
     attachment_map = await _attachment_svc.build_project_attachment_map(db, project.id)
 
+    wiki_tags = _wiki_tags_to_dicts(await _tag_svc.tags_for_wiki_page(db, page.id))
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -337,6 +346,7 @@ async def wiki_show(
             "can_manage_wiki": can_manage,
             "attachments": attachments_json,
             "attachment_map": attachment_map,
+            "wiki_tags": wiki_tags,
         },
     )
 
@@ -382,6 +392,8 @@ async def wiki_edit(
                 current_parent_title = p.title
                 break
 
+    wiki_tags = _wiki_tags_to_dicts(await _tag_svc.tags_for_wiki_page(db, page.id))
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -398,6 +410,7 @@ async def wiki_edit(
             "mode": "edit",
             "preselect_parent_slug": current_parent_slug,
             "preselect_parent_title": current_parent_title,
+            "wiki_tags": wiki_tags,
         },
     )
 

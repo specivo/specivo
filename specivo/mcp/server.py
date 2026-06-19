@@ -31,10 +31,12 @@ from specivo.mcp.tools import (
     _create_metadata_schema,
     _create_recurring_pattern,
     _create_sprint,
+    _create_tag,
     _create_version,
     _create_wiki,
     _delete_metadata_schema,
     _delete_recurring_pattern,
+    _delete_tag,
     _delete_version,
     _delete_wiki,
     _edit_description,
@@ -50,6 +52,7 @@ from specivo.mcp.tools import (
     _list_relations,
     _list_sprint_issues,
     _list_sprints,
+    _list_tags,
     _list_version_issues,
     _list_versions,
     _list_wiki_pages,
@@ -64,10 +67,12 @@ from specivo.mcp.tools import (
     _show_issue,
     _skip_recurrence_occurrence,
     _start_sprint,
+    _tag,
     _update_issue,
     _update_metadata_schema,
     _update_recurring_pattern,
     _update_sprint,
+    _update_tag,
     _update_version,
     _update_wiki_metadata,
     _whoami,
@@ -934,6 +939,94 @@ async def specivo_delete_version(
     """
     async with _get_session_and_user() as (session, user):
         return await _delete_version(session, user, project_key, version_id)
+
+
+# ---------------------------------------------------------------------------
+# Tags
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def specivo_list_tags(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+) -> str:
+    """List a project's tags with their colors and usage counts.
+
+    Tags are flat, case-insensitively-unique labels shared by issues and wiki
+    pages. Use a tag ID with specivo_update_tag / specivo_delete_tag.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _list_tags(session, user, project_key)
+
+
+@mcp.tool()
+async def specivo_create_tag(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    name: Annotated[str, Field(description="Tag name (unique per project, case-insensitive).")],
+    color: Annotated[str | None, Field(description="Optional hex color, e.g. '#4f9d6c'.")] = None,
+) -> str:
+    """Create a project tag. Requires the 'manage_project' permission.
+
+    Members can also create tags on the fly via specivo_tag(op='add'); this
+    tool is for explicit vocabulary curation.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _create_tag(session, user, project_key, name, color)
+
+
+@mcp.tool()
+async def specivo_update_tag(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    tag_id: Annotated[int, Field(description="Tag ID from specivo_list_tags.")],
+    name: Annotated[str | None, Field(description="New tag name.")] = None,
+    color: Annotated[str | None, Field(description="New hex color, e.g. '#4f9d6c'.")] = None,
+) -> str:
+    """Rename or recolor a tag. Requires the 'manage_project' permission."""
+    async with _get_session_and_user() as (session, user):
+        return await _update_tag(session, user, project_key, tag_id, name, color)
+
+
+@mcp.tool()
+async def specivo_delete_tag(
+    project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
+    tag_id: Annotated[int, Field(description="Tag ID from specivo_list_tags.")],
+) -> str:
+    """Delete a tag and detach it from all entities. Requires 'manage_project'."""
+    async with _get_session_and_user() as (session, user):
+        return await _delete_tag(session, user, project_key, tag_id)
+
+
+@mcp.tool()
+async def specivo_tag(
+    target_ref: Annotated[
+        str,
+        Field(
+            description=(
+                "Entity to tag: an issue ref ('ACME-12' or 'issue:ACME-12') "
+                "or a wiki page ('wiki:ACME/some-slug')."
+            ),
+        ),
+    ],
+    op: Annotated[str, Field(description="One of: get, add, remove, set.")],
+    value: Annotated[
+        Any,
+        Field(
+            default=None,
+            description=(
+                "Tag name or list of names. For 'set', the full desired list. "
+                "Ignored for 'get'. New names are created on the fly for add/set."
+            ),
+        ),
+    ] = None,
+) -> str:
+    """Read or mutate the tags on an issue or wiki page.
+
+    Ops: get (list current tags), add (apply one or more, creating new tags as
+    needed), remove (detach by name), set (replace the full tag set). Requires
+    project access; mutations are recorded in the audit log.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _tag(session, user, target_ref, op, value)
 
 
 # ---------------------------------------------------------------------------

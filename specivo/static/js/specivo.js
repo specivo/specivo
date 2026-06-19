@@ -28,6 +28,71 @@ function spFetch(url, opts) {
     return fetch(url, opts);
 }
 
+/* -------------------------------------------------------
+   Autocomplete dropdown anchoring
+   -------------------------------------------------------
+   Positions a `.sp-ac-menu` as `position: fixed` anchored to its
+   trigger element so it escapes every `overflow: hidden` ancestor
+   (e.g. the rounded `.card` containers in the issue sidebar, which
+   would otherwise clip an absolutely-positioned menu). Shared by the
+   `tagField` and `entityAutocomplete` Alpine components.
+
+   `root` is the component's positioning element (`.sp-tag-field` /
+   `.sp-ac`); `menu` is the `.sp-ac-menu` inside it. The menu opens
+   below the trigger, flipping above it when there is not enough room
+   below within the viewport. */
+function spAnchorMenu(root, menu) {
+    if (!root || !menu) return;
+    var rect = root.getBoundingClientRect();
+    var gap = 4;
+    var margin = 8;
+    menu.style.position = 'fixed';
+    menu.style.left = rect.left + 'px';
+    menu.style.right = 'auto';
+    menu.style.width = rect.width + 'px';
+    // Clear any prior placement so measurements are accurate.
+    menu.style.top = '';
+    menu.style.bottom = '';
+    menu.style.maxHeight = '';
+    var menuHeight = menu.offsetHeight;
+    var spaceBelow = window.innerHeight - rect.bottom - gap - margin;
+    var spaceAbove = rect.top - gap - margin;
+    if (menuHeight > spaceBelow && spaceAbove > spaceBelow) {
+        // Flip above the trigger.
+        menu.style.top = '';
+        menu.style.bottom = (window.innerHeight - rect.top + gap) + 'px';
+        menu.style.maxHeight = Math.max(0, spaceAbove) + 'px';
+    } else {
+        menu.style.top = (rect.bottom + gap) + 'px';
+        menu.style.maxHeight = Math.max(0, spaceBelow) + 'px';
+    }
+}
+
+/**
+ * Wires up an autocomplete component so its dropdown stays anchored to
+ * the trigger while open. `ctx` is the Alpine component (`this`); it
+ * must expose `$el` (root) and a boolean `open`. The menu is
+ * repositioned whenever `open` becomes true and on scroll/resize while
+ * open. Listeners are registered once per component.
+ */
+function spBindAnchoredMenu(ctx) {
+    var root = ctx.$el;
+    var menu = root.querySelector('.sp-ac-menu');
+    if (!menu) return;
+    var reposition = function () {
+        if (ctx.open) spAnchorMenu(root, menu);
+    };
+    ctx.$watch('open', function (isOpen) {
+        if (isOpen) {
+            // Wait for x-show + x-for to render rows before measuring.
+            ctx.$nextTick(function () { spAnchorMenu(root, menu); });
+        }
+    });
+    // Keep the menu glued to the trigger as the user scrolls/resizes.
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
+}
+
 /* HTMX — inject CSRF header on every mutating request */
 document.addEventListener('htmx:configRequest', function (e) {
     var method = (e.detail.verb || 'GET').toUpperCase();
@@ -2042,6 +2107,7 @@ document.addEventListener('alpine:init', function () {
             showRelationForm: false,
             newRelationType: 'relates',
             newRelationKey: '',
+            pendingTags: initial.tags || [],
 
             get canSubmit() {
                 return !this.submitting && this.subject.trim() !== '';
@@ -2128,6 +2194,8 @@ document.addEventListener('alpine:init', function () {
                     payload.metadata = metadataVal;
                 }
 
+                var tagNames = (this.pendingTags || []).map(function (t) { return t.name; });
+
                 try {
                     if (this.mode === 'edit') {
                         payload.lock_version = this.lockVersion;
@@ -2137,6 +2205,13 @@ document.addEventListener('alpine:init', function () {
                             body: JSON.stringify(payload)
                         });
                         if (res.ok) {
+                            try {
+                                await spFetch('/api/v1/issues/' + this.displayKey + '/tags/', {
+                                    method: 'PUT',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({names: tagNames})
+                                });
+                            } catch (_e) { /* best-effort */ }
                             window.location.href = '/projects/' + this.projectKey + '/issues/' + this.displayKey + '/';
                         }
                     } else {
@@ -2165,6 +2240,17 @@ document.addEventListener('alpine:init', function () {
                             } catch (_e) { /* best-effort */ }
                         }
 
+                        /* Apply pending tags */
+                        if (tagNames.length) {
+                            try {
+                                await spFetch('/api/v1/issues/' + data.key + '/tags/', {
+                                    method: 'PUT',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({names: tagNames})
+                                });
+                            } catch (_e) { /* best-effort */ }
+                        }
+
                         /* Create pending relations */
                         for (var j = 0; j < this.pendingRelations.length; j++) {
                             var rel = this.pendingRelations[j];
@@ -2185,6 +2271,7 @@ document.addEventListener('alpine:init', function () {
                             this.description = '';
                             this.files = [];
                             this.pendingRelations = [];
+                            this.pendingTags = [];
                             this.newRelationKey = '';
                             this.showRelationForm = false;
                             this.submitting = false;
@@ -2973,6 +3060,309 @@ document.addEventListener('alpine:init', function () {
     });
 
     /**
+     * Multi-select tag input with create-on-type.
+     *
+     * Renders the current tags as chips (with a color swatch + remove ×) and a
+     * debounced autocomplete text input. Selecting a suggestion or typing a new
+     * value (Enter / comma) adds a tag; after any add/remove the full name list
+     * is PUT to ``saveUrl`` and the local state is replaced from the response.
+     *
+     * Modes:
+     *   - Bound mode (saveUrl set): commits to the entity tags API immediately.
+     *   - Pending mode (saveUrl empty): only mutates the local ``tags`` array;
+     *     the host component reads it (e.g. issueForm on the create form).
+     *
+     * initial: {
+     *   endpoint,   // tag search URL, e.g. /api/v1/projects/FOO/tags/search/
+     *   saveUrl,    // PUT entity-tags URL, e.g. /api/v1/issues/FOO-42/tags/ ('' = pending)
+     *   tags,       // current tags: [{id, name, color}]
+     *   canEdit     // whether the input is shown
+     * }
+     */
+    Alpine.data('tagField', function (initial) {
+        return {
+            endpoint: initial.endpoint || '',
+            saveUrl: initial.saveUrl || '',
+            tags: initial.tags || [],
+            canEdit: initial.canEdit !== false,
+
+            query: '',
+            results: [],
+            open: false,
+            loading: false,
+            saving: false,
+            activeIndex: -1,
+            debounceTimer: null,
+            _lastQuery: null,
+
+            _names() {
+                return this.tags.map(function (t) { return t.name; });
+            },
+
+            _hasTag(name) {
+                var lower = name.toLowerCase();
+                for (var i = 0; i < this.tags.length; i++) {
+                    if (this.tags[i].name.toLowerCase() === lower) return true;
+                }
+                return false;
+            },
+
+            init() {
+                var self = this;
+                this.$watch('query', function () {
+                    self.open = true;
+                    self.search();
+                });
+                spBindAnchoredMenu(this);
+                // Re-anchor when the row set changes the menu height.
+                this.$watch('results', function () {
+                    if (self.open) self.$nextTick(function () { spAnchorMenu(self.$el, self.$el.querySelector('.sp-ac-menu')); });
+                });
+            },
+
+            onFocus() {
+                this.open = true;
+                if (!this.query) this.fetchDefault();
+            },
+
+            onBlur() {
+                var self = this;
+                setTimeout(function () {
+                    self.open = false;
+                    self.activeIndex = -1;
+                }, 150);
+            },
+
+            async fetchDefault() {
+                this.loading = true;
+                try {
+                    var res = await spFetch(this.endpoint + '?limit=20');
+                    if (res.ok) {
+                        this.results = await res.json();
+                        this.activeIndex = -1;
+                    }
+                } catch (_e) {}
+                this.loading = false;
+            },
+
+            search() {
+                var q = (this.query || '').trim();
+                if (q === this._lastQuery) return;
+                this._lastQuery = q;
+                clearTimeout(this.debounceTimer);
+                var self = this;
+                if (!q) {
+                    this.fetchDefault();
+                    return;
+                }
+                this.debounceTimer = setTimeout(async function () {
+                    self.loading = true;
+                    try {
+                        var res = await spFetch(self.endpoint + '?q=' + encodeURIComponent(q) + '&limit=20');
+                        if (res.ok) {
+                            self.results = await res.json();
+                            self.activeIndex = self.results.length ? 0 : -1;
+                        }
+                    } catch (_e) {}
+                    self.loading = false;
+                }, 200);
+            },
+
+            moveDown() {
+                if (!this.open) { this.open = true; this.fetchDefault(); return; }
+                if (this.activeIndex < this.results.length - 1) this.activeIndex++;
+            },
+
+            moveUp() {
+                if (this.activeIndex > 0) this.activeIndex--;
+            },
+
+            confirm() {
+                if (this.activeIndex >= 0 && this.activeIndex < this.results.length) {
+                    this.selectResult(this.results[this.activeIndex]);
+                } else {
+                    this.commitTyped();
+                }
+            },
+
+            cancel() {
+                this.open = false;
+                this.activeIndex = -1;
+                this.query = '';
+            },
+
+            selectResult(item) {
+                if (!this._hasTag(item.name)) {
+                    this.tags.push({id: item.id, name: item.name, color: item.color || null});
+                    this.persist();
+                }
+                this.query = '';
+                this._lastQuery = null;
+                this.results = [];
+                this.open = false;
+                this.activeIndex = -1;
+            },
+
+            commitTyped() {
+                var name = (this.query || '').trim();
+                if (!name) return;
+                if (!this._hasTag(name)) {
+                    this.tags.push({id: null, name: name, color: null});
+                    this.persist();
+                }
+                this.query = '';
+                this._lastQuery = null;
+                this.results = [];
+                this.open = false;
+                this.activeIndex = -1;
+            },
+
+            removeTag(index) {
+                this.tags.splice(index, 1);
+                this.persist();
+            },
+
+            removeLast() {
+                if (this.query) return;
+                if (this.tags.length) {
+                    this.tags.pop();
+                    this.persist();
+                }
+            },
+
+            async persist() {
+                if (!this.saveUrl) return;  // pending mode — host reads this.tags
+                this.saving = true;
+                try {
+                    var res = await spFetch(this.saveUrl, {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({names: this._names()})
+                    });
+                    if (res.ok) {
+                        this.tags = await res.json();
+                    }
+                } catch (_e) {}
+                this.saving = false;
+            }
+        };
+    });
+
+    /**
+     * Project settings — tag vocabulary management.
+     *
+     * Table of tags (color swatch, name, usage counts) with a create/edit modal
+     * (name + color) and delete confirmation. Management controls gated on
+     * ``canManage`` (manage_project).
+     *
+     * initial: { tags: [{id,name,color,issue_count,wiki_count}], projectKey, canManage }
+     */
+    Alpine.data('projectTagsSettings', function (initial) {
+        return {
+            tags: initial.tags || [],
+            projectKey: initial.projectKey || '',
+            canManage: initial.canManage !== false,
+            showModal: false,
+            showDeleteModal: false,
+            editingTag: null,
+            deletingTag: null,
+            saving: false,
+            deleting: false,
+            error: '',
+            form: {name: '', color: ''},
+
+            get canSaveTag() {
+                return !this.saving && this.form.name.trim() !== '';
+            },
+
+            openCreate() {
+                if (!this.canManage) return;
+                this.editingTag = null;
+                this.error = '';
+                this.form = {name: '', color: ''};
+                this.showModal = true;
+            },
+
+            openEdit(t) {
+                if (!this.canManage) return;
+                this.editingTag = t;
+                this.error = '';
+                this.form = {name: t.name, color: t.color || ''};
+                this.showModal = true;
+            },
+
+            async saveTag() {
+                if (!this.form.name.trim()) return;
+                this.saving = true;
+                this.error = '';
+                var payload = {name: this.form.name.trim(), color: this.form.color || null};
+                var url, method;
+                if (this.editingTag) {
+                    url = '/api/v1/projects/' + this.projectKey + '/tags/' + this.editingTag.id + '/';
+                    method = 'PATCH';
+                } else {
+                    url = '/api/v1/projects/' + this.projectKey + '/tags/';
+                    method = 'POST';
+                }
+                try {
+                    var res = await spFetch(url, {
+                        method: method,
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        var saved = await res.json();
+                        if (this.editingTag) {
+                            var idx = this.tags.findIndex(function (t) { return t.id === saved.id; });
+                            if (idx !== -1) {
+                                saved.issue_count = this.tags[idx].issue_count || 0;
+                                saved.wiki_count = this.tags[idx].wiki_count || 0;
+                                this.tags[idx] = saved;
+                            }
+                        } else {
+                            saved.issue_count = 0;
+                            saved.wiki_count = 0;
+                            this.tags.push(saved);
+                            this.tags.sort(function (a, b) {
+                                return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                            });
+                        }
+                        this.showModal = false;
+                    } else {
+                        var err = await res.json().catch(function () { return {}; });
+                        this.error = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to save tag.';
+                    }
+                } catch (_e) {
+                    this.error = 'Unable to connect.';
+                }
+                this.saving = false;
+            },
+
+            confirmDelete(t) {
+                if (!this.canManage) return;
+                this.deletingTag = t;
+                this.showDeleteModal = true;
+            },
+
+            async doDelete() {
+                if (!this.deletingTag) return;
+                this.deleting = true;
+                try {
+                    var res = await spFetch('/api/v1/projects/' + this.projectKey + '/tags/' + this.deletingTag.id + '/', {
+                        method: 'DELETE'
+                    });
+                    if (res.ok || res.status === 204) {
+                        this.tags = this.tags.filter(function (t) { return t.id !== this.deletingTag.id; }.bind(this));
+                        this.showDeleteModal = false;
+                        this.deletingTag = null;
+                    }
+                } catch (_e) {}
+                this.deleting = false;
+            }
+        };
+    });
+
+    /**
      * Generic autocomplete for picking a single entity (version or sprint)
      * and PATCHing an issue field with the selected id.
      *
@@ -3096,6 +3486,11 @@ document.addEventListener('alpine:init', function () {
                 this.$watch('query', function () {
                     self.open = true;
                     self.search();
+                });
+                spBindAnchoredMenu(this);
+                // Re-anchor when the row set changes the menu height.
+                this.$watch('results', function () {
+                    if (self.open) self.$nextTick(function () { spAnchorMenu(self.$el, self.$el.querySelector('.sp-ac-menu')); });
                 });
             },
 

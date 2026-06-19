@@ -22,11 +22,13 @@ from specivo.core.constants import SEARCH_SNIPPET_MAX_CHARS
 from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.models.project import Project
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
 from specivo.schemas.sprint import SprintCreate, SprintUpdate
+from specivo.schemas.tag import TagCreate, TagUpdate
 from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
 from specivo.services.issue_service import IssueService
@@ -39,6 +41,7 @@ from specivo.services.relation_service import RelationService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import AuditEvent
 from specivo.services.sprint_service import SprintService
+from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.services.version_service import VersionService
 from specivo.services.wiki_service import WikiService
@@ -55,6 +58,7 @@ _version_svc = VersionService()
 _relation_svc = RelationService()
 _sprint_svc = SprintService()
 _recurring_pattern_svc = RecurringPatternService()
+_tag_svc = TagService()
 
 
 async def _log_tool(
@@ -2427,3 +2431,216 @@ async def _list_version_issues(
         project_id=project.id,
     )
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Tags
+# ---------------------------------------------------------------------------
+
+
+async def _list_tags(session: AsyncSession, user: User, project_key: str) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "view_issues")
+    rows = await _tag_svc.list_with_usage(session, project.id)
+    lines = [f"Tags for {project.key} ({len(rows)} total):", ""]
+    for tag, issue_count, wiki_count in rows:
+        color = f"  {tag.color}" if tag.color else ""
+        lines.append(f"  {tag.id}  {tag.name}{color}  (issues: {issue_count}, wiki: {wiki_count})")
+    if not rows:
+        lines.append("  (none)")
+    await _log_tool(
+        session, user, AuditEvent.TAGS_LISTED, "list_tags", {"project_key": project_key}, project_id=project.id
+    )
+    return "\n".join(lines)
+
+
+async def _create_tag(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    name: str,
+    color: str | None = None,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_project")
+    try:
+        tag = await _tag_svc.create(session, project, TagCreate(name=name, color=color))
+    except ConflictError as exc:
+        return f"Error: {exc.message}"
+    await session.flush()
+    await _log_tool(
+        session, user, AuditEvent.TAG_CREATED, "create_tag",
+        {"project_key": project_key, "name": tag.name}, project_id=project.id,
+    )
+    return f"Created tag '{tag.name}' (ID: {tag.id}) in {project.key}."
+
+
+async def _update_tag(
+    session: AsyncSession,
+    user: User,
+    project_key: str,
+    tag_id: int,
+    name: str | None = None,
+    color: str | None = None,
+) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_project")
+    tag = await _tag_svc.get_by_id(session, tag_id)
+    if tag.project_id != project.id:
+        return f"Error: tag {tag_id} not found in project '{project.key}'"
+    data = TagUpdate(name=name) if color is None else TagUpdate(name=name, color=color)
+    try:
+        tag = await _tag_svc.update(session, tag, data)
+    except ConflictError as exc:
+        return f"Error: {exc.message}"
+    await session.flush()
+    await _log_tool(
+        session, user, AuditEvent.TAG_UPDATED, "update_tag",
+        {"project_key": project_key, "tag_id": tag_id, "name": tag.name}, project_id=project.id,
+    )
+    return f"Updated tag '{tag.name}' (ID: {tag.id}) in {project.key}."
+
+
+async def _delete_tag(session: AsyncSession, user: User, project_key: str, tag_id: int) -> str:
+    project = await _project_svc.get_by_key(session, project_key)
+    await _require_permission(session, user, project.id, "manage_project")
+    tag = await _tag_svc.get_by_id(session, tag_id)
+    if tag.project_id != project.id:
+        return f"Error: tag {tag_id} not found in project '{project.key}'"
+    name = tag.name
+    await _tag_svc.delete(session, tag)
+    await session.flush()
+    await _log_tool(
+        session, user, AuditEvent.TAG_DELETED, "delete_tag",
+        {"project_key": project_key, "tag_id": tag_id, "name": name}, project_id=project.id,
+    )
+    return f"Deleted tag '{name}' from {project.key}."
+
+
+async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str):
+    """Resolve a tag target_ref to (kind, project, entity_id, display).
+
+    Accepts an issue ref ('ACME-12' or 'issue:ACME-12') or a wiki ref
+    ('wiki:ACME/some-slug').
+    """
+    if target_ref.startswith("wiki:"):
+        ref = target_ref[len("wiki:") :]
+        if "/" not in ref:
+            raise ValueError("wiki target must be 'wiki:PROJECT_KEY/slug'")
+        pkey, slug = ref.split("/", 1)
+        project = await _project_svc.get_by_key(session, pkey.upper())
+        await _project_svc.require_project_access(session, project, user)
+        page, _ = await _wiki_svc.get_page(session, project.id, slug)
+        return "wiki", project, page.id, f"wiki {project.key}/{page.slug}"
+
+    ref = target_ref[len("issue:") :] if target_ref.startswith("issue:") else target_ref
+    issue = await _issue_svc.get_by_display_key(session, ref, user=user)
+    issue_project = await session.get(Project, issue.project_id)
+    if issue_project is None:  # pragma: no cover - defensive
+        raise NotFoundError(f"Project for issue '{ref}' not found")
+    return "issue", issue_project, issue.id, issue.display_key
+
+
+async def _tag(
+    session: AsyncSession,
+    user: User,
+    target_ref: str,
+    op: str,
+    value: Any = None,
+) -> str:
+    """Read or mutate the tags on an issue or wiki page.
+
+    Ops: get, add, remove, set. ``value`` is a tag name or list of names
+    (ignored for get). Adding creates new tags on the fly.
+    """
+    valid_ops = {"get", "add", "remove", "set"}
+    if op not in valid_ops:
+        return f"Error: invalid op '{op}'. Must be one of: {', '.join(sorted(valid_ops))}"
+
+    try:
+        kind, project, entity_id, display = await _resolve_tag_target(session, user, target_ref)
+    except NotFoundError as exc:
+        return f"Error: {exc}"
+    except ValueError as exc:
+        return f"Error: {exc}"
+
+    if op == "get":
+        tags = (
+            await _tag_svc.tags_for_issue(session, entity_id)
+            if kind == "issue"
+            else await _tag_svc.tags_for_wiki_page(session, entity_id)
+        )
+        await _log_tool(
+            session, user, AuditEvent.TAGS_LISTED, "tag",
+            {"target_ref": target_ref, "op": op}, project_id=project.id,
+        )
+        if not tags:
+            return f"{display}: (no tags)"
+        return f"{display}: " + ", ".join(t.name for t in tags)
+
+    # Normalize value to a list of names.
+    if value is None:
+        names: list[str] = []
+    elif isinstance(value, list):
+        names = [str(v) for v in value]
+    else:
+        names = [str(value)]
+
+    if op == "set":
+        if kind == "issue":
+            diff = await _tag_svc.set_issue_tags(session, project, entity_id, names, user)
+        else:
+            diff = await _tag_svc.set_wiki_page_tags(session, project, entity_id, names, user)
+        await session.flush()
+        for n in diff["added"]:
+            await _log_tool(
+                session, user, AuditEvent.TAG_ADDED, "tag",
+                {"target_ref": target_ref, "name": n}, project_id=project.id,
+            )
+        for n in diff["removed"]:
+            await _log_tool(
+                session, user, AuditEvent.TAG_REMOVED, "tag",
+                {"target_ref": target_ref, "name": n}, project_id=project.id,
+            )
+        return (
+            f"Set tags on {display}: +{len(diff['added'])} / -{len(diff['removed'])} "
+            f"(added: {', '.join(diff['added']) or 'none'}; removed: {', '.join(diff['removed']) or 'none'})"
+        )
+
+    if not names:
+        return "Error: value (tag name) is required for add/remove"
+
+    changed: list[str] = []
+    if op == "add":
+        for n in names:
+            if kind == "issue":
+                tag, created = await _tag_svc.add_to_issue(session, project, entity_id, n, user)
+            else:
+                tag, created = await _tag_svc.add_to_wiki_page(session, project, entity_id, n, user)
+            if created:
+                changed.append(tag.name)
+                await _log_tool(
+                    session, user, AuditEvent.TAG_ADDED, "tag",
+                    {"target_ref": target_ref, "name": tag.name}, project_id=project.id,
+                )
+        await session.flush()
+        return f"Added tags to {display}: {', '.join(changed) or '(already present)'}"
+
+    # op == "remove"
+    for n in names:
+        existing_tag = await _tag_svc.get_by_name(session, project.id, n)
+        if existing_tag is None:
+            continue
+        removed = (
+            await _tag_svc.remove_from_issue(session, entity_id, existing_tag.id)
+            if kind == "issue"
+            else await _tag_svc.remove_from_wiki_page(session, entity_id, existing_tag.id)
+        )
+        if removed:
+            changed.append(existing_tag.name)
+            await _log_tool(
+                session, user, AuditEvent.TAG_REMOVED, "tag",
+                {"target_ref": target_ref, "name": existing_tag.name}, project_id=project.id,
+            )
+    await session.flush()
+    return f"Removed tags from {display}: {', '.join(changed) or '(not present)'}"
