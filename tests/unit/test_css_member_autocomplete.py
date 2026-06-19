@@ -19,18 +19,17 @@ from pathlib import Path
 
 import pytest
 
-CSS_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "specivo"
-    / "static"
-    / "css"
-    / "specivo.css"
-)
+# The stylesheet is authored as component source files under frontend/css/ and
+# bundled by esbuild into a content-hashed dist file at build time. Read the
+# tracked source directly so this test does not depend on a frontend build.
+CSS_DIR = Path(__file__).resolve().parents[2] / "frontend" / "css"
 
 
 @pytest.fixture(scope="module")
 def css_text() -> str:
-    return CSS_PATH.read_text(encoding="utf-8")
+    parts = [p.read_text(encoding="utf-8") for p in sorted(CSS_DIR.glob("*.css"))]
+    assert parts, f"no CSS source files found in {CSS_DIR}"
+    return "\n".join(parts)
 
 
 def _rule_body(css: str, selector: str) -> str:
@@ -41,7 +40,7 @@ def _rule_body(css: str, selector: str) -> str:
         + r"\s*\{([^}]*)\}",
     )
     match = pattern.search(css)
-    assert match is not None, f"selector {selector!r} not found in specivo.css"
+    assert match is not None, f"selector {selector!r} not found in frontend/css source"
     return match.group(1)
 
 
