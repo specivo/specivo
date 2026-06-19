@@ -25,6 +25,7 @@
     <a class="filter-tab" :class="{ active: tab === 'recurring' }" @click.prevent="tab = 'recurring'" href="#">{% trans %}Recurring tasks{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'metadata' }" @click.prevent="tab = 'metadata'" href="#">{% trans %}Metadata{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'tags' }" @click.prevent="tab = 'tags'" href="#">{% trans %}Tags{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'search' }" @click.prevent="tab = 'search'" href="#">{% trans %}Search{% endtrans %}</a>
   </div>
 
   <!-- General tab -->
@@ -379,7 +380,6 @@
           <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
           <p x-text="canManage ? '{{ _('Create a pattern to generate issues automatically on a schedule.') }}' : '{{ _('No recurring patterns have been created for this project yet.') }}'"></p>
           <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
             {% trans %}Create first pattern{% endtrans %}
           </a>
         </div>
@@ -817,6 +817,18 @@
         </div>
       </div>
     </template>
+  </div>
+
+  <!-- Search tab -->
+  <div x-show="tab === 'search'" x-cloak>
+    <div class="card" style="padding: var(--sp-space-lg); max-width: 720px;"
+         x-data='ftsReindex({ baseUrl: "/api/v1/projects/{{ project.key }}/search", isProject: true, canManage: {{ can_manage_search | tojson }}, language: {{ fts_language | tojson }}, allowed: {{ fts_allowed | tojson }}, instanceDefault: {{ fts_instance_default | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }} })'>
+      <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Search indexing{% endtrans %}</h2>
+      <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
+        {% trans %}Full-text search analyzer language for this project. Leave on Inherit to use the instance default.{% endtrans %}
+      </p>
+      {% include "pages/_fts_card.html" %}
+    </div>
   </div>
 </div>
 {% endblock %}

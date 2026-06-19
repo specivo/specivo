@@ -1,0 +1,30 @@
+{# Per-project search-language card body. Expects an ancestor element to
+   provide the `ftsReindex(...)` Alpine component via x-data. #}
+<div class="form-group">
+  <label class="form-label">{% trans %}Analyzer language{% endtrans %}</label>
+  <div class="sp-fts-inline">
+    <button type="button" class="sp-btn sp-btn-ghost sp-btn-auto" @click="reindex()"
+            x-show="canManage" :disabled="busy">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" :class="{ 'sp-spin': busy }"><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/></svg>
+      <span x-show="!busy">{% trans %}Reindex now{% endtrans %}</span>
+      <span x-show="busy">{% trans %}Reindexing...{% endtrans %}</span>
+    </button>
+    <select class="form-input" x-model="selected" :disabled="!canManage || busy">
+      <template x-for="opt in languageOptions" :key="opt.value">
+        <option :value="opt.value" :selected="opt.value === selected" x-text="opt.label"></option>
+      </template>
+    </select>
+    <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()"
+            x-show="canManage" :disabled="saving || busy">
+      <span x-show="!saving">{% trans %}Save{% endtrans %}</span>
+      <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+    </button>
+  </div>
+  <div class="sp-fts-effective" x-show="isProject">
+    {% trans %}Effective:{% endtrans %} <span x-text="effective"></span>
+  </div>
+  <div class="form-hint">
+    {% trans %}Controls how text is tokenized and stemmed for full-text search. Changing it does not update already-indexed content until you reindex.{% endtrans %}
+  </div>
+  {% include "pages/_fts_reindex.html" %}
+</div>

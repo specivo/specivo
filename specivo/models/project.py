@@ -89,6 +89,10 @@ class Project(Base, TimestampMixin):
     # Hex color for project card border (e.g. "#c49a3c")
     color: Mapped[str | None] = mapped_column(String(7), nullable=True)
 
+    # Optional per-project full-text-search analyzer language (a Postgres
+    # regconfig name like "russian"). NULL = inherit the instance-wide default.
+    fts_language: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
     # Extensible JSONB settings bag
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
 

@@ -320,6 +320,18 @@ async def project_settings(
         for tag, issue_count, wiki_count in await _tag_svc.list_with_usage(db, project.id)
     ]
 
+    # Search indexing (FTS): per-project analyzer language with inherit. The
+    # Alpine component fetches fresh state (running job, last result, etc.) on
+    # init; these context vars only seed the initial render.
+    from specivo.core.config import _ALLOWED_FTS_LANGUAGES
+    from specivo.services.settings_service import SettingsService
+    from specivo.tasks.search import reindex_needed_key
+
+    can_manage_search = user.is_admin or await check_permission(user, project.id, "manage_project", db)
+    _fts_settings = SettingsService()
+    fts_instance_default = await _fts_settings.get(db, "search_fts_language", "english")
+    fts_reindex_needed = (await _fts_settings.get(db, reindex_needed_key(project.id))) == "1"
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -329,6 +341,11 @@ async def project_settings(
             "active_page": "settings",
             "active_project": project,
             "project": project,
+            "fts_language": project.fts_language,
+            "fts_instance_default": fts_instance_default,
+            "fts_allowed": sorted(_ALLOWED_FTS_LANGUAGES),
+            "fts_reindex_needed": fts_reindex_needed,
+            "can_manage_search": can_manage_search,
             "members": members,
             "modules": modules,
             "roles": roles,
