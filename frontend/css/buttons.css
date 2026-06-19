@@ -1,0 +1,42 @@
+/* ============================================================
+   BUTTONS
+   ============================================================ */
+.sp-row-hover { border-bottom: 1px solid var(--sp-border); transition: background 0.1s; }
+.sp-row-hover:hover { background: var(--sp-bg-hover); }
+
+.sp-btn {
+  display: inline-flex;
+  width: auto;
+  align-self: flex-start;
+  align-items: center;
+  gap: var(--sp-space-sm);
+  padding: 7px 14px;
+  border-radius: var(--sp-border-radius);
+  font-family: var(--sp-font-body);
+  font-size: var(--sp-font-size-sm);
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.sp-btn svg { width: 14px; height: 14px; }
+.sp-btn-primary { background: var(--sp-accent); color: var(--sp-accent-text); }
+.sp-btn-primary:hover { background: var(--sp-accent-hover); box-shadow: 0 0 20px rgba(196, 154, 60, 0.25); text-decoration: none; }
+.sp-btn-ghost { background: transparent; color: var(--sp-text-secondary); border: 1px solid var(--sp-border); }
+.sp-btn-ghost:hover { background: var(--sp-bg-input); text-decoration: none; }
+.sp-btn-danger { background: var(--sp-danger); color: white; }
+.sp-btn-danger:hover { background: #B91C1C; text-decoration: none; }
+.sp-btn-success { background: var(--sp-success); color: white; border-color: var(--sp-success); }
+.sp-btn-success:hover { background: #15803D; text-decoration: none; }
+.sp-btn-kill { background: var(--sp-danger); color: white; border: none; padding: 10px 20px; border-radius: var(--sp-border-radius); font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); font-weight: 700; cursor: pointer; transition: background 0.15s; text-transform: uppercase; letter-spacing: 0.04em; }
+.sp-btn-kill:hover { background: #B91C1C; }
+.sp-btn-sm { padding: 3px 10px; border-radius: 4px; font-size: var(--sp-font-size-xs); }
+.sp-btn-sm:not(.sp-btn-primary):not(.sp-btn-success):not(.sp-btn-danger):not(.sp-btn-ghost) { border: 1px solid var(--sp-border); background: var(--sp-bg-surface); color: var(--sp-text-secondary); }
+.sp-btn-sm:not(.sp-btn-primary):not(.sp-btn-success):not(.sp-btn-danger):not(.sp-btn-ghost):hover { background: var(--sp-bg-input); border-color: var(--sp-border-strong); }
+.sp-btn-sm.danger { color: var(--sp-danger); border-color: #FECACA; }
+.sp-btn-sm.danger:hover { background: var(--sp-danger-subtle); }
+.sp-btn-sm.warning { color: var(--sp-warning); border-color: #FDE68A; }
+.sp-btn-sm.warning:hover { background: var(--sp-warning-subtle); }
+

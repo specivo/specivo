@@ -3,6 +3,17 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.3.0] - 2026-06-20
+
+### Added
+- **Tags** — per-project labels (with optional hex color) for issues and wiki pages; managed in Project Settings → Tags; any member can apply tags or create them on the fly; project Managers curate the vocabulary (rename, recolor, delete)
+- **Tag filter in search** — tag chips are clickable links to a tag-filtered search; search page supports multi-select tag filtering with AND logic, cross-project autocomplete, and case-insensitive matching; MCP/API support for listing, applying, and curating tags
+- Per-project full-text-search analyzer language configurable in Project Settings, with a one-click reindex trigger
+
+### Fixed
+- MCP sessions remain initialized across an API restart (session state rehydrated from Redis)
+- Celery task DB sessions use NullPool to prevent connection leaks in async worker context
+
 ## [0.2.1] - 2026-06-18
 
 ### Fixed

@@ -1,0 +1,67 @@
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 15px; transition: font-size 0.2s ease; height: 100%; }
+html, body { margin: 0; padding: 0; }
+html.font-md { font-size: 17px; }
+html.font-lg { font-size: 19px; }
+body {
+  font-family: var(--sp-font-body);
+  color: var(--sp-text-primary);
+  background: var(--sp-bg-page);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--sp-text-link); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* Bootstrap overrides */
+body {
+  --bs-body-font-family: var(--sp-font-body);
+  --bs-body-color: var(--sp-text-primary);
+  --bs-body-bg: var(--sp-bg-page);
+}
+/* Custom modal — sp- prefixed to avoid Bootstrap collision.
+   Single source of truth for the .sp-scrim / .sp-modal containers. These were
+   formerly redeclared in sprints.css and metadata.css; the rules below are the
+   merged result of that cascade (last-wins per property). The .sp-modal-*
+   children are still defined per-feature (base/metadata) — consolidating them
+   is deferred (see ADR-0001). */
+.sp-scrim { display: none; position: fixed; inset: 0; z-index: 1050; background: rgba(0, 0, 0, 0.5); align-items: center; justify-content: center; }
+.sp-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1055; display: flex; flex-direction: column; background: var(--sp-bg-surface); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-lg); padding: var(--sp-space-2xl); width: 100%; max-width: 580px; max-height: 90vh; overflow: hidden; }
+.sp-modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-space-lg) var(--sp-space-xl); border-bottom: 1px solid var(--sp-border); }
+.sp-modal-header h2 { font-size: var(--sp-font-size-lg); font-weight: 700; font-family: var(--sp-font-display); margin: 0; }
+.sp-modal-close { background: none; border: none; font-size: 24px; color: var(--sp-text-muted); cursor: pointer; padding: 0; line-height: 1; }
+.sp-modal-close:hover { color: var(--sp-text-primary); }
+.sp-modal-body { padding: var(--sp-space-xl); }
+.sp-modal-footer { display: flex; justify-content: flex-end; gap: var(--sp-space-sm); padding: var(--sp-space-md) var(--sp-space-xl); border-top: 1px solid var(--sp-border); }
+.btn-close { filter: none; opacity: 0.5; }
+.btn-close:hover { opacity: 1; }
+
+/* ============================================================
+   FONT SIZE TOGGLE
+   ============================================================ */
+.font-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--sp-border-radius);
+  background: rgba(255, 255, 255, 0.06);
+}
+.font-toggle button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9b99b0;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-family: var(--sp-font-body);
+  font-weight: 600;
+  line-height: 1;
+  transition: all 0.15s;
+}
+.font-toggle button:hover { color: #e8e4f0; }
+.font-toggle button.active { background: rgba(196, 154, 60, 0.2); color: var(--sp-accent); }
+

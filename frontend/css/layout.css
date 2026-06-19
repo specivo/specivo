@@ -1,0 +1,10 @@
+/* ============================================================
+   LAYOUT SHELL
+   ============================================================ */
+.app-layout {
+  display: grid;
+  grid-template-columns: var(--sp-sidebar-width) 1fr;
+  grid-template-rows: var(--sp-header-height) 1fr;
+  min-height: 100vh;
+}
+

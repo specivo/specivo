@@ -371,11 +371,11 @@ async def test_generate_recurring_async_acquires_lock_and_generates(
     """The locked entrypoint acquires the real Redis lock and runs generation.
 
     The test's ``db_session`` is bound to a rollback-isolated connection, so a
-    session from the real factory (a fresh connection) would not see the
-    uncommitted fixtures. We therefore patch the factory to reuse ``db_session``
-    via a no-op async context manager. This still exercises the genuine Redis
-    distributed-lock acquisition path in ``_generate_recurring_async`` against
-    the test Redis.
+    session from ``task_session()`` (a fresh NullPool connection) would not see
+    the uncommitted fixtures. We therefore patch ``task_session`` to reuse
+    ``db_session`` via a no-op async context manager. This still exercises the
+    genuine Redis distributed-lock acquisition path in
+    ``_generate_recurring_async`` against the test Redis.
     """
     import uuid
     from contextlib import asynccontextmanager
@@ -403,10 +403,7 @@ async def test_generate_recurring_async_acquires_lock_and_generates(
         # Reuse the test session; do not close it (the fixture owns its lifecycle).
         yield db_session
 
-    monkeypatch.setattr(
-        "specivo.core.database.get_session_factory",
-        lambda: _session_cm,
-    )
+    monkeypatch.setattr("specivo.tasks._async.task_session", _session_cm)
 
     await recurring._generate_recurring_async()
 

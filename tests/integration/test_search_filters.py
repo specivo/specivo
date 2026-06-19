@@ -637,3 +637,142 @@ async def test_search_requires_query_or_filter(authed_client: AsyncClient):
     """An empty query with no filter is rejected."""
     resp = await _get(authed_client, q="", scope="issues")
     assert resp.status_code == 422, resp.text
+
+
+# ---------------------------------------------------------------------------
+# Tests — Real-tag filtering (issues + wiki, AND logic)
+# ---------------------------------------------------------------------------
+
+
+async def _tag_issue(client: AsyncClient, key: str, names: list[str]) -> None:
+    resp = await client.put(f"/api/v1/issues/{key}/tags/", json={"names": names})
+    assert resp.status_code == 200, resp.text
+
+
+async def _tag_wiki(client: AsyncClient, project_key: str, slug: str, names: list[str]) -> None:
+    resp = await client.put(f"/api/v1/projects/{project_key}/wiki/{slug}/tags/", json={"names": names})
+    assert resp.status_code == 200, resp.text
+
+
+class TestTagFilter:
+    @pytest.mark.asyncio
+    async def test_and_logic(self, authed_client, project, lookups):
+        both = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter one")
+        one = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter two")
+        await _tag_issue(authed_client, both["key"], ["alpha", "beta"])
+        await _tag_issue(authed_client, one["key"], ["alpha"])
+
+        # Single tag → both issues.
+        resp = await _get(authed_client, q="", scope="issues", tag=["alpha"])
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["total_count"] == 2
+
+        # Two tags → AND → only the issue carrying both.
+        resp = await _get(authed_client, q="", scope="issues", tag=["alpha", "beta"])
+        data = resp.json()
+        assert data["total_count"] == 1
+        assert "one" in data["items"][0]["subtitle"].lower()
+
+    @pytest.mark.asyncio
+    async def test_case_insensitive(self, authed_client, project, lookups):
+        issue = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter ci")
+        await _tag_issue(authed_client, issue["key"], ["MixedCase"])
+        resp = await _get(authed_client, q="", scope="issues", tag=["mixedcase"])
+        assert resp.json()["total_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_includes_wiki(self, authed_client, project, lookups):
+        issue = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter wikimix issue")
+        page = await _create_wiki_page(authed_client, project.key, "Tagfilter Wikimix Page", "body text")
+        await _tag_issue(authed_client, issue["key"], ["wikimix"])
+        await _tag_wiki(authed_client, project.key, page["slug"], ["wikimix"])
+
+        resp = await _get(authed_client, q="", scope="all", tag=["wikimix"])
+        data = resp.json()
+        assert data["total_count"] == 2
+        types = {item["result_type"] for item in data["items"]}
+        assert "issue" in types
+        assert "wiki" in types
+
+    @pytest.mark.asyncio
+    async def test_wiki_scope_only(self, authed_client, project, lookups):
+        issue = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter wikiscope issue")
+        page = await _create_wiki_page(authed_client, project.key, "Tagfilter Wikiscope Page", "body text")
+        await _tag_issue(authed_client, issue["key"], ["wikiscope"])
+        await _tag_wiki(authed_client, project.key, page["slug"], ["wikiscope"])
+
+        resp = await _get(authed_client, q="", scope="wiki", tag=["wikiscope"])
+        data = resp.json()
+        assert data["total_count"] == 1
+        assert data["items"][0]["result_type"] == "wiki"
+
+    @pytest.mark.asyncio
+    async def test_filter_only_score_zero(self, authed_client, project, lookups):
+        issue = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter zero")
+        await _tag_issue(authed_client, issue["key"], ["zerotag"])
+        resp = await _get(authed_client, q="", scope="issues", tag=["zerotag"])
+        data = resp.json()
+        assert data["total_count"] == 1
+        assert data["items"][0]["score"] == 0.0
+
+    @pytest.mark.asyncio
+    async def test_combined_with_query(self, authed_client, project, lookups):
+        tagged = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagcombo needle alpha")
+        await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagcombo needle beta")
+        await _tag_issue(authed_client, tagged["key"], ["needletag"])
+
+        data = await _search(authed_client, "tagcombo needle", scope="issues", tag=["needletag"])
+        assert data["total_count"] == 1
+        assert "alpha" in data["items"][0]["subtitle"].lower()
+
+    @pytest.mark.asyncio
+    async def test_cross_project_by_name(self, db_session, authed_client, project, filter_user, lookups):
+        proj2 = await _make_project(db_session, key="FL2", identifier="filter-project-2")
+        await _add_manager(db_session, proj2, filter_user)
+
+        a = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter crossa")
+        b = await _create_issue(authed_client, proj2.key, lookups["tracker_bug"].id, "Tagfilter crossb")
+        await _tag_issue(authed_client, a["key"], ["crosstag"])
+        await _tag_issue(authed_client, b["key"], ["crosstag"])
+
+        resp = await _get(authed_client, q="", scope="issues", tag=["crosstag"])
+        data = resp.json()
+        assert data["total_count"] == 2
+        keys = {item["title"] for item in data["items"]}
+        assert {a["key"], b["key"]} <= keys
+
+    @pytest.mark.asyncio
+    async def test_respects_visibility(self, db_session, authed_client, project, lookups, second_user):
+        from specivo.services.tag_service import TagService
+
+        visible = await _create_issue(authed_client, project.key, lookups["tracker_bug"].id, "Tagfilter visible item")
+        await _tag_issue(authed_client, visible["key"], ["secrettag"])
+
+        hidden = await _make_project(db_session, key="HID3", identifier="hidden-tagproj")
+        hidden_issue = IssueFactory.build(
+            project_id=hidden.id,
+            project_key=hidden.key,
+            tracker_id=lookups["tracker_bug"].id,
+            status_id=lookups["status_new"].id,
+            priority_id=lookups["priority_low"].id,
+            author_id=second_user.id,
+            subject="Tagfilter hidden item",
+        )
+        db_session.add(hidden_issue)
+        await db_session.commit()
+        await db_session.refresh(hidden_issue)
+        await TagService().add_to_issue(db_session, hidden, hidden_issue.id, "secrettag", second_user)
+        await db_session.commit()
+
+        resp = await _get(authed_client, q="", scope="issues", tag=["secrettag"])
+        data = resp.json()
+        assert data["total_count"] == 1
+        titles = " ".join(item.get("subtitle", "") for item in data["items"]).lower()
+        assert "visible" in titles
+        assert "hidden" not in titles
+
+    @pytest.mark.asyncio
+    async def test_empty_tag_ignored(self, authed_client):
+        """Blank/whitespace tags don't form a filter — empty query then 422s."""
+        resp = await _get(authed_client, q="", scope="issues", tag=["", "  "])
+        assert resp.status_code == 422, resp.text

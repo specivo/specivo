@@ -44,3 +44,22 @@ async def test_search_requires_auth(unauth_client: AsyncClient):
     resp = await unauth_client.get("/search/", follow_redirects=False)
     assert resp.status_code == 302
     assert "/login/" in resp.headers["location"]
+
+
+@pytest.mark.integration
+async def test_search_page_has_tag_filter(auth_client: AsyncClient):
+    """The search page renders the tag filter field wired to the global endpoint."""
+    token = auth_client.state.token
+    resp = await auth_client.get("/search/", cookies={"access_token": token})
+    assert resp.status_code == 200
+    assert "tagFilter(" in resp.text
+    assert "/api/v1/tags/search/" in resp.text
+
+
+@pytest.mark.integration
+async def test_search_page_seeds_selected_tags(auth_client: AsyncClient):
+    """A `tag=` param seeds the filter component with the selected chip."""
+    token = auth_client.state.token
+    resp = await auth_client.get("/search/?tag=pickup", cookies={"access_token": token})
+    assert resp.status_code == 200
+    assert "pickup" in resp.text

@@ -1,0 +1,7 @@
+/* ============================================================
+   COLOR SWATCHES (avatar color picker)
+   ============================================================ */
+.sp-color-swatch { display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;color:white;font-size:var(--sp-font-size-sm);font-weight:600;font-family:var(--sp-font-body);border:3px solid transparent;transition:all 0.15s;user-select:none; }
+.sp-color-swatch:hover { transform:scale(1.1); }
+.sp-color-swatch.selected, .sp-color-radio:checked + .sp-color-swatch { border-color:var(--sp-text-primary);transform:scale(1.1); }
+

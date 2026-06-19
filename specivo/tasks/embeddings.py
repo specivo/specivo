@@ -7,23 +7,14 @@ Tasks:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_EMBEDDING
 from specivo.schemas.search import SearchSourceType
 from specivo.tasks import celery_app
+from specivo.tasks._async import run_async, task_session
 
 logger = logging.getLogger(__name__)
-
-
-def _run_async(coro):  # type: ignore[no-untyped-def]
-    """Run an async coroutine in a new event loop (for Celery sync tasks)."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMBEDDING)
@@ -41,7 +32,7 @@ def generate_embeddings(self, source_type: str, entity_id: int, project_id: int)
         project_id: ID of the project the entity belongs to.
     """
     try:
-        _run_async(_generate_embeddings_async(source_type, entity_id, project_id))
+        run_async(_generate_embeddings_async(source_type, entity_id, project_id))
     except Exception as exc:
         logger.warning("Failed to generate embeddings for %s:%d: %s", source_type, entity_id, exc)
         raise self.retry(exc=exc)
@@ -49,15 +40,13 @@ def generate_embeddings(self, source_type: str, entity_id: int, project_id: int)
 
 async def _generate_embeddings_async(source_type: str, entity_id: int, project_id: int) -> None:
     """Async implementation of embedding generation."""
-    from specivo.core.database import get_session_factory
     from specivo.services.chunking_service import ChunkingService
     from specivo.services.embedding_service import EmbeddingService
 
     chunking = ChunkingService()
     embedding = EmbeddingService()
 
-    factory = get_session_factory()
-    async with factory() as session:
+    async with task_session() as session:
         chunks: list[str] = []
 
         if source_type == SearchSourceType.ISSUE:
@@ -139,7 +128,7 @@ def backfill_model_embeddings(self, model_id: int) -> None:  # type: ignore[no-u
         model_id: ID of the EmbeddingModel to backfill.
     """
     try:
-        _run_async(_backfill_async(model_id))
+        run_async(_backfill_async(model_id))
     except Exception as exc:
         logger.warning("Failed to backfill model %d: %s", model_id, exc)
         raise self.retry(exc=exc)
@@ -147,13 +136,11 @@ def backfill_model_embeddings(self, model_id: int) -> None:  # type: ignore[no-u
 
 async def _backfill_async(model_id: int) -> None:
     """Async implementation of model backfill."""
-    from specivo.core.database import get_session_factory
     from specivo.services.embedding_service import EmbeddingService
 
     embedding = EmbeddingService()
 
-    factory = get_session_factory()
-    async with factory() as session:
+    async with task_session() as session:
         count = await embedding.backfill_model(session, model_id)
         await session.commit()
         logger.info("Backfill complete: %d embeddings for model %d", count, model_id)

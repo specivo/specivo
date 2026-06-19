@@ -22,6 +22,12 @@ class SettingsService:
         rows = result.scalars().all()
         return {row.key: row.value for row in rows}
 
+    async def get(self, session: AsyncSession, key: str, default: str | None = None) -> str | None:
+        """Return a single setting's value, or *default* if unset."""
+        result = await session.execute(select(Setting.value).where(Setting.key == key))
+        value = result.scalar_one_or_none()
+        return value if value is not None else default
+
     async def get_avatar_palette(self, session: AsyncSession) -> list[str]:
         """Return the avatar color palette from settings, with fallback."""
         import json

@@ -1,0 +1,36 @@
+/* ============================================================
+   ADMIN
+   ============================================================ */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-space-lg); margin-bottom: var(--sp-space-2xl); }
+.stat-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-sm); padding: var(--sp-space-xl); }
+.stat-card .stat-label { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-xs); }
+.stat-card .stat-value { font-family: var(--sp-font-display); font-size: var(--sp-font-size-2xl); font-weight: 700; color: var(--sp-text-primary); letter-spacing: -0.02em; }
+.stat-card .stat-icon { width: 36px; height: 36px; border-radius: var(--sp-border-radius); display: flex; align-items: center; justify-content: center; margin-bottom: var(--sp-space-md); }
+.stat-card .stat-icon svg { width: 20px; height: 20px; }
+.stat-card .stat-icon.gold { background: var(--sp-accent-subtle); color: var(--sp-accent); }
+.stat-card .stat-icon.violet { background: #F5F3FF; color: #7C3AED; }
+.stat-card .stat-icon.info { background: var(--sp-info-subtle); color: var(--sp-info); }
+.stat-card .stat-icon.success { background: var(--sp-success-subtle); color: var(--sp-success); }
+/* Mono key — settings keys, config identifiers, login names */
+.sp-mono-key { font-family: var(--sp-font-mono); font-weight: 500; white-space: nowrap; color: var(--sp-danger); }
+
+/* Muted row — locked users, archived items */
+.sp-row-muted td { color: var(--sp-text-muted) !important; }
+
+.admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-lg); }
+.admin-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-sm); padding: var(--sp-space-xl); display: flex; gap: var(--sp-space-lg); transition: border-color 0.15s, box-shadow 0.15s; }
+.admin-card:hover { border-color: var(--sp-border-strong); box-shadow: var(--sp-shadow-md); }
+.admin-card.danger { border-color: var(--sp-danger); border-left: 3px solid var(--sp-danger); }
+.admin-card-icon { width: 44px; height: 44px; border-radius: var(--sp-border-radius-lg); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.admin-card-icon svg { width: 22px; height: 22px; }
+.admin-card-icon.gold { background: var(--sp-accent-subtle); color: var(--sp-accent); }
+.admin-card-icon.violet { background: #F5F3FF; color: #7C3AED; }
+.admin-card-icon.muted { background: var(--sp-bg-input); color: var(--sp-text-secondary); }
+.admin-card-icon.info { background: var(--sp-info-subtle); color: var(--sp-info); }
+.admin-card-icon.danger { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+.admin-card-body { flex: 1; }
+.admin-card-body h3 { font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs); }
+.admin-card-body p { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-md); line-height: 1.5; }
+.admin-card-body .manage-link { font-size: var(--sp-font-size-sm); font-weight: 500; color: var(--sp-text-link); }
+.admin-card.danger .manage-link { color: var(--sp-danger); }
+

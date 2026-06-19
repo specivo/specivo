@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/static/vendor/font-awesome/4.7.0/css/font-awesome.min.css">
   {# EasyMDE 2.18.0 — vendored Markdown editor (CodeMirror 5). See specivo/static/vendor/easymde.VENDOR.md. #}
   <link rel="stylesheet" href="/static/vendor/easymde.2.18.0.min.css">
-  <link rel="stylesheet" href="/static/css/{{ versioned['specivo.css'] }}">
+  <link rel="stylesheet" href="/static/dist/css/{{ versioned['specivo.min.css'] }}">
   {% block plugin_css %}
   {% for css_url in plugin_css_files %}
   <link rel="stylesheet" href="{{ css_url }}">
@@ -77,10 +77,14 @@
       </footer>
     </main>
   </div>
-  {# EasyMDE 2.18.0 — must load before specivo.js so the markdownEditor component sees window.EasyMDE. #}
+  {# EasyMDE 2.18.0 — must load before alpine-init.min.js so the markdownEditor component sees window.EasyMDE. #}
   <script src="/static/vendor/easymde.2.18.0.min.js"></script>
-  <script src="/static/js/{{ versioned['specivo.js'] }}" defer></script>
+  {# alpine-init registers all Alpine.data components/stores; it is deferred and
+     ordered before Alpine so registration completes before alpine:init fires. #}
+  <script src="/static/dist/js/{{ versioned['alpine-init.min.js'] }}" defer></script>
   <script src="/static/vendor/alpine.3.14.min.js" defer></script>
+  {# app.min.js wires the non-Alpine (vanilla) modules on DOMContentLoaded. #}
+  <script src="/static/dist/js/{{ versioned['app.min.js'] }}" defer></script>
   <script src="/static/vendor/htmx.2.0.min.js"></script>
   <script src="/static/vendor/htmx-ext-json-enc.2.0.1.min.js"></script>
   <script src="/static/vendor/bootstrap.bundle.5.3.6.min.js"></script>

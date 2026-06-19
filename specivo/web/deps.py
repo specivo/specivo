@@ -52,10 +52,13 @@ def _resolve_git_commit() -> str:
 
 _git_commit: str = _resolve_git_commit()
 
-# Versioned static filenames populated by setup_versioned_assets() at startup.
+# Versioned (content-hashed) bundle filenames populated by
+# setup_versioned_assets() at startup from the esbuild manifests. Defaults are
+# the un-hashed names so templates still render if a build manifest is missing.
 _versioned_assets: dict[str, str] = {
-    "specivo.css": "specivo.css",
-    "specivo.js": "specivo.js",
+    "specivo.min.css": "specivo.min.css",
+    "alpine-init.min.js": "alpine-init.min.js",
+    "app.min.js": "app.min.js",
 }
 
 # Brand name — populated from DB setting at startup, updated via admin.
@@ -354,7 +357,7 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
 def setup_versioned_assets(versioned: dict[str, str]) -> None:
     """Update versioned asset filenames from create_app().
 
-    Called once at startup after symlinks are created.
+    Called once at startup with the merged esbuild bundle manifests.
     """
     _versioned_assets.update(versioned)
 

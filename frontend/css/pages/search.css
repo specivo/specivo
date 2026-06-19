@@ -1,0 +1,91 @@
+/* ============================================================
+   SEARCH PAGE
+   ============================================================ */
+.search-box { position: relative; margin-bottom: var(--sp-space-xl); }
+.search-box input { width: 100%; padding: 14px 80px 14px 48px; border: 1px solid var(--sp-border-strong); border-radius: var(--sp-border-radius-lg); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-lg); color: var(--sp-text-primary); outline: none; transition: border-color 0.15s, box-shadow 0.15s; box-shadow: var(--sp-shadow-sm); }
+.search-submit-btn { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); padding: 6px 16px; background: var(--sp-accent); color: white; border: none; border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); font-weight: 500; cursor: pointer; font-family: var(--sp-font-body); transition: background 0.15s; }
+.search-submit-btn:hover { background: var(--sp-accent-hover); }
+.search-box input:focus { border-color: var(--sp-border-focus); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
+.search-box .search-icon-lg { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; color: var(--sp-text-muted); }
+.search-controls { display: flex; align-items: center; gap: var(--sp-space-xl); margin-bottom: var(--sp-space-xl); }
+.search-project-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.search-applied-filters { margin-bottom: var(--sp-space-lg); }
+.search-applied-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; padding: 0; cursor: pointer; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.search-applied-toggle:hover { color: var(--sp-text-secondary); }
+.search-applied-chevron { width: 14px; height: 14px; transition: transform 0.15s; }
+.search-applied-chevron.open { transform: rotate(90deg); }
+.search-applied-text { display: block; width: 100%; max-width: 480px; margin-top: var(--sp-space-xs); padding: var(--sp-space-xs) var(--sp-space-sm); font-family: var(--sp-font-mono, monospace); font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); background: var(--sp-bg-input); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); resize: vertical; }
+.search-results-header { margin-bottom: var(--sp-space-md); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); }
+
+/* Mode toggle */
+.mode-toggle { display: flex; gap: 2px; background: var(--sp-bg-input); border-radius: var(--sp-border-radius); padding: 2px; }
+.mode-toggle-btn { padding: 6px 14px; border: none; background: transparent; border-radius: 4px; cursor: pointer; font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); font-weight: 500; color: var(--sp-text-secondary); transition: all 0.15s; }
+.mode-toggle-btn:hover { color: var(--sp-text-primary); }
+.mode-toggle-btn.active { background: var(--sp-accent); color: var(--sp-accent-text); box-shadow: var(--sp-shadow-sm); }
+
+/* Scope tabs */
+.scope-tabs { display: flex; gap: 2px; background: var(--sp-bg-input); border-radius: var(--sp-border-radius); padding: 2px; }
+.scope-tab { padding: 6px 14px; border-radius: 4px; font-size: var(--sp-font-size-sm); cursor: pointer; transition: all 0.15s; color: var(--sp-text-secondary); font-weight: 500; border: none; background: transparent; font-family: var(--sp-font-body); display: inline-flex; align-items: center; gap: 5px; }
+.scope-tab:hover { color: var(--sp-text-primary); }
+.scope-tab.active { background: var(--sp-accent); color: var(--sp-accent-text); box-shadow: var(--sp-shadow-sm); }
+.scope-tab-icon { display: inline-flex; align-items: center; }
+.scope-tab-icon svg { width: 14px; height: 14px; stroke-width: 2; }
+
+/* Search results */
+.search-results { display: flex; flex-direction: column; gap: var(--sp-space-md); }
+.search-result { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-xl); box-shadow: var(--sp-shadow-sm); transition: border-color 0.15s; }
+.search-result:hover { border-color: var(--sp-border-strong); }
+.search-result.result-type-issue { border-left: 3px solid var(--sp-accent); }
+.search-result.result-type-wiki { border-left: 3px solid var(--sp-success); }
+.search-result.result-type-comment { border-left: 3px solid var(--sp-info); }
+.search-result.result-type-attachment { border-left: 3px solid var(--sp-text-muted); }
+.result-header { display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-xs); }
+.result-type-icon { width: 18px; height: 18px; color: #a09880; flex-shrink: 0; }
+.result-title { font-size: var(--sp-font-size-md); font-weight: 600; color: var(--sp-accent); text-decoration: none; }
+.result-title:hover { text-decoration: underline; }
+.result-subtitle { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-bottom: var(--sp-space-sm); display: flex; align-items: center; gap: var(--sp-space-sm); }
+.result-subtitle .project-key { font-family: var(--sp-font-mono); background: rgba(196, 154, 60, 0.08); color: var(--sp-text-secondary); padding: 1px 5px; border-radius: 3px; }
+.result-snippet { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); line-height: 1.6; }
+.result-snippet mark { background: rgba(196, 154, 60, 0.15); color: var(--sp-text-primary); padding: 0 2px; border-radius: 2px; }
+.result-footer { display: flex; align-items: center; gap: var(--sp-space-lg); margin-top: var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.result-score { font-family: var(--sp-font-mono); color: var(--sp-accent); }
+
+/* Issue key in issue-scoped results */
+.issue-key { font-family: var(--sp-font-mono); font-weight: 500; color: var(--sp-accent); font-size: var(--sp-font-size-sm); text-decoration: none; }
+.issue-key:hover { text-decoration: underline; }
+.result-subject { font-size: var(--sp-font-size-md); font-weight: 600; color: var(--sp-text-primary); }
+
+/* Status & tracker badges */
+.status-badge { font-size: var(--sp-font-size-xs); font-weight: 500; padding: 2px 8px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; }
+.status-badge.in-progress { background: var(--sp-info-subtle); color: var(--sp-info); }
+.status-badge.new { background: var(--sp-warning-subtle); color: var(--sp-warning); }
+.status-badge.closed { background: rgba(0, 0, 0, 0.05); color: var(--sp-text-muted); }
+.tracker-badge { font-size: var(--sp-font-size-xs); font-weight: 500; padding: 2px 8px; border-radius: 4px; background: var(--sp-bg-input); color: var(--sp-text-secondary); }
+.priority-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+.priority-dot.urgent { background: var(--sp-danger); }
+.priority-dot.high { background: var(--sp-warning); }
+.priority-dot.normal { background: var(--sp-success); }
+
+/* Meta tags for issue metadata */
+.meta-tag { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); padding: 2px 8px; border-radius: 4px; background: var(--sp-bg-input); color: var(--sp-text-secondary); display: inline-flex; align-items: center; gap: 4px; }
+.meta-tag .meta-label { color: var(--sp-text-muted); }
+.meta-row { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm); }
+
+/* Comment results */
+.search-result.comment-result { background: rgba(196, 154, 60, 0.03); }
+.comment-header { display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm); }
+.agent-badge { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 3px; background: rgba(217, 119, 6, 0.12); color: var(--sp-warning); text-transform: uppercase; letter-spacing: 0.04em; }
+.comment-issue-context { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: var(--sp-space-sm); padding-top: var(--sp-space-sm); border-top: 1px solid var(--sp-border); display: flex; align-items: center; gap: var(--sp-space-sm); }
+
+/* Wiki result extras */
+.wiki-path { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); font-style: italic; }
+.wiki-editor { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+
+/* Pagination */
+.search-pagination { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-top: var(--sp-space-xl); display: flex; align-items: center; justify-content: space-between; }
+.search-pagination-info { color: var(--sp-text-muted); }
+.search-pagination-nav { display: flex; gap: var(--sp-space-sm); }
+
+/* Empty state */
+.search-empty { padding: var(--sp-space-xl); text-align: center; color: var(--sp-text-muted); }
+

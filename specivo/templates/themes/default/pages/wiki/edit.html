@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, tag_field_input %}
 
 {% block title %}{% if mode == 'create' %}{% trans %}New Page{% endtrans %}{% else %}{% trans name=wiki_page.title %}Edit %(name)s{% endtrans %}{% endif %} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -70,6 +70,17 @@
           <label class="modal-label">{% trans %}Edit summary{% endtrans %}</label>
           <input type="text" class="modal-input" x-model="comments" placeholder="{{ _('Describe your changes...') }}">
         </div>
+        {% if mode == 'edit' and wiki_page %}
+        <div>
+          <label class="modal-label">{% trans %}Tags{% endtrans %}</label>
+          {{ tag_field_input(
+               "/api/v1/projects/" ~ project.key ~ "/tags/search/",
+               "/api/v1/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/tags/",
+               (wiki_tags if wiki_tags is defined else []) | tojson,
+               _('Add tags...')
+             ) }}
+        </div>
+        {% endif %}
         {% if page_tree is defined and page_tree %}
         <div x-data="{ pickerOpen: false, treeExpanded: {} }" style="position:relative;">
           <label class="modal-label">{% trans %}Parent page{% endtrans %}</label>

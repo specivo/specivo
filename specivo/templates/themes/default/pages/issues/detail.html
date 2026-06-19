@@ -61,7 +61,7 @@
       <template x-if="editing">
         <div>
           <div class="description-card" style="padding:var(--sp-space-md);">
-            {# EasyMDE-wrapped editor — see markdownEditor in specivo.js. The inner #}
+            {# EasyMDE-wrapped editor — see markdownEditor in frontend/js/components/markdown-editor.js. The inner #}
             {# component exposes its current value via x-modelable, bound to the    #}
             {# outer descriptionEditor's `draft` state.                             #}
             <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue" })'

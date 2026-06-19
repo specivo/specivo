@@ -29,6 +29,29 @@ _audit_service = SecurityAuditService()
 _METADATA_FILTER_MAX_BYTES = 2048
 _METADATA_FILTER_MAX_KEYS = 10
 
+# Real-tag filter caps (mirror the web search page).
+_TAG_VALUE_MAX = 64
+_TAG_MAX = 20
+
+
+def _clean_tag_names(tag: list[str]) -> list[str]:
+    """Normalize repeated ``tag`` params: strip, length-cap, dedupe, clamp count."""
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in tag:
+        for part in raw.split(",") if "," in raw else [raw]:
+            name = part.strip()
+            if not name or len(name) > _TAG_VALUE_MAX:
+                continue
+            key = name.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(name)
+            if len(out) >= _TAG_MAX:
+                return out
+    return out
+
 
 @router.get("/search/", response_model=SearchResponse)
 async def search(
@@ -53,6 +76,7 @@ async def search(
     updated_after: datetime | None = Query(None, description="Issues updated after"),
     updated_before: datetime | None = Query(None, description="Issues updated before"),
     metadata: str | None = Query(None, description="JSONB containment filter (JSON string)"),
+    tag: list[str] = Query(default=[], description="Real-tag name(s) to filter by (AND logic)"),  # noqa: B006
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
@@ -118,6 +142,8 @@ async def search(
             )
         parsed_metadata = loaded
 
+    tag_names = _clean_tag_names(tag)
+
     filters = SearchFilters(
         tracker_id=tracker_id,
         status_id=status_id,
@@ -131,6 +157,7 @@ async def search(
         updated_after=updated_after,
         updated_before=updated_before,
         metadata=parsed_metadata,
+        tag_names=tag_names or None,
     )
 
     # Check if any filters are active
@@ -150,8 +177,12 @@ async def search(
             updated_before,
             parsed_metadata,
         )
-    )
+    ) or bool(tag_names)
     active_filters = filters if has_filters else None
+
+    # Tags attach only to issues and wiki pages; coerce non-taggable scopes.
+    if tag_names and scope not in ("issues", "wiki"):
+        scope = "all"
 
     has_query = bool(q.strip())
     if not has_query and active_filters is None:
@@ -161,7 +192,19 @@ async def search(
         )
 
     type_counts: dict[str, int] = {}
-    if not has_query:
+    if not has_query and tag_names:
+        # Tag-only listing — issues + wiki, ordered by recency.
+        items, total_count, type_counts = await _service.filter_tagged(
+            session=db,
+            user=user,
+            project_id=project_id,
+            project_ids=project_ids,
+            scope=scope,
+            offset=offset,
+            limit=limit,
+            filters=active_filters,
+        )
+    elif not has_query:
         # Metadata/attribute-only listing — no full-text term.
         items, total_count, type_counts = await _service.filter_issues(
             session=db,

@@ -86,3 +86,7 @@ class SearchFilters(BaseModel):
     updated_after: datetime | None = None
     updated_before: datetime | None = None
     metadata: dict[str, Any] | None = None
+    #: Real-tag names to filter by (case-insensitive). Multiple names combine
+    #: with AND logic (the entity must carry every named tag). Tags are matched
+    #: by name, not id, so the filter spans projects.
+    tag_names: list[str] | None = None

@@ -16,6 +16,7 @@ from specivo.models.issue import Issue
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member
 from specivo.models.project import Project
+from specivo.models.tag import TagLink
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
@@ -806,6 +807,10 @@ class IssueService:
             stmt = stmt.where(Issue.fixed_version_id == filters["version_id"])
         if filters.get("sprint_id") is not None:
             stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
+        if filters.get("tag_id") is not None:
+            stmt = stmt.where(
+                Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"]))
+            )
 
         # ------------------------------------------------------------------
         # Text search

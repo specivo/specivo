@@ -20,6 +20,7 @@ from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
+from specivo.services.tag_service import TagService
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import get_current_user_optional, get_templates
 from specivo.web.thread_tree import build_thread_tree
@@ -37,6 +38,12 @@ _project_svc = ProjectService()
 _reaction_svc = ReactionService()
 _relation_svc = RelationService()
 _saved_filter_svc = SavedFilterService()
+_tag_svc = TagService()
+
+
+def _tags_to_dicts(tags: list) -> list[dict]:
+    """Serialize Tag ORM objects to plain dicts for templates / x-data injection."""
+    return [{"id": t.id, "name": t.name, "color": t.color} for t in tags]
 
 
 async def _resolve_issue_project(
@@ -85,6 +92,7 @@ async def issues_list(
     tracker_id: str = Query(""),
     assigned_to_id: str = Query(""),
     priority_id: str = Query(""),
+    tag_id: str = Query(""),
     sort: str = Query("created_at:desc"),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
@@ -112,6 +120,8 @@ async def issues_list(
         filters["assigned_to_id"] = safe_int(assigned_to_id)
     if safe_int(priority_id) is not None:
         filters["priority_id"] = safe_int(priority_id)
+    if safe_int(tag_id) is not None:
+        filters["tag_id"] = safe_int(tag_id)
 
     # Board view loads more issues (up to 200) to fill columns
     effective_limit = min(limit, 100) if view != "board" else 200
@@ -132,6 +142,9 @@ async def issues_list(
 
     # Get project members for assignee dropdown
     members = await _project_svc.list_members(db, project)
+
+    # Project tag vocabulary for the tag filter dropdown
+    project_tags = _tags_to_dicts(await _tag_svc.list_for_project(db, project.id))
 
     # Parse per-column offsets for board view: col_<status_id>_offset=N
     col_offsets: dict[int, int] = {}
@@ -162,6 +175,7 @@ async def issues_list(
             "total": total,
             "saved_filters": saved_filters,
             "members": members,
+            "project_tags": project_tags,
             "offset": offset,
             "limit": limit,
             "sort": sort,
@@ -287,6 +301,7 @@ async def issue_detail(
     }
     watchers = await watcher_svc.list_watchers(db, issue)
     relations = await _relation_svc.list_for_issue(db, issue)
+    issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
     # Paginate activity feed
     activity_per_page = user.preferences.get("activity_per_page", ACTIVITY_DEFAULT_PER_PAGE)
@@ -401,6 +416,7 @@ async def issue_detail(
             "relation_count": relation_count,
             "current_sprint": current_sprint,
             "relations": relations,
+            "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             "issue_metadata": issue.issue_metadata or {},
             "watchers": watchers,
@@ -444,6 +460,8 @@ async def issue_edit_form(
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
 
+    issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -459,6 +477,7 @@ async def issue_edit_form(
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,
             "issue_metadata": issue.issue_metadata or {},
+            "issue_tags": issue_tags,
             **lookups,
         },
     )

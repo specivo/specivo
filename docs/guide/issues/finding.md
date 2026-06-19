@@ -15,10 +15,11 @@ The **Issues** list shows every issue in the project as rows, with columns for t
 subject, tracker, status, priority, and assignee. **Filter** the list to narrow it down — by status,
 tracker, assignee, version, sprint, and more — and click any row to open the issue.
 
-!!! tip "Filter by metadata"
+!!! tip "Filter by metadata or tags"
     If your project defines [metadata](../metadata/index.md), you can filter the list by a metadata
     `key=value` match. For array fields, the filter matches when the array *contains* the value — for
-    example, every issue whose `branches` includes `release/1.2`.
+    example, every issue whose `branches` includes `release/1.2`. You can also filter by
+    [tags](../projects/tags.md) from the search page — clicking any tag chip jumps straight there.
 
 ## The board
 

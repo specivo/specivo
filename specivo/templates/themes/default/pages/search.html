@@ -56,7 +56,7 @@
       <button type="button" class="scope-tab{{ ' active' if scope == s_val else '' }}" :disabled="submitting"
               @click="$refs.scopeInput.value = '{{ s_val }}'; submitting = true; $el.closest('form').submit()">
         <span class="scope-tab-icon">{{ tab_icons[s_val] | safe }}</span>
-        {{ s_label }}{% if (query or mf) and s_count is not none and s_count != '' %} ({{ s_count }}){% endif %}
+        {{ s_label }}{% if (query or mf or tags) and s_count is not none and s_count != '' %} ({{ s_count }}){% endif %}
       </button>
       {% endfor %}
     </div>
@@ -66,6 +66,62 @@
     {% endif %}
   </div>
 </form>
+
+{# Tag filter — real tags across accessible projects (issues + wiki, AND logic).
+   Lives outside the GET form: selecting/removing a tag reloads with updated
+   repeated `tag=` params via the tagFilter Alpine component. #}
+<div class="search-tag-filter sp-tag-field"
+     x-data='tagFilter({
+       endpoint: "/api/v1/tags/search/",
+       tags: {{ (tags if tags is defined else []) | tojson }},
+       baseParams: {
+         q: {{ query | tojson }},
+         mode: {{ mode | tojson }},
+         scope: {{ scope | tojson }},
+         project_key: {{ project_key | tojson }},
+         limit: {{ limit | tojson }}
+       }
+     })'>
+  <span class="search-tag-label">{% trans %}Filter by tags{% endtrans %}</span>
+  <div class="sp-meta-tags" @click="$refs.tagFilterInput.focus()">
+    <template x-for="(tag, i) in tags" :key="i">
+      <span class="sp-meta-tag">
+        <span class="sp-meta-tag-name" x-text="tag.name"></span>
+        <span class="sp-meta-tag-divider" aria-hidden="true"></span>
+        <span class="sp-meta-tag-remove" @click.stop="removeTag(i)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </span>
+      </span>
+    </template>
+    <input type="text" x-ref="tagFilterInput"
+           x-model="query"
+           @focus="onFocus()"
+           @blur="onBlur()"
+           @keydown.down.prevent="moveDown()"
+           @keydown.up.prevent="moveUp()"
+           @keydown.enter.prevent="confirm()"
+           @keydown.escape.prevent="open = false"
+           @keydown.backspace="removeLast()"
+           :placeholder="tags.length === 0 ? '{{ _('Filter by tag...') }}' : '{{ _('Add tag...') }}'">
+  </div>
+  <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
+    <template x-if="loading">
+      <div class="sp-ac-empty">{% trans %}Searching…{% endtrans %}</div>
+    </template>
+    <template x-if="!loading && results.length === 0">
+      <div class="sp-ac-empty">{% trans %}No matching tags{% endtrans %}</div>
+    </template>
+    <template x-for="(item, idx) in results" :key="item.id">
+      <div class="sp-ac-row"
+           :class="{'sp-ac-row-active': idx === activeIndex}"
+           @mouseenter="activeIndex = idx"
+           @click="selectResult(item)">
+        <template x-if="item.color"><span class="sp-tag-ac-color" :style="'background:' + item.color"></span></template>
+        <span class="sp-ac-name" x-text="item.name"></span>
+      </div>
+    </template>
+  </div>
+</div>
 
 {# Applied metadata filter — collapsed by default, only shown when a filter is active #}
 {% if mf %}
@@ -80,11 +136,14 @@
 </div>
 {% endif %}
 
-{% if query or mf %}
+{% if query or mf or tags %}
 {# Results header #}
 <div class="search-results-header">
   {% if query %}
   {% trans count=total, query=query %}%(count)s result for &ldquo;%(query)s&rdquo;{% pluralize %}%(count)s results for &ldquo;%(query)s&rdquo;{% endtrans %}
+  {% elif tags %}
+  {% set tag_list = tags | map(attribute='name') | join(', ') %}
+  {% trans count=total, tags=tag_list %}%(count)s result tagged %(tags)s{% pluralize %}%(count)s results tagged %(tags)s{% endtrans %}
   {% else %}
   {% trans count=total, field=mf, value=mv %}%(count)s issue where %(field)s = %(value)s{% pluralize %}%(count)s issues where %(field)s = %(value)s{% endtrans %}
   {% endif %}
@@ -211,7 +270,9 @@
 {% if total > 0 %}
 {% set current_page = (offset // limit) + 1 %}
 {% set total_pages = ((total - 1) // limit) + 1 %}
-{% set pbase = "/search/?q=" ~ query ~ "&mode=" ~ mode ~ "&scope=" ~ scope ~ ("&project_key=" ~ project_key if project_key else "") ~ ("&mf=" ~ (mf | urlencode) ~ "&mv=" ~ (mv | urlencode) ~ "&ma=" ~ ma if mf else "") %}
+{% set ns = namespace(pbase="/search/?q=" ~ query ~ "&mode=" ~ mode ~ "&scope=" ~ scope ~ ("&project_key=" ~ project_key if project_key else "") ~ ("&mf=" ~ (mf | urlencode) ~ "&mv=" ~ (mv | urlencode) ~ "&ma=" ~ ma if mf else "")) %}
+{% if tags %}{% for t in tags %}{% set ns.pbase = ns.pbase ~ "&tag=" ~ (t.name | urlencode) %}{% endfor %}{% endif %}
+{% set pbase = ns.pbase %}
 <div class="sp-pagination">
   <div class="sp-pagination-info">{% trans start=offset + 1, end=[offset + limit, total] | min, total=total %}%(start)s–%(end)s of %(total)s{% endtrans %}</div>
   {% if total_pages > 1 %}
@@ -248,6 +309,9 @@
 <div class="card search-empty">
   {% if query %}
   {% trans query=query %}No results found for &ldquo;%(query)s&rdquo;. Try different keywords or search mode.{% endtrans %}
+  {% elif tags %}
+  {% set tag_list = tags | map(attribute='name') | join(', ') %}
+  {% trans tags=tag_list %}No issues or wiki pages found tagged %(tags)s.{% endtrans %}
   {% else %}
   {% trans field=mf, value=mv %}No issues found where %(field)s = %(value)s.{% endtrans %}
   {% endif %}

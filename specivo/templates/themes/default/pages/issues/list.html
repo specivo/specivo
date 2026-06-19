@@ -63,6 +63,15 @@
     {% endfor %}
   </select>
 
+  {% if project_tags is defined and project_tags %}
+  <select name="tag_id" class="filter-select">
+    <option value="">{% trans %}All Tags{% endtrans %}</option>
+    {% for t in project_tags %}
+    <option value="{{ t.id }}" {{ 'selected' if filters.get('tag_id') == t.id }}>{{ t.name }}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+
   <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Apply{% endtrans %}</button>
 
   <input type="hidden" name="view" value="{{ view }}">

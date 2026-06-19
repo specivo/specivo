@@ -24,6 +24,8 @@
     <a class="filter-tab" :class="{ active: tab === 'versions' }" @click.prevent="tab = 'versions'" href="#">{% trans %}Versions{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'recurring' }" @click.prevent="tab = 'recurring'" href="#">{% trans %}Recurring tasks{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'metadata' }" @click.prevent="tab = 'metadata'" href="#">{% trans %}Metadata{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'tags' }" @click.prevent="tab = 'tags'" href="#">{% trans %}Tags{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'search' }" @click.prevent="tab = 'search'" href="#">{% trans %}Search{% endtrans %}</a>
   </div>
 
   <!-- General tab -->
@@ -378,7 +380,6 @@
           <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
           <p x-text="canManage ? '{{ _('Create a pattern to generate issues automatically on a schedule.') }}' : '{{ _('No recurring patterns have been created for this project yet.') }}'"></p>
           <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
             {% trans %}Create first pattern{% endtrans %}
           </a>
         </div>
@@ -684,6 +685,150 @@
       </div>
     </template>
 
+  </div>
+
+  <!-- Tags tab -->
+  <div x-show="tab === 'tags'" x-data='projectTagsSettings({ tags: {{ tags_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_tags | tojson }} })'>
+
+    <div class="card">
+      <div class="sp-listcard-header">
+        <div>
+          <span class="sp-listcard-title">{% trans %}Tags{% endtrans %}</span>
+          <span class="sp-text-muted-xs-ml-sm" x-text="'(' + tags.length + ')'"></span>
+        </div>
+        <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+          {% trans %}New tag{% endtrans %}
+        </button>
+      </div>
+
+      <!-- Empty state -->
+      <template x-if="tags.length === 0">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><path d="M7 7h.01"/></svg>
+          <h3>{% trans %}No tags yet{% endtrans %}</h3>
+          <p x-text="canManage ? 'Create tags to label issues and wiki pages across this project.' : 'No tags have been created for this project yet.'"></p>
+          <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+            {% trans %}Create first tag{% endtrans %}
+          </button>
+        </div>
+      </template>
+
+      <!-- Table -->
+      <template x-if="tags.length > 0">
+        <table class="version-table">
+          <thead>
+            <tr>
+              <th class="sp-col-28"></th>
+              <th>{% trans %}Tag{% endtrans %}</th>
+              <th>{% trans %}Issues{% endtrans %}</th>
+              <th>{% trans %}Wiki pages{% endtrans %}</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="t in tags" :key="t.id">
+              <tr>
+                <td>
+                  <span class="sp-tag-swatch" :style="'background:' + (t.color || 'var(--sp-border)')" style="width:12px;height:12px;"></span>
+                </td>
+                <td>
+                  <span class="version-name" x-text="t.name"></span>
+                </td>
+                <td><span x-text="t.issue_count"></span></td>
+                <td><span x-text="t.wiki_count"></span></td>
+                <td class="td-actions sp-td-actions-right" x-show="canManage">
+                  <button class="action-link" @click="openEdit(t)" title="{{ _('Edit') }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                  </button>
+                  <button class="action-link danger" @click="confirmDelete(t)" title="{{ _('Delete') }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </template>
+    </div>
+
+    <!-- Create / Edit Modal -->
+    <template x-if="showModal">
+      <div class="sp-scrim open" @click.self="showModal = false" x-cloak>
+        <div class="sp-modal">
+          <div class="sp-modal-header">
+            <h2 x-text="editingTag ? 'Edit tag' : 'New tag'"></h2>
+            <button class="sp-modal-close" @click="showModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <template x-if="error">
+              <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
+            </template>
+            <div class="form-group">
+              <label class="form-label">{% trans %}Name{% endtrans %}</label>
+              <input class="form-input" type="text" x-model="form.name" maxlength="64" placeholder="{{ _('e.g. backend, ux, needs-review') }}">
+              <div class="form-hint">{% trans %}Tag names are unique per project (case-insensitive).{% endtrans %}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">{% trans %}Color{% endtrans %}</label>
+              <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
+                <input type="color" x-model="form.color" :value="form.color || '#888888'" style="width:42px;height:34px;padding:2px;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);background:var(--sp-bg-surface);cursor:pointer;">
+                <input class="form-input" type="text" x-model="form.color" placeholder="#4f9d6c" style="flex:1;font-family:var(--sp-font-mono);">
+                <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="form.color = ''" x-show="form.color">{% trans %}Clear{% endtrans %}</button>
+              </div>
+              <div class="form-hint">{% trans %}Optional. A hex color like #4f9d6c.{% endtrans %}</div>
+            </div>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-primary" @click="saveTag()" :disabled="!canSaveTag">
+              <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+              <span x-show="!saving" x-text="editingTag ? 'Save changes' : 'Create tag'"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Delete confirmation modal -->
+    <template x-if="showDeleteModal">
+      <div class="sp-scrim open" @click.self="showDeleteModal = false" x-cloak>
+        <div class="sp-modal sp-modal--xs">
+          <div class="sp-modal-header">
+            <h2>{% trans %}Delete tag{% endtrans %}</h2>
+            <button class="sp-modal-close" @click="showDeleteModal = false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <p class="sp-modal-lead">
+              {% trans %}Are you sure you want to delete tag{% endtrans %} <strong x-text="deletingTag?.name"></strong>{% trans %}? It will be removed from all issues and wiki pages. This action cannot be undone.{% endtrans %}
+            </p>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="deleting">
+              <span x-show="deleting">{% trans %}Deleting...{% endtrans %}</span>
+              <span x-show="!deleting">{% trans %}Delete tag{% endtrans %}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Search tab -->
+  <div x-show="tab === 'search'" x-cloak>
+    <div class="card" style="padding: var(--sp-space-lg); max-width: 720px;"
+         x-data='ftsReindex({ baseUrl: "/api/v1/projects/{{ project.key }}/search", isProject: true, canManage: {{ can_manage_search | tojson }}, language: {{ fts_language | tojson }}, allowed: {{ fts_allowed | tojson }}, instanceDefault: {{ fts_instance_default | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }} })'>
+      <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Search indexing{% endtrans %}</h2>
+      <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
+        {% trans %}Full-text search analyzer language for this project. Leave on Inherit to use the instance default.{% endtrans %}
+      </p>
+      {% include "pages/_fts_card.html" %}
+    </div>
   </div>
 </div>
 {% endblock %}

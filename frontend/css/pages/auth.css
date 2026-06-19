@@ -1,0 +1,76 @@
+/* ============================================================
+   FLASH MESSAGES
+   ============================================================ */
+.flash { padding: var(--sp-space-md) var(--sp-space-lg); border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-lg); display: flex; align-items: center; gap: var(--sp-space-sm); }
+.flash-success { background: var(--sp-success-subtle); color: #15803D; border: 1px solid #BBF7D0; }
+.flash-error { background: var(--sp-danger-subtle); color: var(--sp-danger); border: 1px solid #FECACA; }
+.flash-warning { background: var(--sp-warning-subtle); color: #B45309; border: 1px solid #FDE68A; }
+.flash-info { background: var(--sp-info-subtle); color: #1D4ED8; border: 1px solid #BFDBFE; }
+
+/* ============================================================
+   LOGIN PAGE
+   ============================================================ */
+.login-page { width: 100%; max-width: 420px; padding: var(--sp-space-2xl); }
+.login-brand { text-align: center; margin-bottom: var(--sp-space-2xl); }
+.login-brand img { height: 32px; margin: 0 auto var(--sp-space-lg); }
+.login-brand svg { width: 40px; height: 40px; margin-bottom: var(--sp-space-md); }
+.login-brand h1 { font-family: var(--sp-font-body); font-size: var(--sp-font-size-2xl); font-weight: 500; letter-spacing: -0.01em; color: var(--sp-text-inverse); }
+.login-brand p { color: rgba(232, 228, 240, 0.5); font-size: var(--sp-font-size-sm); margin-top: var(--sp-space-xs); }
+.login-card { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-2xl); box-shadow: var(--sp-shadow-lg); }
+.login-footer { text-align: center; margin-top: var(--sp-space-xl); font-size: var(--sp-font-size-sm); color: rgba(232, 228, 240, 0.4); }
+.login-footer a { color: rgba(196, 154, 60, 0.7); }
+.login-footer a:hover { color: var(--sp-accent); }
+.login-error { background: var(--sp-danger-subtle); border: 1px solid #FECACA; border-radius: var(--sp-border-radius); padding: var(--sp-space-md) var(--sp-space-lg); margin-bottom: var(--sp-space-lg); font-size: var(--sp-font-size-sm); color: var(--sp-danger); display: none; }
+.login-error.show { display: flex; align-items: center; gap: var(--sp-space-sm); }
+.sp-btn-login { width: 100%; padding: 11px; border: none; border-radius: var(--sp-border-radius); background: var(--sp-accent); color: var(--sp-accent-text); font-family: var(--sp-font-body); font-size: var(--sp-font-size-md); font-weight: 700; cursor: pointer; transition: all 0.2s; }
+.sp-btn-login:hover { background: var(--sp-accent-hover); box-shadow: 0 0 20px rgba(196, 154, 60, 0.3); }
+
+/* ============================================================
+   STANDALONE BODY (login, error pages)
+   ============================================================ */
+body.standalone { background: var(--sp-bg-sidebar); min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+body.standalone::before { content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: radial-gradient(ellipse at 30% 20%, rgba(196, 154, 60, 0.06) 0%, transparent 50%), radial-gradient(ellipse at 70% 80%, rgba(90, 62, 158, 0.08) 0%, transparent 50%); pointer-events: none; z-index: -1; }
+
+/* ============================================================
+   ERROR PAGES
+   ============================================================ */
+.error-content { display: flex; align-items: center; justify-content: center; min-height: calc(100vh - var(--sp-header-height)); padding: var(--sp-space-2xl); }
+.error-content--standalone { min-height: 80vh; }
+.error-card { text-align: center; max-width: 480px; width: 100%; }
+
+/* Error code — the big number */
+.error-code { font-family: var(--sp-font-display); font-weight: 700; line-height: 1; letter-spacing: -0.04em; margin-bottom: var(--sp-space-lg); position: relative; display: inline-block; }
+.error-code span { position: relative; z-index: 1; }
+
+/* Size and color per error type */
+.error-code.e404 { font-size: 7rem; color: var(--sp-text-primary); }
+.error-code.e404::after { content: ''; position: absolute; bottom: 8px; left: -4%; right: -4%; height: 18px; background: var(--sp-accent-subtle); border-radius: 4px; z-index: 0; }
+
+.error-code.e403 { font-size: 7rem; color: var(--sp-text-primary); }
+.error-code.e403::after { content: ''; position: absolute; bottom: 8px; left: -4%; right: -4%; height: 18px; background: rgba(220, 38, 38, 0.08); border-radius: 4px; z-index: 0; }
+
+.error-code.e500 { font-size: 7rem; color: var(--sp-text-primary); }
+.error-code.e500::after { content: ''; position: absolute; bottom: 8px; left: -4%; right: -4%; height: 18px; background: rgba(217, 119, 6, 0.1); border-radius: 4px; z-index: 0; }
+
+/* Icon */
+.error-icon { width: 48px; height: 48px; margin: 0 auto var(--sp-space-xl); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+.error-icon svg { width: 24px; height: 24px; }
+.error-icon.icon-404 { background: var(--sp-accent-subtle); color: var(--sp-accent); }
+.error-icon.icon-403 { background: rgba(220, 38, 38, 0.08); color: var(--sp-danger); }
+.error-icon.icon-500 { background: rgba(217, 119, 6, 0.1); color: var(--sp-warning); }
+
+/* Title */
+.error-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 600; letter-spacing: -0.02em; color: var(--sp-text-primary); margin-bottom: var(--sp-space-sm); }
+
+/* Message */
+.error-message { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); line-height: 1.6; margin-bottom: var(--sp-space-2xl); max-width: 380px; margin-left: auto; margin-right: auto; }
+
+/* Detail block (for request ID, path, etc.) */
+.error-detail { background: var(--sp-bg-input); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); padding: var(--sp-space-md) var(--sp-space-lg); margin-bottom: var(--sp-space-2xl); font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-align: left; max-width: 380px; margin-left: auto; margin-right: auto; }
+.error-detail .detail-row { display: flex; justify-content: space-between; gap: var(--sp-space-lg); padding: 3px 0; }
+.error-detail .detail-label { color: var(--sp-text-muted); white-space: nowrap; }
+.error-detail .detail-value { color: var(--sp-text-secondary); text-align: right; word-break: break-all; }
+
+/* Actions */
+.error-actions { display: flex; align-items: center; justify-content: center; gap: var(--sp-space-md); }
+

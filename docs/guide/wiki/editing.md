@@ -65,3 +65,5 @@ file type. Attachments also work on issues and comments — see [Attachments](..
 - [History & linking](history-linking.md) — view past versions, revert, restore from trash, and
   cross-link with `[[Page Name]]`.
 - [Markdown reference](../reference/markdown.md) — the full set of formatting you can use.
+- [Tags](../projects/tags.md) — attach colored labels to wiki pages and filter by them across your
+  projects.

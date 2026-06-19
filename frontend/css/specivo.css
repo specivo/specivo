@@ -1,0 +1,63 @@
+/* ============================================================
+   Specivo — Main Stylesheet (Navy + Gold Design System)
+
+   Entry point. Imports partials in cascade order. The order
+   matches the original monolith textually, so the bundled
+   output stays cascade-identical to the pre-split build.
+   ORDER MATTERS — some later rules intentionally layer on top
+   of earlier ones (e.g. the animation block re-declares
+   `.project-card { animation }` AFTER the base `.project-card`).
+   Do not reorder or merge partials without checking the cascade.
+
+   Adding a section: create a partial under frontend/css/ (or
+   frontend/css/pages/ for page-specific styling) and append an
+   @import below at the correct cascade position.
+   ============================================================ */
+
+/* Foundations: design tokens (+@font-face), resets, layout shell. */
+@import "./tokens.css";
+@import "./base.css";
+@import "./layout.css";
+
+/* Chrome: sidebar, header (+dropdowns, modal form elements),
+   main content / footer / breadcrumbs / page header. */
+@import "./sidebar.css";
+@import "./header.css";
+@import "./chrome.css";
+
+/* Components: cards, buttons, badges/avatars, tables. */
+@import "./cards.css";
+@import "./buttons.css";
+@import "./badges.css";
+@import "./tables.css";
+
+/* Features: kanban, activity feed, dashboard. */
+@import "./kanban.css";
+@import "./activity.css";
+@import "./dashboard.css";
+
+/* Page-specific styling. */
+@import "./pages/issue-detail.css";
+@import "./pages/new-issue.css";
+@import "./pages/wiki.css";
+@import "./pages/search.css";
+@import "./pages/admin.css";
+@import "./pages/projects.css";
+@import "./pages/roadmap.css";
+@import "./pages/auth.css";
+
+/* Animations + responsive. responsive.css sits BETWEEN the two
+   animation blocks to preserve the original cascade. */
+@import "./animations.css";
+@import "./responsive.css";
+@import "./animations-extra.css";
+
+/* Trailing utilities/features that layer on the above. */
+@import "./color-swatches.css";
+@import "./activity-extra.css";
+@import "./versions.css";
+@import "./attachments.css";
+@import "./sprints.css";
+@import "./metadata.css";
+@import "./sprint-detail.css";
+@import "./pages/search-fts.css";
