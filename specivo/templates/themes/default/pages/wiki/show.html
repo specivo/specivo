@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, tag_badge, tag_field_input %}
 
 {% block title %}{{ wiki_page.title }} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -56,6 +56,24 @@
       {% if content.comments %}
       <span>&middot;</span>
       <span class="sp-text-italic">"{{ content.comments }}"</span>
+      {% endif %}
+    </div>
+
+    {# Tags #}
+    <div class="wiki-tags" style="margin-bottom: var(--sp-space-lg);">
+      {% if can_manage_wiki %}
+      {{ tag_field_input(
+           "/api/v1/projects/" ~ project.key ~ "/tags/search/",
+           "/api/v1/projects/" ~ project.key ~ "/wiki/" ~ wiki_page.slug ~ "/tags/",
+           (wiki_tags if wiki_tags is defined else []) | tojson,
+           _('Add tags...')
+         ) }}
+      {% else %}
+      <div style="display:flex;flex-wrap:wrap;gap:var(--sp-space-xs);">
+        {% for t in wiki_tags if wiki_tags is defined %}
+          {{ tag_badge(t.name, t.color or '') }}
+        {% endfor %}
+      </div>
       {% endif %}
     </div>
 

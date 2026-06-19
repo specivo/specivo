@@ -40,7 +40,8 @@
        mode: {{ mode | tojson }},
        projectKey: {{ project.key | tojson }},
        displayKey: {{ (issue.display_key if issue else "") | tojson }},
-       lockVersion: {{ issue.lock_version if issue else 0 }}
+       lockVersion: {{ issue.lock_version if issue else 0 }},
+       tags: {{ (issue_tags if issue_tags is defined else []) | tojson }}
      })'>
 
   <form @submit.prevent>
@@ -233,6 +234,58 @@
       </template>
     </div>
     {% endif %}
+
+    <div class="form-divider"></div>
+
+    {# Tags — collected here; issueForm submits them via the issue tags API after save #}
+    <div class="form-group">
+      <label class="modal-label">{% trans %}Tags{% endtrans %}</label>
+      <div class="sp-tag-field"
+           x-data='tagField({ endpoint: "/api/v1/projects/{{ project.key }}/tags/search/", saveUrl: "", tags: pendingTags, canEdit: true })'>
+        <div class="sp-meta-tags" @click="$refs.formTagInput.focus()">
+          <template x-for="(tag, i) in tags" :key="i">
+            <span class="sp-meta-tag">
+              <template x-if="tag.color"><span class="sp-tag-swatch" :style="'background:' + tag.color"></span></template>
+              <span x-text="tag.name"></span>
+              <span class="sp-meta-tag-remove" @click.stop="removeTag(i)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              </span>
+            </span>
+          </template>
+          <input type="text" x-ref="formTagInput"
+                 x-model="query"
+                 @focus="onFocus()"
+                 @blur="onBlur()"
+                 @keydown.down.prevent="moveDown()"
+                 @keydown.up.prevent="moveUp()"
+                 @keydown.enter.prevent="confirm()"
+                 @keydown.comma.prevent="commitTyped()"
+                 @keydown.escape.prevent="cancel()"
+                 @keydown.backspace="removeLast()"
+                 :placeholder="tags.length === 0 ? '{{ _('Add tags...') }}' : '{{ _('Add more...') }}'">
+        </div>
+        <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
+          <template x-if="!loading && results.length === 0 && query.trim()">
+            <div class="sp-ac-row" @click="commitTyped()">
+              <span class="sp-ac-name">{% trans %}Create{% endtrans %} “<span x-text="query.trim()"></span>”</span>
+            </div>
+          </template>
+          <template x-if="!loading && results.length === 0 && !query.trim()">
+            <div class="sp-ac-empty">{% trans %}No tags yet — type to create one{% endtrans %}</div>
+          </template>
+          <template x-for="(item, idx) in results" :key="item.id">
+            <div class="sp-ac-row"
+                 :class="{'sp-ac-row-active': idx === activeIndex}"
+                 @mouseenter="activeIndex = idx"
+                 @click="selectResult(item)">
+              <template x-if="item.color"><span class="sp-tag-ac-color" :style="'background:' + item.color"></span></template>
+              <span class="sp-ac-name" x-text="item.name"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+      <div class="form-hint">{% trans %}Press Enter or comma to add. Backspace to remove last.{% endtrans %}</div>
+    </div>
 
     <div class="form-divider"></div>
 

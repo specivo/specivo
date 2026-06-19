@@ -2426,6 +2426,19 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 .sp-meta-tag-remove svg { width: 12px; height: 12px; }
 .sp-meta-tags input { border: none; background: transparent; outline: none; font-family: var(--sp-font-body); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); flex: 1; min-width: 80px; padding: 2px 4px; }
 .sp-meta-tags input::placeholder { color: var(--sp-text-muted); }
+
+/* --- Tags feature: badge + tag-field --- */
+.sp-tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; background: var(--sp-bg-muted, rgba(0,0,0,0.05)); border: 1px solid var(--sp-border); border-radius: 4px; font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); font-weight: 500; line-height: 1.4; }
+.sp-tag-swatch { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.sp-tag-name { white-space: nowrap; }
+.sp-tag-empty { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); font-style: italic; }
+/* The tag-field reuses .sp-meta-tags / .sp-meta-tag chip styles and adds a swatch + dropdown */
+.sp-tag-field { position: relative; }
+.sp-tag-field .sp-meta-tag { color: var(--sp-text-secondary); background: var(--sp-bg-muted, rgba(0,0,0,0.05)); border-color: var(--sp-border); }
+.sp-tag-field .sp-tag-swatch { width: 8px; height: 8px; }
+.sp-tag-field .sp-ac-menu { position: absolute; left: 0; right: 0; top: 100%; }
+.sp-tag-ac-color { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; margin-right: 6px; }
+
 @keyframes slideDown { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
 .sp-metadata-enter { animation: slideDown 0.3s ease-out; }
 
@@ -2786,7 +2799,12 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
 /* Full-width centered button (wiki page tree footer) */
 .sp-btn-block-center { width: 100%; justify-content: center; }
 
-/* Autocomplete (entityAutocomplete Alpine component) */
+/* Autocomplete (entityAutocomplete + tagField Alpine components).
+   Geometry (position/left/top/width/max-height) is set at runtime by
+   spAnchorMenu() in specivo.js, which switches the menu to
+   `position: fixed` so it escapes the `overflow: hidden` clipping of the
+   surrounding `.card`. The `absolute` rule below is only the pre-JS
+   fallback (the menu is x-cloak'd until Alpine initialises). */
 .sp-ac { position: relative; }
 .sp-ac-input { width: 100%; }
 .sp-ac-menu {
@@ -2794,7 +2812,7 @@ textarea.form-input { resize: vertical; min-height: 100px; line-height: 1.6; }
   left: 0;
   right: 0;
   top: calc(100% + var(--sp-space-xs));
-  z-index: 50;
+  z-index: 1030;
   max-height: 280px;
   overflow-y: auto;
   background: var(--sp-bg-surface);
