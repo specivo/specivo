@@ -116,9 +116,8 @@
 .section-divider::before, .section-divider::after { content: ''; flex: 1; height: 1px; background: var(--sp-border); }
 .section-divider span { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
 
-/* Create sprint modal */
+/* Create sprint modal — .sp-modal container consolidated into base.css */
 .sp-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1055; }
-.sp-modal { background: var(--sp-bg-surface); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-2xl); max-width: 480px; width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,0.15); }
 .sp-modal h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl); }
 .sp-modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-space-sm); margin-top: var(--sp-space-xl); }
 

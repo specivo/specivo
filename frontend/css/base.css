@@ -22,9 +22,14 @@ body {
   --bs-body-color: var(--sp-text-primary);
   --bs-body-bg: var(--sp-bg-page);
 }
-/* Custom modal — sp- prefixed to avoid Bootstrap collision */
-.sp-scrim { position: fixed; inset: 0; z-index: 1050; background: rgba(0, 0, 0, 0.5); }
-.sp-modal { position: fixed; z-index: 1055; top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--sp-bg-surface); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-lg); width: calc(100% - 2 * var(--sp-space-xl)); max-width: 520px; max-height: 90vh; overflow-y: auto; }
+/* Custom modal — sp- prefixed to avoid Bootstrap collision.
+   Single source of truth for the .sp-scrim / .sp-modal containers. These were
+   formerly redeclared in sprints.css and metadata.css; the rules below are the
+   merged result of that cascade (last-wins per property). The .sp-modal-*
+   children are still defined per-feature (base/metadata) — consolidating them
+   is deferred (see ADR-0001). */
+.sp-scrim { display: none; position: fixed; inset: 0; z-index: 1050; background: rgba(0, 0, 0, 0.5); align-items: center; justify-content: center; }
+.sp-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1055; display: flex; flex-direction: column; background: var(--sp-bg-surface); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-lg); padding: var(--sp-space-2xl); width: 100%; max-width: 580px; max-height: 90vh; overflow: hidden; }
 .sp-modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-space-lg) var(--sp-space-xl); border-bottom: 1px solid var(--sp-border); }
 .sp-modal-header h2 { font-size: var(--sp-font-size-lg); font-weight: 700; font-family: var(--sp-font-display); margin: 0; }
 .sp-modal-close { background: none; border: none; font-size: 24px; color: var(--sp-text-muted); cursor: pointer; padding: 0; line-height: 1; }

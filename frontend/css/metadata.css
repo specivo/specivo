@@ -47,10 +47,8 @@
 .sp-stat-value { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; color: var(--sp-text-primary); letter-spacing: -0.02em; }
 .sp-stat-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
 
-/* --- Modal & scrim --- */
-.sp-scrim { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1050; align-items: center; justify-content: center; }
+/* --- Modal & scrim --- (.sp-scrim / .sp-modal containers consolidated into base.css) */
 .sp-scrim.open { display: flex; }
-.sp-modal { background: var(--sp-bg-surface); border-radius: var(--sp-border-radius-lg); box-shadow: var(--sp-shadow-lg); width: 100%; max-width: 580px; max-height: 90vh; overflow: hidden; display: flex; flex-direction: column; z-index: 1055; }
 .sp-modal-header { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-space-lg) var(--sp-space-xl); border-bottom: 1px solid var(--sp-border); }
 .sp-modal-header h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; }
 .sp-modal-close { background: none; border: none; cursor: pointer; color: var(--sp-text-muted); padding: 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; }

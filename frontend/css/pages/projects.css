@@ -51,7 +51,5 @@
 .color-swatch:hover { transform: scale(1.15); }
 .color-swatch.selected { border-color: var(--sp-text-primary); box-shadow: 0 0 0 2px var(--sp-bg-surface), 0 0 0 4px var(--sp-text-primary); }
 .color-swatch.selected::after { content: '\2713'; color: #fff; font-size: 13px; font-weight: 700; line-height: 1; }
-/* Checkbox rows (module selector) */
-.checkbox-row { display: flex; align-items: center; gap: var(--sp-space-sm); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); }
-.checkbox-row input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--sp-accent); cursor: pointer; }
+/* Checkbox rows (module selector) — .checkbox-row defined once in pages/wiki.css */
 
