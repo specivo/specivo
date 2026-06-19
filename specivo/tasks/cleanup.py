@@ -6,7 +6,6 @@ Tasks:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 
@@ -14,20 +13,12 @@ import redis.asyncio as aioredis
 from redis.exceptions import LockError, LockNotOwnedError
 
 from specivo.tasks import celery_app
+from specivo.tasks._async import run_async
 
 logger = logging.getLogger(__name__)
 
 _LOCK_TIMEOUT = 120  # seconds — max time the lock is held
 _LOCK_BLOCKING_TIMEOUT = 5  # seconds — give up quickly if another worker holds the lock
-
-
-def _run_async(coro):  # type: ignore[no-untyped-def]
-    """Run an async coroutine in a new event loop (for Celery sync tasks)."""
-    loop = asyncio.new_event_loop()
-    try:
-        return loop.run_until_complete(coro)
-    finally:
-        loop.close()
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
@@ -37,7 +28,7 @@ def cleanup_expired_tokens(self) -> None:  # type: ignore[no-untyped-def]
     Uses a Redis lock to prevent concurrent runs across multiple workers.
     """
     try:
-        _run_async(_cleanup_async())
+        run_async(_cleanup_async())
     except Exception as exc:
         logger.warning("Token cleanup failed: %s", exc)
         raise self.retry(exc=exc)
@@ -47,9 +38,9 @@ async def _cleanup_async() -> None:
     """Async implementation of token cleanup with Redis distributed lock."""
     from sqlalchemy import delete
 
-    from specivo.core.database import get_session_factory
     from specivo.core.utils import utcnow
     from specivo.models.auth import PasswordResetToken, RefreshToken
+    from specivo.tasks._async import task_session
 
     redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
     r = aioredis.from_url(redis_url)
@@ -58,8 +49,7 @@ async def _cleanup_async() -> None:
     try:
         async with r.lock(lock_key, timeout=_LOCK_TIMEOUT, blocking_timeout=_LOCK_BLOCKING_TIMEOUT):
             now = utcnow()
-            factory = get_session_factory()
-            async with factory() as session:
+            async with task_session() as session:
                 # Delete expired password reset tokens
                 reset_stmt = delete(PasswordResetToken).where(PasswordResetToken.expires_at < now)
                 reset_result = await session.execute(reset_stmt)
@@ -103,17 +93,16 @@ async def _cleanup_async() -> None:
 def ensure_audit_partitions(self) -> None:  # type: ignore[no-untyped-def]
     """Create monthly partitions for security_audit_logs 3 months ahead."""
     try:
-        _run_async(_ensure_audit_partitions_async())
+        run_async(_ensure_audit_partitions_async())
     except Exception as exc:
         logger.warning("Audit partition creation failed: %s", exc)
         raise self.retry(exc=exc)
 
 
 async def _ensure_audit_partitions_async() -> None:
-    from specivo.core.database import get_session_factory
+    from specivo.tasks._async import task_session
     from specivo.tasks.partition_management import ensure_partitions
 
-    factory = get_session_factory()
-    async with factory() as session:
+    async with task_session() as session:
         await ensure_partitions(session)
         await session.commit()
