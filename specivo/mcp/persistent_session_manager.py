@@ -106,9 +106,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         if self.stateless:
             # The whole point of this subclass is stateful session continuity.
             # Running in stateless mode would silently disable it.
-            raise ValueError(
-                "PersistentStreamableHTTPSessionManager requires stateless=False"
-            )
+            raise ValueError("PersistentStreamableHTTPSessionManager requires stateless=False")
 
     # ------------------------------------------------------------------
     # Public hook: swap in the store provider after construction
@@ -154,9 +152,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         try:
             await store.touch(session_id)
         except Exception:
-            logger.debug(
-                "Failed to touch MCP session %s in Redis", session_id, exc_info=True
-            )
+            logger.debug("Failed to touch MCP session %s in Redis", session_id, exc_info=True)
 
     async def _lookup_session(self, session_id: str) -> dict[str, str] | None:
         store = await self._get_store()
@@ -222,17 +218,12 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         request_mcp_session_id = request.headers.get(MCP_SESSION_ID_HEADER)
 
         # ---- Existing in-memory session ---------------------------------
-        if (
-            request_mcp_session_id is not None
-            and request_mcp_session_id in self._server_instances
-        ):
+        if request_mcp_session_id is not None and request_mcp_session_id in self._server_instances:
             transport = self._server_instances[request_mcp_session_id]
             logger.debug("Session already exists, handling request directly")
             # Refresh sliding TTL in the background; do not block the hot path.
             if self._task_group is not None:
-                self._task_group.start_soon(
-                    self._touch_session, request_mcp_session_id
-                )
+                self._task_group.start_soon(self._touch_session, request_mcp_session_id)
             await transport.handle_request(scope, receive, send)
             return
 
@@ -325,18 +316,39 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             else:
                 logger.info("Created new transport with session ID: %s", new_session_id)
 
-            async def run_server(
-                *, task_status: TaskStatus[None] = anyio.TASK_STATUS_IGNORED
-            ) -> None:
+            async def run_server(*, task_status: TaskStatus[None] = anyio.TASK_STATUS_IGNORED) -> None:
                 async with http_transport.connect() as streams:
                     read_stream, write_stream = streams
                     task_status.started()
                     try:
+                        # Rehydrated sessions must come up already-initialized.
+                        #
+                        # The SDK keeps the ``initialize`` handshake result in
+                        # the per-process ``ServerSession._initialization_state``;
+                        # it is never persisted and cannot be serialized. A
+                        # brand-new ``ServerSession`` starts ``NotInitialized``
+                        # and rejects every non-``initialize`` request with
+                        # ``Received request before initialization was complete``
+                        # (surfaced to the client as JSON-RPC ``-32602``).
+                        #
+                        # A client whose session predates an api restart already
+                        # finished its handshake and will only send regular
+                        # requests, never a second ``initialize`` — so a fresh
+                        # ``NotInitialized`` session would be permanently stuck.
+                        #
+                        # Running with ``stateless=True`` makes the SDK seed the
+                        # session as ``Initialized`` (see
+                        # ``ServerSession.__init__``). The transport itself stays
+                        # fully stateful (same ``Mcp-Session-Id``, SSE/JSON, event
+                        # store); ``stateless`` here only governs the init-state
+                        # gate. This is safe because Specivo's MCP tools carry no
+                        # per-session negotiated state — auth is re-validated from
+                        # the Bearer key on every tool call.
                         await self.app.run(
                             read_stream,
                             write_stream,
                             self.app.create_initialization_options(),
-                            stateless=False,
+                            stateless=is_rehydration,
                         )
                     except Exception as e:
                         logger.error(
