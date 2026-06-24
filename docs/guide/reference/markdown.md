@@ -98,6 +98,17 @@ them**:
 
 Mentions work in issue descriptions and comments. Use them to pull a specific person into a discussion.
 
+## Issue references
+
+Write an issue's key — `ACME-123` — in a description, a comment, or a wiki page and Specivo turns it
+into a link to that issue. You don't need any special syntax; the plain key is enough.
+
+Specivo links a reference **only when the issue actually exists** (or existed before it was
+[moved](../issues/updating.md#move-an-issue-to-another-project), in which case the old key still
+resolves). A token that looks like a key but doesn't match a real issue — a version string like
+`API-2`, a part number, a typo'd key — stays as plain text instead of becoming a dead link. That keeps
+references trustworthy: if it's a link, there's a real issue on the other end.
+
 ## Wiki cross-links
 
 Inside the wiki, link to another page in the same project with double brackets:
