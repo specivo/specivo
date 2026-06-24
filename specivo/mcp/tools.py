@@ -31,6 +31,7 @@ from specivo.schemas.sprint import SprintCreate, SprintUpdate
 from specivo.schemas.tag import TagCreate, TagUpdate
 from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
+from specivo.services.computed_metadata_service import load_project_settings, merge_computed
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.permission_service import Permission, check_permission
@@ -232,8 +233,11 @@ async def _show_issue(
     if issue.estimated_hours:
         lines.append(f"Estimated hours: {issue.estimated_hours}")
     lines.append(f"Done: {issue.done_ratio}%")
-    if issue.issue_metadata:
-        lines.append(f"Metadata: {issue.issue_metadata}")
+    effective_metadata = merge_computed(
+        issue.issue_metadata, await load_project_settings(session, issue.project_id)
+    )
+    if effective_metadata:
+        lines.append(f"Metadata: {effective_metadata}")
     lines.append(f"Lock version: {issue.lock_version}")
     comments_count = await _journal_svc.count_comments(session, issue.id)
     lines.append(f"Comments: {comments_count}")
@@ -296,6 +300,7 @@ async def _create_issue(
     assigned_to_id: int | None = None,
     fixed_version_id: int | None = None,
     sprint_id: int | None = None,
+    metadata: dict | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "add_issues")
@@ -309,6 +314,7 @@ async def _create_issue(
         assigned_to_id=assigned_to_id,
         fixed_version_id=fixed_version_id,
         sprint_id=sprint_id,
+        metadata=metadata or {},
     )
     issue = await _issue_svc.create(session, project, data, user)
     await session.flush()
@@ -1433,6 +1439,12 @@ async def _metadata(
 
     # Read-only path — return without mutating, flushing, or journaling.
     if op == "get":
+        # Overlay project-derived (computed) metadata for issues so the
+        # effective value is returned even though it is never stored.
+        if scheme == "issue":
+            metadata = merge_computed(
+                metadata, await load_project_settings(session, target.project_id_of(entity))
+            )
         if key not in metadata:
             return "(not set)"
         try:
@@ -2300,6 +2312,9 @@ async def _list_sprint_issues(
         )
 
     lines = [header, ""]
+    settings_by_project = {
+        pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}
+    }
 
     for i in issues:
         if fields == "minimal":
@@ -2320,8 +2335,9 @@ async def _list_sprint_issues(
                 desc_preview = i.description[:200].replace("\n", " ")
             lines.append(f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  {i.subject}{assigned}")
             lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  version_id={i.fixed_version_id}")
-            if i.issue_metadata:
-                lines.append(f"    metadata={i.issue_metadata}")
+            effective_metadata = merge_computed(i.issue_metadata, settings_by_project.get(i.project_id))
+            if effective_metadata:
+                lines.append(f"    metadata={effective_metadata}")
             if desc_preview:
                 lines.append(f"    desc: {desc_preview}")
             lines.append("")
@@ -2393,6 +2409,9 @@ async def _list_version_issues(
     header = f"{header_prefix} ({total} total, showing {offset}..{offset + len(issues)}):"
 
     lines = [header, ""]
+    settings_by_project = {
+        pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}
+    }
 
     for i in issues:
         if fields == "minimal":
@@ -2413,8 +2432,9 @@ async def _list_version_issues(
                 desc_preview = i.description[:200].replace("\n", " ")
             lines.append(f"  {i.display_key}  [{status_name}]  {tracker_name}  {priority_name}  {i.subject}{assigned}")
             lines.append(f"    done={i.done_ratio}%  sprint_id={i.sprint_id}  version_id={i.fixed_version_id}")
-            if i.issue_metadata:
-                lines.append(f"    metadata={i.issue_metadata}")
+            effective_metadata = merge_computed(i.issue_metadata, settings_by_project.get(i.project_id))
+            if effective_metadata:
+                lines.append(f"    metadata={effective_metadata}")
             if desc_preview:
                 lines.append(f"    desc: {desc_preview}")
             lines.append("")

@@ -20,6 +20,7 @@ from specivo.models.tag import TagLink
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
+from specivo.services.computed_metadata_service import load_project_settings, strip_computed
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
@@ -315,8 +316,13 @@ class IssueService:
         if data.sprint_id is not None:
             await self._validate_sprint(session, data.sprint_id, project.id)
 
+        # Strip project-derived (computed) metadata so it is never stored on the
+        # issue — it is overlaid on read instead. This makes the field
+        # un-settable from any client and impossible to drift.
+        stored_metadata = strip_computed(data.metadata, project.settings)
+
         # Validate metadata against schemas (if any exist for this project/tracker)
-        await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, data.metadata)
+        await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, stored_metadata)
 
         # Atomic sequence increment — guarantees no duplicate sequence_numbers
         # for this project under concurrent inserts.
@@ -360,7 +366,7 @@ class IssueService:
             assigned_to_id=data.assigned_to_id,
             subject=data.subject,
             description=data.description,
-            issue_metadata=data.metadata,
+            issue_metadata=stored_metadata,
             start_date=data.start_date,
             due_date=data.due_date,
             estimated_hours=data.estimated_hours,
@@ -629,13 +635,17 @@ class IssueService:
                 await self._validate_sprint(session, data.sprint_id, issue.project_id)
             issue.sprint_id = data.sprint_id
         if data.metadata is not None:
+            # Strip project-derived (computed) metadata — it is never stored and
+            # cannot be set/overridden by a client (see create()).
+            project_settings = await load_project_settings(session, issue.project_id)
+            stored_metadata = strip_computed(data.metadata, project_settings)
             # Validate against schemas using the effective tracker_id
             # (may have been changed in this same update)
             effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
             await self._metadata_schema_service.validate_metadata(
-                session, issue.project_id, effective_tracker_id, data.metadata
+                session, issue.project_id, effective_tracker_id, stored_metadata
             )
-            issue.issue_metadata = data.metadata
+            issue.issue_metadata = stored_metadata
 
         # --- Hierarchy move (parent_id provided) ---
         # Convention: parent_id=0 means "move to root"; parent_id=N means "move to N"

@@ -19,6 +19,7 @@ from specivo.models.role import Role
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
+from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -240,6 +241,11 @@ class ProjectService:
             project.status = data.status
         if data.color is not None:
             project.color = data.color
+        if data.computed_metadata is not None:
+            # Reassign a new dict so SQLAlchemy marks the JSONB column dirty.
+            new_settings = dict(project.settings or {})
+            new_settings[COMPUTED_METADATA_SETTINGS_KEY] = data.computed_metadata
+            project.settings = new_settings
 
         if "parent_id" in data.model_fields_set:
             project = await self._reparent(session, project, data.parent_id)
