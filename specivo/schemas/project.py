@@ -74,6 +74,11 @@ class ProjectUpdate(BaseModel):
     is_public: bool | None = None
     status: int | None = None
     color: str | None = None
+    # Per-project derived (computed) metadata: a {key: value} map. Each key is
+    # auto-filled on every issue in this project (server-side, all clients) and
+    # is never stored on the issue, so it cannot drift. See
+    # ``specivo.services.computed_metadata_service``.
+    computed_metadata: dict | None = None
     # parent_id: use model_fields_set to detect whether this field was provided.
     # - Not in payload          → not in model_fields_set  → do not change parent
     # - parent_id=null in JSON  → in model_fields_set, value is None  → move to root

@@ -14,6 +14,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
+from specivo.services.computed_metadata_service import merge_computed
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
@@ -418,7 +419,7 @@ async def issue_detail(
             "relations": relations,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
-            "issue_metadata": issue.issue_metadata or {},
+            "issue_metadata": merge_computed(issue.issue_metadata, project.settings),
             "watchers": watchers,
             "is_watching": is_watching,
             "last_activity_at": last_activity_at,

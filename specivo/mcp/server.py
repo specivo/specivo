@@ -244,6 +244,16 @@ async def specivo_create_issue(
     ] = None,
     fixed_version_id: Annotated[int | None, Field(description="Version ID from list_versions.")] = None,
     sprint_id: Annotated[int | None, Field(description="Sprint ID from list_sprints.")] = None,
+    metadata: Annotated[
+        dict | None,
+        Field(
+            description=(
+                "Custom metadata key→value map, set atomically at creation "
+                "(no separate specivo_metadata call needed). Project-derived "
+                "(computed) keys are ignored — they cannot be set by clients."
+            )
+        ),
+    ] = None,
 ) -> str:
     """Create a new issue in a project.
 
@@ -263,6 +273,7 @@ async def specivo_create_issue(
             assigned_to_id,
             fixed_version_id,
             sprint_id,
+            metadata,
         )
 
 
