@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, func, select, update
@@ -67,10 +68,14 @@ class WikiService:
                 raise NotFoundError(f"Parent page '{parent_slug}' not found")
             parent_id = parent_page.id
 
+        # Titles with no Latin/digit characters (e.g. Thai-only) slugify to
+        # an empty string, which is neither addressable nor unique. Insert with a
+        # throwaway unique placeholder so the row flushes without colliding, then
+        # swap in a stable, unique, id-based slug once the id is assigned.
         page = WikiPage(
             wiki_id=wiki.id,
             title=title,
-            slug=slug,
+            slug=slug or f"tmp-{uuid.uuid4().hex}",
             parent_id=parent_id,
         )
         session.add(page)
@@ -86,6 +91,13 @@ class WikiService:
                     status_code=409,
                 ) from exc
             raise
+
+        if not slug:
+            slug = page.slug = f"page-{page.id}"
+            await session.flush()
+            # The UPDATE expires server-side columns (e.g. updated_at); reload so
+            # the caller can serialize the page without triggering lazy IO.
+            await session.refresh(page)
 
         content = WikiContent(
             page_id=page.id,
@@ -505,15 +517,19 @@ class WikiService:
             raise ConflictError("Page has been modified by another user. Please refresh and try again.")
 
         old_slug = page.slug
-        new_slug = _slugify(new_title)
+        # A non-Latin title slugifies to an empty string; fall back to a stable,
+        # unique, id-based slug so the page is never left unaddressable.
+        new_slug = _slugify(new_title) or f"page-{page.id}"
 
-        # Create redirect from old slug
-        redirect = WikiRedirect(
-            wiki_id=page.wiki_id,
-            title_from=old_slug,
-            redirected_to=new_slug,
-        )
-        session.add(redirect)
+        # Create a redirect from the old slug — but never a self-redirect, which
+        # the id-based fallback can produce when the slug is unchanged.
+        if new_slug != old_slug:
+            redirect = WikiRedirect(
+                wiki_id=page.wiki_id,
+                title_from=old_slug,
+                redirected_to=new_slug,
+            )
+            session.add(redirect)
 
         page.title = new_title
         page.slug = new_slug
