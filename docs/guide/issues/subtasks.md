@@ -39,3 +39,8 @@ subtasks to assign and work the individual pieces.
     Use a **parent/child** link when one issue is genuinely *part of* a bigger one. Use a
     [relation](relations.md) (blocks, relates, duplicates) when two issues are peers that simply depend
     on or reference each other.
+
+!!! note "Detach before moving between projects"
+    Only a **standalone** issue can be [moved to another project](updating.md#move-an-issue-to-another-project).
+    An issue with a parent or its own subtasks has to be detached from the hierarchy first, so a parent
+    and its children never end up split across projects.

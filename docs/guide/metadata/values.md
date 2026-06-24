@@ -32,6 +32,12 @@ items one at a time, and remove any item you no longer need. For example, a `bra
 `main` and grow to `main`, `feature/login` as work spreads across branches. There's no limit to mixing this
 with the other fields on the issue.
 
+!!! note "Computed fields fill themselves in"
+    A [project-derived (computed) field](schemas.md#project-derived-computed-fields) shows its value on
+    every issue automatically and is **read-only** — there's nothing to set, and you can't override it.
+    Its value comes from the project, so it updates on its own if the issue is
+    [moved to another project](../issues/updating.md#move-an-issue-to-another-project).
+
 ## Filtering issue lists by metadata
 
 Metadata pays off when you search across issues. Issue lists can **filter by metadata** using a key=value

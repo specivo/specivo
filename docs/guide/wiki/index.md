@@ -41,6 +41,10 @@ so all of these resolve to the same page:
 That means a link, a search result, and a hand-typed URL all land in the right place even if the casing
 or separators differ.
 
+A title with no Latin letters or digits — a Thai-only title such as `คู่มือเริ่มต้น`, say — still gets
+a usable, unique address (`page-<id>`) rather than an empty slug, so non-Latin pages link and resolve
+just like any other.
+
 !!! tip "Use spaces in titles, not underscores"
     When you create a page, type the title with **spaces** — `Release Process`, not `Release_Process`.
     Specivo turns that into a clean slug (`release-process`) on its own. Underscores in the title just

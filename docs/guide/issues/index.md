@@ -57,6 +57,7 @@ schemas, so the same fields stay consistent across issues. See [Issue metadata](
 
 - [Create one](creating.md) — pick a tracker, write a subject, set a few fields, save.
 - [Update and edit it](updating.md) — change status, reassign, set % done; every change is recorded.
+- [Move it to another project](updating.md#move-an-issue-to-another-project) — it keeps its history and gets a new key; the old reference still resolves.
 - [Link it to other issues](relations.md) — mark what blocks, duplicates, or relates to it.
 - [Break it into subtasks](subtasks.md) — build a parent/child hierarchy.
 - [Comment on it](comments.md) — discuss in Markdown, mention teammates, react with emoji.

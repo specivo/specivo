@@ -38,6 +38,34 @@ mentions all work.
     To discuss the work or post an update, add a [comment](comments.md). To record progress on the
     work itself, change the fields. Both end up in the issue's history.
 
+## Move an issue to another project
+
+Sometimes an issue lands in the wrong place — a request filed in your inbox project really belongs to
+the team that owns it. The issue detail sidebar has a **Move** card: pick a target project, add an
+optional note explaining the move, and submit.
+
+![The Move card in the issue sidebar](../assets/img/issue-move.webp)
+
+The issue keeps its internal identity but takes a **new per-project number** in the target. An issue
+that was `INB-1` becomes `HOME-1` once it lands in the `HOME` project. The **old reference still
+resolves** — paste `INB-1` anywhere and it redirects to the issue at its new key, so links you shared
+earlier don't break.
+
+Moving carries the issue's substance with it. **Preserved:** full history and comments, relations,
+attachments, watchers, time entries, and custom [metadata](../metadata/index.md). **Cleared:** the
+fixed version, sprint, category, and tags — these belong to the old project and have no meaning in the
+new one, so you set them fresh in the target.
+
+!!! note "Only standalone issues can move"
+    An issue with a **parent** or its own **subtasks** can't be moved as-is — detach it from the
+    hierarchy first, move it, then rebuild the links if you still need them. This keeps a parent and its
+    children from being split across projects.
+
+To move an issue you need edit permission in the source project and the right to add issues in the
+target. The move is also available to [AI agents](../ai-agents/index.md) over the REST API
+(`POST /api/v1/issues/{ref}/move/`) and the `specivo_move_issue` MCP tool — see
+[What agents can do](../ai-agents/capabilities.md).
+
 ## Everything is recorded
 
 Editing the core fields of an issue — status, assignee, priority, dates, % done, and so on — is logged

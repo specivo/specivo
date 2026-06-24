@@ -33,6 +33,22 @@ priorities first, then create the issue with a clear subject and a Markdown desc
 
 The new issue gets a reference like `ACME-42` you can use in follow-ups.
 
+The create-issue tool also accepts a **metadata** map, so the agent can set custom
+[metadata](../metadata/values.md) fields in the same call instead of creating the issue and then
+updating it — for example a story-point estimate or a starting branch can go in at creation time.
+
+## Move an issue to another project
+
+When work was filed in the wrong project, the agent can move it without losing anything.
+
+> *"Move ACME-42 to the HOME project with a note that it belongs to the home team."*
+
+The issue keeps its history, comments, relations, attachments, watchers, time entries, and metadata,
+and takes a new key in the target project; the old reference still resolves. Only standalone issues can
+move — detach any parent or subtasks first. See
+[Move an issue to another project](../issues/updating.md#move-an-issue-to-another-project) for the full
+rules.
+
 ## Mark an issue resolved and log time
 
 When a piece of work is done, the agent can update the status and record the effort in one go.
