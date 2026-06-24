@@ -397,6 +397,76 @@ async def test_wiki_duplicate_slug(
     assert resp2.status_code == 409
 
 
+@pytest.mark.asyncio
+async def test_create_wiki_page_non_latin_title_gets_id_slug(
+    authed_client: AsyncClient,
+    project: Project,
+):
+    """A title with no Latin/digit characters slugifies to empty; the page must
+    still get a guaranteed-non-empty, addressable slug (``page-<id>``)."""
+    resp = await authed_client.post(
+        f"/api/v1/projects/{project.key}/wiki/",
+        json={"title": "รายงานการประชุม", "text": "เนื้อหาของหน้า"},
+    )
+    assert resp.status_code == 201, resp.text
+    data = resp.json()
+    assert data["slug"], "slug must never be empty"
+    assert data["slug"] == f"page-{data['id']}"
+
+    # The page is addressable by its generated slug.
+    get_resp = await authed_client.get(f"/api/v1/projects/{project.key}/wiki/{data['slug']}/")
+    assert get_resp.status_code == 200, get_resp.text
+    assert get_resp.json()["title"] == "รายงานการประชุม"
+
+
+@pytest.mark.asyncio
+async def test_create_two_non_latin_pages_no_slug_collision(
+    authed_client: AsyncClient,
+    project: Project,
+):
+    """Two distinct non-Latin titles must not collide on an empty slug — each
+    gets its own unique ``page-<id>`` slug instead of a shared ``""``."""
+    resp1 = await authed_client.post(
+        f"/api/v1/projects/{project.key}/wiki/",
+        json={"title": "หน้าแรก", "text": "หนึ่ง"},
+    )
+    assert resp1.status_code == 201, resp1.text
+
+    resp2 = await authed_client.post(
+        f"/api/v1/projects/{project.key}/wiki/",
+        json={"title": "หน้าที่สอง", "text": "สอง"},
+    )
+    assert resp2.status_code == 201, resp2.text
+
+    slug1, slug2 = resp1.json()["slug"], resp2.json()["slug"]
+    assert slug1 and slug2
+    assert slug1 != slug2
+
+
+@pytest.mark.asyncio
+async def test_rename_wiki_page_to_non_latin_title_gets_id_slug(
+    authed_client: AsyncClient,
+    project: Project,
+):
+    """Renaming to a non-Latin title must fall back to ``page-<id>`` rather than
+    setting an empty slug."""
+    create_resp = await authed_client.post(
+        f"/api/v1/projects/{project.key}/wiki/",
+        json={"title": "Has A Slug", "text": "content"},
+    )
+    assert create_resp.status_code == 201
+    page_id = create_resp.json()["id"]
+    lv = create_resp.json()["lock_version"]
+
+    rename_resp = await authed_client.post(
+        f"/api/v1/projects/{project.key}/wiki/has-a-slug/rename/",
+        json={"title": "หัวข้อภาษาไทย", "lock_version": lv},
+    )
+    assert rename_resp.status_code == 200, rename_resp.text
+    data = rename_resp.json()
+    assert data["slug"] == f"page-{page_id}"
+
+
 # ---------------------------------------------------------------------------
 # Tests: PATCH title / parent_slug (new wiki PATCH features)
 # ---------------------------------------------------------------------------
