@@ -6,17 +6,19 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
-from specivo.models.issue import Issue
+from specivo.models.issue import Issue, IssueRefAlias
+from specivo.models.journal import Journal
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.tag import TagLink
+from specivo.models.time_entry import ActiveTimer, TimeEntry
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
@@ -461,6 +463,10 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
+                    # Fall back to a historical reference (issue moved projects).
+                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    if aliased_id is not None:
+                        return await self.get_by_id(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if user is not None and not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -552,6 +558,10 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
+                    # Fall back to a historical reference (issue moved projects).
+                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    if aliased_id is not None:
+                        return await self.get_with_relations(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if user is not None and not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -562,6 +572,18 @@ class IssueService:
         except ValueError:
             raise NotFoundError(f"Invalid issue reference: {display_key!r}")
         return await self.get_with_relations(session, issue_id, user=user)
+
+    async def _resolve_ref_alias(
+        self, session: AsyncSession, project_key: str, seq: int
+    ) -> int | None:
+        """Return the issue id a retired ``KEY-N`` reference points to, if any."""
+        issue_id: int | None = await session.scalar(
+            select(IssueRefAlias.issue_id).where(
+                IssueRefAlias.old_project_key == project_key,
+                IssueRefAlias.old_sequence_number == seq,
+            )
+        )
+        return issue_id
 
     async def update(
         self,
@@ -705,6 +727,134 @@ class IssueService:
 
         logger.info(
             "Updated issue %s by user %d",
+            issue.display_key,
+            user.id,
+        )
+        return issue
+
+    async def move(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        target_project: Project,
+        user: User,
+        notes: str | None = None,
+        api_key_id: int | None = None,
+    ) -> Issue:
+        """Move *issue* to ``target_project``.
+
+        Preserves history (journals/comments), relations, attachments, watchers,
+        time entries and stored metadata. A new per-project sequence number is
+        assigned in the target; the old ``KEY-N`` keeps resolving via an
+        ``IssueRefAlias``. The internal ``id`` never changes.
+
+        Project-scoped fields that do not carry across projects are cleared:
+        fixed version, sprint, category and tag links. Project-derived
+        (computed) metadata recomputes automatically because it is never stored.
+
+        The issue must be standalone — cross-project moves of a hierarchy are
+        not supported; detach the issue from its parent and move/detach its
+        children first.
+        """
+        if target_project.id == issue.project_id:
+            raise ValidationError(
+                message=_("Issue is already in this project."),
+                field="target_project_key",
+            )
+
+        # Guard hierarchy: refuse to orphan a subtree across projects.
+        child_count = await session.scalar(
+            select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id)
+        )
+        if issue.parent_id is not None or (child_count or 0) > 0:
+            raise ValidationError(
+                message=_(
+                    "Cannot move an issue that is part of a hierarchy. Detach it from its "
+                    "parent and move or detach its children first."
+                ),
+                field="target_project_key",
+            )
+
+        old_project_key = issue.project_key
+        old_seq = issue.sequence_number
+
+        # Keep the old display key resolvable after the move.
+        session.add(
+            IssueRefAlias(
+                old_project_key=old_project_key,
+                old_sequence_number=old_seq,
+                issue_id=issue.id,
+            )
+        )
+
+        # Atomic per-project sequence increment in the target (same mechanism as create()).
+        result = await session.execute(
+            update(Project)
+            .where(Project.id == target_project.id)
+            .values(issue_sequence=Project.issue_sequence + 1)
+            .returning(Project.issue_sequence, Project.key)
+        )
+        seq, key = result.one()
+
+        issue.project_id = target_project.id
+        issue.project_key = key
+        issue.sequence_number = seq
+        # Clear project-scoped fields that don't belong to the target project.
+        issue.fixed_version_id = None
+        issue.sprint_id = None
+        issue.category_id = None
+
+        # Tags are project-scoped — drop the source project's tag links.
+        await session.execute(delete(TagLink).where(TagLink.issue_id == issue.id))
+
+        await session.flush()
+
+        # Re-sync denormalized project_id on issue-attached rows.
+        await session.execute(
+            update(Journal).where(Journal.issue_id == issue.id).values(project_id=target_project.id)
+        )
+        await session.execute(
+            update(TimeEntry).where(TimeEntry.issue_id == issue.id).values(project_id=target_project.id)
+        )
+        await session.execute(
+            update(ActiveTimer).where(ActiveTimer.issue_id == issue.id).values(project_id=target_project.id)
+        )
+
+        # Record the move in the issue history (notes-only journal entry).
+        snapshot = {attr: getattr(issue, attr) for attr, _label in _JOURNALIZED_ATTRS}
+        move_note = _("Moved from {old} to {new}.").format(
+            old=f"{old_project_key}-{old_seq}", new=issue.display_key
+        )
+        if notes:
+            move_note = f"{move_note}\n\n{notes}"
+        await self._journal_service.record_change(
+            session=session,
+            issue=issue,
+            user=user,
+            old_attrs=snapshot,
+            new_attrs=snapshot,
+            notes=move_note,
+            api_key_id=api_key_id,
+        )
+
+        # Re-embed under the new project (best effort, non-blocking on failure).
+        try:
+            from specivo.schemas.search import SearchSourceType
+            from specivo.services.chunking_service import ChunkingService
+            from specivo.services.embedding_service import EmbeddingService
+
+            chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
+            await EmbeddingService().embed_source(
+                session, SearchSourceType.ISSUE, issue.id, target_project.id, chunks
+            )
+        except Exception:
+            logger.debug("Embedding regeneration skipped for %s after move", issue.display_key)
+
+        logger.info(
+            "Moved issue id=%d from %s-%d to %s by user %d",
+            issue.id,
+            old_project_key,
+            old_seq,
             issue.display_key,
             user.id,
         )

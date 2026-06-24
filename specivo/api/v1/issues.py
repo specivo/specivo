@@ -20,6 +20,7 @@ from specivo.schemas.common import IdName
 from specivo.schemas.issue import (
     IssueCreate,
     IssueListResponse,
+    IssueMove,
     IssueOut,
     IssueUpdate,
     IssueWithChildren,
@@ -536,6 +537,34 @@ async def update_issue(
     issue = await _service.get_with_relations(db, issue.id)
     await db.commit()  # commit before response to avoid reload race condition
     return _issue_out(issue, computed_values(await load_project_settings(db, issue.project_id)))
+
+
+@router.post("/issues/{issue_ref}/move/", response_model=IssueOut)
+async def move_issue(
+    issue_ref: str,
+    data: IssueMove,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> IssueOut:
+    """Move an issue to another project.
+
+    Requires edit permission in the source project and add permission in the
+    target. Preserves history, comments, relations, attachments and stored
+    metadata; clears project-scoped fields (version, sprint, category, tags).
+    The issue keeps its internal id and gets a new per-project number; the old
+    ``KEY-N`` still resolves.
+    """
+    issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
+    if not await check_permission(current_user, issue.project_id, "edit_issues", db):
+        raise PermissionDeniedError("You do not have permission to move this issue")
+    target = await _project_service.get_by_key(db, data.target_project_key.upper())
+    await _project_service.require_project_access(db, target, current_user)
+    if not await check_permission(current_user, target.id, "add_issues", db):
+        raise PermissionDeniedError("You do not have permission to create issues in the target project")
+    issue = await _service.move(db, issue, target, current_user, notes=data.notes)
+    await db.commit()
+    issue = await _service.get_with_relations(db, issue.id)
+    return _issue_out(issue, computed_values(target.settings))
 
 
 @router.delete("/issues/{issue_ref}/", status_code=status.HTTP_204_NO_CONTENT)

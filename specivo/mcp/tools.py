@@ -376,6 +376,35 @@ async def _update_issue(
     return f"Updated issue {updated.display_key}: {updated.subject}\nLock version: {updated.lock_version}"
 
 
+async def _move_issue(
+    session: AsyncSession,
+    user: User,
+    issue_ref: str,
+    target_project_key: str,
+    notes: str | None = None,
+) -> str:
+    issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
+    await _require_permission(session, user, issue.project_id, "edit_issues")
+    old_ref = issue.display_key
+    target = await _project_svc.get_by_key(session, target_project_key.upper())
+    await _require_permission(session, user, target.id, "add_issues")
+    issue = await _issue_svc.move(session, issue, target, user, notes=notes)
+    await session.flush()
+    await _log_tool(
+        session,
+        user,
+        AuditEvent.ISSUE_UPDATED,
+        "move_issue",
+        {"issue_ref": old_ref, "target_project_key": target.key, "new_ref": issue.display_key},
+        project_id=target.id,
+    )
+    return (
+        f"Moved {old_ref} -> {issue.display_key} (project {target.key}).\n"
+        f"History, relations, attachments and metadata preserved; version/sprint/"
+        f"category/tags cleared. The old reference {old_ref} still resolves."
+    )
+
+
 async def _edit_description(
     session: AsyncSession,
     user: User,

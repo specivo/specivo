@@ -95,6 +95,13 @@ class IssueUpdate(BaseModel):
         return v
 
 
+class IssueMove(BaseModel):
+    """Payload for moving an issue to another project."""
+
+    target_project_key: str
+    notes: str | None = None
+
+
 class IssueFilters(BaseModel):
     """Query parameters for issue list filtering."""
 
