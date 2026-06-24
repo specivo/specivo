@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -343,6 +343,11 @@ async def issue_detail(
     applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas]
 
+    # Candidate target projects for the "Move" action (visible to the user,
+    # excluding the issue's current project).
+    visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
+    move_targets = [p for p in visible_projects if p.id != issue.project_id]
+
     # Build lookup maps for human-readable activity details.
     # Collect all sprint/version IDs referenced in journal details so we can
     # bulk-load names instead of showing raw IDs.
@@ -420,6 +425,7 @@ async def issue_detail(
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             "issue_metadata": merge_computed(issue.issue_metadata, project.settings),
+            "move_targets": move_targets,
             "watchers": watchers,
             "is_watching": is_watching,
             "last_activity_at": last_activity_at,
@@ -669,3 +675,37 @@ async def restore_description_version(
         f"/issue/{issue_ref}/",
         status_code=302,
     )
+
+
+@short_router.post("/issue/{issue_ref}/move/", response_class=HTMLResponse)
+async def move_issue_form(
+    issue_ref: str,
+    request: Request,
+    target_project_key: str = Form(...),
+    notes: str | None = Form(None),
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Move an issue to another project from the web UI, then redirect to it."""
+    from specivo.core.exceptions import ValidationError
+    from specivo.services.permission_service import check_permission
+
+    user_obj = await get_current_user_optional(request, db)
+    if not user_obj:
+        return RedirectResponse("/login/", status_code=302)
+    user = cast("User", user_obj)
+
+    _project, issue = await _resolve_issue_project(db, issue_ref, user)
+    if not await check_permission(user, issue.project_id, "edit_issues", db):
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    target = await _project_svc.get_by_key(db, target_project_key.upper())
+    await _project_svc.require_project_access(db, target, user)
+    if not await check_permission(user, target.id, "add_issues", db):
+        raise HTTPException(status_code=403, detail="Permission denied in target project")
+
+    try:
+        moved = await _issue_svc.move(db, issue, target, user, notes=notes or None)
+    except ValidationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message) from exc
+
+    return RedirectResponse(f"/issue/{moved.display_key}/", status_code=302)

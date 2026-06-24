@@ -350,3 +350,39 @@ async def test_issue_list_empty_filter_params(
     )
     assert resp.status_code == 200, f"Expected 200 but got {resp.status_code}: {resp.text[:200]}"
     assert "Issues" in resp.text
+
+
+@pytest.mark.integration
+async def test_issue_move_via_web(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: tuple,
+    _project: Project,
+):
+    """Detail page shows the Move form; POST moves the issue and redirects."""
+    _status, tracker, _priority = _lookups
+    user = admin_client.state.user
+    token = admin_client.state.token
+    issue = await _create_issue(db_session, _project, user, tracker, subject="Move me")
+
+    target = ProjectFactory.build(key="WIS2", identifier="web-issue-target")
+    db_session.add(target)
+    await db_session.commit()
+    await db_session.refresh(target)
+
+    detail = await admin_client.get(f"/issue/{issue.display_key}/", cookies={"access_token": token})
+    assert detail.status_code == 200
+    assert "Move issue" in detail.text
+    assert "WIS2" in detail.text
+
+    resp = await admin_client.post(
+        f"/issue/{issue.display_key}/move/",
+        data={"target_project_key": "WIS2", "notes": "triaged"},
+        cookies={"access_token": token},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 302, resp.text
+    assert "/issue/WIS2-1/" in resp.headers["location"]
+
+    moved = await admin_client.get("/issue/WIS2-1/", cookies={"access_token": token})
+    assert moved.status_code == 200
