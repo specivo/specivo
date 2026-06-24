@@ -20,6 +20,7 @@ from specivo.schemas.common import IdName
 from specivo.schemas.issue import (
     IssueCreate,
     IssueListResponse,
+    IssueMove,
     IssueOut,
     IssueUpdate,
     IssueWithChildren,
@@ -29,6 +30,7 @@ from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
+from specivo.services.computed_metadata_service import computed_values, load_project_settings
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
@@ -59,12 +61,17 @@ _reaction_svc = ReactionService()
 # ---------------------------------------------------------------------------
 
 
-def _issue_out(issue: Issue) -> IssueOut:
+def _issue_out(issue: Issue, computed: dict | None = None) -> IssueOut:
     """Build an IssueOut from an Issue with eagerly-loaded relationships.
 
     All relationship attributes (tracker, status, priority, author,
     assigned_to, category) must already be loaded via selectinload before
     calling this helper.
+
+    ``computed`` is the issue's project-derived metadata map (see
+    :mod:`specivo.services.computed_metadata_service`); when provided it is
+    overlaid on the stored metadata so derived fields appear on read without
+    being persisted.
     """
     return IssueOut(
         id=issue.id,
@@ -97,7 +104,7 @@ def _issue_out(issue: Issue) -> IssueOut:
         start_date=issue.start_date,
         due_date=issue.due_date,
         estimated_hours=issue.estimated_hours,
-        metadata=issue.issue_metadata,
+        metadata={**(issue.issue_metadata or {}), **(computed or {})},
         is_private=issue.is_private,
         lock_version=issue.lock_version,
         created_at=issue.created_at,
@@ -204,7 +211,7 @@ async def create_issue(
     await db.commit()
     # Reload with relationships for response
     issue = await _service.get_with_relations(db, issue.id)
-    return _issue_out(issue)
+    return _issue_out(issue, computed_values(project.settings))
 
 
 @router.get(
@@ -303,11 +310,12 @@ async def list_issues(
         user=current_user,
     )
 
+    project_computed = computed_values(project.settings)
     return IssueListResponse(
         total_count=total_count,
         offset=offset,
         limit=limit,
-        items=[_issue_out(i) for i in issues],
+        items=[_issue_out(i, project_computed) for i in issues],
     )
 
 
@@ -380,7 +388,8 @@ async def get_issue(
     Unknown include values are silently ignored.
     """
     issue = await _service.get_by_display_key_with_relations(db, issue_ref, user=current_user)
-    out = _issue_out(issue)
+    computed = computed_values(await load_project_settings(db, issue.project_id))
+    out = _issue_out(issue, computed)
 
     # Audit log the resource view
     try:
@@ -427,7 +436,7 @@ async def get_issue(
             )
         )
         child_issues = list(result.scalars().all())
-        children = [_issue_out(c) for c in child_issues]
+        children = [_issue_out(c, computed) for c in child_issues]
 
     if "journals" in include_set:
         include_private = current_user.is_admin
@@ -527,7 +536,35 @@ async def update_issue(
     # Reload with relationships
     issue = await _service.get_with_relations(db, issue.id)
     await db.commit()  # commit before response to avoid reload race condition
-    return _issue_out(issue)
+    return _issue_out(issue, computed_values(await load_project_settings(db, issue.project_id)))
+
+
+@router.post("/issues/{issue_ref}/move/", response_model=IssueOut)
+async def move_issue(
+    issue_ref: str,
+    data: IssueMove,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> IssueOut:
+    """Move an issue to another project.
+
+    Requires edit permission in the source project and add permission in the
+    target. Preserves history, comments, relations, attachments and stored
+    metadata; clears project-scoped fields (version, sprint, category, tags).
+    The issue keeps its internal id and gets a new per-project number; the old
+    ``KEY-N`` still resolves.
+    """
+    issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
+    if not await check_permission(current_user, issue.project_id, "edit_issues", db):
+        raise PermissionDeniedError("You do not have permission to move this issue")
+    target = await _project_service.get_by_key(db, data.target_project_key.upper())
+    await _project_service.require_project_access(db, target, current_user)
+    if not await check_permission(current_user, target.id, "add_issues", db):
+        raise PermissionDeniedError("You do not have permission to create issues in the target project")
+    issue = await _service.move(db, issue, target, current_user, notes=data.notes)
+    await db.commit()
+    issue = await _service.get_with_relations(db, issue.id)
+    return _issue_out(issue, computed_values(target.settings))
 
 
 @router.delete("/issues/{issue_ref}/", status_code=status.HTTP_204_NO_CONTENT)

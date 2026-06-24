@@ -13,7 +13,7 @@ know the shape of what's possible.
 
 | Area | What the agent can do |
 |---|---|
-| **Issues & comments** | List, read, create, and update issues; edit descriptions and core fields; add comments and read the comment history. |
+| **Issues & comments** | List, read, create, and update issues; edit descriptions and core fields; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history. |
 | **Search** | Search across issues, wiki, and more using Specivo's hybrid (keyword + meaning) search. |
 | **Wiki** | List, read, create, edit, and append to wiki pages, including section-level reads and edits, and history/restore. |
 | **Metadata & schemas** | Read and set [issue metadata](../metadata/values.md) values, and list the available metadata schemas. |

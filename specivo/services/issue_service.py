@@ -6,26 +6,34 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
-from specivo.models.issue import Issue
+from specivo.models.issue import Issue, IssueRefAlias
+from specivo.models.journal import Journal
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.tag import TagLink
+from specivo.models.time_entry import ActiveTimer, TimeEntry
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
+from specivo.services.computed_metadata_service import load_project_settings, strip_computed
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
 from specivo.services.watcher_service import WatcherService
 
 logger = logging.getLogger(__name__)
+
+# Max distinct issue refs resolved per render when validating autolinks. Bounds
+# the DB lookup so text with a huge number of KEY-N tokens cannot turn one page
+# view into an unbounded query. Refs beyond this cap render as plain text.
+MAX_AUTOLINK_REFS = 500
 
 # Allowed sort columns — prevents SQL injection via user-supplied sort params
 _ALLOWED_SORT_FIELDS = frozenset(
@@ -315,8 +323,13 @@ class IssueService:
         if data.sprint_id is not None:
             await self._validate_sprint(session, data.sprint_id, project.id)
 
+        # Strip project-derived (computed) metadata so it is never stored on the
+        # issue — it is overlaid on read instead. This makes the field
+        # un-settable from any client and impossible to drift.
+        stored_metadata = strip_computed(data.metadata, project.settings)
+
         # Validate metadata against schemas (if any exist for this project/tracker)
-        await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, data.metadata)
+        await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, stored_metadata)
 
         # Atomic sequence increment — guarantees no duplicate sequence_numbers
         # for this project under concurrent inserts.
@@ -360,7 +373,7 @@ class IssueService:
             assigned_to_id=data.assigned_to_id,
             subject=data.subject,
             description=data.description,
-            issue_metadata=data.metadata,
+            issue_metadata=stored_metadata,
             start_date=data.start_date,
             due_date=data.due_date,
             estimated_hours=data.estimated_hours,
@@ -455,6 +468,10 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
+                    # Fall back to a historical reference (issue moved projects).
+                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    if aliased_id is not None:
+                        return await self.get_by_id(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if user is not None and not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -546,6 +563,10 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
+                    # Fall back to a historical reference (issue moved projects).
+                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    if aliased_id is not None:
+                        return await self.get_with_relations(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if user is not None and not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -556,6 +577,82 @@ class IssueService:
         except ValueError:
             raise NotFoundError(f"Invalid issue reference: {display_key!r}")
         return await self.get_with_relations(session, issue_id, user=user)
+
+    async def _resolve_ref_alias(
+        self, session: AsyncSession, project_key: str, seq: int
+    ) -> int | None:
+        """Return the issue id a retired ``KEY-N`` reference points to, if any."""
+        issue_id: int | None = await session.scalar(
+            select(IssueRefAlias.issue_id).where(
+                IssueRefAlias.old_project_key == project_key,
+                IssueRefAlias.old_sequence_number == seq,
+            )
+        )
+        return issue_id
+
+    @staticmethod
+    def _autolink_ref_pairs(
+        texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS
+    ) -> list[tuple[str, int]]:
+        """Extract ``(project_key, sequence_number)`` pairs from *texts*, capped.
+
+        Deduplicates and sorts the candidate refs for a deterministic result,
+        then returns at most *limit* pairs. The cap bounds the database lookup
+        in :meth:`resolve_known_issue_refs` so user-controlled text with a huge
+        number of distinct ``KEY-N`` tokens cannot amplify a single page render
+        into an unbounded query (stored DoS on the issue/wiki read path).
+        """
+        from specivo.services.markdown_service import find_issue_ref_candidates
+
+        candidates: set[str] = set()
+        for text in texts:
+            candidates |= find_issue_ref_candidates(text)
+
+        pairs: list[tuple[str, int]] = []
+        for ref in sorted(candidates):
+            key, _, num = ref.rpartition("-")
+            try:
+                pairs.append((key, int(num)))
+            except ValueError:
+                continue
+            if len(pairs) >= limit:
+                break
+        return pairs
+
+    async def resolve_known_issue_refs(self, session: AsyncSession, *texts: str | None) -> set[str]:
+        """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue.
+
+        A reference is "known" when it matches a current issue
+        ``(project_key, sequence_number)`` or a previous reference recorded in
+        ``issue_ref_aliases`` (i.e. the issue was moved). Used to validate
+        autolinks before rendering so non-existent refs are not linked.
+
+        The number of refs resolved per call is capped (``MAX_AUTOLINK_REFS``)
+        to keep the lookup bounded regardless of input size; refs beyond the cap
+        simply render as plain text.
+        """
+        pairs = self._autolink_ref_pairs(texts)
+        if not pairs:
+            return set()
+
+        known: set[str] = set()
+        rows = await session.execute(
+            select(Issue.project_key, Issue.sequence_number).where(
+                tuple_(Issue.project_key, Issue.sequence_number).in_(pairs)
+            )
+        )
+        for key, num in rows:
+            known.add(f"{key}-{num}")
+
+        alias_rows = await session.execute(
+            select(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).where(
+                tuple_(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).in_(pairs)
+            )
+        )
+        for key, num in alias_rows:
+            known.add(f"{key}-{num}")
+
+        return known
 
     async def update(
         self,
@@ -629,13 +726,17 @@ class IssueService:
                 await self._validate_sprint(session, data.sprint_id, issue.project_id)
             issue.sprint_id = data.sprint_id
         if data.metadata is not None:
+            # Strip project-derived (computed) metadata — it is never stored and
+            # cannot be set/overridden by a client (see create()).
+            project_settings = await load_project_settings(session, issue.project_id)
+            stored_metadata = strip_computed(data.metadata, project_settings)
             # Validate against schemas using the effective tracker_id
             # (may have been changed in this same update)
             effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
             await self._metadata_schema_service.validate_metadata(
-                session, issue.project_id, effective_tracker_id, data.metadata
+                session, issue.project_id, effective_tracker_id, stored_metadata
             )
-            issue.issue_metadata = data.metadata
+            issue.issue_metadata = stored_metadata
 
         # --- Hierarchy move (parent_id provided) ---
         # Convention: parent_id=0 means "move to root"; parent_id=N means "move to N"
@@ -695,6 +796,134 @@ class IssueService:
 
         logger.info(
             "Updated issue %s by user %d",
+            issue.display_key,
+            user.id,
+        )
+        return issue
+
+    async def move(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        target_project: Project,
+        user: User,
+        notes: str | None = None,
+        api_key_id: int | None = None,
+    ) -> Issue:
+        """Move *issue* to ``target_project``.
+
+        Preserves history (journals/comments), relations, attachments, watchers,
+        time entries and stored metadata. A new per-project sequence number is
+        assigned in the target; the old ``KEY-N`` keeps resolving via an
+        ``IssueRefAlias``. The internal ``id`` never changes.
+
+        Project-scoped fields that do not carry across projects are cleared:
+        fixed version, sprint, category and tag links. Project-derived
+        (computed) metadata recomputes automatically because it is never stored.
+
+        The issue must be standalone — cross-project moves of a hierarchy are
+        not supported; detach the issue from its parent and move/detach its
+        children first.
+        """
+        if target_project.id == issue.project_id:
+            raise ValidationError(
+                message=_("Issue is already in this project."),
+                field="target_project_key",
+            )
+
+        # Guard hierarchy: refuse to orphan a subtree across projects.
+        child_count = await session.scalar(
+            select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id)
+        )
+        if issue.parent_id is not None or (child_count or 0) > 0:
+            raise ValidationError(
+                message=_(
+                    "Cannot move an issue that is part of a hierarchy. Detach it from its "
+                    "parent and move or detach its children first."
+                ),
+                field="target_project_key",
+            )
+
+        old_project_key = issue.project_key
+        old_seq = issue.sequence_number
+
+        # Keep the old display key resolvable after the move.
+        session.add(
+            IssueRefAlias(
+                old_project_key=old_project_key,
+                old_sequence_number=old_seq,
+                issue_id=issue.id,
+            )
+        )
+
+        # Atomic per-project sequence increment in the target (same mechanism as create()).
+        result = await session.execute(
+            update(Project)
+            .where(Project.id == target_project.id)
+            .values(issue_sequence=Project.issue_sequence + 1)
+            .returning(Project.issue_sequence, Project.key)
+        )
+        seq, key = result.one()
+
+        issue.project_id = target_project.id
+        issue.project_key = key
+        issue.sequence_number = seq
+        # Clear project-scoped fields that don't belong to the target project.
+        issue.fixed_version_id = None
+        issue.sprint_id = None
+        issue.category_id = None
+
+        # Tags are project-scoped — drop the source project's tag links.
+        await session.execute(delete(TagLink).where(TagLink.issue_id == issue.id))
+
+        await session.flush()
+
+        # Re-sync denormalized project_id on issue-attached rows.
+        await session.execute(
+            update(Journal).where(Journal.issue_id == issue.id).values(project_id=target_project.id)
+        )
+        await session.execute(
+            update(TimeEntry).where(TimeEntry.issue_id == issue.id).values(project_id=target_project.id)
+        )
+        await session.execute(
+            update(ActiveTimer).where(ActiveTimer.issue_id == issue.id).values(project_id=target_project.id)
+        )
+
+        # Record the move in the issue history (notes-only journal entry).
+        snapshot = {attr: getattr(issue, attr) for attr, _label in _JOURNALIZED_ATTRS}
+        move_note = _("Moved from {old} to {new}.").format(
+            old=f"{old_project_key}-{old_seq}", new=issue.display_key
+        )
+        if notes:
+            move_note = f"{move_note}\n\n{notes}"
+        await self._journal_service.record_change(
+            session=session,
+            issue=issue,
+            user=user,
+            old_attrs=snapshot,
+            new_attrs=snapshot,
+            notes=move_note,
+            api_key_id=api_key_id,
+        )
+
+        # Re-embed under the new project (best effort, non-blocking on failure).
+        try:
+            from specivo.schemas.search import SearchSourceType
+            from specivo.services.chunking_service import ChunkingService
+            from specivo.services.embedding_service import EmbeddingService
+
+            chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
+            await EmbeddingService().embed_source(
+                session, SearchSourceType.ISSUE, issue.id, target_project.id, chunks
+            )
+        except Exception:
+            logger.debug("Embedding regeneration skipped for %s after move", issue.display_key)
+
+        logger.info(
+            "Moved issue id=%d from %s-%d to %s by user %d",
+            issue.id,
+            old_project_key,
+            old_seq,
             issue.display_key,
             user.id,
         )

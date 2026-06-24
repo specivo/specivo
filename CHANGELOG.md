@@ -3,6 +3,22 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.0] - 2026-06-24
+
+### Added
+- **Move issues between projects** — reassign an issue to another project from the issue sidebar (also via the REST API and a new MCP tool). The issue keeps its history, comments, relations, attachments, watchers, time entries and metadata, and takes a new per-project number; the old `KEY-123` reference still resolves. Project-scoped fields (target version, sprint, category, tags) are cleared for the new project. Moving an issue that is part of a parent/sub-task hierarchy is not allowed — detach it first
+- **Project-derived (computed) metadata** — a metadata field whose value is a fixed function of the project (e.g. an area/cabinet that groups projects). Configured once per project, it is auto-filled on every issue across the web UI, REST API and MCP, is never stored on the issue and cannot be edited, and recomputes automatically when an issue is moved
+- MCP `create_issue` accepts a `metadata` map so custom metadata can be set in a single call
+
+### Changed
+- **Issue references auto-link only when the issue exists** — a `KEY-123` reference in an issue description, comment or wiki page links only when it points to a real issue (or one that existed before a move); look-alike tokens that don't match an issue are left as plain text instead of becoming dead links
+
+### Fixed
+- Wiki pages whose title has no Latin letters or digits (e.g. a Thai-only title) now get a usable, unique address instead of an empty slug
+
+### Security
+- Bounded the issue-reference resolution that runs when rendering issue and wiki content, so text containing a very large number of reference-like tokens can no longer amplify a single page view into an oversized database lookup
+
 ## [0.3.0] - 2026-06-20
 
 ### Added

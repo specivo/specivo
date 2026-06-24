@@ -31,6 +31,27 @@ touch the admin area to use metadata.
 
 ![Metadata presets in the admin area](../assets/img/admin-metadata-presets.webp)
 
+## Project-derived (computed) fields
+
+Most metadata is filled in per issue. A **computed** field is different: its value is a fixed function
+of the **project**, so every issue in that project gets the same value automatically, with no manual
+step. A typical use is grouping projects under an area — an "Area" or "cabinet" field that says which
+part of the org a project belongs to.
+
+A computed field is configured **once per project**, as a `computed_metadata` map in the project's
+settings (set through the project update / admin area, which requires the project-manage permission).
+After that:
+
+- It is **auto-filled on every issue** in the project, across every creation path — the web UI, the
+  REST API, and [AI agents](../ai-agents/index.md) — with nothing for anyone to enter.
+- It is **never stored on the issue** and **can't be edited or overridden** by users, so it can never
+  drift out of sync with the project.
+- It **recomputes automatically** when an issue is [moved to another project](../issues/updating.md#move-an-issue-to-another-project),
+  picking up the new project's value with no extra step.
+
+Because the value comes from the project, not the issue, a computed field is the right choice for
+anything that should always match the project it lives in.
+
 ## Built-in presets
 
 Specivo ships with five ready-made presets. Enable any of them as-is, or use them as a starting point for
