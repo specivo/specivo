@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
 from specivo.services.attachment_service import AttachmentService
+from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
@@ -26,6 +27,7 @@ _project_svc = ProjectService()
 _wiki_svc = WikiService()
 _attachment_svc = AttachmentService()
 _tag_svc = TagService()
+_issue_svc = IssueService()
 
 
 def _wiki_tags_to_dicts(tags: list) -> list[dict]:
@@ -329,6 +331,8 @@ async def wiki_show(
 
     wiki_tags = _wiki_tags_to_dicts(await _tag_svc.tags_for_wiki_page(db, page.id))
 
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, content.text)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -347,6 +351,7 @@ async def wiki_show(
             "attachments": attachments_json,
             "attachment_map": attachment_map,
             "wiki_tags": wiki_tags,
+            "known_issue_refs": known_issue_refs,
         },
     )
 

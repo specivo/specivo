@@ -348,6 +348,12 @@ async def issue_detail(
     visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
     move_targets = [p for p in visible_projects if p.id != issue.project_id]
 
+    # Resolve which KEY-123 references in the rendered text actually exist (or
+    # previously existed) so the markdown filter only auto-links real issues.
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(
+        db, issue.description, *[j.notes for j in all_journals]
+    )
+
     # Build lookup maps for human-readable activity details.
     # Collect all sprint/version IDs referenced in journal details so we can
     # bulk-load names instead of showing raw IDs.
@@ -426,6 +432,7 @@ async def issue_detail(
             "metadata_schemas_data": metadata_schemas_data,
             "issue_metadata": merge_computed(issue.issue_metadata, project.settings),
             "move_targets": move_targets,
+            "known_issue_refs": known_issue_refs,
             "watchers": watchers,
             "is_watching": is_watching,
             "last_activity_at": last_activity_at,
@@ -614,6 +621,8 @@ async def issue_description_diff(
     selected_num = selected_version["num"] if selected_version else "?"
     prev_num = selected_num - 1 if selected_num != "?" and selected_num > 1 else None
 
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, old_text, new_text)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -630,6 +639,7 @@ async def issue_description_diff(
             "prev_num": prev_num,
             "versions": versions,
             "diff_lines": diff_lines,
+            "known_issue_refs": known_issue_refs,
         },
     )
 

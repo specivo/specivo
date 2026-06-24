@@ -83,8 +83,12 @@ async def test_preview_matches_jinja_filter(
 
     This is the load-bearing test: if a future change forks the two paths,
     this test fails and forces the change to either update both or be reverted.
+
+    The preview endpoint validates KEY-123 refs against the DB before linking;
+    the test DB has no issues, so the equivalent direct call passes an empty
+    known-refs set (nothing resolves → nothing auto-linked on either side).
     """
-    expected = str(render_wiki_markdown(text))
+    expected = str(render_wiki_markdown(text, known_issue_refs=set()))
 
     resp = await auth_client.post(_PREVIEW_URL, json={"text": text, "context": "issue"})
     assert resp.status_code == 200, resp.text
@@ -135,15 +139,15 @@ async def test_empty_text_returns_empty_html(auth_client: AsyncClient) -> None:
     assert resp.json()["html"] == ""
 
 
-async def test_issue_autolink_in_preview(auth_client: AsyncClient) -> None:
-    """The KEY-123 autolink extension must apply in preview output."""
+async def test_nonexistent_issue_ref_not_autolinked(auth_client: AsyncClient) -> None:
+    """A KEY-123 token with no matching issue must NOT be auto-linked."""
     resp = await auth_client.post(
         _PREVIEW_URL, json={"text": "See PROJ-99", "context": "issue"}
     )
     assert resp.status_code == 200, resp.text
     html = resp.json()["html"]
-    assert 'href="/issue/PROJ-99/"' in html
-    assert ">PROJ-99<" in html
+    assert "/issue/PROJ-99/" not in html  # not linked
+    assert "PROJ-99" in html  # still shown, as plain text
 
 
 # ---------------------------------------------------------------------------

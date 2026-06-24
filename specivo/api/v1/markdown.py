@@ -11,13 +11,18 @@ extension).
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.database import get_db
 from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.markdown import MarkdownPreviewRequest, MarkdownPreviewResponse
+from specivo.services.issue_service import IssueService
 from specivo.services.markdown_service import render_wiki_markdown
+
+_issue_svc = IssueService()
 
 router = APIRouter(tags=["markdown"])
 
@@ -32,6 +37,7 @@ _MAX_TEXT_BYTES = 256 * 1024
 async def preview_markdown(
     data: MarkdownPreviewRequest,
     current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     _rl: None = Depends(  # noqa: B008
         rate_limit("markdown_preview", max_requests=60, window_seconds=60)
     ),
@@ -56,5 +62,6 @@ async def preview_markdown(
             details={"max_bytes": _MAX_TEXT_BYTES},
         )
 
-    html = render_wiki_markdown(data.text)
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, data.text)
+    html = render_wiki_markdown(data.text, known_issue_refs=known_issue_refs)
     return MarkdownPreviewResponse(html=str(html))

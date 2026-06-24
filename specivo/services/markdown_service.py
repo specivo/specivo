@@ -104,6 +104,18 @@ _IMG_SRC_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 _ISSUE_REF_RE = re.compile(r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b")
 
 
+def find_issue_ref_candidates(text: str | None) -> set[str]:
+    """Return all ``KEY-123`` issue-reference candidates appearing in *text*.
+
+    Uses the same pattern as the autolinker, so callers can batch-resolve which
+    candidates actually exist (or previously existed) before rendering — see
+    ``IssueService.resolve_known_issue_refs``.
+    """
+    if not text:
+        return set()
+    return {m.group(1) for m in _ISSUE_REF_RE.finditer(text)}
+
+
 def _sanitize_html(html_str: str) -> str:
     return nh3.clean(
         html_str,
@@ -139,6 +151,7 @@ def render_wiki_markdown(
     text: str,
     project_key: str = "",
     attachment_map: dict | None = None,
+    known_issue_refs: set[str] | None = None,
 ) -> markupsafe.Markup:
     """Render markdown with wiki ``[[Page Name]]`` links and ``KEY-123`` autolinks.
 
@@ -153,6 +166,13 @@ def render_wiki_markdown(
     ``attachment_map``: optional dict mapping filenames to attachment download
     URLs. When provided, bare-filename image references like
     ``![alt](chart.png)`` are rewritten to the attachment URL.
+
+    ``known_issue_refs``: optional set of ``KEY-123`` references that actually
+    exist (or previously existed, via a move alias). When provided, ONLY those
+    references are auto-linked and other ``KEY-123``-looking tokens are left as
+    plain text. When ``None`` (the default), every matching token is linked —
+    the original behaviour, kept so callers that cannot resolve refs (e.g. the
+    editor preview without context) are unaffected.
     """
     if not text:
         return markupsafe.Markup("")
@@ -170,8 +190,16 @@ def render_wiki_markdown(
 
         processed = _IMG_SRC_RE.sub(_resolve_image, processed)
 
-    # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/)
-    processed = _ISSUE_REF_RE.sub(r"[\1](/issue/\1/)", processed)
+    # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
+    # When known_issue_refs is provided, only link references that resolve to a
+    # real (or previously-existing) issue; leave the rest as plain text.
+    def _link_issue_ref(m: re.Match[str]) -> str:
+        ref = m.group(1)
+        if known_issue_refs is None or ref in known_issue_refs:
+            return f"[{ref}](/issue/{ref}/)"
+        return ref
+
+    processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
 
     rendered = _md.markdown(
         processed,

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -584,6 +584,51 @@ class IssueService:
             )
         )
         return issue_id
+
+    async def resolve_known_issue_refs(self, session: AsyncSession, *texts: str | None) -> set[str]:
+        """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue.
+
+        A reference is "known" when it matches a current issue
+        ``(project_key, sequence_number)`` or a previous reference recorded in
+        ``issue_ref_aliases`` (i.e. the issue was moved). Used to validate
+        autolinks before rendering so non-existent refs are not linked.
+        """
+        from specivo.services.markdown_service import find_issue_ref_candidates
+
+        candidates: set[str] = set()
+        for text in texts:
+            candidates |= find_issue_ref_candidates(text)
+        if not candidates:
+            return set()
+
+        pairs: list[tuple[str, int]] = []
+        for ref in candidates:
+            key, _, num = ref.rpartition("-")
+            try:
+                pairs.append((key, int(num)))
+            except ValueError:
+                continue
+        if not pairs:
+            return set()
+
+        known: set[str] = set()
+        rows = await session.execute(
+            select(Issue.project_key, Issue.sequence_number).where(
+                tuple_(Issue.project_key, Issue.sequence_number).in_(pairs)
+            )
+        )
+        for key, num in rows:
+            known.add(f"{key}-{num}")
+
+        alias_rows = await session.execute(
+            select(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).where(
+                tuple_(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).in_(pairs)
+            )
+        )
+        for key, num in alias_rows:
+            known.add(f"{key}-{num}")
+
+        return known
 
     async def update(
         self,
