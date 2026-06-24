@@ -285,7 +285,24 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     )
 
     templates.env.filters["markdown"] = render_plain_markdown
-    templates.env.filters["wiki_markdown"] = render_wiki_markdown
+
+    # wiki_markdown is a context filter so it can read the per-request set of
+    # validated issue references (``known_issue_refs``) placed in the template
+    # context by page handlers. When absent, every KEY-123 token is linked
+    # (original behaviour); when present, only existing/previously-existing refs
+    # are linked. See IssueService.resolve_known_issue_refs.
+    from jinja2 import pass_context
+
+    @pass_context
+    def _wiki_markdown_filter(ctx, text, project_key="", attachment_map=None):
+        return render_wiki_markdown(
+            text,
+            project_key,
+            attachment_map,
+            known_issue_refs=ctx.get("known_issue_refs"),
+        )
+
+    templates.env.filters["wiki_markdown"] = _wiki_markdown_filter
 
     # Syntax highlighting filter for raw code strings (e.g. SQL debug panel)
     import markupsafe
