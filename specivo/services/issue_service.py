@@ -30,6 +30,11 @@ from specivo.services.watcher_service import WatcherService
 
 logger = logging.getLogger(__name__)
 
+# Max distinct issue refs resolved per render when validating autolinks. Bounds
+# the DB lookup so text with a huge number of KEY-N tokens cannot turn one page
+# view into an unbounded query. Refs beyond this cap render as plain text.
+MAX_AUTOLINK_REFS = 500
+
 # Allowed sort columns — prevents SQL injection via user-supplied sort params
 _ALLOWED_SORT_FIELDS = frozenset(
     {
@@ -585,6 +590,35 @@ class IssueService:
         )
         return issue_id
 
+    @staticmethod
+    def _autolink_ref_pairs(
+        texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS
+    ) -> list[tuple[str, int]]:
+        """Extract ``(project_key, sequence_number)`` pairs from *texts*, capped.
+
+        Deduplicates and sorts the candidate refs for a deterministic result,
+        then returns at most *limit* pairs. The cap bounds the database lookup
+        in :meth:`resolve_known_issue_refs` so user-controlled text with a huge
+        number of distinct ``KEY-N`` tokens cannot amplify a single page render
+        into an unbounded query (stored DoS on the issue/wiki read path).
+        """
+        from specivo.services.markdown_service import find_issue_ref_candidates
+
+        candidates: set[str] = set()
+        for text in texts:
+            candidates |= find_issue_ref_candidates(text)
+
+        pairs: list[tuple[str, int]] = []
+        for ref in sorted(candidates):
+            key, _, num = ref.rpartition("-")
+            try:
+                pairs.append((key, int(num)))
+            except ValueError:
+                continue
+            if len(pairs) >= limit:
+                break
+        return pairs
+
     async def resolve_known_issue_refs(self, session: AsyncSession, *texts: str | None) -> set[str]:
         """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue.
 
@@ -592,22 +626,12 @@ class IssueService:
         ``(project_key, sequence_number)`` or a previous reference recorded in
         ``issue_ref_aliases`` (i.e. the issue was moved). Used to validate
         autolinks before rendering so non-existent refs are not linked.
+
+        The number of refs resolved per call is capped (``MAX_AUTOLINK_REFS``)
+        to keep the lookup bounded regardless of input size; refs beyond the cap
+        simply render as plain text.
         """
-        from specivo.services.markdown_service import find_issue_ref_candidates
-
-        candidates: set[str] = set()
-        for text in texts:
-            candidates |= find_issue_ref_candidates(text)
-        if not candidates:
-            return set()
-
-        pairs: list[tuple[str, int]] = []
-        for ref in candidates:
-            key, _, num = ref.rpartition("-")
-            try:
-                pairs.append((key, int(num)))
-            except ValueError:
-                continue
+        pairs = self._autolink_ref_pairs(texts)
         if not pairs:
             return set()
 
