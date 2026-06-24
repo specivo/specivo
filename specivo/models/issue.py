@@ -259,3 +259,42 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
 
     def __repr__(self) -> str:
         return f"<Issue id={self.id} key={self.display_key!r} subject={self.subject!r}>"
+
+
+class IssueRefAlias(Base, TimestampMixin):
+    """Historical issue reference, kept so an old ``KEY-N`` resolves after a move.
+
+    When an issue moves to another project it gets a new ``project_key`` and
+    ``sequence_number`` (a new display key). A row here maps the issue's previous
+    ``(project_key, sequence_number)`` to its (unchanged) internal id so links
+    and bookmarks using the old reference keep working — mirroring
+    :class:`specivo.models.project.ProjectKeyAlias` for project key renames.
+    """
+
+    __tablename__ = "issue_ref_aliases"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "old_project_key",
+            "old_sequence_number",
+            name="uq_issue_ref_aliases_old_ref",
+        ),
+        Index("ix_issue_ref_aliases_issue_id", "issue_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
+    old_project_key: Mapped[str] = mapped_column(String(128), nullable=False)
+
+    old_sequence_number: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    issue_id: Mapped[int] = mapped_column(
+        ForeignKey("issues.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<IssueRefAlias {self.old_project_key}-{self.old_sequence_number} "
+            f"-> issue_id={self.issue_id}>"
+        )

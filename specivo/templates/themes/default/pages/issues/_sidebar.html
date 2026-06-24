@@ -268,6 +268,28 @@
   </div>
 </div>
 
+{# Card: Move to another project #}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
+  <label style="{{ lbl }}">{% trans %}Move{% endtrans %}</label>
+  {% if move_targets is defined and move_targets %}
+  <form method="post" action="/issue/{{ issue.display_key }}/move/" style="display:flex;flex-direction:column;gap:var(--sp-space-sm);">
+    <select name="target_project_key" style="{{ sel }}" required>
+      <option value="">{% trans %}-- Select project --{% endtrans %}</option>
+      {% for p in move_targets %}
+      <option value="{{ p.key }}">{{ p.name }} ({{ p.key }})</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="notes" placeholder="{{ _('Optional note') }}" style="{{ sel }}">
+    <button type="submit" class="sp-btn sp-btn-sm sp-btn-primary">{% trans %}Move issue{% endtrans %}</button>
+  </form>
+  <p style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs);line-height:1.5;">
+    {% trans %}Version, sprint, category and tags are cleared. History and the old reference are kept.{% endtrans %}
+  </p>
+  {% else %}
+  <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">{% trans %}No other projects available{% endtrans %}</span>
+  {% endif %}
+</div>
+
 {# Footer: Created / Updated #}
 <div style="padding: 0 var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); line-height: 1.8;">
   <div title="{{ issue.created_at | localtime(user.timezone) if issue.created_at else '' }}">

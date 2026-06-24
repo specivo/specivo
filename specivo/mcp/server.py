@@ -58,6 +58,7 @@ from specivo.mcp.tools import (
     _list_wiki_pages,
     _log_time,
     _metadata,
+    _move_issue,
     _read_wiki,
     _read_wiki_section,
     _remove_relation,
@@ -312,6 +313,23 @@ async def specivo_update_issue(
             fixed_version_id,
             sprint_id,
         )
+
+
+@mcp.tool()
+async def specivo_move_issue(
+    issue_ref: Annotated[str, Field(description="Display key of the issue to move, e.g. ACME-12.")],
+    target_project_key: Annotated[str, Field(description="Destination project key, e.g. OPS.")],
+    notes: Annotated[str | None, Field(description="Optional note added to the move journal entry.")] = None,
+) -> str:
+    """Move an issue to another project.
+
+    Keeps the internal id and assigns a new per-project number; the old KEY-N
+    still resolves. History, comments, relations, attachments and stored
+    metadata are preserved. Project-scoped fields (fixed version, sprint,
+    category, tags) are cleared. The issue must be standalone (no parent/children).
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _move_issue(session, user, issue_ref, target_project_key, notes)
 
 
 @mcp.tool()
