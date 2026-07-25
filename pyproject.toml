@@ -76,7 +76,13 @@ markers = [
     "serial: Tests that cannot run under xdist (shared state like Redis rate limits)",
     "e2e: End-to-end browser tests (requires running server)",
 ]
-addopts = "-v --tb=short --strict-markers -n auto --dist worksteal"
+# loadfile, not worksteal: test modules define fixtures that insert rows with
+# fixed unique keys (logins, project keys). Spreading one module's tests across
+# workers lets two of them create those rows concurrently, and when the two
+# transactions take the locks in opposite order Postgres aborts one with a
+# deadlock. Keeping a module on a single worker removes the concurrency; files
+# still run in parallel with each other, at the same total runtime.
+addopts = "-v --tb=short --strict-markers -n auto --dist loadfile"
 filterwarnings = [
     "ignore::DeprecationWarning:httpx",
     "ignore::DeprecationWarning:asyncpg",
