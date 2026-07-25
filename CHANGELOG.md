@@ -3,7 +3,7 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [0.4.1] - 2026-07-25
 
 ### Fixed
 - **Filtering issues by status name works instead of quietly returning everything** — the issue list accepted `open`, `closed`, `all` and numeric status ids, but a status name such as `In Progress` was dropped and the unfiltered list came back as if the filter had applied. Status names are now matched case-insensitively across the web UI, REST API and MCP, and a value that matches no status is rejected with an error listing the available names rather than silently widening the results
