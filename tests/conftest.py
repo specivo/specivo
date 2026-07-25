@@ -64,9 +64,23 @@ def _restore_plugin_manager():
     ``create_app()`` overwrite ``specivo.main._plugin_manager``. This fixture
     ensures it is restored so subsequent tests that use the default test app
     see the correct feature registry.
+
+    The feature registry's *contents* are snapshotted too. Swapping the manager
+    back does not undo a ``feature_registry.register(...)`` call made against
+    the manager that stays in place, and a leaked feature silently changes
+    behaviour for every later test in the same worker process: tier tests
+    asserting core-only behaviour see an enterprise gate open and fail far away
+    from the test that opened it.
     """
     import specivo.main as _main_mod
 
     original_pm = _main_mod._plugin_manager
+    original_features = original_pm.feature_registry.list_features() if original_pm else {}
     yield
     _main_mod._plugin_manager = original_pm
+    if original_pm is not None:
+        registry = original_pm.feature_registry
+        for feature in set(registry.list_features()) - set(original_features):
+            registry.unregister(feature)
+        for feature, provider in original_features.items():
+            registry.register(feature, provider)

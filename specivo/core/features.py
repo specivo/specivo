@@ -41,6 +41,13 @@ class FeatureRegistry:
         """
         self._features[feature] = provider
 
+    def unregister(self, feature: str) -> None:
+        """Remove *feature* from the registry.
+
+        Silently ignores features that are not registered.
+        """
+        self._features.pop(feature, None)
+
     def has_feature(self, feature: str) -> bool:
         """Return ``True`` if *feature* has been registered."""
         return feature in self._features
