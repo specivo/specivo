@@ -11,6 +11,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 ### Security
 - Dependency updates — bumped Pillow to 12.3.0, the MCP SDK to 1.28.1, pydantic-settings to 2.14.2 and esbuild to 0.25, resolving all outstanding dependency advisories
 
+### Internal
+- Test suite runs each module on a single parallel worker, so fixtures that insert rows with fixed unique keys can no longer collide across workers and abort a run with a database deadlock
+- Features registered on the global registry during a test are undone afterwards; a leaked feature used to open a tier gate for every later test in the same worker, failing assertions in unrelated modules
+
 ## [0.4.0] - 2026-06-24
 
 ### Added
