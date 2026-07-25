@@ -174,7 +174,17 @@ async def specivo_list_projects(
 @mcp.tool()
 async def specivo_list_issues(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
-    status: Annotated[str, Field(description="Filter: 'open', 'all', or a status name.")] = "open",
+    status: Annotated[
+        str,
+        Field(
+            description=(
+                "Filter: 'open' (any non-closed status), 'closed' (any closed "
+                "status), 'all', a status name such as 'In Progress' "
+                "(case-insensitive), or a numeric status id. An unknown name "
+                "is rejected with an error, never ignored."
+            ),
+        ),
+    ] = "open",
     sort: Annotated[str, Field(description="Sort field:direction, e.g. 'created_at:desc'.")] = "created_at:desc",
     offset: Annotated[int, Field(description="Number of issues to skip (pagination).")] = 0,
     limit: Annotated[int, Field(description="Max issues to return (1-100).")] = 25,

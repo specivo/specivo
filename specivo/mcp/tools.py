@@ -181,15 +181,18 @@ async def _list_issues(
         return f"Error: {exc}"
     if parsed_metadata:
         filters["metadata_filters"] = parsed_metadata
-    issues, total = await _issue_svc.list_issues(
-        session,
-        project_id=project.id,
-        filters=filters,
-        sort=sort,
-        offset=offset,
-        limit=limit,
-        user=user,
-    )
+    try:
+        issues, total = await _issue_svc.list_issues(
+            session,
+            project_id=project.id,
+            filters=filters,
+            sort=sort,
+            offset=offset,
+            limit=limit,
+            user=user,
+        )
+    except ValidationError as exc:
+        return f"Error: {exc.message}"
     scope = f"filter={status}"
     if sprint_id is not None:
         scope += f", sprint_id={sprint_id}"

@@ -220,7 +220,15 @@ async def create_issue(
 )
 async def list_issues(
     project_key: str,
-    status_filter: str | None = Query(default="open", alias="status"),
+    status_filter: str | None = Query(
+        default="open",
+        alias="status",
+        description=(
+            "'open' (any non-closed status), 'closed' (any closed status), 'all', "
+            "a numeric status id, or a status name (case-insensitive). "
+            "An unknown value returns 422 rather than being ignored."
+        ),
+    ),
     tracker_id: int | None = Query(default=None),
     assigned_to_id: str | None = Query(default=None),
     priority_id: int | None = Query(default=None),

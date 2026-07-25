@@ -950,6 +950,37 @@ class IssueService:
             if parent is not None:
                 await self._nested_set.recalculate_parent_attributes(session, parent)
 
+    async def resolve_status_filter(self, session: AsyncSession, value: str | int) -> int:
+        """Resolve a status filter value to a concrete status id.
+
+        Accepts a numeric status id or a status name (case-insensitive,
+        surrounding whitespace ignored). The sentinels ``open``, ``closed`` and
+        ``all`` are handled by the caller and never reach this method.
+
+        Raises ``ValidationError`` when the value matches no known status —
+        an unrecognised filter must fail loudly rather than silently widen the
+        result set to every issue.
+        """
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            pass
+
+        name = str(value).strip()
+        result = await session.execute(select(IssueStatus).where(func.lower(IssueStatus.name) == name.lower()))
+        status = result.scalars().first()
+        if status is not None:
+            return status.id
+
+        known_result = await session.execute(select(IssueStatus.name).order_by(IssueStatus.position))
+        known = ", ".join(known_result.scalars().all())
+        raise ValidationError(
+            message=_(
+                "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status id, or one of: {known}"
+            ).format(value=value, known=known),
+            field="status",
+        )
+
     async def list_issues(
         self,
         session: AsyncSession,
@@ -1012,12 +1043,8 @@ class IssueService:
         elif status_filter == "closed":
             stmt = stmt.join(IssueStatus, Issue.status_id == IssueStatus.id).where(IssueStatus.category == "closed")
         elif status_filter not in (None, "all"):
-            # Treat as numeric status ID
-            try:
-                sid = int(status_filter)
-                stmt = stmt.where(Issue.status_id == sid)
-            except (ValueError, TypeError):
-                pass  # ignore invalid value; return all
+            sid = await self.resolve_status_filter(session, status_filter)
+            stmt = stmt.where(Issue.status_id == sid)
 
         # ------------------------------------------------------------------
         # Optional FK filters

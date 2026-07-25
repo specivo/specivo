@@ -261,6 +261,78 @@ class TestMcpListIssues:
         assert "Second issue" in result
 
 
+class TestMcpListIssuesStatusFilter:
+    """status= must filter by status name, never silently return everything."""
+
+    async def _seed_two_statuses(self, db_session: AsyncSession, admin: User, seed: dict) -> IssueStatus:
+        """Create one issue in "New" and one in a second status; return that status."""
+        in_progress = StatusFactory.build(name="In Progress", position=2, category="active")
+        db_session.add(in_progress)
+        await db_session.commit()
+        await db_session.refresh(in_progress)
+
+        svc = IssueService()
+        await svc.create(
+            db_session,
+            seed["project"],
+            IssueCreate(project_key="ACME", tracker_id=seed["tracker"].id, subject="Still new"),
+            admin,
+        )
+        working = await svc.create(
+            db_session,
+            seed["project"],
+            IssueCreate(project_key="ACME", tracker_id=seed["tracker"].id, subject="Being worked on"),
+            admin,
+        )
+        working.status_id = in_progress.id
+        await db_session.commit()
+        return in_progress
+
+    async def test_status_name_filters(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _list_issues
+
+        await self._seed_two_statuses(db_session, admin, seed)
+
+        result = await _list_issues(db_session, admin, project_key="ACME", status="In Progress")
+        assert "Being worked on" in result
+        assert "Still new" not in result
+        assert "(1 total" in result
+
+    async def test_status_name_is_case_insensitive(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _list_issues
+
+        await self._seed_two_statuses(db_session, admin, seed)
+
+        result = await _list_issues(db_session, admin, project_key="ACME", status="in progress")
+        assert "Being worked on" in result
+        assert "Still new" not in result
+
+    async def test_status_id_filters(self, db_session: AsyncSession, admin: User, seed: dict):
+        from specivo.mcp.tools import _list_issues
+
+        in_progress = await self._seed_two_statuses(db_session, admin, seed)
+
+        result = await _list_issues(db_session, admin, project_key="ACME", status=str(in_progress.id))
+        assert "Being worked on" in result
+        assert "Still new" not in result
+
+    async def test_unknown_status_errors_instead_of_returning_all(
+        self, db_session: AsyncSession, admin: User, seed: dict
+    ):
+        from specivo.mcp.tools import _list_issues
+
+        await self._seed_two_statuses(db_session, admin, seed)
+
+        result = await _list_issues(db_session, admin, project_key="ACME", status="Nonexistent")
+        assert result.startswith("Error:")
+        assert "Nonexistent" in result
+        # The known status names are listed so the caller can correct the call.
+        assert "In Progress" in result
+        # Crucially, no issues leak through as a "successful" listing.
+        assert "Still new" not in result
+        assert "Being worked on" not in result
+
+
 class TestMcpListIssuesMetadataFilters:
     async def _seed_three(self, db_session: AsyncSession, admin: User, seed: dict):
         svc = IssueService()

@@ -245,6 +245,76 @@ async def test_list_issues_status_all(
     assert data["total_count"] == 2
 
 
+@pytest_asyncio.fixture
+async def in_progress_status(db_session: AsyncSession) -> IssueStatus:
+    s = StatusFactory.build(name="In Progress", position=2, category="active")
+    db_session.add(s)
+    await db_session.commit()
+    await db_session.refresh(s)
+    return s
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", ["In Progress", "in progress", "  in PROGRESS  "])
+async def test_list_issues_status_by_name(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+    bug_tracker: Tracker,
+    open_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    normal_priority: IssuePriority,
+    value: str,
+) -> None:
+    await _create_issue(
+        client, admin_token, project.key, bug_tracker.id, open_status.id, normal_priority.id, "Not started"
+    )
+    await _create_issue(
+        client, admin_token, project.key, bug_tracker.id, in_progress_status.id, normal_priority.id, "Started"
+    )
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/issues/",
+        params={"status": value},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total_count"] == 1
+    assert [i["subject"] for i in data["items"]] == ["Started"]
+
+
+@pytest.mark.asyncio
+async def test_list_issues_unknown_status_rejected(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+    bug_tracker: Tracker,
+    open_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    normal_priority: IssuePriority,
+) -> None:
+    """An unmappable status must fail, not silently widen to every issue."""
+    await _create_issue(
+        client, admin_token, project.key, bug_tracker.id, open_status.id, normal_priority.id, "Not started"
+    )
+    await _create_issue(
+        client, admin_token, project.key, bug_tracker.id, in_progress_status.id, normal_priority.id, "Started"
+    )
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/issues/",
+        params={"status": "Nonexistent"},
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422, resp.text
+    body = resp.json()
+    assert "Nonexistent" in str(body)
+    assert "In Progress" in str(body)
+
+
 # ---------------------------------------------------------------------------
 # Tests: Tracker filter
 # ---------------------------------------------------------------------------

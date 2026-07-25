@@ -105,7 +105,9 @@ class IssueMove(BaseModel):
 class IssueFilters(BaseModel):
     """Query parameters for issue list filtering."""
 
-    status: str | None = "open"  # "open", "closed", "all", or numeric status id
+    # "open", "closed", "all", a numeric status id, or a status name
+    # (case-insensitive). An unknown value is rejected, not ignored.
+    status: str | None = "open"
     tracker_id: int | None = None
     version_id: int | None = None
     assigned_to_id: str | None = None  # numeric id or "me"
