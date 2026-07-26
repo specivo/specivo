@@ -353,3 +353,64 @@ async def test_rehydration_refreshes_sliding_ttl(
     assert send.status == 200
     new_exp = fake_redis._expiries["mcp:session:seeded"]
     assert new_exp > original_exp
+
+
+# ---------------------------------------------------------------------------
+# A long-lived request must not block other sessions
+# ---------------------------------------------------------------------------
+
+
+class _BlockingHTTPTransport(_FakeHTTPTransport):
+    """Transport whose ``handle_request`` never returns.
+
+    Models a GET that opens an SSE stream: it stays open for as long as the
+    client is connected, which can be hours.
+    """
+
+    started = anyio.Event()
+
+    async def handle_request(self, scope: Any, receive: Any, send: Any) -> None:
+        type(self).started.set()
+        await anyio.sleep_forever()
+
+
+@pytest.mark.unit
+async def test_long_lived_request_does_not_block_other_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+    fake_redis: _FakeRedis,
+) -> None:
+    """One client streaming must not stall session creation for everyone else.
+
+    Serving the request while holding the session-creation lock meant the first
+    client to reconnect after a restart — opening an SSE stream that never ends
+    — locked out every other session indefinitely: new sessions and rehydrations
+    alike hung with no error and no log line.
+    """
+    import specivo.mcp.persistent_session_manager as mod
+
+    store = RedisSessionStore(fake_redis, ttl_seconds=300)
+    await store.create("streamer", {"api_key_id": 1, "user_id": 2})
+
+    monkeypatch.setattr(mod, "StreamableHTTPServerTransport", _BlockingHTTPTransport)
+    manager = _make_manager(store)
+
+    async with manager.run():
+        async with anyio.create_task_group() as tg:
+            # Client A rehydrates its session and starts streaming forever.
+            tg.start_soon(
+                manager._handle_stateful_request,
+                _make_scope("streamer"),
+                _noop_receive,
+                _Sender(),
+            )
+            await _BlockingHTTPTransport.started.wait()
+
+            # Client B must still get a session while A is mid-stream.
+            monkeypatch.setattr(mod, "StreamableHTTPServerTransport", _FakeHTTPTransport)
+            send_b = _Sender()
+            with anyio.fail_after(5):
+                await manager._handle_stateful_request(_make_scope(None), _noop_receive, send_b)
+
+            assert send_b.status == 200
+            assert len(manager._server_instances) == 2
+            tg.cancel_scope.cancel()

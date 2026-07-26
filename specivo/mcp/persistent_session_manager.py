@@ -294,6 +294,26 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         is touched to refresh its TTL — the entry already exists because the
         caller looked it up.
         """
+        transport = await self._start_session_transport(scope, session_id=session_id)
+        # Outside the lock: handling the request can take arbitrarily long. A GET
+        # opens an SSE stream that lives as long as the client stays connected,
+        # so holding the creation lock here would stall every other session —
+        # after a restart the first client to reconnect would lock out all the
+        # rest indefinitely.
+        await transport.handle_request(scope, receive, send)
+
+    async def _start_session_transport(
+        self,
+        scope: Scope,
+        *,
+        session_id: str | None,
+    ) -> StreamableHTTPServerTransport:
+        """Create and start the transport for a session, returning it.
+
+        Holds ``_session_creation_lock`` only for the bookkeeping that needs it:
+        the ``_server_instances`` mutation and the task-group start, both of
+        which complete promptly. Serving the request is the caller's job.
+        """
         from uuid import uuid4
 
         is_rehydration = session_id is not None
@@ -303,9 +323,7 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             # Race: another coroutine may have just rehydrated/created the
             # same session id while we were waiting on the lock.
             if session_id is not None and session_id in self._server_instances:
-                transport = self._server_instances[session_id]
-                await transport.handle_request(scope, receive, send)
-                return
+                return self._server_instances[session_id]
 
             new_session_id = session_id or uuid4().hex
             http_transport = StreamableHTTPServerTransport(
@@ -388,4 +406,4 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             else:
                 await self._persist_new_session(new_session_id, scope)
 
-            await http_transport.handle_request(scope, receive, send)
+            return http_transport
