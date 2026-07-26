@@ -3,6 +3,11 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.4.2] - 2026-07-26
+
+### Fixed
+- **MCP clients could no longer connect after restarting the server** — the first client to reconnect opened a long-lived event stream, and the server kept its session-creation lock for the whole of that stream, so every other client's connection attempt waited behind it with no error and no log entry. Agents already connected kept working, which made the server look healthy while everything else hung. Sessions are now registered without holding that lock for the life of the request. Present since session persistence was introduced in 0.1.9 and not specific to any one version — whether an instance wedged depended on which client reconnected first
+
 ## [0.4.1] - 2026-07-25
 
 ### Fixed
