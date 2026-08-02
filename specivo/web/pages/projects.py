@@ -16,6 +16,7 @@ from specivo.core.database import get_db
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.time_entry import TimeEntry
+from specivo.services.computed_metadata_service import computed_values
 from specivo.services.issue_service import IssueService
 from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
@@ -363,6 +364,7 @@ async def project_settings(
             "can_manage_recurring": can_manage_recurring,
             "tags_data": tags_data,
             "can_manage_tags": can_manage_tags,
+            "computed_metadata": computed_values(project.settings),
         },
     )
 
