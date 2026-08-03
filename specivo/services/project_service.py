@@ -99,6 +99,10 @@ class ProjectService:
             parent.path if parent else None,
         )
 
+        settings: dict = {}
+        if data.computed_metadata is not None:
+            settings[COMPUTED_METADATA_SETTINGS_KEY] = data.computed_metadata
+
         project = Project(
             name=data.name,
             identifier=data.identifier,
@@ -108,6 +112,7 @@ class ProjectService:
             path=path,
             is_public=data.is_public,
             color=data.color,
+            settings=settings,
         )
         session.add(project)
 

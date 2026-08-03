@@ -15,6 +15,7 @@ import { projectModules } from './components/project-modules';
 import { projectVersions } from './components/project-versions';
 import { recurringPatternForm, recurringPatterns, recurringPatternDetail } from './components/recurring';
 import { projectMetadataSettings } from './components/project-metadata-settings';
+import { projectComputedMetadata } from './components/project-computed-metadata';
 import { adminUsers } from './components/admin-users';
 import { adminUserDetail } from './components/admin-user-detail';
 import { adminSettings } from './components/admin-settings';
@@ -68,6 +69,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('recurringPatterns', recurringPatterns);
   Alpine.data('recurringPatternDetail', recurringPatternDetail);
   Alpine.data('projectMetadataSettings', projectMetadataSettings);
+  Alpine.data('projectComputedMetadata', projectComputedMetadata);
   Alpine.data('adminUsers', adminUsers);
   Alpine.data('adminUserDetail', adminUserDetail);
   Alpine.data('adminSettings', adminSettings);

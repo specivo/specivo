@@ -21,7 +21,8 @@ from specivo.schemas.project import (
     ProjectOut,
     ProjectUpdate,
 )
-from specivo.services.permission_service import check_permission
+from specivo.services.computed_metadata_service import computed_values
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import MemberAction, SecurityAuditService
 
@@ -44,7 +45,7 @@ async def _require_manage(
     """Raise 403 if user cannot manage the project. Logs failed attempts."""
     if user.is_admin:
         return
-    allowed = await check_permission(user, project.id, "manage_project", db)
+    allowed = await check_permission(user, project.id, Permission.MANAGE_PROJECT, db)
     if not allowed:
         try:
             await _audit.log_member_change(
@@ -71,8 +72,28 @@ async def _require_project_access(
     await _service.require_project_access(db, project, user)
 
 
-def _project_out(project, parent_key: str | None) -> ProjectOut:
+async def _can_manage(project, user: User, db: AsyncSession) -> bool:
+    """Non-raising variant of :func:`_require_manage`, for response shaping."""
+    if user.is_admin:
+        return True
+    return await check_permission(user, project.id, Permission.MANAGE_PROJECT, db)
+
+
+async def _disclosed_computed_metadata(project, user: User, db: AsyncSession) -> dict | None:
+    """Return the project's computed metadata map, or ``None`` if undisclosed.
+
+    Managers get the real map (``{}`` when unconfigured) so that a configured
+    project is distinguishable from an unconfigured one; everyone else gets
+    ``None``. See ``ProjectOut.computed_metadata`` for the three states.
+    """
+    if not await _can_manage(project, user, db):
+        return None
+    return computed_values(project.settings)
+
+
+def _project_out(project, parent_key: str | None, computed_metadata: dict | None = None) -> ProjectOut:
     return ProjectOut(
+        computed_metadata=computed_metadata,
         id=project.id,
         name=project.name,
         identifier=project.identifier,
@@ -125,7 +146,8 @@ async def create_project(
     project = await _service.create(db, data, current_user)
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
-    return _project_out(project, parent_key)
+    # Creation is admin-only, so the creator may always see the map.
+    return _project_out(project, parent_key, computed_values(project.settings))
 
 
 @router.get("/{key}/", response_model=ProjectOut)
@@ -138,7 +160,8 @@ async def get_project(
     await _require_project_access(project, current_user, db)
 
     parent_key = await _service.get_parent_key(db, project)
-    return _project_out(project, parent_key)
+    computed = await _disclosed_computed_metadata(project, current_user, db)
+    return _project_out(project, parent_key, computed)
 
 
 @router.patch("/{key}/", response_model=ProjectOut)
@@ -154,7 +177,8 @@ async def update_project(
     project = await _service.update(db, project, data)
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
-    return _project_out(project, parent_key)
+    # _require_manage passed, so the caller may always see the map.
+    return _project_out(project, parent_key, computed_values(project.settings))
 
 
 @router.delete("/{key}/", status_code=status.HTTP_204_NO_CONTENT)

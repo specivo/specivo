@@ -38,9 +38,13 @@ of the **project**, so every issue in that project gets the same value automatic
 step. A typical use is grouping projects under an area — an "Area" or "cabinet" field that says which
 part of the org a project belongs to.
 
-A computed field is configured **once per project**, as a `computed_metadata` map in the project's
-settings (set through the project update / admin area, which requires the project-manage permission).
-After that:
+A computed field is configured **once per project**, under **Project → Settings → Metadata →
+Computed Fields**, which requires the project-manage permission. Add one row per field: a field name
+and the value every issue in the project should get. The same map can be set through the REST API as
+`computed_metadata`, either when creating the project or with a later update; a project's current
+configuration is returned on `GET /api/v1/projects/{key}/` for anyone who may manage it.
+
+After a computed field is configured:
 
 - It is **auto-filled on every issue** in the project, across every creation path — the web UI, the
   REST API, and [AI agents](../ai-agents/index.md) — with nothing for anyone to enter.

@@ -27,6 +27,10 @@ class ProjectCreate(BaseModel):
     is_public: bool = False
     color: str | None = None
     modules: list[str] | None = None
+    # Per-project derived (computed) metadata, settable at creation time so a
+    # project never has to ship unconfigured pending a follow-up PATCH. Same
+    # semantics as ``ProjectUpdate.computed_metadata``.
+    computed_metadata: dict | None = None
 
     @field_validator("color")
     @classmethod
@@ -129,6 +133,20 @@ class ProjectOut(BaseModel):
     color: str | None = None
     created_at: datetime
     updated_at: datetime
+    # Per-project derived (computed) metadata, echoed back so a configured
+    # project is distinguishable from an unconfigured one.
+    #
+    # Only populated for callers who may manage the project; everyone else
+    # gets ``None``. The three states are therefore distinct:
+    #   None  -> not disclosed (no manage permission, or a list response)
+    #   {}    -> visible and empty (nothing configured)
+    #   {...} -> visible and configured
+    #
+    # List responses always leave this ``None``: resolving the permission
+    # per project would cost one role lookup per row (see
+    # ``permission_service.get_user_roles``, cached per (user, project)).
+    # Read it from the single-project endpoint instead.
+    computed_metadata: dict | None = None
 
 
 # ---------------------------------------------------------------------------
