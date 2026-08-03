@@ -3,6 +3,15 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.5.0] - 2026-08-03
+
+### Fixed
+- **Project computed metadata can be read back and edited instead of being write-only** — a project's derived-metadata configuration could be set through the REST API but never read: `GET /api/v1/projects/{key}/` returned the same response for a configured and an unconfigured project, so the only ways to check were querying the database or inferring the value from an issue's metadata. Projects that had been configured correctly looked unconfigured. The single-project response now includes `computed_metadata` for users who may manage the project — absent for everyone else, and an empty map when the project genuinely has none, so the two states are finally distinguishable. Project listings omit the field by design
+
+### Added
+- Projects can be created with computed metadata in a single call — `POST /api/v1/projects/` accepts `computed_metadata`, so a new project no longer ships unconfigured pending a follow-up request
+- **Computed Fields editor on the project settings page** — the Metadata tab gains a row editor for a project's derived metadata, available to users who may manage the project. Previously the value could only be set with a PATCH request under an admin token, which was easy to forget and invisible when forgotten
+
 ## [0.4.2] - 2026-07-26
 
 ### Fixed
