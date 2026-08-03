@@ -317,6 +317,18 @@ def api_post_with_retry(
     return resp
 
 
+def wait_for_alpine(page: Page, timeout: float = 15000) -> None:
+    """Block until Alpine has booted, before asserting on Alpine-rendered DOM.
+
+    Markup produced by ``x-for`` or a ``:class`` binding does not exist until
+    the bundle has downloaded, parsed and initialised. Playwright's default 5s
+    assertion budget covers that on a developer machine but not reliably on a
+    loaded CI runner, where the result is a "element(s) not found" failure that
+    reads like a broken feature rather than a slow one.
+    """
+    page.wait_for_function("() => window.Alpine !== undefined", timeout=timeout)
+
+
 def create_project(api: httpx.Client, prefix: str = "E2E", **kwargs: object) -> dict:
     """Create a project via API with retry on 404 (parent race condition)."""
     key = unique_key(prefix)
