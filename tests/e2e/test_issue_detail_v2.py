@@ -6,7 +6,12 @@ import httpx
 import pytest
 from playwright.sync_api import Page, expect
 
-from specivo.testing.e2e_base import api_post_with_retry, create_issue, create_project
+from specivo.testing.e2e_base import (
+    api_post_with_retry,
+    create_issue,
+    create_project,
+    wait_for_alpine,
+)
 
 pytestmark = [pytest.mark.e2e]
 
@@ -53,6 +58,9 @@ def test_emoji_reaction_visible(admin_page: Page, api_client: httpx.Client) -> N
         f"/api/v1/issues/{issue['key']}/journals/{comment['id']}/reactions/thumbs_up/",
     )
     admin_page.goto(f"/issue/{issue['key']}/")
+    # The active reaction is rendered by Alpine (x-for + :class), so the
+    # assertion must not start counting down before Alpine exists.
+    wait_for_alpine(admin_page)
     reaction_btn = admin_page.locator(".sp-reaction-btn.sp-reaction-active")
     expect(reaction_btn).to_be_visible()
 
