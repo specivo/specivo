@@ -216,6 +216,8 @@ async def specivo_list_issues(
     Use status='open' (default) for active issues, 'all' for everything.
     Pass sprint_id to narrow the results to a single sprint.
     Pass metadata_filters to narrow by JSONB metadata (e.g. component=frontend).
+    Each issue line carries its tags as '[tags: a, b]' when it has any, so no
+    follow-up specivo_tag(op='get') call is needed.
     """
     async with _get_session_and_user() as (session, user):
         return await _list_issues(
@@ -229,9 +231,10 @@ async def specivo_show_issue(
     metadata_only: Annotated[bool, Field(description="If true, skip description body to save tokens.")] = False,
     search: Annotated[str | None, Field(description="Return only the description section matching this text.")] = None,
 ) -> str:
-    """Show full issue details including description.
+    """Show full issue details including description and tags.
 
-    Use metadata_only=true to skip the description body and save tokens.
+    Use metadata_only=true to skip the description body and save tokens
+    (tags are still included).
     Use search= to extract only the section containing specific text.
     """
     async with _get_session_and_user() as (session, user):

@@ -16,8 +16,8 @@ if TYPE_CHECKING:
 _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_whoami": "Return authenticated user identity (user_id, login, etc.)",
     "specivo_list_projects": "List all visible projects",
-    "specivo_list_issues": "List issues with status/sprint/metadata filters, sorting, pagination",
-    "specivo_show_issue": "Show issue details; use search= for section extraction",
+    "specivo_list_issues": "List issues (with their tags) with status/sprint/metadata filters, sorting, pagination",
+    "specivo_show_issue": "Show issue details incl. tags; use search= for section extraction",
     "specivo_create_issue": "Create an issue (call list_lookups first for IDs)",
     "specivo_update_issue": "Update issue fields; lock_version handled automatically",
     "specivo_edit_description": "Search-and-replace in issue description (token-efficient)",
@@ -86,7 +86,7 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: FastMCP | None = None
 
 ### Find context before coding
 1. `specivo_search(query, project_key)` -- relevant issues/wiki (default `mode="hybrid"`)
-2. `specivo_show_issue(issue_ref)` -- read issue details (includes `Comments: N` count)
+2. `specivo_show_issue(issue_ref)` -- read issue details (includes `Tags:` and `Comments: N`)
 3. `specivo_list_comments(issue_ref)` -- page through comment history when `Comments: N` > 0
 4. `specivo_read_wiki(project_key, slug)` -- read knowledge base
 
