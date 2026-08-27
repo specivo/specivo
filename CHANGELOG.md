@@ -3,6 +3,11 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.6.0] - 2026-08-27
+
+### Added
+- **Issue tags come back with the issue itself over MCP** — `show_issue` and `list_issues` previously returned everything about an issue except its tags, so an agent reconciling tags across a list of issues had to follow up with one `tag(op="get")` call per issue. On a project of any size that turned a single listing into dozens of round-trips and was slow enough to risk timeouts. `show_issue` now prints a `Tags:` line and each `list_issues` row carries its tags inline; both are backed by one batched lookup, so a page of issues costs a single extra query rather than one per issue. Issues without tags read exactly as before, and the existing per-project permission checks are unchanged
+
 ## [0.5.0] - 2026-08-03
 
 ### Fixed

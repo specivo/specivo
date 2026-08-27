@@ -199,8 +199,14 @@ async def _list_issues(
     if parsed_metadata:
         scope += ", metadata=" + ",".join(f"{k}={v}" for k, v in parsed_metadata)
     lines = [f"Issues for {project.key} ({total} total, {scope}):", ""]
+    # One batched query for every issue on this page — never per-issue lookups.
+    tags_by_issue = await _tag_svc.tags_for_issues(session, [i.id for i in issues])
     for i in issues:
-        lines.append(f"  {i.display_key}  [{i.status.name}]  {i.subject}")
+        line = f"  {i.display_key}  [{i.status.name}]  {i.subject}"
+        tags = tags_by_issue.get(i.id) or []
+        if tags:
+            line += "  [tags: " + ", ".join(t.name for t in tags) + "]"
+        lines.append(line)
     if not issues:
         lines.append("  (none)")
     await _log_tool(session, user, AuditEvent.ISSUE_LISTED, "list_issues", {"project_key": project_key})
@@ -241,6 +247,9 @@ async def _show_issue(
     )
     if effective_metadata:
         lines.append(f"Metadata: {effective_metadata}")
+    tags = await _tag_svc.tags_for_issue(session, issue.id)
+    if tags:
+        lines.append("Tags: " + ", ".join(t.name for t in tags))
     lines.append(f"Lock version: {issue.lock_version}")
     comments_count = await _journal_svc.count_comments(session, issue.id)
     lines.append(f"Comments: {comments_count}")

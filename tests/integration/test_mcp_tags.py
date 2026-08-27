@@ -237,3 +237,73 @@ class TestTagEntityTool:
         ).scalars().all()
         assert len(rows) >= 1
         assert rows[0].details.get("source") == "mcp"
+
+
+# ---------------------------------------------------------------------------
+# Tags surfaced in issue read tools (show_issue / list_issues)
+# ---------------------------------------------------------------------------
+
+
+class TestTagsInIssueResponses:
+    """Tags must come back with the issue itself, not via a second _tag call."""
+
+    async def test_show_issue_lists_tags(self, db_session, admin, issue):
+        from specivo.mcp.tools import _show_issue, _tag
+
+        await _tag(db_session, admin, issue.display_key, "set", ["urgent", "backend"])
+        await db_session.commit()
+
+        result = await _show_issue(db_session, admin, issue.display_key)
+        assert "Tags: backend, urgent" in result
+
+    async def test_show_issue_omits_tags_line_when_untagged(self, db_session, admin, issue):
+        from specivo.mcp.tools import _show_issue
+
+        result = await _show_issue(db_session, admin, issue.display_key)
+        assert "Tags:" not in result
+
+    async def test_show_issue_metadata_only_still_lists_tags(self, db_session, admin, issue):
+        from specivo.mcp.tools import _show_issue, _tag
+
+        await _tag(db_session, admin, issue.display_key, "add", "backend")
+        await db_session.commit()
+
+        result = await _show_issue(db_session, admin, issue.display_key, metadata_only=True)
+        assert "Tags: backend" in result
+
+    async def test_list_issues_shows_tags_per_issue(
+        self, db_session, admin, project, tracker, priority, status, issue
+    ):
+        from specivo.mcp.tools import _list_issues, _tag
+
+        svc = IssueService()
+        second = await svc.create(
+            db_session,
+            project,
+            IssueCreate(project_key=project.key, tracker_id=tracker.id, subject="Second tagged"),
+            admin,
+        )
+        third = await svc.create(
+            db_session,
+            project,
+            IssueCreate(project_key=project.key, tracker_id=tracker.id, subject="Untagged one"),
+            admin,
+        )
+        await db_session.commit()
+
+        await _tag(db_session, admin, issue.display_key, "set", ["urgent", "backend"])
+        await _tag(db_session, admin, second.display_key, "add", "docs")
+        await db_session.commit()
+
+        result = await _list_issues(db_session, admin, project_key=project.key, status="all")
+        by_key = {
+            line.split()[0]: line
+            for line in (raw.strip() for raw in result.splitlines())
+            if line.startswith(project.key + "-")
+        }
+
+        assert "[tags: backend, urgent]" in by_key[issue.display_key]
+        assert "[tags: docs]" in by_key[second.display_key]
+        # An untagged issue keeps the plain line format.
+        assert "[tags:" not in by_key[third.display_key]
+        assert by_key[third.display_key].endswith("Untagged one")
