@@ -186,6 +186,29 @@ class TagService:
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
+    async def tags_for_issues(self, session: AsyncSession, issue_ids: list[int]) -> dict[int, list[Tag]]:
+        """Return ``{issue_id: [Tag, ...]}`` for many issues in a single query.
+
+        Every id in *issue_ids* is present in the result, mapped to an empty
+        list when the issue has no tags. Tags are ordered case-insensitively
+        by name, matching :meth:`tags_for_issue`. An empty *issue_ids* returns
+        an empty mapping without touching the database.
+        """
+        grouped: dict[int, list[Tag]] = {issue_id: [] for issue_id in issue_ids}
+        if not issue_ids:
+            return grouped
+        stmt = (
+            select(TagLink.issue_id, Tag)
+            .join(Tag, TagLink.tag_id == Tag.id)
+            .where(TagLink.issue_id.in_(issue_ids))
+            .order_by(func.lower(Tag.name))
+        )
+        for row in (await session.execute(stmt)).all():
+            issue_id, tag = row[0], row[1]
+            if issue_id is not None:
+                grouped.setdefault(issue_id, []).append(tag)
+        return grouped
+
     async def add_to_issue(
         self, session: AsyncSession, project: Project, issue_id: int, name: str, user: User
     ) -> tuple[Tag, bool]:
