@@ -53,6 +53,11 @@ importers = [
     # Only needed when the source tracker runs on MySQL; PostgreSQL sources use
     # asyncpg, which is already a runtime dependency.
     "aiomysql>=0.2",
+    # Textile is Redmine's historical markup. Converted in two hops, Textile to
+    # HTML and HTML to Markdown, because both halves are mature and neither
+    # needs an external binary in the image.
+    "textile>=4.0",
+    "markdownify>=0.13",
 ]
 
 [tool.setuptools.packages.find]
@@ -115,3 +120,8 @@ python_version = "3.12"
 strict = false
 warn_return_any = true
 warn_unused_configs = true
+
+# Importer-only dependencies that ship no type information.
+[[tool.mypy.overrides]]
+module = ["textile", "textile.*", "markdownify", "markdownify.*", "aiomysql", "aiomysql.*"]
+ignore_missing_imports = true
