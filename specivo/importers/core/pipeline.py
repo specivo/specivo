@@ -35,6 +35,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.progress import NullProgressReporter, ProgressReporter
 from specivo.importers.core.source import SourceAdapter
 
@@ -121,6 +122,7 @@ class ImportSummary:
     finished_at: datetime | None = None
     created: Counter[str] = field(default_factory=Counter)
     skipped: Counter[str] = field(default_factory=Counter)
+    reused: Counter[str] = field(default_factory=Counter)
     phases_run: list[str] = field(default_factory=list)
     warnings: list[ImportWarning] = field(default_factory=list)
     notes: dict[str, list[str]] = field(default_factory=dict)
@@ -132,6 +134,14 @@ class ImportSummary:
     def record_skipped(self, entity_type: str, count: int = 1) -> None:
         """Count rows skipped because they were already imported."""
         self.skipped[str(entity_type)] += count
+
+    def record_reused(self, entity_type: str, count: int = 1) -> None:
+        """Count source entities matched onto a row Specivo already had.
+
+        Distinct from skipped: nothing was created, but the source entity was
+        mapped rather than passed over.
+        """
+        self.reused[str(entity_type)] += count
 
     def add_warning(self, phase: str, message: str, context: dict[str, Any] | None = None) -> None:
         """Append a warning for the final report."""
@@ -152,6 +162,7 @@ class ImportSummary:
             "finished_at": self.finished_at.isoformat() if self.finished_at else None,
             "created": dict(sorted(self.created.items())),
             "skipped": dict(sorted(self.skipped.items())),
+            "reused": dict(sorted(self.reused.items())),
             "phases_run": list(self.phases_run),
             "warnings": [w.as_dict() for w in self.warnings],
             "notes": {k: list(v) for k, v in sorted(self.notes.items())},
@@ -167,6 +178,11 @@ class ImportSummary:
             lines.append("")
             lines.append("Created:")
             for name, count in sorted(self.created.items()):
+                lines.append(f"  {name:<20} {count}")
+        if self.reused:
+            lines.append("")
+            lines.append("Matched onto existing rows:")
+            for name, count in sorted(self.reused.items()):
                 lines.append(f"  {name:<20} {count}")
         if self.skipped:
             lines.append("")
@@ -194,6 +210,10 @@ class PhaseContext:
     ``project_refs`` is the resolved scope for the run. The projects phase fills
     it, so later phases iterate exactly the projects that were imported rather
     than re-deriving the scope.
+
+    ``state`` is a scratch space carried between phases for anything one phase
+    works out and a later one needs — group membership, for instance, which is
+    read with the users but only applied when projects exist.
     """
 
     phase: ImportPhase
@@ -202,7 +222,9 @@ class PhaseContext:
     options: ImportOptions
     summary: ImportSummary
     reporter: ProgressReporter
+    id_map: ImportIdMap
     project_refs: list[str] = field(default_factory=list)
+    state: dict[str, Any] = field(default_factory=dict)
 
     def warn(self, message: str, **context: Any) -> None:
         """Record a warning on both the reporter and the summary.
@@ -269,6 +291,15 @@ class ImportPipeline:
             dry_run=self._options.dry_run,
         )
 
+        # One map for the whole run: it caches lookups across the per-phase
+        # sessions, and its identity is what makes a resumed run recognise the
+        # rows an earlier attempt wrote.
+        id_map = ImportIdMap(
+            source_system=self._adapter.source_system,
+            source_instance=self._options.source_instance,
+            run_id=summary.run_id,
+        )
+
         await self._adapter.connect()
         try:
             if self._options.dry_run:
@@ -276,20 +307,21 @@ class ImportPipeline:
                 # a dry run must exercise the real writes and persist none of them.
                 async with self._session_factory() as shared:
                     try:
-                        await self._run_phases(summary, shared)
+                        await self._run_phases(summary, shared, id_map)
                     finally:
                         await shared.rollback()
             else:
-                await self._run_phases(summary, None)
+                await self._run_phases(summary, None, id_map)
         finally:
             await self._adapter.close()
             summary.finished_at = datetime.now(UTC)
 
         return summary
 
-    async def _run_phases(self, summary: ImportSummary, shared: AsyncSession | None) -> None:
+    async def _run_phases(self, summary: ImportSummary, shared: AsyncSession | None, id_map: ImportIdMap) -> None:
         """Run each registered phase, committing per phase unless sharing a session."""
         project_refs: list[str] = list(self._options.project_refs or [])
+        state: dict[str, Any] = {}
 
         for phase in PHASE_ORDER:
             handlers = self._handlers.get(phase)
@@ -306,13 +338,16 @@ class ImportPipeline:
                     options=self._options,
                     summary=summary,
                     reporter=self._reporter,
+                    id_map=id_map,
                     project_refs=project_refs,
+                    state=state,
                 )
                 for handler in handlers:
                     await handler(context)
                 # A handler may narrow or discover the project scope (the
                 # projects phase does), so carry its view into later phases.
                 project_refs = context.project_refs
+                state = context.state
 
             summary.phases_run.append(str(phase))
             self._reporter.phase_done(str(phase))
