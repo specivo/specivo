@@ -17,6 +17,7 @@ from typing import ClassVar, Protocol, runtime_checkable
 
 from specivo.importers.core.ir import (
     IRAttachment,
+    IRCategory,
     IRCustomField,
     IRGroup,
     IRIssue,
@@ -27,6 +28,7 @@ from specivo.importers.core.ir import (
     IRRelation,
     IRTimeEntry,
     IRUser,
+    IRVersion,
     IRWatcher,
     IRWikiPage,
 )
@@ -68,9 +70,9 @@ class SourceAdapter(Protocol):
 
     def extract_custom_fields(self) -> AsyncIterator[IRCustomField]: ...
 
-    def extract_versions(self, project_ref: str) -> AsyncIterator[object]: ...
+    def extract_versions(self, project_ref: str) -> AsyncIterator[IRVersion]: ...
 
-    def extract_categories(self, project_ref: str) -> AsyncIterator[object]: ...
+    def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]: ...
 
     def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
         """Yield issues parents-first within the project."""

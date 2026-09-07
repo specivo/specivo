@@ -17,10 +17,21 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from specivo.importers.core.ir import IRAttachment, IRGroup, IRLookups, IRUser
+from specivo.importers.core.ir import (
+    IRAttachment,
+    IRCategory,
+    IRCustomField,
+    IRGroup,
+    IRLookups,
+    IRMembership,
+    IRProject,
+    IRUser,
+    IRVersion,
+    PrincipalKind,
+)
 from specivo.importers.redmine import db, extract
 
 logger = logging.getLogger(__name__)
@@ -51,6 +62,7 @@ class RedmineSourceAdapter:
         source_files_dir: str | Path | None = None,
         source_instance: str | None = None,
         status_category_overrides: dict[str, str] | None = None,
+        cf_key_overrides: dict[str, str] | None = None,
         batch_size: int = 500,
     ) -> None:
         self._url = source_db_url
@@ -59,9 +71,13 @@ class RedmineSourceAdapter:
         # Redmine installations imported into the same Specivo database.
         self.source_instance = source_instance or db.safe_url(source_db_url)
         self._status_overrides = {k.strip().lower(): v for k, v in (status_category_overrides or {}).items()}
+        self._cf_key_overrides = {k.strip().lower(): v for k, v in (cf_key_overrides or {}).items()}
         self._batch_size = batch_size
         self._engine: AsyncEngine | None = None
         self._source_format: str | None = None
+        # Filled while streaming, for the import report.
+        self._dropped_modules: dict[str, list[str]] = {}
+        self.relaxed_required_fields: list[str] = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -215,26 +231,229 @@ class RedmineSourceAdapter:
         return {user_id: address for user_id, address in (await conn.execute(stmt)).all()}
 
     # ------------------------------------------------------------------
+    # Projects and project-scoped entities
+    # ------------------------------------------------------------------
+
+    async def extract_projects(self) -> AsyncIterator[IRProject]:
+        """Stream projects with their enabled modules, parents before children.
+
+        Redmine keeps projects in a nested set, so ordering by ``lft`` yields a
+        parent before any of its descendants and no topological sort is needed.
+        Read in one pass rather than paged: an instance has hundreds of
+        projects, not hundreds of thousands, and paging by key would break the
+        ordering that makes the parent guarantee hold.
+        """
+        async with self.engine.connect() as conn:
+            modules: dict[int, list[str]] = {}
+            for row in (await conn.execute(select(db.enabled_modules))).mappings().all():
+                modules.setdefault(row["project_id"], []).append(row["name"])
+
+            rows = (await conn.execute(select(db.projects).order_by(db.projects.c.lft))).mappings().all()
+
+        for row in rows:
+            project = extract.extract_project(dict(row))
+            mapped, dropped = extract.map_modules(modules.get(row["id"], []))
+            project.modules = mapped
+            self._dropped_modules[project.source_ref] = dropped
+            yield project
+
+    def dropped_modules(self, project_ref: str) -> list[str]:
+        """Return the modules of *project_ref* that Specivo has no equivalent for."""
+        return self._dropped_modules.get(project_ref, [])
+
+    async def extract_versions(self, project_ref: str) -> AsyncIterator[IRVersion]:
+        """Stream a project's versions."""
+        async with self.engine.connect() as conn:
+            stmt = select(db.versions).where(db.versions.c.project_id == int(project_ref))
+            for row in (await conn.execute(stmt.order_by(db.versions.c.id))).mappings().all():
+                yield extract.extract_version(dict(row))
+
+    async def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]:
+        """Stream a project's issue categories."""
+        async with self.engine.connect() as conn:
+            stmt = select(db.issue_categories).where(db.issue_categories.c.project_id == int(project_ref))
+            for row in (await conn.execute(stmt.order_by(db.issue_categories.c.id))).mappings().all():
+                yield extract.extract_category(dict(row))
+
+    async def extract_memberships(self, project_ref: str) -> AsyncIterator[IRMembership]:
+        """Stream a project's memberships, for people and for groups.
+
+        Only directly granted roles are emitted. Redmine also stores the grants
+        a user inherits from a group as rows with ``inherited_from`` set;
+        emitting those as well would double-count, since the importer derives
+        them itself when it flattens the group.
+        """
+        async with self.engine.connect() as conn:
+            member_rows = (
+                (
+                    await conn.execute(
+                        select(db.members).where(db.members.c.project_id == int(project_ref)).order_by(db.members.c.id)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if not member_rows:
+                return
+
+            member_ids = [row["id"] for row in member_rows]
+            role_rows = (
+                (
+                    await conn.execute(
+                        select(db.member_roles).where(
+                            db.member_roles.c.member_id.in_(member_ids),
+                            db.member_roles.c.inherited_from.is_(None),
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            roles_by_member: dict[int, list[str]] = {}
+            for role_row in role_rows:
+                roles_by_member.setdefault(role_row["member_id"], []).append(str(role_row["role_id"]))
+
+            principal_ids = [row["user_id"] for row in member_rows]
+            kinds = {
+                user_id: principal_type
+                for user_id, principal_type in (
+                    await conn.execute(select(db.users.c.id, db.users.c.type).where(db.users.c.id.in_(principal_ids)))
+                ).all()
+            }
+
+        for row in member_rows:
+            principal_type = kinds.get(row["user_id"])
+            if principal_type == extract.TYPE_USER:
+                kind = PrincipalKind.USER
+            elif principal_type == extract.TYPE_GROUP:
+                kind = PrincipalKind.GROUP
+            else:
+                # The builtin non-member and anonymous group principals, whose
+                # access Specivo expresses with a role rather than a membership.
+                continue
+
+            roles = roles_by_member.get(row["id"], [])
+            if not roles:
+                continue
+            yield extract.extract_membership(dict(row), roles, kind)
+
+    async def extract_custom_fields(self) -> AsyncIterator[IRCustomField]:
+        """Stream issue custom fields with their scope and choices.
+
+        Fields defined on users, projects, versions, groups and time entries are
+        skipped: Specivo's metadata schemas only target issues today. They are
+        counted so the report can say what was dropped.
+        """
+        async with self.engine.connect() as conn:
+            rows = (
+                (
+                    await conn.execute(
+                        select(db.custom_fields)
+                        .where(db.custom_fields.c.type == extract.ISSUE_CUSTOM_FIELD_TYPE)
+                        .order_by(db.custom_fields.c.id)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            if not rows:
+                return
+
+            field_ids = [row["id"] for row in rows]
+            trackers_by_field: dict[int, list[str]] = {}
+            for link in (
+                (
+                    await conn.execute(
+                        select(db.custom_fields_trackers).where(
+                            db.custom_fields_trackers.c.custom_field_id.in_(field_ids)
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            ):
+                trackers_by_field.setdefault(link["custom_field_id"], []).append(str(link["tracker_id"]))
+
+            projects_by_field: dict[int, list[str]] = {}
+            for link in (
+                (
+                    await conn.execute(
+                        select(db.custom_fields_projects).where(
+                            db.custom_fields_projects.c.custom_field_id.in_(field_ids)
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            ):
+                projects_by_field.setdefault(link["custom_field_id"], []).append(str(link["project_id"]))
+
+            choices_by_field: dict[int, list[str]] = {}
+            for choice in (
+                (
+                    await conn.execute(
+                        select(db.custom_field_enumerations)
+                        .where(db.custom_field_enumerations.c.custom_field_id.in_(field_ids))
+                        .order_by(db.custom_field_enumerations.c.position)
+                    )
+                )
+                .mappings()
+                .all()
+            ):
+                choices_by_field.setdefault(choice["custom_field_id"], []).append(choice["name"])
+
+            # A field marked required in Redmine may still have issues with no
+            # value: it was made required later, or the value was cleared by an
+            # import. Declaring it required in the schema would then reject the
+            # very data being imported, so requiredness is only kept when every
+            # existing value is filled in.
+            blank_fields = set(
+                (
+                    await conn.execute(
+                        select(db.custom_values.c.custom_field_id)
+                        .where(
+                            db.custom_values.c.custom_field_id.in_(field_ids),
+                            db.custom_values.c.customized_type == "Issue",
+                            or_(db.custom_values.c.value.is_(None), db.custom_values.c.value == ""),
+                        )
+                        .distinct()
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+        for row in rows:
+            data = dict(row)
+            choices = choices_by_field.get(row["id"]) or extract.parse_possible_values(row.get("possible_values"))
+            field = extract.extract_custom_field(
+                data,
+                tracker_refs=trackers_by_field.get(row["id"], []),
+                project_refs=projects_by_field.get(row["id"], []),
+                choices=choices,
+                key=self._cf_key_overrides.get((row.get("name") or "").strip().lower()),
+            )
+            if field.is_required and row["id"] in blank_fields:
+                field.is_required = False
+                self.relaxed_required_fields.append(field.name)
+            yield field
+
+    async def count_non_issue_custom_fields(self) -> int:
+        """Count custom fields on entities Specivo cannot attach metadata to."""
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    select(db.custom_fields.c.id).where(db.custom_fields.c.type != extract.ISSUE_CUSTOM_FIELD_TYPE)
+                )
+            ).all()
+        return len(rows)
+
+    # ------------------------------------------------------------------
     # Not yet implemented — added with the loaders that consume them
     # ------------------------------------------------------------------
 
     def _not_yet(self, what: str) -> AsyncIterator[Any]:
         raise NotImplementedError(f"Redmine {what} extraction is not implemented yet")
-
-    def extract_projects(self) -> AsyncIterator[Any]:
-        return self._not_yet("project")
-
-    def extract_memberships(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("membership")
-
-    def extract_custom_fields(self) -> AsyncIterator[Any]:
-        return self._not_yet("custom field")
-
-    def extract_versions(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("version")
-
-    def extract_categories(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("category")
 
     def extract_issues(self, project_ref: str) -> AsyncIterator[Any]:
         return self._not_yet("issue")

@@ -38,6 +38,9 @@ logger = logging.getLogger(__name__)
 # Where the group membership map is parked for the memberships phase.
 GROUP_MEMBERS_STATE_KEY = "group_members"
 
+# Where the fallback author account is parked for every later phase.
+IMPORT_ACCOUNT_STATE_KEY = "import_account"
+
 # Report sections.
 NOTE_PASSWORD_RESET = "password_reset_required"
 NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
@@ -88,6 +91,7 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
         ctx.summary.record_reused(EntityType.SYSTEM)
 
     await ctx.id_map.put(ctx.session, EntityType.SYSTEM, IMPORT_ACCOUNT_REF, "users", existing.id)
+    ctx.state[IMPORT_ACCOUNT_STATE_KEY] = existing
     return existing
 
 

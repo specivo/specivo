@@ -15,7 +15,16 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.importers.core.id_map import ImportIdMap
-from specivo.importers.core.ir import IRGroup, IRLookups, IRUser
+from specivo.importers.core.ir import (
+    IRCategory,
+    IRCustomField,
+    IRGroup,
+    IRLookups,
+    IRMembership,
+    IRProject,
+    IRUser,
+    IRVersion,
+)
 from specivo.importers.core.pipeline import ImportOptions, ImportPhase, ImportSummary, PhaseContext
 from specivo.importers.core.progress import NullProgressReporter
 
@@ -30,11 +39,23 @@ class FakeAdapter:
         lookups: IRLookups | None = None,
         users: list[IRUser] | None = None,
         groups: list[IRGroup] | None = None,
+        projects: list[IRProject] | None = None,
+        versions: list[IRVersion] | None = None,
+        categories: list[IRCategory] | None = None,
+        memberships: list[IRMembership] | None = None,
+        custom_fields: list[IRCustomField] | None = None,
+        dropped: dict[str, list[str]] | None = None,
     ) -> None:
         self.source_instance = "tracker.example.org"
         self.lookups = lookups or IRLookups()
         self.users = users or []
         self.groups = groups or []
+        self.projects = projects or []
+        self.versions = versions or []
+        self.categories = categories or []
+        self.memberships = memberships or []
+        self.custom_fields = custom_fields or []
+        self._dropped = dropped or {}
 
     async def connect(self) -> None:
         return None
@@ -52,6 +73,32 @@ class FakeAdapter:
     async def extract_groups(self) -> AsyncIterator[IRGroup]:
         for group in self.groups:
             yield group
+
+    async def extract_projects(self) -> AsyncIterator[IRProject]:
+        for project in self.projects:
+            yield project
+
+    def dropped_modules(self, project_ref: str) -> list[str]:
+        return self._dropped.get(project_ref, [])
+
+    async def extract_versions(self, project_ref: str) -> AsyncIterator[IRVersion]:
+        for version in self.versions:
+            if version.project_ref == project_ref:
+                yield version
+
+    async def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]:
+        for category in self.categories:
+            if category.project_ref == project_ref:
+                yield category
+
+    async def extract_memberships(self, project_ref: str) -> AsyncIterator[IRMembership]:
+        for membership in self.memberships:
+            if membership.project_ref == project_ref:
+                yield membership
+
+    async def extract_custom_fields(self) -> AsyncIterator[IRCustomField]:
+        for field in self.custom_fields:
+            yield field
 
 
 @pytest.fixture
