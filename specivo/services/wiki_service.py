@@ -56,8 +56,17 @@ class WikiService:
         author: User,
         parent_slug: str | None = None,
         comments: str | None = None,
+        *,
+        skip_search_index: bool = False,
+        skip_link_rebuild: bool = False,
     ) -> tuple[WikiPage, WikiContent]:
-        """Create a wiki page with initial content (version 1)."""
+        """Create a wiki page with initial content (version 1).
+
+        ``skip_search_index`` suppresses the inline embedding call and
+        ``skip_link_rebuild`` the link-graph task dispatch. Bulk callers such as
+        the import pipeline set both and do that work once at the end of the
+        run, rather than per page.
+        """
         wiki = await self.get_or_create_wiki(session, project_id)
         slug = _slugify(title)
 
@@ -110,25 +119,27 @@ class WikiService:
         await session.flush()
 
         # Generate search embeddings (inline, non-blocking on failure)
-        try:
-            from specivo.schemas.search import SearchSourceType
-            from specivo.services.chunking_service import ChunkingService
-            from specivo.services.embedding_service import EmbeddingService
+        if not skip_search_index:
+            try:
+                from specivo.schemas.search import SearchSourceType
+                from specivo.services.chunking_service import ChunkingService
+                from specivo.services.embedding_service import EmbeddingService
 
-            chunks = ChunkingService().chunk_wiki_page(title, text)
-            await EmbeddingService().embed_source(
-                session, SearchSourceType.WIKI_PAGE, page.id, project_id, chunks
-            )
-        except Exception:
-            logger.debug("Embedding generation skipped for wiki page %s", slug)
+                chunks = ChunkingService().chunk_wiki_page(title, text)
+                await EmbeddingService().embed_source(
+                    session, SearchSourceType.WIKI_PAGE, page.id, project_id, chunks
+                )
+            except Exception:
+                logger.debug("Embedding generation skipped for wiki page %s", slug)
 
         # Rebuild wiki link graph (async, non-blocking on failure)
-        try:
-            from specivo.tasks.wiki_links import rebuild_wiki_page_links
+        if not skip_link_rebuild:
+            try:
+                from specivo.tasks.wiki_links import rebuild_wiki_page_links
 
-            rebuild_wiki_page_links.delay(wiki.id, page.id)
-        except Exception:
-            logger.debug("Link graph rebuild dispatch skipped")
+                rebuild_wiki_page_links.delay(wiki.id, page.id)
+            except Exception:
+                logger.debug("Link graph rebuild dispatch skipped")
 
         return page, content
 

@@ -45,6 +45,11 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
 ]
+# Extra dependencies used only by the migration importers (specivo.importers).
+# Kept out of the runtime install: a server that never imports from another
+# tracker should not carry a MySQL driver or a markup converter. Modules import
+# them lazily and fail with an install hint when the extra is missing.
+importers = []
 
 [tool.setuptools.packages.find]
 include = ["specivo*"]

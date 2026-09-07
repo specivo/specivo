@@ -2030,7 +2030,7 @@ requires-dist = [
     { name = "tzdata", specifier = ">=2024.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "importers"]
 
 [package.metadata.requires-dev]
 dev = [
