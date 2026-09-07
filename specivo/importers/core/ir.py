@@ -144,8 +144,16 @@ class IRActivity:
 
 @dataclass(slots=True)
 class IRRole:
+    """A role.
+
+    ``builtin`` follows Specivo's encoding: 0 for an ordinary role, 1 for the
+    non-member role, 2 for the anonymous one. Sources without that concept leave
+    it at 0.
+    """
+
     source_ref: str
     name: str
+    builtin: int = 0
     permissions: list[str] = field(default_factory=list)
 
 

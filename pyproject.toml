@@ -49,7 +49,11 @@ dev = [
 # Kept out of the runtime install: a server that never imports from another
 # tracker should not carry a MySQL driver or a markup converter. Modules import
 # them lazily and fail with an install hint when the extra is missing.
-importers = []
+importers = [
+    # Only needed when the source tracker runs on MySQL; PostgreSQL sources use
+    # asyncpg, which is already a runtime dependency.
+    "aiomysql>=0.2",
+]
 
 [tool.setuptools.packages.find]
 include = ["specivo*"]
