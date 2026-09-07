@@ -21,15 +21,21 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from specivo.importers.core.ir import (
+    ContainerKind,
     IRAttachment,
     IRCategory,
     IRCustomField,
+    IRCustomValue,
     IRGroup,
+    IRIssue,
+    IRJournalEntry,
     IRLookups,
     IRMembership,
     IRProject,
+    IRRelation,
     IRUser,
     IRVersion,
+    IRWatcher,
     PrincipalKind,
 )
 from specivo.importers.redmine import db, extract
@@ -77,7 +83,9 @@ class RedmineSourceAdapter:
         self._source_format: str | None = None
         # Filled while streaming, for the import report.
         self._dropped_modules: dict[str, list[str]] = {}
+        self._custom_fields: dict[int, IRCustomField] | None = None
         self.relaxed_required_fields: list[str] = []
+        self.unmapped_relation_types: list[str] = []
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -449,23 +457,210 @@ class RedmineSourceAdapter:
         return len(rows)
 
     # ------------------------------------------------------------------
+    # Issues
+    # ------------------------------------------------------------------
+
+    async def _custom_field_index(self) -> dict[int, IRCustomField]:
+        """Return issue custom fields by id, read once and cached.
+
+        Values are stored untyped, so turning one into what its schema declares
+        needs the field definition.
+        """
+        if self._custom_fields is None:
+            self._custom_fields = {int(field.source_ref): field async for field in self.extract_custom_fields()}
+        return self._custom_fields
+
+    async def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
+        """Stream a project's issues, parents before children.
+
+        Only the id and parent of every issue are held in memory to work out
+        the order; the rows themselves are read a page at a time.
+        """
+        fields = await self._custom_field_index()
+
+        async with self.engine.connect() as conn:
+            pairs = (
+                await conn.execute(
+                    select(db.issues.c.id, db.issues.c.parent_id).where(db.issues.c.project_id == int(project_ref))
+                )
+            ).all()
+            if not pairs:
+                return
+
+            parents = {str(issue_id): (str(parent_id) if parent_id else None) for issue_id, parent_id in pairs}
+            order = extract.order_parents_first(parents)
+
+            for start in range(0, len(order), self._batch_size):
+                chunk = order[start : start + self._batch_size]
+                ids = [int(ref) for ref in chunk]
+
+                rows = {
+                    row["id"]: dict(row)
+                    for row in (await conn.execute(select(db.issues).where(db.issues.c.id.in_(ids)))).mappings().all()
+                }
+                values = await self._custom_values_for(conn, ids, fields)
+
+                for ref in chunk:
+                    row = rows.get(int(ref))
+                    if row is not None:
+                        yield extract.extract_issue(row, values.get(int(ref), []))
+
+    async def _custom_values_for(
+        self,
+        conn: Any,
+        issue_ids: list[int],
+        fields: dict[int, IRCustomField],
+    ) -> dict[int, list[IRCustomValue]]:
+        """Return custom-field values for a page of issues.
+
+        A multi-value field is stored as one row per value, so those are
+        collected into a list under a single key.
+        """
+        stmt = select(db.custom_values).where(
+            db.custom_values.c.customized_type == "Issue",
+            db.custom_values.c.customized_id.in_(issue_ids),
+        )
+        rows = (await conn.execute(stmt)).mappings().all()
+
+        collected: dict[int, dict[int, list[Any]]] = {}
+        for row in rows:
+            field = fields.get(row["custom_field_id"])
+            if field is None or row["value"] in (None, ""):
+                continue
+            value = extract.coerce_custom_value(row["value"], field.field_format, field.multiple)
+            collected.setdefault(row["customized_id"], {}).setdefault(row["custom_field_id"], []).append(value)
+
+        result: dict[int, list[IRCustomValue]] = {}
+        for issue_id, by_field in collected.items():
+            for field_id, values in by_field.items():
+                field = fields[field_id]
+                result.setdefault(issue_id, []).append(
+                    IRCustomValue(
+                        field_ref=field.source_ref,
+                        key=field.key,
+                        value=values if field.multiple else values[0],
+                        value_kind=extract.value_kind_for(field.field_format),
+                    )
+                )
+        return result
+
+    async def extract_journals(self, project_ref: str) -> AsyncIterator[IRJournalEntry]:
+        """Stream a project's journals oldest first, with their field changes.
+
+        Ordered by creation time so the loader can number them the way Specivo
+        does, per issue and in the order they happened.
+        """
+        async with self.engine.connect() as conn:
+            issue_ids = await self._issue_ids(conn, project_ref)
+            if not issue_ids:
+                return
+
+            for start in range(0, len(issue_ids), self._batch_size):
+                chunk = issue_ids[start : start + self._batch_size]
+                rows = (
+                    (
+                        await conn.execute(
+                            select(db.journals)
+                            .where(
+                                db.journals.c.journalized_type == "Issue",
+                                db.journals.c.journalized_id.in_(chunk),
+                            )
+                            .order_by(db.journals.c.journalized_id, db.journals.c.created_on, db.journals.c.id)
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                if not rows:
+                    continue
+
+                journal_ids = [row["id"] for row in rows]
+                details: dict[int, list[Any]] = {}
+                for detail in (
+                    (
+                        await conn.execute(
+                            select(db.journal_details)
+                            .where(db.journal_details.c.journal_id.in_(journal_ids))
+                            .order_by(db.journal_details.c.id)
+                        )
+                    )
+                    .mappings()
+                    .all()
+                ):
+                    details.setdefault(detail["journal_id"], []).append(extract.extract_journal_detail(dict(detail)))
+
+                for row in rows:
+                    yield extract.extract_journal(dict(row), details.get(row["id"], []))
+
+    async def extract_relations(self, project_ref: str) -> AsyncIterator[IRRelation]:
+        """Stream relations touching a project's issues.
+
+        A relation crossing two projects appears while importing either of
+        them; the loader recognises the second sighting through the id map.
+        """
+        async with self.engine.connect() as conn:
+            issue_ids = await self._issue_ids(conn, project_ref)
+            if not issue_ids:
+                return
+
+            for start in range(0, len(issue_ids), self._batch_size):
+                chunk = issue_ids[start : start + self._batch_size]
+                rows = (
+                    (
+                        await conn.execute(
+                            select(db.issue_relations).where(
+                                or_(
+                                    db.issue_relations.c.issue_from_id.in_(chunk),
+                                    db.issue_relations.c.issue_to_id.in_(chunk),
+                                )
+                            )
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                for row in rows:
+                    relation = extract.extract_relation(dict(row))
+                    if relation is None:
+                        self.unmapped_relation_types.append((row.get("relation_type") or "").strip())
+                        continue
+                    yield relation
+
+    async def extract_watchers(self, project_ref: str) -> AsyncIterator[IRWatcher]:
+        """Stream the issue watchers of a project."""
+        async with self.engine.connect() as conn:
+            issue_ids = await self._issue_ids(conn, project_ref)
+            if not issue_ids:
+                return
+
+            for start in range(0, len(issue_ids), self._batch_size):
+                chunk = issue_ids[start : start + self._batch_size]
+                rows = (
+                    (
+                        await conn.execute(
+                            select(db.watchers).where(
+                                db.watchers.c.watchable_type == "Issue",
+                                db.watchers.c.watchable_id.in_(chunk),
+                            )
+                        )
+                    )
+                    .mappings()
+                    .all()
+                )
+                for row in rows:
+                    yield extract.extract_watcher(dict(row), ContainerKind.ISSUE)
+
+    async def _issue_ids(self, conn: Any, project_ref: str) -> list[int]:
+        """Return the ids of a project's issues, ordered."""
+        stmt = select(db.issues.c.id).where(db.issues.c.project_id == int(project_ref)).order_by(db.issues.c.id)
+        return list((await conn.execute(stmt)).scalars().all())
+
+    # ------------------------------------------------------------------
     # Not yet implemented — added with the loaders that consume them
     # ------------------------------------------------------------------
 
     def _not_yet(self, what: str) -> AsyncIterator[Any]:
         raise NotImplementedError(f"Redmine {what} extraction is not implemented yet")
-
-    def extract_issues(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("issue")
-
-    def extract_journals(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("journal")
-
-    def extract_relations(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("relation")
-
-    def extract_watchers(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("watcher")
 
     def extract_attachments(self, project_ref: str) -> AsyncIterator[Any]:
         return self._not_yet("attachment")

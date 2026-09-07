@@ -29,8 +29,8 @@ def _lookups(**overrides) -> IRLookups:
         ],
         "trackers": [IRTracker(source_ref="1", name="Bug", default_status_ref="1", position=1)],
         "priorities": [IRPriority(source_ref="4", name="Normal", position=2, is_default=True)],
-        "activities": [IRActivity(source_ref="9", name="Development", is_default=True)],
-        "roles": [IRRole(source_ref="3", name="Developer")],
+        "activities": [IRActivity(source_ref="9", name="Lookup Development", is_default=True)],
+        "roles": [IRRole(source_ref="3", name="Lookup Developer")],
     }
     data.update(overrides)
     return IRLookups(**data)
@@ -105,7 +105,7 @@ class TestFreshInstance:
         role_id = await ctx.id_map.get(db_session, EntityType.ROLE, "3")
         role = await db_session.get(Role, role_id)
         assert role.permissions == []
-        assert "Developer" in ctx.summary.notes[NOTE_ROLES_NEED_PERMISSIONS]
+        assert "Lookup Developer" in ctx.summary.notes[NOTE_ROLES_NEED_PERMISSIONS]
 
 
 class TestNameCollisions:
@@ -147,7 +147,7 @@ class TestNameCollisions:
 
     async def test_activity_is_always_reused(self, db_session, make_context):
         """time_entry_activities.name is unique, so a duplicate cannot exist."""
-        existing = TimeEntryActivity(name="Development", is_default=False)
+        existing = TimeEntryActivity(name="Lookup Development", is_default=False)
         db_session.add(existing)
         await db_session.flush()
 
@@ -159,7 +159,7 @@ class TestNameCollisions:
 
     async def test_role_is_always_reused(self, db_session, make_context):
         """roles.name is unique, and duplicating a role would fragment access."""
-        existing = Role(name="Developer", permissions=["view_issues"])
+        existing = Role(name="Lookup Developer", permissions=["view_issues"])
         db_session.add(existing)
         await db_session.flush()
 
@@ -171,7 +171,7 @@ class TestNameCollisions:
 
     async def test_builtin_role_is_matched_on_its_flag(self, db_session, make_context):
         """Either system may name the non-member role differently."""
-        existing = Role(name="Non member", builtin=1, permissions=[])
+        existing = Role(name="Lookup Non member", builtin=1, permissions=[])
         db_session.add(existing)
         await db_session.flush()
 

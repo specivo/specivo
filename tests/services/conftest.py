@@ -19,20 +19,28 @@ from specivo.importers.core.ir import (
     IRCategory,
     IRCustomField,
     IRGroup,
+    IRIssue,
+    IRJournalEntry,
     IRLookups,
     IRMembership,
     IRProject,
+    IRRelation,
     IRUser,
     IRVersion,
+    IRWatcher,
 )
 from specivo.importers.core.pipeline import ImportOptions, ImportPhase, ImportSummary, PhaseContext
 from specivo.importers.core.progress import NullProgressReporter
 
 
 class FakeAdapter:
-    """Serves pre-built IR instead of reading a source system."""
+    """Serves pre-built IR instead of reading a source system.
 
-    source_system = "redmine"
+    ``source_system`` is settable because it decides the login of the import
+    service account. Test modules run in parallel, and two of them inserting
+    the same login in uncommitted transactions block on the unique index, so
+    each module uses its own.
+    """
 
     def __init__(
         self,
@@ -44,8 +52,15 @@ class FakeAdapter:
         categories: list[IRCategory] | None = None,
         memberships: list[IRMembership] | None = None,
         custom_fields: list[IRCustomField] | None = None,
+        issues: list[IRIssue] | None = None,
+        journals: list[IRJournalEntry] | None = None,
+        relations: list[IRRelation] | None = None,
+        watchers: list[IRWatcher] | None = None,
         dropped: dict[str, list[str]] | None = None,
+        source_format: str = "textile",
+        source_system: str = "redmine",
     ) -> None:
+        self.source_system = source_system
         self.source_instance = "tracker.example.org"
         self.lookups = lookups or IRLookups()
         self.users = users or []
@@ -55,7 +70,12 @@ class FakeAdapter:
         self.categories = categories or []
         self.memberships = memberships or []
         self.custom_fields = custom_fields or []
+        self.issues = issues or []
+        self.journals = journals or []
+        self.relations = relations or []
+        self.watchers = watchers or []
         self._dropped = dropped or {}
+        self.source_format = source_format
 
     async def connect(self) -> None:
         return None
@@ -99,6 +119,33 @@ class FakeAdapter:
     async def extract_custom_fields(self) -> AsyncIterator[IRCustomField]:
         for field in self.custom_fields:
             yield field
+
+    async def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
+        """Yield parents before children, as the real adapter guarantees."""
+        from specivo.importers.redmine.extract import order_parents_first
+
+        in_project = {issue.source_ref: issue for issue in self.issues if issue.project_ref == project_ref}
+        parents = {ref: issue.parent_ref for ref, issue in in_project.items()}
+        for ref in order_parents_first(parents):
+            yield in_project[ref]
+
+    async def extract_journals(self, project_ref: str) -> AsyncIterator[IRJournalEntry]:
+        refs = {issue.source_ref for issue in self.issues if issue.project_ref == project_ref}
+        for journal in self.journals:
+            if journal.issue_ref in refs:
+                yield journal
+
+    async def extract_relations(self, project_ref: str) -> AsyncIterator[IRRelation]:
+        refs = {issue.source_ref for issue in self.issues if issue.project_ref == project_ref}
+        for relation in self.relations:
+            if relation.from_ref in refs or relation.to_ref in refs:
+                yield relation
+
+    async def extract_watchers(self, project_ref: str) -> AsyncIterator[IRWatcher]:
+        refs = {issue.source_ref for issue in self.issues if issue.project_ref == project_ref}
+        for watcher in self.watchers:
+            if watcher.container_ref in refs:
+                yield watcher
 
 
 @pytest.fixture

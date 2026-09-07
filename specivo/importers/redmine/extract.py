@@ -18,22 +18,31 @@ from __future__ import annotations
 
 import re
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 from specivo.importers.core.ir import (
+    ContainerKind,
     IRActivity,
     IRCategory,
     IRCustomField,
+    IRCustomValue,
     IRGroup,
+    IRIssue,
+    IRJournalDetail,
+    IRJournalEntry,
     IRMembership,
     IRPriority,
     IRProject,
+    IRRelation,
     IRRole,
     IRStatus,
     IRTracker,
     IRUser,
     IRVersion,
+    IRWatcher,
     PrincipalKind,
+    ValueKind,
 )
 
 # Order matters: ``trackers.fields_bits`` sets bit i when CORE_FIELDS[i] is
@@ -487,4 +496,193 @@ def extract_custom_field(
         is_for_all=bool(row.get("is_for_all")),
         tracker_refs=list(tracker_refs),
         project_refs=list(project_refs),
+    )
+
+
+# --------------------------------------------------------------------------
+# Issues
+# --------------------------------------------------------------------------
+
+# Redmine names both directions of a relation; Specivo stores one canonical
+# form and derives the reverse when reading. A reverse name therefore becomes
+# its canonical form with the endpoints swapped.
+_RELATION_CANONICAL: dict[str, tuple[str, bool]] = {
+    "relates": ("relates", False),
+    "duplicates": ("duplicates", False),
+    "duplicated": ("duplicates", True),
+    "blocks": ("blocks", False),
+    "blocked": ("blocks", True),
+    "precedes": ("precedes", False),
+    "follows": ("precedes", True),
+    "copied_to": ("copied_to", False),
+    "copied_from": ("copied_to", True),
+}
+
+# Redmine field formats whose stored value is a reference to something else.
+_REFERENCE_FORMATS: dict[str, ValueKind] = {
+    "user": ValueKind.USER_REF,
+    "version": ValueKind.VERSION_REF,
+}
+
+
+def order_parents_first(parents: dict[str, str | None]) -> list[str]:
+    """Order issue references so a parent always precedes its children.
+
+    Redmine issue ids give no such guarantee — a subtask can be older than the
+    issue it was later attached to — and Specivo's nested set has to be built
+    top down.
+
+    A reference whose parent is not in *parents* is treated as a root: its
+    parent lives in another project or outside the selected scope, so it cannot
+    be waited for. Anything left over after the sweep is part of a cycle, which
+    Redmine should not allow; it is returned at the end rather than dropped, so
+    the loader can complain about issues that exist instead of silently losing
+    them.
+    """
+    children: dict[str, list[str]] = {}
+    roots: list[str] = []
+    for ref, parent in parents.items():
+        if parent is None or parent not in parents:
+            roots.append(ref)
+        else:
+            children.setdefault(parent, []).append(ref)
+
+    ordered: list[str] = []
+    queue = list(roots)
+    while queue:
+        ref = queue.pop(0)
+        ordered.append(ref)
+        queue.extend(children.get(ref, []))
+
+    if len(ordered) < len(parents):
+        placed = set(ordered)
+        ordered.extend(ref for ref in parents if ref not in placed)
+    return ordered
+
+
+def coerce_custom_value(raw: str | None, field_format: str, multiple: bool) -> Any:
+    """Turn a stored custom-field value into the type its schema declares.
+
+    Redmine keeps every value as text, so a field declared as an integer still
+    arrives as ``"3"``. A value that cannot be converted is kept as text: the
+    schema will reject it, which is better than discarding what the source held.
+    """
+    if raw is None or raw == "":
+        return [] if multiple else None
+
+    if field_format == "int":
+        return int(raw) if raw.lstrip("-").isdigit() else raw
+    if field_format == "float":
+        try:
+            return float(raw)
+        except ValueError:
+            return raw
+    if field_format == "bool":
+        return raw in {"1", "true", "t", "yes"}
+    if field_format in _REFERENCE_FORMATS:
+        return int(raw) if raw.isdigit() else raw
+    return raw
+
+
+def value_kind_for(field_format: str) -> ValueKind:
+    """Return how a value of this format has to be resolved."""
+    return _REFERENCE_FORMATS.get(field_format, ValueKind.SCALAR)
+
+
+def extract_issue(row: dict[str, Any], custom_values: list[IRCustomValue] | None = None) -> IRIssue:
+    """Build an :class:`IRIssue` from an ``issues`` row.
+
+    ``description`` is left as the source wrote it; the caller converts markup.
+    The nested-set columns are deliberately not carried: Specivo rebuilds its
+    own tree as issues are created, and two systems' nested sets never line up.
+    """
+    estimated = row.get("estimated_hours")
+    return IRIssue(
+        source_ref=str(row["id"]),
+        project_ref=str(row["project_id"]),
+        tracker_ref=str(row["tracker_id"]),
+        status_ref=str(row["status_id"]),
+        priority_ref=str(row["priority_id"]),
+        subject=(row.get("subject") or "").strip(),
+        author_ref=str(row["author_id"]) if row.get("author_id") else None,
+        assigned_to_ref=str(row["assigned_to_id"]) if row.get("assigned_to_id") else None,
+        description=row.get("description") or None,
+        parent_ref=str(row["parent_id"]) if row.get("parent_id") else None,
+        category_ref=str(row["category_id"]) if row.get("category_id") else None,
+        fixed_version_ref=str(row["fixed_version_id"]) if row.get("fixed_version_id") else None,
+        start_date=row.get("start_date"),
+        due_date=row.get("due_date"),
+        estimated_hours=Decimal(str(estimated)) if estimated is not None else None,
+        done_ratio=row.get("done_ratio") or 0,
+        is_private=bool(row.get("is_private")),
+        custom_values=list(custom_values or []),
+        created_at=as_utc(row.get("created_on")),
+        updated_at=as_utc(row.get("updated_on")),
+        closed_at=as_utc(row.get("closed_on")),
+    )
+
+
+def extract_journal(row: dict[str, Any], details: list[IRJournalDetail]) -> IRJournalEntry:
+    """Build an :class:`IRJournalEntry` from a ``journals`` row.
+
+    The sequence number is not carried: Specivo numbers journals per issue and
+    the loader assigns them in chronological order.
+    """
+    return IRJournalEntry(
+        source_ref=str(row["id"]),
+        issue_ref=str(row["journalized_id"]),
+        user_ref=str(row["user_id"]) if row.get("user_id") else None,
+        notes=row.get("notes") or None,
+        is_private=bool(row.get("private_notes")),
+        created_at=as_utc(row.get("created_on")),
+        details=list(details),
+    )
+
+
+def extract_journal_detail(row: dict[str, Any]) -> IRJournalDetail:
+    """Build an :class:`IRJournalDetail`.
+
+    Both systems use the same ``property`` vocabulary and the same attribute
+    names, so only the column holding the new value is renamed.
+    """
+    return IRJournalDetail(
+        property=(row.get("property") or "attr").strip(),
+        prop_key=(row.get("prop_key") or "").strip(),
+        old_value=row.get("old_value"),
+        new_value=row.get("value"),
+    )
+
+
+def extract_relation(row: dict[str, Any]) -> IRRelation | None:
+    """Build an :class:`IRRelation`, normalised to Specivo's canonical form.
+
+    Returns ``None`` for a relation type Specivo has no equivalent for, so the
+    caller can count it rather than storing something that means the wrong
+    thing.
+    """
+    raw_type = (row.get("relation_type") or "").strip()
+    canonical = _RELATION_CANONICAL.get(raw_type)
+    if canonical is None:
+        return None
+
+    relation_type, swap = canonical
+    from_ref, to_ref = str(row["issue_from_id"]), str(row["issue_to_id"])
+    if swap:
+        from_ref, to_ref = to_ref, from_ref
+
+    return IRRelation(
+        source_ref=str(row["id"]),
+        from_ref=from_ref,
+        to_ref=to_ref,
+        relation_type=relation_type,
+        delay=row.get("delay"),
+    )
+
+
+def extract_watcher(row: dict[str, Any], container_kind: ContainerKind) -> IRWatcher:
+    """Build an :class:`IRWatcher` from a ``watchers`` row."""
+    return IRWatcher(
+        container_kind=container_kind,
+        container_ref=str(row["watchable_id"]),
+        user_ref=str(row["user_id"]),
     )

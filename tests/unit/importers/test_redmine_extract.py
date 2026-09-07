@@ -308,3 +308,54 @@ class TestExtractGroup:
         group = extract_group({"id": 22, "firstname": "", "lastname": "Team", "login": ""}, members)
         members.append("2")
         assert group.member_refs == ["1"]
+
+
+class TestOrderParentsFirst:
+    """Redmine issue ids give no parent-before-child guarantee."""
+
+    def test_roots_only(self):
+        from specivo.importers.redmine.extract import order_parents_first
+
+        assert order_parents_first({"1": None, "2": None}) == ["1", "2"]
+
+    def test_child_follows_its_parent(self):
+        from specivo.importers.redmine.extract import order_parents_first
+
+        order = order_parents_first({"2": "1", "1": None})
+        assert order.index("1") < order.index("2")
+
+    def test_older_subtask_attached_to_a_newer_parent(self):
+        """A subtask can predate the issue it was later attached to."""
+        from specivo.importers.redmine.extract import order_parents_first
+
+        order = order_parents_first({"101": "200", "200": None})
+        assert order == ["200", "101"]
+
+    def test_deep_chain_is_ordered_top_down(self):
+        from specivo.importers.redmine.extract import order_parents_first
+
+        order = order_parents_first({"3": "2", "2": "1", "1": None})
+        assert order == ["1", "2", "3"]
+
+    def test_parent_outside_the_set_is_treated_as_a_root(self):
+        """Its parent is in another project, so waiting for it never ends."""
+        from specivo.importers.redmine.extract import order_parents_first
+
+        assert order_parents_first({"2": "999"}) == ["2"]
+
+    def test_every_reference_is_returned(self):
+        from specivo.importers.redmine.extract import order_parents_first
+
+        parents = {"1": None, "2": "1", "3": "1", "4": "2"}
+        assert sorted(order_parents_first(parents)) == ["1", "2", "3", "4"]
+
+    def test_a_cycle_is_not_dropped(self):
+        """Redmine should not allow one, but losing issues is worse than noise."""
+        from specivo.importers.redmine.extract import order_parents_first
+
+        assert sorted(order_parents_first({"1": "2", "2": "1"})) == ["1", "2"]
+
+    def test_empty_input(self):
+        from specivo.importers.redmine.extract import order_parents_first
+
+        assert order_parents_first({}) == []

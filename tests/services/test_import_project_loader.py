@@ -48,6 +48,19 @@ from tests.services.conftest import FakeAdapter
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.service]
 
 
+class ProjectAdapter(FakeAdapter):
+    """Adapter with its own source system.
+
+    The import service account's login is derived from it, and test modules
+    run in parallel: two of them inserting the same login in uncommitted
+    transactions block on the unique index.
+    """
+
+    def __init__(self, **kwargs) -> None:
+        kwargs.setdefault("source_system", "redmineproj")
+        super().__init__(**kwargs)
+
+
 def _project(ref: str = "1", identifier: str = "acme-app", **overrides) -> IRProject:
     data = {
         "source_ref": ref,
@@ -84,7 +97,7 @@ async def loaded(db_session, make_context):
 
 class TestProjects:
     async def test_creates_the_project(self, db_session, loaded):
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         project = await db_session.get(Project, project_id)
@@ -94,18 +107,18 @@ class TestProjects:
 
     async def test_key_is_derived_from_the_identifier(self, db_session, loaded):
         """Redmine has no project key, so one has to be invented."""
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         assert (await db_session.get(Project, project_id)).key == "ACMEAPP"
 
     async def test_every_key_is_reported(self, db_session, loaded):
         """This is the mapping operators most often want to correct."""
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
         assert ctx.summary.notes[NOTE_PROJECT_KEYS] == ["acme-app -> ACMEAPP"]
 
     async def test_operator_can_override_the_key(self, db_session, make_context):
-        ctx = make_context(FakeAdapter(projects=[_project()]), project_key_map={"acme-app": "ACME"})
+        ctx = make_context(ProjectAdapter(projects=[_project()]), project_key_map={"acme-app": "ACME"})
         await load_projects(ctx)
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
@@ -113,7 +126,7 @@ class TestProjects:
 
     async def test_identifier_starting_with_a_digit_gets_a_usable_key(self, db_session, loaded):
         """A key must start with a letter; an identifier need not."""
-        ctx = await loaded(FakeAdapter(projects=[_project(identifier="2026-roadmap")]))
+        ctx = await loaded(ProjectAdapter(projects=[_project(identifier="2026-roadmap")]))
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         key = (await db_session.get(Project, project_id)).key
@@ -123,7 +136,7 @@ class TestProjects:
         db_session.add(Project(name="Existing", identifier="existing", key="ACMEAPP", path="existing"))
         await db_session.flush()
 
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         assert (await db_session.get(Project, project_id)).key == "ACMEAPP2"
 
@@ -131,12 +144,12 @@ class TestProjects:
         db_session.add(Project(name="Existing", identifier="acme-app", key="OTHER", path="acme_app"))
         await db_session.flush()
 
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         assert (await db_session.get(Project, project_id)).identifier == "acme-app-2"
 
     async def test_original_timestamps_are_restored(self, db_session, loaded):
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         project = await db_session.get(Project, project_id)
@@ -144,13 +157,13 @@ class TestProjects:
 
     async def test_closed_project_keeps_its_status(self, db_session, loaded):
         """The create schema has no status field, so it is set afterwards."""
-        ctx = await loaded(FakeAdapter(projects=[_project(status=5)]))
+        ctx = await loaded(ProjectAdapter(projects=[_project(status=5)]))
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         assert (await db_session.get(Project, project_id)).status == 5
 
     async def test_archived_project_keeps_its_status(self, db_session, loaded):
-        ctx = await loaded(FakeAdapter(projects=[_project(status=9)]))
+        ctx = await loaded(ProjectAdapter(projects=[_project(status=9)]))
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         assert (await db_session.get(Project, project_id)).status == 9
 
@@ -158,7 +171,7 @@ class TestProjects:
 class TestSubprojects:
     async def test_child_is_attached_to_its_parent(self, db_session, loaded):
         projects = [_project("1", "parent"), _project("2", "child", parent_ref="1")]
-        ctx = await loaded(FakeAdapter(projects=projects))
+        ctx = await loaded(ProjectAdapter(projects=projects))
 
         parent_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         child_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "2")
@@ -166,7 +179,7 @@ class TestSubprojects:
 
     async def test_child_path_nests_under_the_parent(self, db_session, loaded):
         projects = [_project("1", "parent"), _project("2", "child", parent_ref="1")]
-        ctx = await loaded(FakeAdapter(projects=projects))
+        ctx = await loaded(ProjectAdapter(projects=projects))
 
         child_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "2")
         assert str((await db_session.get(Project, child_id)).path) == "parent.child"
@@ -177,14 +190,14 @@ class TestSubprojects:
             _project("2", "middle", parent_ref="1"),
             _project("3", "bottom", parent_ref="2"),
         ]
-        ctx = await loaded(FakeAdapter(projects=projects))
+        ctx = await loaded(ProjectAdapter(projects=projects))
 
         bottom_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "3")
         assert str((await db_session.get(Project, bottom_id)).path) == "top.middle.bottom"
 
     async def test_orphan_becomes_a_root_with_a_warning(self, db_session, loaded):
         """A parent outside the selected scope must not take its child with it."""
-        ctx = await loaded(FakeAdapter(projects=[_project("2", "child", parent_ref="999")]))
+        ctx = await loaded(ProjectAdapter(projects=[_project("2", "child", parent_ref="999")]))
 
         child_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "2")
         assert (await db_session.get(Project, child_id)).parent_id is None
@@ -193,7 +206,7 @@ class TestSubprojects:
 
 class TestModules:
     async def test_mapped_modules_are_enabled(self, db_session, loaded):
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         stmt = select(EnabledModule.name).where(EnabledModule.project_id == project_id)
@@ -202,7 +215,7 @@ class TestModules:
 
     async def test_unmapped_modules_are_reported(self, db_session, make_context):
         """Repository and forums belong to features Specivo does not have."""
-        adapter = FakeAdapter(projects=[_project()], dropped={"1": ["repository", "boards"]})
+        adapter = ProjectAdapter(projects=[_project()], dropped={"1": ["repository", "boards"]})
         ctx = make_context(adapter)
         await load_projects(ctx)
 
@@ -222,7 +235,7 @@ class TestVersionsAndCategories:
                 sharing="descendants",
             )
         ]
-        ctx = await loaded(FakeAdapter(projects=[_project()], versions=versions))
+        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=versions))
         await load_project_lookups(ctx)
 
         version_id = await ctx.id_map.get(db_session, EntityType.VERSION, "10")
@@ -232,9 +245,9 @@ class TestVersionsAndCategories:
         assert version.sharing == "descendants"
 
     async def test_category_is_created_with_its_assignee(self, db_session, loaded):
-        users = [IRUser(source_ref="7", login="alex", display_name="Alex", email="alex@example.org")]
+        users = [IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org")]
         categories = [IRCategory(source_ref="20", project_ref="1", name="Backend", assigned_to_ref="7")]
-        ctx = await loaded(FakeAdapter(projects=[_project()], users=users, categories=categories))
+        ctx = await loaded(ProjectAdapter(projects=[_project()], users=users, categories=categories))
         await load_project_lookups(ctx)
 
         category_id = await ctx.id_map.get(db_session, EntityType.CATEGORY, "20")
@@ -244,7 +257,7 @@ class TestVersionsAndCategories:
 
     async def test_second_run_creates_no_duplicates(self, db_session, loaded):
         versions = [IRVersion(source_ref="10", project_ref="1", name="1.0")]
-        ctx = await loaded(FakeAdapter(projects=[_project()], versions=versions))
+        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=versions))
         await load_project_lookups(ctx)
         await load_project_lookups(ctx)
 
@@ -261,16 +274,16 @@ class TestMemberships:
             lookups = IRLookups(
                 statuses=[IRStatus(source_ref="1", name="New", category="backlog")],
                 trackers=[IRTracker(source_ref="1", name="Bug", default_status_ref="1")],
-                roles=[IRRole(source_ref="3", name="Developer"), IRRole(source_ref="4", name="Manager")],
+                roles=[IRRole(source_ref="3", name="Proj Developer"), IRRole(source_ref="4", name="Proj Manager")],
             )
-            return FakeAdapter(lookups=lookups, **kwargs)
+            return ProjectAdapter(lookups=lookups, **kwargs)
 
         return _adapter
 
     async def test_direct_membership_grants_the_role(self, db_session, loaded, with_roles):
         adapter = with_roles(
             projects=[_project()],
-            users=[IRUser(source_ref="7", login="alex", display_name="Alex", email="alex@example.org")],
+            users=[IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org")],
             memberships=[
                 IRMembership(
                     source_ref="100",
@@ -297,8 +310,8 @@ class TestMemberships:
         adapter = with_roles(
             projects=[_project()],
             users=[
-                IRUser(source_ref="7", login="alex", display_name="Alex", email="alex@example.org"),
-                IRUser(source_ref="8", login="sam", display_name="Sam", email="sam@example.org"),
+                IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org"),
+                IRUser(source_ref="8", login="proj_sam", display_name="Sam", email="proj_sam@example.org"),
             ],
             groups=[IRGroup(source_ref="20", name="Platform", member_refs=["7", "8"])],
             memberships=[
@@ -322,7 +335,7 @@ class TestMemberships:
         """A user in both keeps every role Redmine gave them."""
         adapter = with_roles(
             projects=[_project()],
-            users=[IRUser(source_ref="7", login="alex", display_name="Alex", email="alex@example.org")],
+            users=[IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org")],
             groups=[IRGroup(source_ref="20", name="Platform", member_refs=["7"])],
             memberships=[
                 IRMembership(
@@ -355,7 +368,7 @@ class TestMemberships:
     async def test_membership_with_no_imported_role_is_skipped(self, db_session, loaded, with_roles):
         adapter = with_roles(
             projects=[_project()],
-            users=[IRUser(source_ref="7", login="alex", display_name="Alex", email="alex@example.org")],
+            users=[IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org")],
             memberships=[
                 IRMembership(
                     source_ref="100",
@@ -394,7 +407,7 @@ class TestCustomFieldSchemas:
                 statuses=[IRStatus(source_ref="1", name="New", category="backlog")],
                 trackers=[IRTracker(source_ref="1", name="Bug", default_status_ref="1")],
             )
-            return FakeAdapter(lookups=lookups, **kwargs)
+            return ProjectAdapter(lookups=lookups, **kwargs)
 
         return _adapter
 
@@ -471,7 +484,7 @@ class TestCustomFieldSchemas:
 
 class TestIdempotency:
     async def test_second_project_run_creates_nothing(self, db_session, loaded):
-        ctx = await loaded(FakeAdapter(projects=[_project()]))
+        ctx = await loaded(ProjectAdapter(projects=[_project()]))
         await load_projects(ctx)
 
         count = (
