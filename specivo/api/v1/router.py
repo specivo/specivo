@@ -6,7 +6,7 @@ operations, notifications (inbox + preferences), wiki, search, and admin.
 Pro-only routes (webhooks) are mounted by the ProPlugin via ``get_routers()``
 when specivo-pro is installed.
 
-Enterprise-only routes (admin groups, credentials, kill switch, audit logs,
+Enterprise-only routes (admin agent groups, credentials, kill switch, audit logs,
 model costs, agent costs, admin metadata_schemas) are NOT included here.
 They are mounted by the EnterprisePlugin via ``get_routers()``.
 """
@@ -19,6 +19,7 @@ from specivo.api.v1.admin.metadata_presets import router as admin_metadata_prese
 from specivo.api.v1.admin.metadata_schemas import router as admin_metadata_schemas_router
 from specivo.api.v1.admin.projects import router as admin_projects_router
 from specivo.api.v1.admin.settings import router as admin_settings_router
+from specivo.api.v1.admin.user_groups import router as admin_user_groups_router
 from specivo.api.v1.admin.users import router as admin_users_router
 from specivo.api.v1.admin.workflows import router as admin_workflows_router
 from specivo.api.v1.agent_sessions import router as agent_sessions_router
@@ -68,6 +69,7 @@ api_router.include_router(admin_embedding_models_router)
 api_router.include_router(users_router)
 api_router.include_router(agent_sessions_router)
 api_router.include_router(admin_users_router)
+api_router.include_router(admin_user_groups_router)
 api_router.include_router(admin_projects_router)
 api_router.include_router(admin_email_router)
 api_router.include_router(admin_metadata_presets_router)

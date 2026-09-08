@@ -23,6 +23,7 @@ class AuditEvent(StrEnum):
     LOGIN_FAILURE = "login_failure"
     SEARCH_QUERY = "search_query"
     MEMBER_CHANGE = "member_change"
+    GROUP_CHANGE = "group_change"
     ACCESS_GRANTED = "access_granted"
     ACCESS_DENIED = "access_denied"
     AUTH_FAILURE = "auth_failure"
@@ -80,6 +81,21 @@ class MemberAction(StrEnum):
     REMOVED = "removed"
     ROLES_CHANGED = "roles_changed"
     PERMISSION_DENIED = "permission_denied"
+
+
+class GroupAction(StrEnum):
+    """Valid actions for group_change audit events (details.action).
+
+    A user group is a membership principal, so changing one changes who can
+    reach which projects — the same class of event as a member change, but
+    not project-scoped, which is why it has its own event type.
+    """
+
+    CREATED = "created"
+    RENAMED = "renamed"
+    DELETED = "deleted"
+    USER_ADDED = "user_added"
+    USER_REMOVED = "user_removed"
 
 
 class SecurityAuditService:
@@ -349,6 +365,56 @@ class SecurityAuditService:
             event_type=AuditEvent.MEMBER_CHANGE,
             user_id=user_id,
             project_id=project_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_group_change(
+        self,
+        session: AsyncSession,
+        action: GroupAction,
+        user_id: int,
+        group_id: int,
+        group_name: str,
+        target_user_id: int | None = None,
+        target_login: str | None = None,
+        extra: dict[str, Any] | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a user group change. Core feature — always persisted.
+
+        Unlike :meth:`log_member_change` this is not project-scoped: a group
+        exists outside any project and can grant access to several at once.
+        ``project_id`` is therefore left NULL and the group is identified by
+        ``resource_type``/``resource_id``.
+
+        *target_user_id* / *target_login* identify the user moved in or out of
+        the group, and are None for events about the group itself.  *extra*
+        carries action-specific facts — the old name on a rename, and what the
+        group was granting on a delete, which cannot be recovered afterwards.
+        """
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {
+            "action": str(action),
+            "group_id": group_id,
+            "group_name": group_name,
+        }
+        if target_user_id is not None:
+            details["target_user_id"] = target_user_id
+        if target_login is not None:
+            details["target_login"] = target_login
+        if extra:
+            details.update(extra)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.GROUP_CHANGE,
+            user_id=user_id,
+            resource_type="user_group",
+            resource_id=group_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
             user_agent=info["user_agent"],
