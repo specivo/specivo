@@ -10,6 +10,7 @@ from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.project import (
     MemberAdd,
@@ -23,7 +24,7 @@ from specivo.schemas.project import (
 )
 from specivo.services.computed_metadata_service import computed_values
 from specivo.services.permission_service import Permission, check_permission
-from specivo.services.project_service import ProjectService
+from specivo.services.project_service import Principal, ProjectService
 from specivo.services.security_audit_service import MemberAction, SecurityAuditService
 
 router = APIRouter(prefix="/projects", tags=["projects"])
@@ -197,16 +198,97 @@ async def delete_project(
 # ---------------------------------------------------------------------------
 
 
+async def _member_row(
+    db: AsyncSession,
+    project,
+    principal: Principal,
+) -> MemberOut:
+    """Re-read the membership row *principal* holds and render it.
+
+    Written as a read-back rather than assembled from the service's return
+    value so the response is exactly what a subsequent GET would show.
+    """
+    if principal.is_user:
+        rows = await _service.list_members(db, project)
+        key = "user_id"
+    else:
+        rows = await _service.list_group_memberships(db, project)
+        key = "group_id"
+
+    for row in rows:
+        if row[key] == principal.id:
+            return MemberOut(**row)
+
+    raise AppError(code="internal_error", message="Member not found after write", status_code=500)
+
+
+async def _log_member_change(
+    db: AsyncSession,
+    action: MemberAction,
+    actor: User,
+    project,
+    principal: Principal,
+    label: str,
+    roles: list[str] | None = None,
+    request: Request | None = None,
+) -> None:
+    """Write the audit row for a membership change, whatever holds it.
+
+    *label* is the holder's human-readable name — a login for a user, a group
+    name for a group.  Audit failures never fail the request they describe,
+    which is why this swallows.
+    """
+    try:
+        if principal.is_user:
+            await _audit.log_member_change(
+                session=db,
+                action=action,
+                user_id=actor.id,
+                project_id=project.id,
+                target_user_id=principal.id,
+                target_login=label,
+                roles=roles,
+                request=request,
+            )
+        else:
+            await _audit.log_member_change(
+                session=db,
+                action=action,
+                user_id=actor.id,
+                project_id=project.id,
+                target_group_id=principal.id,
+                target_group_name=label,
+                roles=roles,
+                request=request,
+            )
+    except Exception:
+        pass
+
+
+async def _principal_label(db: AsyncSession, principal: Principal) -> str:
+    """Return the login or group name for *principal*, or "" if it is gone."""
+    if principal.is_user:
+        stmt = select(User.login).where(User.id == principal.id)
+    else:
+        stmt = select(UserGroup.name).where(UserGroup.id == principal.id)
+    try:
+        return (await db.execute(stmt)).scalar_one_or_none() or ""
+    except Exception:
+        return ""
+
+
 @router.get("/{key}/members/", response_model=list[MemberOut])
 async def list_members(
     key: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[MemberOut]:
+    """List every membership on the project — users first, then user groups."""
     project = await _service.get_by_key(db, key.upper())
     await _require_project_access(project, current_user, db)
-    members = await _service.list_members(db, project)
-    return [MemberOut(**m) for m in members]
+    rows = await _service.list_members(db, project)
+    rows += await _service.list_group_memberships(db, project)
+    return [MemberOut(**row) for row in rows]
 
 
 @router.post("/{key}/members/", response_model=MemberOut, status_code=status.HTTP_201_CREATED)
@@ -217,113 +299,79 @@ async def add_member(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
+    """Add a user or a user group to the project with the given roles."""
     project = await _service.get_by_key(db, key.upper())
     await _require_manage(project, current_user, db, request)
 
-    await _service.add_member(db, project, data.user_id, data.role_ids)
+    principal = Principal.of(user_id=data.user_id, group_id=data.group_id)
+    await _service.add_member(db, project, principal, data.role_ids)
 
-    # Return the member's current state
-    members = await _service.list_members(db, project)
-    result: MemberOut | None = None
-    for m in members:
-        if m["user_id"] == data.user_id:
-            result = MemberOut(**m)
-            break
-
-    if result is None:
-        raise AppError(code="internal_error", message="Member not found after add", status_code=500)
-
-    try:
-        await _audit.log_member_change(
-            session=db,
-            action=MemberAction.ADDED,
-            user_id=current_user.id,
-            project_id=project.id,
-            target_user_id=data.user_id,
-            target_login=result.login,
-            roles=result.roles,
-            request=request,
-        )
-    except Exception:
-        pass
-
+    result = await _member_row(db, project, principal)
+    label = result.login if principal.is_user else result.name
+    await _log_member_change(
+        db,
+        MemberAction.ADDED,
+        current_user,
+        project,
+        principal,
+        label or "",
+        roles=result.roles,
+        request=request,
+    )
     return result
 
 
-@router.delete("/{key}/members/{user_id}/", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{key}/members/{principal_type}/{principal_id}/", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_member(
     key: str,
-    user_id: int,
+    principal_type: str,
+    principal_id: int,
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
+    """Remove a membership. *principal_type* is ``user`` or ``group``."""
+    principal = Principal.parse(principal_type, principal_id)
     project = await _service.get_by_key(db, key.upper())
     await _require_manage(project, current_user, db, request)
 
-    # Capture member info before deletion for audit
-    target_login = ""
-    try:
-        target = await db.execute(select(User.login).where(User.id == user_id))
-        target_login = target.scalar_one_or_none() or ""
-    except Exception:
-        pass
+    # Capture the holder's name before the delete takes it out of reach.
+    label = await _principal_label(db, principal)
 
-    await _service.remove_member(db, project, user_id)
+    await _service.remove_member(db, project, principal)
 
-    try:
-        await _audit.log_member_change(
-            session=db,
-            action=MemberAction.REMOVED,
-            user_id=current_user.id,
-            project_id=project.id,
-            target_user_id=user_id,
-            target_login=target_login,
-            request=request,
-        )
-    except Exception:
-        pass
+    await _log_member_change(db, MemberAction.REMOVED, current_user, project, principal, label, request=request)
 
 
-@router.patch("/{key}/members/{user_id}/", response_model=MemberOut)
+@router.patch("/{key}/members/{principal_type}/{principal_id}/", response_model=MemberOut)
 async def update_member_roles(
     key: str,
-    user_id: int,
+    principal_type: str,
+    principal_id: int,
     data: MemberUpdateRoles,
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> MemberOut:
-    """Replace all roles for a project member."""
+    """Replace all roles held by one membership. ``user`` or ``group``."""
+    principal = Principal.parse(principal_type, principal_id)
     project = await _service.get_by_key(db, key.upper())
     await _require_manage(project, current_user, db, request)
 
-    await _service.update_member_roles(db, project, user_id, data.role_ids)
+    await _service.update_member_roles(db, project, principal, data.role_ids)
 
-    members = await _service.list_members(db, project)
-    result: MemberOut | None = None
-    for m in members:
-        if m["user_id"] == user_id:
-            result = MemberOut(**m)
-            break
-
-    if result is None:
-        raise AppError(code="internal_error", message="Member not found after update", status_code=500)
-
-    try:
-        await _audit.log_member_change(
-            session=db,
-            action=MemberAction.ROLES_CHANGED,
-            user_id=current_user.id,
-            project_id=project.id,
-            target_user_id=user_id,
-            target_login=result.login,
-            roles=result.roles,
-            request=request,
-        )
-    except Exception:
-        pass
-
+    result = await _member_row(db, project, principal)
+    label = result.login if principal.is_user else result.name
+    await _log_member_change(
+        db,
+        MemberAction.ROLES_CHANGED,
+        current_user,
+        project,
+        principal,
+        label or "",
+        roles=result.roles,
+        request=request,
+    )
     return result
 
 

@@ -347,18 +347,37 @@ class SecurityAuditService:
         action: MemberAction,
         user_id: int,
         project_id: int,
-        target_user_id: int,
-        target_login: str,
+        target_user_id: int | None = None,
+        target_login: str | None = None,
+        target_group_id: int | None = None,
+        target_group_name: str | None = None,
         roles: list[str] | None = None,
         request: Request | None = None,
     ) -> SecurityAuditLog:
-        """Log a project member change. Core feature — always persisted."""
+        """Log a project member change. Core feature — always persisted.
+
+        A membership is held by a user or by a user group, and granting a
+        group roles on a project is the same class of event as granting them
+        to a user: it changes who can reach this project.  Both therefore land
+        here, as a project-scoped ``member_change`` row, rather than a group
+        grant going to :meth:`log_group_change` — that one is about the group
+        itself, leaves ``project_id`` NULL and so could not name the project
+        whose access changed.
+
+        ``details.principal_type`` says which kind the row is about, and the
+        holder is named by ``target_user_id``/``target_login`` for a user or
+        ``target_group_id``/``target_group_name`` for a group.
+        """
         info = self._extract_request_info(request)
-        details: dict[str, Any] = {
-            "action": str(action),
-            "target_user_id": target_user_id,
-            "target_login": target_login,
-        }
+        details: dict[str, Any] = {"action": str(action)}
+        if target_group_id is not None:
+            details["principal_type"] = "group"
+            details["target_group_id"] = target_group_id
+            details["target_group_name"] = target_group_name or ""
+        else:
+            details["principal_type"] = "user"
+            details["target_user_id"] = target_user_id if target_user_id is not None else 0
+            details["target_login"] = target_login or ""
         if roles:
             details["roles"] = roles
         log = SecurityAuditLog(

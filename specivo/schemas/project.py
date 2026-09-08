@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -198,8 +199,23 @@ class ProjectRenameOut(ProjectOut):
 
 
 class MemberAdd(BaseModel):
-    user_id: int
+    """Request body for adding a principal to a project.
+
+    A membership is held by a user or by a user group, never both and never
+    neither, so exactly one of ``user_id`` / ``group_id`` must be supplied.
+    """
+
+    user_id: int | None = None
+    group_id: int | None = None
     role_ids: list[int]
+
+    @model_validator(mode="after")
+    def check_principal(self) -> MemberAdd:
+        if self.user_id is not None and self.group_id is not None:
+            raise ValueError("Provide either user_id or group_id, not both")
+        if self.user_id is None and self.group_id is None:
+            raise ValueError("Provide either user_id or group_id")
+        return self
 
     @model_validator(mode="after")
     def check_role_ids(self) -> MemberAdd:
@@ -219,13 +235,33 @@ class MemberUpdateRoles(BaseModel):
 
 
 class MemberOut(BaseModel):
+    """One project membership row, held by a user or by a user group.
+
+    This is one flat shape with a ``principal_type`` discriminator rather than
+    a union of two schemas.  The two kinds share everything that matters to a
+    client — the roles, and the fact that this is a membership on this
+    project — and differ only in how the holder is named, so a union would
+    duplicate the common half and force every consumer to branch before
+    reading it.  The fields belonging to the other kind are simply ``None``:
+    a user row has no ``group_id``/``name``/``user_count``, and a group row
+    has no ``user_id``/``login``/``display_name``.
+    """
+
     model_config = {"from_attributes": True}
 
-    user_id: int
-    login: str
-    display_name: str
+    principal_type: Literal["user", "group"]
     roles: list[str]
     role_ids: list[int] = []
+
+    # Set on user rows only.
+    user_id: int | None = None
+    login: str | None = None
+    display_name: str | None = None
+
+    # Set on group rows only.
+    group_id: int | None = None
+    name: str | None = None
+    user_count: int | None = None
 
 
 # ---------------------------------------------------------------------------

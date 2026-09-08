@@ -383,7 +383,7 @@ async def test_remove_member(
     )
 
     resp = await client.delete(
-        f"/api/v1/projects/RMB/members/{regular_user.id}/",
+        f"/api/v1/projects/RMB/members/user/{regular_user.id}/",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 204
@@ -419,7 +419,7 @@ async def test_update_member_roles(
     )
 
     resp = await client.patch(
-        f"/api/v1/projects/UPR/members/{regular_user.id}/",
+        f"/api/v1/projects/UPR/members/user/{regular_user.id}/",
         json={"role_ids": [mgr_role.id]},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
@@ -461,7 +461,7 @@ async def test_update_member_roles_empty_rejected(
     )
 
     resp = await client.patch(
-        f"/api/v1/projects/UPE/members/{regular_user.id}/",
+        f"/api/v1/projects/UPE/members/user/{regular_user.id}/",
         json={"role_ids": []},
         headers={"Authorization": f"Bearer {admin_token}"},
     )

@@ -76,7 +76,9 @@ export function projectMembers(initial) {
 
             async removeMember(userId) {
                 if (!confirm('Remove this member?')) return;
-                var res = await spFetch('/api/v1/projects/' + this.projectKey + '/members/' + userId + '/', {
+                // Memberships are addressed by principal kind; this list only
+                // ever holds user-held rows, so the kind is always 'user'.
+                var res = await spFetch('/api/v1/projects/' + this.projectKey + '/members/user/' + userId + '/', {
                     method: 'DELETE',
                     headers: {'Content-Type': 'application/json'}
                 });
@@ -110,7 +112,7 @@ export function projectMembers(initial) {
                 if (!this.editMember || this.editRoleIds.length === 0) return;
                 this.editSaving = true;
                 this.editError = '';
-                var res = await spFetch('/api/v1/projects/' + this.projectKey + '/members/' + this.editMember.user_id + '/', {
+                var res = await spFetch('/api/v1/projects/' + this.projectKey + '/members/user/' + this.editMember.user_id + '/', {
                     method: 'PATCH',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ role_ids: this.editRoleIds })
