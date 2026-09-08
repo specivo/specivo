@@ -23,7 +23,7 @@ import logging
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.ir import ContainerKind, EntityType, IRAttachment
 from specivo.importers.core.pipeline import PhaseContext
-from specivo.importers.load.user_loader import IMPORT_ACCOUNT_STATE_KEY, ensure_import_account
+from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.attachment import Attachment
 from specivo.models.user import User
 from specivo.services.attachment_service import ALLOWED_CONTENT_TYPES, AttachmentService
@@ -138,5 +138,4 @@ async def _resolve_author(ctx: PhaseContext, author_ref: str | None) -> User:
         author = await ctx.session.get(User, author_id)
         if author is not None:
             return author
-    account = ctx.state.get(IMPORT_ACCOUNT_STATE_KEY)
-    return account if account is not None else await ensure_import_account(ctx)
+    return await ensure_import_account(ctx)

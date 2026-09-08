@@ -38,8 +38,10 @@ logger = logging.getLogger(__name__)
 # Where the group membership map is parked for the memberships phase.
 GROUP_MEMBERS_STATE_KEY = "group_members"
 
-# Where the fallback author account is parked for every later phase.
-IMPORT_ACCOUNT_STATE_KEY = "import_account"
+# Where the fallback author account's id is parked for later phases. Its id and
+# not the object: each phase runs in its own session, so an instance loaded in
+# an earlier one is detached by the time a later phase would use it.
+IMPORT_ACCOUNT_STATE_KEY = "import_account_id"
 
 # Report sections.
 NOTE_PASSWORD_RESET = "password_reset_required"
@@ -65,11 +67,24 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
     Redmine allows a row whose author was deleted, and Specivo requires one, so
     the import needs an account to attribute those to. Marked as a service
     account so it is not mistaken for a person, and reused across runs.
+
+    Always returns an instance attached to the current session, and always
+    records the id, including when the account already existed. Returning early
+    without recording it was a real defect: on a second or resumed run the
+    account is found rather than created, and every later phase then looked for
+    something that had never been put there.
     """
+    cached_id = ctx.state.get(IMPORT_ACCOUNT_STATE_KEY)
+    if isinstance(cached_id, int):
+        cached = await ctx.session.get(User, cached_id)
+        if cached is not None:
+            return cached
+
     mapped_id = await ctx.id_map.get(ctx.session, EntityType.SYSTEM, IMPORT_ACCOUNT_REF)
     if mapped_id is not None:
         account = await ctx.session.get(User, mapped_id)
         if account is not None:
+            ctx.state[IMPORT_ACCOUNT_STATE_KEY] = account.id
             return account
 
     login = f"{ctx.adapter.source_system}-import"
@@ -91,7 +106,7 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
         ctx.summary.record_reused(EntityType.SYSTEM)
 
     await ctx.id_map.put(ctx.session, EntityType.SYSTEM, IMPORT_ACCOUNT_REF, "users", existing.id)
-    ctx.state[IMPORT_ACCOUNT_STATE_KEY] = existing
+    ctx.state[IMPORT_ACCOUNT_STATE_KEY] = existing.id
     return existing
 
 

@@ -36,7 +36,6 @@ from specivo.importers.core.ir import EntityType, IRCustomField, IRProject, Prin
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import (
     GROUP_MEMBERS_STATE_KEY,
-    IMPORT_ACCOUNT_STATE_KEY,
     ensure_import_account,
 )
 from specivo.models.lookups import IssueCategory
@@ -173,7 +172,7 @@ async def _create_project(
             is_public=ir.is_public,
             modules=ir.modules or None,
         ),
-        creator_user=ctx.state[IMPORT_ACCOUNT_STATE_KEY],
+        creator_user=await ensure_import_account(ctx),
     )
 
     # ProjectCreate has no status field: a closed or archived project can only

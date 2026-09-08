@@ -22,7 +22,7 @@ from specivo.importers.core.backdate import backdate
 from specivo.importers.core.ir import EntityType, IRWikiPage
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.issue_loader import convert_markup
-from specivo.importers.load.user_loader import IMPORT_ACCOUNT_STATE_KEY, ensure_import_account
+from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.user import User
 from specivo.models.watcher import Watcher
 from specivo.models.wiki import WikiContent, WikiPage, WikiRedirect
@@ -211,5 +211,4 @@ async def _resolve_author(ctx: PhaseContext, author_ref: str | None) -> User:
         author = await ctx.session.get(User, author_id)
         if author is not None:
             return author
-    account = ctx.state.get(IMPORT_ACCOUNT_STATE_KEY)
-    return account if account is not None else await ensure_import_account(ctx)
+    return await ensure_import_account(ctx)

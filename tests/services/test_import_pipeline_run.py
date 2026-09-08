@@ -220,6 +220,30 @@ class TestResume:
         assert projects == 1
         assert second.skipped[EntityType.PROJECT] == 1
 
+    async def test_resuming_before_projects_still_creates_them(self, db_session, run_pipeline):
+        """Regression: the import account is found rather than created on a
+        resumed run, and the code that needed it looked for something the
+        find-path had never recorded. Stopping after users and resuming is the
+        case that exposed it — stopping after projects hides it, because the
+        projects are then skipped and never ask for the account."""
+        first = await run_pipeline(_adapter(), stop_after_phase=ImportPhase.USERS).run()
+        second = await run_pipeline(_adapter(), resume_run_id=first.run_id).run()
+
+        assert second.created[EntityType.PROJECT] == 1
+        projects = (await db_session.execute(select(func.count()).select_from(Project))).scalar_one()
+        assert projects == 1
+
+    async def test_the_import_account_is_not_duplicated_across_runs(self, db_session, run_pipeline):
+        from specivo.models.user import User
+
+        await run_pipeline(_adapter(), stop_after_phase=ImportPhase.USERS).run()
+        await run_pipeline(_adapter()).run()
+
+        count = (
+            await db_session.execute(select(func.count()).select_from(User).where(User.is_service_account.is_(True)))
+        ).scalar_one()
+        assert count == 1
+
     async def test_a_fresh_run_id_also_recognises_earlier_work(self, db_session, run_pipeline):
         """The identifier map is keyed on the source, not on the run."""
         await run_pipeline(_adapter(), stop_after_phase=ImportPhase.PROJECTS).run()

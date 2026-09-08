@@ -61,6 +61,9 @@ _DRIVER_REQUIREMENTS: dict[str, tuple[str, str]] = {
     "asyncpg": ("asyncpg", "specivo"),
 }
 
+# Comfortably inside MySQL's default eight-hour idle timeout.
+_MYSQL_POOL_RECYCLE_SECONDS = 3600
+
 metadata = MetaData()
 
 # --------------------------------------------------------------------------
@@ -543,13 +546,24 @@ def create_source_engine(url: str | URL, **engine_kwargs: Any) -> AsyncEngine:
     """Return a read-only engine for the Redmine database at *url*.
 
     Accepts either dialect with or without an explicit async driver.
-    ``pool_pre_ping`` is on because an import can run for hours and a source
-    database is entitled to drop an idle connection in that time.
+
+    An import can run for hours and a source database is entitled to drop an
+    idle connection in that time, so connections are checked before use. On
+    PostgreSQL that is ``pool_pre_ping``. On MySQL it cannot be: SQLAlchemy's
+    aiomysql adapter and aiomysql disagree about the signature of ``ping``, so
+    pre-ping raises on the first checkout. Connections are recycled by age
+    instead, well inside MySQL's default idle timeout, which covers the same
+    risk without the broken path.
     """
     normalised = normalise_source_url(url)
     _check_driver(normalised)
     logger.info("Connecting to source database %s", safe_url(normalised))
-    engine_kwargs.setdefault("pool_pre_ping", True)
+
+    if normalised.get_backend_name() == "mysql":
+        engine_kwargs.setdefault("pool_recycle", _MYSQL_POOL_RECYCLE_SECONDS)
+    else:
+        engine_kwargs.setdefault("pool_pre_ping", True)
+
     return create_async_engine(normalised, **engine_kwargs)
 
 

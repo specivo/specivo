@@ -35,7 +35,7 @@ from specivo.importers.core.backdate import backdate
 from specivo.importers.core.converter import ContentConverter, ConversionContext
 from specivo.importers.core.ir import EntityType, IRIssue, IRJournalEntry, IRRelation
 from specivo.importers.core.pipeline import PhaseContext
-from specivo.importers.load.user_loader import IMPORT_ACCOUNT_STATE_KEY, ensure_import_account
+from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.project import Project
@@ -184,7 +184,7 @@ async def _resolve_author(ctx: PhaseContext, author_ref: str | None):
         author = await ctx.session.get(User, author_id)
         if author is not None:
             return author
-    return ctx.state.get(IMPORT_ACCOUNT_STATE_KEY) or await ensure_import_account(ctx)
+    return await ensure_import_account(ctx)
 
 
 # --------------------------------------------------------------------------

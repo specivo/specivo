@@ -22,7 +22,7 @@ from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.ir import EntityType, IRTimeEntry
 from specivo.importers.core.pipeline import PhaseContext
-from specivo.importers.load.user_loader import IMPORT_ACCOUNT_STATE_KEY, ensure_import_account
+from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
 from specivo.schemas.time_entry import TimeEntryCreate
@@ -118,5 +118,4 @@ async def _resolve_user(ctx: PhaseContext, user_ref: str | None) -> User:
         user = await ctx.session.get(User, user_id)
         if user is not None:
             return user
-    account = ctx.state.get(IMPORT_ACCOUNT_STATE_KEY)
-    return account if account is not None else await ensure_import_account(ctx)
+    return await ensure_import_account(ctx)
