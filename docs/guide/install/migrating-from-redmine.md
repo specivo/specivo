@@ -1,4 +1,8 @@
-# Importing from Redmine
+---
+description: Move a Redmine instance into Specivo — projects, users, issues with their history, wiki revisions, attachments and logged time — starting with a dry run.
+---
+
+# Migrating from Redmine
 
 Specivo can take over from a Redmine instance: projects and their hierarchy,
 users and memberships, issues with their full history, wiki pages with every
@@ -118,32 +122,3 @@ guessing:
 - Reset the imported accounts, or tell those people to use password recovery.
 - Give any newly created roles their permissions.
 - Check the flattened group memberships against how the group was used.
-
-## Developing the importer
-
-There is a Redmine fixture for working on this:
-
-```
-make redmine-fixture-up PROFILE=pg      # or PROFILE=mysql
-make redmine-fixture-seed PROFILE=pg
-make redmine-fixture-down PROFILE=pg
-```
-
-Then run the importer's tests against it:
-
-```
-make test-serial
-```
-
-They are marked `serial` because an import writes instance-wide rows that other
-tests also insert, and running both in parallel deadlocks. They skip
-automatically when the fixture is not up, so a normal `make test` is unaffected.
-
-It runs Redmine 7.0.1 and seeds it through Redmine's own models, so the rows
-are written the way a real instance writes them. The seed covers the cases the
-importer has to handle: a subproject and an archived project, accounts in every
-state, a group membership, a parent issue with subtasks, history of each shape,
-relations including one across projects, a custom field of every format, a wiki
-page with three revisions and a rename, attachments including a binary and a
-file type Specivo would not accept from an upload today, non-Latin text, and
-time entries.
