@@ -6,7 +6,8 @@ description: Move a Redmine instance into Specivo — projects, users, issues wi
 
 Specivo can take over from a Redmine instance: projects and their hierarchy,
 users and memberships, issues with their full history, wiki pages with every
-revision, attachments and logged time.
+revision and the redirects left behind by page renames, attachments and
+logged time.
 
 The importer reads Redmine's database directly and copies its attachment files.
 It does not use Redmine's REST API, which cannot see private notes, deleted
@@ -94,6 +95,7 @@ recognised and skipped.
 | `--cf-key-map "Story Points=points"` | Choose the metadata key a custom field is stored under. |
 | `--source-instance name` | Name this Redmine, so two installations can be imported into one Specivo. |
 | `--report-json path` | Write the report as JSON as well as printing it. |
+| `--batch-size n` | Rows read per page from the source (default 500). Lower it if the source database is memory-constrained; raise it to reduce round trips on a fast connection to a large instance. |
 
 ## What does not come across
 
@@ -116,6 +118,25 @@ guessing:
   the ones you already have, and any that are new arrive with no permissions
   for an administrator to fill in.
 - **Per-project priorities and activities**, which Specivo keeps global.
+- **Who logged a time entry**, as distinct from whose time it is. Redmine
+  tracks both; Specivo keeps only whose time it is, so an entry a manager
+  logged on someone else's behalf keeps the person it belongs to.
+
+## What gets adjusted
+
+A few things come across but not unchanged, and each is worth knowing about
+before you look at real numbers:
+
+- **Logins and email addresses that collide with an existing account** are
+  suffixed (`jsmith-2`, `jsmith+2@example.com`) rather than skipped, and every
+  suffixed one is listed in the report.
+- **Logged time** is rounded to two decimal places, since that is all Specivo
+  stores. Floating-point noise from Redmine's own storage (`7.5` coming back
+  as `7.499999999999999`) is rounded silently; a rounding that drops precision
+  someone actually entered is reported.
+- **A custom field that is required in Redmine but has existing issues with no
+  value for it** is imported as optional instead. Keeping it required would
+  make the imported data invalid against its own schema on arrival.
 
 ## After the import
 

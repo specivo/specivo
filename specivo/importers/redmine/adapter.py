@@ -4,10 +4,12 @@ Connects to a Redmine database, reads it, and emits intermediate-representation
 objects. It is the only place in the importer that knows Redmine's schema; the
 loaders downstream see IR and nothing else.
 
-Extraction of lookups, users and groups lives here. The issue, wiki, attachment
-and time-entry streams are added by the tasks that build their loaders, so the
-methods for them raise until then rather than returning empty results that would
-look like an empty source.
+Everything the importer reads comes from here: lookups, principals, projects
+and their scoped entities, issues with their history, wiki pages with their
+revisions, attachments and logged time.
+
+Streams are paged rather than materialised, and the two that have to be ordered
+parents-first — projects and issues — say so on the method that produces them.
 """
 
 from __future__ import annotations
