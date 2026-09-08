@@ -45,7 +45,7 @@ from specivo.schemas.metadata_schema import MetadataSchemaCreate
 from specivo.schemas.project import ProjectCreate
 from specivo.schemas.version import VersionCreate
 from specivo.services.metadata_schema_service import MetadataSchemaService
-from specivo.services.project_service import ProjectService
+from specivo.services.project_service import Principal, ProjectService
 from specivo.services.version_service import VersionService
 
 logger = logging.getLogger(__name__)
@@ -418,7 +418,7 @@ async def load_memberships(ctx: PhaseContext) -> None:
                 # add_member merges roles into an existing membership, so a user
                 # who is both a direct member and in a group ends up with the
                 # union of both grants, which is what Redmine gave them.
-                await _project_service.add_member(ctx.session, project, user_id, role_ids)
+                await _project_service.add_member(ctx.session, project, Principal.user(user_id), role_ids)
                 ctx.summary.record_created(EntityType.MEMBERSHIP)
                 ctx.tick()
 

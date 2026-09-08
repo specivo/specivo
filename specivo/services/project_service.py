@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Literal
 
 from sqlalchemy import delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
-from specivo.core.exceptions import AppError, ConflictError, NotFoundError
+from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
@@ -17,6 +20,7 @@ from specivo.models.member import Member, MemberRole
 from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
 from specivo.models.role import Role
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
@@ -26,6 +30,96 @@ logger = logging.getLogger(__name__)
 
 # Default modules enabled for every new project
 _DEFAULT_MODULES = ("issue_tracking", "wiki", "time_tracking")
+
+PrincipalKind = Literal["user", "group"]
+
+
+@dataclass(frozen=True, slots=True)
+class Principal:
+    """The holder of one ``members`` row: a user or a user group, never both.
+
+    ``members`` allows exactly one of ``user_id`` / ``group_id`` to be set
+    (``ck_members_one_principal``).  Passing the pair around as two optional
+    arguments makes the invalid combinations — both set, neither set —
+    representable at every call site, and each site has to be trusted to
+    check.  This type makes them unrepresentable instead: the only ways in
+    are :meth:`user`, :meth:`group`, :meth:`of` and :meth:`parse`, so
+    "exactly one" is established once, at construction, and everything
+    downstream can simply use it.
+
+    The fields are deliberately not named ``user_id``/``group_id``: a
+    ``Principal`` is a kind plus an id, and the properties of those names are
+    provided for building queries and payloads.
+    """
+
+    kind: PrincipalKind
+    id: int
+
+    @classmethod
+    def user(cls, user_id: int) -> Principal:
+        """A principal holding a membership as a user."""
+        return cls("user", user_id)
+
+    @classmethod
+    def group(cls, group_id: int) -> Principal:
+        """A principal holding a membership as a user group."""
+        return cls("group", group_id)
+
+    @classmethod
+    def of(cls, *, user_id: int | None = None, group_id: int | None = None) -> Principal:
+        """Build a principal from an optional user id and an optional group id.
+
+        Exactly one must be given.  This is the boundary where request
+        payloads that name both, or neither, are rejected with a readable
+        :class:`ValidationError` rather than reaching the database and
+        failing the CHECK constraint.
+        """
+        if (user_id is None) == (group_id is None):
+            raise ValidationError("Exactly one of user_id or group_id must be given", field="user_id")
+        return cls.user(user_id) if user_id is not None else cls.group(group_id)  # type: ignore[arg-type]
+
+    @classmethod
+    def parse(cls, kind: str, principal_id: int) -> Principal:
+        """Build a principal from a URL path segment naming its kind."""
+        if kind not in ("user", "group"):
+            raise ValidationError(
+                f"principal_type must be 'user' or 'group', got '{kind}'",
+                field="principal_type",
+            )
+        return cls(kind, principal_id)  # type: ignore[arg-type]
+
+    @property
+    def is_user(self) -> bool:
+        return self.kind == "user"
+
+    @property
+    def user_id(self) -> int | None:
+        """The user id, or ``None`` for a group principal."""
+        return self.id if self.kind == "user" else None
+
+    @property
+    def group_id(self) -> int | None:
+        """The group id, or ``None`` for a user principal."""
+        return self.id if self.kind == "group" else None
+
+    @property
+    def label(self) -> str:
+        """How to name this principal in an error message."""
+        return f"User {self.id}" if self.kind == "user" else f"Group {self.id}"
+
+    def member_row_clause(self) -> ColumnElement[bool]:
+        """Match the one ``members`` row this principal holds, if any.
+
+        Deliberately narrow, and deliberately not
+        ``permission_service.member_principal_clause``: that one answers "does
+        this row grant the user access", folding in the groups they belong to.
+        This one addresses a row *to edit it*, so a user must never match a
+        group's row and a group must never match a user's — otherwise removing
+        a user could delete a group's grant, or the reverse.
+        """
+        if self.kind == "user":
+            return Member.user_id == self.id
+        return Member.group_id == self.id
 
 
 class ProjectService:
@@ -439,42 +533,64 @@ class ProjectService:
     # Membership
     # -----------------------------------------------------------------------
 
+    async def _require_principal_exists(self, session: AsyncSession, principal: Principal) -> None:
+        """Raise :class:`NotFoundError` if the user or group does not exist."""
+        if principal.is_user:
+            found = (await session.execute(select(User.id).where(User.id == principal.id))).scalar_one_or_none()
+            if found is None:
+                raise NotFoundError(f"User {principal.id} not found")
+        else:
+            found = (
+                await session.execute(select(UserGroup.id).where(UserGroup.id == principal.id))
+            ).scalar_one_or_none()
+            if found is None:
+                raise NotFoundError(f"User group {principal.id} not found")
+
+    async def _require_roles_exist(self, session: AsyncSession, role_ids: list[int]) -> None:
+        """Raise :class:`NotFoundError` naming any role id that does not exist."""
+        result = await session.execute(select(Role.id).where(Role.id.in_(role_ids)))
+        found_ids = set(result.scalars().all())
+        missing = set(role_ids) - found_ids
+        if missing:
+            raise NotFoundError(f"Roles not found: {sorted(missing)}")
+
+    async def _find_member_row(
+        self,
+        session: AsyncSession,
+        project: Project,
+        principal: Principal,
+    ) -> Member | None:
+        """Return the membership row *principal* holds on *project*, if any."""
+        result = await session.execute(
+            select(Member).where(
+                principal.member_row_clause(),
+                Member.project_id == project.id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def add_member(
         self,
         session: AsyncSession,
         project: Project,
-        user_id: int,
+        principal: Principal,
         role_ids: list[int],
     ) -> Member:
-        """Add a user as a project member with the specified roles.
+        """Add a principal — a user or a user group — to *project* with roles.
 
-        If the user is already a member, adds the new roles to the existing
-        member record (skipping duplicates).
+        If the principal is already a member, the new roles are added to the
+        existing membership row, skipping ones it already holds.
         """
-        # Verify user exists
-        user_result = await session.execute(select(User).where(User.id == user_id))
-        user = user_result.scalar_one_or_none()
-        if user is None:
-            raise NotFoundError(f"User {user_id} not found")
+        await self._require_principal_exists(session, principal)
+        await self._require_roles_exist(session, role_ids)
 
-        # Verify all roles exist
-        roles_result = await session.execute(select(Role).where(Role.id.in_(role_ids)))
-        roles = roles_result.scalars().all()
-        if len(roles) != len(role_ids):
-            found_ids = {r.id for r in roles}
-            missing = set(role_ids) - found_ids
-            raise NotFoundError(f"Roles not found: {sorted(missing)}")
-
-        # Upsert member record
-        existing_result = await session.execute(
-            select(Member).where(
-                Member.user_id == user_id,
-                Member.project_id == project.id,
-            )
-        )
-        member = existing_result.scalar_one_or_none()
+        member = await self._find_member_row(session, project, principal)
         if member is None:
-            member = Member(user_id=user_id, project_id=project.id)
+            member = Member(
+                user_id=principal.user_id,
+                group_id=principal.group_id,
+                project_id=project.id,
+            )
             session.add(member)
             await session.flush()
 
@@ -493,28 +609,15 @@ class ProjectService:
         self,
         session: AsyncSession,
         project: Project,
-        user_id: int,
+        principal: Principal,
         role_ids: list[int],
     ) -> Member:
-        """Replace all roles for a project member with the given role_ids."""
-        # Verify member exists
-        result = await session.execute(
-            select(Member).where(
-                Member.user_id == user_id,
-                Member.project_id == project.id,
-            )
-        )
-        member = result.scalar_one_or_none()
+        """Replace all roles held by *principal* on *project* with *role_ids*."""
+        member = await self._find_member_row(session, project, principal)
         if member is None:
-            raise NotFoundError(f"User {user_id} is not a member of project '{project.key}'")
+            raise NotFoundError(f"{principal.label} is not a member of project '{project.key}'")
 
-        # Verify all roles exist
-        roles_result = await session.execute(select(Role).where(Role.id.in_(role_ids)))
-        roles = roles_result.scalars().all()
-        if len(roles) != len(role_ids):
-            found_ids = {r.id for r in roles}
-            missing = set(role_ids) - found_ids
-            raise NotFoundError(f"Roles not found: {sorted(missing)}")
+        await self._require_roles_exist(session, role_ids)
 
         # Delete existing roles and replace
         await session.execute(delete(MemberRole).where(MemberRole.member_id == member.id))
@@ -528,18 +631,12 @@ class ProjectService:
         self,
         session: AsyncSession,
         project: Project,
-        user_id: int,
+        principal: Principal,
     ) -> None:
-        """Remove a user from a project (deletes member + member_roles via CASCADE)."""
-        result = await session.execute(
-            select(Member).where(
-                Member.user_id == user_id,
-                Member.project_id == project.id,
-            )
-        )
-        member = result.scalar_one_or_none()
+        """Remove *principal* from *project* (member_roles go via CASCADE)."""
+        member = await self._find_member_row(session, project, principal)
         if member is None:
-            raise NotFoundError(f"User {user_id} is not a member of project '{project.key}'")
+            raise NotFoundError(f"{principal.label} is not a member of project '{project.key}'")
 
         await session.delete(member)
         await session.flush()
@@ -559,16 +656,22 @@ class ProjectService:
         project: Project,
         limit: int | None = None,
     ) -> list[dict]:
-        """Return project members held by a user, with their roles.
+        """Return the **user-held** membership rows of a project, with their roles.
 
         Returns a list of dicts sorted by last login (most recent first).
         Pass ``limit`` to cap the number of results (useful for overview cards).
 
-        Group-held membership rows are skipped: every consumer of these dicts
-        (``MemberOut``, the members tab) is built around a user identity —
-        login, display name, avatar, last login — and a group has none of
-        them.  Rendering groups needs its own row shape and is handled with
-        the rest of the group member UI, not here.
+        Group-held rows are skipped, and that is this method's job rather than
+        a gap in it.  Nearly every caller is an assignee or user picker — the
+        issue, sprint, time and recurring-task screens, and the MCP
+        ``list_members`` tool — and they need people to assign work to, which
+        a group is not.  So this stays the user-only membership list and can
+        be relied on to be one.  Group-held rows have their own shape and are
+        returned by :meth:`list_group_memberships`; the callers that want both
+        kinds (the members API endpoint) ask for both and concatenate.
+
+        Each row carries ``principal_type == "user"`` so a row remains
+        self-describing once the two lists are mixed.
         """
         stmt = (
             select(Member)
@@ -594,6 +697,7 @@ class ProjectService:
             role_ids = [mr.role.id for mr in member.member_roles if mr.role is not None]
             out.append(
                 {
+                    "principal_type": "user",
                     "user_id": user.id,
                     "login": user.login,
                     "display_name": user.display_name,
@@ -612,6 +716,49 @@ class ProjectService:
         if limit is not None:
             out = out[:limit]
         return out
+
+    async def list_group_memberships(
+        self,
+        session: AsyncSession,
+        project: Project,
+    ) -> list[dict]:
+        """Return the **group-held** membership rows of a project, with their roles.
+
+        The counterpart to :meth:`list_members`, which covers the user-held
+        rows.  A group has no login, display name or last-login date, so its
+        row is shaped around what a group does have: its id, its name, and how
+        many users the grant reaches.  Rows are ordered by name, since there
+        is no "last active" to sort them by, and carry
+        ``principal_type == "group"`` so they stay identifiable when the two
+        lists are concatenated.
+        """
+        user_count = (
+            select(func.count())
+            .select_from(UserGroupMember)
+            .where(UserGroupMember.group_id == UserGroup.id)
+            .correlate(UserGroup)
+            .scalar_subquery()
+        )
+        stmt = (
+            select(Member, UserGroup, user_count)
+            .join(UserGroup, UserGroup.id == Member.group_id)
+            .where(Member.project_id == project.id)
+            .options(selectinload(Member.member_roles).joinedload(MemberRole.role))
+            .order_by(func.lower(UserGroup.name))
+        )
+        rows = (await session.execute(stmt)).all()
+
+        return [
+            {
+                "principal_type": "group",
+                "group_id": group.id,
+                "name": group.name,
+                "user_count": users,
+                "roles": [mr.role.name for mr in member.member_roles if mr.role is not None],
+                "role_ids": [mr.role.id for mr in member.member_roles if mr.role is not None],
+            }
+            for member, group, users in rows
+        ]
 
     # -----------------------------------------------------------------------
     # Modules
