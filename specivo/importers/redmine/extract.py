@@ -24,6 +24,7 @@ from typing import Any
 from specivo.importers.core.ir import (
     ContainerKind,
     IRActivity,
+    IRAttachment,
     IRCategory,
     IRCustomField,
     IRCustomValue,
@@ -771,4 +772,42 @@ def extract_time_entry(row: dict[str, Any]) -> IRTimeEntry:
         comments=row.get("comments") or None,
         created_at=as_utc(row.get("created_on")),
         updated_at=as_utc(row.get("updated_on")),
+    )
+
+
+# Attachment containers Specivo can hold. Redmine also attaches files to
+# forum messages, documents, versions and projects, all of which belong to
+# features Specivo does not have.
+_CONTAINER_KINDS: dict[str, ContainerKind] = {
+    "Issue": ContainerKind.ISSUE,
+    "WikiPage": ContainerKind.WIKI_PAGE,
+}
+
+
+def container_kind_for(container_type: str) -> ContainerKind | None:
+    """Return the Specivo container for a Redmine container type, if any."""
+    return _CONTAINER_KINDS.get((container_type or "").strip())
+
+
+def extract_attachment(row: dict[str, Any], container_kind: ContainerKind) -> IRAttachment:
+    """Build an :class:`IRAttachment` from an ``attachments`` row.
+
+    Redmine's own ``digest`` is not carried. Its algorithm has changed across
+    versions and is configurable, and the point of a hash here is to describe
+    the bytes that actually arrived, so it is recomputed on copy. ``filesize``
+    is kept only as a hint for the same reason.
+    """
+    from specivo.importers.redmine.files import build_storage_key
+
+    return IRAttachment(
+        source_ref=str(row["id"]),
+        container_kind=container_kind,
+        container_ref=str(row["container_id"]),
+        filename=(row.get("filename") or "").strip(),
+        storage_key=build_storage_key(row.get("disk_directory"), row.get("disk_filename") or ""),
+        content_type=(row.get("content_type") or "").strip() or None,
+        filesize=row.get("filesize"),
+        description=row.get("description") or None,
+        author_ref=str(row["author_id"]) if row.get("author_id") else None,
+        created_at=as_utc(row.get("created_on")),
     )

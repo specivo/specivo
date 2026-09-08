@@ -17,7 +17,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any, ClassVar
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from specivo.importers.core.ir import (
@@ -41,6 +41,7 @@ from specivo.importers.core.ir import (
     PrincipalKind,
 )
 from specivo.importers.redmine import db, extract
+from specivo.importers.redmine.files import AttachmentPathError, resolve_attachment_path
 
 logger = logging.getLogger(__name__)
 
@@ -772,14 +773,67 @@ class RedmineSourceAdapter:
                 yield extract.extract_time_entry(row)
 
     # ------------------------------------------------------------------
-    # Not yet implemented — added with the loader that consumes them
+    # Attachments
     # ------------------------------------------------------------------
 
-    def _not_yet(self, what: str) -> AsyncIterator[Any]:
-        raise NotImplementedError(f"Redmine {what} extraction is not implemented yet")
+    async def extract_attachments(self, project_ref: str) -> AsyncIterator[IRAttachment]:
+        """Stream the files attached to a project's issues and wiki pages.
 
-    def extract_attachments(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("attachment")
+        Files hanging off anything else — a forum message, a document, a
+        version — belong to features Specivo does not have, so they are counted
+        and left behind rather than attached to something they did not belong
+        to.
+        """
+        async with self.engine.connect() as conn:
+            issue_ids = await self._issue_ids(conn, project_ref)
+            wiki_page_ids = await self._wiki_page_ids(conn, project_ref)
+
+            for container_type, ids in (("Issue", issue_ids), ("WikiPage", wiki_page_ids)):
+                kind = extract.container_kind_for(container_type)
+                if kind is None or not ids:
+                    continue
+
+                for start in range(0, len(ids), self._batch_size):
+                    chunk = ids[start : start + self._batch_size]
+                    rows = (
+                        (
+                            await conn.execute(
+                                select(db.attachments).where(
+                                    db.attachments.c.container_type == container_type,
+                                    db.attachments.c.container_id.in_(chunk),
+                                )
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    for row in rows:
+                        yield extract.extract_attachment(dict(row), kind)
+
+    async def count_unsupported_attachments(self) -> dict[str, int]:
+        """Count attachments on containers Specivo cannot hold, by container."""
+        async with self.engine.connect() as conn:
+            rows = (
+                await conn.execute(
+                    select(db.attachments.c.container_type, func.count())
+                    .where(db.attachments.c.container_type.not_in(["Issue", "WikiPage"]))
+                    .group_by(db.attachments.c.container_type)
+                )
+            ).all()
+        return {container_type or "(none)": count for container_type, count in rows}
+
+    async def _wiki_page_ids(self, conn: Any, project_ref: str) -> list[int]:
+        """Return the ids of a project's wiki pages."""
+        wiki_id = (
+            await conn.execute(select(db.wikis.c.id).where(db.wikis.c.project_id == int(project_ref)))
+        ).scalar_one_or_none()
+        if wiki_id is None:
+            return []
+        stmt = select(db.wiki_pages.c.id).where(db.wiki_pages.c.wiki_id == wiki_id)
+        return list((await conn.execute(stmt)).scalars().all())
 
     def resolve_attachment_path(self, attachment: IRAttachment) -> Path:
-        raise NotImplementedError("Attachment path resolution is not implemented yet")
+        """Return the on-disk path of *attachment* under the source files directory."""
+        if self.source_files_dir is None:
+            raise AttachmentPathError("No source files directory was configured for this import")
+        return resolve_attachment_path(self.source_files_dir, attachment.storage_key)

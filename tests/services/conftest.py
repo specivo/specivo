@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import (
+    IRAttachment,
     IRCategory,
     IRCustomField,
     IRGroup,
@@ -62,6 +63,8 @@ class FakeAdapter:
         wiki_watchers: list[IRWatcher] | None = None,
         wiki_redirects: list[tuple[str, str]] | None = None,
         time_entries: list[IRTimeEntry] | None = None,
+        attachments: list[IRAttachment] | None = None,
+        files_dir: object | None = None,
         dropped: dict[str, list[str]] | None = None,
         source_format: str = "textile",
         source_system: str = "redmine",
@@ -84,6 +87,8 @@ class FakeAdapter:
         self.wiki_watchers = wiki_watchers or []
         self.wiki_redirects = wiki_redirects or []
         self.time_entries = time_entries or []
+        self.attachments = attachments or []
+        self.source_files_dir = files_dir
         self._dropped = dropped or {}
         self.source_format = source_format
 
@@ -180,6 +185,17 @@ class FakeAdapter:
         for entry in self.time_entries:
             if entry.project_ref == project_ref:
                 yield entry
+
+    async def extract_attachments(self, project_ref: str) -> AsyncIterator[IRAttachment]:
+        for attachment in self.attachments:
+            yield attachment
+
+    def resolve_attachment_path(self, attachment: IRAttachment):
+        from specivo.importers.redmine.files import resolve_attachment_path
+
+        if self.source_files_dir is None:
+            raise ValueError("No source files directory was configured")
+        return resolve_attachment_path(self.source_files_dir, attachment.storage_key)
 
 
 @pytest.fixture
