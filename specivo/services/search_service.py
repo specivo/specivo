@@ -35,6 +35,7 @@ from specivo.schemas.search import (
     SearchResultType,
     SearchSourceType,
 )
+from specivo.services.permission_service import Permission
 
 # Shortcuts for f-string interpolation into raw SQL. These expand to the
 # enum member's string value (e.g. ``_SST_ATTACHMENT == "attachment"``). Values
@@ -50,6 +51,51 @@ _SST_JOURNAL = SearchSourceType.JOURNAL.value
 _SST_ATTACHMENT = SearchSourceType.ATTACHMENT.value
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Shared visibility SQL fragments
+# ---------------------------------------------------------------------------
+#
+# The visibility clauses below are near-identical to one another, and every
+# copy is a chance for them to drift — which is how the wiki clauses came to
+# check less than the issue ones. The two rules that every clause needs are
+# defined here once and composed into each.
+
+
+def _principal_match(alias: str = "m") -> str:
+    """Return SQL matching the ``members`` rows that reach the current user.
+
+    A ``members`` row is held by exactly one principal: a user or a user
+    group. It reaches the user when it is their own row, or when it belongs
+    to a group they are in. This mirrors
+    ``permission_service.member_principal_clause()``, which is the ORM-side
+    definition of the same rule.
+    """
+    return (
+        f"({alias}.user_id = :current_user_id"
+        f" OR {alias}.group_id IN (SELECT ugm.group_id FROM user_group_members ugm"
+        f" WHERE ugm.user_id = :current_user_id))"
+    )
+
+
+def _role_grants(permission: str, alias: str = "r") -> str:
+    """Return SQL testing whether a role grants *permission* (or the wildcard).
+
+    ``roles.permissions`` is a JSONB array of permission strings, with
+    ``["*"]`` meaning all. ``jsonb_exists()`` is used rather than the ``?``
+    operator: a bare ``?`` in a raw SQL string sits badly next to parameter
+    handling and reads worse.
+
+    *permission* is always a ``Permission`` member, never user input, so
+    interpolating it is safe.
+    """
+    return f"(jsonb_exists({alias}.permissions, '{permission}') OR jsonb_exists({alias}.permissions, '*'))"
+
+
+# Joins from a ``members`` row to the roles it holds. Every clause that needs
+# to ask what a membership grants starts from this.
+_MEMBER_ROLE_JOINS = "JOIN member_roles mr ON mr.member_id = m.id JOIN roles r ON r.id = mr.role_id"
 
 
 def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int]:
@@ -172,34 +218,43 @@ class SearchService:
         if user.is_admin:
             return ""
 
+        principal = _principal_match("m")
+        principal2 = _principal_match("m2")
+        grants_view = _role_grants(Permission.VIEW_ISSUES, "r")
+        grants_view2 = _role_grants(Permission.VIEW_ISSUES, "r2")
+
         return f"""
             AND (
-                -- Member with "all" or "default" visibility: see non-private + own private
+                -- Member granted view_issues with "all"/"default": non-private + own private
                 (EXISTS (SELECT 1 FROM members m
-                         JOIN member_roles mr ON mr.member_id = m.id
-                         JOIN roles r ON r.id = mr.role_id
-                         WHERE m.user_id = :current_user_id AND m.project_id = {alias}.project_id
+                         {_MEMBER_ROLE_JOINS}
+                         WHERE {principal} AND m.project_id = {alias}.project_id
+                         AND {grants_view}
                          AND r.issues_visibility IN ('all', 'default'))
                  AND ({alias}.is_private = false
                       OR {alias}.author_id = :current_user_id
                       OR {alias}.assigned_to_id = :current_user_id))
                 OR
-                -- Member with "own" only: author/assignee only
+                -- Member granted view_issues with "own" only: author/assignee only
                 (EXISTS (SELECT 1 FROM members m
-                         JOIN member_roles mr ON mr.member_id = m.id
-                         JOIN roles r ON r.id = mr.role_id
-                         WHERE m.user_id = :current_user_id AND m.project_id = {alias}.project_id
+                         {_MEMBER_ROLE_JOINS}
+                         WHERE {principal} AND m.project_id = {alias}.project_id
+                         AND {grants_view}
                          AND r.issues_visibility = 'own'
                          AND NOT EXISTS (SELECT 1 FROM members m2
                                          JOIN member_roles mr2 ON mr2.member_id = m2.id
                                          JOIN roles r2 ON r2.id = mr2.role_id
-                                         WHERE m2.user_id = :current_user_id AND m2.project_id = {alias}.project_id
+                                         WHERE {principal2} AND m2.project_id = {alias}.project_id
+                                         AND {grants_view2}
                                          AND r2.issues_visibility IN ('all', 'default')))
                  AND ({alias}.author_id = :current_user_id OR {alias}.assigned_to_id = :current_user_id))
                 OR
-                -- Non-member on public project: non-private only
+                -- Non-member on public project: non-private only. A member whose
+                -- roles grant nothing does NOT reach this branch -- the row exists,
+                -- so their roles replace the non-member fallback rather than adding
+                -- to it.
                 (NOT EXISTS (SELECT 1 FROM members m
-                             WHERE m.user_id = :current_user_id
+                             WHERE {principal}
                              AND m.project_id = {alias}.project_id)
                  AND EXISTS (SELECT 1 FROM projects p
                              WHERE p.id = {alias}.project_id AND p.is_public = true)
@@ -223,8 +278,9 @@ class SearchService:
         return f"""
             AND (
                 EXISTS (SELECT 1 FROM members m
-                        WHERE m.user_id = :current_user_id
-                        AND m.project_id = {alias}.project_id)
+                        {_MEMBER_ROLE_JOINS}
+                        WHERE {_principal_match("m")} AND m.project_id = {alias}.project_id
+                        AND {_role_grants(Permission.VIEW_WIKI, "r")})
                 OR EXISTS (SELECT 1 FROM projects p2 WHERE p2.id = {alias}.project_id AND p2.is_public = true)
             )
         """
@@ -290,18 +346,21 @@ class SearchService:
         if user is None or user.is_admin:
             return ""
 
-        return """
+        grants_issues = _role_grants(Permission.VIEW_ISSUES, "r")
+        grants_wiki = _role_grants(Permission.VIEW_WIKI, "r")
+
+        return f"""
             WITH user_visibility AS (
                 SELECT m.project_id,
                        MAX(CASE
-                           WHEN r.issues_visibility IN ('all', 'default') THEN 2
-                           WHEN r.issues_visibility = 'own' THEN 1
+                           WHEN {grants_issues} AND r.issues_visibility IN ('all', 'default') THEN 2
+                           WHEN {grants_issues} AND r.issues_visibility = 'own' THEN 1
                            ELSE 0
-                       END) AS visibility_level
+                       END) AS visibility_level,
+                       bool_or({grants_wiki}) AS can_view_wiki
                 FROM members m
-                JOIN member_roles mr ON mr.member_id = m.id
-                JOIN roles r ON r.id = mr.role_id
-                WHERE m.user_id = :current_user_id
+                {_MEMBER_ROLE_JOINS}
+                WHERE {_principal_match("m")}
                 GROUP BY m.project_id
             ),
             public_projects AS (
@@ -351,7 +410,7 @@ class SearchService:
         return f"""
             AND (
                 EXISTS (SELECT 1 FROM user_visibility uv
-                        WHERE uv.project_id = {alias}.project_id)
+                        WHERE uv.project_id = {alias}.project_id AND uv.can_view_wiki)
                 OR EXISTS (SELECT 1 FROM public_projects pp
                            WHERE pp.project_id = {alias}.project_id)
             )
@@ -404,7 +463,7 @@ class SearchService:
                 -- WikiPage attachments: user has project access or project is public
                 (att.container_type = 'WikiPage' AND awp.id IS NOT NULL AND (
                     EXISTS (SELECT 1 FROM user_visibility uv
-                            WHERE uv.project_id = aw.project_id)
+                            WHERE uv.project_id = aw.project_id AND uv.can_view_wiki)
                     OR EXISTS (SELECT 1 FROM public_projects pp
                                WHERE pp.project_id = aw.project_id)
                 ))
