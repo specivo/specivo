@@ -20,6 +20,7 @@ from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
+from specivo.services.permission_service import member_principal_clause
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +164,8 @@ class ProjectService:
         """Raise NotFoundError if non-admin user cannot access this project.
 
         Public projects: accessible to all authenticated users.
-        Private projects: accessible only to members.
+        Private projects: accessible to members — whether the membership is
+        held by the user directly or by a user group they belong to.
         Returns 404 (not 403) to prevent project key enumeration.
         """
         if user.is_admin:
@@ -174,7 +176,7 @@ class ProjectService:
             select(Member.id)
             .where(
                 Member.project_id == project.id,
-                Member.user_id == user.id,
+                member_principal_clause(user.id),
             )
             .limit(1)
         )
@@ -201,14 +203,15 @@ class ProjectService:
 
         Admins see all projects.  Regular users see:
         - All public projects.
-        - Private projects they are a member of.
+        - Private projects they are a member of, directly or through a
+          user group that holds the membership.
         """
         if user.is_admin:
             count_stmt = select(func.count()).select_from(Project)
             stmt = select(Project).order_by(Project.name).offset(offset).limit(limit)
         else:
-            # Subquery: project IDs the user is a member of
-            member_projects = select(Member.project_id).where(Member.user_id == user.id).scalar_subquery()
+            # Subquery: project IDs the user is a member of, via either principal
+            member_projects = select(Member.project_id).where(member_principal_clause(user.id)).scalar_subquery()
             base = Project.is_public.is_(True) | Project.id.in_(member_projects)
             count_stmt = select(func.count()).select_from(Project).where(base)
             stmt = select(Project).where(base).order_by(Project.name).offset(offset).limit(limit)
@@ -542,7 +545,11 @@ class ProjectService:
         await session.flush()
 
     async def count_members(self, session: AsyncSession, project: Project) -> int:
-        """Return the total number of members in a project."""
+        """Return the number of membership rows in a project.
+
+        A group counts as one member, not as the number of users in it: this
+        counts membership rows, which is what the members tab lists.
+        """
         result = await session.execute(select(func.count()).select_from(Member).where(Member.project_id == project.id))
         return result.scalar_one()
 
@@ -552,10 +559,16 @@ class ProjectService:
         project: Project,
         limit: int | None = None,
     ) -> list[dict]:
-        """Return project members with their roles.
+        """Return project members held by a user, with their roles.
 
         Returns a list of dicts sorted by last login (most recent first).
         Pass ``limit`` to cap the number of results (useful for overview cards).
+
+        Group-held membership rows are skipped: every consumer of these dicts
+        (``MemberOut``, the members tab) is built around a user identity —
+        login, display name, avatar, last login — and a group has none of
+        them.  Rendering groups needs its own row shape and is handled with
+        the rest of the group member UI, not here.
         """
         stmt = (
             select(Member)
@@ -575,6 +588,7 @@ class ProjectService:
         for member in members:
             user = member.user
             if user is None:
+                # Group-held membership row — see the docstring.
                 continue
             role_names = [mr.role.name for mr in member.member_roles if mr.role is not None]
             role_ids = [mr.role.id for mr in member.member_roles if mr.role is not None]
@@ -712,6 +726,9 @@ class ProjectService:
             stats[row.project_id]["closed_count"] = done
 
         # --- Member counts + member details (first 6 per project) ---
+        # User-held rows only: these feed the avatar strip on project cards,
+        # which needs a user identity.  Group-held rows are counted by
+        # ``count_members()`` and rendered with the rest of the group UI.
         member_stmt = (
             select(
                 Member.project_id,

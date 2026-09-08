@@ -163,11 +163,14 @@ class WorkflowService:
         return (result.scalar() or 0) > 0
 
     async def _get_user_role_ids(self, session: AsyncSession, user: User, project_id: int) -> list[int]:
-        """Get role IDs for a user in a project."""
+        """Get role IDs for a user in a project, including group-held roles."""
+        from specivo.services.permission_service import member_principal_clause
+
         stmt = (
             select(MemberRole.role_id)
             .join(Member, Member.id == MemberRole.member_id)
-            .where(Member.user_id == user.id, Member.project_id == project_id)
+            .where(member_principal_clause(user.id), Member.project_id == project_id)
+            .distinct()
         )
         result = await session.execute(stmt)
         return [row[0] for row in result.all()]

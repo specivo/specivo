@@ -1,6 +1,14 @@
 """Permission constants and check utilities.
 
+A user reaches a project through one of two kinds of ``members`` row: one
+held directly by the user, or one held by a user group the user belongs to.
+Both kinds carry their roles the same way (via ``member_roles``), so every
+membership read here resolves the union of the two.
+
 - ``PERMISSIONS`` dict: canonical permission names + human labels.
+- ``member_principal_clause(user_id)``: the single definition of "this
+  ``members`` row grants *user_id* access" — direct row or group row. Reuse
+  it anywhere membership is read for an access decision.
 - ``check_permission(user, project_id, permission, session)``:
   - Admin users always pass.
   - For non-admins: queries member_roles + roles for this user+project,
@@ -17,21 +25,47 @@ from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.models.member import Member, MemberRole
 from specivo.models.role import Role
 from specivo.models.user import User
+from specivo.models.user_group import UserGroupMember
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Membership predicate
+# ---------------------------------------------------------------------------
+
+
+def member_principal_clause(user_id: int) -> ColumnElement[bool]:
+    """Return a predicate selecting the ``members`` rows that grant *user_id* access.
+
+    A ``members`` row is held by exactly one principal: a user or a user
+    group.  A row reaches *user_id* when it is the user's own row, or when it
+    belongs to a group the user is in.  The ``OR`` keeps this to a single
+    join-free predicate over ``members``, so the planner can still use
+    ``ix_members_user_id`` / ``ix_members_group_id``.
+
+    This is the one definition of "is this user a member"; use it for every
+    membership read that feeds an access decision.  Membership rows looked up
+    to be *edited* (add/update/remove a specific user's roles) must stay
+    user-only and should not use this.
+    """
+    users_groups = select(UserGroupMember.group_id).where(UserGroupMember.user_id == user_id)
+    return or_(Member.user_id == user_id, Member.group_id.in_(users_groups))
+
 
 # ---------------------------------------------------------------------------
 # Role lookup (cacheable per request)
 # ---------------------------------------------------------------------------
 
-# Per-session role cache to avoid repeated 3-table JOINs within the same
-# request/tool call.  Keyed by (user_id, project_id) → list[Role].
+# Per-session role cache to avoid repeated JOINs within the same request/tool
+# call.  Keyed by (user_id, project_id) → list[Role]: group-held roles are
+# already folded into that list, so the key stays the user, not the principal.
 # Callers should call ``get_user_roles()`` instead of querying directly.
 _role_cache: dict[tuple[int, int], list[Role]] = {}
 
@@ -48,9 +82,14 @@ async def get_user_roles(
 ) -> list[Role]:
     """Return roles for *user_id* on *project_id*, with per-request caching.
 
-    The 3-table JOIN (roles → member_roles → members) is the most
-    frequent query in the system.  This function caches the result so
-    repeated checks within the same request hit the DB only once.
+    The result is the union of the roles held by the user's own membership
+    row and those held by every group the user belongs to; a user who is both
+    a direct member and in a group ends up holding both sets.  Roles are
+    deduplicated, so two groups granting the same role yield it once.
+
+    The JOIN (roles → member_roles → members) is the most frequent query in
+    the system.  This function caches the result so repeated checks within
+    the same request hit the DB only once.
     """
     cache_key = (user_id, project_id)
     if cache_key in _role_cache:
@@ -60,7 +99,8 @@ async def get_user_roles(
         select(Role)
         .join(MemberRole, MemberRole.role_id == Role.id)
         .join(Member, Member.id == MemberRole.member_id)
-        .where(Member.project_id == project_id, Member.user_id == user_id)
+        .where(Member.project_id == project_id, member_principal_clause(user_id))
+        .distinct()
     )
     roles = list((await session.execute(stmt)).scalars().all())
     _role_cache[cache_key] = roles

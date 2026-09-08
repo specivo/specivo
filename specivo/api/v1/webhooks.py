@@ -26,14 +26,20 @@ async def _require_manage_project(user: User, project_id: int, db: AsyncSession)
 
 
 async def _require_project_member(user: User, project_id: int, db: AsyncSession) -> None:
-    """Raise 403 if user is not a project member (admins always pass)."""
+    """Raise 403 if user is not a project member (admins always pass).
+
+    Membership held by a user group the user belongs to counts.
+    """
     if user.is_admin:
         return
     from sqlalchemy import select
 
     from specivo.models.member import Member
+    from specivo.services.permission_service import member_principal_clause
 
-    result = await db.execute(select(Member.id).where(Member.user_id == user.id, Member.project_id == project_id))
+    result = await db.execute(
+        select(Member.id).where(member_principal_clause(user.id), Member.project_id == project_id)
+    )
     if result.scalar_one_or_none() is None:
         raise PermissionDeniedError("Project membership required")
 
