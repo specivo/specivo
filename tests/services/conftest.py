@@ -25,9 +25,11 @@ from specivo.importers.core.ir import (
     IRMembership,
     IRProject,
     IRRelation,
+    IRTimeEntry,
     IRUser,
     IRVersion,
     IRWatcher,
+    IRWikiPage,
 )
 from specivo.importers.core.pipeline import ImportOptions, ImportPhase, ImportSummary, PhaseContext
 from specivo.importers.core.progress import NullProgressReporter
@@ -56,6 +58,10 @@ class FakeAdapter:
         journals: list[IRJournalEntry] | None = None,
         relations: list[IRRelation] | None = None,
         watchers: list[IRWatcher] | None = None,
+        wiki_pages: list[IRWikiPage] | None = None,
+        wiki_watchers: list[IRWatcher] | None = None,
+        wiki_redirects: list[tuple[str, str]] | None = None,
+        time_entries: list[IRTimeEntry] | None = None,
         dropped: dict[str, list[str]] | None = None,
         source_format: str = "textile",
         source_system: str = "redmine",
@@ -74,6 +80,10 @@ class FakeAdapter:
         self.journals = journals or []
         self.relations = relations or []
         self.watchers = watchers or []
+        self.wiki_pages = wiki_pages or []
+        self.wiki_watchers = wiki_watchers or []
+        self.wiki_redirects = wiki_redirects or []
+        self.time_entries = time_entries or []
         self._dropped = dropped or {}
         self.source_format = source_format
 
@@ -146,6 +156,30 @@ class FakeAdapter:
         for watcher in self.watchers:
             if watcher.container_ref in refs:
                 yield watcher
+
+    async def extract_wiki_pages(self, project_ref: str) -> AsyncIterator[IRWikiPage]:
+        """Yield parents before children, as the real adapter guarantees."""
+        from specivo.importers.redmine.extract import order_parents_first
+
+        in_project = {page.source_ref: page for page in self.wiki_pages if page.project_ref == project_ref}
+        parents = {ref: page.parent_ref for ref, page in in_project.items()}
+        for ref in order_parents_first(parents):
+            yield in_project[ref]
+
+    async def extract_wiki_watchers(self, project_ref: str) -> AsyncIterator[IRWatcher]:
+        refs = {page.source_ref for page in self.wiki_pages if page.project_ref == project_ref}
+        for watcher in self.wiki_watchers:
+            if watcher.container_ref in refs:
+                yield watcher
+
+    async def extract_wiki_redirects(self, project_ref: str) -> AsyncIterator[tuple[str, str]]:
+        for pair in self.wiki_redirects:
+            yield pair
+
+    async def extract_time_entries(self, project_ref: str) -> AsyncIterator[IRTimeEntry]:
+        for entry in self.time_entries:
+            if entry.project_ref == project_ref:
+                yield entry
 
 
 @pytest.fixture

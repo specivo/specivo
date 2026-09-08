@@ -37,10 +37,13 @@ from specivo.importers.core.ir import (
     IRRelation,
     IRRole,
     IRStatus,
+    IRTimeEntry,
     IRTracker,
     IRUser,
     IRVersion,
     IRWatcher,
+    IRWikiPage,
+    IRWikiVersion,
     PrincipalKind,
     ValueKind,
 )
@@ -685,4 +688,87 @@ def extract_watcher(row: dict[str, Any], container_kind: ContainerKind) -> IRWat
         container_kind=container_kind,
         container_ref=str(row["watchable_id"]),
         user_ref=str(row["user_id"]),
+    )
+
+
+# --------------------------------------------------------------------------
+# Wiki and time tracking
+# --------------------------------------------------------------------------
+
+
+def decode_wiki_text(data: bytes | str | None, compression: str | None) -> str:
+    """Return the text of a wiki revision.
+
+    Redmine stores revision bodies as bytes and may gzip them, which the
+    ``compression`` column records. A body that cannot be decoded comes back as
+    replacement characters rather than raising: a garbled revision is worth
+    keeping, and losing the page's history is not.
+    """
+    if data is None:
+        return ""
+    if isinstance(data, str):
+        return data
+
+    payload = data
+    if (compression or "").strip().lower() == "gzip":
+        import gzip
+        import zlib
+
+        try:
+            payload = gzip.decompress(data)
+        except (OSError, zlib.error):
+            return data.decode("utf-8", errors="replace")
+
+    return payload.decode("utf-8", errors="replace")
+
+
+def extract_wiki_version(row: dict[str, Any]) -> IRWikiVersion:
+    """Build an :class:`IRWikiVersion` from a ``wiki_content_versions`` row."""
+    return IRWikiVersion(
+        source_ref=str(row["id"]),
+        version=row.get("version") or 1,
+        text=decode_wiki_text(row.get("data"), row.get("compression")),
+        comments=row.get("comments") or None,
+        author_ref=str(row["author_id"]) if row.get("author_id") else None,
+        created_at=as_utc(row.get("updated_on")),
+    )
+
+
+def extract_wiki_page(row: dict[str, Any], versions: list[IRWikiVersion]) -> IRWikiPage:
+    """Build an :class:`IRWikiPage` with its history, oldest revision first.
+
+    The slug is not carried: Specivo derives its own from the title, and its
+    rules differ from Redmine's.
+    """
+    return IRWikiPage(
+        source_ref=str(row["id"]),
+        project_ref=str(row["project_id"]),
+        title=(row.get("title") or "").strip(),
+        parent_ref=str(row["parent_id"]) if row.get("parent_id") else None,
+        protected=bool(row.get("protected")),
+        versions=sorted(versions, key=lambda version: version.version),
+    )
+
+
+def extract_time_entry(row: dict[str, Any]) -> IRTimeEntry:
+    """Build an :class:`IRTimeEntry` from a ``time_entries`` row.
+
+    Redmine records both whose time it is and who logged it; Specivo keeps only
+    the former, so ``author_id`` is dropped.
+
+    Hours are converted from a float to a Decimal through its string form,
+    which is what keeps 7.5 from becoming 7.499999999999999.
+    """
+    hours = row.get("hours")
+    return IRTimeEntry(
+        source_ref=str(row["id"]),
+        project_ref=str(row["project_id"]),
+        hours=Decimal(str(hours if hours is not None else 0)),
+        spent_on=row["spent_on"],
+        issue_ref=str(row["issue_id"]) if row.get("issue_id") else None,
+        user_ref=str(row["user_id"]) if row.get("user_id") else None,
+        activity_ref=str(row["activity_id"]) if row.get("activity_id") else None,
+        comments=row.get("comments") or None,
+        created_at=as_utc(row.get("created_on")),
+        updated_at=as_utc(row.get("updated_on")),
     )

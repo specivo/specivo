@@ -359,3 +359,139 @@ class TestOrderParentsFirst:
         from specivo.importers.redmine.extract import order_parents_first
 
         assert order_parents_first({}) == []
+
+
+class TestWikiText:
+    """Redmine stores revision bodies as bytes and may gzip them."""
+
+    def test_plain_bytes_are_decoded(self):
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text(b"h1. Home", "") == "h1. Home"
+
+    def test_gzip_is_decompressed(self):
+        import gzip
+
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text(gzip.compress(b"h1. Home"), "gzip") == "h1. Home"
+
+    def test_compression_label_is_matched_loosely(self):
+        import gzip
+
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text(gzip.compress(b"text"), " GZIP ") == "text"
+
+    def test_non_ascii_survives(self):
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text("ข้อความ".encode(), "") == "ข้อความ"
+
+    def test_gzipped_non_ascii_survives(self):
+        import gzip
+
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text(gzip.compress("ข้อความ".encode()), "gzip") == "ข้อความ"
+
+    def test_body_mislabelled_as_gzip_is_not_lost(self):
+        """A garbled revision is worth keeping; losing the history is not."""
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text(b"not actually gzipped", "gzip") == "not actually gzipped"
+
+    def test_undecodable_bytes_become_replacement_characters(self):
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text(b"\xff\xfe", "") != ""
+
+    def test_missing_body_is_empty(self):
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text(None, None) == ""
+
+    def test_a_string_passes_through(self):
+        from specivo.importers.redmine.extract import decode_wiki_text
+
+        assert decode_wiki_text("already text", None) == "already text"
+
+
+class TestTimeEntryExtraction:
+    def test_float_hours_become_exact_decimals(self):
+        """Going through the string form is what keeps 7.5 from becoming
+        7.499999999999999."""
+        from datetime import date
+        from decimal import Decimal
+
+        from specivo.importers.redmine.extract import extract_time_entry
+
+        entry = extract_time_entry(
+            {"id": 1, "project_id": 1, "hours": 7.5, "spent_on": date(2026, 3, 1), "user_id": 5, "activity_id": 9}
+        )
+        assert entry.hours == Decimal("7.5")
+
+    def test_author_is_dropped_in_favour_of_the_owner(self):
+        """Specivo keeps whose time it is, not who logged it."""
+        from datetime import date
+
+        from specivo.importers.redmine.extract import extract_time_entry
+
+        entry = extract_time_entry(
+            {
+                "id": 1,
+                "project_id": 1,
+                "hours": 1.0,
+                "spent_on": date(2026, 3, 1),
+                "user_id": 5,
+                "author_id": 9,
+                "activity_id": 9,
+            }
+        )
+        assert entry.user_ref == "5"
+
+
+class TestRelationNormalisation:
+    @pytest.mark.parametrize(
+        ("source_type", "expected_type", "swapped"),
+        [
+            ("relates", "relates", False),
+            ("duplicates", "duplicates", False),
+            ("duplicated", "duplicates", True),
+            ("blocks", "blocks", False),
+            ("blocked", "blocks", True),
+            ("precedes", "precedes", False),
+            ("follows", "precedes", True),
+            ("copied_to", "copied_to", False),
+            ("copied_from", "copied_to", True),
+        ],
+    )
+    def test_reverse_names_swap_the_endpoints(self, source_type, expected_type, swapped):
+        """Specivo stores one canonical direction and derives the reverse."""
+        from specivo.importers.redmine.extract import extract_relation
+
+        relation = extract_relation(
+            {"id": 1, "issue_from_id": 10, "issue_to_id": 20, "relation_type": source_type, "delay": None}
+        )
+        assert relation is not None
+        assert relation.relation_type == expected_type
+        assert (relation.from_ref, relation.to_ref) == (("20", "10") if swapped else ("10", "20"))
+
+    def test_unknown_type_is_rejected_rather_than_guessed(self):
+        from specivo.importers.redmine.extract import extract_relation
+
+        assert (
+            extract_relation(
+                {"id": 1, "issue_from_id": 10, "issue_to_id": 20, "relation_type": "invented", "delay": None}
+            )
+            is None
+        )
+
+    def test_delay_is_kept(self):
+        from specivo.importers.redmine.extract import extract_relation
+
+        relation = extract_relation(
+            {"id": 1, "issue_from_id": 10, "issue_to_id": 20, "relation_type": "precedes", "delay": 3}
+        )
+        assert relation is not None
+        assert relation.delay == 3

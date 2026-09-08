@@ -33,9 +33,11 @@ from specivo.importers.core.ir import (
     IRMembership,
     IRProject,
     IRRelation,
+    IRTimeEntry,
     IRUser,
     IRVersion,
     IRWatcher,
+    IRWikiPage,
     PrincipalKind,
 )
 from specivo.importers.redmine import db, extract
@@ -656,7 +658,121 @@ class RedmineSourceAdapter:
         return list((await conn.execute(stmt)).scalars().all())
 
     # ------------------------------------------------------------------
-    # Not yet implemented — added with the loaders that consume them
+    # Wiki
+    # ------------------------------------------------------------------
+
+    async def extract_wiki_pages(self, project_ref: str) -> AsyncIterator[IRWikiPage]:
+        """Stream a project's wiki pages with their history, parents first.
+
+        History comes from ``wiki_content_versions`` alone. That table holds
+        every revision including the current one, so reading the separate
+        current-content table as well would duplicate the latest revision.
+        """
+        async with self.engine.connect() as conn:
+            wiki_id = (
+                await conn.execute(select(db.wikis.c.id).where(db.wikis.c.project_id == int(project_ref)))
+            ).scalar_one_or_none()
+            if wiki_id is None:
+                return
+
+            page_rows = (
+                (await conn.execute(select(db.wiki_pages).where(db.wiki_pages.c.wiki_id == wiki_id))).mappings().all()
+            )
+            if not page_rows:
+                return
+
+            pages = {str(row["id"]): dict(row) for row in page_rows}
+            parents = {ref: (str(row["parent_id"]) if row.get("parent_id") else None) for ref, row in pages.items()}
+
+            versions: dict[int, list[Any]] = {}
+            for row in (
+                (
+                    await conn.execute(
+                        select(db.wiki_content_versions)
+                        .where(db.wiki_content_versions.c.page_id.in_([int(ref) for ref in pages]))
+                        .order_by(db.wiki_content_versions.c.page_id, db.wiki_content_versions.c.version)
+                    )
+                )
+                .mappings()
+                .all()
+            ):
+                versions.setdefault(row["page_id"], []).append(extract.extract_wiki_version(dict(row)))
+
+        for ref in extract.order_parents_first(parents):
+            page_row = pages[ref]
+            # wiki_pages hangs off the wiki, not the project, so the project is
+            # attached here for the IR.
+            page_row["project_id"] = int(project_ref)
+            yield extract.extract_wiki_page(page_row, versions.get(int(ref), []))
+
+    async def extract_wiki_watchers(self, project_ref: str) -> AsyncIterator[IRWatcher]:
+        """Stream the wiki-page watchers of a project."""
+        async with self.engine.connect() as conn:
+            wiki_id = (
+                await conn.execute(select(db.wikis.c.id).where(db.wikis.c.project_id == int(project_ref)))
+            ).scalar_one_or_none()
+            if wiki_id is None:
+                return
+
+            page_ids = list(
+                (await conn.execute(select(db.wiki_pages.c.id).where(db.wiki_pages.c.wiki_id == wiki_id)))
+                .scalars()
+                .all()
+            )
+            if not page_ids:
+                return
+
+            rows = (
+                (
+                    await conn.execute(
+                        select(db.watchers).where(
+                            db.watchers.c.watchable_type == "WikiPage",
+                            db.watchers.c.watchable_id.in_(page_ids),
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        for row in rows:
+            yield extract.extract_watcher(dict(row), ContainerKind.WIKI_PAGE)
+
+    async def extract_wiki_redirects(self, project_ref: str) -> AsyncIterator[tuple[str, str]]:
+        """Stream a project's wiki redirects as (from title, to title) pairs.
+
+        Redmine records one whenever a page is renamed and Specivo has the same
+        table, so links to a page's old name keep working after the import.
+        """
+        async with self.engine.connect() as conn:
+            wiki_id = (
+                await conn.execute(select(db.wikis.c.id).where(db.wikis.c.project_id == int(project_ref)))
+            ).scalar_one_or_none()
+            if wiki_id is None:
+                return
+
+            rows = (
+                (await conn.execute(select(db.wiki_redirects).where(db.wiki_redirects.c.wiki_id == wiki_id)))
+                .mappings()
+                .all()
+            )
+        for row in rows:
+            title, target = (row.get("title") or "").strip(), (row.get("redirects_to") or "").strip()
+            if title and target:
+                yield title, target
+
+    # ------------------------------------------------------------------
+    # Time tracking
+    # ------------------------------------------------------------------
+
+    async def extract_time_entries(self, project_ref: str) -> AsyncIterator[IRTimeEntry]:
+        """Stream a project's logged time."""
+        async with self.engine.connect() as conn:
+            stmt = select(db.time_entries).where(db.time_entries.c.project_id == int(project_ref))
+            async for row in db.stream(conn, stmt, db.time_entries.c.id, self._batch_size):
+                yield extract.extract_time_entry(row)
+
+    # ------------------------------------------------------------------
+    # Not yet implemented — added with the loader that consumes them
     # ------------------------------------------------------------------
 
     def _not_yet(self, what: str) -> AsyncIterator[Any]:
@@ -664,12 +780,6 @@ class RedmineSourceAdapter:
 
     def extract_attachments(self, project_ref: str) -> AsyncIterator[Any]:
         return self._not_yet("attachment")
-
-    def extract_wiki_pages(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("wiki page")
-
-    def extract_time_entries(self, project_ref: str) -> AsyncIterator[Any]:
-        return self._not_yet("time entry")
 
     def resolve_attachment_path(self, attachment: IRAttachment) -> Path:
         raise NotImplementedError("Attachment path resolution is not implemented yet")
