@@ -89,6 +89,110 @@ class AttachmentService:
         """Return the absolute path for a given disk_filename."""
         return _get_upload_dir() / disk_filename
 
+    async def upload_from_path(
+        self,
+        session: AsyncSession,
+        container_type: str,
+        container_id: int,
+        source_path: Path,
+        original_filename: str,
+        author: User,
+        description: str | None = None,
+        content_type: str | None = None,
+        *,
+        skip_search_index: bool = False,
+        copy_file: bool = True,
+    ) -> Attachment:
+        """Attach a file that already exists on disk.
+
+        For migrations, where the bytes come from another tracker's storage
+        rather than an HTTP upload. Differs from :meth:`upload` in three ways,
+        each because the file is historical rather than newly offered:
+
+        * The content-type allowlist is not applied. It governs what this
+          instance accepts today; a file attached years ago in a source system
+          predates that policy, and dropping it would lose data the operator
+          asked to migrate.
+        * The size limit is not applied, for the same reason.
+        * ``skip_search_index`` lets a bulk caller index everything once at the
+          end rather than per file.
+        * ``copy_file=False`` does everything except write the copy. A dry-run
+          import rolls its transaction back, but a file already written would
+          stay written, so the copy is the one step it has to leave out. The
+          bytes are still read, which is where the failures are.
+
+        Size and hash are computed from the bytes actually copied rather than
+        trusted from the source's own record, so a file that was truncated or
+        replaced underneath the source database is described correctly here.
+
+        Raises ``FileNotFoundError`` when the file is not readable.
+        """
+        import hashlib
+        import shutil
+
+        if not source_path.is_file():
+            raise FileNotFoundError(f"Attachment file not found: {source_path}")
+
+        digest = hashlib.sha256()
+        filesize = 0
+        with source_path.open("rb") as handle:
+            while chunk := handle.read(1024 * 1024):
+                digest.update(chunk)
+                filesize += len(chunk)
+        content_hash = digest.hexdigest()
+
+        _get_upload_dir().mkdir(parents=True, exist_ok=True)
+
+        filename = original_filename or source_path.name or "attachment"
+        project_id = await self._resolve_project_id(session, container_type, container_id)
+        if project_id is not None:
+            filename = await self._unique_filename_in_project(session, project_id, filename, content_hash)
+
+        disk_filename = self._make_disk_filename(filename)
+        file_path = self._file_path(disk_filename)
+        if copy_file:
+            shutil.copyfile(source_path, file_path)
+
+        try:
+            attachment = Attachment(
+                container_type=container_type,
+                container_id=container_id,
+                filename=filename,
+                disk_filename=disk_filename,
+                content_type=content_type or "application/octet-stream",
+                filesize=filesize,
+                author_id=author.id,
+                description=description,
+                content_hash=content_hash,
+            )
+            session.add(attachment)
+            await session.flush()
+        except Exception:
+            # Atomic cleanup: the copy is only wanted if the row lands.
+            try:
+                file_path.unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise
+
+        if not skip_search_index:
+            try:
+                from specivo.services.embedding_service import EmbeddingService
+
+                await EmbeddingService().embed_attachment(session, attachment)
+            except Exception:
+                logger.debug("Embedding generation skipped for attachment %d", attachment.id)
+
+        logger.debug(
+            "Imported attachment %d (%s, %d bytes) onto %s/%d",
+            attachment.id,
+            filename,
+            filesize,
+            container_type,
+            container_id,
+        )
+        return attachment
+
     async def upload(
         self,
         session: AsyncSession,

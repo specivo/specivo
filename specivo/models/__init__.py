@@ -7,6 +7,7 @@ from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
+from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.kill_switch import KillEvent, KillTriggerConfig
@@ -48,6 +49,7 @@ __all__ = [
     "ApiKey",
     "RefreshToken",
     "Attachment",
+    "ImportIdMapping",
     "Issue",
     "Journal",
     "JournalDetail",

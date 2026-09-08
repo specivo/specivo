@@ -73,3 +73,4 @@ your own provider key (BYOK). Either way it is opt-in — see
 - [Quick start with Docker](docker.md) — get a working instance in a few minutes.
 - [Configuration](configuration.md) — environment variables, external database, SMTP, secrets.
 - [Backup & restore](backup-restore.md) — protect your data before you depend on it.
+- [Migrating from Redmine](migrating-from-redmine.md) — bring your projects, issues, history, wiki and attachments across.

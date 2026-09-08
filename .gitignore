@@ -56,3 +56,7 @@ docs-site/
 # specivo/static/dist/ ARE committed (but never the dev sourcemaps).
 frontend/node_modules/
 specivo/static/dist/**/*.map
+
+# Redmine test fixture: its attachment directory is bind-mounted so the
+# importer can read files the way an operator would. Disposable.
+.redmine-fixture/

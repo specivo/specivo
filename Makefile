@@ -244,3 +244,25 @@ backfill-embeddings:  ## Re-embed all existing issues and wiki pages
 
 reindex-fts:  ## Rebuild FTS vectors (optionally PROJECT=KEY) after a language change
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.reindex_fts $(if $(PROJECT),--project $(PROJECT),)
+
+import-redmine:  ## Import a Redmine instance (ARGS='--source-db-url ... --dry-run'; see --help)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.import_redmine $(ARGS)
+
+# --- Redmine test fixture (importer development only) ----------------------
+# PROFILE=pg (default) or PROFILE=mysql — the importer supports both databases
+# Redmine runs on, so both are testable.
+REDMINE_PROFILE ?= $(if $(PROFILE),$(PROFILE),pg)
+REDMINE_APP := $(if $(filter mysql,$(REDMINE_PROFILE)),redmine-my,redmine-pg)
+REDMINE_COMPOSE := docker compose -f docker-compose.redmine.yml --profile $(REDMINE_PROFILE)
+
+redmine-fixture-up:  ## Start the Redmine 7.0.1 fixture (PROFILE=pg|mysql)
+	@mkdir -p .redmine-fixture/files-pg .redmine-fixture/files-mysql
+	$(REDMINE_COMPOSE) up -d --wait
+
+redmine-fixture-seed:  ## Fill the fixture with importer test content (PROFILE=pg|mysql)
+	$(REDMINE_COMPOSE) exec $(REDMINE_APP) bundle exec rails runner /seed/seed.rb
+
+redmine-fixture-down:  ## Stop the fixture and discard its data (PROFILE=pg|mysql)
+	$(REDMINE_COMPOSE) down -v
+
+redmine-fixture-reset: redmine-fixture-down redmine-fixture-up redmine-fixture-seed  ## Recreate and reseed the fixture

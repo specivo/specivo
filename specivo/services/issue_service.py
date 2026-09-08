@@ -291,6 +291,7 @@ class IssueService:
         *,
         recurring_pattern_id: int | None = None,
         original_occurrence_at: datetime | None = None,
+        skip_search_index: bool = False,
     ) -> Issue:
         """Create an issue with an atomic per-project sequence number.
 
@@ -305,6 +306,11 @@ class IssueService:
         — untouched. Together they form the idempotency key for generated issues
         (a partial unique index on the issues table enforces one issue per
         ``(recurring_pattern_id, original_occurrence_at)``).
+
+        ``skip_search_index`` suppresses the inline embedding call. Bulk callers
+        such as the import pipeline set it and run one batch backfill at the end
+        instead of embedding every row as it is written; the FTS vector is
+        maintained by a database trigger and is unaffected either way.
         """
         # Resolve optional fields to defaults before writing anything
         status_id = data.status_id
@@ -428,17 +434,18 @@ class IssueService:
         )
 
         # Generate search embeddings (inline, non-blocking on failure)
-        try:
-            from specivo.schemas.search import SearchSourceType
-            from specivo.services.chunking_service import ChunkingService
-            from specivo.services.embedding_service import EmbeddingService
+        if not skip_search_index:
+            try:
+                from specivo.schemas.search import SearchSourceType
+                from specivo.services.chunking_service import ChunkingService
+                from specivo.services.embedding_service import EmbeddingService
 
-            chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
-            await EmbeddingService().embed_source(
-                session, SearchSourceType.ISSUE, issue.id, project.id, chunks
-            )
-        except Exception:
-            logger.debug("Embedding generation skipped for %s (no model or error)", issue.display_key)
+                chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
+                await EmbeddingService().embed_source(
+                    session, SearchSourceType.ISSUE, issue.id, project.id, chunks
+                )
+            except Exception:
+                logger.debug("Embedding generation skipped for %s (no model or error)", issue.display_key)
 
         return issue
 

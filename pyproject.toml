@@ -1,6 +1,6 @@
 [project]
 name = "specivo"
-version = "0.6.0"
+version = "0.7.0"
 description = "Your team's knowledge, finally findable. Self-hosted project tracking, wiki, and search that understands what you wrote."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -45,6 +45,20 @@ dev = [
     "ruff>=0.8",
     "mypy>=1.13",
 ]
+# Extra dependencies used only by the migration importers (specivo.importers).
+# Kept out of the runtime install: a server that never imports from another
+# tracker should not carry a MySQL driver or a markup converter. Modules import
+# them lazily and fail with an install hint when the extra is missing.
+importers = [
+    # Only needed when the source tracker runs on MySQL; PostgreSQL sources use
+    # asyncpg, which is already a runtime dependency.
+    "aiomysql>=0.2",
+    # Textile is Redmine's historical markup. Converted in two hops, Textile to
+    # HTML and HTML to Markdown, because both halves are mature and neither
+    # needs an external binary in the image.
+    "textile>=4.0",
+    "markdownify>=0.13",
+]
 
 [tool.setuptools.packages.find]
 include = ["specivo*"]
@@ -75,6 +89,7 @@ markers = [
     "enterprise: Tests for Enterprise tier features",
     "serial: Tests that cannot run under xdist (shared state like Redis rate limits)",
     "e2e: End-to-end browser tests (requires running server)",
+    "redmine: Importer tests against the Redmine fixture (make redmine-fixture-up)",
 ]
 # loadfile, not worksteal: test modules define fixtures that insert rows with
 # fixed unique keys (logins, project keys). Spreading one module's tests across
@@ -106,3 +121,8 @@ python_version = "3.12"
 strict = false
 warn_return_any = true
 warn_unused_configs = true
+
+# Importer-only dependencies that ship no type information.
+[[tool.mypy.overrides]]
+module = ["textile", "textile.*", "markdownify", "markdownify.*", "aiomysql", "aiomysql.*"]
+ignore_missing_imports = true

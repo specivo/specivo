@@ -1,0 +1,112 @@
+# Redmine 7.0.1 test fixture for the migration importer.
+#
+# Not part of running Specivo. It exists so the importer can be developed and
+# tested against a real Redmine — its schema, its own bookkeeping, and its
+# storage layout — rather than against an approximation of one.
+#
+# Two profiles, because the importer supports both databases Redmine runs on
+# and the schema is only identical in theory:
+#
+#   make redmine-fixture-up PROFILE=pg      # PostgreSQL source
+#   make redmine-fixture-up PROFILE=mysql   # MySQL source
+#   make redmine-fixture-seed PROFILE=pg    # fill it with test content
+#   make redmine-fixture-down PROFILE=pg
+#
+# Redmine's attachment directory is bind-mounted so the importer can read the
+# files the way an operator would, from a directory rather than out of a
+# container.
+
+name: specivo-redmine-fixture
+
+services:
+  redmine-db:
+    profiles: ["pg"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: redmine
+      POSTGRES_PASSWORD: redmine
+      POSTGRES_DB: redmine
+    ports:
+      - "${REDMINE_FIXTURE_PG_PORT:-5444}:5432"
+    tmpfs:
+      # The fixture is disposable: keeping it in RAM makes a reset instant and
+      # guarantees no state survives a down.
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U redmine"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redmine-pg:
+    profiles: ["pg"]
+    image: redmine:7.0.1
+    depends_on:
+      redmine-db:
+        condition: service_healthy
+    environment:
+      REDMINE_DB_POSTGRES: redmine-db
+      REDMINE_DB_USERNAME: redmine
+      REDMINE_DB_PASSWORD: redmine
+      REDMINE_DB_DATABASE: redmine
+      REDMINE_SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+      # The image maps its own variable when it starts the server; Rails reads
+      # this one, which is what `rails runner` needs to seed the fixture.
+      SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+    ports:
+      - "${REDMINE_FIXTURE_PG_HTTP_PORT:-8031}:3000"
+    volumes:
+      - ./.redmine-fixture/files-pg:/usr/src/redmine/files
+      - ./tests/fixtures/redmine:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  redmine-mysql-db:
+    profiles: ["mysql"]
+    image: mysql:8.4
+    command: --mysql-native-password=ON
+    environment:
+      MYSQL_ROOT_PASSWORD: redmine
+      MYSQL_DATABASE: redmine
+      MYSQL_USER: redmine
+      MYSQL_PASSWORD: redmine
+    ports:
+      - "${REDMINE_FIXTURE_MYSQL_PORT:-3307}:3306"
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uredmine -predmine"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redmine-my:
+    profiles: ["mysql"]
+    image: redmine:7.0.1
+    depends_on:
+      redmine-mysql-db:
+        condition: service_healthy
+    environment:
+      REDMINE_DB_MYSQL: redmine-mysql-db
+      REDMINE_DB_USERNAME: redmine
+      REDMINE_DB_PASSWORD: redmine
+      REDMINE_DB_DATABASE: redmine
+      REDMINE_SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+      # The image maps its own variable when it starts the server; Rails reads
+      # this one, which is what `rails runner` needs to seed the fixture.
+      SECRET_KEY_BASE: fixture-only-secret-not-used-anywhere-else
+    ports:
+      - "${REDMINE_FIXTURE_MYSQL_HTTP_PORT:-8032}:3000"
+    volumes:
+      - ./.redmine-fixture/files-mysql:/usr/src/redmine/files
+      - ./tests/fixtures/redmine:/seed:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
