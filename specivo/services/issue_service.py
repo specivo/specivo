@@ -1281,7 +1281,11 @@ class IssueService:
         if not user.is_admin:
             from sqlalchemy import and_
 
-            accessible_project_ids = (select(Member.project_id).where(Member.user_id == user.id)).scalar_subquery()
+            from specivo.services.permission_service import member_principal_clause
+
+            accessible_project_ids = (
+                select(Member.project_id).where(member_principal_clause(user.id))
+            ).scalar_subquery()
             stmt = stmt.where(
                 or_(
                     Issue.project_id.in_(accessible_project_ids),

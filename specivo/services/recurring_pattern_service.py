@@ -67,6 +67,7 @@ from specivo.models.project import Project
 from specivo.models.recurrence_exception import RecurrenceException
 from specivo.models.recurring_pattern import RecurringPattern
 from specivo.models.user import User
+from specivo.models.user_group import UserGroupMember
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
 from specivo.services.issue_service import IssueService
@@ -791,6 +792,11 @@ class RecurringPatternService:
         service is responsible for dropping non-members. Order is preserved.
         Returns the rotation dict with a filtered ``user_ids`` list, or the
         original value when there is nothing to filter.
+
+        A user reached through a member user group is a project member and
+        stays in the rotation. This asks the membership question for a set of
+        users at once, so it expands the group rows here rather than using
+        ``member_principal_clause()``, which is scoped to a single user.
         """
         if not rotation:
             return rotation
@@ -798,13 +804,21 @@ class RecurringPatternService:
         if not user_ids:
             return rotation
 
-        result = await session.execute(
-            select(Member.user_id).where(
+        candidates = list(user_ids)
+        direct = select(Member.user_id).where(
+            Member.project_id == project_id,
+            Member.user_id.in_(candidates),
+        )
+        via_group = (
+            select(UserGroupMember.user_id)
+            .join(Member, Member.group_id == UserGroupMember.group_id)
+            .where(
                 Member.project_id == project_id,
-                Member.user_id.in_(list(user_ids)),
+                UserGroupMember.user_id.in_(candidates),
             )
         )
-        members = set(result.scalars().all())
+        result = await session.execute(direct.union(via_group))
+        members = {row[0] for row in result.all()}
         # Preserve the caller's ordering; drop non-members / duplicates.
         seen: set[int] = set()
         filtered: list[int] = []

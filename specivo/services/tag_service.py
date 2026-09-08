@@ -101,12 +101,14 @@ class TagService:
 
         Deduplicated case-insensitively by name (one row per distinct lowercased
         name). Admins see all tags; other users see tags in projects they are a
-        member of or that are public. Returns ``[{id, name, color}]`` ordered by
-        name.
+        member of — directly or through a user group — or that are public.
+        Returns ``[{id, name, color}]`` ordered by name.
         """
+        from specivo.services.permission_service import member_principal_clause
+
         stmt = select(Tag)
         if not user.is_admin:
-            member_projects = select(Member.project_id).where(Member.user_id == user.id).scalar_subquery()
+            member_projects = select(Member.project_id).where(member_principal_clause(user.id)).scalar_subquery()
             public_projects = select(Project.id).where(Project.is_public.is_(True)).scalar_subquery()
             stmt = stmt.where(or_(Tag.project_id.in_(member_projects), Tag.project_id.in_(public_projects)))
         q = (query or "").strip()

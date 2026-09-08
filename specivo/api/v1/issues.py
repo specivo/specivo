@@ -35,7 +35,7 @@ from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
 from specivo.services.notification_service import NotificationService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import check_permission, member_principal_clause
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.saved_filter_service import SavedFilterService
@@ -156,7 +156,7 @@ async def issue_autocomplete(
 
     # Access control: admin sees all, others see member + public projects
     if not current_user.is_admin:
-        member_projects = select(Member.project_id).where(Member.user_id == current_user.id).scalar_subquery()
+        member_projects = select(Member.project_id).where(member_principal_clause(current_user.id)).scalar_subquery()
         public_projects = select(Project.id).where(Project.is_public.is_(True)).scalar_subquery()
         stmt = stmt.where(
             or_(
