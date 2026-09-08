@@ -61,6 +61,10 @@ NOTE_MODULES_DROPPED = "project_modules_without_an_equivalent"
 # Where the derived custom-field keys are parked for the issue phase.
 CUSTOM_FIELD_KEYS_STATE_KEY = "custom_field_keys"
 
+# Versions are created open and their real status applied once every issue
+# that targets them exists. See restore_version_statuses.
+VERSION_STATUS_STATE_KEY = "version_statuses"
+
 # projects.key must be 2 to 128 characters, start with a letter, and hold only
 # letters and digits.
 _KEY_ALLOWED_RE = re.compile(r"[^A-Z0-9]")
@@ -302,7 +306,11 @@ async def load_project_lookups(ctx: PhaseContext) -> None:
                 VersionCreate(
                     name=version_ir.name,
                     description=version_ir.description,
-                    status=_version_status(ctx, version_ir.status, version_ir.name),
+                    # Created open whatever the source says: Specivo refuses to
+                    # put an issue on a locked or closed version, and the source
+                    # is full of issues sitting on exactly those. The real
+                    # status is applied once the issues are in.
+                    status="open",
                     effective_date=version_ir.effective_date,
                     sharing=_version_sharing(ctx, version_ir.sharing, version_ir.name),
                     wiki_page_title=version_ir.wiki_page_title,
@@ -316,6 +324,11 @@ async def load_project_lookups(ctx: PhaseContext) -> None:
                 updated_at=version_ir.updated_at,
             )
             await ctx.id_map.put(ctx.session, EntityType.VERSION, version_ir.source_ref, "versions", version.id)
+
+            intended = _version_status(ctx, version_ir.status, version_ir.name)
+            if intended != "open":
+                ctx.state.setdefault(VERSION_STATUS_STATE_KEY, {})[version.id] = intended
+
             ctx.summary.record_created(EntityType.VERSION)
             ctx.tick()
 
@@ -493,6 +506,28 @@ async def _tracker_name(ctx: PhaseContext, tracker_id: int) -> str:
 
     tracker = await ctx.session.get(Tracker, tracker_id)
     return tracker.name if tracker else str(tracker_id)
+
+
+async def restore_version_statuses(ctx: PhaseContext) -> None:
+    """Lock or close the versions that were created open.
+
+    Specivo refuses to put an issue on a locked or closed version, which is
+    right for somebody filing one today and wrong for a migration: the source
+    is full of issues sitting on versions that were locked years ago. Versions
+    are therefore created open and set to their real status here, once every
+    issue that targets them exists.
+    """
+    intended: dict[int, str] = ctx.state.get(VERSION_STATUS_STATE_KEY, {})
+    if not intended:
+        return
+
+    for version_id, status in intended.items():
+        version = await ctx.session.get(Version, version_id)
+        if version is None:
+            continue
+        version.status = status
+        ctx.tick()
+    await ctx.session.flush()
 
 
 async def _project_for(ctx: PhaseContext, project_ref: str) -> Project | None:

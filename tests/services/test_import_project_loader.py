@@ -36,6 +36,7 @@ from specivo.importers.load.project_loader import (
     load_memberships,
     load_project_lookups,
     load_projects,
+    restore_version_statuses,
 )
 from specivo.importers.load.user_loader import load_groups, load_users
 from specivo.models.lookups import IssueCategory
@@ -223,9 +224,8 @@ class TestModules:
 
 
 class TestVersionsAndCategories:
-    async def test_version_fields_carry_across(self, db_session, loaded):
-        """status and sharing use the same vocabulary in both systems."""
-        versions = [
+    def _locked_version(self) -> list[IRVersion]:
+        return [
             IRVersion(
                 source_ref="10",
                 project_ref="1",
@@ -235,14 +235,52 @@ class TestVersionsAndCategories:
                 sharing="descendants",
             )
         ]
-        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=versions))
+
+    async def test_version_fields_carry_across(self, db_session, loaded):
+        """sharing uses the same vocabulary in both systems."""
+        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=self._locked_version()))
         await load_project_lookups(ctx)
 
         version_id = await ctx.id_map.get(db_session, EntityType.VERSION, "10")
         version = await db_session.get(Version, version_id)
         assert version.name == "1.0"
-        assert version.status == "locked"
+        assert version.description == "First"
         assert version.sharing == "descendants"
+
+    async def test_a_locked_version_is_created_open(self, db_session, loaded):
+        """Specivo refuses to put an issue on a locked version, and the source
+        is full of issues sitting on versions locked years ago."""
+        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=self._locked_version()))
+        await load_project_lookups(ctx)
+
+        version_id = await ctx.id_map.get(db_session, EntityType.VERSION, "10")
+        assert (await db_session.get(Version, version_id)).status == "open"
+
+    async def test_the_real_status_is_applied_after_the_issues(self, db_session, loaded):
+        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=self._locked_version()))
+        await load_project_lookups(ctx)
+        await restore_version_statuses(ctx)
+
+        version_id = await ctx.id_map.get(db_session, EntityType.VERSION, "10")
+        assert (await db_session.get(Version, version_id)).status == "locked"
+
+    async def test_an_open_version_needs_no_restoring(self, db_session, loaded):
+        versions = [IRVersion(source_ref="10", project_ref="1", name="1.0", status="open")]
+        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=versions))
+        await load_project_lookups(ctx)
+        await restore_version_statuses(ctx)
+
+        version_id = await ctx.id_map.get(db_session, EntityType.VERSION, "10")
+        assert (await db_session.get(Version, version_id)).status == "open"
+
+    async def test_a_closed_version_is_restored_too(self, db_session, loaded):
+        versions = [IRVersion(source_ref="10", project_ref="1", name="0.9", status="closed")]
+        ctx = await loaded(ProjectAdapter(projects=[_project()], versions=versions))
+        await load_project_lookups(ctx)
+        await restore_version_statuses(ctx)
+
+        version_id = await ctx.id_map.get(db_session, EntityType.VERSION, "10")
+        assert (await db_session.get(Version, version_id)).status == "closed"
 
     async def test_category_is_created_with_its_assignee(self, db_session, loaded):
         users = [IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org")]

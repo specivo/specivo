@@ -25,6 +25,7 @@ from specivo.importers.load.project_loader import (
     load_memberships,
     load_project_lookups,
     load_projects,
+    restore_version_statuses,
 )
 from specivo.importers.load.reference_rewrite import rewrite_issue_references
 from specivo.importers.load.search_index import backfill_search_index, rebuild_wiki_link_graph
@@ -42,6 +43,17 @@ async def _users_and_groups(ctx: PhaseContext) -> None:
     """Import users, then collect group membership for the memberships phase."""
     await load_users(ctx)
     await load_groups(ctx)
+
+
+async def _after_issues(ctx: PhaseContext) -> None:
+    """The fix-ups that can only be done once every issue exists.
+
+    References because one can point into a project imported later, and version
+    statuses because a locked version cannot be assigned to an issue while the
+    issues are still being created.
+    """
+    await rewrite_issue_references(ctx)
+    await restore_version_statuses(ctx)
 
 
 async def _wiki(ctx: PhaseContext) -> None:
@@ -68,7 +80,7 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.JOURNALS: load_journals,
             ImportPhase.RELATIONS: load_relations,
             ImportPhase.ISSUE_ATTACHMENTS: load_issue_attachments,
-            ImportPhase.ISSUE_REF_REWRITE: rewrite_issue_references,
+            ImportPhase.ISSUE_REF_REWRITE: _after_issues,
             ImportPhase.WIKI_PAGES: _wiki,
             ImportPhase.WIKI_ATTACHMENTS: load_wiki_attachments,
             ImportPhase.TIME_ENTRIES: load_time_entries,
