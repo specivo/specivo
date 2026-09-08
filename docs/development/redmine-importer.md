@@ -1,7 +1,7 @@
 # The Redmine importer
 
 Operator-facing instructions live in the user guide, under
-[Migrating from Redmine](guide/install/migrating-from-redmine.md). This page is
+[Migrating from Redmine](../guide/install/migrating-from-redmine.md). This page is
 for changing the importer itself: its architecture, how to add a new source,
 what each translation rule does, and how the test fixture works.
 
