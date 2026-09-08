@@ -89,6 +89,7 @@ markers = [
     "enterprise: Tests for Enterprise tier features",
     "serial: Tests that cannot run under xdist (shared state like Redis rate limits)",
     "e2e: End-to-end browser tests (requires running server)",
+    "redmine: Importer tests against the Redmine fixture (make redmine-fixture-up)",
 ]
 # loadfile, not worksteal: test modules define fixtures that insert rows with
 # fixed unique keys (logins, project keys). Spreading one module's tests across

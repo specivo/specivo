@@ -16,6 +16,7 @@ in their respective repos.
 """
 
 import os
+import socket
 
 import pytest
 
@@ -39,21 +40,49 @@ from specivo.testing.conftest_base import (  # noqa: F401
 
 _INSTALLED_PLUGINS = os.environ.get("INSTALLED_PLUGINS", "[]")
 
+# The Redmine fixture is started on demand and is not part of a normal test run.
+# Its database port is probed at collection time so importer tests skip rather
+# than fail when it is not up.
+_REDMINE_FIXTURE_HOST = os.environ.get("REDMINE_FIXTURE_HOST", "127.0.0.1")
+_REDMINE_FIXTURE_PORT = int(os.environ.get("REDMINE_FIXTURE_PG_PORT", "5444"))
+
+
+def _fixture_is_running(host: str, port: int, timeout: float = 0.5) -> bool:
+    """Whether something is listening, without importing a database driver."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
-    """Skip tests marked ``pro`` or ``enterprise`` when the corresponding
-    plugins are not loaded (core-only CI)."""
+    """Skip tests whose dependencies are absent.
+
+    ``pro`` and ``enterprise`` need their plugins; ``redmine`` needs the
+    importer's Redmine fixture, which is started on demand.
+    """
     has_pro = "specivo_pro" in _INSTALLED_PLUGINS
     has_enterprise = "specivo_enterprise" in _INSTALLED_PLUGINS
 
     skip_pro = pytest.mark.skip(reason="requires specivo-pro plugin (not installed)")
     skip_ent = pytest.mark.skip(reason="requires specivo-enterprise plugin (not installed)")
 
+    has_redmine_fixture = any(item.get_closest_marker("redmine") for item in items) and _fixture_is_running(
+        _REDMINE_FIXTURE_HOST, _REDMINE_FIXTURE_PORT
+    )
+    skip_redmine = pytest.mark.skip(
+        reason=f"Redmine fixture is not running on {_REDMINE_FIXTURE_HOST}:{_REDMINE_FIXTURE_PORT} "
+        "(start it with: make redmine-fixture-up && make redmine-fixture-seed)"
+    )
+
     for item in items:
         if not has_pro and item.get_closest_marker("pro"):
             item.add_marker(skip_pro)
         if not has_enterprise and item.get_closest_marker("enterprise"):
             item.add_marker(skip_ent)
+        if not has_redmine_fixture and item.get_closest_marker("redmine"):
+            item.add_marker(skip_redmine)
 
 
 @pytest.fixture(autouse=True)

@@ -129,6 +129,16 @@ make redmine-fixture-seed PROFILE=pg
 make redmine-fixture-down PROFILE=pg
 ```
 
+Then run the importer's tests against it:
+
+```
+make test-serial
+```
+
+They are marked `serial` because an import writes instance-wide rows that other
+tests also insert, and running both in parallel deadlocks. They skip
+automatically when the fixture is not up, so a normal `make test` is unaffected.
+
 It runs Redmine 7.0.1 and seeds it through Redmine's own models, so the rows
 are written the way a real instance writes them. The seed covers the cases the
 importer has to handle: a subproject and an archived project, accounts in every
