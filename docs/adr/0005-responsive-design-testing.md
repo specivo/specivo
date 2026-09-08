@@ -1,6 +1,7 @@
 # ADR-0005: Responsive Design Testing Strategy
 
 **Date:** 2026-04-11
+**Revised:** 2026-09-08 — refreshed the test counts as pages were added.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -71,7 +72,7 @@ Full-page screenshots change height when other tests create data that appears on
 - `make test-e2e-update-snapshots` for easy baseline updates after intentional changes
 
 **Negative:**
-- 77 structural + 28 visual = 105 additional test runs (~50s total)
+- 81 structural + 28 visual = 109 additional test runs (~50s total)
 - Snapshot baselines must be regenerated after any visual change
 - 2% pixel tolerance may miss very subtle regressions; byte-exact comparison would catch more but produces false positives from anti-aliasing
 - Screenshots are OS/font-dependent — baselines generated on macOS won't match Linux CI (mitigate by regenerating in CI environment)

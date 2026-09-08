@@ -1,6 +1,8 @@
 # ADR-0003: E2E Testing with Playwright
 
 **Date:** 2026-04-04
+**Revised:** 2026-09-08 — the frontend is no longer zero-build (see ADR-0001); refreshed the
+Page Object list and the suite size.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -8,7 +10,7 @@
 
 Specivo's backend integration tests (ADR-0002) verify API responses and rendered HTML via `httpx.AsyncClient`, but cannot test browser behavior: Alpine.js form submissions, HTMX partial swaps, cookie-based auth flows, sidebar navigation, or JavaScript-driven components. A browser-based test layer is needed to catch issues that only manifest in a real browser.
 
-The frontend uses a zero-build-step stack: Jinja2 server-side rendering, Alpine.js for reactivity, HTMX for partial updates, Bootstrap 5 for layout.
+The frontend is server-rendered Jinja2 with Alpine.js for reactivity, HTMX for partial updates and Bootstrap 5 for layout. Since ADR-0001 was revised, its custom CSS and JS are bundled by esbuild into committed artifacts — so E2E tests exercise the same `dist/` bundles the Docker image serves, and a stale bundle is a real failure mode these tests can catch.
 
 ## Decision
 
@@ -25,7 +27,7 @@ Playwright via `pytest-playwright` — same pytest ecosystem as backend tests, n
 Unlike backend tests that use `httpx.AsyncClient` with in-process ASGI transport, E2E tests start a real uvicorn server. This tests the full stack including middleware, static file serving, cookie handling, and CORS.
 
 ```
-pytest → starts uvicorn subprocess (port 9944) → Chromium connects → tests run → uvicorn killed
+pytest → starts uvicorn subprocess (port 9944, override with E2E_SERVER_PORT) → Chromium connects → tests run → uvicorn killed
 ```
 
 ### Fixture hierarchy
@@ -62,13 +64,10 @@ Locator logic is separated from assertions:
 
 ```
 tests/e2e/pages/
-    login_page.py
-    dashboard_page.py
-    issue_list_page.py
-    issue_form_page.py
-    wiki_page.py
-    search_page.py
-    admin_page.py
+    admin_page.py            issue_detail_page.py     preferences_page.py
+    backlog_page.py          issue_form_page.py       project_page.py
+    dashboard_page.py        issue_list_page.py       search_page.py
+    forgot_password_page.py  login_page.py            wiki_page.py
 ```
 
 ### Plugin extensibility
@@ -115,7 +114,8 @@ Traces saved as artifacts on failure for debugging via Playwright Trace Viewer.
 **Positive:**
 - Catches JS-only bugs (Alpine.js binding, HTMX swaps, cookie auth)
 - Same pytest ecosystem — markers, fixtures, CI pipelines
-- 31 tests run in ~11 seconds headless
+- The suite has grown to ~266 collected tests, including the responsive and visual-regression
+  layers added by ADR-0005; it runs serially (`-n 0`) against one uvicorn instance
 - Plugin repos extend naturally via shared fixtures
 - `make test-e2e-headed` for visual debugging
 

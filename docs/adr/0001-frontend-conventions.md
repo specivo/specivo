@@ -3,6 +3,8 @@
 **Date:** 2026-04-04
 **Revised:** 2026-06-20 — adopted an esbuild asset pipeline (previously zero-build); the
 JavaScript and CSS monoliths were split into modular sources.
+**Revised:** 2026-09-08 — recorded server-side syntax highlighting and HTML sanitization in §7,
+and the charting/icon vendors in §9.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -193,8 +195,11 @@ The manifest reflects the current `brand_name` setting without rebuilding.
 User-authored content (wiki pages, issue descriptions, comments) is stored as raw Markdown and
 rendered server-side:
 
-- **Library:** Python `markdown` with extensions: `fenced_code`, `tables`, `toc`
-- **Jinja2 filter:** `{{ content.text | markdown }}` — returns `Markup` (safe HTML)
+- **Library:** Python `markdown` with extensions: `fenced_code`, `tables`, `toc`, `codehilite`
+- **Sanitization:** rendered HTML goes through `nh3.clean()` with an explicit allowlist before it
+  is wrapped in `Markup`. The content is user-authored, so rendering and sanitizing are one step —
+  never mark Markdown-derived HTML safe without it (`specivo/services/markdown_service.py`).
+- **Jinja2 filter:** `{{ content.text | markdown }}` — returns sanitized `Markup`
 - **CSS:** `.wiki-content`, `.editor-preview`, `.prose` classes style rendered HTML
 - **Editing:** the `markdownEditor` component (`frontend/js/components/markdown-editor.js`) wraps
   EasyMDE; EasyMDE must load before `alpine-init.min.js`
@@ -224,7 +229,10 @@ specivo/static/
     css/specivo.min.<hash>.css  +  manifest.json
     js/{alpine-init,app}.min.<hash>.js  +  manifest.json
   sw.js                            # service worker (PWA)
-  vendor/                          # third-party (bootstrap, alpine, htmx, easymde) — immutable
+  vendor/                          # third-party — immutable
+                                   #   bootstrap, alpine (standard + csp builds), htmx
+                                   #   (+ json-enc ext), easymde, font-awesome,
+                                   #   observable-plot (charts)
   fonts/                           # self-hosted WOFF2 — immutable
   img/                             # SVG favicon
 ```
@@ -280,4 +288,6 @@ keeps the product name (not the instance brand).
 - **Bootstrap JS components** — modals, dropdowns replaced with Alpine.js for lighter weight
 - **Building inside Docker** — would add a Node toolchain to the runtime image; committing
   pre-built artifacts keeps the image slim and Node-free
-- **Syntax highlighting (Prism/Highlight.js)** — deferred, plain `<pre><code>` styling sufficient
+- **Client-side syntax highlighting (Prism/Highlight.js)** — highlighting is done server-side by
+  the `codehilite` Markdown extension (Pygments) instead, so no JS highlighter ships to the browser
+  and no extra bundle is parsed on every page with a code block
