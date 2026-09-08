@@ -29,6 +29,7 @@ from specivo.models.sprint import Sprint
 from specivo.models.tag import Tag, TagLink
 from specivo.models.time_entry import ActiveTimer, TimeEntry, TimeEntryActivity
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.version import Version
 from specivo.models.watcher import Watcher
 from specivo.models.webhook import Webhook, WebhookDelivery
@@ -86,6 +87,8 @@ __all__ = [
     "Tag",
     "TagLink",
     "User",
+    "UserGroup",
+    "UserGroupMember",
     "Version",
     "Watcher",
     "Webhook",
