@@ -97,6 +97,8 @@ async def _load_one(ctx: PhaseContext, ir: IRAttachment) -> Attachment | None:
             description=ir.description,
             content_type=ir.content_type,
             skip_search_index=True,
+            # A dry run rolls the database back; a copied file would stay.
+            copy_file=not ctx.options.dry_run,
         )
     except FileNotFoundError:
         # The row outlived its file. A download that fails is worse than an

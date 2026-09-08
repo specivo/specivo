@@ -244,3 +244,6 @@ backfill-embeddings:  ## Re-embed all existing issues and wiki pages
 
 reindex-fts:  ## Rebuild FTS vectors (optionally PROJECT=KEY) after a language change
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.reindex_fts $(if $(PROJECT),--project $(PROJECT),)
+
+import-redmine:  ## Import a Redmine instance (ARGS='--source-db-url ... --dry-run'; see --help)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.import_redmine $(ARGS)

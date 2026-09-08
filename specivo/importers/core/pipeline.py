@@ -186,7 +186,7 @@ class ImportSummary:
                 lines.append(f"  {name:<20} {count}")
         if self.skipped:
             lines.append("")
-            lines.append("Already imported (skipped):")
+            lines.append("Skipped (already present):")
             for name, count in sorted(self.skipped.items()):
                 lines.append(f"  {name:<20} {count}")
         for category, items in sorted(self.notes.items()):

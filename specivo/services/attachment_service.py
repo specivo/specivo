@@ -101,6 +101,7 @@ class AttachmentService:
         content_type: str | None = None,
         *,
         skip_search_index: bool = False,
+        copy_file: bool = True,
     ) -> Attachment:
         """Attach a file that already exists on disk.
 
@@ -115,6 +116,10 @@ class AttachmentService:
         * The size limit is not applied, for the same reason.
         * ``skip_search_index`` lets a bulk caller index everything once at the
           end rather than per file.
+        * ``copy_file=False`` does everything except write the copy. A dry-run
+          import rolls its transaction back, but a file already written would
+          stay written, so the copy is the one step it has to leave out. The
+          bytes are still read, which is where the failures are.
 
         Size and hash are computed from the bytes actually copied rather than
         trusted from the source's own record, so a file that was truncated or
@@ -145,7 +150,8 @@ class AttachmentService:
 
         disk_filename = self._make_disk_filename(filename)
         file_path = self._file_path(disk_filename)
-        shutil.copyfile(source_path, file_path)
+        if copy_file:
+            shutil.copyfile(source_path, file_path)
 
         try:
             attachment = Attachment(
