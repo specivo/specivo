@@ -3,6 +3,21 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.7.0] - 2026-09-08
+
+### Added
+- **Migrate an existing Redmine instance into Specivo** — a new `import_redmine` command brings across projects and their hierarchy, users and memberships, issues with their full history, relations, watchers and custom fields, wiki pages with every revision and the redirects left behind by renames, attachments, and logged time. It reads Redmine's database directly and copies its attachment files rather than going through the REST API, which cannot see private notes, deleted users or complete history and is far slower. Nothing is written to the source: a read-only database user and a read-only mount of the files directory are enough. MySQL and PostgreSQL instances are both supported
+- **`--dry-run` exercises the whole import and rolls it back**, so the report can be trusted before anything is written. That report is the point of running it: it lists the issue-key prefix derived for each project (Redmine identifies an issue as `#123` and has no per-project prefix to take one from), the statuses whose category had to be inferred from their name, and everything that has no Specivo equivalent. Both can be corrected with `--project-key-map` and `--status-category-map` before the real run
+- **An interrupted import continues instead of starting again** — each phase commits as it finishes and every imported record is remembered, so `--resume` picks up where the run stopped and a second run of a finished import creates nothing. The mapping is keyed on the source rather than on the run, so an operator who lost the run id is not stuck
+- Where the two systems disagree the import says so and carries on rather than failing or guessing. Passwords cannot come across, since the two hashing schemes share nothing, so imported accounts arrive unusable and every login is listed for a reset. Redmine groups become individual role grants on each member, because Specivo has no group that can hold project roles; the resulting access matches the source exactly, but the grouping itself is not imported. Modules Specivo does not have, custom fields on anything but issues, and role permissions are reported and dropped. The full list is in the user guide under Migrating from Redmine
+
+### Internal
+- New `import_id_map` table (migration 0027) recording which source record became which Specivo row. It lives in the database rather than a state file so that a mapping and the row it describes commit together, which is what makes an interrupted import safe to re-run
+- `IssueService.create` and `WikiService.create_page` accept keyword-only flags to skip inline search indexing and the wiki link-graph dispatch. Both default to the existing behaviour; the importer sets them and does that work once at the end of a run instead of per row, and full-text vectors are unaffected either way since they are maintained by database triggers
+- `AttachmentService.upload_from_path` attaches a file that already exists on disk, computing its size and hash from the bytes actually copied rather than trusting the source's own record
+- A disposable Redmine 7.0.1 fixture (`docker-compose.redmine.yml`, both database profiles) seeded through Redmine's own models, with end-to-end tests that import it. They are marked `redmine` and skip when the fixture is not running, so a normal test run is unaffected
+- Architecture decision record 0006 covers the importer's design and how a second migration source would be added
+
 ## [0.6.0] - 2026-08-27
 
 ### Added
