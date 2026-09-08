@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Groups{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Groups{% endtrans %}</span>
+</div>
+
+<div x-data='adminGroups({
+  groups: {{ groups_data | tojson }},
+  i18n: {
+    createFailed: {{ _("Failed to create group.") | tojson }},
+    saveFailed: {{ _("Failed to save group.") | tojson }},
+    deleteFailed: {{ _("Failed to delete group.") | tojson }}
+  }
+})'>
+
+  <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; gap: var(--sp-space-md); flex-wrap: wrap; margin-bottom: var(--sp-space-lg);">
+    <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Groups{% endtrans %}</h1>
+    <button class="sp-btn sp-btn-primary" @click="openCreate()">{% trans %}+ New Group{% endtrans %}</button>
+  </div>
+
+  <p class="sp-text-muted sp-mb-md" style="font-size: var(--sp-font-size-sm); max-width: 68ch;">
+    {% trans %}A group is an access grant. Everyone in a group holds every role the group has been given on every project it is a member of.{% endtrans %}
+  </p>
+
+  <div class="card sp-card-pad">
+    <div class="sp-mb-md" style="max-width: 320px;">
+      <label class="form-label" for="sp-group-filter">{% trans %}Filter{% endtrans %}</label>
+      <input id="sp-group-filter" class="form-input" type="text" x-model="filter"
+        placeholder="{{ _('Filter by name or description...') }}" autocomplete="off">
+    </div>
+
+    {% if total_groups > list_cap %}
+    <p class="sp-msg-danger">
+      {% trans shown=list_cap, total=total_groups %}Showing the first %(shown)s of %(total)s groups.{% endtrans %}
+    </p>
+    {% endif %}
+
+    <div class="sp-table-scroll">
+      <table class="issue-table">
+        <thead>
+          <tr>
+            <th>{% trans %}Group{% endtrans %}</th>
+            <th>{% trans %}Description{% endtrans %}</th>
+            <th>{% trans %}People{% endtrans %}</th>
+            <th>{% trans %}Projects{% endtrans %}</th>
+            <th>{% trans %}Actions{% endtrans %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-if="visibleGroups.length === 0">
+            <tr>
+              <td colspan="5" class="sp-empty-td">{% trans %}No groups.{% endtrans %}</td>
+            </tr>
+          </template>
+          <template x-for="g in visibleGroups" :key="g.id">
+            <tr>
+              <td>
+                <a :href="groupUrl(g)" class="sp-suggest-name" style="color: var(--sp-text-primary);" x-text="g.name"></a>
+              </td>
+              <td class="sp-text-muted-xs" x-text="g.description"></td>
+              <td x-text="g.user_count"></td>
+              <td x-text="g.project_count"></td>
+              <td class="sp-td-actions-inline">
+                <button class="sp-btn-sm" @click="openEdit(g)">{% trans %}Edit{% endtrans %}</button>
+                <button class="sp-btn-sm danger" @click="openDelete(g)">{% trans %}Delete{% endtrans %}</button>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Create group modal -->
+  <div class="sp-modal-overlay" x-show="showCreate" x-cloak
+    @click.self="showCreate = false" @keydown.escape.window="showCreate = false">
+    <div class="sp-modal sp-modal--sm" @click.stop>
+      <h2>{% trans %}New Group{% endtrans %}</h2>
+      <div class="form-group sp-mb-md">
+        <label class="form-label">{% trans %}Name{% endtrans %}</label>
+        <input class="form-input" type="text" x-model="newGroup.name"
+          placeholder="{{ _('Developers') }}" @keydown.enter="createGroup()">
+      </div>
+      <div class="form-group sp-mb-md">
+        <label class="form-label">{% trans %}Description{% endtrans %}</label>
+        <input class="form-input" type="text" x-model="newGroup.description"
+          placeholder="{{ _('Optional') }}">
+      </div>
+      <div x-show="createError" class="sp-msg-danger-mb-sm" x-text="createError"></div>
+      <div class="sp-modal-actions">
+        <button class="sp-btn" @click="showCreate = false">{% trans %}Cancel{% endtrans %}</button>
+        <button class="sp-btn sp-btn-primary" @click="createGroup()" :disabled="creating || !newGroup.name.trim()">
+          <span x-show="!creating">{% trans %}Create{% endtrans %}</span>
+          <span x-show="creating">{% trans %}Creating...{% endtrans %}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit group modal -->
+  <div class="sp-modal-overlay" x-show="showEdit" x-cloak
+    @click.self="showEdit = false" @keydown.escape.window="showEdit = false">
+    <div class="sp-modal sp-modal--sm" @click.stop>
+      <h2>{% trans %}Edit Group{% endtrans %}</h2>
+      <div class="form-group sp-mb-md">
+        <label class="form-label">{% trans %}Name{% endtrans %}</label>
+        <input class="form-input" type="text" x-model="editDraft.name" @keydown.enter="saveGroup()">
+      </div>
+      <div class="form-group sp-mb-md">
+        <label class="form-label">{% trans %}Description{% endtrans %}</label>
+        <input class="form-input" type="text" x-model="editDraft.description"
+          placeholder="{{ _('Optional') }}">
+      </div>
+      <div x-show="editError" class="sp-msg-danger-mb-sm" x-text="editError"></div>
+      <div class="sp-modal-actions">
+        <button class="sp-btn" @click="showEdit = false">{% trans %}Cancel{% endtrans %}</button>
+        <button class="sp-btn sp-btn-primary" @click="saveGroup()" :disabled="editing || !editDraft.name.trim()">
+          <span x-show="!editing">{% trans %}Save{% endtrans %}</span>
+          <span x-show="editing">{% trans %}Saving...{% endtrans %}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!--
+    Delete modal. The counts come off the row the administrator clicked, so
+    the cost of the delete is on screen before the button, not in a message
+    afterwards.
+  -->
+  <div class="sp-modal-overlay" x-show="showDelete" x-cloak
+    @click.self="showDelete = false" @keydown.escape.window="showDelete = false">
+    <div class="sp-modal sp-modal--sm" @click.stop>
+      <h2>{% trans %}Delete Group{% endtrans %}</h2>
+      <p class="sp-mb-md">
+        {% trans %}Delete{% endtrans %} <strong x-text="deleteGroup?.name"></strong>?
+      </p>
+
+      <template x-if="deleteHasConsequences">
+        <div>
+          <p class="sp-mb-md">{% trans %}This revokes the access the group grants:{% endtrans %}</p>
+          <div class="sp-blast-radius">
+            <div class="sp-blast-stat">
+              <span class="sp-blast-number" x-text="deleteGroup?.user_count"></span>
+              <span class="sp-blast-label">{% trans %}people lose access{% endtrans %}</span>
+            </div>
+            <div class="sp-blast-stat">
+              <span class="sp-blast-number" x-text="deleteGroup?.project_count"></span>
+              <span class="sp-blast-label">{% trans %}projects they lose it on{% endtrans %}</span>
+            </div>
+          </div>
+          <p class="sp-text-muted-xs sp-mb-md">
+            {% trans %}Anyone who also holds a membership directly, or through another group, keeps that access.{% endtrans %}
+          </p>
+        </div>
+      </template>
+
+      <template x-if="!deleteHasConsequences">
+        <p class="sp-text-muted sp-mb-md">
+          {% trans %}This group grants no project access, so nothing is revoked.{% endtrans %}
+        </p>
+      </template>
+
+      <div x-show="deleteError" class="sp-msg-danger-mb-sm" x-text="deleteError"></div>
+      <div class="sp-modal-actions">
+        <button class="sp-btn" @click="showDelete = false">{% trans %}Cancel{% endtrans %}</button>
+        <button class="sp-btn sp-btn-danger" @click="confirmDelete()" :disabled="deleting">
+          <span x-show="!deleting">{% trans %}Delete{% endtrans %}</span>
+          <span x-show="deleting">{% trans %}Deleting...{% endtrans %}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

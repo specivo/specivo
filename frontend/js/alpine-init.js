@@ -17,6 +17,8 @@ import { recurringPatternForm, recurringPatterns, recurringPatternDetail } from 
 import { projectMetadataSettings } from './components/project-metadata-settings';
 import { projectComputedMetadata } from './components/project-computed-metadata';
 import { adminUsers } from './components/admin-users';
+import { adminGroups } from './components/admin-groups';
+import { adminGroupDetail } from './components/admin-group-detail';
 import { adminUserDetail } from './components/admin-user-detail';
 import { adminSettings } from './components/admin-settings';
 import { issueAutocomplete } from './components/issue-autocomplete';
@@ -71,6 +73,8 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('projectMetadataSettings', projectMetadataSettings);
   Alpine.data('projectComputedMetadata', projectComputedMetadata);
   Alpine.data('adminUsers', adminUsers);
+  Alpine.data('adminGroups', adminGroups);
+  Alpine.data('adminGroupDetail', adminGroupDetail);
   Alpine.data('adminUserDetail', adminUserDetail);
   Alpine.data('adminSettings', adminSettings);
   Alpine.data('issueAutocomplete', issueAutocomplete);

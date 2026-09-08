@@ -211,7 +211,11 @@ async def admin_projects(
                 "color": p.color or "#c49a3c",
                 "status": p.status,
                 "issue_count": issue_count,
-                "member_count": s.get("member_count", 0),
+                # People with access, direct or through a group — not the
+                # number of membership rows. The table has a separate Groups
+                # column so the two are never conflated.
+                "people_count": s.get("member_count", 0),
+                "group_count": s.get("group_count", 0),
                 "has_issues": issue_count > 0,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
             }
@@ -230,6 +234,96 @@ async def admin_projects(
             "projects_data": projects_data,
             "all_projects": active_projects,
             "project_colors": DEFAULT_PROJECT_COLORS,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# User groups
+# ---------------------------------------------------------------------------
+
+# Groups are an administrative concept and a self-hosted instance has tens of
+# them, not thousands, so the list page renders them all and filters in the
+# browser rather than paging the API. The cap exists only so a pathological
+# instance degrades into a visible notice instead of an enormous page; the
+# template says so when it is hit.
+GROUP_LIST_CAP = 500
+
+
+@router.get("/admin/groups/", response_class=HTMLResponse)
+async def admin_groups(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the admin user groups page."""
+    from specivo.services.user_group_service import UserGroupService
+
+    svc = UserGroupService()
+    rows, total = await svc.list_groups(db, limit=GROUP_LIST_CAP)
+
+    groups_data = [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"] or "",
+            "user_count": row["user_count"],
+            "project_count": row["project_count"],
+        }
+        for row in rows
+    ]
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/groups.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "groups_data": groups_data,
+            "total_groups": total,
+            "list_cap": GROUP_LIST_CAP,
+        },
+    )
+
+
+@router.get("/admin/groups/{group_id}/", response_class=HTMLResponse)
+async def admin_group_detail(
+    request: Request,
+    group_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render one group: the users in it, and the projects it grants access to."""
+    from fastapi import HTTPException
+
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.user_group_service import UserGroupService
+
+    svc = UserGroupService()
+    try:
+        group = await svc.get(db, group_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    users, user_total = await svc.list_users(db, group_id, limit=GROUP_LIST_CAP)
+    projects = await svc.list_projects(db, group_id)
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/group_detail.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "group": {
+                "id": group.id,
+                "name": group.name,
+                "description": group.description or "",
+            },
+            "group_users": users,
+            "user_total": user_total,
+            "group_projects": projects,
         },
     )
 
@@ -520,10 +614,7 @@ async def admin_metadata_presets(
 
     svc = MetadataPresetService()
     presets = await svc.list_presets(db)
-    presets_data = [
-        MetadataPresetOut.model_validate(p).model_dump(mode="json")
-        for p in presets
-    ]
+    presets_data = [MetadataPresetOut.model_validate(p).model_dump(mode="json") for p in presets]
 
     templates = get_templates()
     return templates.TemplateResponse(

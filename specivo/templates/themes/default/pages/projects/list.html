@@ -154,7 +154,8 @@
         <div class="project-stats-header">
           <span class="project-stats-title">{% trans %}Issues{% endtrans %}</span>
           <span class="project-stats-meta">
-            {% trans count=item.member_count %}%(count)s member{% pluralize %}%(count)s members{% endtrans %}
+            {# People, not membership rows: the strip below shows faces, and a group has none. #}
+            {% trans count=item.people_count %}%(count)s person{% pluralize %}%(count)s people{% endtrans %}
             {% if item.wiki_page_count > 0 %}
             <span>&middot;</span>{% trans count=item.wiki_page_count %}%(count)s wiki page{% pluralize %}%(count)s wiki pages{% endtrans %}
             {% endif %}
@@ -173,8 +174,8 @@
         {% for m in item.members[:5] %}
         {{ avatar(m.display_name, size='sm', color=m.avatar_color or '', avatar_url=m.avatar_url or '') }}
         {% endfor %}
-        {% if item.member_count > 5 %}
-        <span class="more">+{{ item.member_count - 5 }}</span>
+        {% if item.people_count > 5 %}
+        <span class="more">+{{ item.people_count - 5 }}</span>
         {% endif %}
       </div>
       <div class="module-badges">

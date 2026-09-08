@@ -6,7 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, func, or_, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -641,14 +641,46 @@ class ProjectService:
         await session.delete(member)
         await session.flush()
 
-    async def count_members(self, session: AsyncSession, project: Project) -> int:
-        """Return the number of membership rows in a project.
+    async def count_membership_rows(self, session: AsyncSession, project: Project) -> int:
+        """Return the number of membership rows on a project — its access grants.
 
-        A group counts as one member, not as the number of users in it: this
-        counts membership rows, which is what the members tab lists.
+        One row is one grant of a role set to one principal, so a group counts
+        as one however many users it holds.  This is the number the project
+        settings members tab reports, because that tab lists the rows
+        themselves and each row is separately editable and removable.
+
+        For a count of the *humans* those rows reach, which is what every
+        people-shaped surface wants, use :meth:`count_people_with_access`.
+        The two numbers differ as soon as a group is used, and they are
+        deliberately named apart so no screen can show one while meaning the
+        other.
         """
         result = await session.execute(select(func.count()).select_from(Member).where(Member.project_id == project.id))
         return result.scalar_one()
+
+    async def count_people_with_access(self, session: AsyncSession, project: Project) -> int:
+        """Return the number of distinct users the project's memberships reach.
+
+        A user is counted once whether they hold a membership directly, belong
+        to a group that holds one, or both — the ``UNION`` deduplicates.  This
+        is the number shown wherever the UI says "people": the project cards,
+        the admin projects table and the project overview.  Counting rows
+        there would report a project whose access is entirely group-held as
+        having one or two members when it in fact reaches a whole team.
+
+        The counterpart is :meth:`count_membership_rows`.
+        """
+        direct = select(Member.user_id.label("user_id")).where(
+            Member.project_id == project.id,
+            Member.user_id.is_not(None),
+        )
+        via_group = (
+            select(UserGroupMember.user_id.label("user_id"))
+            .join(Member, Member.group_id == UserGroupMember.group_id)
+            .where(Member.project_id == project.id)
+        )
+        stmt = select(func.count()).select_from(union(direct, via_group).subquery())
+        return (await session.execute(stmt)).scalar_one()
 
     async def list_members(
         self,
@@ -834,16 +866,26 @@ class ProjectService:
 
         Returns a dict keyed by project_id with:
         - open_count, closed_count (issue stats)
-        - member_count
+        - member_count — distinct **people** with access, direct or via a group
+        - group_count — how many of the memberships are held by a group
         - wiki_page_count
         - modules (dict of module_name -> bool)
         - members (list of dicts with user_id, display_name, avatar_url)
+
+        ``member_count`` and ``members`` describe humans, not membership rows,
+        because this feeds the avatar strips on project cards and the admin
+        projects table — surfaces that show faces, which a group does not
+        have.  ``group_count`` is carried alongside so those screens can say
+        how many of the people arrive through a group rather than pretending
+        every grant is direct.  The row count is a different number with its
+        own method, :meth:`count_membership_rows`.
         """
         stats: dict[int, dict] = {
             pid: {
                 "open_count": 0,
                 "closed_count": 0,
                 "member_count": 0,
+                "group_count": 0,
                 "wiki_page_count": 0,
                 "modules": {m: False for m in sorted(KNOWN_MODULES)},
                 "members": [],
@@ -872,11 +914,14 @@ class ProjectService:
             stats[row.project_id]["open_count"] = total - done
             stats[row.project_id]["closed_count"] = done
 
-        # --- Member counts + member details (first 6 per project) ---
-        # User-held rows only: these feed the avatar strip on project cards,
-        # which needs a user identity.  Group-held rows are counted by
-        # ``count_members()`` and rendered with the rest of the group UI.
-        member_stmt = (
+        # --- People with access + their avatars (first 6 per project) ---
+        # Two queries rather than one UNION: the direct rows keep their
+        # existing ``Member.id`` ordering so the avatar strip does not
+        # reshuffle for projects that use no groups, and the group-reached
+        # users are appended after them.  Duplicates — someone who is both a
+        # direct member and in a member group — collapse in the merge below,
+        # so the count is of distinct people either way.
+        direct_stmt = (
             select(
                 Member.project_id,
                 User.id.label("user_id"),
@@ -888,21 +933,49 @@ class ProjectService:
             .where(Member.project_id.in_(project_ids))
             .order_by(Member.project_id, Member.id)
         )
-        member_rows = (await session.execute(member_stmt)).all()
-        members_by_project: dict[int, list[dict]] = {}
-        for row in member_rows:
-            prefs = row.preferences or {}
-            members_by_project.setdefault(row.project_id, []).append(
-                {
-                    "user_id": row.user_id,
-                    "display_name": row.display_name,
-                    "avatar_url": row.avatar_url,
-                    "avatar_color": prefs.get("avatar_color", ""),
-                }
+        via_group_stmt = (
+            select(
+                Member.project_id,
+                User.id.label("user_id"),
+                User.display_name,
+                User.avatar_url,
+                User.preferences,
             )
+            .join(UserGroupMember, UserGroupMember.group_id == Member.group_id)
+            .join(User, User.id == UserGroupMember.user_id)
+            .where(Member.project_id.in_(project_ids))
+            .order_by(Member.project_id, User.id)
+        )
+
+        members_by_project: dict[int, list[dict]] = {}
+        seen_by_project: dict[int, set[int]] = {}
+        for stmt in (direct_stmt, via_group_stmt):
+            for row in (await session.execute(stmt)).all():
+                seen = seen_by_project.setdefault(row.project_id, set())
+                if row.user_id in seen:
+                    continue
+                seen.add(row.user_id)
+                prefs = row.preferences or {}
+                members_by_project.setdefault(row.project_id, []).append(
+                    {
+                        "user_id": row.user_id,
+                        "display_name": row.display_name,
+                        "avatar_url": row.avatar_url,
+                        "avatar_color": prefs.get("avatar_color", ""),
+                    }
+                )
         for pid, members in members_by_project.items():
             stats[pid]["member_count"] = len(members)
             stats[pid]["members"] = members[:6]  # first 6 for avatars
+
+        # --- Group-held membership rows per project ---
+        group_stmt = (
+            select(Member.project_id, func.count().label("group_count"))
+            .where(Member.project_id.in_(project_ids), Member.group_id.is_not(None))
+            .group_by(Member.project_id)
+        )
+        for group_row in (await session.execute(group_stmt)).all():
+            stats[group_row.project_id]["group_count"] = group_row.group_count
 
         # --- Wiki page counts ---
         wiki_stmt = (

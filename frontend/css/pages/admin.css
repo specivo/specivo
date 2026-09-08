@@ -34,3 +34,30 @@
 .admin-card-body .manage-link { font-size: var(--sp-font-size-sm); font-weight: 500; color: var(--sp-text-link); }
 .admin-card.danger .manage-link { color: var(--sp-danger); }
 
+
+/* ------------------------------------------------------------------
+   Admin > Groups
+   ------------------------------------------------------------------ */
+
+/* Group detail: the people list and the projects the group grants sit
+   side by side, because one is only meaningful next to the other. They
+   stack below the tablet breakpoint rather than shrinking into two
+   unreadable columns. */
+.sp-group-columns { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-space-lg); align-items: start; }
+@media (max-width: 960px) { .sp-group-columns { grid-template-columns: 1fr; } }
+
+/* Delete confirmation: the access a delete revokes, stated as two
+   numbers big enough to be read before the button is pressed. */
+.sp-blast-radius {
+  display: flex;
+  gap: var(--sp-space-lg);
+  flex-wrap: wrap;
+  padding: var(--sp-space-md) var(--sp-space-lg);
+  margin-bottom: var(--sp-space-md);
+  background: var(--sp-danger-subtle);
+  border: 1px solid var(--sp-danger);
+  border-radius: var(--sp-border-radius);
+}
+.sp-blast-stat { display: flex; align-items: baseline; gap: var(--sp-space-xs); min-width: 0; }
+.sp-blast-number { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; color: var(--sp-danger); }
+.sp-blast-label { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); }

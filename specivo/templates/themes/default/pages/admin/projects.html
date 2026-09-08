@@ -27,7 +27,8 @@
           <th>{% trans %}Project{% endtrans %}</th>
           <th>{% trans %}Key{% endtrans %}</th>
           <th>{% trans %}Issues{% endtrans %}</th>
-          <th>{% trans %}Members{% endtrans %}</th>
+          <th>{% trans %}People{% endtrans %}</th>
+          <th>{% trans %}Groups{% endtrans %}</th>
           <th>{% trans %}Status{% endtrans %}</th>
           <th>{% trans %}Created{% endtrans %}</th>
           <th style="width: 180px">{% trans %}Actions{% endtrans %}</th>
@@ -36,7 +37,7 @@
       <tbody>
         <template x-if="projects.length === 0">
           <tr>
-            <td colspan="7" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">{% trans %}No projects.{% endtrans %}</td>
+            <td colspan="8" style="text-align: center; padding: var(--sp-space-xl); color: var(--sp-text-muted);">{% trans %}No projects.{% endtrans %}</td>
           </tr>
         </template>
         <template x-for="p in projects" :key="p.id">
@@ -51,7 +52,9 @@
               <code :style="'font-family:var(--sp-font-mono);font-size:var(--sp-font-size-xs);padding:2px 6px;border-radius:3px;' + (p.status === 9 ? 'background:var(--sp-bg-input);color:var(--sp-text-muted)' : 'background:var(--sp-danger-subtle);color:var(--sp-danger)')" x-text="p.key"></code>
             </td>
             <td x-text="p.issue_count"></td>
-            <td x-text="p.member_count"></td>
+            {# People reached, then how many of the grants are group-held. #}
+            <td x-text="p.people_count"></td>
+            <td x-text="p.group_count"></td>
             <td>
               <span style="display: inline-flex; align-items: center; gap: var(--sp-space-xs); font-size: var(--sp-font-size-sm);">
                 <span :style="'width:7px;height:7px;border-radius:50%;flex-shrink:0;background:' + (p.status === 1 ? 'var(--sp-success)' : p.status === 9 ? 'var(--sp-warning)' : 'var(--sp-text-muted)')"></span>

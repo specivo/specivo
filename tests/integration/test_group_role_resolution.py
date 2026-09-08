@@ -323,8 +323,10 @@ class TestProjectAccess:
 
 
 class TestMemberListing:
-    async def test_a_group_counts_as_one_member(self, db_session: AsyncSession, user: User, project: Project):
-        """Two users in the group, one membership row — the row is what is counted."""
+    async def test_a_group_is_one_membership_row_but_reaches_everyone_in_it(
+        self, db_session: AsyncSession, user: User, project: Project
+    ):
+        """The two counts diverge here, and each screen must use the one it means."""
         group = await _make_group(db_session, "Developers")
         other = UserFactory.build()
         db_session.add(other)
@@ -333,7 +335,8 @@ class TestMemberListing:
         await _join_group(db_session, group, other)
         await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
 
-        assert await _svc.count_members(db_session, project) == 1
+        assert await _svc.count_membership_rows(db_session, project) == 1
+        assert await _svc.count_people_with_access(db_session, project) == 2
 
     async def test_list_members_returns_user_rows_and_skips_group_rows(
         self, db_session: AsyncSession, user: User, project: Project
@@ -370,4 +373,96 @@ class TestMemberListing:
             await db_session.execute(select(func.count()).select_from(Member).where(Member.project_id == project.id))
         ).scalar_one()
         assert rows == 2
-        assert await _svc.count_members(db_session, project) == 2
+        assert await _svc.count_membership_rows(db_session, project) == 2
+
+
+# ---------------------------------------------------------------------------
+# The two member counts
+# ---------------------------------------------------------------------------
+
+
+class TestMemberCounts:
+    """``count_membership_rows`` counts grants; ``count_people_with_access`` counts humans.
+
+    They agree only while no group is involved. Every assertion here is about
+    a case where they must not, so neither number can quietly stand in for
+    the other on a screen that means the other one.
+    """
+
+    async def test_both_counts_agree_without_groups(self, db_session: AsyncSession, user: User, project: Project):
+        await _add_principal(db_session, project, user=user, roles=[await _make_role(db_session, "Direct")])
+
+        assert await _svc.count_membership_rows(db_session, project) == 1
+        assert await _svc.count_people_with_access(db_session, project) == 1
+
+    async def test_a_person_in_a_group_and_direct_is_counted_once(
+        self, db_session: AsyncSession, user: User, project: Project
+    ):
+        group = await _make_group(db_session, "Developers")
+        await _join_group(db_session, group, user)
+        await _add_principal(db_session, project, user=user, roles=[await _make_role(db_session, "Direct")])
+        await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
+
+        assert await _svc.count_membership_rows(db_session, project) == 2
+        assert await _svc.count_people_with_access(db_session, project) == 1
+
+    async def test_a_group_only_project_reports_its_people(
+        self, db_session: AsyncSession, user: User, project: Project
+    ):
+        """The case that made the old card read "0 members" for a staffed project."""
+        group = await _make_group(db_session, "Developers")
+        await _join_group(db_session, group, user)
+        await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
+
+        assert await _svc.list_members(db_session, project) == []
+        assert await _svc.count_people_with_access(db_session, project) == 1
+
+    async def test_an_empty_group_grants_access_to_nobody(self, db_session: AsyncSession, project: Project):
+        group = await _make_group(db_session, "Developers")
+        await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
+
+        assert await _svc.count_membership_rows(db_session, project) == 1
+        assert await _svc.count_people_with_access(db_session, project) == 0
+
+
+# ---------------------------------------------------------------------------
+# Project card / admin table stats
+# ---------------------------------------------------------------------------
+
+
+class TestProjectStats:
+    """``load_project_stats`` feeds surfaces that show faces, so it counts people."""
+
+    async def test_stats_count_people_reached_through_a_group(
+        self, db_session: AsyncSession, user: User, project: Project
+    ):
+        group = await _make_group(db_session, "Developers")
+        await _join_group(db_session, group, user)
+        await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
+
+        stats = await _svc.load_project_stats(db_session, [project.id])
+
+        assert stats[project.id]["member_count"] == 1
+        assert stats[project.id]["group_count"] == 1
+        assert [m["user_id"] for m in stats[project.id]["members"]] == [user.id]
+
+    async def test_stats_do_not_double_count_a_direct_member_who_is_also_in_a_group(
+        self, db_session: AsyncSession, user: User, project: Project
+    ):
+        group = await _make_group(db_session, "Developers")
+        await _join_group(db_session, group, user)
+        await _add_principal(db_session, project, user=user, roles=[await _make_role(db_session, "Direct")])
+        await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
+
+        stats = await _svc.load_project_stats(db_session, [project.id])
+
+        assert stats[project.id]["member_count"] == 1
+        assert [m["user_id"] for m in stats[project.id]["members"]] == [user.id]
+
+    async def test_group_count_is_zero_without_groups(self, db_session: AsyncSession, user: User, project: Project):
+        await _add_principal(db_session, project, user=user, roles=[await _make_role(db_session, "Direct")])
+
+        stats = await _svc.load_project_stats(db_session, [project.id])
+
+        assert stats[project.id]["member_count"] == 1
+        assert stats[project.id]["group_count"] == 0

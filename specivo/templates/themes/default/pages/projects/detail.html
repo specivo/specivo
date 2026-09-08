@@ -109,7 +109,14 @@
   <!-- Right column: members -->
   <div>
     <div class="card sp-card-pad">
-      <h3 class="sp-card-h3">{% trans %}Members{% endtrans %}</h3>
+      {#
+        This card shows faces, so its number counts people — anyone the
+        project's memberships reach, whether they hold one directly or sit in
+        a group that does. The list itself is only the direct holders, which
+        is why the footer states the full figure rather than letting the
+        avatars imply it.
+      #}
+      <h3 class="sp-card-h3">{% trans %}People{% endtrans %}</h3>
       {% if members %}
       <div class="sp-stack-sm">
         {% for m in members %}
@@ -123,10 +130,15 @@
           </div>
         </div>
         {% endfor %}
-        {% if member_count > 10 %}
-        <a href="/projects/{{ project.key }}/settings/" class="sp-member-more">{% trans count=member_count %}... %(count)s total{% endtrans %}</a>
+        {% if people_count > members | length %}
+        <a href="/projects/{{ project.key }}/settings/" class="sp-member-more">{% trans count=people_count %}%(count)s person with access{% pluralize %}%(count)s people with access{% endtrans %}</a>
         {% endif %}
       </div>
+      {% elif people_count > 0 %}
+      {# No direct members, but a group grants access — say so rather than reading as empty. #}
+      <p class="sp-member-empty">
+        <a href="/projects/{{ project.key }}/settings/">{% trans count=people_count %}%(count)s person has access through a group{% pluralize %}%(count)s people have access through a group{% endtrans %}</a>
+      </p>
       {% else %}
       <p class="sp-member-empty">{% trans %}No members yet.{% endtrans %}</p>
       {% endif %}
