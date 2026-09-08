@@ -72,7 +72,10 @@ async def projects_list(
             "closed_count": closed_count,
             "total_issues": total_issues,
             "closed_pct": round(closed_count / total_issues * 100) if total_issues > 0 else 0,
-            "member_count": pstats.get("member_count", 0),
+            # Distinct people reached by the project's memberships, direct or
+            # through a group — the card shows faces, so it counts humans.
+            "people_count": pstats.get("member_count", 0),
+            "group_count": pstats.get("group_count", 0),
             "wiki_page_count": pstats.get("wiki_page_count", 0),
             "modules": pstats.get("modules", {}),
             "members": pstats.get("members", []),
@@ -126,7 +129,11 @@ async def project_detail(
         raise HTTPException(status_code=404, detail="Project not found")
     await _svc.require_project_access(db, project, user)
 
-    member_count = await _svc.count_members(db, project)
+    # The overview card shows faces, so its number is people — anyone the
+    # project's memberships reach, whether they hold one directly or sit in a
+    # group that does. ``list_members`` only ever returns the direct holders,
+    # so ``people_count`` is what tells the reader that more of them exist.
+    people_count = await _svc.count_people_with_access(db, project)
     members = await _svc.list_members(db, project, limit=10)
     modules = await _svc.get_modules(db, project)
 
@@ -144,7 +151,7 @@ async def project_detail(
             "active_project": project,
             "project": project,
             "members": members,
-            "member_count": member_count,
+            "people_count": people_count,
             "modules": modules,
             "subprojects": subprojects,
             "status_label": _STATUS_LABELS.get(project.status, "unknown"),
@@ -218,7 +225,37 @@ async def project_settings(
     if not user.is_admin and not await check_permission(user, project.id, "manage_project", db):
         raise HTTPException(status_code=403, detail="Permission denied")
 
-    members = await _svc.list_members(db, project)
+    # The members tab lists membership *rows*, so both kinds go into one list:
+    # user-held rows first, then group-held ones. Each row carries its own
+    # ``principal_type``, which is what the template keys and addresses it by.
+    from specivo.services.user_group_service import UserGroupService
+
+    group_svc = UserGroupService()
+
+    user_rows = await _svc.list_members(db, project)
+    group_rows = await _svc.list_group_memberships(db, project)
+
+    # Who each group actually covers. This is the tab's reason to exist for
+    # anyone auditing access: a person reached only through a group is
+    # otherwise invisible on a screen that lists grants, and the group row
+    # alone does not say whose access it is.
+    covered = await group_svc.list_users_for_groups(db, [row["group_id"] for row in group_rows])
+    for row in group_rows:
+        row["users"] = covered.get(row["group_id"], [])
+
+    members = user_rows + group_rows
+
+    # Every group, for the "add member" picker — the picker offers users and
+    # groups in one list. The admin groups API would answer this too, but it
+    # is admin-only and this page is open to any project manager, so the list
+    # is rendered with the page instead of fetched.
+    all_group_rows, _group_total = await group_svc.list_groups(db, limit=500)
+    all_groups = [{"id": g["id"], "name": g["name"], "user_count": g["user_count"]} for g in all_group_rows]
+
+    # The two numbers this tab has to keep apart: rows granted, and people
+    # reached. They are equal until a group is used, and then they are not.
+    people_count = await _svc.count_people_with_access(db, project)
+
     modules = await _svc.get_modules(db, project)
 
     from sqlalchemy import select
@@ -304,9 +341,7 @@ async def project_settings(
     recurring_svc = RecurringPatternService()
     recurring_patterns = await recurring_svc.list_for_project(db, project.id)
     recurring_patterns_data = [_pattern_summary(p) for p in recurring_patterns]
-    can_manage_recurring = user.is_admin or await check_permission(
-        user, project.id, "manage_recurring_tasks", db
-    )
+    can_manage_recurring = user.is_admin or await check_permission(user, project.id, "manage_recurring_tasks", db)
 
     # Tag vocabulary with usage counts (create/edit/delete gated on manage_project)
     can_manage_tags = user.is_admin or await check_permission(user, project.id, "manage_project", db)
@@ -348,6 +383,8 @@ async def project_settings(
             "fts_reindex_needed": fts_reindex_needed,
             "can_manage_search": can_manage_search,
             "members": members,
+            "all_groups": all_groups,
+            "people_count": people_count,
             "modules": modules,
             "roles": roles,
             "versions_data": versions_data,

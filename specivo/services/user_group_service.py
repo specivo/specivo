@@ -248,6 +248,38 @@ class UserGroupService:
             for user in users
         ], total
 
+    async def list_users_for_groups(self, session: AsyncSession, group_ids: list[int]) -> dict[int, list[dict]]:
+        """Return ``{group_id: [user, ...]}`` for several groups in one query.
+
+        The per-group :meth:`list_users` is paginated and takes one group; a
+        screen showing the people behind every group at once — the project
+        members tab, where a group row expands to name the users it covers —
+        would otherwise issue a query per group.  Users are ordered by login
+        within each group, and a group with no users is absent from the
+        result rather than mapping to an empty list.
+        """
+        if not group_ids:
+            return {}
+
+        stmt = (
+            select(UserGroupMember.group_id, User)
+            .join(User, User.id == UserGroupMember.user_id)
+            .where(UserGroupMember.group_id.in_(group_ids))
+            .order_by(UserGroupMember.group_id, User.login)
+        )
+
+        out: dict[int, list[dict]] = {}
+        for group_id, user in (await session.execute(stmt)).all():
+            out.setdefault(group_id, []).append(
+                {
+                    "user_id": user.id,
+                    "login": user.login,
+                    "display_name": user.display_name,
+                    "avatar_url": user.avatar_url,
+                }
+            )
+        return out
+
     async def list_user_groups(self, session: AsyncSession, user_id: int) -> list[UserGroup]:
         """Return every group *user_id* belongs to, ordered by name."""
         stmt = (

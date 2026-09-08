@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}{{ group.name }} - {% trans %}Groups{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/groups/">{% trans %}Groups{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{{ group.name }}</span>
+</div>
+
+<div x-data='adminGroupDetail({
+  groupId: {{ group.id | tojson }},
+  groupName: {{ group.name | tojson }},
+  users: {{ group_users | tojson }},
+  projectCount: {{ group_projects | length | tojson }},
+  i18n: {
+    addFailed: {{ _("Failed to add user.") | tojson }},
+    removeFailed: {{ _("Failed to remove user.") | tojson }},
+    confirmRemove: {{ _("Remove %s from this group?") | tojson }}
+  }
+})'>
+
+  <h1 class="sp-page-h1">{{ group.name }}</h1>
+  {% if group.description %}
+  <p class="sp-text-muted sp-mb-lg" style="max-width: 68ch;">{{ group.description }}</p>
+  {% endif %}
+
+  <div class="sp-group-columns">
+
+    {# --- Users in the group --- #}
+    <div class="card sp-card-pad-mb-md">
+      <h3 class="sp-card-h3">{% trans %}People in this group{% endtrans %}</h3>
+      <p class="sp-text-muted-xs sp-mb-md">
+        {% trans count=group_projects | length %}Everyone here holds this group's roles on %(count)s project.{% pluralize %}Everyone here holds this group's roles on %(count)s projects.{% endtrans %}
+      </p>
+
+      <div class="sp-form-row-end-wrap sp-mb-md">
+        <div class="sp-suggest-field">
+          <label class="form-label">{% trans %}Add a user{% endtrans %}</label>
+          <input class="form-input" type="text" placeholder="{{ _('Search by name or login...') }}"
+            x-model="userQuery" @input.debounce.300ms="searchUsers()" @focus="searchUsers()"
+            @click.outside="showSuggestions = false" autocomplete="off">
+          <div class="sp-suggest-panel" x-show="showSuggestions && suggestions.length > 0" x-cloak>
+            <template x-for="u in suggestions" :key="u.id">
+              <div class="sp-suggest-item" @click="selectUser(u)">
+                <span class="sp-suggest-name" x-text="u.display_name"></span>
+                <span class="sp-text-muted" x-text="'(' + u.login + ')'"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div>
+          <button class="sp-btn sp-btn-primary sp-btn-nowrap-wide" @click="addUser()" :disabled="!selectedUser || adding">
+            <span x-show="!adding">{% trans %}Add{% endtrans %}</span>
+            <span x-show="adding">{% trans %}Adding...{% endtrans %}</span>
+          </button>
+        </div>
+      </div>
+      <div x-show="addError" class="sp-msg-danger" x-text="addError"></div>
+      <div x-show="removeError" class="sp-msg-danger" x-text="removeError"></div>
+
+      <div class="sp-table-scroll">
+        <table class="issue-table">
+          <thead>
+            <tr>
+              <th>{% trans %}User{% endtrans %}</th>
+              <th>{% trans %}Actions{% endtrans %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-if="users.length === 0">
+              <tr>
+                <td colspan="2" class="sp-empty-td">{% trans %}Nobody is in this group yet.{% endtrans %}</td>
+              </tr>
+            </template>
+            <template x-for="u in users" :key="u.user_id">
+              <tr>
+                <td>
+                  <span class="sp-suggest-name" x-text="u.display_name"></span>
+                  <span class="sp-text-muted-xs" x-text="'(' + u.login + ')'"></span>
+                </td>
+                <td class="sp-td-actions-inline">
+                  <button class="sp-btn-sm danger" @click="removeUser(u)">{% trans %}Remove{% endtrans %}</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {#
+      Projects the group grants access to. Read-only: a membership is granted
+      from the project's own settings, and this page links there rather than
+      offering a second place to do the same thing.
+    #}
+    <div class="card sp-card-pad">
+      <h3 class="sp-card-h3">{% trans %}Projects this group grants{% endtrans %}</h3>
+      {% if group_projects %}
+      <div class="sp-table-scroll">
+        <table class="issue-table">
+          <thead>
+            <tr>
+              <th>{% trans %}Project{% endtrans %}</th>
+              <th>{% trans %}Roles{% endtrans %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in group_projects %}
+            <tr>
+              <td>
+                <a href="/projects/{{ p.key }}/settings/" class="sp-text-link">{{ p.name }}</a>
+                <span class="sp-text-muted-xs">{{ p.key }}</span>
+              </td>
+              <td>{{ p.roles | join(', ') }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="sp-text-muted">{% trans %}This group is not a member of any project, so it grants nothing yet.{% endtrans %}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -62,23 +62,44 @@
   </div>
 
   <!-- Members tab -->
-  <div x-show="tab === 'members'" x-data='projectMembers({ members: {{ members | tojson }}, projectKey: {{ project.key | tojson }}, roles: {{ roles | tojson }} })'>
+  <div x-show="tab === 'members'" x-data='projectMembers({
+    members: {{ members | tojson }},
+    projectKey: {{ project.key | tojson }},
+    roles: {{ roles | tojson }},
+    allGroups: {{ all_groups | tojson }},
+    i18n: {
+      onePerson: {{ _("1 person") | tojson }},
+      nPeople: {{ _("%d people") | tojson }},
+      added: {{ _("added.") | tojson }},
+      addFailed: {{ _("Failed to add member.") | tojson }},
+      saveFailed: {{ _("Failed to update roles.") | tojson }},
+      confirmRemoveUser: {{ _("Remove %s from this project?") | tojson }},
+      confirmRemoveGroup: {{ _("Remove the group %s? %d people lose the access it grants.") | tojson }},
+      kindGroup: {{ _("Group") | tojson }},
+      kindUser: {{ _("User") | tojson }}
+    }
+  })'>
 
     <!-- Add member form -->
     <div class="card sp-card-pad-mb-md">
       <h3 class="sp-card-h3">{% trans %}Add Member{% endtrans %}</h3>
+      <p class="sp-text-muted-xs sp-mb-md">
+        {% trans %}Grant access to one person, or to a group so everyone in it gets the same roles.{% endtrans %}
+      </p>
       <div class="sp-form-row-end-wrap">
         <div class="sp-suggest-field">
-          <label class="form-label">{% trans %}User{% endtrans %}</label>
-          <input class="form-input" type="text" placeholder="{{ _('Search by name or login...') }}"
-            x-model="userQuery" @input.debounce.300ms="searchUsers()" @focus="searchUsers()"
+          <label class="form-label">{% trans %}User or group{% endtrans %}</label>
+          <input class="form-input" type="text" placeholder="{{ _('Search people and groups...') }}"
+            x-model="userQuery" @input.debounce.300ms="searchPrincipals()" @focus="searchPrincipals()"
+            @input="clearSelection()"
             @click.outside="showSuggestions = false" autocomplete="off">
-          <div class="sp-suggest-panel" x-show="showSuggestions && suggestions.length > 0">
-            <template x-for="u in suggestions" :key="u.id">
-              <div class="sp-suggest-item" @click="selectUser(u)"
-                @mouseenter="$el.style.background='var(--sp-bg-input)'" @mouseleave="$el.style.background=''">
-                <span class="sp-suggest-name" x-text="u.display_name"></span>
-                <span class="sp-text-muted" x-text="'(' + u.login + ')'"></span>
+          <div class="sp-suggest-panel" x-show="showSuggestions && suggestions.length > 0" x-cloak>
+            <template x-for="s in suggestions" :key="suggestionKey(s)">
+              <div class="sp-suggest-item" @click="selectPrincipal(s)">
+                <span class="sp-principal-kind" :class="s.kind === 'group' ? 'sp-principal-kind-group' : 'sp-principal-kind-user'"
+                  x-text="s.kind === 'group' ? kindGroup : kindUser"></span>
+                <span class="sp-suggest-name" x-text="s.name"></span>
+                <span class="sp-text-muted" x-text="s.subtitle"></span>
               </div>
             </template>
           </div>
@@ -93,7 +114,7 @@
           </select>
         </div>
         <div>
-          <button class="sp-btn sp-btn-primary sp-btn-nowrap-wide" @click="addMember()" :disabled="!selectedUserId || !selectedRoleId || adding">
+          <button class="sp-btn sp-btn-primary sp-btn-nowrap-wide" @click="addMember()" :disabled="!selected || !selectedRoleId || adding">
             <span x-show="!adding">{% trans %}Add{% endtrans %}</span>
             <span x-show="adding">{% trans %}Adding...{% endtrans %}</span>
           </button>
@@ -103,48 +124,90 @@
       <div x-show="addSuccess" class="sp-msg-success" x-text="addSuccess"></div>
     </div>
 
-    <!-- Members list -->
+    <!--
+      The access table lists membership *rows*: one per user or group that has
+      been granted roles here. That is a different number from the count of
+      people, which the summary states separately so neither can be mistaken
+      for the other.
+    -->
     <div class="card sp-card-pad">
-      <h3 class="sp-card-h3">{% trans %}Project Members{% endtrans %}</h3>
-      <table class="issue-table">
-        <thead>
-          <tr>
-            <th>{% trans %}User{% endtrans %}</th>
-            <th>{% trans %}Roles{% endtrans %}</th>
-            <th>{% trans %}Actions{% endtrans %}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template x-if="members.length === 0">
+      <h3 class="sp-card-h3">{% trans %}Project Access{% endtrans %}</h3>
+      <p class="sp-text-muted-xs sp-mb-md">
+        {# Label form, not "N groups": the counts are Alpine-reactive so Jinja's
+           {% raw %}{% pluralize %}{% endraw %} cannot see them, and a hand-rolled singular/plural pair
+           only covers two forms — wrong in Russian, which has three. Labelling
+           the number sidesteps plural agreement in every locale. #}
+        {% trans %}Direct members{% endtrans %}: <span x-text="directCount"></span>
+        &middot;
+        {% trans %}Groups{% endtrans %}: <span x-text="groupCount"></span>
+        &middot;
+        <strong>{% trans %}People with access{% endtrans %}: <span x-text="peopleCount"></span></strong>
+      </p>
+      <div class="sp-table-scroll">
+        <table class="issue-table">
+          <thead>
             <tr>
-              <td colspan="3" class="sp-empty-td">{% trans %}No members.{% endtrans %}</td>
+              <th>{% trans %}Member{% endtrans %}</th>
+              <th>{% trans %}Roles{% endtrans %}</th>
+              <th>{% trans %}Actions{% endtrans %}</th>
             </tr>
-          </template>
-          <template x-for="m in members" :key="m.user_id">
-            <tr>
-              <td>
-                <span class="sp-suggest-name" x-text="m.display_name"></span>
-                <span class="sp-text-muted-xs" x-text="'(' + m.login + ')'"></span>
-              </td>
-              <td>
-                <a href="#" class="sp-text-link" @click.prevent="openEditRoles(m)" x-text="joinRoles(m)"
-                  title="{{ _('Click to edit roles') }}"></a>
-              </td>
-              <td class="sp-td-actions-inline">
-                <button class="sp-btn-sm" @click="openEditRoles(m)">{% trans %}Edit roles{% endtrans %}</button>
-                <button class="sp-btn-sm danger" @click="removeMember(m.user_id)">{% trans %}Remove{% endtrans %}</button>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            <template x-if="members.length === 0">
+              <tr>
+                <td colspan="3" class="sp-empty-td">{% trans %}No members.{% endtrans %}</td>
+              </tr>
+            </template>
+            <template x-for="m in members" :key="principalKey(m)">
+              <tr>
+                <td>
+                  <span class="sp-principal-kind"
+                    :class="isGroup(m) ? 'sp-principal-kind-group' : 'sp-principal-kind-user'"
+                    x-text="isGroup(m) ? kindGroup : kindUser"></span>
+                  <span class="sp-suggest-name" x-text="principalName(m)"></span>
+                  <span class="sp-text-muted-xs" x-text="principalSubtitle(m)"></span>
+                  <template x-if="isGroup(m) && m.users && m.users.length > 0">
+                    <div>
+                      <button type="button" class="sp-btn-sm sp-mt-sm" @click="toggleExpanded(m)"
+                        :aria-expanded="isExpanded(m) ? 'true' : 'false'">
+                        <span x-show="!isExpanded(m)">{% trans %}Show who this covers{% endtrans %}</span>
+                        <span x-show="isExpanded(m)">{% trans %}Hide{% endtrans %}</span>
+                      </button>
+                      <ul class="sp-group-people" x-show="isExpanded(m)" x-cloak>
+                        <template x-for="u in m.users" :key="u.user_id">
+                          <li>
+                            <span x-text="u.display_name"></span>
+                            <span class="sp-text-muted-xs" x-text="'(' + u.login + ')'"></span>
+                            <span class="sp-via-group" x-show="onlyViaGroup(u.user_id)">{% trans %}via this group only{% endtrans %}</span>
+                          </li>
+                        </template>
+                      </ul>
+                    </div>
+                  </template>
+                </td>
+                <td>
+                  <a href="#" class="sp-text-link" @click.prevent="openEditRoles(m)" x-text="joinRoles(m)"
+                    title="{{ _('Click to edit roles') }}"></a>
+                </td>
+                <td class="sp-td-actions-inline">
+                  <button class="sp-btn-sm" @click="openEditRoles(m)">{% trans %}Edit roles{% endtrans %}</button>
+                  <button class="sp-btn-sm danger" @click="removeMember(m)">{% trans %}Remove{% endtrans %}</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <!-- Edit roles modal -->
     <div class="sp-modal-overlay" x-show="editModal" x-cloak
       @click.self="editModal = false" @keydown.escape.window="editModal = false">
       <div class="sp-modal" @click.stop>
-        <h2>{% trans %}Edit Roles{% endtrans %} &mdash; <span x-text="editMember?.display_name"></span></h2>
+        <h2>{% trans %}Edit Roles{% endtrans %} &mdash; <span x-text="editTitle()"></span></h2>
+        <p class="sp-text-muted-xs sp-mb-md" x-show="editMember && isGroup(editMember)">
+          {% trans %}These roles apply to everyone in the group.{% endtrans %}
+        </p>
         <div class="sp-mb-md">
           <template x-for="r in roles" :key="r.id">
             <label class="sp-label-check-row">
