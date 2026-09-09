@@ -7,6 +7,7 @@ Endpoints:
     POST   /auth/logout-all      - Revoke all sessions for the current user
     GET    /auth/sessions        - List active sessions
     DELETE /auth/sessions/{id}   - Revoke a specific session
+    POST   /auth/change-password - Change your own password (authenticated)
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.auth import (
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     ForgotPasswordRequest,
     LoginRequest,
     RefreshRequest,
@@ -31,6 +34,7 @@ from specivo.schemas.auth import (
     TokenResponse,
 )
 from specivo.services.auth_service import AuthService
+from specivo.services.auth_utils import validate_password_policy
 
 router = APIRouter()
 _service = AuthService()
@@ -386,16 +390,7 @@ async def reset_password(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict:
     """Set a new password using a valid reset token."""
-    from specivo.core.config import get_settings
-
-    settings = get_settings()
-    if len(body.new_password) < settings.password_min_length:
-        raise AppError(
-            code="validation_error",
-            message=f"Password must be at least {settings.password_min_length} characters",
-            status_code=422,
-            field="new_password",
-        )
+    validate_password_policy(body.new_password)
 
     try:
         user_id = await _service.reset_password_with_token(
@@ -433,3 +428,94 @@ async def reset_password(
         pass  # Non-critical — never block the response
 
     return {"detail": "Password has been reset successfully."}
+
+
+# ---------------------------------------------------------------------------
+# POST /auth/change-password
+# ---------------------------------------------------------------------------
+
+# A stolen session must not become a brute-force oracle for the current
+# password, so this is limited like /auth/forgot-password (5 per 5 minutes)
+# rather than like /auth/login (10 per minute): a legitimate user changes
+# their password once, while an attacker gets roughly one bcrypt guess a
+# minute. The identifier is the client IP, as on every other auth route.
+_change_password_rate_limit = rate_limit("auth_change_password", max_requests=5, window_seconds=300)
+
+
+@router.post(
+    "/change-password/",
+    response_model=ChangePasswordResponse,
+    summary="Change the authenticated user's own password",
+    responses={
+        400: {"description": "Current password incorrect, unchanged, or account has no password"},
+        401: {"description": "Not authenticated"},
+        422: {"description": "New password fails the password policy"},
+        429: {"description": "Rate limit exceeded"},
+    },
+)
+async def change_password(
+    body: ChangePasswordRequest,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    _rl: Annotated[None, Depends(_change_password_rate_limit)],
+    refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+) -> ChangePasswordResponse:
+    """Change your own password, proving ownership with the current one.
+
+    On success every *other* session of this user is revoked; the session
+    making the request survives, so the caller is not signed out of the page
+    they changed their password on.
+    """
+    from specivo.services.security_audit_service import SecurityAuditService
+
+    audit = SecurityAuditService()
+
+    try:
+        await _service.change_password(
+            session=db,
+            user=current_user,
+            current_password=body.current_password,
+            new_password=body.new_password,
+        )
+    except AppError as exc:
+        # Audit the rejection, committing before re-raising so the row
+        # survives the get_db rollback on error.
+        try:
+            await audit.log_password_change_failed(
+                session=db,
+                reason=exc.code,
+                user_id=current_user.id,
+                request=request,
+            )
+            await db.commit()
+        except Exception:
+            pass  # Non-critical — never block the error response
+        raise
+
+    # Revoke the user's other sessions, keeping the caller's own refresh
+    # token alive so a browser session survives its own password change.
+    revoked = await _service.logout_other_sessions(
+        session=db,
+        user_id=current_user.id,
+        keep_refresh_token_raw=refresh_token_cookie,
+    )
+
+    try:
+        await audit.log_password_changed(
+            session=db,
+            user_id=current_user.id,
+            request=request,
+            revoked_sessions=revoked,
+        )
+    except Exception:
+        pass  # Non-critical — never block the response
+
+    # Commit before responding: the browser reloads its session state as soon
+    # as it sees the success payload (ADR-0004 §12).
+    await db.commit()
+
+    return ChangePasswordResponse(
+        detail="Password changed successfully.",
+        revoked_sessions=revoked,
+    )

@@ -156,6 +156,7 @@ async def preferences_page(
             "avatar_palette": palette,
             "language_choices": get_language_choices(settings.available_languages),
             "timezone_choices": TIMEZONE_CHOICES,
+            "password_min_length": settings.password_min_length,
         },
     )
 
