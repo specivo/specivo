@@ -72,6 +72,8 @@ class AuditEvent(StrEnum):
     PASSWORD_RESET_REQUESTED = "password_reset_requested"
     PASSWORD_RESET_COMPLETED = "password_reset_completed"
     PASSWORD_RESET_FAILED = "password_reset_failed"
+    PASSWORD_CHANGED = "password_changed"
+    PASSWORD_CHANGE_FAILED = "password_change_failed"
 
 
 class MemberAction(StrEnum):
@@ -572,6 +574,56 @@ class SecurityAuditService:
             request_id=info["request_id"],
             user_agent=info["user_agent"],
             details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_password_changed(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        request: Request | None = None,
+        revoked_sessions: int = 0,
+    ) -> SecurityAuditLog:
+        """Log a successful self-service password change. Core feature.
+
+        *revoked_sessions* records how many of the user's other sessions were
+        revoked as part of the change. No password material is ever recorded.
+        """
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_CHANGED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"revoked_sessions": revoked_sessions},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_password_change_failed(
+        self,
+        session: AsyncSession,
+        reason: str,
+        user_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a rejected self-service password change. Core feature.
+
+        *reason* is the ``AppError`` code of the rejection — never the
+        submitted password or any part of it.
+        """
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_CHANGE_FAILED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"reason": reason},
         )
         session.add(log)
         await session.flush()

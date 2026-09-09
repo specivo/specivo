@@ -8,6 +8,7 @@ import { notifications, sidebar } from './stores';
 import { loginForm } from './components/login-form';
 import { forgotPasswordForm } from './components/forgot-password-form';
 import { resetPasswordForm } from './components/reset-password-form';
+import { changePasswordForm } from './components/change-password-form';
 import { apiKeyManager } from './components/api-key-manager';
 import { projectGeneralSettings } from './components/project-general-settings';
 import { projectMembers } from './components/project-members';
@@ -62,6 +63,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('loginForm', loginForm);
   Alpine.data('forgotPasswordForm', forgotPasswordForm);
   Alpine.data('resetPasswordForm', resetPasswordForm);
+  Alpine.data('changePasswordForm', changePasswordForm);
   Alpine.data('apiKeyManager', apiKeyManager);
   Alpine.data('projectGeneralSettings', projectGeneralSettings);
   Alpine.data('projectMembers', projectMembers);
