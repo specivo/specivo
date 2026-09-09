@@ -48,6 +48,8 @@
 
 /* Service account badge */
 .sp-badge-info { display: inline-flex; padding: 2px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; background: var(--sp-info-subtle); color: var(--sp-info); }
+/* Account needs attention — e.g. a password change is still pending */
+.sp-badge-warning { display: inline-flex; padding: 2px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; background: var(--sp-warning-subtle); color: var(--sp-warning); }
 
 /* Info rows (key-value pairs in detail cards) */
 .sp-info-row { display: flex; align-items: center; justify-content: space-between; padding: var(--sp-space-md) 0; border-bottom: 1px solid var(--sp-border); }

@@ -524,6 +524,10 @@ class AuthService:
         user.password_changed_at = utcnow()
         user.failed_login_count = 0
         user.locked_until = None
+        # Somebody completing an email reset picked this password themselves,
+        # so a forced change has already happened. Leaving the flag set would
+        # demand a second change the moment they sign in.
+        user.must_change_password = False
 
         # If user was locked (brute-force), reactivate
         if user.status == "locked":
@@ -593,6 +597,9 @@ class AuthService:
         # this code path at all.
         user.failed_login_count = 0
         user.locked_until = None
+        # The password is now one the owner chose, which is the whole point of
+        # the flag. This is the way out of a forced change.
+        user.must_change_password = False
 
         await session.flush()
 

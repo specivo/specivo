@@ -161,6 +161,39 @@ async def preferences_page(
     )
 
 
+@router.get("/my/password/", response_model=None)
+async def change_password_page(
+    request: Request,
+    user: Annotated[User, Depends(require_user)],
+) -> Response:
+    """Render the standalone password-change page.
+
+    ``require_user`` sends a user carrying ``must_change_password`` here from
+    every other page and lets this one through, so this is the end of that
+    redirect rather than another hop in it. The same page serves a voluntary
+    visit, which gets the form without the explanation and without being sent
+    anywhere afterwards.
+    """
+    from specivo.core.config import get_settings
+
+    settings = get_settings()
+    forced = bool(user.must_change_password)
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/auth/change_password.html",
+        context={
+            "user": user,
+            "forced": forced,
+            "password_min_length": settings.password_min_length,
+            # A forced user came here trying to reach the app, so put them in
+            # it once the flag is cleared. A voluntary visitor asked for this
+            # page and stays on it.
+            "change_password_redirect": "/" if forced else "",
+        },
+    )
+
+
 @router.post("/my/preferences/", response_model=None)
 async def update_preferences(
     request: Request,

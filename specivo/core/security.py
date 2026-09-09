@@ -22,6 +22,15 @@ JWT validation steps (order matters):
 API key validation delegates to ``ApiKeyService.authenticate``, which:
 - Allows locked users (locking is brute-force protection, not agent access control)
 - Blocks deactivated users
+
+Forced password change: a user carrying ``must_change_password`` is refused every
+API path except the handful listed in ``PASSWORD_CHANGE_EXEMPT_SUFFIXES``. The
+check runs on the JWT and cookie paths only — an agent holding a valid API key
+must never start failing because of a flag on a row it does not own. The web
+layer does not use this refusal at all:
+``specivo.web.deps.get_current_user_optional`` resolves the same user through
+``authenticate_request(..., enforce_password_change=False)`` and redirects it to
+the change-password page instead.
 """
 
 from __future__ import annotations
@@ -86,6 +95,59 @@ async def is_token_blocked(jti: str) -> bool:
     except Exception as exc:
         logger.warning("Redis blocklist unavailable — denying JWT auth (fail-closed): %s", exc)
         return True
+
+
+# ---------------------------------------------------------------------------
+# Forced password change
+# ---------------------------------------------------------------------------
+
+# What a user with ``must_change_password`` may still reach. Entries are path
+# suffixes matched after the configured stealth prefix, built the same way
+# ``CSRFMiddleware`` builds its own exempt list.
+#
+# - change-password is the way out, so it has to be reachable.
+# - logout and logout-all: leaving must always be possible. An account somebody
+#   else set a password on is exactly the account whose owner may want out.
+# - refresh: a browser sitting on the change-password page long enough for its
+#   access token to expire would otherwise lose the session mid-flow, and the
+#   silent refresh runs through this dependency.
+# - health: it carries no auth dependency today, so nothing here can reach it.
+#   It is listed anyway because a liveness probe must never depend on the state
+#   of whichever account happens to be calling.
+PASSWORD_CHANGE_EXEMPT_SUFFIXES = (
+    "/api/v1/auth/change-password/",
+    "/api/v1/auth/logout/",
+    "/api/v1/auth/logout-all/",
+    "/api/v1/auth/refresh/",
+    "/health/",
+)
+
+
+def is_password_change_exempt(path: str) -> bool:
+    """Return True if *path* stays reachable while a password change is forced."""
+    sp = get_settings().stealth_prefix.rstrip("/")
+    return any(path.startswith(sp + suffix) for suffix in PASSWORD_CHANGE_EXEMPT_SUFFIXES)
+
+
+def _enforce_password_change(user: User, request: Request) -> None:
+    """Refuse *user* unless the request is for one of the exempt paths.
+
+    Only ever called on the JWT and cookie paths. API key authentication is
+    deliberately left alone: an agent's access must not depend on a flag set
+    for the benefit of whoever signs in with a password.
+    """
+    if not user.must_change_password:
+        return
+    if is_password_change_exempt(request.url.path):
+        return
+    raise AppError(
+        code="password_change_required",
+        message=(
+            "This account must set a new password before it can be used. "
+            "POST the current and new password to /api/v1/auth/change-password/."
+        ),
+        status_code=403,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +308,25 @@ async def get_current_user(
 ) -> User:
     """FastAPI dependency: resolve the current user from JWT or API key.
 
+    Thin wrapper over :func:`authenticate_request` with the forced
+    password-change gate on, which is what every JSON API endpoint wants.
+    """
+    return await authenticate_request(request, db)
+
+
+async def authenticate_request(
+    request: Request,
+    db: AsyncSession,
+    *,
+    enforce_password_change: bool = True,
+) -> User:
+    """Resolve the current user from JWT or API key.
+
+    *enforce_password_change* is switched off by the web layer, which needs the
+    resolved user in order to redirect it to the change-password page; a 403
+    raised here would reach ``get_current_user_optional`` as "not signed in"
+    and send a forced user to the login page instead.
+
     Resolution order:
     1. ``Authorization: Bearer <token>`` header
        - Starts with ``spv_`` → API key auth
@@ -278,6 +359,8 @@ async def get_current_user(
         if from_cookie:
             refreshed = await try_silent_refresh(request, db)
             if refreshed is not None:
+                if enforce_password_change:
+                    _enforce_password_change(refreshed, request)
                 return refreshed
         await _log_auth_failure(db, "no_credentials", request)
         raise AppError(
@@ -310,10 +393,13 @@ async def get_current_user(
             # Agent session tracking is non-critical — never block auth
             logger.warning("Agent session tracking failed: %s", exc)
 
+        # No forced password-change check here, deliberately: an API key is not
+        # a password, and an agent holding a valid one must not start failing
+        # because somebody flagged the row it authenticates as.
         return user
 
     try:
-        return await _authenticate_jwt(token, db)
+        user = await _authenticate_jwt(token, db)
     except AppError as exc:
         # Silent refresh for cookie-based sessions when the JWT is
         # present but expired.  Never invoked on the Authorization:
@@ -321,9 +407,15 @@ async def get_current_user(
         if from_cookie and exc.code == "auth_token_expired":
             refreshed = await try_silent_refresh(request, db)
             if refreshed is not None:
+                if enforce_password_change:
+                    _enforce_password_change(refreshed, request)
                 return refreshed
         await _log_auth_failure(db, "invalid_jwt", request)
         raise
+
+    if enforce_password_change:
+        _enforce_password_change(user, request)
+    return user
 
 
 # ---------------------------------------------------------------------------
