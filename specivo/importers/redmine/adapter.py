@@ -217,8 +217,9 @@ class RedmineSourceAdapter:
     async def extract_groups(self) -> AsyncIterator[IRGroup]:
         """Stream groups with their members.
 
-        Specivo cannot hold project roles on a group, so these exist only to be
-        flattened into per-user memberships. Membership is read up front: a
+        Redmine keeps groups in ``users`` alongside people, distinguished by
+        ``type``; the builtin anonymous and non-member principals have types of
+        their own and so are left out here. Membership is read up front: a
         Redmine instance has few groups, and the join table has no primary key
         to page on.
         """
@@ -291,10 +292,13 @@ class RedmineSourceAdapter:
     async def extract_memberships(self, project_ref: str) -> AsyncIterator[IRMembership]:
         """Stream a project's memberships, for people and for groups.
 
-        Only directly granted roles are emitted. Redmine also stores the grants
-        a user inherits from a group as rows with ``inherited_from`` set;
-        emitting those as well would double-count, since the importer derives
-        them itself when it flattens the group.
+        Only directly granted roles are emitted. Redmine materialises the grants
+        a user inherits from a group as extra rows with ``inherited_from`` set,
+        because that is how it answers "what can this person do here". Specivo
+        answers the same question by unioning a user's own roles with those of
+        the groups they belong to, so importing those rows would create a second
+        copy of a grant the group already carries — one that would then outlive
+        the person leaving the group.
         """
         async with self.engine.connect() as conn:
             member_rows = (

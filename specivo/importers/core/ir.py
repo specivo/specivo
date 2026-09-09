@@ -198,8 +198,9 @@ class IRUser:
 class IRGroup:
     """A source-side group of users.
 
-    Specivo has no group that can hold project roles, so groups exist in the IR
-    only to be flattened into per-user memberships.
+    Becomes a Specivo ``UserGroup``, which is a membership principal in its own
+    right: an :class:`IRMembership` with ``principal_kind`` ``GROUP`` names one
+    of these, and the roles it is granted reach everyone in ``member_refs``.
     """
 
     source_ref: str

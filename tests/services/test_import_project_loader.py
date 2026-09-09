@@ -1,9 +1,9 @@
 """Service tests for the project loader.
 
 The behaviour worth pinning is where Redmine and Specivo disagree: a project
-key that Redmine never had, a nesting limit Redmine does not enforce, group
-memberships Specivo cannot represent, and custom fields that have to become
-per-project schemas.
+key that Redmine never had, a nesting limit Redmine does not enforce, a group
+grant that stays on the group rather than being copied onto its members, and
+custom fields that have to become per-project schemas.
 """
 
 from __future__ import annotations
@@ -44,6 +44,7 @@ from specivo.models.member import Member, MemberRole
 from specivo.models.metadata_schema import MetadataSchema
 from specivo.models.project import EnabledModule, Project
 from specivo.models.version import Version
+from specivo.services.permission_service import clear_role_cache, get_user_roles
 from tests.services.conftest import FakeAdapter
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.service]
@@ -343,8 +344,8 @@ class TestMemberships:
         roles = (await db_session.execute(select(MemberRole).where(MemberRole.member_id == member.id))).scalars().all()
         assert len(roles) == 1
 
-    async def test_group_membership_is_flattened_to_its_members(self, db_session, loaded, with_roles):
-        """Specivo cannot hang a role off a group, so each member gets it."""
+    async def test_group_membership_is_held_by_the_group(self, db_session, loaded, with_roles):
+        """One membership row, held by the group — not one copy per member."""
         adapter = with_roles(
             projects=[_project()],
             users=[
@@ -366,11 +367,68 @@ class TestMemberships:
         await load_memberships(ctx)
 
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
+        group_id = await ctx.id_map.get(db_session, EntityType.GROUP, "20")
         members = (await db_session.execute(select(Member).where(Member.project_id == project_id))).scalars().all()
-        assert len(members) == 2
+        assert len(members) == 1
+        assert members[0].group_id == group_id
+        assert members[0].user_id is None
+
+    async def test_the_group_grant_reaches_its_members(self, db_session, loaded, with_roles):
+        """What the flattening got right, resolved at read time instead."""
+        adapter = with_roles(
+            projects=[_project()],
+            users=[
+                IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org"),
+                IRUser(source_ref="8", login="proj_sam", display_name="Sam", email="proj_sam@example.org"),
+            ],
+            groups=[IRGroup(source_ref="20", name="Platform", member_refs=["7", "8"])],
+            memberships=[
+                IRMembership(
+                    source_ref="100",
+                    project_ref="1",
+                    principal_ref="20",
+                    principal_kind=PrincipalKind.GROUP,
+                    role_refs=["3"],
+                )
+            ],
+        )
+        ctx = await loaded(adapter)
+        await load_memberships(ctx)
+
+        clear_role_cache()
+        project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
+        for user_ref in ("7", "8"):
+            user_id = await ctx.id_map.get(db_session, EntityType.USER, user_ref)
+            roles = await get_user_roles(db_session, user_id, project_id)
+            assert [role.id for role in roles] == [await ctx.id_map.get(db_session, EntityType.ROLE, "3")]
+
+    async def test_a_group_that_was_not_imported_is_reported(self, db_session, loaded, with_roles):
+        adapter = with_roles(
+            projects=[_project()],
+            memberships=[
+                IRMembership(
+                    source_ref="100",
+                    project_ref="1",
+                    principal_ref="999",
+                    principal_kind=PrincipalKind.GROUP,
+                    role_refs=["3"],
+                )
+            ],
+        )
+        ctx = await loaded(adapter)
+        await load_memberships(ctx)
+
+        project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
+        members = (await db_session.execute(select(Member).where(Member.project_id == project_id))).scalars().all()
+        assert members == []
+        assert any("group that was not imported" in w.message for w in ctx.summary.warnings)
 
     async def test_direct_and_group_roles_are_unioned(self, db_session, loaded, with_roles):
-        """A user in both keeps every role Redmine gave them."""
+        """A user in both keeps every role Redmine gave them.
+
+        Two membership rows now, one theirs and one the group's, unioned when
+        their roles are resolved rather than merged onto a single row.
+        """
         adapter = with_roles(
             projects=[_project()],
             users=[IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org")],
@@ -395,13 +453,14 @@ class TestMemberships:
         ctx = await loaded(adapter)
         await load_memberships(ctx)
 
+        clear_role_cache()
         user_id = await ctx.id_map.get(db_session, EntityType.USER, "7")
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
-        member = (
-            await db_session.execute(select(Member).where(Member.user_id == user_id, Member.project_id == project_id))
-        ).scalar_one()
-        roles = (await db_session.execute(select(MemberRole).where(MemberRole.member_id == member.id))).scalars().all()
-        assert len(roles) == 2
+        roles = await get_user_roles(db_session, user_id, project_id)
+        assert {role.id for role in roles} == {
+            await ctx.id_map.get(db_session, EntityType.ROLE, "3"),
+            await ctx.id_map.get(db_session, EntityType.ROLE, "4"),
+        }
 
     async def test_membership_with_no_imported_role_is_skipped(self, db_session, loaded, with_roles):
         adapter = with_roles(

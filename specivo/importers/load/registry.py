@@ -40,7 +40,10 @@ async def _bootstrap(ctx: PhaseContext) -> None:
 
 
 async def _users_and_groups(ctx: PhaseContext) -> None:
-    """Import users, then collect group membership for the memberships phase."""
+    """Import users, then the groups they belong to.
+
+    In that order: a group can only hold members the run has already created.
+    """
     await load_users(ctx)
     await load_groups(ctx)
 

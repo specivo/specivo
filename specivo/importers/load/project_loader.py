@@ -10,10 +10,11 @@ Redmine has to a short name, and the operator can override any of them. It is
 the one mapping worth reviewing before a large import, so every derived key is
 reported.
 
-**Group memberships are flattened.** Specivo cannot hang roles off a group, so
-a group's grant is expanded into an identical grant for each of its members.
-The resulting permissions match the source exactly; what is lost is the
-knowledge that they came from a group.
+**Group memberships stay group memberships.** A Specivo ``UserGroup`` holds
+roles on a project the same way a user does, so a group's grant is one
+membership row held by the group the users phase created. Permission resolution
+unions a user's own roles with those of every group they are in, so the people
+in it get the access without a grant of their own.
 
 **Custom fields become metadata schemas per project.** A Redmine custom field
 is instance-wide; a Specivo metadata schema belongs to a project and optionally
@@ -32,12 +33,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_PROJECT_DEPTH
 from specivo.importers.core.backdate import backdate
-from specivo.importers.core.ir import EntityType, IRCustomField, IRProject, PrincipalKind
+from specivo.importers.core.ir import EntityType, IRCustomField, IRMembership, IRProject, PrincipalKind
 from specivo.importers.core.pipeline import PhaseContext
-from specivo.importers.load.user_loader import (
-    GROUP_MEMBERS_STATE_KEY,
-    ensure_import_account,
-)
+from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.lookups import IssueCategory
 from specivo.models.project import Project
 from specivo.models.version import Version
@@ -382,9 +380,7 @@ def _version_sharing(ctx: PhaseContext, value: str, name: str) -> VersionSharing
 
 
 async def load_memberships(ctx: PhaseContext) -> None:
-    """Grant project roles, expanding group memberships into individual ones."""
-    group_members: dict[str, list[str]] = ctx.state.get(GROUP_MEMBERS_STATE_KEY, {})
-
+    """Grant project roles to the users and groups that held them in the source."""
     for project_ref in ctx.project_refs:
         project = await _project_for(ctx, project_ref)
         if project is None:
@@ -402,25 +398,35 @@ async def load_memberships(ctx: PhaseContext) -> None:
                 ctx.warn("Membership has no role that was imported; skipped", project=project.key)
                 continue
 
-            if ir.principal_kind is PrincipalKind.USER:
-                principal_refs = [ir.principal_ref]
-            else:
-                principal_refs = group_members.get(ir.principal_ref, [])
-                if not principal_refs:
-                    ctx.warn("Group membership has no members to expand to", project=project.key)
-                    continue
+            principal = await _principal_for(ctx, ir, project.key)
+            if principal is None:
+                continue
 
-            for user_ref in principal_refs:
-                user_id = await ctx.id_map.get(ctx.session, EntityType.USER, user_ref)
-                if user_id is None:
-                    ctx.warn("Membership refers to a user that was not imported; skipped", project=project.key)
-                    continue
-                # add_member merges roles into an existing membership, so a user
-                # who is both a direct member and in a group ends up with the
-                # union of both grants, which is what Redmine gave them.
-                await _project_service.add_member(ctx.session, project, Principal.user(user_id), role_ids)
-                ctx.summary.record_created(EntityType.MEMBERSHIP)
-                ctx.tick()
+            await _project_service.add_member(ctx.session, project, principal, role_ids)
+            ctx.summary.record_created(EntityType.MEMBERSHIP)
+            ctx.tick()
+
+
+async def _principal_for(ctx: PhaseContext, ir: IRMembership, project_key: str) -> Principal | None:
+    """Resolve who a membership belongs to, or ``None`` if it was not imported.
+
+    A group grant is held by the group itself. Nothing is expanded to the
+    people in it: permission resolution unions a user's own roles with the
+    roles of every group they belong to, so the access follows membership of
+    the group rather than a copy of the grant made when the import ran.
+    """
+    if ir.principal_kind is PrincipalKind.USER:
+        user_id = await ctx.id_map.get(ctx.session, EntityType.USER, ir.principal_ref)
+        if user_id is None:
+            ctx.warn("Membership refers to a user that was not imported; skipped", project=project_key)
+            return None
+        return Principal.user(user_id)
+
+    group_id = await ctx.id_map.get(ctx.session, EntityType.GROUP, ir.principal_ref)
+    if group_id is None:
+        ctx.warn("Membership refers to a group that was not imported; skipped", project=project_key)
+        return None
+    return Principal.group(group_id)
 
 
 # --------------------------------------------------------------------------

@@ -1,13 +1,21 @@
 ---
-description: Move a Redmine instance into Specivo — projects, users, issues with their history, wiki revisions, attachments and logged time — starting with a dry run.
+description: Move a Redmine instance into Specivo — projects, users, groups, issues with their history, wiki revisions, attachments and logged time — starting with a dry run.
 ---
 
 # Migrating from Redmine
 
 Specivo can take over from a Redmine instance: projects and their hierarchy,
-users and memberships, issues with their full history, wiki pages with every
-revision and the redirects left behind by page renames, attachments and
+users, groups and memberships, issues with their full history, wiki pages with
+every revision and the redirects left behind by page renames, attachments and
 logged time.
+
+Groups arrive as groups. A Redmine group becomes a Specivo user group holding
+the same people, and a role that group held on a project stays a grant to the
+group rather than being copied onto each member — so adding somebody to the
+group afterwards gives them that access, and removing them takes it away, the
+way it did in Redmine. Redmine's own bookkeeping rows for what each member
+inherited are not imported: Specivo works that out from the group when it
+checks a permission.
 
 The importer reads Redmine's database directly and copies its attachment files.
 It does not use Redmine's REST API, which cannot see private notes, deleted
@@ -105,10 +113,6 @@ guessing:
 - **Passwords.** The two systems hash differently and nothing is portable.
   Every imported account gets an unusable password and is listed in the report;
   those people use password recovery, or an administrator resets them.
-- **Groups.** Specivo cannot hang project roles off a group, so a group's grant
-  is expanded into the same grant for each of its members. The resulting access
-  matches Redmine exactly; what is lost is the knowledge that it came from a
-  group.
 - **Modules Specivo does not have** — repositories, forums, news, documents,
   calendars and Gantt.
 - **Custom fields on anything but issues.** Fields on users, projects, versions
@@ -130,6 +134,13 @@ before you look at real numbers:
 - **Logins and email addresses that collide with an existing account** are
   suffixed (`jsmith-2`, `jsmith+2@example.com`) rather than skipped, and every
   suffixed one is listed in the report.
+- **A group whose name is already taken** is suffixed the same way
+  (`Platform Team-2`), and the suffixing is reported. Specivo requires group
+  names to be unique ignoring case and Redmine does not, so this covers both a
+  name your Specivo already uses and two Redmine groups differing only in case.
+  The imported group is always a new one: adding Redmine's members and grants
+  to a group you already had would hand the people in it access nobody decided
+  to give them.
 - **Logged time** is rounded to two decimal places, since that is all Specivo
   stores. Floating-point noise from Redmine's own storage (`7.5` coming back
   as `7.499999999999999`) is rounded silently; a rounding that drops precision
@@ -142,4 +153,6 @@ before you look at real numbers:
 
 - Reset the imported accounts, or tell those people to use password recovery.
 - Give any newly created roles their permissions.
-- Check the flattened group memberships against how the group was used.
+- Check the imported groups under **Administration → Groups**, and any that were
+  suffixed on a name collision in particular — a suffixed group is a second one
+  next to the group that already held the name, which may not be what you want.
