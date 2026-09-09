@@ -4,8 +4,10 @@ Three things happen here that are worth knowing about.
 
 **No password survives.** Redmine salts and hashes with SHA1 and Specivo uses
 bcrypt, so nothing is portable. Every imported account gets a random unusable
-hash and its login is listed in the import report, because the accounts are
-otherwise unreachable until somebody resets them.
+hash and is flagged ``must_change_password``, so whatever password it is
+eventually given — by an administrator, or by the person completing an email
+recovery — is not the password it keeps. The logins are listed in the report so
+the operator knows which accounts are waiting for one.
 
 **Identity has to be squeezed into narrower columns.** Specivo requires an email
 and enforces case-insensitive uniqueness on both login and email, while Redmine
@@ -45,8 +47,9 @@ logger = logging.getLogger(__name__)
 # an earlier one is detached by the time a later phase would use it.
 IMPORT_ACCOUNT_STATE_KEY = "import_account_id"
 
-# Report sections.
-NOTE_PASSWORD_RESET = "password_reset_required"
+# Report sections. The section name is printed as the heading of its list, so it
+# has to read as a statement about the accounts under it.
+NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN = "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"
 NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
 
 # Identifier under which the fallback author account is mapped, so a resumed
@@ -102,6 +105,9 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
             status="active",
             is_admin=False,
             is_service_account=True,
+            # Deliberately not flagged for a password change, and the CHECK on
+            # users would reject the row if it were: this account authenticates
+            # with an API key and has no password anyone could replace.
         )
         ctx.session.add(existing)
         await ctx.session.flush()
@@ -136,6 +142,11 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
         status=ir.status,
         is_admin=ir.is_admin,
         is_service_account=False,
+        # Nobody holds this password, so the first one the account actually has
+        # will have been chosen by somebody else. Making the owner replace it is
+        # the point; a person who recovers the account by email picks their own
+        # and the flag clears itself.
+        must_change_password=True,
         language=_supported_language(ir.language),
         last_login_at=ir.last_login_at,
     )
@@ -146,7 +157,7 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
     await ctx.id_map.put(ctx.session, EntityType.USER, ir.source_ref, "users", user.id)
 
     ctx.summary.record_created(EntityType.USER)
-    ctx.summary.add_note(NOTE_PASSWORD_RESET, login)
+    ctx.summary.add_note(NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN, login)
     if synthesised:
         ctx.summary.add_note(NOTE_SYNTHETIC_EMAIL, f"{login} ({email})")
     ctx.tick()

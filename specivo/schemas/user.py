@@ -52,6 +52,15 @@ class UserCreate(BaseModel):
     is_admin: bool = False
     is_service_account: bool = False
     status: Literal["active", "pending_verification"] = "active"
+    must_change_password: bool | None = Field(
+        default=None,
+        description=(
+            "Require the account to replace this password at first sign-in. "
+            "Left unset it defaults to true for a person given a password, and "
+            "to false otherwise — a service account has no password to change, "
+            "and setting it on one is rejected."
+        ),
+    )
 
 
 # ---------------------------------------------------------------------------

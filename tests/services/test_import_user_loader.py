@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 
 from specivo.importers.core.ir import EntityType, IRGroup, IRUser
 from specivo.importers.load.user_loader import (
-    NOTE_PASSWORD_RESET,
+    NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN,
     NOTE_SYNTHETIC_EMAIL,
     ensure_import_account,
     load_groups,
@@ -111,11 +111,19 @@ class TestCredentials:
         hashes = (await db_session.execute(stmt)).scalars().all()
         assert len(set(hashes)) == 2
 
-    async def test_every_login_is_listed_for_reset(self, db_session, make_context):
-        """The accounts are unreachable until somebody resets them."""
+    async def test_every_login_is_listed_as_owing_a_password(self, db_session, make_context):
+        """The accounts have no usable password until somebody gives them one."""
         ctx = make_context(FakeAdapter(users=[_user()]))
         await load_users(ctx)
-        assert ctx.summary.notes[NOTE_PASSWORD_RESET] == ["alex"]
+        assert ctx.summary.notes[NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN] == ["alex"]
+
+    async def test_the_account_must_set_its_own_password(self, db_session, make_context):
+        """Whatever password it is eventually given is not the one it keeps."""
+        ctx = make_context(FakeAdapter(users=[_user()]))
+        await load_users(ctx)
+
+        user_id = await ctx.id_map.get(db_session, EntityType.USER, "12")
+        assert (await db_session.get(User, user_id)).must_change_password is True
 
 
 class TestIdentityAdjustments:
@@ -202,6 +210,9 @@ class TestImportAccount:
         assert account.login == "redmine-import"
         assert account.is_service_account is True
         assert account.is_admin is False
+        # It has no password to replace, and the CHECK on users would reject
+        # the row if it were flagged.
+        assert account.must_change_password is False
 
     async def test_is_reused_on_a_second_call(self, db_session, make_context):
         ctx = make_context(FakeAdapter())

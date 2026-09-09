@@ -394,6 +394,46 @@ def setup_plugin_assets(plugins: list) -> None:
         _plugin_js_files.extend(assets.get("js", []))
 
 
+# Where a user carrying ``must_change_password`` is sent, and the only web
+# paths that survive the redirect. Anything else would bounce back here.
+#
+# The check runs in ``get_current_user_optional``, which every web page and
+# partial resolves its user through.
+#
+# ``/logout/`` resolves no user of its own today, so it is already out of reach
+# of this check. It is listed anyway: being able to leave an account whose
+# password somebody else chose must not depend on that staying true.
+#
+# Static files, ``/static/...``, are mounted outside the router and never touch
+# this dependency, so the page keeps its CSS and bundles. The form posts to
+# ``/api/v1/auth/change-password/``, which the API side exempts.
+CHANGE_PASSWORD_PATH = "/my/password/"
+_PASSWORD_CHANGE_ALLOWED_SUFFIXES = (CHANGE_PASSWORD_PATH, "/logout/")
+
+
+def redirect_if_password_change_required(request: Request, user: object) -> None:
+    """Send a user who must change their password to the page that lets them.
+
+    Raises the 302 ``HTTPException`` the web layer uses for redirects. Returns
+    quietly when the flag is not set, or when the request is already for one of
+    the pages a forced user is allowed to reach — without that exception the
+    change-password page would redirect to itself forever.
+    """
+    if not getattr(user, "must_change_password", False):
+        return
+
+    from specivo.core.config import get_settings
+
+    sp = get_settings().stealth_prefix.rstrip("/")
+    path = request.url.path
+    if any(path.startswith(sp + suffix) for suffix in _PASSWORD_CHANGE_ALLOWED_SUFFIXES):
+        return
+
+    from fastapi import HTTPException
+
+    raise HTTPException(status_code=302, headers={"Location": f"{sp}{CHANGE_PASSWORD_PATH}"})
+
+
 async def require_user(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -402,6 +442,10 @@ async def require_user(
 
     Uses HTTPException with Location header to trigger a 302 redirect
     when the user is not authenticated.
+
+    The redirect to the change-password page is not made here: it belongs to
+    ``get_current_user_optional`` below, which every web page goes through —
+    most of them without ever calling this dependency.
     """
     from fastapi import HTTPException
 
@@ -420,6 +464,11 @@ async def get_current_user_optional(
     Returns the User model if authenticated, None otherwise.
     Used by web pages that work for both logged-in and anonymous visitors.
 
+    Raises a 302 ``HTTPException`` — the redirect the web layer already uses —
+    when the resolved user must change their password and the request is not
+    for one of the pages that lets them. Returning the user instead would let
+    every page that only checks for ``None`` render normally.
+
     Silent refresh: when the access token has expired but a valid
     ``refresh_token`` cookie is present, the function calls
     ``AuthService.refresh()`` to obtain new tokens.  The new tokens
@@ -427,10 +476,15 @@ async def get_current_user_optional(
     ``TokenRefreshMiddleware`` can set the cookies on the response.
     """
     from specivo.core.exceptions import AppError
-    from specivo.core.security import get_current_user
+    from specivo.core.security import authenticate_request
 
     try:
-        user_obj = await get_current_user(request, db)
+        # The forced password-change gate is off here on purpose. It answers
+        # with 403, which this function would read as "not signed in" and turn
+        # into a redirect to the login page — where an already-signed-in user
+        # has nothing to do. The web layer needs the resolved user so it can
+        # send it to the change-password page instead; see ``require_user``.
+        user_obj = await authenticate_request(request, db, enforce_password_change=False)
     except AppError:
         # get_current_user now performs silent refresh internally for the
         # cookie-based paths ("auth_token_expired" + missing access_token).
@@ -453,5 +507,12 @@ async def get_current_user_optional(
 
         if user_language in get_available_locales():
             activate(user_language)
+
+    # Last step, and the reason it is here rather than in ``require_user``:
+    # only a handful of pages use that dependency. Every other page — issues,
+    # wiki, projects, sprints, the dashboard — resolves its user through this
+    # function and redirects to /login/ itself, so this is the one place a
+    # forced password change can be enforced across the whole web surface.
+    redirect_if_password_change_required(request, user_obj)
 
     return user_obj

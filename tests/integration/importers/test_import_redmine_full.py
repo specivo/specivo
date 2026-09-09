@@ -291,8 +291,19 @@ class TestFullImport:
         assert user.password_hash is not None
         assert not verify_password("fixture-password-not-a-secret", user.password_hash)
 
-    async def test_the_report_lists_the_accounts_needing_a_reset(self, db_session, imported):
-        assert "fixture_dev" in imported.notes["password_reset_required"]
+    async def test_the_report_lists_the_accounts_owing_a_password(self, db_session, imported):
+        note = imported.notes["accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"]
+        assert "fixture_dev" in note
+
+    async def test_imported_people_must_set_their_own_password(self, db_session, imported):
+        user = (await db_session.execute(select(User).where(User.login == "fixture_dev"))).scalar_one()
+        assert user.must_change_password is True
+
+    async def test_the_import_service_account_is_not_flagged(self, db_session, imported):
+        """It has no password to replace; the CHECK on users would reject the row."""
+        account = (await db_session.execute(select(User).where(User.login == "redmine-import"))).scalar_one()
+        assert account.is_service_account is True
+        assert account.must_change_password is False
 
 
 class TestRerun:

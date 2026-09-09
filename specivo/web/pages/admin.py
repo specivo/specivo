@@ -156,6 +156,7 @@ async def admin_user_detail(
         "display_name": target_user.display_name,
         "is_admin": target_user.is_admin,
         "is_service_account": target_user.is_service_account,
+        "must_change_password": target_user.must_change_password,
         "status": target_user.status,
         "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
         "last_login_at": target_user.last_login_at.isoformat() if target_user.last_login_at else None,

@@ -111,8 +111,12 @@ Some things have no Specivo equivalent. The importer says so rather than
 guessing:
 
 - **Passwords.** The two systems hash differently and nothing is portable.
-  Every imported account gets an unusable password and is listed in the report;
-  those people use password recovery, or an administrator resets them.
+  Every imported account arrives with a password nobody holds, and is marked as
+  owing one. Give an account a password from **Administration → Users** and the
+  person is asked to replace it the first time they sign in, so the one you
+  typed is not the one they keep. If mail is configured they can instead use
+  password recovery and set their own straight away. Either way the logins are
+  in the report.
 - **Modules Specivo does not have** — repositories, forums, news, documents,
   calendars and Gantt.
 - **Custom fields on anything but issues.** Fields on users, projects, versions
@@ -151,7 +155,10 @@ before you look at real numbers:
 
 ## After the import
 
-- Reset the imported accounts, or tell those people to use password recovery.
+- Give the imported accounts a way in: set a password for each from
+  **Administration → Users** and pass it on, or tell those people to use
+  password recovery. A password you set is replaced at first sign-in, so
+  neither route leaves an account whose password somebody else knows.
 - Give any newly created roles their permissions.
 - Check the imported groups under **Administration → Groups**, and any that were
   suffixed on a name collision in particular — a suffixed group is a second one

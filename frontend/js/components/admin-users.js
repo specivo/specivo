@@ -22,7 +22,9 @@ export function adminUsers(initial) {
             showCreate: false,
             creating: false,
             createError: '',
-            newUser: { login: '', email: '', display_name: '', password: '', is_admin: false, is_service_account: false },
+            // must_change_password defaults on: an administrator typing
+            // somebody else's password knows it, so it must not stay theirs.
+            newUser: { login: '', email: '', display_name: '', password: '', is_admin: false, is_service_account: false, must_change_password: true },
 
             async createUser() {
                 this.creating = true;
@@ -31,6 +33,11 @@ export function adminUsers(initial) {
                 // Service accounts don't need a password
                 if (payload.is_service_account && !payload.password) {
                     delete payload.password;
+                }
+                // A service account has no password to change and the server
+                // refuses the combination outright, so never send it.
+                if (payload.is_service_account) {
+                    payload.must_change_password = false;
                 }
                 if (!payload.password && !payload.is_service_account) {
                     this.createError = 'Password: required for regular users.';
@@ -62,6 +69,7 @@ export function adminUsers(initial) {
             showReset: false,
             resetUser: null,
             resetPassword: '',
+            resetMustChange: true,
             resetting: false,
             resetError: '',
             resetSuccess: '',
@@ -69,6 +77,9 @@ export function adminUsers(initial) {
             openResetPassword(u) {
                 this.resetUser = u;
                 this.resetPassword = '';
+                // Same default as creation, and off for a service account,
+                // which the server refuses to flag.
+                this.resetMustChange = !u.is_service_account;
                 this.resetError = '';
                 this.resetSuccess = '';
                 this.showReset = true;
@@ -85,7 +96,10 @@ export function adminUsers(initial) {
                 var res = await spFetch('/api/v1/admin/users/' + this.resetUser.id + '/reset-password/', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ password: this.resetPassword })
+                    body: JSON.stringify({
+                        password: this.resetPassword,
+                        must_change_password: this.resetUser.is_service_account ? false : this.resetMustChange
+                    })
                 });
                 if (res.ok) {
                     this.resetSuccess = 'Password reset successfully.';
