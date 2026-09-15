@@ -16,11 +16,16 @@ cannot express:
 
 The instance switch is the ``anonymous_access_enabled`` setting. It is off by
 default, and off whenever the row is absent. Turning it on exposes nothing by
-itself: it lets the projects that were opted in above be read without an
-account. Only instance administrators change it, turning it on has to be
-confirmed against the list of opted-in projects, and every change is audited.
-It is read from the database on every call, so a change applies to the next
-request without any process cache to invalidate.
+itself: a project can only ever be read without an account while the switch
+is on and the project is opted in. Only instance administrators change it,
+turning it on must name exactly the projects opted in at that moment, and
+every change is audited. It is read from the database on every call, so a
+change applies to the next request without any process cache to invalidate.
+
+Both kinds of change take ``ANONYMOUS_ACCESS_LOCK_KEY``, a transaction-scoped
+advisory lock. Turning the switch on therefore cannot interleave with a
+project being opted in or out: the confirmed list is compared with the
+opted-in projects, and the switch written, while no opt-in can change.
 
 Nothing on the request path reads these values. Granting anonymous visitors
 access based on them is a separate piece of work.
@@ -54,6 +59,16 @@ _DISABLED_VALUE = "false"
 
 _audit = SecurityAuditService()
 _settings = SettingsService()
+
+# Transaction-scoped advisory lock serialising the instance switch with
+# per-project opt-in changes. The value is arbitrary; the other advisory locks
+# in the codebase key on issue and tree-root ids, far below it.
+ANONYMOUS_ACCESS_LOCK_KEY = 0x5350_414E_4F4E_0001
+
+
+async def lock_anonymous_access(session: AsyncSession) -> None:
+    """Wait until no other transaction is changing anonymous access, then hold the lock until this one ends."""
+    await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": ANONYMOUS_ACCESS_LOCK_KEY})
 
 
 class AnonymousPermissionsChangeReason(StrEnum):
@@ -96,6 +111,11 @@ async def set_anonymous_permissions(
         raise PermissionDeniedError("Only instance administrators can change anonymous access")
 
     new = normalize_anonymous_permissions(permissions)
+
+    # Serialise with the instance switch, then re-read the row so the check
+    # and the audited old value reflect anything committed while waiting.
+    await lock_anonymous_access(session)
+    await session.refresh(project, attribute_names=["is_public", "anonymous_permissions"])
     if new and not project.is_public:
         raise AppError(
             code="project_not_public",
@@ -136,6 +156,8 @@ async def clear_anonymous_permissions_for_private(
     ``ck_projects_anonymous_permissions_public`` holds at every flush. Does
     nothing, and audits nothing, when the list is already empty.
     """
+    await lock_anonymous_access(session)
+    await session.refresh(project, attribute_names=["anonymous_permissions"])
     old = list(project.anonymous_permissions or [])
     if not old:
         return
@@ -190,18 +212,44 @@ def anonymous_access_project_summary(project: Project) -> dict[str, object]:
     }
 
 
-class AnonymousAccessConfirmationRequiredError(AppError):
-    """Raised when the switch is turned on without confirming the projects it opens (409)."""
+class AnonymousAccessConfirmationError(AppError):
+    """Turning the switch on was not confirmed against the projects opted in now (409).
+
+    ``projects`` holds the projects opted in at this moment, and
+    ``details.projects`` carries the same list for API clients.
+    """
+
+    def __init__(self, code: str, message: str, projects: list[Project]) -> None:
+        super().__init__(
+            code=code,
+            message=message,
+            status_code=409,
+            details={"projects": [anonymous_access_project_summary(p) for p in projects]},
+        )
+        self.projects = projects
+
+
+class AnonymousAccessConfirmationRequiredError(AnonymousAccessConfirmationError):
+    """Turning the switch on named no projects at all."""
 
     def __init__(self, projects: list[Project]) -> None:
         super().__init__(
-            code="confirmation_required",
-            message=(
-                f"Turning on anonymous access makes {len(projects)} opted-in project(s) readable without an "
-                "account immediately. Repeat the request with confirm set to true."
-            ),
-            status_code=409,
-            details={"projects": [anonymous_access_project_summary(p) for p in projects]},
+            "confirmation_required",
+            f"{len(projects)} project(s) are opted in to anonymous reading. To turn anonymous access on, "
+            "repeat the request with confirmed_projects set to exactly their keys.",
+            projects,
+        )
+
+
+class AnonymousAccessConfirmationStaleError(AnonymousAccessConfirmationError):
+    """Turning the switch on named a different set of projects than is opted in now."""
+
+    def __init__(self, projects: list[Project]) -> None:
+        super().__init__(
+            "confirmation_stale",
+            "The projects opted in to anonymous reading changed after they were confirmed. "
+            "Review the current list and confirm again.",
+            projects,
         )
 
 
@@ -210,27 +258,41 @@ async def set_anonymous_access_enabled(
     enabled: bool,
     actor: User,
     *,
-    confirmed: bool = False,
+    confirmed_projects: Iterable[str] | None = None,
     request: Request | None = None,
 ) -> bool:
     """Turn the instance switch on or off. Instance administrators only.
 
-    Turning it on without *confirmed* raises ``AnonymousAccessConfirmationRequiredError``
-    naming every project that carries anonymous permissions. Turning it off
-    needs no confirmation. A request that changes nothing writes nothing and
-    asks for no confirmation. Every change is audited with the old and new
-    value and the opted-in projects at that moment.
+    Turning it on requires *confirmed_projects*, the keys of the projects the
+    administrator was shown. As a set it must equal the projects opted in at
+    the moment of the change, and it may be empty. ``None`` raises
+    ``AnonymousAccessConfirmationRequiredError``; a different set raises
+    ``AnonymousAccessConfirmationStaleError``. Both carry the current list.
+    Turning it off needs no confirmation. A request that changes nothing
+    writes nothing.
+
+    The comparison and the write happen under ``ANONYMOUS_ACCESS_LOCK_KEY``,
+    which every per-project opt-in change also takes, so the opted-in set
+    cannot change between them. Every change is audited with the old and new
+    value, the opted-in project keys and, when turning on, the confirmed keys.
     """
     if not actor.is_admin:
         raise PermissionDeniedError("Only instance administrators can change anonymous access")
 
+    await lock_anonymous_access(session)
     old = await is_anonymous_access_enabled(session)
     if old == enabled:
         return enabled
 
     projects = await list_projects_with_anonymous_permissions(session)
-    if enabled and not confirmed:
-        raise AnonymousAccessConfirmationRequiredError(projects)
+    opted_in = sorted(p.key for p in projects)
+    confirmed: list[str] | None = None
+    if enabled:
+        if confirmed_projects is None:
+            raise AnonymousAccessConfirmationRequiredError(projects)
+        confirmed = sorted({key.strip().upper() for key in confirmed_projects})
+        if confirmed != opted_in:
+            raise AnonymousAccessConfirmationStaleError(projects)
 
     await _settings.set_many(session, {ANONYMOUS_ACCESS_SETTING_KEY: _ENABLED_VALUE if enabled else _DISABLED_VALUE})
     await _audit.log_anonymous_access_switch_change(
@@ -239,7 +301,8 @@ async def set_anonymous_access_enabled(
         setting_key=ANONYMOUS_ACCESS_SETTING_KEY,
         old=old,
         new=enabled,
-        opted_in_projects=[p.key for p in projects],
+        opted_in_projects=opted_in,
+        confirmed_projects=confirmed,
         request=request,
     )
     return enabled

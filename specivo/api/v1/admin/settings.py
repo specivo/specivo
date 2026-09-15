@@ -95,12 +95,17 @@ async def update_anonymous_access(
 ) -> AnonymousAccessOut:
     """Turn the anonymous access switch on or off (admin only).
 
-    The switch alone exposes nothing: it lets the public projects that were
-    individually opted in be read without an account. Turning it on requires
-    ``confirm: true``; without it the response is 409 ``confirmation_required``
-    and ``details.projects`` names the projects that would become readable.
-    Every change is written to the security audit log.
+    The switch alone exposes nothing: a public project can only be read
+    without an account while the switch is on and the project is opted in.
+    Turning it on requires ``confirmed_projects``, the keys listed in
+    ``details.projects`` of the previous 409. Without it the response is 409
+    ``confirmation_required``; if the opted-in projects changed since, it is
+    409 ``confirmation_stale`` with the current list. An empty list confirms
+    that nothing is opted in. Turning it off needs no confirmation. Every
+    change is written to the security audit log.
     """
-    await set_anonymous_access_enabled(db, data.enabled, current_user, confirmed=data.confirm, request=request)
+    await set_anonymous_access_enabled(
+        db, data.enabled, current_user, confirmed_projects=data.confirmed_projects, request=request
+    )
     await db.commit()
     return await _anonymous_access_out(db)

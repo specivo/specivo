@@ -61,7 +61,7 @@
 <div class="card" id="anonymous-access" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;">
   <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Anonymous access{% endtrans %}</h2>
   <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md);">
-    {% trans %}Turning this on exposes nothing by itself. It lets people who are not signed in read the issues or wiki pages of public projects that an administrator has opted in, one project at a time, in that project's settings.{% endtrans %}
+    {% trans %}This is the instance-wide gate for anonymous reading, and turning it on exposes nothing by itself. A public project can only be read without an account while this switch is on and the project is opted in, one project at a time, in its own settings.{% endtrans %}
   </p>
   <p class="sp-mb-md" data-testid="anonymous-access-state">
     {% if anonymous_access_enabled %}<strong>{% trans %}Anonymous access is on.{% endtrans %}</strong>{% else %}<strong>{% trans %}Anonymous access is off.{% endtrans %}</strong>{% endif %}

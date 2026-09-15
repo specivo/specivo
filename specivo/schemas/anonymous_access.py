@@ -14,7 +14,7 @@ class AnonymousAccessProject(BaseModel):
 
 
 class AnonymousAccessOut(BaseModel):
-    """The switch, and the projects that are readable without an account while it is on."""
+    """The switch, and the projects opted in to anonymous reading."""
 
     enabled: bool
     projects: list[AnonymousAccessProject]
@@ -23,11 +23,12 @@ class AnonymousAccessOut(BaseModel):
 class AnonymousAccessUpdate(BaseModel):
     """Turn the switch on or off.
 
-    Turning it on must carry ``confirm=true``; without it the request is
-    refused with ``confirmation_required`` and the projects that would become
-    readable are listed in the error details. Turning it off needs no
-    confirmation.
+    Turning it on must carry ``confirmed_projects``: the keys from
+    ``details.projects`` of the 409 the first attempt returned. Omitted, the
+    request is refused with ``confirmation_required``; if the opted-in projects
+    no longer match as a set, with ``confirmation_stale``. An empty list is
+    valid when nothing is opted in. Turning the switch off ignores the field.
     """
 
     enabled: bool
-    confirm: bool = False
+    confirmed_projects: list[str] | None = None

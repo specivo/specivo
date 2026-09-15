@@ -515,6 +515,23 @@ async def admin_settings_defaults(
     return RedirectResponse("/admin/settings/", status_code=303)
 
 
+def _render_anonymous_access_confirm(
+    request: Request,
+    user: User,
+    projects: list,
+    *,
+    stale: bool = False,
+    status_code: int = 200,
+) -> Response:
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/anonymous_access_confirm.html",
+        context={"user": user, "active_page": "admin", "projects": projects, "stale": stale},
+        status_code=status_code,
+    )
+
+
 @router.post("/admin/settings/anonymous-access/", response_model=None)
 async def admin_settings_anonymous_access(
     request: Request,
@@ -522,22 +539,34 @@ async def admin_settings_anonymous_access(
     db: AsyncSession = Depends(get_db),  # noqa: B008
     enabled: str = Form(""),
     confirm: str = Form(""),
+    confirmed_projects: list[str] = Form(default=[]),  # noqa: B008
 ) -> Response:
     """Turn the anonymous access switch on or off.
 
-    ``enabled=1`` without ``confirm=1`` does not change anything: it redirects
-    to the confirmation page, which names the projects that become readable.
-    Turning the switch off needs no confirmation.
+    ``enabled=1`` without ``confirm=1`` changes nothing and redirects to the
+    confirmation page. That page posts ``confirm=1`` with the keys it showed as
+    ``confirmed_projects``; if the opted-in projects changed in the meantime,
+    it is rendered again with the current list and a notice (409). Turning the
+    switch off needs no confirmation.
     """
     from specivo.services.anonymous_access_service import (
         AnonymousAccessConfirmationRequiredError,
+        AnonymousAccessConfirmationStaleError,
         set_anonymous_access_enabled,
     )
 
     try:
-        await set_anonymous_access_enabled(db, enabled == "1", user, confirmed=confirm == "1", request=request)
+        await set_anonymous_access_enabled(
+            db,
+            enabled == "1",
+            user,
+            confirmed_projects=confirmed_projects if confirm == "1" else None,
+            request=request,
+        )
     except AnonymousAccessConfirmationRequiredError:
         return RedirectResponse("/admin/settings/anonymous-access/confirm/", status_code=303)
+    except AnonymousAccessConfirmationStaleError as exc:
+        return _render_anonymous_access_confirm(request, user, exc.projects, stale=True, status_code=409)
     await db.commit()
     return RedirectResponse("/admin/settings/", status_code=303)
 
@@ -556,17 +585,7 @@ async def admin_settings_anonymous_access_confirm(
 
     if await is_anonymous_access_enabled(db):
         return RedirectResponse("/admin/settings/", status_code=303)
-
-    templates = get_templates()
-    return templates.TemplateResponse(
-        request,
-        "pages/admin/anonymous_access_confirm.html",
-        context={
-            "user": user,
-            "active_page": "admin",
-            "projects": await list_projects_with_anonymous_permissions(db),
-        },
-    )
+    return _render_anonymous_access_confirm(request, user, await list_projects_with_anonymous_permissions(db))
 
 
 # ---------------------------------------------------------------------------

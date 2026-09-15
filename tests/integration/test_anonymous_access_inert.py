@@ -157,7 +157,7 @@ async def _snapshot(client: AsyncClient, world: dict[str, Any], user: User | Non
 
 async def _opt_everything_in(db: AsyncSession, world: dict[str, Any]) -> None:
     await set_anonymous_permissions(db, world["public"], ["view_issues", "view_wiki"], world["admin"])
-    await set_anonymous_access_enabled(db, True, world["admin"], confirmed=True)
+    await set_anonymous_access_enabled(db, True, world["admin"], confirmed_projects=["INPUB"])
     await db.commit()
     clear_role_cache()
     assert await is_anonymous_access_enabled(db)

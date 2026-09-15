@@ -3,9 +3,17 @@
 Covers that the switch is off on a fresh instance and whenever the setting is
 absent or holds anything other than ``"true"``, that a change applies to the
 next request, that only instance administrators can read or change it, that
-turning it on needs a confirmation naming exactly the opted-in projects while
-turning it off does not, that every change is audited, and that the generic
-settings endpoint cannot bypass any of that.
+turning it on must confirm exactly the projects opted in at that moment (a
+stale list is refused) while turning it off needs no confirmation, that the
+switch and per-project opt-ins share one transaction-scoped lock, that every
+change is audited, and that the generic settings endpoint cannot bypass any of
+that.
+
+The lock tests check from a second connection that each write path holds the
+lock until its transaction ends. They are ``serial``: the lock is global to the
+database, so a test on another xdist worker holding it would skew the check. Two requests genuinely racing cannot be
+staged here: each test's data lives in a transaction that is never committed,
+so a second connection could not see the projects it would race over.
 
 Whether the switch changes what anybody can see is covered in
 ``test_anonymous_access_inert.py``.
@@ -20,7 +28,7 @@ import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 import specivo.importers
 from specivo.core.config import get_settings
@@ -29,13 +37,16 @@ from specivo.models.project import Project
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.setting import Setting
 from specivo.models.user import User
+from specivo.schemas.project import ProjectUpdate
 from specivo.services.anonymous_access_service import (
+    ANONYMOUS_ACCESS_LOCK_KEY,
     ANONYMOUS_ACCESS_SETTING_KEY,
     is_anonymous_access_enabled,
     set_anonymous_access_enabled,
     set_anonymous_permissions,
 )
 from specivo.services.auth_service import _make_access_token
+from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import AuditEvent
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
@@ -118,7 +129,7 @@ async def _csrf(client: AsyncClient, user: User) -> str:
     raise AssertionError("no csrf_token cookie on the settings page")
 
 
-async def _post_form(client: AsyncClient, user: User, data: dict[str, str]):
+async def _post_form(client: AsyncClient, user: User, data: dict[str, str | list[str]]):
     csrf = await _csrf(client, user)
     return await client.post(
         "/admin/settings/anonymous-access/",
@@ -203,7 +214,9 @@ async def test_confirmation_is_required_even_with_no_opted_in_project(
 async def test_confirmed_change_takes_effect_on_the_next_request_and_is_audited(
     client: AsyncClient, db_session: AsyncSession, admin: User, projects
 ) -> None:
-    resp = await client.patch(URL, json={"enabled": True, "confirm": True}, headers=_bearer(admin))
+    resp = await client.patch(
+        URL, json={"enabled": True, "confirmed_projects": ["SWTWO", "swone"]}, headers=_bearer(admin)
+    )
     assert resp.status_code == 200, resp.text
     assert resp.json()["enabled"] is True
 
@@ -219,13 +232,14 @@ async def test_confirmed_change_takes_effect_on_the_next_request_and_is_audited(
         "old": False,
         "new": True,
         "opted_in_projects": ["SWONE", "SWTWO"],
+        "confirmed_projects": ["SWONE", "SWTWO"],
     }
 
 
 async def test_turning_it_off_needs_no_confirmation_and_is_audited(
     client: AsyncClient, db_session: AsyncSession, admin: User, projects
 ) -> None:
-    await set_anonymous_access_enabled(db_session, True, admin, confirmed=True)
+    await set_anonymous_access_enabled(db_session, True, admin, confirmed_projects=["SWONE", "SWTWO"])
     await db_session.commit()
 
     resp = await client.patch(URL, json={"enabled": False}, headers=_bearer(admin))
@@ -272,12 +286,12 @@ async def test_non_admin_can_neither_read_nor_change_it(
 
 async def test_unauthenticated_request_is_refused(client: AsyncClient) -> None:
     assert (await client.get(URL)).status_code == 401
-    assert (await client.patch(URL, json={"enabled": True, "confirm": True})).status_code == 401
+    assert (await client.patch(URL, json={"enabled": True, "confirmed_projects": []})).status_code == 401
 
 
 async def test_service_refuses_a_non_admin(db_session: AsyncSession, regular: User) -> None:
     with pytest.raises(PermissionDeniedError):
-        await set_anonymous_access_enabled(db_session, True, regular, confirmed=True)
+        await set_anonymous_access_enabled(db_session, True, regular, confirmed_projects=[])
 
 
 @pytest.mark.parametrize("value", ["true", "false", None])
@@ -357,14 +371,16 @@ async def test_confirmation_page_lists_exactly_the_opted_in_projects(
 
     assert resp.status_code == 200
     assert re.findall(r'data-project-key="([^"]+)"', resp.text) == ["SWONE", "SWTWO"]
+    assert re.findall(r'name="confirmed_projects" value="([^"]+)"', resp.text) == ["SWONE", "SWTWO"]
     assert 'name="confirm" value="1"' in resp.text
+    assert 'data-testid="anonymous-access-confirm-stale"' not in resp.text
     assert "The switch alone exposes nothing." in resp.text
 
 
 async def test_confirming_turns_it_on_and_turning_it_off_needs_no_confirmation(
     client: AsyncClient, db_session: AsyncSession, admin: User, projects
 ) -> None:
-    on = await _post_form(client, admin, {"enabled": "1", "confirm": "1"})
+    on = await _post_form(client, admin, {"enabled": "1", "confirm": "1", "confirmed_projects": ["SWONE", "SWTWO"]})
     assert on.status_code == 303
     assert on.headers["location"] == "/admin/settings/"
     assert await is_anonymous_access_enabled(db_session) is True
@@ -406,9 +422,146 @@ async def test_project_settings_card_reflects_the_switch(
     client: AsyncClient, db_session: AsyncSession, admin: User, projects
 ) -> None:
     off = await client.get("/projects/SWONE/settings/", cookies=_cookies(admin))
-    await set_anonymous_access_enabled(db_session, True, admin, confirmed=True)
+    await set_anonymous_access_enabled(db_session, True, admin, confirmed_projects=["SWONE", "SWTWO"])
     await db_session.commit()
     on = await client.get("/projects/SWONE/settings/", cookies=_cookies(admin))
 
     assert 'data-testid="anonymous-access-switch-off"' in off.text
     assert 'data-testid="anonymous-access-switch-on"' in on.text
+    assert "Anonymous access is turned on for the whole instance." in on.text
+    assert "these settings apply" not in on.text
+
+
+# ---------------------------------------------------------------------------
+# Confirmation tied to the exact opted-in list
+# ---------------------------------------------------------------------------
+
+
+async def test_empty_confirmation_turns_it_on_when_nothing_is_opted_in(
+    client: AsyncClient, db_session: AsyncSession, admin: User
+) -> None:
+    resp = await client.patch(URL, json={"enabled": True, "confirmed_projects": []}, headers=_bearer(admin))
+
+    assert resp.status_code == 200, resp.text
+    assert await is_anonymous_access_enabled(db_session) is True
+    assert (await _audit_rows(db_session))[0].details["confirmed_projects"] == []
+
+
+@pytest.mark.parametrize("confirmed", [[], ["SWONE"], ["SWONE", "SWTWO", "SWPUB"], ["SWONE", "SWPRIV"]])
+async def test_stale_confirmation_is_refused_and_the_switch_stays_off(
+    client: AsyncClient, db_session: AsyncSession, admin: User, projects, confirmed: list[str]
+) -> None:
+    resp = await client.patch(URL, json={"enabled": True, "confirmed_projects": confirmed}, headers=_bearer(admin))
+
+    assert resp.status_code == 409, resp.text
+    error = resp.json()["errors"][0]
+    assert error["code"] == "confirmation_stale"
+    assert [p["key"] for p in error["details"]["projects"]] == ["SWONE", "SWTWO"]
+    assert await is_anonymous_access_enabled(db_session) is False
+    assert await _audit_rows(db_session) == []
+
+
+async def test_a_project_opted_in_after_the_first_attempt_makes_the_confirmation_stale(
+    client: AsyncClient, db_session: AsyncSession, admin: User, projects
+) -> None:
+    first = await client.patch(URL, json={"enabled": True}, headers=_bearer(admin))
+    shown = [p["key"] for p in first.json()["errors"][0]["details"]["projects"]]
+
+    opt_in = await client.patch(
+        "/api/v1/admin/projects/SWPUB/anonymous-permissions/",
+        json={"anonymous_permissions": ["view_wiki"]},
+        headers=_bearer(admin),
+    )
+    assert opt_in.status_code == 200, opt_in.text
+
+    stale = await client.patch(URL, json={"enabled": True, "confirmed_projects": shown}, headers=_bearer(admin))
+    assert stale.status_code == 409, stale.text
+    error = stale.json()["errors"][0]
+    assert error["code"] == "confirmation_stale"
+    current = [p["key"] for p in error["details"]["projects"]]
+    assert current == ["SWONE", "SWPUB", "SWTWO"]
+    assert await is_anonymous_access_enabled(db_session) is False
+
+    ok = await client.patch(URL, json={"enabled": True, "confirmed_projects": current}, headers=_bearer(admin))
+    assert ok.status_code == 200, ok.text
+
+
+async def test_stale_confirmation_from_the_page_re_renders_it_with_the_current_list(
+    client: AsyncClient, db_session: AsyncSession, admin: User, projects
+) -> None:
+    await set_anonymous_permissions(db_session, projects["SWPUB"], ["view_issues"], admin)
+    await db_session.commit()
+
+    resp = await _post_form(client, admin, {"enabled": "1", "confirm": "1", "confirmed_projects": ["SWONE", "SWTWO"]})
+
+    assert resp.status_code == 409
+    assert 'data-testid="anonymous-access-confirm-stale"' in resp.text
+    assert re.findall(r'data-project-key="([^"]+)"', resp.text) == ["SWONE", "SWPUB", "SWTWO"]
+    assert re.findall(r'name="confirmed_projects" value="([^"]+)"', resp.text) == ["SWONE", "SWPUB", "SWTWO"]
+    assert await is_anonymous_access_enabled(db_session) is False
+
+
+async def test_page_confirmation_of_an_empty_list_turns_it_on(
+    client: AsyncClient, db_session: AsyncSession, admin: User
+) -> None:
+    page = await client.get("/admin/settings/anonymous-access/confirm/", cookies=_cookies(admin))
+    assert 'name="confirmed_projects"' not in page.text
+
+    resp = await _post_form(client, admin, {"enabled": "1", "confirm": "1"})
+
+    assert resp.status_code == 303
+    assert await is_anonymous_access_enabled(db_session) is True
+
+
+# ---------------------------------------------------------------------------
+# Serialisation: one transaction-scoped lock for the switch and the opt-ins
+# ---------------------------------------------------------------------------
+
+
+async def _held_by_another_transaction(engine: AsyncEngine) -> bool:
+    """Try the lock from a second connection; True if some other transaction holds it."""
+    async with engine.connect() as conn:
+        acquired = await conn.scalar(text("SELECT pg_try_advisory_lock(:k)"), {"k": ANONYMOUS_ACCESS_LOCK_KEY})
+        if acquired:
+            await conn.scalar(text("SELECT pg_advisory_unlock(:k)"), {"k": ANONYMOUS_ACCESS_LOCK_KEY})
+        return not acquired
+
+
+@pytest.mark.serial
+async def test_turning_the_switch_on_holds_the_lock_until_the_transaction_ends(
+    db_session: AsyncSession, db_engine: AsyncEngine, admin: User
+) -> None:
+    assert await _held_by_another_transaction(db_engine) is False
+
+    await set_anonymous_access_enabled(db_session, True, admin, confirmed_projects=[])
+    await db_session.commit()  # a savepoint here; the test transaction stays open
+
+    assert await _held_by_another_transaction(db_engine) is True
+
+
+@pytest.mark.serial
+async def test_opting_a_project_in_takes_the_same_lock(
+    db_session: AsyncSession, db_engine: AsyncEngine, admin: User
+) -> None:
+    project = ProjectFactory.build(key="SWLOCK", identifier="switch-lock", name="Switch Lock", is_public=True)
+    db_session.add(project)
+    await db_session.flush()
+    assert await _held_by_another_transaction(db_engine) is False
+
+    await set_anonymous_permissions(db_session, project, ["view_issues"], admin)
+
+    assert await _held_by_another_transaction(db_engine) is True
+
+
+@pytest.mark.serial
+async def test_making_a_project_private_takes_the_same_lock(
+    db_session: AsyncSession, db_engine: AsyncEngine, admin: User
+) -> None:
+    project = ProjectFactory.build(key="SWLOCKP", identifier="switch-lock-p", name="Lock P", is_public=True)
+    db_session.add(project)
+    await db_session.flush()
+    assert await _held_by_another_transaction(db_engine) is False
+
+    await ProjectService().update(db_session, project, ProjectUpdate(is_public=False), actor=admin)
+
+    assert await _held_by_another_transaction(db_engine) is True
