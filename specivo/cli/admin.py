@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from specivo.core.config import get_settings
 from specivo.core.utils import utcnow
 from specivo.models.user import User
+from specivo.services.anonymous_user_service import RESERVED_LOGIN_PREFIX, is_reserved_login
 from specivo.services.auth_utils import hash_password
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,10 @@ async def _create_admin(
     password: str,
 ) -> None:
     """Create or promote an admin user."""
+    if is_reserved_login(login):
+        print(f"Error: logins starting with '{RESERVED_LOGIN_PREFIX}' are reserved for the system.", file=sys.stderr)
+        sys.exit(1)
+
     result = await session.execute(select(User).where(func.lower(User.login) == login.lower()))
     user = result.scalar_one_or_none()
 
@@ -84,6 +89,9 @@ async def _reset_password(
 
     if user is None:
         print(f"Error: user '{login}' not found.", file=sys.stderr)
+        sys.exit(1)
+    if user.is_anonymous:
+        print("Error: the anonymous user cannot have a password.", file=sys.stderr)
         sys.exit(1)
 
     user.password_hash = hash_password(password)

@@ -84,8 +84,9 @@ async def admin_users(
 ) -> Response:
     """Render the admin users page."""
     from specivo.models.role import Role
+    from specivo.services.anonymous_user_service import real_users_clause
 
-    result = await db.execute(select(UserModel).order_by(UserModel.id))
+    result = await db.execute(select(UserModel).where(real_users_clause()).order_by(UserModel.id))
     users = list(result.scalars().all())
 
     roles_result = await db.execute(
@@ -133,7 +134,8 @@ async def admin_user_detail(
 
     result = await db.execute(select(UserModel).where(UserModel.id == user_id))
     target_user = result.scalar_one_or_none()
-    if target_user is None:
+    # The anonymous user is not listed, so it has no page either.
+    if target_user is None or target_user.is_anonymous:
         raise HTTPException(status_code=404, detail="User not found")
 
     api_keys = await _api_key_svc.list_keys(session=db, user_id=target_user.id)

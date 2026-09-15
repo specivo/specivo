@@ -487,14 +487,14 @@ class IssueService:
 
         return issue
 
-    async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User | None = None) -> Issue:
+    async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key like 'ACME-42' to an Issue.
 
         Also accepts a bare numeric string (e.g. ``"42"``), which is treated
         as an internal ID lookup for backward compatibility.
 
-        When ``user`` is provided, a visibility check is applied.
-        Invisible issues raise ``NotFoundError`` (404, not 403).
+        A visibility check is applied for *user*: invisible issues raise
+        ``NotFoundError`` (404, not 403).
 
         Raises ``NotFoundError`` when no matching issue exists.
         """
@@ -518,7 +518,7 @@ class IssueService:
                     if aliased_id is not None:
                         return await self.get_by_id(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
-                if user is not None and not await self._check_visible(session, issue, user):
+                if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 return issue
 
@@ -571,12 +571,10 @@ class IssueService:
             raise NotFoundError(f"Issue {issue_id} not found")
         return issue
 
-    async def get_by_display_key_with_relations(
-        self, session: AsyncSession, display_key: str, user: User | None = None
-    ) -> Issue:
+    async def get_by_display_key_with_relations(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key or numeric ID, eager-loading all relations.
 
-        When ``user`` is provided, a visibility check is applied.
+        A visibility check is applied for *user*.
         Raises ``NotFoundError`` when no matching issue exists or is not visible.
         """
         if "-" in display_key:
@@ -613,7 +611,7 @@ class IssueService:
                     if aliased_id is not None:
                         return await self.get_with_relations(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
-                if user is not None and not await self._check_visible(session, issue, user):
+                if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 return issue
 
@@ -1022,7 +1020,7 @@ class IssueService:
         sort: str,
         offset: int,
         limit: int,
-        user: User | None = None,
+        user: User,
     ) -> tuple[list[Issue], int]:
         """List issues with filtering, sorting, and pagination.
 
@@ -1041,8 +1039,8 @@ class IssueService:
         offset, limit:
             Pagination parameters.
         user:
-            When provided, visibility filtering is applied based on the
-            user's roles and ``issues_visibility`` setting.
+            Whose roles and ``issues_visibility`` setting filter the results.
+            Admins are not filtered.
         """
         stmt = select(Issue).options(
             selectinload(Issue.tracker),
@@ -1060,7 +1058,7 @@ class IssueService:
         # ------------------------------------------------------------------
         # Visibility filter
         # ------------------------------------------------------------------
-        if user is not None and not user.is_admin and project_id is not None:
+        if not user.is_admin and project_id is not None:
             project_result = await session.execute(select(Project).where(Project.id == project_id))
             project = project_result.scalar_one_or_none()
             if project is not None:

@@ -23,6 +23,7 @@ from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
+from specivo.services.anonymous_user_service import refuse_anonymous_user
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
 from specivo.services.permission_service import member_principal_clause
 
@@ -536,9 +537,10 @@ class ProjectService:
     async def _require_principal_exists(self, session: AsyncSession, principal: Principal) -> None:
         """Raise :class:`NotFoundError` if the user or group does not exist."""
         if principal.is_user:
-            found = (await session.execute(select(User.id).where(User.id == principal.id))).scalar_one_or_none()
-            if found is None:
+            user = (await session.execute(select(User).where(User.id == principal.id))).scalar_one_or_none()
+            if user is None:
                 raise NotFoundError(f"User {principal.id} not found")
+            refuse_anonymous_user(user, "The anonymous user cannot be a project member.")
         else:
             found = (
                 await session.execute(select(UserGroup.id).where(UserGroup.id == principal.id))

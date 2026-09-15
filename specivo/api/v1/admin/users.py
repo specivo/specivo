@@ -17,6 +17,7 @@ from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
 from specivo.schemas.user import UserCreate, UserOut
+from specivo.services.anonymous_user_service import real_users_clause, refuse_anonymous_user
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
@@ -80,7 +81,7 @@ async def list_users(
     limit: int = Query(50, ge=1, le=200),
 ) -> list[UserOut]:
     """List all users (admin only). Optional search by login/display_name."""
-    stmt = select(User)
+    stmt = select(User).where(real_users_clause())
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(or_(User.login.ilike(pattern), User.display_name.ilike(pattern)))
@@ -182,6 +183,7 @@ async def reset_password(
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
 
     # Resolved before anything is written, so a refused combination leaves the
     # stored password exactly as it was.
@@ -242,6 +244,7 @@ async def lock_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
 
     user.status = "locked"
     user.locked_until = body.locked_until if body else None
@@ -277,6 +280,7 @@ async def unlock_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
 
     user.status = "active"
     user.locked_until = None
@@ -414,4 +418,5 @@ async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
     return user

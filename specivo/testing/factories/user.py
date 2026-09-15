@@ -55,6 +55,7 @@ class UserFactory(factory.Factory):
     # applies at INSERT, and a service account must never carry this flag
     # (users has a CHECK forbidding the combination).
     must_change_password = False
+    is_anonymous = False
     failed_login_count = 0
     locked_until = None
     email_verified_at = None

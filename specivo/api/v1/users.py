@@ -13,6 +13,7 @@ from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.reaction import UserAutocompleteOut
+from specivo.services.anonymous_user_service import real_users_clause
 
 router = APIRouter(tags=["users"])
 
@@ -32,6 +33,7 @@ async def user_autocomplete(
         select(User)
         .where(
             User.status == "active",
+            real_users_clause(),
             or_(
                 User.login.ilike(pattern),
                 User.display_name.ilike(pattern),
