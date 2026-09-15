@@ -27,8 +27,9 @@ advisory lock. Turning the switch on therefore cannot interleave with a
 project being opted in or out: the confirmed list is compared with the
 opted-in projects, and the switch written, while no opt-in can change.
 
-Nothing on the request path reads these values. Granting anonymous visitors
-access based on them is a separate piece of work.
+Role resolution reads both values (``permission_service.anonymous_role``), so
+a signed-in non-member of an opted-in project gains the opted-in permissions
+as soon as the switch is on. No route serves the anonymous user yet.
 """
 
 from __future__ import annotations
@@ -44,13 +45,9 @@ from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.models.project import Project
 from specivo.models.setting import Setting
 from specivo.models.user import User
-from specivo.services.permission_service import Permission
+from specivo.services.permission_service import ANONYMOUS_PERMISSION_CEILING
 from specivo.services.security_audit_service import SecurityAuditService
 from specivo.services.settings_service import SettingsService
-
-# The only permissions an anonymous visitor can ever hold. Mirrors
-# ck_projects_anonymous_permissions_allowed.
-ANONYMOUS_PERMISSION_CEILING: frozenset[Permission] = frozenset({Permission.VIEW_ISSUES, Permission.VIEW_WIKI})
 
 # The instance switch. Only the exact value "true" turns it on.
 ANONYMOUS_ACCESS_SETTING_KEY = "anonymous_access_enabled"

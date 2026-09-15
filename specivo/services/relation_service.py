@@ -196,8 +196,12 @@ class RelationService:
     # List
     # ------------------------------------------------------------------
 
-    async def list_for_issue(self, session: AsyncSession, issue: Issue) -> list[dict]:
-        """Return all relations for an issue, labelled from the issue's perspective.
+    async def list_for_issue(self, session: AsyncSession, issue: Issue, user: User) -> list[dict]:
+        """Return the relations of *issue* whose other issue *user* may see, labelled from *issue*'s side.
+
+        The caller has already checked that *user* may see *issue*. A
+        relation to an issue *user* cannot see is left out entirely, so its
+        key is never disclosed.
 
         For each relation the ``relation_type`` field reflects the label
         appropriate for the queried issue:
@@ -215,6 +219,19 @@ class RelationService:
             )
         )
         relations = list(result.scalars().all())
+
+        if relations and not user.is_admin:
+            from specivo.services.issue_service import IssueService
+
+            def counterpart(relation: IssueRelation) -> int:
+                return relation.issue_to_id if relation.issue_from_id == issue.id else relation.issue_from_id
+
+            visible_stmt = select(Issue.id).where(Issue.id.in_({counterpart(r) for r in relations}))
+            visibility = await IssueService().visible_issues_clause(session, user)
+            if visibility is not None:
+                visible_stmt = visible_stmt.where(visibility)
+            visible_ids = set((await session.execute(visible_stmt)).scalars().all())
+            relations = [r for r in relations if counterpart(r) in visible_ids]
 
         # Bulk-load all referenced issue keys in two queries
         related_ids: set[int] = set()

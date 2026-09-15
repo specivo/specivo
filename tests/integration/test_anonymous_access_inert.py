@@ -1,10 +1,14 @@
-"""Anonymous access settings are stored but not yet enforced.
+"""What opting a project in and turning the instance switch on changes, before any anonymous route exists.
 
-Opting a project in to anonymous reading and turning the instance switch on
-must change nothing until role resolution and the anonymous routes read the
-values. This module snapshots the responses a signed-in non-member and an
+Role resolution reads both settings, but no route serves the anonymous user
+yet. This module snapshots the responses a signed-in non-member and an
 unauthenticated visitor get from the project, issue, wiki and search
-endpoints, stores both settings, and checks that every response is unchanged.
+endpoints, stores both settings, and compares:
+
+- an unauthenticated request gets exactly the same responses;
+- a signed-in non-member gains exactly what the opted-in project now grants
+  anonymous visitors — its wiki, in the wiki routes and in search — and
+  nothing else changes, least of all anything in the private project.
 
 JSON bodies are compared in full except for ``updated_at``: writing the
 setting touches the project row, and that timestamp is not access. HTML pages
@@ -29,20 +33,12 @@ from specivo.services.anonymous_access_service import (
     set_anonymous_permissions,
 )
 from specivo.services.auth_service import _make_access_token
-from specivo.services.permission_service import clear_role_cache
 from specivo.services.wiki_service import WikiService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _fresh_role_cache():
-    clear_role_cache()
-    yield
-    clear_role_cache()
 
 
 def _bearer(user: User) -> dict[str, str]:
@@ -159,13 +155,13 @@ async def _opt_everything_in(db: AsyncSession, world: dict[str, Any]) -> None:
     await set_anonymous_permissions(db, world["public"], ["view_issues", "view_wiki"], world["admin"])
     await set_anonymous_access_enabled(db, True, world["admin"], confirmed_projects=["INPUB"])
     await db.commit()
-    clear_role_cache()
     assert await is_anonymous_access_enabled(db)
 
 
-async def test_enabling_anonymous_access_changes_nothing_for_a_signed_in_non_member(
+async def test_enabling_anonymous_access_gives_a_signed_in_non_member_only_the_opted_in_wiki(
     client: AsyncClient, db_session: AsyncSession, world: dict[str, Any]
 ) -> None:
+    """A signed-in user never sees less than an anonymous visitor would, and gains nothing more."""
     before = await _snapshot(client, world, world["outsider"])
     # The snapshot is only meaningful if it covers both outcomes.
     assert before["/api/v1/projects/INPUB/"][0] == 200
@@ -174,7 +170,21 @@ async def test_enabling_anonymous_access_changes_nothing_for_a_signed_in_non_mem
     await _opt_everything_in(db_session, world)
     after = await _snapshot(client, world, world["outsider"])
 
-    assert after == before
+    slug = world["slugs"]["INPUB"]
+    wiki_paths = {
+        "/api/v1/projects/INPUB/wiki/",
+        f"/api/v1/projects/INPUB/wiki/{slug}/",
+        f"/projects/INPUB/wiki/{slug}/",
+    }
+    changed = {path for path in before if after[path] != before[path]}
+    # The public project's issues were already visible through the Non member
+    # role, so only its wiki and the search results that include it change.
+    assert changed == wiki_paths | {"/api/v1/search/?q=lighthouse"}
+    for path in wiki_paths:
+        assert before[path][0] == 403 and after[path][0] == 200, path
+    search_titles = {item["title"] for item in after["/api/v1/search/?q=lighthouse"][1]["items"]}
+    assert "Lighthouse page INPUB" in search_titles
+    assert "Lighthouse page INPRIV" not in search_titles
 
 
 async def test_enabling_anonymous_access_changes_nothing_for_an_unauthenticated_request(

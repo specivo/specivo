@@ -79,7 +79,6 @@ from specivo.mcp.tools import (
     _whoami,
 )
 from specivo.services.agent_session_service import AgentSessionService
-from specivo.services.permission_service import clear_role_cache
 
 logger = logging.getLogger(__name__)
 
@@ -107,7 +106,7 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
     The session is committed on clean exit and rolled back on error.
     """
     factory = get_session_factory()
-    clear_role_cache()  # fresh permission state per tool call
+    # Roles are cached in session.info, so each tool call's new session starts clean.
     async with factory() as session:
         try:
             user, api_key = await authenticate_mcp_tool(session)

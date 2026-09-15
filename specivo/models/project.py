@@ -20,6 +20,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from specivo.models.base import Base, TimestampMixin
 
+# ``projects.status`` of a project in use (ck_projects_status). Anonymous
+# access applies only to active projects.
+PROJECT_STATUS_ACTIVE = 1
+
 
 class Project(Base, TimestampMixin):
     """Tracker project.

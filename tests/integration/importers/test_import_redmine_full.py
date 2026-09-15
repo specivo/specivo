@@ -264,7 +264,7 @@ class TestFullImport:
         Developer can only be reaching them through the group.
         """
         project = (await db_session.execute(select(Project).where(Project.identifier == "acme-app"))).scalar_one()
-        clear_role_cache()
+        clear_role_cache(db_session)
 
         for login in ("fixture_dev", "fixture_thai"):
             user = (await db_session.execute(select(User).where(User.login == login))).scalar_one()
@@ -275,7 +275,7 @@ class TestFullImport:
             ).scalar_one_or_none()
             assert direct is None, login
 
-            roles = await get_user_roles(db_session, user.id, project.id)
+            roles = await get_user_roles(db_session, user, project)
             assert [role.name for role in roles] == ["Developer"], login
 
     async def test_logged_time_is_rounded_to_two_places(self, db_session, imported):

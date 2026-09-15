@@ -53,6 +53,18 @@ class UnauthorizedError(AppError):
         super().__init__(code="unauthorized", message=message, status_code=401, **kwargs)
 
 
+class AnonymousAccessDeniedError(UnauthorizedError):
+    """The anonymous user may not reach this project (401).
+
+    Raised identically whether the project is private, not opted in to
+    anonymous reading, archived, or the instance switch is off, so the
+    response reveals none of those. It carries no project key.
+    """
+
+    def __init__(self) -> None:
+        super().__init__("Authentication required")
+
+
 class ValidationError(AppError):
     def __init__(self, message: str = "Validation error", **kwargs):
         super().__init__(code="validation_error", message=message, status_code=422, **kwargs)

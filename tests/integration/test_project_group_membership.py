@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.member import Member
 from specivo.models.project import Project
-from specivo.models.role import Role
+from specivo.models.role import Role, RoleBuiltin
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
@@ -59,14 +59,6 @@ def _principal_url(project: Project, kind: str, principal_id: int) -> str:
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _reset_role_cache():
-    """The role cache is a module global; keep it from leaking between tests."""
-    clear_role_cache()
-    yield
-    clear_role_cache()
 
 
 @pytest_asyncio.fixture
@@ -217,8 +209,8 @@ class TestAddGroup:
         )
         assert resp.status_code == 201, resp.text
 
-        clear_role_cache()
-        roles = await get_user_roles(db_session, member_user.id, project.id)
+        clear_role_cache(db_session)
+        roles = await get_user_roles(db_session, member_user, project)
         assert [r.name for r in roles] == [role.name]
 
     async def test_a_user_outside_the_group_resolves_nothing(
@@ -228,8 +220,10 @@ class TestAddGroup:
 
         await admin_client.post(_members_url(project), json={"group_id": group.id, "role_ids": [role.id]})
 
-        clear_role_cache()
-        assert await get_user_roles(db_session, outsider.id, project.id) == []
+        clear_role_cache(db_session)
+        # The project is public, so an outsider falls back to the Non member role only.
+        roles = await get_user_roles(db_session, outsider, project)
+        assert [r.builtin for r in roles] == [RoleBuiltin.NON_MEMBER]
 
     async def test_add_group_twice_adds_roles_to_the_same_row(
         self,
@@ -348,8 +342,8 @@ class TestUpdateAndRemoveGroup:
         assert body["principal_type"] == "group"
         assert body["roles"] == [other_role.name]
 
-        clear_role_cache()
-        roles = await get_user_roles(db_session, member_user.id, project.id)
+        clear_role_cache(db_session)
+        roles = await get_user_roles(db_session, member_user, project)
         assert [r.name for r in roles] == [other_role.name]
 
     async def test_delete_removes_the_groups_membership(
@@ -364,8 +358,10 @@ class TestUpdateAndRemoveGroup:
         assert resp.status_code == 204, resp.text
         assert await _member_row_ids(db_session, project) == []
 
-        clear_role_cache()
-        assert await get_user_roles(db_session, member_user.id, project.id) == []
+        clear_role_cache(db_session)
+        # Without the group's row the user is a non-member of this public project.
+        roles = await get_user_roles(db_session, member_user, project)
+        assert [r.builtin for r in roles] == [RoleBuiltin.NON_MEMBER]
 
     async def test_patch_on_a_group_that_is_not_a_member_is_404(
         self, admin_client: AsyncClient, project: Project, group: UserGroup, role: Role
@@ -578,7 +574,7 @@ class TestMcpListMembers:
         await admin_client.post(_members_url(project), json={"user_id": direct_user.id, "role_ids": [role.id]})
         await admin_client.post(_members_url(project), json={"group_id": group.id, "role_ids": [role.id]})
 
-        clear_role_cache()
+        clear_role_cache(db_session)
         out = await _list_members(db_session, direct_user, project.key)
 
         assert f"Members of {project.key} (1 total):" in out

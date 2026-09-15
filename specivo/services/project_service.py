@@ -7,26 +7,26 @@ from dataclasses import dataclass
 from typing import Literal
 
 from fastapi import Request
-from sqlalchemy import delete, func, or_, select, union
+from sqlalchemy import and_, delete, false, func, or_, select, text, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
-from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
+from specivo.core.exceptions import AnonymousAccessDeniedError, AppError, ConflictError, NotFoundError, ValidationError
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
-from specivo.models.role import Role
+from specivo.models.project import PROJECT_STATUS_ACTIVE, EnabledModule, Project, ProjectKeyAlias
+from specivo.models.role import Role, RoleBuiltin
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
 from specivo.services.anonymous_user_service import refuse_anonymous_user
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
-from specivo.services.permission_service import member_principal_clause
+from specivo.services.permission_service import anonymous_role, member_principal_clause
 
 logger = logging.getLogger(__name__)
 
@@ -257,14 +257,28 @@ class ProjectService:
         return project
 
     async def require_project_access(self, session: AsyncSession, project: Project, user: User) -> None:
-        """Raise NotFoundError if non-admin user cannot access this project.
+        """Raise unless *user* may reach *project* at all.
 
-        Public projects: accessible to all authenticated users.
-        Private projects: accessible to members — whether the membership is
-        held by the user directly or by a user group they belong to.
-        Returns 404 (not 403) to prevent project key enumeration.
+        - Admins reach every project.
+        - The anonymous user reaches a project only while its anonymous role
+          applies there (``permission_service.anonymous_role``): the instance
+          switch is on, the project is public and active, and it is opted in
+          to at least one permission. Otherwise ``AnonymousAccessDeniedError``,
+          raised identically for a private, not opted-in or archived project
+          and for a switched-off instance.
+        - Signed-in users reach every public project.
+        - A private project is reached through membership, held by the user or
+          by a user group they belong to. Anyone else gets ``NotFoundError``
+          (404, not 403) so project keys cannot be enumerated.
+
+        Reaching a project grants nothing by itself: what can be read there is
+        decided by ``check_permission`` and issue visibility.
         """
         if user.is_admin:
+            return
+        if user.is_anonymous:
+            if await anonymous_role(session, project) is None:
+                raise AnonymousAccessDeniedError()
             return
         if project.is_public:
             return
@@ -295,26 +309,44 @@ class ProjectService:
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[Project], int]:
-        """List projects visible to the user.
-
-        Admins see all projects.  Regular users see:
-        - All public projects.
-        - Private projects they are a member of, directly or through a
-          user group that holds the membership.
-        """
-        if user.is_admin:
-            count_stmt = select(func.count()).select_from(Project)
-            stmt = select(Project).order_by(Project.name).offset(offset).limit(limit)
-        else:
-            # Subquery: project IDs the user is a member of, via either principal
-            member_projects = select(Member.project_id).where(member_principal_clause(user.id)).scalar_subquery()
-            base = Project.is_public.is_(True) | Project.id.in_(member_projects)
-            count_stmt = select(func.count()).select_from(Project).where(base)
-            stmt = select(Project).where(base).order_by(Project.name).offset(offset).limit(limit)
+        """List the projects ``require_project_access`` admits for *user*."""
+        count_stmt = select(func.count()).select_from(Project)
+        stmt = select(Project).order_by(Project.name).offset(offset).limit(limit)
+        accessible = await self.accessible_projects_clause(session, user)
+        if accessible is not None:
+            count_stmt = count_stmt.where(accessible)
+            stmt = stmt.where(accessible)
 
         total = (await session.execute(count_stmt)).scalar_one()
         projects = (await session.execute(stmt)).scalars().all()
         return list(projects), total
+
+    async def accessible_projects_clause(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """Return a predicate over ``projects`` matching exactly what ``require_project_access`` admits.
+
+        None for admins, who reach every project. The anonymous user matches
+        public, active projects opted in to anonymous reading, and nothing
+        while the instance switch is off. Signed-in users match public
+        projects and projects they hold a membership on, directly or through
+        a user group.
+        """
+        if user.is_admin:
+            return None
+        if user.is_anonymous:
+            from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+
+            if not await is_anonymous_access_enabled(session):
+                return false()
+            # A non-empty list is always within the ceiling
+            # (ck_projects_anonymous_permissions_allowed); the predicate
+            # matches ix_projects_anonymous_readable.
+            return and_(
+                Project.is_public.is_(True),
+                Project.status == PROJECT_STATUS_ACTIVE,
+                Project.anonymous_permissions.op("<>")(text("'[]'::jsonb")),
+            )
+        member_projects = select(Member.project_id).where(member_principal_clause(user.id)).scalar_subquery()
+        return or_(Project.is_public.is_(True), Project.id.in_(member_projects))
 
     async def list_all_admin(self, session: AsyncSession, user: User) -> list[Project]:
         """List all projects (including archived). Admin use only."""
@@ -562,12 +594,21 @@ class ProjectService:
                 raise NotFoundError(f"User group {principal.id} not found")
 
     async def _require_roles_exist(self, session: AsyncSession, role_ids: list[int]) -> None:
-        """Raise :class:`NotFoundError` naming any role id that does not exist."""
-        result = await session.execute(select(Role.id).where(Role.id.in_(role_ids)))
-        found_ids = set(result.scalars().all())
-        missing = set(role_ids) - found_ids
+        """Raise unless every id names a role a membership may hold.
+
+        :class:`NotFoundError` names ids that do not exist;
+        :class:`ValidationError` names builtin roles, which apply to users
+        without a membership and are never assigned (the database refuses
+        them too, through ``trg_reject_builtin_role_membership``).
+        """
+        result = await session.execute(select(Role.id, Role.builtin).where(Role.id.in_(role_ids)))
+        builtin_by_id = {row.id: row.builtin for row in result}
+        missing = set(role_ids) - set(builtin_by_id)
         if missing:
             raise NotFoundError(f"Roles not found: {sorted(missing)}")
+        builtin = sorted(role_id for role_id, kind in builtin_by_id.items() if kind != RoleBuiltin.CUSTOM)
+        if builtin:
+            raise ValidationError(f"Builtin roles cannot be assigned to a membership: {builtin}", field="role_ids")
 
     async def _find_member_row(
         self,

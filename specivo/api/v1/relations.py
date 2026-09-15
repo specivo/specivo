@@ -39,7 +39,7 @@ async def list_relations(
     ``blocked``.
     """
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
-    rows = await _relation_service.list_for_issue(db, issue)
+    rows = await _relation_service.list_for_issue(db, issue, current_user)
     return [RelationOut(**row) for row in rows]
 
 
@@ -81,7 +81,7 @@ async def create_relation(
     )
 
     # Build the response from the persisted relation
-    rows = await _relation_service.list_for_issue(db, issue_from)
+    rows = await _relation_service.list_for_issue(db, issue_from, current_user)
     for row in rows:
         if row["id"] == relation.id:
             await db.commit()  # commit before response to avoid reload race condition

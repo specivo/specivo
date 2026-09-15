@@ -27,7 +27,6 @@ from specivo.models.project import Project
 from specivo.models.role import Role
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
-from specivo.services.permission_service import clear_role_cache
 from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
@@ -42,13 +41,6 @@ _MARK = "Acvis"
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _fresh_role_cache():
-    clear_role_cache()
-    yield
-    clear_role_cache()
 
 
 @pytest_asyncio.fixture
@@ -132,7 +124,6 @@ async def _grant(db: AsyncSession, project: Project, user: User, visibility: str
     await db.flush()
     db.add(MemberRole(member_id=member.id, role_id=role.id))
     await db.commit()
-    clear_role_cache()
 
 
 _seq = iter(range(1, 10_000))

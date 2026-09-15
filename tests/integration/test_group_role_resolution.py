@@ -41,14 +41,6 @@ _svc = ProjectService()
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(autouse=True)
-def _reset_role_cache():
-    """The role cache is a module global; keep it from leaking between tests."""
-    clear_role_cache()
-    yield
-    clear_role_cache()
-
-
 @pytest_asyncio.fixture
 async def user(db_session: AsyncSession) -> User:
     obj = UserFactory.build()
@@ -132,7 +124,7 @@ class TestRoleResolution:
         role = await _make_role(db_session, "Direct")
         await _add_principal(db_session, project, user=user, roles=[role])
 
-        roles = await get_user_roles(db_session, user.id, project.id)
+        roles = await get_user_roles(db_session, user, project)
 
         assert _names(roles) == {role.name}
 
@@ -143,7 +135,7 @@ class TestRoleResolution:
         role = await _make_role(db_session, "ViaGroup")
         await _add_principal(db_session, project, group=group, roles=[role])
 
-        roles = await get_user_roles(db_session, user.id, project.id)
+        roles = await get_user_roles(db_session, user, project)
 
         assert _names(roles) == {role.name}
 
@@ -155,7 +147,7 @@ class TestRoleResolution:
         await _add_principal(db_session, project, user=user, roles=[direct_role])
         await _add_principal(db_session, project, group=group, roles=[group_role])
 
-        roles = await get_user_roles(db_session, user.id, project.id)
+        roles = await get_user_roles(db_session, user, project)
 
         assert _names(roles) == {direct_role.name, group_role.name}
 
@@ -168,7 +160,7 @@ class TestRoleResolution:
             await _join_group(db_session, group, user)
             await _add_principal(db_session, project, group=group, roles=[shared_role])
 
-        roles = await get_user_roles(db_session, user.id, project.id)
+        roles = await get_user_roles(db_session, user, project)
 
         assert [r.name for r in roles] == [shared_role.name]
 
@@ -179,7 +171,7 @@ class TestRoleResolution:
         role = await _make_role(db_session, "NotMine")
         await _add_principal(db_session, project, group=group, roles=[role])
 
-        assert await get_user_roles(db_session, user.id, project.id) == []
+        assert await get_user_roles(db_session, user, project) == []
 
     async def test_group_roles_are_scoped_to_the_group_s_project(
         self, db_session: AsyncSession, user: User, project: Project
@@ -194,31 +186,31 @@ class TestRoleResolution:
         role = await _make_role(db_session, "ViaGroup")
         await _add_principal(db_session, project, group=group, roles=[role])
 
-        assert await get_user_roles(db_session, user.id, other.id) == []
+        assert await get_user_roles(db_session, user, other) == []
 
     async def test_leaving_the_group_revokes_roles(self, db_session: AsyncSession, user: User, project: Project):
         group = await _make_group(db_session, "Developers")
         link = await _join_group(db_session, group, user)
         role = await _make_role(db_session, "ViaGroup")
         await _add_principal(db_session, project, group=group, roles=[role])
-        assert await get_user_roles(db_session, user.id, project.id) != []
+        assert await get_user_roles(db_session, user, project) != []
 
         await db_session.execute(text("DELETE FROM user_group_members WHERE id = :id"), {"id": link.id})
-        clear_role_cache()
+        clear_role_cache(db_session)
 
-        assert await get_user_roles(db_session, user.id, project.id) == []
+        assert await get_user_roles(db_session, user, project) == []
 
     async def test_deleting_the_group_revokes_roles(self, db_session: AsyncSession, user: User, project: Project):
         group = await _make_group(db_session, "Developers")
         await _join_group(db_session, group, user)
         role = await _make_role(db_session, "ViaGroup")
         await _add_principal(db_session, project, group=group, roles=[role])
-        assert await get_user_roles(db_session, user.id, project.id) != []
+        assert await get_user_roles(db_session, user, project) != []
 
         await db_session.execute(text("DELETE FROM user_groups WHERE id = :id"), {"id": group.id})
-        clear_role_cache()
+        clear_role_cache(db_session)
 
-        assert await get_user_roles(db_session, user.id, project.id) == []
+        assert await get_user_roles(db_session, user, project) == []
 
     async def test_deleting_the_group_leaves_the_direct_membership_intact(
         self, db_session: AsyncSession, user: User, project: Project
@@ -231,9 +223,9 @@ class TestRoleResolution:
         await _add_principal(db_session, project, group=group, roles=[group_role])
 
         await db_session.execute(text("DELETE FROM user_groups WHERE id = :id"), {"id": group.id})
-        clear_role_cache()
+        clear_role_cache(db_session)
 
-        roles = await get_user_roles(db_session, user.id, project.id)
+        roles = await get_user_roles(db_session, user, project)
         assert _names(roles) == {direct_role.name}
 
 

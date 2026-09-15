@@ -11,10 +11,10 @@ the two rules that SQL has to reproduce faithfully:
   user whose only link to a project is a group sees exactly what that group's
   roles grant.
 
-Both query paths are covered: the CTE path (``user_visibility`` /
-``public_projects``), which every live entry point uses, and the inline path
-built by ``_issue_visibility_clause`` / ``_wiki_visibility_clause``, which
-carries its own ``members`` joins. A parity helper asserts the two agree.
+The direct SQL helpers run the ``user_visibility`` CTE that every search
+entry point uses, with the same bind parameters. Agreement with
+``check_permission`` and ``IssueService`` across members, non-members and
+anonymous visitors is pinned separately in ``test_access_resolution_matrix``.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.services.chunking_service import ChunkingService
 from specivo.services.embedding_service import EmbeddingService
 from specivo.services.journal_service import JournalService
-from specivo.services.permission_service import Permission, clear_role_cache
+from specivo.services.permission_service import Permission
 from specivo.services.search_service import SearchService
 from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
@@ -58,14 +58,6 @@ TERM = "zephyrine gate"
 _counter = itertools.count(1)
 
 _service = SearchService()
-
-
-@pytest.fixture(autouse=True)
-def _reset_role_cache():
-    """The role cache is a module global; keep it from leaking between tests."""
-    clear_role_cache()
-    yield
-    clear_role_cache()
 
 
 # ---------------------------------------------------------------------------
@@ -292,47 +284,28 @@ async def _counts(client: AsyncClient, user: User) -> dict[str, int]:
 
 
 # ---------------------------------------------------------------------------
-# Direct SQL helpers — exercise both visibility query paths
+# Direct SQL helpers — run the visibility CTE the search entry points use
 # ---------------------------------------------------------------------------
 
 
 async def _visible_issue_ids(db: AsyncSession, user: User) -> set[int]:
-    """Issue ids the visibility SQL admits for *user*, asserting path parity.
-
-    Runs the inline clause (``_issue_visibility_clause``, its own ``members``
-    joins) and the CTE clause (``_issue_visibility_cte_clause`` on top of
-    ``_visibility_cte_sql``) and requires them to agree before returning.
-    """
-    params = {"current_user_id": user.id}
-
-    inline_sql = f"SELECT i.id FROM issues i WHERE true {_service._issue_visibility_clause(user)}"
-    inline = {row[0] for row in await db.execute(text(inline_sql), params)}
-
-    cte_sql = (
+    """Issue ids the search visibility SQL admits for *user*."""
+    params = await _service._visibility_params(db, user)
+    sql = (
         f"{_service._visibility_cte_sql(user)}\n"
         f"SELECT i.id FROM issues i WHERE true {_service._issue_visibility_cte_clause(user)}"
     )
-    cte = {row[0] for row in await db.execute(text(cte_sql), params)}
-
-    assert inline == cte, "inline and CTE issue visibility clauses disagree"
-    return inline
+    return {row[0] for row in await db.execute(text(sql), params)}
 
 
 async def _visible_wiki_project_ids(db: AsyncSession, user: User) -> set[int]:
-    """Project ids whose wikis the visibility SQL admits for *user*, asserting parity."""
-    params = {"current_user_id": user.id}
-
-    inline_sql = f"SELECT w.project_id FROM wikis w WHERE true {_service._wiki_visibility_clause(user)}"
-    inline = {row[0] for row in await db.execute(text(inline_sql), params)}
-
-    cte_sql = (
+    """Project ids whose wikis the search visibility SQL admits for *user*."""
+    params = await _service._visibility_params(db, user)
+    sql = (
         f"{_service._visibility_cte_sql(user)}\n"
         f"SELECT w.project_id FROM wikis w WHERE true {_service._wiki_visibility_cte_clause(user)}"
     )
-    cte = {row[0] for row in await db.execute(text(cte_sql), params)}
-
-    assert inline == cte, "inline and CTE wiki visibility clauses disagree"
-    return inline
+    return {row[0] for row in await db.execute(text(sql), params)}
 
 
 # ---------------------------------------------------------------------------
@@ -628,12 +601,12 @@ async def test_direct_and_group_memberships_union(
 
 
 # ---------------------------------------------------------------------------
-# Preserved behaviour of the non-member / public-project branch
+# Public projects: the Non member role, not a hardcoded branch
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_level_zero_member_does_not_fall_through_to_public_branch(
+async def test_level_zero_member_does_not_fall_through_to_the_non_member_role(
     db_session: AsyncSession,
     client: AsyncClient,
     public_content: Content,
@@ -642,7 +615,7 @@ async def test_level_zero_member_does_not_fall_through_to_public_branch(
 ):
     """A member whose roles grant no view_issues sees less than a passing stranger.
 
-    The non-member branch is a fallback for people with no membership row at
+    The Non member role is a fallback for people with no membership row at
     all. A member is judged by their roles instead, even when that leaves them
     with nothing — do not "fix" this into a fallback.
     """
@@ -650,7 +623,7 @@ async def test_level_zero_member_does_not_fall_through_to_public_branch(
     await _add_principal(db_session, public_content.project, role, user=member)
 
     assert await _visible_issue_ids(db_session, member) == set()
-    # The non-member branch itself is untouched: a stranger still sees the issue.
+    # A stranger still sees the issue, through the seeded Non member role.
     assert await _visible_issue_ids(db_session, outsider) == {public_content.issue.id}
 
     assert (await _counts(client, member))["issues"] == 0
@@ -658,28 +631,28 @@ async def test_level_zero_member_does_not_fall_through_to_public_branch(
 
 
 @pytest.mark.asyncio
-async def test_public_project_wiki_stays_readable_without_view_wiki(
+async def test_public_project_wiki_needs_view_wiki(
     db_session: AsyncSession,
     client: AsyncClient,
     public_content: Content,
     member: User,
     outsider: User,
 ):
-    """The public-project wiki branch is unchanged: it has no membership guard.
+    """Search no longer opens a public project's wiki to everyone.
 
-    A member of a public project who lacks ``view_wiki`` still reaches its wiki
-    through the public branch, exactly as before. Whether search should be that
-    permissive about public projects is a separate question about builtin
-    non-member roles; this test pins today's answer so a refactor cannot move
-    it by accident.
+    It used to, through a hardcoded public-project branch, while the wiki
+    routes refused the same users. Now both follow ``view_wiki``: a member
+    without it sees no wiki, and neither does a non-member, because the
+    seeded Non member role grants only ``view_issues``.
     """
     role = await _make_role(db_session, "PublicNoWiki", [Permission.VIEW_ISSUES])
     await _add_principal(db_session, public_content.project, role, user=member)
 
-    assert public_content.project.id in await _visible_wiki_project_ids(db_session, member)
-    assert public_content.project.id in await _visible_wiki_project_ids(db_session, outsider)
+    assert public_content.project.id not in await _visible_wiki_project_ids(db_session, member)
+    assert public_content.project.id not in await _visible_wiki_project_ids(db_session, outsider)
 
-    assert (await _counts(client, member))["wiki"] == 1
+    assert (await _counts(client, member))["wiki"] == 0
+    assert (await _counts(client, outsider))["wiki"] == 0
 
 
 @pytest.mark.asyncio
@@ -689,7 +662,7 @@ async def test_private_project_stays_invisible_to_non_members(
     private_content: Content,
     outsider: User,
 ):
-    """No membership and no public project means no results, on either path."""
+    """No membership and no public project means no results."""
     assert await _visible_issue_ids(db_session, outsider) == set()
     assert await _visible_wiki_project_ids(db_session, outsider) == set()
 
@@ -698,21 +671,17 @@ async def test_private_project_stays_invisible_to_non_members(
 
 
 # ---------------------------------------------------------------------------
-# Inline (non-CTE) clauses in isolation
+# Role edits through a group
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_inline_clauses_enforce_permissions_and_groups(
+async def test_role_permission_edits_through_a_group_apply_to_visibility(
     db_session: AsyncSession,
     private_content: Content,
     member: User,
 ):
-    """The inline builders apply the same gate as the CTE ones.
-
-    ``_visible_issue_ids`` / ``_visible_wiki_project_ids`` assert parity, so
-    this walks a role through three shapes and checks both paths each time.
-    """
+    """Walks a group-held role through three permission sets and checks the SQL each time."""
     # 1. A role granting neither view permission: a member, but sees nothing.
     role = await _make_role(db_session, "InlineNothing", [Permission.ADD_ISSUES])
     group = await _make_group(db_session, "InlineGroup", [member])
@@ -739,9 +708,9 @@ async def test_inline_clauses_enforce_permissions_and_groups(
 @pytest.mark.asyncio
 async def test_admin_clauses_are_empty(admin: User):
     """Admins bypass every clause, so the builders return nothing to append."""
-    assert _service._issue_visibility_clause(admin) == ""
-    assert _service._wiki_visibility_clause(admin) == ""
     assert _service._visibility_cte_sql(admin) == ""
+    assert _service._comment_visibility_clause(admin) == ""
+    assert _service._attachment_semantic_vis(admin) == ""
     assert _service._issue_visibility_cte_clause(admin) == ""
     assert _service._wiki_visibility_cte_clause(admin) == ""
     assert _service._attachment_visibility_cte_clause(admin) == ""

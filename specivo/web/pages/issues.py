@@ -301,7 +301,7 @@ async def issue_detail(
         "time_logged": time_logged,
     }
     watchers = await watcher_svc.list_watchers(db, issue)
-    relations = await _relation_svc.list_for_issue(db, issue)
+    relations = await _relation_svc.list_for_issue(db, issue, user)
     issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
     # Paginate activity feed
