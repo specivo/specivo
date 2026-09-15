@@ -3,6 +3,7 @@
 **Date:** 2026-04-04
 **Revised:** 2026-09-08 — the frontend is no longer zero-build (see ADR-0001); refreshed the
 Page Object list and the suite size.
+**Revised:** 2026-09-15 — frontend bundles are generated, not committed; E2E needs a build first.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -10,7 +11,7 @@ Page Object list and the suite size.
 
 Specivo's backend integration tests (ADR-0002) verify API responses and rendered HTML via `httpx.AsyncClient`, but cannot test browser behavior: Alpine.js form submissions, HTMX partial swaps, cookie-based auth flows, sidebar navigation, or JavaScript-driven components. A browser-based test layer is needed to catch issues that only manifest in a real browser.
 
-The frontend is server-rendered Jinja2 with Alpine.js for reactivity, HTMX for partial updates and Bootstrap 5 for layout. Since ADR-0001 was revised, its custom CSS and JS are bundled by esbuild into committed artifacts — so E2E tests exercise the same `dist/` bundles the Docker image serves, and a stale bundle is a real failure mode these tests can catch.
+The frontend is server-rendered Jinja2 with Alpine.js for reactivity, HTMX for partial updates and Bootstrap 5 for layout. Since ADR-0001 was revised, its custom CSS and JS are bundled by esbuild into `specivo/static/dist/`, which is generated and never committed. E2E tests therefore need a build first: `make test-e2e` runs `make frontend-build`, CI builds the bundles before the E2E pytest step, and the E2E session fails fast when the manifests are missing. The tests exercise bundles built from the same sources the Docker image builds, so a frontend bug that only shows in the bundled output is a real failure mode they can catch.
 
 ## Decision
 
@@ -87,6 +88,7 @@ E2E tests run as a separate CI job after backend tests pass:
 
 ```yaml
 # GitHub Actions / GitLab CI
+- (cd frontend && npm ci && npm run build)   # bundles are not committed
 - uv run playwright install chromium --with-deps
 - uv run pytest tests/e2e/ -m e2e -n 0
 ```
@@ -121,6 +123,7 @@ Traces saved as artifacts on failure for debugging via Playwright Trace Viewer.
 
 **Negative:**
 - Requires running database + Redis (same as integration tests)
+- Requires built frontend bundles (`make frontend-build`; `make test-e2e` runs it)
 - Requires `playwright install chromium` (one-time, ~130MB)
 - Alpine.js `x-model` binding can be tricky with Playwright's `fill()` — some components need `press_sequentially()` or `dispatch_event("input")`
 - Server stdout pipe must be DEVNULL to prevent blocking on SQL echo output
@@ -128,6 +131,7 @@ Traces saved as artifacts on failure for debugging via Playwright Trace Viewer.
 ## Makefile targets
 
 ```makefile
+make frontend-build    # Build the esbuild bundles (prerequisite of the e2e targets)
 make test-e2e          # Headless, chromium
 make test-e2e-headed   # Visible browser + 300ms slowmo
 make test-e2e-debug    # Playwright Inspector (PWDEBUG=1)

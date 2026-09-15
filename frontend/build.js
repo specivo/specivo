@@ -88,11 +88,61 @@ function writeManifest(outdir, entries) {
   console.log(`Wrote ${path.relative(process.cwd(), manifestPath)}:`, manifest);
 }
 
+// Watch mode rebuilds each bundle in place under its logical name, and the app
+// reads manifests only at startup, so a content hash would go stale on the
+// first rebuild. Map every bundle to its logical name instead, and drop hashed
+// copies left behind by an earlier one-off build.
+function writeWatchManifest(outdir, entries) {
+  const manifest = {};
+  for (const entry of entries) {
+    const baseName = path.basename(entry.outfile);
+    cleanOldHashed(outdir, baseName);
+    manifest[baseName] = baseName;
+  }
+
+  const manifestPath = path.join(outdir, 'manifest.json');
+  const content = JSON.stringify(manifest, null, 2) + '\n';
+  const current = fs.existsSync(manifestPath) ? fs.readFileSync(manifestPath, 'utf8') : null;
+  if (current !== content) {
+    fs.writeFileSync(manifestPath, content);
+    console.log(`Wrote ${path.relative(process.cwd(), manifestPath)}:`, manifest);
+  }
+}
+
+// One manifest per output dir (so the template tag can load each
+// independently and asset types stay decoupled).
+function writeManifests() {
+  const byOutdir = new Map();
+  for (const bundle of bundles) {
+    if (!byOutdir.has(bundle.outdir)) byOutdir.set(bundle.outdir, []);
+    byOutdir.get(bundle.outdir).push(bundle);
+  }
+  for (const [outdir, entries] of byOutdir.entries()) {
+    if (isWatch) {
+      writeWatchManifest(outdir, entries);
+    } else {
+      writeManifest(outdir, entries);
+    }
+  }
+}
+
 async function build() {
   // Ensure output dirs exist.
   for (const bundle of bundles) {
     fs.mkdirSync(bundle.outdir, { recursive: true });
   }
+
+  // In watch mode, rewrite the manifests after every rebuild, so a one-off
+  // build run in between cannot leave a hashed manifest behind.
+  let watching = false;
+  const watchManifestPlugin = {
+    name: 'watch-manifest',
+    setup(pluginBuild) {
+      pluginBuild.onEnd(() => {
+        if (watching) writeManifests();
+      });
+    },
+  };
 
   for (const bundle of bundles) {
     const opts = {
@@ -102,7 +152,10 @@ async function build() {
     };
 
     if (isWatch) {
-      const ctx = await esbuild.context(opts);
+      const ctx = await esbuild.context({ ...opts, plugins: [watchManifestPlugin] });
+      // Build once before watching so the manifests point at real files. A
+      // build error must not kill the watcher: esbuild has logged it already.
+      await ctx.rebuild().catch(() => {});
       await ctx.watch();
       console.log(`Watching ${bundle.entryPoints[0]}...`);
     } else {
@@ -111,17 +164,11 @@ async function build() {
     }
   }
 
-  if (!isWatch) {
-    // One manifest per output dir (so the template tag can load each
-    // independently and asset types stay decoupled).
-    const byOutdir = new Map();
-    for (const bundle of bundles) {
-      if (!byOutdir.has(bundle.outdir)) byOutdir.set(bundle.outdir, []);
-      byOutdir.get(bundle.outdir).push(bundle);
-    }
-    for (const [outdir, entries] of byOutdir.entries()) {
-      writeManifest(outdir, entries);
-    }
+  writeManifests();
+  if (isWatch) {
+    watching = true;
+    console.log('Watching for changes.');
+  } else {
     console.log(isDev ? 'Dev build complete.' : 'Production build complete.');
   }
 }

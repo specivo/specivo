@@ -4,8 +4,38 @@
 #   make dev-up
 #   # or manually:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+#
+# The `frontend` service rebuilds the esbuild bundles on every source change and
+# writes them to ./specivo/static/dist on the host. The api container mounts
+# ./specivo over the image copy, so it serves those fresh bundles. No Node is
+# needed on the host.
 
 services:
+  frontend:
+    image: node:22-slim
+    working_dir: /src/frontend
+    command: sh -c "npm ci --no-audit --no-fund && npm run watch"
+    volumes:
+      - ./frontend:/src/frontend
+      # build.js writes to ../specivo/static/dist relative to frontend/.
+      - ./specivo/static/dist:/src/specivo/static/dist
+      # Keep Linux node_modules (esbuild's native binary) off the host.
+      - frontend-node-modules:/src/frontend/node_modules
+    healthcheck:
+      # Healthy once watch mode has written its manifests, which map each bundle
+      # to its logical (unhashed) name. A stale hashed manifest from a one-off
+      # build does not count, so the api never starts against it.
+      test:
+        - CMD
+        - node
+        - -e
+        - "const m=require('/src/specivo/static/dist/css/manifest.json');process.exit(m['specivo.min.css']==='specivo.min.css'?0:1)"
+      interval: 3s
+      timeout: 5s
+      retries: 40
+      start_period: 180s
+    restart: unless-stopped
+
   api:
     build: .
     image: specivo/specivo:dev
@@ -20,6 +50,9 @@ services:
       SECRET_KEY: "dev-secret-key-minimum-32-bytes-for-hs256-signing"
       GIT_COMMIT: "${GIT_COMMIT:-}"
       PYTHONPATH: "/app"
+    depends_on:
+      frontend:
+        condition: service_healthy
     command: uvicorn specivo.main:app --host 0.0.0.0 --port 8000 --reload
 
   celery-worker:
@@ -60,3 +93,6 @@ services:
     ports:
       - "${SPECIVO_MAIL_PORT:-8025}:8025"
     restart: unless-stopped
+
+volumes:
+  frontend-node-modules:

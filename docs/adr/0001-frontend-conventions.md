@@ -5,6 +5,8 @@
 JavaScript and CSS monoliths were split into modular sources.
 **Revised:** 2026-09-08 — recorded server-side syntax highlighting and HTML sanitization in §7,
 and the charting/icon vendors in §9.
+**Revised:** 2026-09-15 — generated bundles are no longer committed: `specivo/static/dist/` is
+gitignored and built in the Docker image, in CI and by the dev watcher container (§1, §9).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -18,21 +20,23 @@ The project originally shipped a deliberate **zero-build** frontend: a single ha
 `specivo.css` and a single `specivo.js`, hashed at app startup. Those files grew past 3,000 and
 5,000 lines respectively and became write-only — duplicated rules, 50+ Alpine components in one
 file, mixed concerns. As anticipated in the original ADR ("split with esbuild when it exceeds
-~1000 lines"), we adopted a small build step: **esbuild** bundles modular sources into committed,
-content-hashed artifacts. The runtime stays Node-free.
+~1000 lines"), we adopted a small build step: **esbuild** bundles modular sources into
+content-hashed artifacts. The runtime stays Node-free. Those artifacts were first committed; since
+2026-09-15 they are generated wherever they are needed and never committed (see §1).
 
 ## Decision
 
 ### 1. esbuild Asset Pipeline
 
 Custom CSS/JS live as modular **sources** under `frontend/` and are bundled by **esbuild** into
-committed, content-hashed artifacts under `specivo/static/dist/`. The stack:
+generated, content-hashed artifacts under `specivo/static/dist/`. The stack:
 
 - **Jinja2** — server-side HTML rendering with theme support
 - **Alpine.js 3.14** — lightweight reactivity (`x-data`, `x-model`, `x-show`)
 - **HTMX 2.0** — HTML-over-the-wire partial updates
 - **Bootstrap 5.3** — grid, utilities only (NOT Bootstrap JS components)
-- **esbuild** — the only build dependency (single Go binary, dev/CI only)
+- **esbuild** — the only build dependency (single Go binary; build time only: image build stage,
+  CI, dev watcher)
 
 Three bundles are produced:
 
@@ -43,16 +47,39 @@ Three bundles are produced:
 | `frontend/js/app.js` | `dist/js/app.min.js` | vanilla (non-Alpine) modules |
 
 - **Content hashing + manifest:** esbuild writes `<name>.<hash>.<ext>` plus a `manifest.json`
-  per output dir. At startup the app loads the manifests (`_load_asset_manifests()` in `main.py`)
+  per output dir. At startup the app loads the manifests (`load_asset_manifests()` in `specivo/web/assets.py`)
   into the `versioned` Jinja global; templates resolve the served filename via
   `{{ versioned['specivo.min.css'] }}`. This replaced the old Python startup SHA hashing.
-- **Committed artifacts → Node-free runtime:** `dist/` is committed, so the Docker image and
-  end users never need Node. Only the dev/CI build needs it.
-- **CI guard:** CI runs `npm ci && npm run build` then `git diff --exit-code specivo/static/dist/`,
-  failing if committed bundles are stale relative to source.
+- **Generated, never committed:** `specivo/static/dist/` is gitignored. The bundles are built
+  wherever they are needed:
+  - **Docker image** — a multi-stage `Dockerfile`: a `node:22-slim` stage (on the build host's
+    native platform, since the output is platform-independent) runs `npm ci && npm run build`;
+    the Python stage copies `dist/` in after the source. The runtime image and end users never
+    need Node. `.dockerignore` keeps any local `dist/` and `node_modules` out of the context.
+  - **CI** — the `test` and `test-e2e` jobs build the frontend before pytest; the `frontend` job
+    is a standalone build check. The release workflow builds through the `Dockerfile`.
+  - **Development** — the `frontend` service in `docker-compose.dev.yml` runs `npm run watch`
+    into the host's `specivo/static/dist/`, which the `api` container's `./specivo` mount serves;
+    `make dev-up` starts it and `api` waits for its first build. `make frontend-build` does a
+    one-off build with host Node, or a Node container when `npm` is absent.
+- **Missing bundles:** the app still starts — templates fall back to the unhashed names — but logs
+  a WARNING at startup naming `make frontend-build`. Integration tests that fetch bundles skip
+  without a build (CI sets `SPECIVO_REQUIRE_BUNDLES=1`, so there they fail instead); the E2E
+  session fails fast.
+- **Watch mode** rebuilds bundles in place under their logical names and writes manifests mapping
+  each name to itself: the app reads manifests only at startup, so a hash would go stale on the
+  first rebuild.
 
-**Dev workflow:** edit under `frontend/`, run `npm run build` (or `npm run watch`), and commit the
-regenerated `dist/` with the source change. See `frontend/README.md`.
+**Why not commit them:** committed bundles put minified diff noise in every frontend change,
+caused `dist/` merge conflicts between parallel branches, and needed a CI staleness guard to stay
+honest. A multi-stage image keeps the runtime Node-free without any of that.
+
+*History:* from 2026-06-20 to 2026-09-15 `dist/` was committed so the single-stage image needed
+no Node, and CI failed on `git diff --exit-code specivo/static/dist/` when bundles were stale.
+
+**Dev workflow:** edit under `frontend/`; with `make dev-up` running, bundles rebuild on save (or
+run `npm run watch` / `make frontend-build` yourself). Commit only the sources. See
+`frontend/README.md`.
 
 ### 2. Alpine.js Component Pattern
 
@@ -221,11 +248,11 @@ The `pagination` Jinja2 macro in `components/macros.html` renders a three-part b
 ### 9. Static Asset Organization
 
 ```
-frontend/                          # esbuild SOURCE (dev/CI only, Node)
+frontend/                          # esbuild SOURCE (build time only: image stage, CI, dev)
   build.js package.json            # esbuild driver + scripts (esbuild devDep only)
   css/ js/                         # modular partials and ES modules (see §2, §4)
 specivo/static/
-  dist/                            # COMMITTED build output, served at runtime
+  dist/                            # GENERATED build output (gitignored), served at runtime
     css/specivo.min.<hash>.css  +  manifest.json
     js/{alpine-init,app}.min.<hash>.js  +  manifest.json
   sw.js                            # service worker (PWA)
@@ -237,8 +264,7 @@ specivo/static/
   img/                             # SVG favicon
 ```
 
-`frontend/node_modules/` and `dist/**/*.map` are gitignored; the hashed bundles + manifests are
-committed.
+`frontend/node_modules/` and all of `specivo/static/dist/` are gitignored.
 
 ### 10. Template Resolution Order
 
@@ -267,14 +293,17 @@ keeps the product name (not the instance brand).
 **Positive:**
 - Modular, navigable source — one Alpine component per file, CSS partitioned by cascade layer
 - Minified, content-hashed bundles; manifests drive cache busting (no manual versioning)
-- Runtime stays Node-free (artifacts committed); only one build dependency (esbuild)
-- CI fails on stale bundles, so committed `dist/` can't drift from source
+- Runtime stays Node-free (bundles built in a discarded image stage); only one build dependency
+  (esbuild)
+- No generated files in git: no bundle diff noise or `dist/` merge conflicts, and no committed
+  artifact that can drift from source
 - No Bootstrap class collisions — `sp-` prefix is unambiguous
 - PWA installable with dynamic branding
 
 **Negative:**
-- A build step now exists: editing `frontend/` requires `npm run build` and committing `dist/`
-- Bundles are committed artifacts in the repo (diff noise on rebuilds)
+- A build step exists: a fresh checkout has no bundles, so pages load unstyled and E2E cannot run
+  until `make frontend-build` (or `make dev-up`) has built them
+- Building the image pulls a Node base image for the build stage
 - Alpine logic that uses string/global methods must stay in registered components to remain
   compatible with a future CSP-build switch
 - Some CSS still uses unprefixed class names and layered `.sp-modal-*` children (see §4 deferred)
@@ -286,8 +315,10 @@ keeps the product name (not the instance brand).
 - **CSS Modules / Tailwind** — Tailwind adds a heavier Node build; the `sp-` prefix + partials
   give enough isolation
 - **Bootstrap JS components** — modals, dropdowns replaced with Alpine.js for lighter weight
-- **Building inside Docker** — would add a Node toolchain to the runtime image; committing
-  pre-built artifacts keeps the image slim and Node-free
+- **Committing built bundles** — used from 2026-06-20 to 2026-09-15 (see §1): diff noise, `dist/`
+  merge conflicts and a CI staleness guard, all avoidable with a multi-stage image build
+- **Node in the runtime image** — the Node build stage is discarded; only `dist/` is copied into
+  the Python image
 - **Client-side syntax highlighting (Prism/Highlight.js)** — highlighting is done server-side by
   the `codehilite` Markdown extension (Pygments) instead, so no JS highlighter ships to the browser
   and no extra bundle is parsed on every page with a code block

@@ -20,6 +20,8 @@ import httpx
 import pytest
 from playwright.sync_api import BrowserContext, Page
 
+from specivo.web.assets import missing_asset_manifests
+
 # ---------------------------------------------------------------------------
 # Environment — same defaults as conftest_base.py
 # ---------------------------------------------------------------------------
@@ -91,6 +93,16 @@ def _flush_redis():
 @pytest.fixture(scope="session")
 def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     """Start uvicorn, wait for /health/, yield base URL, stop on teardown."""
+    # The esbuild bundles are generated, not committed. Without them every page
+    # loads with no Specivo CSS/JS, so fail once with the fix instead of per test.
+    missing = missing_asset_manifests()
+    if missing:
+        pytest.fail(
+            f"Frontend bundles not built (no manifest for: {', '.join(missing)}). "
+            "Run `make frontend-build` before the E2E suite.",
+            pytrace=False,
+        )
+
     # Kill any leftover server on our port
     subprocess.run(f"lsof -ti:{E2E_SERVER_PORT} | xargs kill -9", shell=True, capture_output=True)
     time.sleep(0.5)
