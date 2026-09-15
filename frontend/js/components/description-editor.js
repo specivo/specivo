@@ -1,4 +1,10 @@
 export function descriptionEditor(initial) {
+        var i18n = Object.assign({
+            titleRequired: 'Title cannot be empty.',
+            saveFailed: 'Could not save changes.',
+            networkError: 'Network error. Please retry.'
+        }, initial.i18n || {});
+
         return {
             subject: initial.subject || '',
             description: initial.description || '',
@@ -34,7 +40,7 @@ export function descriptionEditor(initial) {
                 /* Client-side validation: title must contain non-whitespace */
                 var trimmed = (this.subjectDraft || '').trim();
                 if (!trimmed) {
-                    this.error = 'Title cannot be empty.';
+                    this.error = i18n.titleRequired;
                     return;
                 }
                 this.error = '';
@@ -59,10 +65,10 @@ export function descriptionEditor(initial) {
                                 msg = body.errors[0].message || '';
                             }
                         } catch (_e) { /* ignore parse errors */ }
-                        this.error = msg || 'Could not save changes.';
+                        this.error = msg || i18n.saveFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Network error. Please retry.';
+                    this.error = i18n.networkError;
                 }
                 this.saving = false;
             }

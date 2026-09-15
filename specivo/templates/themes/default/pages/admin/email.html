@@ -67,7 +67,12 @@
 
   {# ── Send Test Email ── #}
   <div class="card" style="padding:var(--sp-space-xl);"
-       x-data="testEmailForm">
+       x-data="testEmailForm"
+       data-msg-subject="{{ _('Specivo test email') }}"
+       data-msg-body="{{ _('This is a test email from Specivo to verify SMTP configuration.\n\nIf you received this message, email delivery is working correctly.') }}"
+       data-msg-sent="{{ _('Test email sent to %(email)s') }}"
+       data-msg-unknown-error="{{ _('Unknown error') }}"
+       data-msg-request-failed="{{ _('Request failed: %(error)s') }}">
     <h2 style="font-family:var(--sp-font-display);font-size:var(--sp-font-size-lg);font-weight:600;margin-bottom:var(--sp-space-xs);">{% trans %}Send Test Email{% endtrans %}</h2>
     <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary);margin-bottom:var(--sp-space-xl);line-height:1.5;">{% trans %}Verify your SMTP configuration by sending a test message.{% endtrans %}</p>
 

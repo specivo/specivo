@@ -1,4 +1,10 @@
 export function issueMetadataPanel(initial) {
+        var i18n = Object.assign({
+            tagsPlaceholder: 'Type and press Enter...',
+            yes: 'Yes',
+            no: 'No'
+        }, initial.i18n || {});
+
         function resolveFieldsFromSchemas(schemas, metadataObj) {
             var fields = [];
             var names = [];
@@ -22,7 +28,7 @@ export function issueMetadataPanel(initial) {
                     } else if (prop.type === 'array' && prop.items && prop.items.enum) {
                         inputType = 'multiselect'; typeLabel = 'multi'; options = prop.items.enum;
                     } else if (prop.type === 'array') {
-                        inputType = 'tags'; typeLabel = 'array'; placeholder = 'Type and press Enter...';
+                        inputType = 'tags'; typeLabel = 'array'; placeholder = i18n.tagsPlaceholder;
                     } else {
                         placeholder = prop.description || '';
                     }
@@ -93,7 +99,7 @@ export function issueMetadataPanel(initial) {
                             values.push({ text: String(v[j]), href: this.metadataSearchUrl(f.key, v[j], true) });
                         }
                     } else if (typeof v === 'boolean') {
-                        values.push({ text: v ? 'Yes' : 'No', href: null });
+                        values.push({ text: v ? i18n.yes : i18n.no, href: null });
                     } else if (f.inputType === 'enum') {
                         cls = 'sp-ms-enum';
                         values.push({ text: String(v), href: this.metadataSearchUrl(f.key, v, false) });

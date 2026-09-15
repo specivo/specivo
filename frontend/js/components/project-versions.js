@@ -1,4 +1,13 @@
 export function projectVersions(initial) {
+        var i18n = Object.assign({
+            versionCreated: 'Version "%(name)s" created.',
+            versionUpdated: 'Version "%(name)s" updated.',
+            versionDeleted: 'Version "%(name)s" deleted.',
+            saveFailed: 'Failed to save version.',
+            deleteFailed: 'Failed to delete version.',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
+
         return {
             versions: initial.versions || [],
             projectKey: initial.projectKey || '',
@@ -62,15 +71,15 @@ export function projectVersions(initial) {
                     if (res.ok) {
                         // Reload versions with roadmap data to get fresh counts
                         await this._reloadVersions();
-                        var action = this.editingVersion ? 'updated' : 'created';
-                        this.flash('Version "' + this.form.name + '" ' + action + '.', 'success');
+                        var template = this.editingVersion ? i18n.versionUpdated : i18n.versionCreated;
+                        this.flash(template.replace('%(name)s', this.form.name), 'success');
                         this.showModal = false;
                     } else {
                         var err = await res.json().catch(function () { return {}; });
-                        this.flash((err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to save version.', 'error');
+                        this.flash((err.errors && err.errors[0] && err.errors[0].message) || err.detail || i18n.saveFailed, 'error');
                     }
                 } catch (_e) {
-                    this.flash('Unable to connect.', 'error');
+                    this.flash(i18n.connectFailed, 'error');
                 }
                 this.saving = false;
             },
@@ -94,13 +103,13 @@ export function projectVersions(initial) {
                         this.versions = this.versions.filter(function (v) { return v.id !== this.deletingVersion.id; }.bind(this));
                         this.showDeleteModal = false;
                         this.deletingVersion = null;
-                        this.flash('Version "' + name + '" deleted.', 'success');
+                        this.flash(i18n.versionDeleted.replace('%(name)s', name), 'success');
                     } else {
                         var err = await res.json().catch(function () { return {}; });
-                        this.flash((err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to delete version.', 'error');
+                        this.flash((err.errors && err.errors[0] && err.errors[0].message) || err.detail || i18n.deleteFailed, 'error');
                     }
                 } catch (_e) {
-                    this.flash('Unable to connect.', 'error');
+                    this.flash(i18n.connectFailed, 'error');
                 }
                 this.deleting = false;
             },

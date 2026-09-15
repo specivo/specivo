@@ -1,4 +1,8 @@
 export function adminVersions(initial) {
+        var i18n = Object.assign({
+            confirmDelete: 'Delete version "%(name)s"?'
+        }, (initial && initial.i18n) || {});
+
         return {
             allVersions: (initial && initial.versions) || [],
             projects: (initial && initial.projects) || [],
@@ -56,7 +60,7 @@ export function adminVersions(initial) {
             },
 
             async deleteVersion(v) {
-                if (!confirm('Delete version "' + v.name + '"?')) return;
+                if (!confirm(i18n.confirmDelete.replace('%(name)s', v.name))) return;
                 var res = await spFetch('/api/v1/projects/' + v.project_key + '/versions/' + v.id + '/', {
                     method: 'DELETE'
                 });

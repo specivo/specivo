@@ -29,7 +29,12 @@
   </div>
 
   <!-- General tab -->
-  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }} })'>
+  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, i18n: {{ {
+    "saved": _("Saved successfully."),
+    "errorWithMessage": _("Error: %(message)s"),
+    "saveFailed": _("Failed to save"),
+    "connectFailed": _("Unable to connect.")
+  } | tojson }} })'>
     <div class="card sp-card-pad">
       <div class="form-group sp-form-group-mb-md">
         <label class="form-label">{% trans %}Name{% endtrans %}</label>
@@ -253,7 +258,10 @@
   </div>
 
   <!-- Modules tab -->
-  <div x-show="tab === 'modules'" x-data='projectModules({ modules: {{ modules | tojson }}, projectKey: {{ project.key | tojson }} })'>
+  <div x-show="tab === 'modules'" x-data='projectModules({ modules: {{ modules | tojson }}, projectKey: {{ project.key | tojson }}, i18n: {{ {
+    "updated": _("Module updated."),
+    "connectFailed": _("Unable to connect.")
+  } | tojson }} })'>
     <div class="card sp-card-pad">
       <h3 class="sp-card-h3">{% trans %}Enabled Modules{% endtrans %}</h3>
       <template x-for="(enabled, name) in modules" :key="name">
@@ -267,7 +275,14 @@
   </div>
 
   <!-- Versions tab -->
-  <div x-show="tab === 'versions'" x-data='projectVersions({ versions: {{ versions_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_versions | tojson }} })'>
+  <div x-show="tab === 'versions'" x-data='projectVersions({ versions: {{ versions_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_versions | tojson }}, i18n: {{ {
+    "versionCreated": _('Version "%(name)s" created.'),
+    "versionUpdated": _('Version "%(name)s" updated.'),
+    "versionDeleted": _('Version "%(name)s" deleted.'),
+    "saveFailed": _("Failed to save version."),
+    "deleteFailed": _("Failed to delete version."),
+    "connectFailed": _("Unable to connect.")
+  } | tojson }} })'>
 
     <!-- Flash messages -->
     <template x-if="message">
@@ -440,7 +455,8 @@
   </div>
 
   <!-- Recurring tasks tab -->
-  <div x-show="tab === 'recurring'" x-data='recurringPatterns({ patterns: {{ recurring_patterns_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_recurring | tojson }} })'>
+  {% from "pages/projects/_recurring_i18n.html" import recurring_labels %}
+  <div x-show="tab === 'recurring'" x-data='recurringPatterns({ patterns: {{ recurring_patterns_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_recurring | tojson }}, labels: {{ recurring_labels() }} })'>
 
     <!-- Flash messages -->
     <template x-if="message">
@@ -541,7 +557,16 @@
   </div>
 
   <!-- Metadata tab -->
-  <div x-show="tab === 'metadata'" x-data='projectMetadataSettings({ presets: {{ presets_data | tojson }}, enabledSlugs: {{ enabled_slugs | tojson }}, schemas: {{ schemas_data | tojson }}, trackers: {{ trackers_data | tojson }}, projectKey: {{ project.key | tojson }} })'>
+  <div x-show="tab === 'metadata'" x-data='projectMetadataSettings({ presets: {{ presets_data | tojson }}, enabledSlugs: {{ enabled_slugs | tojson }}, schemas: {{ schemas_data | tojson }}, trackers: {{ trackers_data | tojson }}, projectKey: {{ project.key | tojson }}, i18n: {{ {
+    "trackerFallback": _("Tracker #%(id)s"),
+    "scopeTracker": _("(%(tracker)s only)"),
+    "scopeAll": _("(all trackers)"),
+    "disableBlocked": _("Cannot disable: issues have data from this preset."),
+    "schemaRequired": _("Schema definition is required."),
+    "schemaNotObject": _('Root type must be "object".'),
+    "invalidJson": _("Invalid JSON: %(error)s"),
+    "deleteBlocked": _("Cannot delete: %(count)s issue(s) use this schema.")
+  } | tojson }} })'>
 
     <!-- Available Presets section -->
     <div class="sp-section-label">{% trans %}Available Presets{% endtrans %}</div>
@@ -773,7 +798,13 @@
     </template>
 
     <!-- Computed fields section -->
-    <div x-data='projectComputedMetadata({ computedMetadata: {{ computed_metadata | tojson }}, projectKey: {{ project.key | tojson }} })'>
+    <div x-data='projectComputedMetadata({ computedMetadata: {{ computed_metadata | tojson }}, projectKey: {{ project.key | tojson }}, i18n: {{ {
+      "keyRequired": _("Every value needs a field name."),
+      "duplicateKey": _("Duplicate field name: %(name)s"),
+      "saved": _("Saved successfully."),
+      "saveFailed": _("Failed to save"),
+      "connectFailed": _("Unable to connect.")
+    } | tojson }} })'>
       <div class="sp-section-label">{% trans %}Computed Fields{% endtrans %}</div>
       <p class="sp-section-lead">{% trans %}Fields whose value is fixed by the project. Each one is filled in automatically on every issue here, is never stored on the issue itself, and cannot be overridden by a client — so it can never drift, and it recomputes when an issue moves to another project.{% endtrans %}</p>
 
@@ -816,7 +847,10 @@
   </div>
 
   <!-- Tags tab -->
-  <div x-show="tab === 'tags'" x-data='projectTagsSettings({ tags: {{ tags_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_tags | tojson }} })'>
+  <div x-show="tab === 'tags'" x-data='projectTagsSettings({ tags: {{ tags_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_tags | tojson }}, i18n: {{ {
+    "saveFailed": _("Failed to save tag."),
+    "connectFailed": _("Unable to connect.")
+  } | tojson }} })'>
 
     <div class="card">
       <div class="sp-listcard-header">
@@ -949,8 +983,9 @@
 
   <!-- Search tab -->
   <div x-show="tab === 'search'" x-cloak>
+    {% from "pages/_fts_i18n.html" import fts_i18n %}
     <div class="card" style="padding: var(--sp-space-lg); max-width: 720px;"
-         x-data='ftsReindex({ baseUrl: "/api/v1/projects/{{ project.key }}/search", isProject: true, canManage: {{ can_manage_search | tojson }}, language: {{ fts_language | tojson }}, allowed: {{ fts_allowed | tojson }}, instanceDefault: {{ fts_instance_default | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }} })'>
+         x-data='ftsReindex({ baseUrl: "/api/v1/projects/{{ project.key }}/search", isProject: true, canManage: {{ can_manage_search | tojson }}, language: {{ fts_language | tojson }}, allowed: {{ fts_allowed | tojson }}, instanceDefault: {{ fts_instance_default | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }}, i18n: {{ fts_i18n() }} })'>
       <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Search indexing{% endtrans %}</h2>
       <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
         {% trans %}Full-text search analyzer language for this project. Leave on Inherit to use the instance default.{% endtrans %}

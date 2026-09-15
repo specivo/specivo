@@ -1,8 +1,31 @@
 export function adminMetadataPresets(initialPresets, initialLabels) {
         var _knownIcons = ['code', 'bug', 'megaphone', 'sprint', 'book'];
+        // Translated strings come from the template as the second argument; the
+        // English defaults only cover a caller that omits a key.
+        var labels = Object.assign({
+            nameRequired: 'Name is required.',
+            slugRequired: 'Identifier is required.',
+            slugInvalid: 'Use lowercase letters, numbers and dashes only.',
+            schemaRequired: 'Schema definition is required.',
+            schemaNotObject: 'Root schema type must be "object".',
+            invalidJson: 'Invalid JSON: %(error)s',
+            saveFailed: 'Save failed',
+            presetCreated: 'Preset created',
+            presetUpdated: 'Preset updated',
+            deleteFailed: 'Delete failed',
+            presetDeleted: 'Preset deleted',
+            networkError: 'Network error: %(error)s',
+            oneField: '1 field',
+            nFields: '%(count)s fields'
+        }, initialLabels || {});
+
+        function toast(type, message) {
+            window.dispatchEvent(new CustomEvent('toast', { detail: { type: type, message: message } }));
+        }
+
         return {
             presets: initialPresets || [],
-            labels: initialLabels || {},
+            labels: labels,
 
             isKnownIcon(icon) {
                 return _knownIcons.indexOf(icon) !== -1;
@@ -15,7 +38,7 @@ export function adminMetadataPresets(initialPresets, initialLabels) {
 
             fieldCountLabel(obj) {
                 var count = this.schemaFields(obj).length;
-                return count + ' fields';
+                return count === 1 ? labels.oneField : labels.nFields.replace('%(count)s', count);
             },
 
             get builtinPresets() {
@@ -73,19 +96,19 @@ export function adminMetadataPresets(initialPresets, initialLabels) {
 
             validateSchema: function () {
                 if (!this.form.schema_definition_raw.trim()) {
-                    this.schemaError = 'Schema definition is required.';
+                    this.schemaError = labels.schemaRequired;
                     return false;
                 }
                 try {
                     var parsed = JSON.parse(this.form.schema_definition_raw);
                     if (parsed.type !== 'object') {
-                        this.schemaError = 'Root schema type must be "object".';
+                        this.schemaError = labels.schemaNotObject;
                         return false;
                     }
                     this.schemaError = '';
                     return true;
                 } catch (e) {
-                    this.schemaError = 'Invalid JSON: ' + e.message;
+                    this.schemaError = labels.invalidJson.replace('%(error)s', e.message);
                     return false;
                 }
             },
@@ -99,17 +122,17 @@ export function adminMetadataPresets(initialPresets, initialLabels) {
                 this.nameError = '';
                 this.slugError = '';
                 if (!this.form.name || !this.form.name.trim()) {
-                    this.nameError = this.labels.nameRequired || 'Name is required.';
+                    this.nameError = labels.nameRequired;
                     ok = false;
                 }
                 // Slug is read-only for built-in presets, so only validate when editable.
                 if (!(this.editingPreset && this.editingPreset.is_builtin)) {
                     var slug = this.normalizeSlug(this.form.slug);
                     if (!slug) {
-                        this.slugError = this.labels.slugRequired || 'Identifier is required.';
+                        this.slugError = labels.slugRequired;
                         ok = false;
                     } else if (!/^[a-z0-9][a-z0-9-]*$/.test(slug)) {
-                        this.slugError = this.labels.slugInvalid || 'Use lowercase letters, numbers and dashes only.';
+                        this.slugError = labels.slugInvalid;
                         ok = false;
                     }
                 }
@@ -148,8 +171,7 @@ export function adminMetadataPresets(initialPresets, initialLabels) {
                     }
                     if (!resp.ok) {
                         var err = await resp.json();
-                        var msg = (err.errors && err.errors[0] && err.errors[0].message) || 'Save failed';
-                        window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: msg } }));
+                        toast('error', (err.errors && err.errors[0] && err.errors[0].message) || labels.saveFailed);
                         return;
                     }
                     var updated = await resp.json();
@@ -162,9 +184,9 @@ export function adminMetadataPresets(initialPresets, initialLabels) {
                         this.presets.push(updated);
                     }
                     this.showModal = false;
-                    window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: this.editingPreset ? 'Preset updated' : 'Preset created' } }));
+                    toast('success', this.editingPreset ? labels.presetUpdated : labels.presetCreated);
                 } catch (e) {
-                    window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: 'Network error: ' + e.message } }));
+                    toast('error', labels.networkError.replace('%(error)s', e.message));
                 } finally {
                     this.saving = false;
                 }
@@ -183,15 +205,14 @@ export function adminMetadataPresets(initialPresets, initialLabels) {
                     });
                     if (!resp.ok) {
                         var err = await resp.json();
-                        var msg = (err.errors && err.errors[0] && err.errors[0].message) || 'Delete failed';
-                        window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: msg } }));
+                        toast('error', (err.errors && err.errors[0] && err.errors[0].message) || labels.deleteFailed);
                         return;
                     }
                     var slug = this.deleteTarget.slug;
                     this.presets = this.presets.filter(function (p) { return p.slug !== slug; });
-                    window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', message: 'Preset deleted' } }));
+                    toast('success', labels.presetDeleted);
                 } catch (e) {
-                    window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'error', message: 'Network error: ' + e.message } }));
+                    toast('error', labels.networkError.replace('%(error)s', e.message));
                 } finally {
                     this.showDeleteModal = false;
                     this.deleteTarget = null;

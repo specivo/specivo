@@ -1,4 +1,22 @@
 export function adminUsers(initial) {
+        var i18n = Object.assign({
+            passwordRequired: 'Password: required for regular users.',
+            createFailed: 'Failed to create user.',
+            passwordTooShort: 'Password must be at least 10 characters.',
+            passwordReset: 'Password reset successfully.',
+            resetFailed: 'Failed to reset password.',
+            confirmLock: 'Lock user %(login)s?',
+            confirmUnlock: 'Unlock user %(login)s?',
+            lockFailed: 'Failed to lock user.',
+            unlockFailed: 'Failed to unlock user.',
+            never: 'Never',
+            justNow: 'Just now',
+            minutesAgo: '%(count)s min ago',
+            hoursAgo: '%(count)s hours ago',
+            yesterday: 'Yesterday',
+            daysAgo: '%(count)s days ago'
+        }, initial.i18n || {});
+
         return {
             users: initial.users || [],
             roles: initial.roles || [],
@@ -40,7 +58,7 @@ export function adminUsers(initial) {
                     payload.must_change_password = false;
                 }
                 if (!payload.password && !payload.is_service_account) {
-                    this.createError = 'Password: required for regular users.';
+                    this.createError = i18n.passwordRequired;
                     this.creating = false;
                     return;
                 }
@@ -59,7 +77,7 @@ export function adminUsers(initial) {
                             return field + e.message;
                         }).join('\n');
                     } else {
-                        this.createError = err.detail || 'Failed to create user.';
+                        this.createError = err.detail || i18n.createFailed;
                     }
                 }
                 this.creating = false;
@@ -87,7 +105,7 @@ export function adminUsers(initial) {
 
             async doResetPassword() {
                 if (!this.resetUser || this.resetPassword.length < 10) {
-                    this.resetError = 'Password must be at least 10 characters.';
+                    this.resetError = i18n.passwordTooShort;
                     return;
                 }
                 this.resetting = true;
@@ -102,18 +120,19 @@ export function adminUsers(initial) {
                     })
                 });
                 if (res.ok) {
-                    this.resetSuccess = 'Password reset successfully.';
+                    this.resetSuccess = i18n.passwordReset;
                     this.resetPassword = '';
                 } else {
                     var err = await res.json().catch(function () { return {}; });
-                    this.resetError = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to reset password.';
+                    this.resetError = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || i18n.resetFailed;
                 }
                 this.resetting = false;
             },
 
             async toggleLock(u) {
                 var action = u.status === 'locked' ? 'unlock' : 'lock';
-                if (!confirm(action.charAt(0).toUpperCase() + action.slice(1) + ' user ' + u.login + '?')) return;
+                var question = action === 'lock' ? i18n.confirmLock : i18n.confirmUnlock;
+                if (!confirm(question.replace('%(login)s', u.login))) return;
                 var res = await spFetch('/api/v1/admin/users/' + u.id + '/' + action + '/', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'}
@@ -123,20 +142,21 @@ export function adminUsers(initial) {
                     u.status = updated.status;
                 } else {
                     var err = await res.json().catch(function () { return {}; });
-                    alert((err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to ' + action + ' user.');
+                    var fallback = action === 'lock' ? i18n.lockFailed : i18n.unlockFailed;
+                    alert((err.errors && err.errors[0] && err.errors[0].message) || err.detail || fallback);
                 }
             },
 
             timeAgo(iso) {
-                if (!iso) return 'Never';
+                if (!iso) return i18n.never;
                 var d = new Date(iso);
                 var now = new Date();
                 var diff = Math.floor((now - d) / 1000);
-                if (diff < 60) return 'Just now';
-                if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
-                if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
-                if (diff < 172800) return 'Yesterday';
-                if (diff < 604800) return Math.floor(diff / 86400) + ' days ago';
+                if (diff < 60) return i18n.justNow;
+                if (diff < 3600) return i18n.minutesAgo.replace('%(count)s', Math.floor(diff / 60));
+                if (diff < 86400) return i18n.hoursAgo.replace('%(count)s', Math.floor(diff / 3600));
+                if (diff < 172800) return i18n.yesterday;
+                if (diff < 604800) return i18n.daysAgo.replace('%(count)s', Math.floor(diff / 86400));
                 return d.toLocaleDateString();
             }
         };

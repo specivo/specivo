@@ -1,5 +1,16 @@
 export function projectMetadataSettings(initial) {
         var _knownIcons = ['code', 'bug', 'megaphone', 'sprint', 'book'];
+        var i18n = Object.assign({
+            trackerFallback: 'Tracker #%(id)s',
+            scopeTracker: '(%(tracker)s only)',
+            scopeAll: '(all trackers)',
+            disableBlocked: 'Cannot disable: issues have data from this preset.',
+            schemaRequired: 'Schema definition is required.',
+            schemaNotObject: 'Root type must be "object".',
+            invalidJson: 'Invalid JSON: %(error)s',
+            deleteBlocked: 'Cannot delete: %(count)s issue(s) use this schema.'
+        }, initial.i18n || {});
+
         return {
             presets: initial.presets || [],
             enabledSlugs: initial.enabledSlugs || [],
@@ -21,7 +32,7 @@ export function projectMetadataSettings(initial) {
                 for (var i = 0; i < this.trackers.length; i++) {
                     if (this.trackers[i].id === trackerId) return this.trackers[i].name;
                 }
-                return 'Tracker #' + trackerId;
+                return i18n.trackerFallback.replace('%(id)s', trackerId);
             },
 
             showSchemaModal: false,
@@ -42,10 +53,9 @@ export function projectMetadataSettings(initial) {
                 var schema = this.schemas.find(function (s) { return s.preset_slug === slug; });
                 if (!schema) return '';
                 if (schema.tracker_id) {
-                    var tracker = this.trackers.find(function (t) { return t.id === schema.tracker_id; });
-                    return '(' + (tracker ? tracker.name : 'Tracker #' + schema.tracker_id) + ' only)';
+                    return i18n.scopeTracker.replace('%(tracker)s', this.trackerName(schema.tracker_id));
                 }
-                return '(all trackers)';
+                return i18n.scopeAll;
             },
 
             enablePreset: async function (slug) {
@@ -73,7 +83,7 @@ export function projectMetadataSettings(initial) {
                     this.schemas = this.schemas.filter(function (s) { return s.preset_slug !== slug; });
                 } else if (resp.status === 409) {
                     var data = await resp.json();
-                    this.disableWarningMsg = (data.errors && data.errors[0] && data.errors[0].message) || 'Cannot disable: issues have data from this preset.';
+                    this.disableWarningMsg = (data.errors && data.errors[0] && data.errors[0].message) || i18n.disableBlocked;
                     this.showDisableWarning = true;
                 }
             },
@@ -102,19 +112,19 @@ export function projectMetadataSettings(initial) {
 
             validateSchema: function () {
                 if (!this.schemaForm.schema_definition_raw.trim()) {
-                    this.schemaError = 'Schema definition is required.';
+                    this.schemaError = i18n.schemaRequired;
                     return false;
                 }
                 try {
                     var parsed = JSON.parse(this.schemaForm.schema_definition_raw);
                     if (parsed.type !== 'object') {
-                        this.schemaError = 'Root type must be "object".';
+                        this.schemaError = i18n.schemaNotObject;
                         return false;
                     }
                     this.schemaError = '';
                     return true;
                 } catch (e) {
-                    this.schemaError = 'Invalid JSON: ' + e.message;
+                    this.schemaError = i18n.invalidJson.replace('%(error)s', e.message);
                     return false;
                 }
             },
@@ -156,7 +166,7 @@ export function projectMetadataSettings(initial) {
                 if (resp.ok) {
                     var data = await resp.json();
                     if (data.usage_count > 0) {
-                        this.disableWarningMsg = 'Cannot delete: ' + data.usage_count + ' issue(s) use this schema.';
+                        this.disableWarningMsg = i18n.deleteBlocked.replace('%(count)s', data.usage_count);
                         this.showDisableWarning = true;
                         return;
                     }

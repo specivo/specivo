@@ -1,0 +1,24 @@
+{# Translated strings for the recurringPatterns and recurringPatternDetail
+   Alpine components, shared by the project settings tab, the recurring list
+   and the pattern detail page. Renders a JSON object for the components'
+   `labels` key, so it must be used inside a single-quoted x-data attribute. #}
+{% macro recurring_labels() -%}
+{{ {
+  "daily": _("Daily"),
+  "weekly": _("Weekly"),
+  "monthly": _("Monthly"),
+  "yearly": _("Yearly"),
+  "everyDays": _("Every %(count)s days"),
+  "everyWeeks": _("Every %(count)s weeks"),
+  "everyMonths": _("Every %(count)s months"),
+  "everyYears": _("Every %(count)s years"),
+  "connectFailed": _("Unable to connect."),
+  "patternEnabled": _("Pattern enabled."),
+  "patternDisabled": _("Pattern disabled."),
+  "updateFailed": _("Failed to update pattern."),
+  "patternDeleted": _("Pattern deleted."),
+  "deleteFailed": _("Failed to delete pattern."),
+  "occurrenceSkipped": _("Occurrence skipped."),
+  "skipFailed": _("Failed to skip occurrence.")
+} | tojson }}
+{%- endmacro %}

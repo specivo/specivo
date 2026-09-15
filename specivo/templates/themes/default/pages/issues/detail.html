@@ -14,7 +14,11 @@
 <div class="issue-detail-layout">
   {# Main content #}
   <div>
-    <div x-data='descriptionEditor({ subject: {{ issue.subject | tojson }}, description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }} })'>
+    <div x-data='descriptionEditor({ subject: {{ issue.subject | tojson }}, description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
+      "titleRequired": _("Title cannot be empty."),
+      "saveFailed": _("Could not save changes."),
+      "networkError": _("Network error. Please retry.")
+    } | tojson }} })'>
       <div class="issue-header">
         <div class="issue-key-line">
           <span class="key">{{ issue.display_key }}</span>
@@ -64,7 +68,11 @@
             {# EasyMDE-wrapped editor — see markdownEditor in frontend/js/components/markdown-editor.js. The inner #}
             {# component exposes its current value via x-modelable, bound to the    #}
             {# outer descriptionEditor's `draft` state.                             #}
-            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue" })'
+            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue", i18n: {{ {
+              "placeholder": _("Write your content here (Markdown)..."),
+              "rendering": _("Rendering..."),
+              "previewUnavailable": _("Preview unavailable.")
+            } | tojson }} })'
                  x-modelable="value"
                  x-model="draft"
                  data-preview-url="/api/v1/markdown/preview/"
@@ -83,7 +91,11 @@
 
     {# Metadata panel -- collapsible, between description and activity #}
     {% if metadata_schemas_data is defined and metadata_schemas_data and (issue_metadata or metadata_schemas_data) %}
-    <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }} })'>
+    <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
+      "tagsPlaceholder": _("Type and press Enter..."),
+      "yes": _("Yes"),
+      "no": _("No")
+    } | tojson }} })'>
       {# Toggle header (always visible) #}
       <button class="sp-metadata-toggle" :class="{ open: expanded }" @click="expanded = !expanded" type="button">
         <svg class="sp-mt-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
@@ -269,7 +281,11 @@
 
       {# Time entries tab #}
       <div x-show="tab === 'time'">
-        <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }} })'>
+        <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }}, i18n: {{ {
+          "minimum": _("Enter at least 1 minute"),
+          "logFailed": _("Failed to log time"),
+          "connectFailed": _("Unable to connect.")
+        } | tojson }} })'>
           {# Log time toggle button #}
           <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
             <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Log time'"></button>
@@ -392,7 +408,10 @@
         </div>
         {% endif %}
 
-        <div x-data='relationForm({ issueKey: "{{ issue.display_key }}" })' style="margin-top:var(--sp-space-lg);">
+        <div x-data='relationForm({ issueKey: "{{ issue.display_key }}", i18n: {{ {
+          "addFailed": _("Failed to add relation"),
+          "connectFailed": _("Unable to connect.")
+        } | tojson }} })' style="margin-top:var(--sp-space-lg);">
           <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showForm = !showForm">
             <template x-if="!showForm"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px;"><path d="M12 5v14M5 12h14"/></svg> {% trans %}Add relation{% endtrans %}</span></template>
             <template x-if="showForm"><span>{% trans %}Cancel{% endtrans %}</span></template>

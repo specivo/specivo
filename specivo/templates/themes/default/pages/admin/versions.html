@@ -11,7 +11,9 @@
   <span class="current">{% trans %}Versions{% endtrans %}</span>
 </div>
 
-<div x-data='adminVersions({ versions: {{ versions_data | tojson }}, projects: {{ projects_data | tojson }} })'>
+<div x-data='adminVersions({ versions: {{ versions_data | tojson }}, projects: {{ projects_data | tojson }}, i18n: {{ {
+  "confirmDelete": _('Delete version "%(name)s"?')
+} | tojson }} })'>
   <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Versions{% endtrans %}</h1>
   </div>

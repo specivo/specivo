@@ -103,11 +103,40 @@ function _formToPayload(form, includeLock) {
         return payload;
     }
 
-function _scheduleLabel(p) {
+// English fallbacks for every recurring component. Templates pass translated
+// strings in `labels`, which are merged over these. Interval labels carry the
+// count as a placeholder; translations phrase them in a count-neutral form
+// where a language needs more than two plural forms.
+var _RECURRING_LABELS = {
+    daily: 'Daily',
+    weekly: 'Weekly',
+    monthly: 'Monthly',
+    yearly: 'Yearly',
+    everyDays: 'Every %(count)s days',
+    everyWeeks: 'Every %(count)s weeks',
+    everyMonths: 'Every %(count)s months',
+    everyYears: 'Every %(count)s years',
+    conflict: 'This pattern was changed by someone else. Reload and try again.',
+    saveFailed: 'Failed to save pattern.',
+    connectFailed: 'Unable to connect.',
+    patternEnabled: 'Pattern enabled.',
+    patternDisabled: 'Pattern disabled.',
+    updateFailed: 'Failed to update pattern.',
+    patternDeleted: 'Pattern deleted.',
+    deleteFailed: 'Failed to delete pattern.',
+    occurrenceSkipped: 'Occurrence skipped.',
+    skipFailed: 'Failed to skip occurrence.'
+};
+
+function _recurringLabels(initial) {
+        return Object.assign({}, _RECURRING_LABELS, (initial && initial.labels) || {});
+    }
+
+function _scheduleLabel(p, labels) {
         var n = p.rrule_interval || 1;
-        var plural = {daily: 'days', weekly: 'weeks', monthly: 'months', yearly: 'years'};
-        var single = {daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly'};
-        if (n > 1) return 'Every ' + n + ' ' + (plural[p.freq] || p.freq);
+        var every = {daily: labels.everyDays, weekly: labels.everyWeeks, monthly: labels.everyMonths, yearly: labels.everyYears};
+        var single = {daily: labels.daily, weekly: labels.weekly, monthly: labels.monthly, yearly: labels.yearly};
+        if (n > 1) return every[p.freq] ? every[p.freq].replace('%(count)s', n) : p.freq;
         return single[p.freq] || p.freq;
     }
 
@@ -117,7 +146,7 @@ function _fmtOccurrence(iso) {
     }
 
 export function recurringPatternForm(initial) {
-        var labels = initial.labels || {};
+        var labels = _recurringLabels(initial);
         var isEdit = initial.mode === 'edit';
         var form;
         if (isEdit && initial.pattern) {
@@ -336,24 +365,25 @@ export function recurringPatternForm(initial) {
                         return;
                     }
                     if (res.status === 409) {
-                        this.formError = this.labels.conflict || 'This pattern was changed by someone else. Reload and try again.';
+                        this.formError = this.labels.conflict;
                     } else {
                         var err = await res.json().catch(function () { return {}; });
-                        this.formError = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || this.labels.saveFailed || 'Failed to save pattern.';
+                        this.formError = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || this.labels.saveFailed;
                     }
                 } catch (_e) {
-                    this.formError = this.labels.connectFailed || 'Unable to connect.';
+                    this.formError = this.labels.connectFailed;
                 }
                 // Re-enable only on error (on success we navigate away).
                 this.saving = false;
             },
 
-            scheduleLabel: function (p) { return _scheduleLabel(p); }
+            scheduleLabel: function (p) { return _scheduleLabel(p, this.labels); }
         };
     }
 
 export function recurringPatterns(initial) {
         return {
+            labels: _recurringLabels(initial),
             projectKey: initial.projectKey || '',
             canManage: initial.canManage !== false,
             patterns: initial.patterns || [],
@@ -369,7 +399,7 @@ export function recurringPatterns(initial) {
                 setTimeout(function () { this.message = ''; }.bind(this), 4000);
             },
 
-            scheduleLabel: function (p) { return _scheduleLabel(p); },
+            scheduleLabel: function (p) { return _scheduleLabel(p, this.labels); },
 
             toggleEnabled: async function (p) {
                 if (!this.canManage) return;
@@ -385,12 +415,12 @@ export function recurringPatterns(initial) {
                         var updated = await res.json();
                         p.enabled = updated.enabled;
                         p.lock_version = updated.lock_version;
-                        this.flash('Pattern ' + (p.enabled ? 'enabled' : 'disabled') + '.', 'success');
+                        this.flash(p.enabled ? this.labels.patternEnabled : this.labels.patternDisabled, 'success');
                     } else {
-                        this.flash('Failed to update pattern.', 'error');
+                        this.flash(this.labels.updateFailed, 'error');
                     }
                 } catch (_e) {
-                    this.flash('Unable to connect.', 'error');
+                    this.flash(this.labels.connectFailed, 'error');
                 }
             },
 
@@ -413,12 +443,12 @@ export function recurringPatterns(initial) {
                         this.patterns = this.patterns.filter(function (x) { return x.id !== id; });
                         this.showDeleteModal = false;
                         this.deleting = null;
-                        this.flash('Pattern deleted.', 'success');
+                        this.flash(this.labels.patternDeleted, 'success');
                     } else {
-                        this.flash('Failed to delete pattern.', 'error');
+                        this.flash(this.labels.deleteFailed, 'error');
                     }
                 } catch (_e) {
-                    this.flash('Unable to connect.', 'error');
+                    this.flash(this.labels.connectFailed, 'error');
                 }
                 this.deletingBusy = false;
             }
@@ -427,6 +457,7 @@ export function recurringPatterns(initial) {
 
 export function recurringPatternDetail(initial) {
         return {
+            labels: _recurringLabels(initial),
             projectKey: initial.projectKey || '',
             canManage: initial.canManage !== false,
             pattern: initial.pattern || {},
@@ -474,13 +505,13 @@ export function recurringPatternDetail(initial) {
                         body: JSON.stringify({occurrence_at: occurrenceAt})
                     });
                     if (res.ok) {
-                        this.flash('Occurrence skipped.', 'success');
+                        this.flash(this.labels.occurrenceSkipped, 'success');
                         window.location.reload();
                     } else {
-                        this.flash('Failed to skip occurrence.', 'error');
+                        this.flash(this.labels.skipFailed, 'error');
                     }
                 } catch (_e) {
-                    this.flash('Unable to connect.', 'error');
+                    this.flash(this.labels.connectFailed, 'error');
                 }
             }
         };
