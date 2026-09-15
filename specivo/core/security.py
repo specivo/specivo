@@ -208,6 +208,16 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> User:
             status_code=401,
         )
 
+    # Nobody signs in as the anonymous user, so no genuine token names it.
+    # Refused explicitly rather than through its deactivated status below,
+    # which this check must not depend on.
+    if user.is_anonymous:
+        raise AppError(
+            code="auth_token_invalid",
+            message="Invalid access token",
+            status_code=401,
+        )
+
     # Locked accounts cannot use JWT auth (per spec: locking blocks JWT, not API keys)
     if user.status == "locked":
         raise AppError(

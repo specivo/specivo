@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.models.journal import Journal
 from specivo.models.reaction import Mention
 from specivo.models.user import User
+from specivo.services.anonymous_user_service import real_users_clause
 from specivo.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,9 @@ class MentionService:
             return []
 
         # Batch-resolve usernames to user IDs
-        result = await session.execute(select(User).where(User.login.in_(usernames), User.status == "active"))
+        result = await session.execute(
+            select(User).where(User.login.in_(usernames), User.status == "active", real_users_clause())
+        )
         users_by_login: dict[str, User] = {u.login: u for u in result.scalars().all()}
 
         created_mentions: list[Mention] = []

@@ -148,7 +148,10 @@ class AuthService:
         # --- Constant-time guard: prevent user enumeration ---
         # We always try to verify a password even when the user is not found,
         # then raise the same generic error.
-        if user is None:
+        # The anonymous user is not an account anybody can sign in to. It has no
+        # password either, but it is refused here explicitly, and exactly like an
+        # unknown login, rather than relying on that.
+        if user is None or user.is_anonymous:
             # Burn time comparable to bcrypt.checkpw so timing doesn't reveal existence
             verify_password(password, _get_enumeration_guard_hash())
             raise AppError(
@@ -288,8 +291,8 @@ class AuthService:
         # Load the associated user
         user_result = await session.execute(select(User).where(User.id == record.user_id))
         user = user_result.scalar_one_or_none()
-        if user is None or user.status not in ("active", "locked"):
-            # User deleted or deactivated — refuse refresh
+        if user is None or user.is_anonymous or user.status not in ("active", "locked"):
+            # User deleted or deactivated, or the anonymous user — refuse refresh
             await session.delete(record)
             await session.flush()
             raise AppError(
@@ -429,8 +432,9 @@ class AuthService:
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
 
-        # Silent return for nonexistent or inactive users — no enumeration
-        if user is None or user.status not in ("active", "locked"):
+        # Silent return for nonexistent or inactive users, and for the anonymous
+        # user, which no one may take over — no enumeration
+        if user is None or user.is_anonymous or user.status not in ("active", "locked"):
             return None
 
         # Invalidate any existing unused tokens for this user
@@ -512,7 +516,7 @@ class AuthService:
         # Load user
         user_result = await session.execute(select(User).where(User.id == record.user_id))
         user = user_result.scalar_one_or_none()
-        if user is None:
+        if user is None or user.is_anonymous:
             raise AppError(
                 code="password_reset_invalid",
                 message=_("Invalid or expired password reset link"),

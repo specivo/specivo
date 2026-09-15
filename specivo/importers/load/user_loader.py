@@ -37,6 +37,7 @@ from specivo.importers.core.ir import EntityType, IRGroup, IRUser
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup
+from specivo.services.anonymous_user_service import real_users_clause
 from specivo.services.auth_utils import hash_password
 from specivo.services.user_group_service import UserGroupService
 
@@ -237,7 +238,7 @@ def _supported_language(language: str | None) -> str:
 
 
 async def _find_user_by_login(session: AsyncSession, login: str) -> User | None:
-    stmt = select(User).where(func.lower(User.login) == login.lower()).limit(1)
+    stmt = select(User).where(func.lower(User.login) == login.lower(), real_users_clause()).limit(1)
     return (await session.execute(stmt)).scalar_one_or_none()
 
 

@@ -37,6 +37,7 @@ from specivo.models.project import Project
 from specivo.models.role import Role
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
+from specivo.services.anonymous_user_service import refuse_anonymous_user
 
 # Sentinel for "argument not supplied", so ``description=None`` can mean
 # "clear the description" and still be distinguishable from "leave it alone".
@@ -333,6 +334,7 @@ class UserGroupService:
         user = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
         if user is None:
             raise NotFoundError(f"User {user_id} not found")
+        refuse_anonymous_user(user, "The anonymous user cannot be added to a group.")
 
         existing = (
             await session.execute(

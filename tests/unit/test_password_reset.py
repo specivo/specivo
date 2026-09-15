@@ -34,6 +34,9 @@ def _make_user(
     user.email = email
     user.login = login
     user.status = status
+    # Explicit: an unset MagicMock attribute is truthy, which would make every
+    # mocked user look like the anonymous user.
+    user.is_anonymous = False
     user.display_name = display_name
     user.password_hash = "$2b$12$fakehashfortest"
     user.failed_login_count = 0

@@ -20,7 +20,7 @@ from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
-from tests.factories.user import UserFactory
+from tests.factories.user import AdminUserFactory, UserFactory
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -88,6 +88,15 @@ async def author(db_session: AsyncSession) -> User:
     db_session.add(user)
     await db_session.commit()
     await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def admin(db_session: AsyncSession) -> User:
+    """An administrator, who can look up any issue regardless of membership."""
+    user = AdminUserFactory.build(login="issue_lookup_admin", status="active")
+    db_session.add(user)
+    await db_session.commit()
     return user
 
 
@@ -174,6 +183,7 @@ async def test_get_issue_by_display_key(
     priority: IssuePriority,
     author: User,
     service: IssueService,
+    admin: User,
 ) -> None:
     """Issue can be retrieved by its display key string."""
     data = IssueCreate(
@@ -186,7 +196,7 @@ async def test_get_issue_by_display_key(
     created = await service.create(db_session, project, data, author)
     await db_session.commit()
 
-    fetched = await service.get_by_display_key(db_session, "ACME-1")
+    fetched = await service.get_by_display_key(db_session, "ACME-1", user=admin)
 
     assert fetched.id == created.id
     assert fetched.subject == "Find me by key"
@@ -229,6 +239,7 @@ async def test_get_issue_by_display_key_using_numeric_string(
     priority: IssuePriority,
     author: User,
     service: IssueService,
+    admin: User,
 ) -> None:
     """get_by_display_key accepts bare numeric string as internal ID fallback."""
     data = IssueCreate(
@@ -241,7 +252,7 @@ async def test_get_issue_by_display_key_using_numeric_string(
     created = await service.create(db_session, project, data, author)
     await db_session.commit()
 
-    fetched = await service.get_by_display_key(db_session, str(created.id))
+    fetched = await service.get_by_display_key(db_session, str(created.id), user=admin)
 
     assert fetched.id == created.id
 

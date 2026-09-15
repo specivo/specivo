@@ -65,8 +65,11 @@ class SettingsService:
         from specivo.models.agent_session import AgentSession
         from specivo.models.project import Project
         from specivo.models.user import User
+        from specivo.services.anonymous_user_service import real_users_clause
 
-        total_users = (await session.execute(select(func.count()).select_from(User))).scalar_one()
+        total_users = (
+            await session.execute(select(func.count()).select_from(User).where(real_users_clause()))
+        ).scalar_one()
         active_projects = (
             await session.execute(select(func.count()).select_from(Project).where(Project.status == 1))
         ).scalar_one()

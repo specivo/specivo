@@ -294,13 +294,13 @@ class SearchService:
         """Wiki visibility clause with default alias 'w'."""
         return self._wiki_visibility_clause(user, alias="w")
 
-    def _comment_visibility_clause(self, user: User | None, journal_alias: str = "j", issue_alias: str = "ci") -> str:
+    def _comment_visibility_clause(self, user: User, journal_alias: str = "j", issue_alias: str = "ci") -> str:
         """Generate SQL AND clause for comment visibility via parent issue.
 
         Comments inherit visibility from their parent issue. Uses the same
         CTE-based approach as issue visibility.
         """
-        if user is None or user.is_admin:
+        if user.is_admin:
             return ""
 
         return f"""
@@ -333,17 +333,17 @@ class SearchService:
     # Visibility CTE optimization
     # ------------------------------------------------------------------
 
-    def _visibility_cte_sql(self, user: User | None) -> str:
+    def _visibility_cte_sql(self, user: User) -> str:
         """Generate WITH clauses that pre-compute user visibility per project.
 
         Returns SQL CTE prefix (WITH ... AS ...) for non-admin users,
-        or empty string for admins / anonymous.
+        or empty string for admins.
 
         CTEs:
         - ``user_visibility``: projects where the user is a member, with max visibility level
         - ``public_projects``: projects where is_public = true
         """
-        if user is None or user.is_admin:
+        if user.is_admin:
             return ""
 
         grants_issues = _role_grants(Permission.VIEW_ISSUES, "r")
@@ -368,12 +368,12 @@ class SearchService:
             )
         """
 
-    def _issue_visibility_cte_clause(self, user: User | None, alias: str = "i") -> str:
+    def _issue_visibility_cte_clause(self, user: User, alias: str = "i") -> str:
         """Generate SQL AND clause referencing pre-computed visibility CTEs.
 
         Must be used with ``_visibility_cte_sql()`` as a CTE prefix.
         """
-        if user is None or user.is_admin:
+        if user.is_admin:
             return ""
 
         return f"""
@@ -402,9 +402,9 @@ class SearchService:
             )
         """
 
-    def _wiki_visibility_cte_clause(self, user: User | None, alias: str = "w") -> str:
+    def _wiki_visibility_cte_clause(self, user: User, alias: str = "w") -> str:
         """Generate SQL AND clause for wiki visibility referencing CTEs."""
-        if user is None or user.is_admin:
+        if user.is_admin:
             return ""
 
         return f"""
@@ -420,7 +420,7 @@ class SearchService:
     # Attachment visibility
     # ------------------------------------------------------------------
 
-    def _attachment_visibility_cte_clause(self, user: User | None) -> str:
+    def _attachment_visibility_cte_clause(self, user: User) -> str:
         """SQL AND clause for attachment access control via container joins.
 
         Expects the following table aliases in scope:
@@ -431,8 +431,6 @@ class SearchService:
 
         Must be used with ``_visibility_cte_sql()`` as a CTE prefix.
         """
-        if user is None:
-            return "AND 1=0"
         if user.is_admin:
             return ""
 
@@ -485,7 +483,7 @@ class SearchService:
 
     def _attachment_fts_sql(
         self,
-        user: User | None,
+        user: User,
         project_filter: str,
     ) -> str:
         """Build the FTS UNION ALL branch for attachment search.
@@ -534,7 +532,7 @@ class SearchService:
 
     def _attachment_fts_count_sql(
         self,
-        user: User | None,
+        user: User,
         project_filter: str,
     ) -> str:
         """Build the FTS COUNT query for attachment search.
@@ -560,14 +558,12 @@ class SearchService:
             {att_project_filter}
         """
 
-    def _attachment_semantic_vis(self, user: User | None) -> str:
+    def _attachment_semantic_vis(self, user: User) -> str:
         """Attachment visibility for semantic search (main query).
 
         Uses aliases from the main semantic query LEFT JOINs:
         att, att_iss, att_wp, att_w.
         """
-        if user is None:
-            return "AND 1=0"
         if user.is_admin:
             return ""
 
@@ -603,14 +599,12 @@ class SearchService:
             )
         """
 
-    def _attachment_semantic_count_vis(self, user: User | None) -> str:
+    def _attachment_semantic_count_vis(self, user: User) -> str:
         """Attachment visibility for semantic count query.
 
         Uses aliases from the count query LEFT JOINs:
         att_c, att_c_iss, att_c_wp, att_c_w.
         """
-        if user is None:
-            return "AND 1=0"
         if user.is_admin:
             return ""
 
@@ -753,7 +747,7 @@ class SearchService:
         self,
         session: AsyncSession,
         query: str,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         scope: str = "all",
@@ -792,8 +786,7 @@ class SearchService:
         params: dict[str, Any] = {"query": normalized_query}
 
         # Add user ID for visibility checks
-        if user is not None:
-            params["current_user_id"] = user.id
+        params["current_user_id"] = user.id
 
         # Visibility SQL fragments: CTE-optimized visibility for all modes.
         # Comments and attachments always reference the user_visibility /
@@ -1026,7 +1019,7 @@ class SearchService:
     async def filter_issues(
         self,
         session: AsyncSession,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         offset: int = 0,
@@ -1045,8 +1038,7 @@ class SearchService:
         :meth:`search` (only the ``issues`` scope is meaningful here).
         """
         params: dict[str, Any] = {}
-        if user is not None:
-            params["current_user_id"] = user.id
+        params["current_user_id"] = user.id
 
         cte_prefix = self._visibility_cte_sql(user)
         issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
@@ -1122,7 +1114,7 @@ class SearchService:
     async def filter_tagged(
         self,
         session: AsyncSession,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         scope: str = "all",
@@ -1139,8 +1131,7 @@ class SearchService:
         narrows the already-visible set.
         """
         params: dict[str, Any] = {}
-        if user is not None:
-            params["current_user_id"] = user.id
+        params["current_user_id"] = user.id
 
         cte_prefix = self._visibility_cte_sql(user)
         issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
@@ -1259,7 +1250,7 @@ class SearchService:
         self,
         session: AsyncSession,
         query: str,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         offset: int = 0,
@@ -1300,8 +1291,7 @@ class SearchService:
             params["project_id"] = project_id
 
         # Add user ID for visibility checks
-        if user is not None:
-            params["current_user_id"] = user.id
+        params["current_user_id"] = user.id
 
         # Visibility filters for semantic search (CTE-optimized)
         cte_prefix = self._visibility_cte_sql(user)
@@ -1517,7 +1507,7 @@ class SearchService:
         self,
         session: AsyncSession,
         query: str,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         scope: str = "all",

@@ -441,22 +441,20 @@ class IssueService:
                 from specivo.services.embedding_service import EmbeddingService
 
                 chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
-                await EmbeddingService().embed_source(
-                    session, SearchSourceType.ISSUE, issue.id, project.id, chunks
-                )
+                await EmbeddingService().embed_source(session, SearchSourceType.ISSUE, issue.id, project.id, chunks)
             except Exception:
                 logger.debug("Embedding generation skipped for %s (no model or error)", issue.display_key)
 
         return issue
 
-    async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User | None = None) -> Issue:
+    async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key like 'ACME-42' to an Issue.
 
         Also accepts a bare numeric string (e.g. ``"42"``), which is treated
         as an internal ID lookup for backward compatibility.
 
-        When ``user`` is provided, a visibility check is applied.
-        Invisible issues raise ``NotFoundError`` (404, not 403).
+        A visibility check is applied for *user*: invisible issues raise
+        ``NotFoundError`` (404, not 403).
 
         Raises ``NotFoundError`` when no matching issue exists.
         """
@@ -480,7 +478,7 @@ class IssueService:
                     if aliased_id is not None:
                         return await self.get_by_id(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
-                if user is not None and not await self._check_visible(session, issue, user):
+                if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 return issue
 
@@ -533,12 +531,10 @@ class IssueService:
             raise NotFoundError(f"Issue {issue_id} not found")
         return issue
 
-    async def get_by_display_key_with_relations(
-        self, session: AsyncSession, display_key: str, user: User | None = None
-    ) -> Issue:
+    async def get_by_display_key_with_relations(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key or numeric ID, eager-loading all relations.
 
-        When ``user`` is provided, a visibility check is applied.
+        A visibility check is applied for *user*.
         Raises ``NotFoundError`` when no matching issue exists or is not visible.
         """
         if "-" in display_key:
@@ -575,7 +571,7 @@ class IssueService:
                     if aliased_id is not None:
                         return await self.get_with_relations(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
-                if user is not None and not await self._check_visible(session, issue, user):
+                if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 return issue
 
@@ -585,9 +581,7 @@ class IssueService:
             raise NotFoundError(f"Invalid issue reference: {display_key!r}")
         return await self.get_with_relations(session, issue_id, user=user)
 
-    async def _resolve_ref_alias(
-        self, session: AsyncSession, project_key: str, seq: int
-    ) -> int | None:
+    async def _resolve_ref_alias(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
         """Return the issue id a retired ``KEY-N`` reference points to, if any."""
         issue_id: int | None = await session.scalar(
             select(IssueRefAlias.issue_id).where(
@@ -598,9 +592,7 @@ class IssueService:
         return issue_id
 
     @staticmethod
-    def _autolink_ref_pairs(
-        texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS
-    ) -> list[tuple[str, int]]:
+    def _autolink_ref_pairs(texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS) -> list[tuple[str, int]]:
         """Extract ``(project_key, sequence_number)`` pairs from *texts*, capped.
 
         Deduplicates and sorts the candidate refs for a deterministic result,
@@ -839,9 +831,7 @@ class IssueService:
             )
 
         # Guard hierarchy: refuse to orphan a subtree across projects.
-        child_count = await session.scalar(
-            select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id)
-        )
+        child_count = await session.scalar(select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id))
         if issue.parent_id is not None or (child_count or 0) > 0:
             raise ValidationError(
                 message=_(
@@ -886,9 +876,7 @@ class IssueService:
         await session.flush()
 
         # Re-sync denormalized project_id on issue-attached rows.
-        await session.execute(
-            update(Journal).where(Journal.issue_id == issue.id).values(project_id=target_project.id)
-        )
+        await session.execute(update(Journal).where(Journal.issue_id == issue.id).values(project_id=target_project.id))
         await session.execute(
             update(TimeEntry).where(TimeEntry.issue_id == issue.id).values(project_id=target_project.id)
         )
@@ -898,9 +886,7 @@ class IssueService:
 
         # Record the move in the issue history (notes-only journal entry).
         snapshot = {attr: getattr(issue, attr) for attr, _label in _JOURNALIZED_ATTRS}
-        move_note = _("Moved from {old} to {new}.").format(
-            old=f"{old_project_key}-{old_seq}", new=issue.display_key
-        )
+        move_note = _("Moved from {old} to {new}.").format(old=f"{old_project_key}-{old_seq}", new=issue.display_key)
         if notes:
             move_note = f"{move_note}\n\n{notes}"
         await self._journal_service.record_change(
@@ -920,9 +906,7 @@ class IssueService:
             from specivo.services.embedding_service import EmbeddingService
 
             chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
-            await EmbeddingService().embed_source(
-                session, SearchSourceType.ISSUE, issue.id, target_project.id, chunks
-            )
+            await EmbeddingService().embed_source(session, SearchSourceType.ISSUE, issue.id, target_project.id, chunks)
         except Exception:
             logger.debug("Embedding regeneration skipped for %s after move", issue.display_key)
 
@@ -996,7 +980,7 @@ class IssueService:
         sort: str,
         offset: int,
         limit: int,
-        user: User | None = None,
+        user: User,
     ) -> tuple[list[Issue], int]:
         """List issues with filtering, sorting, and pagination.
 
@@ -1015,8 +999,8 @@ class IssueService:
         offset, limit:
             Pagination parameters.
         user:
-            When provided, visibility filtering is applied based on the
-            user's roles and ``issues_visibility`` setting.
+            Whose roles and ``issues_visibility`` setting filter the results.
+            Admins are not filtered.
         """
         stmt = select(Issue).options(
             selectinload(Issue.tracker),
@@ -1034,7 +1018,7 @@ class IssueService:
         # ------------------------------------------------------------------
         # Visibility filter
         # ------------------------------------------------------------------
-        if user is not None and not user.is_admin and project_id is not None:
+        if not user.is_admin and project_id is not None:
             project_result = await session.execute(select(Project).where(Project.id == project_id))
             project = project_result.scalar_one_or_none()
             if project is not None:
@@ -1071,9 +1055,7 @@ class IssueService:
         if filters.get("sprint_id") is not None:
             stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
         if filters.get("tag_id") is not None:
-            stmt = stmt.where(
-                Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"]))
-            )
+            stmt = stmt.where(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
 
         # ------------------------------------------------------------------
         # Text search
