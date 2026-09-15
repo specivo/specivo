@@ -65,8 +65,12 @@
     <div class="card sp-card-pad sp-mt-lg" data-testid="anonymous-access-settings"
          x-data='projectAnonymousAccess({ projectKey: {{ project.key | tojson }}, permissions: {{ project.anonymous_permissions | tojson }}, savedMessage: {{ _("Anonymous access saved.") | tojson }}, errorMessage: {{ _("Could not save anonymous access.") | tojson }} })'>
       <h3 class="sp-card-h3">{% trans %}Anonymous access{% endtrans %}</h3>
-      <p class="sp-text-muted sp-mb-md">{% trans %}Choose what visitors who are not signed in may read in this public project. Only instance administrators can see or change this section.{% endtrans %}</p>
-      <p class="sp-text-muted sp-mb-md">{% trans %}These settings have no effect while anonymous access is turned off for the whole instance.{% endtrans %}</p>
+      <p class="sp-text-muted sp-mb-md">{% trans %}Choose which parts of this public project are opted in to anonymous reading. Only instance administrators can see or change this section.{% endtrans %}</p>
+      {% if anonymous_access_enabled %}
+      <p class="sp-text-muted sp-mb-md" data-testid="anonymous-access-switch-on">{% trans %}Anonymous access is turned on for the whole instance.{% endtrans %}</p>
+      {% else %}
+      <p class="sp-text-muted sp-mb-md" data-testid="anonymous-access-switch-off">{% trans %}These settings have no effect while anonymous access is turned off for the whole instance.{% endtrans %} <a href="/admin/settings/#anonymous-access">{% trans %}Instance settings{% endtrans %}</a></p>
+      {% endif %}
       <div class="sp-module-row">
         <input type="checkbox" id="anonymous-view-issues" value="view_issues" x-model="permissions" :disabled="saving" class="sp-checkbox-accent-pointer">
         <label class="sp-module-label" for="anonymous-view-issues">{% trans %}Issues{% endtrans %}</label>

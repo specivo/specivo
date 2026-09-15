@@ -368,6 +368,12 @@ async def project_settings(
     fts_instance_default = await _fts_settings.get(db, "search_fts_language", "english")
     fts_reindex_needed = (await _fts_settings.get(db, reindex_needed_key(project.id))) == "1"
 
+    # The admin-only anonymous access card says whether the instance switch is
+    # on. Only read for admins, the only users who see that card.
+    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+
+    anonymous_access_enabled = user.is_admin and await is_anonymous_access_enabled(db)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -402,6 +408,7 @@ async def project_settings(
             "tags_data": tags_data,
             "can_manage_tags": can_manage_tags,
             "computed_metadata": computed_values(project.settings),
+            "anonymous_access_enabled": anonymous_access_enabled,
         },
     )
 

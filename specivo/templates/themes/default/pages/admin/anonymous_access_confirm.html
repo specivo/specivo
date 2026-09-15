@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Turn on anonymous access{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/settings/">{% trans %}Settings{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Turn on anonymous access{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}Turn on anonymous access{% endtrans %}</h1>
+
+<div class="card sp-card-pad" style="max-width: 720px;" data-testid="anonymous-access-confirm">
+  {% if stale %}
+  <div class="flash sp-mb-md" data-testid="anonymous-access-confirm-stale">{% trans %}The projects opted in to anonymous reading changed while you were reviewing them. Check the current list and confirm again.{% endtrans %}</div>
+  {% endif %}
+
+  <p class="sp-mb-md">{% trans %}The switch alone exposes nothing. A public project can only be read without an account while this switch is on and the project is opted in, in its own settings.{% endtrans %}</p>
+
+  {% if projects %}
+  <p class="sp-mb-md"><strong>{% trans count=projects|length %}{{ count }} project is opted in to anonymous reading:{% pluralize %}{{ count }} projects are opted in to anonymous reading:{% endtrans %}</strong></p>
+  <ul class="sp-mb-md">
+    {% for p in projects %}
+    <li data-testid="anonymous-access-confirm-project" data-project-key="{{ p.key }}">
+      {{ p.name }} <span class="sp-mono-key">{{ p.key }}</span>:
+      {% if "view_issues" in p.anonymous_permissions %}{% trans %}Issues{% endtrans %}{% endif %}{% if p.anonymous_permissions|length > 1 %}, {% endif %}{% if "view_wiki" in p.anonymous_permissions %}{% trans %}Wiki{% endtrans %}{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sp-mb-md">{% trans %}No project is opted in to anonymous reading yet.{% endtrans %}</p>
+  {% endif %}
+
+  <form method="post" action="/admin/settings/anonymous-access/">
+    <input type="hidden" name="enabled" value="1">
+    <input type="hidden" name="confirm" value="1">
+    {% for p in projects %}
+    <input type="hidden" name="confirmed_projects" value="{{ p.key }}">
+    {% endfor %}
+    <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Turn on anonymous access{% endtrans %}</button>
+    <a href="/admin/settings/" class="sp-btn sp-btn-ghost sp-btn-auto">{% trans %}Cancel{% endtrans %}</a>
+  </form>
+</div>
+{% endblock %}

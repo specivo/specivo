@@ -75,6 +75,7 @@ class AuditEvent(StrEnum):
     PASSWORD_CHANGED = "password_changed"
     PASSWORD_CHANGE_FAILED = "password_change_failed"
     PROJECT_ANONYMOUS_PERMISSIONS_CHANGED = "project_anonymous_permissions_changed"
+    ANONYMOUS_ACCESS_SWITCH_CHANGED = "anonymous_access_switch_changed"
 
 
 class MemberAction(StrEnum):
@@ -658,6 +659,46 @@ class SecurityAuditService:
             request_id=info["request_id"],
             user_agent=info["user_agent"],
             details={"project_key": project_key, "old": old, "new": new, "reason": str(reason)},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_anonymous_access_switch_change(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        setting_key: str,
+        old: bool,
+        new: bool,
+        opted_in_projects: list[str],
+        confirmed_projects: list[str] | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log the instance-wide anonymous access switch being turned on or off. Core feature.
+
+        *opted_in_projects* records the keys of the projects carrying anonymous
+        permissions at the moment of the change. *confirmed_projects* records
+        the keys the administrator confirmed when turning the switch on, and is
+        omitted when turning it off.
+        """
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {
+            "setting": setting_key,
+            "old": old,
+            "new": new,
+            "opted_in_projects": opted_in_projects,
+        }
+        if confirmed_projects is not None:
+            details["confirmed_projects"] = confirmed_projects
+        log = SecurityAuditLog(
+            event_type=AuditEvent.ANONYMOUS_ACCESS_SWITCH_CHANGED,
+            user_id=user_id,
+            resource_type="setting",
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
         )
         session.add(log)
         await session.flush()

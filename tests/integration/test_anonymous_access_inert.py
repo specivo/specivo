@@ -1,10 +1,10 @@
 """Anonymous access settings are stored but not yet enforced.
 
-Opting a project in to anonymous reading must change nothing until role
-resolution and the anonymous routes read the value. This module snapshots the
-responses a signed-in non-member and an unauthenticated visitor get from the
-project, issue, wiki and search endpoints, stores the setting, and checks that
-every response is unchanged.
+Opting a project in to anonymous reading and turning the instance switch on
+must change nothing until role resolution and the anonymous routes read the
+values. This module snapshots the responses a signed-in non-member and an
+unauthenticated visitor get from the project, issue, wiki and search
+endpoints, stores both settings, and checks that every response is unchanged.
 
 JSON bodies are compared in full except for ``updated_at``: writing the
 setting touches the project row, and that timestamp is not access. HTML pages
@@ -23,7 +23,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.config import get_settings
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
-from specivo.services.anonymous_access_service import set_anonymous_permissions
+from specivo.services.anonymous_access_service import (
+    is_anonymous_access_enabled,
+    set_anonymous_access_enabled,
+    set_anonymous_permissions,
+)
 from specivo.services.auth_service import _make_access_token
 from specivo.services.permission_service import clear_role_cache
 from specivo.services.wiki_service import WikiService
@@ -153,11 +157,13 @@ async def _snapshot(client: AsyncClient, world: dict[str, Any], user: User | Non
 
 async def _opt_everything_in(db: AsyncSession, world: dict[str, Any]) -> None:
     await set_anonymous_permissions(db, world["public"], ["view_issues", "view_wiki"], world["admin"])
+    await set_anonymous_access_enabled(db, True, world["admin"], confirmed_projects=["INPUB"])
     await db.commit()
     clear_role_cache()
+    assert await is_anonymous_access_enabled(db)
 
 
-async def test_opting_a_project_in_changes_nothing_for_a_signed_in_non_member(
+async def test_enabling_anonymous_access_changes_nothing_for_a_signed_in_non_member(
     client: AsyncClient, db_session: AsyncSession, world: dict[str, Any]
 ) -> None:
     before = await _snapshot(client, world, world["outsider"])
@@ -171,7 +177,7 @@ async def test_opting_a_project_in_changes_nothing_for_a_signed_in_non_member(
     assert after == before
 
 
-async def test_opting_a_project_in_changes_nothing_for_an_unauthenticated_request(
+async def test_enabling_anonymous_access_changes_nothing_for_an_unauthenticated_request(
     client: AsyncClient, db_session: AsyncSession, world: dict[str, Any]
 ) -> None:
     before = await _snapshot(client, world, None)

@@ -433,6 +433,18 @@ async def admin_settings(
     fts_language = settings.get("search_fts_language") or get_settings().search_fts_language
     fts_reindex_needed = settings.get(reindex_needed_key(None)) == "1"
 
+    # Anonymous access has its own card with a confirmation step, so it is
+    # kept out of the generic key/value table (whose API refuses the key).
+    from specivo.services.anonymous_access_service import (
+        ANONYMOUS_ACCESS_SETTING_KEY,
+        is_anonymous_access_enabled,
+        list_projects_with_anonymous_permissions,
+    )
+
+    anonymous_access_enabled = await is_anonymous_access_enabled(db)
+    anonymous_access_projects = await list_projects_with_anonymous_permissions(db)
+    generic_settings = {k: v for k, v in settings.items() if k != ANONYMOUS_ACCESS_SETTING_KEY}
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -440,7 +452,9 @@ async def admin_settings(
         context={
             "user": user,
             "active_page": "admin",
-            "settings": settings,
+            "settings": generic_settings,
+            "anonymous_access_enabled": anonymous_access_enabled,
+            "anonymous_access_projects": anonymous_access_projects,
             "language_choices": language_choices,
             "current_default_language": current_default,
             "timezone_choices": timezone_choices,
@@ -499,6 +513,79 @@ async def admin_settings_defaults(
             set_default_language_override(to_set["default_language"])
 
     return RedirectResponse("/admin/settings/", status_code=303)
+
+
+def _render_anonymous_access_confirm(
+    request: Request,
+    user: User,
+    projects: list,
+    *,
+    stale: bool = False,
+    status_code: int = 200,
+) -> Response:
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/anonymous_access_confirm.html",
+        context={"user": user, "active_page": "admin", "projects": projects, "stale": stale},
+        status_code=status_code,
+    )
+
+
+@router.post("/admin/settings/anonymous-access/", response_model=None)
+async def admin_settings_anonymous_access(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    enabled: str = Form(""),
+    confirm: str = Form(""),
+    confirmed_projects: list[str] = Form(default=[]),  # noqa: B008
+) -> Response:
+    """Turn the anonymous access switch on or off.
+
+    ``enabled=1`` without ``confirm=1`` changes nothing and redirects to the
+    confirmation page. That page posts ``confirm=1`` with the keys it showed as
+    ``confirmed_projects``; if the opted-in projects changed in the meantime,
+    it is rendered again with the current list and a notice (409). Turning the
+    switch off needs no confirmation.
+    """
+    from specivo.services.anonymous_access_service import (
+        AnonymousAccessConfirmationRequiredError,
+        AnonymousAccessConfirmationStaleError,
+        set_anonymous_access_enabled,
+    )
+
+    try:
+        await set_anonymous_access_enabled(
+            db,
+            enabled == "1",
+            user,
+            confirmed_projects=confirmed_projects if confirm == "1" else None,
+            request=request,
+        )
+    except AnonymousAccessConfirmationRequiredError:
+        return RedirectResponse("/admin/settings/anonymous-access/confirm/", status_code=303)
+    except AnonymousAccessConfirmationStaleError as exc:
+        return _render_anonymous_access_confirm(request, user, exc.projects, stale=True, status_code=409)
+    await db.commit()
+    return RedirectResponse("/admin/settings/", status_code=303)
+
+
+@router.get("/admin/settings/anonymous-access/confirm/", response_class=HTMLResponse)
+async def admin_settings_anonymous_access_confirm(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Ask the administrator to confirm turning anonymous access on, naming the opted-in projects."""
+    from specivo.services.anonymous_access_service import (
+        is_anonymous_access_enabled,
+        list_projects_with_anonymous_permissions,
+    )
+
+    if await is_anonymous_access_enabled(db):
+        return RedirectResponse("/admin/settings/", status_code=303)
+    return _render_anonymous_access_confirm(request, user, await list_projects_with_anonymous_permissions(db))
 
 
 # ---------------------------------------------------------------------------
