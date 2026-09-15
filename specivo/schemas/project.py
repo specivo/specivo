@@ -151,6 +151,25 @@ class ProjectOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Anonymous access schemas (admin-only)
+# ---------------------------------------------------------------------------
+
+# Kept out of ProjectCreate/ProjectUpdate/ProjectOut on purpose: only instance
+# administrators read or change what anonymous visitors may see.
+AnonymousPermission = Literal["view_issues", "view_wiki"]
+
+
+class ProjectAnonymousPermissionsUpdate(BaseModel):
+    anonymous_permissions: list[AnonymousPermission]
+
+
+class ProjectAnonymousPermissionsOut(BaseModel):
+    key: str
+    is_public: bool
+    anonymous_permissions: list[str]
+
+
+# ---------------------------------------------------------------------------
 # Rename schemas (admin-only)
 # ---------------------------------------------------------------------------
 

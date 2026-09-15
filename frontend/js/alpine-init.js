@@ -11,6 +11,7 @@ import { resetPasswordForm } from './components/reset-password-form';
 import { changePasswordForm } from './components/change-password-form';
 import { apiKeyManager } from './components/api-key-manager';
 import { projectGeneralSettings } from './components/project-general-settings';
+import { projectAnonymousAccess } from './components/project-anonymous-access';
 import { projectMembers } from './components/project-members';
 import { projectModules } from './components/project-modules';
 import { projectVersions } from './components/project-versions';
@@ -66,6 +67,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('changePasswordForm', changePasswordForm);
   Alpine.data('apiKeyManager', apiKeyManager);
   Alpine.data('projectGeneralSettings', projectGeneralSettings);
+  Alpine.data('projectAnonymousAccess', projectAnonymousAccess);
   Alpine.data('projectMembers', projectMembers);
   Alpine.data('projectModules', projectModules);
   Alpine.data('projectVersions', projectVersions);

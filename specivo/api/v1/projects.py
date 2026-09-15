@@ -169,13 +169,14 @@ async def get_project(
 async def update_project(
     key: str,
     data: ProjectUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectOut:
     project = await _service.get_by_key(db, key.upper())
     await _require_manage(project, current_user, db)
 
-    project = await _service.update(db, project, data)
+    project = await _service.update(db, project, data, actor=current_user, request=request)
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # _require_manage passed, so the caller may always see the map.

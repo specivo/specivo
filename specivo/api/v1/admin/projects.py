@@ -1,4 +1,4 @@
-"""Admin project operations — rename, archive/unarchive (superadmin only)."""
+"""Admin project operations — rename, archive/unarchive, anonymous access (superadmin only)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
 from specivo.core.database import get_db
+from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.schemas.project import ProjectOut, ProjectRenameOut, ProjectRenameRequest
+from specivo.schemas.project import (
+    ProjectAnonymousPermissionsOut,
+    ProjectAnonymousPermissionsUpdate,
+    ProjectOut,
+    ProjectRenameOut,
+    ProjectRenameRequest,
+)
+from specivo.services.anonymous_access_service import set_anonymous_permissions
 from specivo.services.project_service import ProjectService
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
@@ -103,3 +111,42 @@ async def unarchive_project(
     await db.refresh(project)
     await db.commit()  # commit before response to avoid reload race condition
     return ProjectOut.model_validate(project)
+
+
+def _anonymous_permissions_out(project: Project) -> ProjectAnonymousPermissionsOut:
+    return ProjectAnonymousPermissionsOut(
+        key=project.key,
+        is_public=project.is_public,
+        anonymous_permissions=list(project.anonymous_permissions or []),
+    )
+
+
+@router.get("/admin/projects/{key}/anonymous-permissions/", response_model=ProjectAnonymousPermissionsOut)
+async def get_anonymous_permissions(
+    key: str,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),
+) -> ProjectAnonymousPermissionsOut:
+    """Return what anonymous visitors may read in a project. Superadmin only."""
+    project = await _service.get_by_key(db, key.upper())
+    return _anonymous_permissions_out(project)
+
+
+@router.patch("/admin/projects/{key}/anonymous-permissions/", response_model=ProjectAnonymousPermissionsOut)
+async def update_anonymous_permissions(
+    key: str,
+    data: ProjectAnonymousPermissionsUpdate,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),
+) -> ProjectAnonymousPermissionsOut:
+    """Replace what anonymous visitors may read in a project. Superadmin only.
+
+    Only public projects accept a non-empty list. Every change is written to
+    the security audit log. The value has no effect while the instance-wide
+    anonymous access switch is off.
+    """
+    project = await _service.get_by_key(db, key.upper())
+    await set_anonymous_permissions(db, project, data.anonymous_permissions, admin, request=request)
+    await db.commit()  # commit before response to avoid reload race condition
+    return _anonymous_permissions_out(project)

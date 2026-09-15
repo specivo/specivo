@@ -59,6 +59,26 @@
       <div x-show="message" class="flash sp-mb-md" x-text="message"></div>
       <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">{% trans %}Save{% endtrans %}</button>
     </div>
+
+    {% if user.is_admin and project.is_public %}
+    <!-- Anonymous access: instance administrators only, public projects only -->
+    <div class="card sp-card-pad sp-mt-lg" data-testid="anonymous-access-settings"
+         x-data='projectAnonymousAccess({ projectKey: {{ project.key | tojson }}, permissions: {{ project.anonymous_permissions | tojson }}, savedMessage: {{ _("Anonymous access saved.") | tojson }}, errorMessage: {{ _("Could not save anonymous access.") | tojson }} })'>
+      <h3 class="sp-card-h3">{% trans %}Anonymous access{% endtrans %}</h3>
+      <p class="sp-text-muted sp-mb-md">{% trans %}Choose what visitors who are not signed in may read in this public project. Only instance administrators can see or change this section.{% endtrans %}</p>
+      <p class="sp-text-muted sp-mb-md">{% trans %}These settings have no effect while anonymous access is turned off for the whole instance.{% endtrans %}</p>
+      <div class="sp-module-row">
+        <input type="checkbox" id="anonymous-view-issues" value="view_issues" x-model="permissions" :disabled="saving" class="sp-checkbox-accent-pointer">
+        <label class="sp-module-label" for="anonymous-view-issues">{% trans %}Issues{% endtrans %}</label>
+      </div>
+      <div class="sp-module-row">
+        <input type="checkbox" id="anonymous-view-wiki" value="view_wiki" x-model="permissions" :disabled="saving" class="sp-checkbox-accent-pointer">
+        <label class="sp-module-label" for="anonymous-view-wiki">{% trans %}Wiki{% endtrans %}</label>
+      </div>
+      <div x-show="message" class="flash sp-mt-md" x-text="message"></div>
+      <button class="sp-btn sp-btn-primary sp-btn-auto sp-mt-md" @click="save()" :disabled="saving">{% trans %}Save{% endtrans %}</button>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Members tab -->
