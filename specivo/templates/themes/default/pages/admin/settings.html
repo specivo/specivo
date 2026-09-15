@@ -58,6 +58,33 @@
   </form>
 </div>
 
+<div class="card" id="anonymous-access" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;">
+  <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Anonymous access{% endtrans %}</h2>
+  <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md);">
+    {% trans %}Turning this on exposes nothing by itself. It lets people who are not signed in read the issues or wiki pages of public projects that an administrator has opted in, one project at a time, in that project's settings.{% endtrans %}
+  </p>
+  <p class="sp-mb-md" data-testid="anonymous-access-state">
+    {% if anonymous_access_enabled %}<strong>{% trans %}Anonymous access is on.{% endtrans %}</strong>{% else %}<strong>{% trans %}Anonymous access is off.{% endtrans %}</strong>{% endif %}
+    {% trans count=anonymous_access_projects|length %}{{ count }} project is opted in.{% pluralize %}{{ count }} projects are opted in.{% endtrans %}
+  </p>
+  {% if anonymous_access_projects %}
+  <ul class="sp-mb-md">
+    {% for p in anonymous_access_projects %}
+    <li><a href="/projects/{{ p.key }}/settings/">{{ p.name }}</a> <span class="sp-mono-key">{{ p.key }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  <form method="post" action="/admin/settings/anonymous-access/">
+    {% if anonymous_access_enabled %}
+    <input type="hidden" name="enabled" value="0">
+    <button type="submit" class="sp-btn sp-btn-ghost sp-btn-auto">{% trans %}Turn off{% endtrans %}</button>
+    {% else %}
+    <input type="hidden" name="enabled" value="1">
+    <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Turn on{% endtrans %}</button>
+    {% endif %}
+  </form>
+</div>
+
 <div class="card" style="padding: var(--sp-space-lg);" x-data='adminSettings({{ settings | tojson }})'>
   <table class="issue-table">
     <thead>

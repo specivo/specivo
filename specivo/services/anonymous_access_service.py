@@ -1,4 +1,4 @@
-"""Anonymous read access: the per-project opt-in.
+"""Anonymous read access: the per-project opt-in and the instance switch.
 
 ``projects.anonymous_permissions`` lists what a visitor without an account may
 read in a project. The database limits it to ``view_issues`` / ``view_wiki``
@@ -13,6 +13,14 @@ cannot express:
 - every change is written to the security audit log with the old and the new
   value;
 - making a project private clears the list in the same transaction.
+
+The instance switch is the ``anonymous_access_enabled`` setting. It is off by
+default, and off whenever the row is absent. Turning it on exposes nothing by
+itself: it lets the projects that were opted in above be read without an
+account. Only instance administrators change it, turning it on has to be
+confirmed against the list of opted-in projects, and every change is audited.
+It is read from the database on every call, so a change applies to the next
+request without any process cache to invalidate.
 
 Nothing on the request path reads these values. Granting anonymous visitors
 access based on them is a separate piece of work.
@@ -29,15 +37,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.models.project import Project
+from specivo.models.setting import Setting
 from specivo.models.user import User
 from specivo.services.permission_service import Permission
 from specivo.services.security_audit_service import SecurityAuditService
+from specivo.services.settings_service import SettingsService
 
 # The only permissions an anonymous visitor can ever hold. Mirrors
 # ck_projects_anonymous_permissions_allowed.
 ANONYMOUS_PERMISSION_CEILING: frozenset[Permission] = frozenset({Permission.VIEW_ISSUES, Permission.VIEW_WIKI})
 
+# The instance switch. Only the exact value "true" turns it on.
+ANONYMOUS_ACCESS_SETTING_KEY = "anonymous_access_enabled"
+_ENABLED_VALUE = "true"
+_DISABLED_VALUE = "false"
+
 _audit = SecurityAuditService()
+_settings = SettingsService()
 
 
 class AnonymousPermissionsChangeReason(StrEnum):
@@ -148,3 +164,82 @@ async def list_projects_with_anonymous_permissions(session: AsyncSession) -> lis
         .order_by(Project.name, Project.id)
     )
     return list((await session.execute(stmt)).scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# Instance switch
+# ---------------------------------------------------------------------------
+
+
+async def is_anonymous_access_enabled(session: AsyncSession) -> bool:
+    """Return True only if the ``anonymous_access_enabled`` setting is exactly ``"true"``.
+
+    An absent row, NULL or any other value means off. The value is read from
+    the database on every call, so a change is seen by the next request.
+    """
+    value = await session.scalar(select(Setting.value).where(Setting.key == ANONYMOUS_ACCESS_SETTING_KEY))
+    return value == _ENABLED_VALUE
+
+
+def anonymous_access_project_summary(project: Project) -> dict[str, object]:
+    """Return the fields that name an opted-in project in a confirmation or audit entry."""
+    return {
+        "key": project.key,
+        "name": project.name,
+        "anonymous_permissions": list(project.anonymous_permissions or []),
+    }
+
+
+class AnonymousAccessConfirmationRequiredError(AppError):
+    """Raised when the switch is turned on without confirming the projects it opens (409)."""
+
+    def __init__(self, projects: list[Project]) -> None:
+        super().__init__(
+            code="confirmation_required",
+            message=(
+                f"Turning on anonymous access makes {len(projects)} opted-in project(s) readable without an "
+                "account immediately. Repeat the request with confirm set to true."
+            ),
+            status_code=409,
+            details={"projects": [anonymous_access_project_summary(p) for p in projects]},
+        )
+
+
+async def set_anonymous_access_enabled(
+    session: AsyncSession,
+    enabled: bool,
+    actor: User,
+    *,
+    confirmed: bool = False,
+    request: Request | None = None,
+) -> bool:
+    """Turn the instance switch on or off. Instance administrators only.
+
+    Turning it on without *confirmed* raises ``AnonymousAccessConfirmationRequiredError``
+    naming every project that carries anonymous permissions. Turning it off
+    needs no confirmation. A request that changes nothing writes nothing and
+    asks for no confirmation. Every change is audited with the old and new
+    value and the opted-in projects at that moment.
+    """
+    if not actor.is_admin:
+        raise PermissionDeniedError("Only instance administrators can change anonymous access")
+
+    old = await is_anonymous_access_enabled(session)
+    if old == enabled:
+        return enabled
+
+    projects = await list_projects_with_anonymous_permissions(session)
+    if enabled and not confirmed:
+        raise AnonymousAccessConfirmationRequiredError(projects)
+
+    await _settings.set_many(session, {ANONYMOUS_ACCESS_SETTING_KEY: _ENABLED_VALUE if enabled else _DISABLED_VALUE})
+    await _audit.log_anonymous_access_switch_change(
+        session=session,
+        user_id=actor.id,
+        setting_key=ANONYMOUS_ACCESS_SETTING_KEY,
+        old=old,
+        new=enabled,
+        opted_in_projects=[p.key for p in projects],
+        request=request,
+    )
+    return enabled
