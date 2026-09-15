@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal
 
+from fastapi import Request
 from sqlalchemy import delete, func, or_, select, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -327,8 +328,14 @@ class ProjectService:
         session: AsyncSession,
         project: Project,
         data: ProjectUpdate,
+        actor: User | None = None,
+        request: Request | None = None,
     ) -> Project:
         """Apply partial update to an existing project.
+
+        Making the project private also clears its anonymous permissions in
+        the same transaction; *actor* and *request* are recorded in that audit
+        entry.
 
         When ``parent_id`` is present in the request payload (detected via
         ``model_fields_set``), the project is reparented.  A value of ``None``
@@ -339,6 +346,12 @@ class ProjectService:
         if data.description is not None:
             project.description = data.description
         if data.is_public is not None:
+            if not data.is_public:
+                # A private project cannot stay open to anonymous visitors
+                # (ck_projects_anonymous_permissions_public).
+                from specivo.services.anonymous_access_service import clear_anonymous_permissions_for_private
+
+                await clear_anonymous_permissions_for_private(session, project, actor, request=request)
             project.is_public = data.is_public
         if data.status is not None:
             project.status = data.status

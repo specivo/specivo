@@ -74,6 +74,7 @@ class AuditEvent(StrEnum):
     PASSWORD_RESET_FAILED = "password_reset_failed"
     PASSWORD_CHANGED = "password_changed"
     PASSWORD_CHANGE_FAILED = "password_change_failed"
+    PROJECT_ANONYMOUS_PERMISSIONS_CHANGED = "project_anonymous_permissions_changed"
 
 
 class MemberAction(StrEnum):
@@ -624,6 +625,39 @@ class SecurityAuditService:
             request_id=info["request_id"],
             user_agent=info["user_agent"],
             details={"reason": reason},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_project_anonymous_permissions_change(
+        self,
+        session: AsyncSession,
+        user_id: int | None,
+        project_id: int,
+        project_key: str,
+        old: list[str],
+        new: list[str],
+        reason: str,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a change to what anonymous visitors may read in a project. Core feature.
+
+        *reason* says what caused it: an administrator editing the list, or
+        the project being made private. *user_id* is None only when the change
+        was made outside a request by nobody in particular.
+        """
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PROJECT_ANONYMOUS_PERMISSIONS_CHANGED,
+            user_id=user_id,
+            resource_type="project",
+            resource_id=project_id,
+            project_id=project_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"project_key": project_key, "old": old, "new": new, "reason": str(reason)},
         )
         session.add(log)
         await session.flush()
