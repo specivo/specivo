@@ -35,7 +35,7 @@ from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
 from specivo.services.notification_service import NotificationService
-from specivo.services.permission_service import check_permission, member_principal_clause
+from specivo.services.permission_service import check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.saved_filter_service import SavedFilterService
@@ -126,57 +126,10 @@ async def issue_autocomplete(
 ) -> list[dict]:
     """Lightweight issue autocomplete — searches by key and subject via SQL ILIKE.
 
-    Returns only issues the user has access to. No FTS, no vectors — just
-    a fast SQL query for autocomplete dropdowns.
+    Returns only issues the user may see, with the same visibility rules as
+    issue listing. No FTS, no vectors — a fast query for autocomplete dropdowns.
     """
-    from sqlalchemy import String, and_, cast, or_
-
-    from specivo.models.member import Member
-    from specivo.models.project import Project
-
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{escaped}%"
-    display_key = Issue.project_key + "-" + cast(Issue.sequence_number, String)
-
-    stmt = (
-        select(
-            Issue.project_key,
-            Issue.sequence_number,
-            Issue.subject,
-        )
-        .where(
-            or_(
-                display_key.ilike(pattern, escape="\\"),
-                Issue.subject.ilike(pattern, escape="\\"),
-            )
-        )
-        .order_by(Issue.updated_at.desc())
-        .limit(limit)
-    )
-
-    # Access control: admin sees all, others see member + public projects
-    if not current_user.is_admin:
-        member_projects = select(Member.project_id).where(member_principal_clause(current_user.id)).scalar_subquery()
-        public_projects = select(Project.id).where(Project.is_public.is_(True)).scalar_subquery()
-        stmt = stmt.where(
-            or_(
-                Issue.project_id.in_(member_projects),
-                and_(
-                    Issue.project_id.in_(public_projects),
-                    Issue.is_private.is_(False),
-                ),
-            )
-        )
-
-    result = await db.execute(stmt)
-    return [
-        {
-            "key": f"{row.project_key}-{row.sequence_number}",
-            "subject": row.subject,
-            "project_key": row.project_key,
-        }
-        for row in result
-    ]
+    return await _service.autocomplete(db, q, current_user, limit=limit)
 
 
 # ---------------------------------------------------------------------------
@@ -325,26 +278,6 @@ async def list_issues(
         limit=limit,
         items=[_issue_out(i, project_computed) for i in issues],
     )
-
-
-# ---------------------------------------------------------------------------
-# Autocomplete (must be before {issue_ref} routes to avoid path conflicts)
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/issues/autocomplete/",
-    tags=["issues"],
-)
-async def autocomplete_issues(
-    q: str = Query("", min_length=1),
-    limit: int = Query(10, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    """Autocomplete issues by key or subject. Returns only issues the user can access."""
-    results = await _service.autocomplete(db, q, current_user, limit=limit)
-    return results
 
 
 # ---------------------------------------------------------------------------
