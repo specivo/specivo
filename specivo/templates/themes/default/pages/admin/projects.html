@@ -11,7 +11,11 @@
   <span class="current">{% trans %}Projects{% endtrans %}</span>
 </div>
 
-<div x-data='adminProjects({ projects: {{ projects_data | tojson }}, colors: {{ project_colors | tojson }}, allProjects: {{ all_projects | tojson }} })'>
+<div x-data='adminProjects({ projects: {{ projects_data | tojson }}, colors: {{ project_colors | tojson }}, allProjects: {{ all_projects | tojson }}, i18n: {{ {
+  "saveFailed": _("Failed to save"),
+  "connectFailed": _("Unable to connect."),
+  "confirmArchive": _("Archive %(name)s?")
+} | tojson }} })'>
   <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Projects{% endtrans %}</h1>
     <button class="sp-btn sp-btn-primary" @click="openCreate()">

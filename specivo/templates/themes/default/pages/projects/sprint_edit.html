@@ -35,7 +35,16 @@
 </div>
 
 <div class="edit-layout"
-     x-data='sprintEdit({ startDate: {{ (sprint.start_date.isoformat() if sprint.start_date else "") | tojson }}, endDate: {{ (sprint.end_date.isoformat() if sprint.end_date else "") | tojson }} })'>
+     x-data='sprintEdit({ startDate: {{ (sprint.start_date.isoformat() if sprint.start_date else "") | tojson }}, endDate: {{ (sprint.end_date.isoformat() if sprint.end_date else "") | tojson }}, i18n: {{ {
+       "invalidRange": _("Invalid range"),
+       "oneDay": _("1 day"),
+       "nDays": _("%(count)s days"),
+       "oneWeek": _("1 week"),
+       "nWeeks": _("%(count)s weeks"),
+       "durationWeeks": _("%(days)s (%(weeks)s)"),
+       "durationApprox": _("%(days)s (~%(weeks)s)"),
+       "saveFailed": _("Failed to save changes.")
+     } | tojson }} })'>
 
   {# ============ MAIN COLUMN ============ #}
   <div>

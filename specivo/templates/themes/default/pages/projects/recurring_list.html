@@ -12,10 +12,12 @@
 
 <h1 class="sp-page-h1">{% trans %}Recurring tasks{% endtrans %}</h1>
 
+{% from "pages/projects/_recurring_i18n.html" import recurring_labels %}
 <div x-data='recurringPatterns({
     patterns: {{ patterns_json | tojson }},
     projectKey: {{ project.key | tojson }},
-    canManage: {{ can_manage_recurring | tojson }}
+    canManage: {{ can_manage_recurring | tojson }},
+    labels: {{ recurring_labels() }}
   })'>
 
   {# Flash #}

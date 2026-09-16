@@ -13,7 +13,17 @@
   <span class="current">{{ target_user.display_name }}</span>
 </div>
 
-<div x-data='adminUserDetail({ targetUser: {{ target_user | tojson }}, apiKeys: {{ api_keys | tojson }} })'>
+<div x-data='adminUserDetail({ targetUser: {{ target_user | tojson }}, apiKeys: {{ api_keys | tojson }}, i18n: {{ {
+  "createKeyFailed": _("Failed to create key"),
+  "connectFailed": _("Unable to connect. Please try again."),
+  "confirmRevoke": _("Revoke this API key? This cannot be undone."),
+  "never": _("Never"),
+  "justNow": _("Just now"),
+  "minutesAgo": _("%(count)s min ago"),
+  "hoursAgo": _("%(count)s hours ago"),
+  "yesterday": _("Yesterday"),
+  "daysAgo": _("%(count)s days ago")
+} | tojson }} })'>
 
   {# --- User header --- #}
   <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">

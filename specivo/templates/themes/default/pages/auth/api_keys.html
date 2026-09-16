@@ -9,7 +9,10 @@
   <span class="current">{% trans %}API Keys{% endtrans %}</span>
 </div>
 
-<div x-data="apiKeyManager">
+<div x-data="apiKeyManager"
+     data-msg-create-failed="{{ _('Failed to create key') }}"
+     data-msg-connect-failed="{{ _('Unable to connect. Please try again.') }}"
+     data-msg-confirm-delete="{{ _('Are you sure you want to permanently delete this API key?') }}">
 
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}API Keys{% endtrans %}</h1>

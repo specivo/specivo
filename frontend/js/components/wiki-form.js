@@ -1,4 +1,9 @@
 export function wikiForm(initial) {
+        var i18n = Object.assign({
+            saveFailed: 'Failed to save',
+            connectFailed: 'Unable to connect. Please try again.'
+        }, initial.i18n || {});
+
         return {
             title: initial.title || '',
             text: initial.text || '',
@@ -115,10 +120,10 @@ export function wikiForm(initial) {
                         window.location.href = '/projects/' + this.projectKey + '/wiki/' + slug + '/';
                     } else {
                         var errData = await res.json();
-                        this.error = (errData.errors && errData.errors[0] && errData.errors[0].message) || 'Failed to save';
+                        this.error = (errData.errors && errData.errors[0] && errData.errors[0].message) || i18n.saveFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Unable to connect. Please try again.';
+                    this.error = i18n.connectFailed;
                 }
                 this.submitting = false;
             }

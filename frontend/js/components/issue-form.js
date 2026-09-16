@@ -56,7 +56,9 @@ export function issueForm(initial) {
 
             addPendingRelation() {
                 if (!this.newRelationKey) return;
-                var typeLabels = {
+                // Labels are translated in the template (i18n.relationTypes);
+                // the English defaults only cover a caller that omits them.
+                var typeLabels = Object.assign({
                     relates: 'Relates to',
                     blocks: 'Blocks',
                     blocked: 'Blocked by',
@@ -64,7 +66,7 @@ export function issueForm(initial) {
                     duplicated: 'Duplicated by',
                     precedes: 'Precedes',
                     follows: 'Follows'
-                };
+                }, (initial.i18n && initial.i18n.relationTypes) || {});
                 this.pendingRelations.push({
                     issue_key: this.newRelationKey,
                     relation_type: this.newRelationType,

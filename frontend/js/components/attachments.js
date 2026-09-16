@@ -29,6 +29,21 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
             lightbox: null,
             deleteTarget: null,
             deleting: false,
+            msgDeleteFailed: 'Delete failed',
+            msgUploadFailed: 'Upload failed',
+            msgConnectFailed: 'Unable to connect.',
+            msgFileLabel: 'FILE',
+
+            init() {
+                // Translated strings arrive as data-msg-* attributes on the
+                // component root; the English defaults above cover a template
+                // that renders none.
+                var d = this.$el.dataset;
+                this.msgDeleteFailed = d.msgDeleteFailed || this.msgDeleteFailed;
+                this.msgUploadFailed = d.msgUploadFailed || this.msgUploadFailed;
+                this.msgConnectFailed = d.msgConnectFailed || this.msgConnectFailed;
+                this.msgFileLabel = d.msgFileLabel || this.msgFileLabel;
+            },
 
             get images() {
                 return this.attachments.filter(function (a) {
@@ -49,7 +64,7 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
 
             fileIconLabel(att) {
                 var ext = getExt(att.filename);
-                return ext ? ext.toUpperCase().substring(0, 4) : 'FILE';
+                return ext ? ext.toUpperCase().substring(0, 4) : this.msgFileLabel;
             },
 
             formatSize(bytes) {
@@ -107,11 +122,11 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
                     } else {
                         var data = {};
                         try { data = await res.json(); } catch (_e) {}
-                        this.uploadError = (data.errors && data.errors[0] && data.errors[0].message) || 'Delete failed';
+                        this.uploadError = (data.errors && data.errors[0] && data.errors[0].message) || this.msgDeleteFailed;
                         this.deleteTarget = null;
                     }
                 } catch (_e) {
-                    this.uploadError = 'Unable to connect.';
+                    this.uploadError = this.msgConnectFailed;
                     this.deleteTarget = null;
                 }
                 this.deleting = false;
@@ -159,10 +174,10 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
                         var errData = {};
                         try { errData = await res.json(); } catch (_e) {}
                         this.uploadError = (errData.errors && errData.errors[0] && errData.errors[0].message)
-                            || errData.message || 'Upload failed';
+                            || errData.message || this.msgUploadFailed;
                     }
                 } catch (_e) {
-                    this.uploadError = 'Unable to connect.';
+                    this.uploadError = this.msgConnectFailed;
                 }
                 // Remove progress entry after a short delay
                 var self = this;

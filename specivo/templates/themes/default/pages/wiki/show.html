@@ -84,7 +84,11 @@
 
     {# Attachments section #}
     <div class="attachments-section"
-         x-data="wikiAttachments({ pageId: {{ wiki_page.id }}, dataElementId: 'att-data-{{ wiki_page.id }}' })">
+         x-data="wikiAttachments({ pageId: {{ wiki_page.id }}, dataElementId: 'att-data-{{ wiki_page.id }}' })"
+         data-msg-delete-failed="{{ _('Delete failed') }}"
+         data-msg-upload-failed="{{ _('Upload failed') }}"
+         data-msg-connect-failed="{{ _('Unable to connect.') }}"
+         data-msg-file-label="{{ _('FILE') }}">
       <script type="application/json" id="att-data-{{ wiki_page.id }}">{{ attachments | tojson }}</script>
       <div class="attachments-header">
         <div class="attachments-title">

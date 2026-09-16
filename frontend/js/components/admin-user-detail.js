@@ -1,4 +1,16 @@
 export function adminUserDetail(initial) {
+        var i18n = Object.assign({
+            createKeyFailed: 'Failed to create key',
+            connectFailed: 'Unable to connect. Please try again.',
+            confirmRevoke: 'Revoke this API key? This cannot be undone.',
+            never: 'Never',
+            justNow: 'Just now',
+            minutesAgo: '%(count)s min ago',
+            hoursAgo: '%(count)s hours ago',
+            yesterday: 'Yesterday',
+            daysAgo: '%(count)s days ago'
+        }, initial.i18n || {});
+
         return {
             targetUser: initial.targetUser || {},
             apiKeys: initial.apiKeys || [],
@@ -42,16 +54,16 @@ export function adminUserDetail(initial) {
                         await this.loadKeys();
                     } else {
                         var errData = await res.json().catch(function () { return {}; });
-                        this.createError = (errData.errors && errData.errors[0] && errData.errors[0].message) || errData.detail || 'Failed to create key';
+                        this.createError = (errData.errors && errData.errors[0] && errData.errors[0].message) || errData.detail || i18n.createKeyFailed;
                     }
                 } catch (_e) {
-                    this.createError = 'Unable to connect. Please try again.';
+                    this.createError = i18n.connectFailed;
                 }
                 this.creating = false;
             },
 
             async revokeKey(id) {
-                if (!confirm('Revoke this API key? This cannot be undone.')) return;
+                if (!confirm(i18n.confirmRevoke)) return;
                 var res = await spFetch('/api/v1/admin/users/' + this.targetUser.id + '/api-keys/' + id + '/', {
                     method: 'DELETE',
                     headers: {'Content-Type': 'application/json'}
@@ -91,15 +103,15 @@ export function adminUserDetail(initial) {
             },
 
             timeAgo(iso) {
-                if (!iso) return 'Never';
+                if (!iso) return i18n.never;
                 var d = new Date(iso);
                 var now = new Date();
                 var diff = Math.floor((now - d) / 1000);
-                if (diff < 60) return 'Just now';
-                if (diff < 3600) return Math.floor(diff / 60) + ' min ago';
-                if (diff < 86400) return Math.floor(diff / 3600) + ' hours ago';
-                if (diff < 172800) return 'Yesterday';
-                if (diff < 604800) return Math.floor(diff / 86400) + ' days ago';
+                if (diff < 60) return i18n.justNow;
+                if (diff < 3600) return i18n.minutesAgo.replace('%(count)s', Math.floor(diff / 60));
+                if (diff < 86400) return i18n.hoursAgo.replace('%(count)s', Math.floor(diff / 3600));
+                if (diff < 172800) return i18n.yesterday;
+                if (diff < 604800) return i18n.daysAgo.replace('%(count)s', Math.floor(diff / 86400));
                 return d.toLocaleDateString();
             }
         };

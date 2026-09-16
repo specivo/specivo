@@ -1,4 +1,11 @@
 export function projectGeneralSettings(initial) {
+        var i18n = Object.assign({
+            saved: 'Saved successfully.',
+            errorWithMessage: 'Error: %(message)s',
+            saveFailed: 'Failed to save',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
+
         return {
             name: initial.name || '',
             description: initial.description || '',
@@ -23,13 +30,14 @@ export function projectGeneralSettings(initial) {
                         body: JSON.stringify(payload)
                     });
                     if (res.ok) {
-                        this.message = 'Saved successfully.';
+                        this.message = i18n.saved;
                     } else {
                         var data = await res.json();
-                        this.message = 'Error: ' + ((data.errors && data.errors[0] && data.errors[0].message) || 'Failed to save');
+                        var detail = (data.errors && data.errors[0] && data.errors[0].message) || i18n.saveFailed;
+                        this.message = i18n.errorWithMessage.replace('%(message)s', detail);
                     }
                 } catch (_e) {
-                    this.message = 'Unable to connect.';
+                    this.message = i18n.connectFailed;
                 }
                 this.saving = false;
             }

@@ -1,4 +1,8 @@
 export function metadataFieldRenderer(initial) {
+        var i18n = Object.assign({
+            tagsPlaceholder: 'Type and press Enter...'
+        }, initial.i18n || {});
+
         return {
             schemas: initial.schemas || [],
             trackerId: initial.trackerId || null,
@@ -35,7 +39,7 @@ export function metadataFieldRenderer(initial) {
                         } else if (prop.type === 'array' && prop.items && prop.items.enum) {
                             inputType = 'multiselect'; typeLabel = 'multi'; options = prop.items.enum;
                         } else if (prop.type === 'array') {
-                            inputType = 'tags'; typeLabel = 'array'; placeholder = 'Type and press Enter...';
+                            inputType = 'tags'; typeLabel = 'array'; placeholder = i18n.tagsPlaceholder;
                         } else {
                             placeholder = prop.description || '';
                         }

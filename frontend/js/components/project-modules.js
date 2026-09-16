@@ -1,4 +1,9 @@
 export function projectModules(initial) {
+        var i18n = Object.assign({
+            updated: 'Module updated.',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
+
         return {
             modules: initial.modules || {},
             projectKey: initial.projectKey || '',
@@ -19,10 +24,10 @@ export function projectModules(initial) {
                     if (res.ok) {
                         var data = await res.json();
                         this.modules = data.modules;
-                        this.message = 'Module updated.';
+                        this.message = i18n.updated;
                     }
                 } catch (_e) {
-                    this.message = 'Unable to connect.';
+                    this.message = i18n.connectFailed;
                 }
                 this.saving = false;
             }

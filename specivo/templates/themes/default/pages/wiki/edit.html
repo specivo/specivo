@@ -35,7 +35,11 @@
        title: {{ (wiki_page.title if wiki_page else "") | tojson }},
        text: {{ (content.text if content else "") | tojson }},
        parentSlug: {{ (preselect_parent_slug if preselect_parent_slug is defined else "") | tojson }},
-       parentTitle: {{ (preselect_parent_title if preselect_parent_title is defined else "") | tojson }}
+       parentTitle: {{ (preselect_parent_title if preselect_parent_title is defined else "") | tojson }},
+       i18n: {{ {
+         "saveFailed": _("Failed to save"),
+         "connectFailed": _("Unable to connect. Please try again.")
+       } | tojson }}
      })'>
   {# Editor area #}
   <div>
@@ -55,7 +59,11 @@
         {# The wikiForm parent owns `text`; the wrapper's `value` is bound via #}
         {# x-modelable. `onPasteDrop` routes paste/drop events back to         #}
         {# wikiForm.handleEditorPasteDrop for image upload.                    #}
-        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", onPasteDrop: "handleEditorPasteDrop" })'
+        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", onPasteDrop: "handleEditorPasteDrop", i18n: {{ {
+          "placeholder": _("Write your content here (Markdown)..."),
+          "rendering": _("Rendering..."),
+          "previewUnavailable": _("Preview unavailable.")
+        } | tojson }} })'
              x-modelable="value"
              x-model="text"
              data-preview-url="/api/v1/markdown/preview/"

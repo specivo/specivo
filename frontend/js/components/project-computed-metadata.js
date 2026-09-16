@@ -1,4 +1,12 @@
 export function projectComputedMetadata(initial) {
+        var i18n = Object.assign({
+            keyRequired: 'Every value needs a field name.',
+            duplicateKey: 'Duplicate field name: %(name)s',
+            saved: 'Saved successfully.',
+            saveFailed: 'Failed to save',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
+
         var configured = initial.computedMetadata || {};
         var keys = Object.keys(configured);
 
@@ -42,13 +50,13 @@ export function projectComputedMetadata(initial) {
                         // A blank key with a value is a half-filled row, not an
                         // intentional deletion — refuse rather than drop it.
                         if (this.rows[i].value.trim()) {
-                            this.error = 'Every value needs a field name.';
+                            this.error = i18n.keyRequired;
                             return null;
                         }
                         continue;
                     }
                     if (Object.prototype.hasOwnProperty.call(map, key)) {
-                        this.error = 'Duplicate field name: ' + key;
+                        this.error = i18n.duplicateKey.replace('%(name)s', key);
                         return null;
                     }
                     map[key] = this.rows[i].value;
@@ -72,7 +80,7 @@ export function projectComputedMetadata(initial) {
                     });
                     if (res.ok) {
                         var data = await res.json();
-                        this.message = 'Saved successfully.';
+                        this.message = i18n.saved;
                         // Re-seed from the response so the editor shows what
                         // the server actually stored.
                         var saved = data.computed_metadata || {};
@@ -84,10 +92,10 @@ export function projectComputedMetadata(initial) {
                         this.rows = next;
                     } else {
                         var err = await res.json();
-                        this.error = (err.errors && err.errors[0] && err.errors[0].message) || 'Failed to save';
+                        this.error = (err.errors && err.errors[0] && err.errors[0].message) || i18n.saveFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Unable to connect.';
+                    this.error = i18n.connectFailed;
                 }
                 this.saving = false;
             }

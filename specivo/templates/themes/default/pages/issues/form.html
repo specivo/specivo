@@ -41,7 +41,18 @@
        projectKey: {{ project.key | tojson }},
        displayKey: {{ (issue.display_key if issue else "") | tojson }},
        lockVersion: {{ issue.lock_version if issue else 0 }},
-       tags: {{ (issue_tags if issue_tags is defined else []) | tojson }}
+       tags: {{ (issue_tags if issue_tags is defined else []) | tojson }},
+       i18n: {{ {
+         "relationTypes": {
+           "relates": _("Relates to"),
+           "blocks": _("Blocks"),
+           "blocked": _("Blocked by"),
+           "duplicates": _("Duplicates"),
+           "duplicated": _("Duplicated by"),
+           "precedes": _("Precedes"),
+           "follows": _("Follows")
+         }
+       } | tojson }}
      })'>
 
   <form @submit.prevent>
@@ -132,7 +143,9 @@
 
     {# Metadata fields -- dynamically rendered from project schemas #}
     {% if metadata_schemas_data %}
-    <div x-data='metadataFieldRenderer({ schemas: {{ metadata_schemas_data | tojson }}, trackerId: tracker_id, existingValues: {{ (issue_metadata if issue_metadata is defined else {}) | tojson }} })' x-effect="resolveFields()">
+    <div x-data='metadataFieldRenderer({ schemas: {{ metadata_schemas_data | tojson }}, trackerId: tracker_id, existingValues: {{ (issue_metadata if issue_metadata is defined else {}) | tojson }}, i18n: {{ {
+      "tagsPlaceholder": _("Type and press Enter...")
+    } | tojson }} })' x-effect="resolveFields()">
       <template x-if="currentFields.length > 0">
         <div>
           <div class="form-divider"></div>

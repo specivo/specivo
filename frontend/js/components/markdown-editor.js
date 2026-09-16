@@ -1,5 +1,11 @@
 export function markdownEditor(initial) {
         initial = initial || {};
+        var i18n = Object.assign({
+            placeholder: 'Write your content here (Markdown)...',
+            rendering: 'Rendering...',
+            previewUnavailable: 'Preview unavailable.'
+        }, initial.i18n || {});
+
         return {
             value: initial.initial || '',
             editor: null,
@@ -30,7 +36,7 @@ export function markdownEditor(initial) {
                     indentWithTabs: false,
                     forceSync: true,
                     minHeight: '200px',
-                    placeholder: 'Write your content here (Markdown supported)...',
+                    placeholder: i18n.placeholder,
                     /* Use built-in toolbar shorthand strings — EasyMDE wires up the
                      * matching prototype methods (togglePreview, toggleSideBySide,
                      * toggleFullScreen) internally. Passing static method refs as
@@ -228,7 +234,7 @@ export function markdownEditor(initial) {
                     clearTimeout(this._previewTimer);
                 }
                 /* Loading placeholder — plain text only, no HTML injection. */
-                previewElement.textContent = 'Rendering...';
+                previewElement.textContent = i18n.rendering;
                 this._previewTimer = setTimeout(function () {
                     self._fetchPreview(plainText, previewElement);
                 }, 250);
@@ -251,10 +257,10 @@ export function markdownEditor(initial) {
                          * what the user will see after Save. */
                         previewElement.innerHTML = this._lastPreviewHtml;  /* noqa: XSS */
                     } else {
-                        previewElement.textContent = 'Preview unavailable.';
+                        previewElement.textContent = i18n.previewUnavailable;
                     }
                 } catch (_e) {
-                    previewElement.textContent = 'Preview unavailable.';
+                    previewElement.textContent = i18n.previewUnavailable;
                 }
             }
         };

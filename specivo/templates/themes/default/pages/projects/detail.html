@@ -148,7 +148,10 @@
 
 {% if user is defined and user and user.is_admin %}
 <div class="sp-scrim" x-show="showCreateSub" x-cloak x-transition.opacity @click="showCreateSub = false"></div>
-<div class="sp-modal" x-show="showCreateSub" x-cloak @click.stop x-data="projectCreateModal({ parentKey: '{{ project.key }}' })">
+<div class="sp-modal" x-show="showCreateSub" x-cloak @click.stop x-data='projectCreateModal({ parentKey: {{ project.key | tojson }}, i18n: {{ {
+       "createFailed": _("Failed to create project"),
+       "connectFailed": _("Unable to connect.")
+     } | tojson }} })'>
     <div class="sp-modal-header">
       <h2>{% trans %}New Subproject{% endtrans %}</h2>
       <button class="sp-modal-close" @click="showCreateSub = false">&times;</button>

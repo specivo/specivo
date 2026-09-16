@@ -13,8 +13,9 @@
 
 <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-xl);">{% trans %}Settings{% endtrans %}</h1>
 
+{% from "pages/_fts_i18n.html" import fts_i18n %}
 <div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;"
-     x-data='ftsReindex({ baseUrl: "/api/v1/admin/search", isProject: false, canManage: true, language: {{ fts_language | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }} })'>
+     x-data='ftsReindex({ baseUrl: "/api/v1/admin/search", isProject: false, canManage: true, language: {{ fts_language | tojson }}, reindexNeeded: {{ fts_reindex_needed | tojson }}, i18n: {{ fts_i18n() }} })'>
   <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Defaults{% endtrans %}</h2>
   <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg);">
     {% trans %}Workspace-wide fallbacks for anonymous visitors and users without their own saved preference.{% endtrans %}
@@ -85,7 +86,10 @@
   </form>
 </div>
 
-<div class="card" style="padding: var(--sp-space-lg);" x-data='adminSettings({{ settings | tojson }})'>
+<div class="card" style="padding: var(--sp-space-lg);" x-data='adminSettings({{ settings | tojson }}, {{ {
+  "updated": _("Setting updated."),
+  "saveFailed": _("Failed to save.")
+} | tojson }})'>
   <table class="issue-table">
     <thead>
       <tr>
