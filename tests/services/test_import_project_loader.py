@@ -43,6 +43,7 @@ from specivo.models.lookups import IssueCategory
 from specivo.models.member import Member, MemberRole
 from specivo.models.metadata_schema import MetadataSchema
 from specivo.models.project import EnabledModule, Project
+from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.services.permission_service import clear_role_cache, get_user_roles
 from tests.services.conftest import FakeAdapter
@@ -395,11 +396,13 @@ class TestMemberships:
         ctx = await loaded(adapter)
         await load_memberships(ctx)
 
-        clear_role_cache()
+        clear_role_cache(db_session)
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
         for user_ref in ("7", "8"):
             user_id = await ctx.id_map.get(db_session, EntityType.USER, user_ref)
-            roles = await get_user_roles(db_session, user_id, project_id)
+            roles = await get_user_roles(
+                db_session, await db_session.get(User, user_id), await db_session.get(Project, project_id)
+            )
             assert [role.id for role in roles] == [await ctx.id_map.get(db_session, EntityType.ROLE, "3")]
 
     async def test_a_group_that_was_not_imported_is_reported(self, db_session, loaded, with_roles):
@@ -453,10 +456,12 @@ class TestMemberships:
         ctx = await loaded(adapter)
         await load_memberships(ctx)
 
-        clear_role_cache()
+        clear_role_cache(db_session)
         user_id = await ctx.id_map.get(db_session, EntityType.USER, "7")
         project_id = await ctx.id_map.get(db_session, EntityType.PROJECT, "1")
-        roles = await get_user_roles(db_session, user_id, project_id)
+        roles = await get_user_roles(
+            db_session, await db_session.get(User, user_id), await db_session.get(Project, project_id)
+        )
         assert {role.id for role in roles} == {
             await ctx.id_map.get(db_session, EntityType.ROLE, "3"),
             await ctx.id_map.get(db_session, EntityType.ROLE, "4"),

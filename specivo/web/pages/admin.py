@@ -383,7 +383,8 @@ async def admin_workflows(
 
     trackers = (await db.execute(select(Tracker).order_by(Tracker.position))).scalars().all()
     statuses = (await db.execute(select(IssueStatus).order_by(IssueStatus.position))).scalars().all()
-    roles = (await db.execute(select(Role).order_by(Role.position))).scalars().all()
+    # Builtin roles are never held through a membership, so no transition could apply to them.
+    roles = (await db.execute(select(Role).where(Role.builtin == 0).order_by(Role.position))).scalars().all()
 
     templates = get_templates()
     return templates.TemplateResponse(

@@ -31,7 +31,6 @@ from specivo.services.anonymous_access_service import (
     set_anonymous_permissions,
 )
 from specivo.services.auth_service import _make_access_token
-from specivo.services.permission_service import clear_role_cache
 from specivo.services.security_audit_service import AuditEvent
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
@@ -44,13 +43,6 @@ URL = "/api/v1/admin/projects/{key}/anonymous-permissions/"
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest_asyncio.fixture(autouse=True)
-async def _fresh_role_cache():
-    clear_role_cache()
-    yield
-    clear_role_cache()
 
 
 @pytest_asyncio.fixture

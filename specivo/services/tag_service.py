@@ -10,11 +10,10 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import ConflictError, NotFoundError
-from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.models.tag import Tag, TagLink
 from specivo.models.user import User
@@ -100,17 +99,16 @@ class TagService:
         """Autocomplete tag names across every project the *user* can access.
 
         Deduplicated case-insensitively by name (one row per distinct lowercased
-        name). Admins see all tags; other users see tags in projects they are a
-        member of — directly or through a user group — or that are public.
+        name). A project's tags are offered when ``require_project_access``
+        admits *user* to it (``ProjectService.accessible_projects_clause``).
         Returns ``[{id, name, color}]`` ordered by name.
         """
-        from specivo.services.permission_service import member_principal_clause
+        from specivo.services.project_service import ProjectService
 
         stmt = select(Tag)
-        if not user.is_admin:
-            member_projects = select(Member.project_id).where(member_principal_clause(user.id)).scalar_subquery()
-            public_projects = select(Project.id).where(Project.is_public.is_(True)).scalar_subquery()
-            stmt = stmt.where(or_(Tag.project_id.in_(member_projects), Tag.project_id.in_(public_projects)))
+        accessible = await ProjectService().accessible_projects_clause(session, user)
+        if accessible is not None:
+            stmt = stmt.where(Tag.project_id.in_(select(Project.id).where(accessible)))
         q = (query or "").strip()
         if q:
             stmt = stmt.where(Tag.name.ilike(f"%{q}%"))

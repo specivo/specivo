@@ -362,21 +362,8 @@ async def get_issue(
         include_set = {v.strip() for v in include.split(",")}
 
     if "children" in include_set:
-        # Direct children only: parent_id == issue.id (not all descendants)
-        result = await db.execute(
-            select(Issue)
-            .where(Issue.parent_id == issue.id)
-            .order_by(Issue.lft)
-            .options(
-                selectinload(Issue.tracker),
-                selectinload(Issue.status),
-                selectinload(Issue.priority),
-                selectinload(Issue.category),
-                selectinload(Issue.author),
-                selectinload(Issue.assigned_to),
-            )
-        )
-        child_issues = list(result.scalars().all())
+        # Direct children only (not all descendants), filtered by visibility.
+        child_issues = await _service.list_visible_children(db, issue, current_user)
         children = [_issue_out(c, computed) for c in child_issues]
 
     if "journals" in include_set:

@@ -14,6 +14,10 @@ Developer - core development permissions
 Reporter  - read + create + comment
 Agent     - API-facing role for automated agents (no management/delete rights)
 
+Non member - builtin, read-only; what a signed-in user holds on a public project
+             without a membership. Migration 0032 creates it; seeding only
+             recreates it if missing and never overwrites its permissions.
+
 Default statuses
 ----------------
 New (backlog), In Progress (active), Resolved (done), Feedback (active),
@@ -39,7 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from specivo.core.config import get_settings
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.metadata_preset import MetadataPreset
-from specivo.models.role import Role
+from specivo.models.role import NON_MEMBER_ROLE_NAME, Role, RoleBuiltin
 from specivo.models.search import EmbeddingModel
 from specivo.models.time_entry import TimeEntryActivity
 from specivo.models.workflow import WorkflowTransition
@@ -261,6 +265,42 @@ async def seed_roles(session: AsyncSession) -> None:
 
     await session.commit()
     print(f"Seeded {len(_DEFAULT_ROLES)} roles: {[r['name'] for r in _DEFAULT_ROLES]}")
+
+
+async def seed_non_member_role(session: AsyncSession) -> None:
+    """Make sure the builtin Non member role exists, without ever changing an existing one.
+
+    Migration 0032 creates the role, so this normally finds it and does
+    nothing. Its permissions belong to the administrator once it exists, so
+    unlike ``seed_roles`` this never resets them. A custom role that already
+    uses the name is left alone, with a warning.
+    """
+    existing = (
+        await session.execute(select(Role.id).where(Role.builtin == RoleBuiltin.NON_MEMBER))
+    ).scalar_one_or_none()
+    if existing is not None:
+        return
+
+    clash = (await session.execute(select(Role.id).where(Role.name == NON_MEMBER_ROLE_NAME))).scalar_one_or_none()
+    if clash is not None:
+        logger.warning(
+            "Not creating the Non member role: role id=%s already uses the name %r", clash, NON_MEMBER_ROLE_NAME
+        )
+        return
+
+    session.add(
+        Role(
+            name=NON_MEMBER_ROLE_NAME,
+            position=0,
+            assignable=False,
+            builtin=RoleBuiltin.NON_MEMBER,
+            permissions=["view_issues"],
+            issues_visibility="default",
+            settings={},
+        )
+    )
+    await session.commit()
+    logger.info("Created role: %s", NON_MEMBER_ROLE_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -578,6 +618,7 @@ async def _run() -> None:
         await seed_trackers(session)
         await seed_priorities(session)
         await seed_roles(session)
+        await seed_non_member_role(session)
         await seed_time_entry_activities(session)
         await seed_workflow_transitions(session)
         await seed_embedding_model(session)

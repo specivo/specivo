@@ -12,7 +12,7 @@ from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
 from specivo.services.wiki_service import WikiService
@@ -53,8 +53,10 @@ async def wiki_index(
         raise HTTPException(status_code=404, detail="Project not found")
     await _project_svc.require_project_access(db, project, user)
 
-    # Ensure Home page exists (auto-create if missing)
-    await _wiki_svc.ensure_home_page(db, project.id, user)
+    # Create a missing Home page, but only for someone who may edit the wiki:
+    # a GET by a reader must never write.
+    if await check_permission(user, project.id, Permission.MANAGE_WIKI, db):
+        await _wiki_svc.ensure_home_page(db, project.id, user)
 
     return RedirectResponse(
         f"/projects/{project_key}/wiki/home/",
@@ -286,7 +288,8 @@ async def wiki_show(
     try:
         page, content = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        if slug == "home":
+        # Only an editor gets a missing Home page created; a reader's GET never writes.
+        if slug == "home" and await check_permission(user, project.id, Permission.MANAGE_WIKI, db):
             await _wiki_svc.ensure_home_page(db, project.id, user)
             page, content = await _wiki_svc.get_page(db, project.id, slug)
         else:
