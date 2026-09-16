@@ -6,16 +6,18 @@ import json
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
-from specivo.core.exceptions import ValidationError
-from specivo.core.security import get_current_user
+from specivo.core.exceptions import AnonymousAccessDeniedError, ValidationError
+from specivo.core.rate_limit import enforce_rate_limit
+from specivo.core.security import ANONYMOUS_SEARCH_RATE_LIMIT, get_reader
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.search import SearchFilters, SearchResponse
+from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import SecurityAuditService
 
@@ -24,6 +26,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["search"])
 _service = SearchService()
 _audit_service = SecurityAuditService()
+_project_service = ProjectService()
 
 # Bounds for the raw ``metadata`` containment filter, to keep crafted payloads small.
 _METADATA_FILTER_MAX_BYTES = 2048
@@ -32,6 +35,35 @@ _METADATA_FILTER_MAX_KEYS = 10
 # Real-tag filter caps (mirror the web search page).
 _TAG_VALUE_MAX = 64
 _TAG_MAX = 20
+
+# What a visitor without an account may ask of search. Keyword only: semantic
+# and hybrid both run an embedding model, and that is cost a stranger must not
+# be able to spend. The page is short and close to the surface so the result
+# set cannot be walked wholesale.
+_ANONYMOUS_SEARCH_MODE = "keyword"
+_ANONYMOUS_SEARCH_MAX_LIMIT = 25
+_ANONYMOUS_SEARCH_MAX_OFFSET = 500
+
+
+async def _anonymous_search_budget(
+    request: Request,
+    response: Response,
+    user: User = Depends(get_reader),
+) -> None:
+    """Meter anonymous searches against their own per-IP bucket.
+
+    A dependency of its own rather than a ``rate_limit`` on the route,
+    because it must never touch the signed-in buckets: it applies only after
+    ``get_reader`` has resolved the caller, and only when that caller turns
+    out to be anonymous. ``get_reader`` is the same callable the route
+    depends on, so FastAPI resolves it once and both see one principal.
+
+    Search gets a bucket separate from ``anon_read`` because it is the
+    expensive route: a full-text query costs far more than fetching one issue,
+    so it is metered far more tightly.
+    """
+    if user.is_anonymous:
+        await enforce_rate_limit(request, response, "anon_search", *ANONYMOUS_SEARCH_RATE_LIMIT)
 
 
 def _clean_tag_names(tag: list[str]) -> list[str]:
@@ -77,7 +109,8 @@ async def search(
     updated_before: datetime | None = Query(None, description="Issues updated before"),
     metadata: str | None = Query(None, description="JSONB containment filter (JSON string)"),
     tag: list[str] = Query(default=[], description="Real-tag name(s) to filter by (AND logic)"),  # noqa: B006
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_reader),
+    _budget: None = Depends(_anonymous_search_budget),
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
     """Search across issues and wiki pages.
@@ -89,7 +122,17 @@ async def search(
 
     Results are sorted by relevance score (descending).
     Access control enforces per-project visibility rules.
+
+    A visitor without an account gets keyword search only, over a short page,
+    and a project filter that names a project they may not read is refused the
+    same way one naming no project at all is.
     """
+    anonymous = user.is_anonymous
+    if anonymous and (
+        mode != _ANONYMOUS_SEARCH_MODE or limit > _ANONYMOUS_SEARCH_MAX_LIMIT or offset > _ANONYMOUS_SEARCH_MAX_OFFSET
+    ):
+        raise AnonymousAccessDeniedError()
+
     # Resolve project IDs
     project_id: int | None = None
     project_ids: list[int] | None = None
@@ -97,7 +140,14 @@ async def search(
     if project_keys is not None:
         # Multi-project search
         keys = [k.strip() for k in project_keys.split(",") if k.strip()]
-        if keys:
+        if keys and anonymous:
+            # Resolved one at a time through the reader's own project lookup,
+            # so a key naming no project and a key naming one this visitor may
+            # not read are refused identically. The bulk query below cannot do
+            # that: it answers "no results" for the unreadable project and an
+            # error for the missing one, and the difference is the disclosure.
+            project_ids = [(await _project_service.get_readable_by_key(db, key.upper(), user)).id for key in keys]
+        elif keys:
             stmt = select(Project.id).where(Project.key.in_(keys))
             result = await db.execute(stmt)
             project_ids = [row[0] for row in result.all()]
@@ -107,15 +157,18 @@ async def search(
                     field="project_keys",
                 )
     elif project_key is not None:
-        stmt = select(Project.id).where(Project.key == project_key)
-        result = await db.execute(stmt)
-        pid = result.scalar_one_or_none()
-        if pid is None:
-            raise ValidationError(
-                message=f"Project with key '{project_key}' not found",
-                field="project_key",
-            )
-        project_id = pid
+        if anonymous:
+            project_id = (await _project_service.get_readable_by_key(db, project_key.upper(), user)).id
+        else:
+            stmt = select(Project.id).where(Project.key == project_key)
+            result = await db.execute(stmt)
+            pid = result.scalar_one_or_none()
+            if pid is None:
+                raise ValidationError(
+                    message=f"Project with key '{project_key}' not found",
+                    field="project_key",
+                )
+            project_id = pid
 
     # Build metadata filters
     parsed_metadata: dict | None = None
@@ -250,28 +303,34 @@ async def search(
             filters=active_filters,
         )
 
-    # Audit log the search query
-    try:
-        filter_details: dict | None = None
-        if has_filters:
-            filter_details = {k: v for k, v in filters.model_dump().items() if v is not None}
-            # Convert datetime to string for JSON serialization
-            for fk, fv in filter_details.items():
-                if isinstance(fv, datetime):
-                    filter_details[fk] = fv.isoformat()
-        await _audit_service.log_search_query(
-            session=db,
-            user_id=user.id,
-            query=q,
-            mode=mode,
-            scope=scope,
-            filters=filter_details,
-            result_count=total_count,
-            type_counts=type_counts if mode != "semantic" else None,
-            request=request,
-        )
-    except Exception:
-        logger.warning("Failed to log search query audit", exc_info=True)
+    # Audit log the search query. Skipped for anonymous visitors, and this is
+    # the guard that matters most: unlike ``log_event``, ``log_search_query``
+    # writes unconditionally — it is a core feature, not enterprise-gated — so
+    # without this an anonymous crawl would persist one row per request. It is
+    # also the only write on this path, which a read-only transaction would
+    # otherwise refuse outright.
+    if not anonymous:
+        try:
+            filter_details: dict | None = None
+            if has_filters:
+                filter_details = {k: v for k, v in filters.model_dump().items() if v is not None}
+                # Convert datetime to string for JSON serialization
+                for fk, fv in filter_details.items():
+                    if isinstance(fv, datetime):
+                        filter_details[fk] = fv.isoformat()
+            await _audit_service.log_search_query(
+                session=db,
+                user_id=user.id,
+                query=q,
+                mode=mode,
+                scope=scope,
+                filters=filter_details,
+                result_count=total_count,
+                type_counts=type_counts if mode != "semantic" else None,
+                request=request,
+            )
+        except Exception:
+            logger.warning("Failed to log search query audit", exc_info=True)
 
     return SearchResponse(
         total_count=total_count,

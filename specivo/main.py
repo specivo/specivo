@@ -29,6 +29,7 @@ from specivo.core.exceptions import (
 )
 from specivo.core.logging import setup_logging
 from specivo.core.middleware import (
+    AnonymousResponseHeadersMiddleware,
     AuditBatchMiddleware,
     CSRFMiddleware,
     LocaleMiddleware,
@@ -176,6 +177,11 @@ def create_app() -> FastAPI:
     # onto the response at the ASGI level so they survive endpoints that
     # return their own Response objects (e.g. JSONResponse).
     application.add_middleware(RateLimitHeaderMiddleware)
+
+    # Anonymous responses — Cache-Control: no-store and a Vary naming the
+    # headers that decide who the caller is, so nothing shared caches a page
+    # served to a visitor without an account.
+    application.add_middleware(AnonymousResponseHeadersMiddleware)
 
     # Silent token refresh — sets auth cookies on the response when
     # get_current_user_optional() transparently rotated an expired access

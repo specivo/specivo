@@ -36,16 +36,19 @@ the change-password page instead.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
 
 import jwt
-from fastapi import Depends, Request
-from sqlalchemy import select
+from fastapi import Depends, Request, Response
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
 from specivo.core.constants import API_KEY_PREFIX, JWT_ALGORITHM
 from specivo.core.database import get_db
-from specivo.core.exceptions import AppError
+from specivo.core.exceptions import AnonymousAccessDeniedError, AppError
+from specivo.core.middleware import ANONYMOUS_READER_STATE_KEY
+from specivo.core.rate_limit import enforce_rate_limit
 from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.services.agent_session_service import AgentSessionService
@@ -386,6 +389,13 @@ async def authenticate_request(
             raw_key=token,
             client_ip=client_ip,
         )
+        # No API key can name the anonymous row: it has no password, it is
+        # deactivated, and ApiKeyService refuses deactivated users. Refused
+        # again here so that "get_current_user never returns the anonymous
+        # principal" does not quietly depend on all three staying true.
+        if user.is_anonymous:
+            raise AppError(code="api_key_invalid", message="Invalid API key", status_code=401)
+
         # Store API key scopes on request.state for downstream permission checks
         request.state.api_key_scopes = api_key.scopes
         request.state.api_key_id = api_key.id
@@ -426,6 +436,116 @@ async def authenticate_request(
     if enforce_password_change:
         _enforce_password_change(user, request)
     return user
+
+
+# ---------------------------------------------------------------------------
+# Reader dependency: the one place the anonymous principal enters a request
+# ---------------------------------------------------------------------------
+
+# The GET routes that may be served to a visitor without an account, as the
+# path templates FastAPI registers them under (before any stealth prefix).
+#
+# This is the whole surface anonymous access has. A route joins it by being
+# written here *and* by depending on ``get_reader``; the contract test in
+# ``tests/integration/test_anonymous_route_contract.py`` fails when the two
+# disagree, so a new route cannot drift into the set by accident, and one
+# listed here cannot quietly stop being served.
+ANONYMOUS_READ_ROUTES: frozenset[str] = frozenset(
+    {
+        "/api/v1/projects/",
+        "/api/v1/projects/{project_key}/issues/",
+        "/api/v1/issues/{issue_ref}/",
+        "/api/v1/projects/{project_key}/wiki/{slug}/",
+        "/api/v1/search/",
+    }
+)
+
+# Per-IP budgets for anonymous traffic, kept in their own Redis buckets so a
+# crawler cannot spend a signed-in user's allowance or vice versa.
+ANONYMOUS_READ_RATE_LIMIT = (120, 60)
+ANONYMOUS_SEARCH_RATE_LIMIT = (10, 60)
+
+# How long a single statement may run for an anonymous visitor. Every query on
+# the allowlisted routes is an indexed read that finishes far inside this; the
+# limit is here so a crafted search cannot hold a connection open.
+ANONYMOUS_STATEMENT_TIMEOUT_MS = 2000
+
+
+def has_credentials(request: Request) -> bool:
+    """Return True if the request carries anything that claims to be a credential.
+
+    Deliberately asks "did the caller try to authenticate", not "did it
+    work". A request holding a revoked API key or an expired token must be
+    answered with 401, never quietly downgraded to an anonymous read — an
+    agent whose key was revoked would otherwise keep receiving public data
+    and skip every scope check, and would have no way to notice.
+    """
+    if request.headers.get("authorization", "").strip():
+        return True
+    if request.headers.get("x-api-key", "").strip():
+        return True
+    return bool(request.cookies.get("access_token") or request.cookies.get("refresh_token"))
+
+
+async def get_reader(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AsyncGenerator[User, None]:
+    """FastAPI dependency: the signed-in user, or the anonymous principal.
+
+    Used only on the routes in :data:`ANONYMOUS_READ_ROUTES`. Three cases,
+    and the middle one is the point of the whole dependency:
+
+    - **Credentials present** — resolved by :func:`authenticate_request`,
+      exactly as ``get_current_user`` would. Bad, expired or revoked
+      credentials raise 401 from there and never reach the anonymous branch.
+    - **No credentials at all** — the anonymous principal, but only while the
+      instance switch is on. Otherwise ``AnonymousAccessDeniedError``, the
+      same 401 every other anonymous refusal produces.
+    - The anonymous row missing (an unmigrated database) is treated as the
+      switch being off rather than as an error worth reporting to a stranger.
+
+    An anonymous request then runs inside a savepoint marked
+    ``transaction_read_only``, so any write a handler attempts fails loudly
+    instead of being committed. The savepoint is rolled back on the way out;
+    ``SET LOCAL`` is scoped to it either way, so neither the read-only flag
+    nor the statement timeout escapes into the surrounding transaction — which
+    is what lets the same code run under the test suite's outer transaction.
+    """
+    if has_credentials(request):
+        yield await authenticate_request(request, db)
+        return
+
+    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+    from specivo.services.anonymous_user_service import get_anonymous_user
+
+    anonymous = await get_anonymous_user(db) if await is_anonymous_access_enabled(db) else None
+    if anonymous is None:
+        # Nothing to serve: either the switch is off, or the row is missing.
+        # With the switch off this is just an unauthenticated request to a
+        # protected route, which is what it was before this dependency
+        # existed — so it is audited exactly as ``get_current_user`` audits
+        # it, and turning the switch off leaves the route's behaviour
+        # unchanged down to the audit trail. Refusals that happen *because*
+        # of a project's settings, once the switch is on, are routine and are
+        # deliberately not logged; see the route handlers.
+        await _log_auth_failure(db, "no_credentials", request)
+        raise AnonymousAccessDeniedError()
+
+    # Flagged before the rate limit is applied so that a 429 is marked
+    # uncacheable too.
+    setattr(request.state, ANONYMOUS_READER_STATE_KEY, True)
+    await enforce_rate_limit(request, response, "anon_read", *ANONYMOUS_READ_RATE_LIMIT)
+
+    savepoint = await db.begin_nested()
+    try:
+        await db.execute(text("SET LOCAL transaction_read_only = on"))
+        await db.execute(text(f"SET LOCAL statement_timeout = {ANONYMOUS_STATEMENT_TIMEOUT_MS}"))
+        yield anonymous
+    finally:
+        if savepoint.is_active:
+            await savepoint.rollback()
 
 
 # ---------------------------------------------------------------------------

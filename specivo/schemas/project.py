@@ -126,12 +126,20 @@ class ProjectOut(BaseModel):
     description: str | None
     parent_id: int | None
     parent_key: str | None = None
-    path: str
     is_public: bool
-    inherit_members: bool
     status: int
-    issue_sequence: int
     color: str | None = None
+    # Undisclosed (``None``) for an anonymous visitor, populated for everyone
+    # else — the same "not disclosed" state ``computed_metadata`` documents
+    # below. ``path`` and ``parent_key`` name ancestor projects, which may be
+    # private even when this one is public; ``issue_sequence`` counts every
+    # issue ever created here, including the private ones a visitor cannot
+    # see; and ``inherit_members`` describes a membership model an anonymous
+    # visitor has no part in. None of the four is filled with a stand-in
+    # value, because a wrong number is worse than an absent one.
+    path: str | None = None
+    inherit_members: bool | None = None
+    issue_sequence: int | None = None
     created_at: datetime
     updated_at: datetime
     # Per-project derived (computed) metadata, echoed back so a configured
