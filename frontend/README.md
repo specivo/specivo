@@ -1,9 +1,14 @@
 # Specivo frontend build
 
 Source for Specivo's custom CSS and JavaScript. esbuild bundles, minifies, and
-content-hashes the sources into committed artifacts under
-`../specivo/static/dist/`, which the FastAPI app serves at runtime. The runtime
-never needs Node — only this build step does.
+content-hashes the sources into `../specivo/static/dist/`, which the FastAPI app
+serves at runtime. The runtime never needs Node — only this build step does.
+
+`specivo/static/dist/` is **generated and gitignored**. It is built:
+
+- in the Docker image, by the Dockerfile's `frontend` stage;
+- in CI, before the backend and E2E test runs;
+- in development, by the `frontend` watcher service that `make dev-up` starts.
 
 ## Layout
 
@@ -22,22 +27,35 @@ frontend/
   js/modules/*.js        vanilla initX() modules
 ```
 
-Outputs (committed): `specivo/static/dist/{js,css}/*.min.<hash>.{js,css}` plus a
-`manifest.json` per directory mapping logical name -> hashed name. The app reads
-those manifests at startup.
+Outputs (never committed): `specivo/static/dist/{js,css}/*.min.<hash>.{js,css}`
+plus a `manifest.json` per directory mapping logical name -> hashed name. The app
+reads those manifests at startup and logs a warning when they are missing.
 
 ## Workflow
 
+With Docker only (no Node on the host):
+
 ```
-cd frontend
-npm install        # once
-npm run build      # production: minified + hashed
-npm run watch      # rebuild on change (dev: unminified + sourcemaps)
+make dev-up            # starts the watcher container; bundles rebuild on save
+make frontend-build    # one-off build (uses a Node container if npm is absent)
 ```
 
-After editing anything under `frontend/`, run `npm run build` and **commit the
-regenerated `specivo/static/dist/` artifacts** along with your source changes. CI
-rebuilds and fails if the committed artifacts are stale.
+With Node on the host:
+
+```
+cd frontend
+npm ci                 # once, or after package-lock.json changes
+npm run build          # production: minified + hashed
+npm run watch          # rebuild on change (dev: unminified + sourcemaps)
+```
+
+Commit only the sources under `frontend/`. Run a build before `make test-e2e`
+(the target does it for you) or when you want the bundle-serving integration
+tests to run instead of skip.
+
+Watch mode rebuilds the bundles in place under their logical names and writes
+manifests that map each name to itself: the app reads manifests only at
+startup, so a content hash would go stale on the first rebuild.
 
 ## Conventions
 

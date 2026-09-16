@@ -5,15 +5,23 @@ checks for existing API/health endpoints after adding the web layer.
 """
 
 import json
-from pathlib import Path
+import os
 
 import pytest
 from httpx import AsyncClient
 
-_DIST = Path(__file__).resolve().parents[2] / "specivo" / "static" / "dist"
+from specivo.web.assets import DIST_DIR, MANIFEST_SUBDIRS, missing_asset_manifests
+
+# The esbuild bundles are generated, never committed. Without a local build the
+# bundle tests skip; CI sets SPECIVO_REQUIRE_BUNDLES=1 so a missing build fails there.
+requires_bundles = pytest.mark.skipif(
+    bool(missing_asset_manifests()) and not os.environ.get("SPECIVO_REQUIRE_BUNDLES"),
+    reason="frontend bundles not built; run `make frontend-build`",
+)
 
 
 @pytest.mark.integration
+@requires_bundles
 async def test_static_css_served(unauth_client: AsyncClient):
     """Main stylesheet bundle is served from /static/dist/css/."""
     resp = await unauth_client.get("/static/dist/css/specivo.min.css")
@@ -22,6 +30,7 @@ async def test_static_css_served(unauth_client: AsyncClient):
 
 
 @pytest.mark.integration
+@requires_bundles
 async def test_static_css_variables_served(unauth_client: AsyncClient):
     """Design tokens are included in the main stylesheet bundle."""
     resp = await unauth_client.get("/static/dist/css/specivo.min.css")
@@ -47,6 +56,7 @@ async def test_static_js_htmx_served(unauth_client: AsyncClient):
 
 
 @pytest.mark.integration
+@requires_bundles
 @pytest.mark.parametrize("bundle", ["alpine-init.min.js", "app.min.js"])
 async def test_static_js_bundles_served(unauth_client: AsyncClient, bundle: str):
     """Custom JS bundles are served from /static/dist/js/."""
@@ -56,17 +66,14 @@ async def test_static_js_bundles_served(unauth_client: AsyncClient, bundle: str)
 
 
 @pytest.mark.integration
+@requires_bundles
 def test_asset_manifests_resolve():
     """Every esbuild manifest entry points at a file that exists on disk."""
-    found = False
-    for sub in ("js", "css"):
-        manifest = _DIST / sub / "manifest.json"
-        if not manifest.exists():
-            continue
-        found = True
-        for logical, hashed in json.loads(manifest.read_text()).items():
-            assert (_DIST / sub / hashed).exists(), f"{logical} -> {hashed} missing"
-    assert found, "no esbuild manifests found — run `npm run build` in frontend/"
+    assert missing_asset_manifests() == [], "esbuild manifests missing — run `make frontend-build`"
+    for sub in MANIFEST_SUBDIRS:
+        manifest = DIST_DIR / sub / "manifest.json"
+        for logical, served in json.loads(manifest.read_text()).items():
+            assert (DIST_DIR / sub / served).exists(), f"{logical} -> {served} missing"
 
 
 @pytest.mark.integration
