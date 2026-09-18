@@ -294,6 +294,31 @@ class ProjectService:
         if result.scalar_one_or_none() is None:
             raise NotFoundError(f"Project '{project.key}' not found")
 
+    async def get_readable_by_key(self, session: AsyncSession, key: str, user: User) -> Project:
+        """Resolve a project *user* may reach, refusing anonymous visitors uniformly.
+
+        The pair of :meth:`get_by_key` and :meth:`require_project_access` that
+        every reader-facing route needs, with the gap between them closed. On
+        its own ``get_by_key`` raises ``NotFoundError`` for a key that names no
+        project, and that answer arrives *before* ``require_project_access``
+        ever refuses anything — so an anonymous visitor comparing responses
+        could tell a project that does not exist from one that does but is
+        private, archived or not opted in. Here all four are the same
+        ``AnonymousAccessDeniedError``.
+
+        Signed-in users are unaffected and keep the ADR-0004 rule: 404 for a
+        project that does not exist, and 404 for a private one they hold no
+        membership on.
+        """
+        try:
+            project = await self.get_by_key(session, key)
+        except NotFoundError:
+            if user.is_anonymous:
+                raise AnonymousAccessDeniedError() from None
+            raise
+        await self.require_project_access(session, project, user)
+        return project
+
     async def get_parent_key(self, session: AsyncSession, project: Project) -> str | None:
         """Resolve the parent project's key, or None for root projects."""
         if project.parent_id is None:

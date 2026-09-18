@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, PermissionDeniedError
-from specivo.core.security import get_current_user
+from specivo.core.security import get_current_user, get_reader
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.common import PaginatedResponse
@@ -118,14 +118,58 @@ def _project_out(project, parent_key: str | None, computed_metadata: dict | None
 # ---------------------------------------------------------------------------
 
 
+def _anonymous_project_out(project) -> ProjectOut:
+    """Render a project for a visitor without an account.
+
+    Only the project itself, never its place in the tree: ``path`` and
+    ``parent_key`` spell out ancestor identifiers, and a public project can
+    hang under a private parent. ``issue_sequence`` and ``inherit_members``
+    are withheld for the reasons given on :class:`ProjectOut`. Each is left
+    ``None`` — undisclosed — rather than filled with a stand-in.
+    """
+    return ProjectOut(
+        id=project.id,
+        name=project.name,
+        identifier=project.identifier,
+        key=project.key,
+        description=project.description,
+        is_public=project.is_public,
+        status=project.status,
+        color=project.color,
+        created_at=project.created_at,
+        updated_at=project.updated_at,
+        parent_id=None,
+        parent_key=None,
+        path=None,
+        inherit_members=None,
+        issue_sequence=None,
+        computed_metadata=None,
+    )
+
+
 @router.get("/", response_model=PaginatedResponse[ProjectOut])
 async def list_projects(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_reader),
     db: AsyncSession = Depends(get_db),
 ) -> PaginatedResponse[ProjectOut]:
+    """List the projects the caller may reach.
+
+    ``ProjectService.accessible_projects_clause`` decides the set, so an
+    anonymous visitor sees exactly the public, active, opted-in projects and
+    nothing else — the listing cannot disagree with what the detail routes
+    would serve.
+    """
     projects, total = await _service.list_projects(db, current_user, offset=offset, limit=limit)
+
+    if current_user.is_anonymous:
+        return PaginatedResponse(
+            total_count=total,
+            offset=offset,
+            limit=limit,
+            items=[_anonymous_project_out(p) for p in projects],
+        )
 
     items = []
     for p in projects:

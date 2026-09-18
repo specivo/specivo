@@ -1,14 +1,21 @@
-"""What opting a project in and turning the instance switch on changes, before any anonymous route exists.
+"""What opting a project in and turning the instance switch on actually changes.
 
-Role resolution reads both settings, but no route serves the anonymous user
-yet. This module snapshots the responses a signed-in non-member and an
+This module snapshots every response a signed-in non-member and an
 unauthenticated visitor get from the project, issue, wiki and search
-endpoints, stores both settings, and compares:
+endpoints, stores both settings, and compares the two snapshots:
 
-- an unauthenticated request gets exactly the same responses;
 - a signed-in non-member gains exactly what the opted-in project now grants
   anonymous visitors — its wiki, in the wiki routes and in search — and
-  nothing else changes, least of all anything in the private project.
+  nothing else changes, least of all anything in the private project;
+- an unauthenticated visitor gains exactly the allowlisted API routes on the
+  opted-in project, and nothing adjacent to them.
+
+The second comparison is deliberately written as a full diff of the snapshot
+rather than a list of things to check. It is therefore an independent reading
+of the anonymous surface: a route that starts serving anonymous visitors shows
+up here as an unexpected difference, whether or not anyone remembered to name
+it. Web pages are covered too, and they stay redirecting to the login page —
+serving them is a separate piece of work.
 
 JSON bodies are compared in full except for ``updated_at``: writing the
 setting touches the project row, and that timestamp is not access. HTML pages
@@ -187,9 +194,10 @@ async def test_enabling_anonymous_access_gives_a_signed_in_non_member_only_the_o
     assert "Lighthouse page INPRIV" not in search_titles
 
 
-async def test_enabling_anonymous_access_changes_nothing_for_an_unauthenticated_request(
+async def test_enabling_anonymous_access_opens_exactly_the_allowlisted_api_routes(
     client: AsyncClient, db_session: AsyncSession, world: dict[str, Any]
 ) -> None:
+    """An unauthenticated visitor gains the allowlist on the opted-in project, and nothing else."""
     before = await _snapshot(client, world, None)
     assert before["/api/v1/projects/INPUB/issues/"][0] == 401
     assert before["/projects/INPUB/"][0] in (302, 303)
@@ -197,4 +205,21 @@ async def test_enabling_anonymous_access_changes_nothing_for_an_unauthenticated_
     await _opt_everything_in(db_session, world)
     after = await _snapshot(client, world, None)
 
-    assert after == before
+    slug = world["slugs"]["INPUB"]
+    opened = {
+        "/api/v1/projects/",
+        "/api/v1/search/?q=lighthouse",
+        "/api/v1/projects/INPUB/issues/",
+        "/api/v1/issues/INPUB-1/",
+        f"/api/v1/projects/INPUB/wiki/{slug}/",
+    }
+
+    assert {path for path in before if after[path] != before[path]} == opened
+    for path in opened:
+        assert before[path][0] == 401 and after[path][0] == 200, path
+
+    # Everything else an unauthenticated visitor can reach is untouched: the
+    # project detail and member list, the wiki page index, every path in the
+    # private project, and every web page.
+    for path in set(before) - opened:
+        assert after[path] == before[path], path
