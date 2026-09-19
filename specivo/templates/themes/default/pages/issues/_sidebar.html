@@ -4,6 +4,70 @@
 {% set lbl = 'font-size: var(--sp-font-size-xs); color: var(--sp-accent); display: block; margin-bottom: var(--sp-space-xs); text-transform: uppercase; font-weight: 600; letter-spacing: 0.05em;' %}
 {% set sel = 'width: 100%; padding: var(--sp-space-xs) var(--sp-space-sm); border-radius: var(--sp-border-radius); border: 1px solid var(--sp-border); font-size: var(--sp-font-size-sm); background: var(--sp-bg-surface); color: var(--sp-text-primary);' %}
 
+{# For a visitor without an account the sidebar is the same facts as text.
+   Every card below this branch exists to change something — the field editors,
+   the tag field, watchers, the estimate, the move form — so none of them is
+   rendered rather than rendered and refused. Relations survive because the
+   service has already dropped the ones pointing at issues this reader cannot
+   see, and with them their keys. #}
+{% if anonymous %}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md); border-left: 3px solid var(--sp-accent);">
+  <div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
+    <div>
+      <label style="{{ lbl }}">{% trans %}Status{% endtrans %}</label>
+      {{ status_badge(issue.status.name if issue.status else '') }}
+    </div>
+    <div>
+      <label style="{{ lbl }}">{% trans %}Assignee{% endtrans %}</label>
+      <span style="font-size: var(--sp-font-size-sm); font-weight: 500;">
+        {%- if issue.assigned_to %}{{ issue.assigned_to.display_name }}{% else %}{% trans %}Unassigned{% endtrans %}{% endif -%}
+      </span>
+    </div>
+    <div>
+      <label style="{{ lbl }}">{% trans %}Priority{% endtrans %}</label>
+      {{ priority_badge(issue.priority.name if issue.priority else 'Normal') }}
+      <span style="font-size: var(--sp-font-size-sm);">{{ issue.priority.name if issue.priority else '' }}</span>
+    </div>
+    <div>
+      <label style="{{ lbl }}">{% trans %}Tracker{% endtrans %}</label>
+      {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
+    </div>
+    <div>
+      <label style="{{ lbl }}">{% trans %}Progress{% endtrans %}</label>
+      <div style="display:flex;align-items:center;gap:var(--sp-space-sm);">
+        <div style="flex:1;background: var(--sp-bg-muted, #e5e7eb); border-radius: var(--sp-radius-sm); height: 8px; overflow: hidden;">
+          <div style="background: var(--sp-accent); height: 100%; width: {{ issue.done_ratio }}%;"></div>
+        </div>
+        <span style="font-size: var(--sp-font-size-xs);">{{ issue.done_ratio }}%</span>
+      </div>
+    </div>
+    {% if issue.due_date %}
+    <div>
+      <label style="{{ lbl }}">{% trans %}Due Date{% endtrans %}</label>
+      <span style="font-size: var(--sp-font-size-sm);">{{ issue.due_date.strftime('%Y-%m-%d') }}</span>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+{% if relations is defined and relations %}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
+  <label style="{{ lbl }}">{% trans %}Relations{% endtrans %}</label>
+  <div style="display:flex;flex-direction:column;gap:var(--sp-space-xs);">
+    {% for rel in relations %}
+    <div style="display:flex;align-items:baseline;gap:var(--sp-space-sm);font-size:var(--sp-font-size-sm);">
+      <span style="color:var(--sp-text-muted);min-width:60px;">{{ rel.relation_type | replace('_', ' ') }}</span>
+      <a href="/issue/{{ rel.issue_to_key }}/" style="font-weight:600;color:var(--sp-accent);">{{ rel.issue_to_key }}</a>
+      {% if rel.issue_to_subject is defined and rel.issue_to_subject %}
+      <span style="color:var(--sp-text-secondary);">{{ rel.issue_to_subject }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% else %}
+
 {# Card 1: Core Details #}
 <div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md); border-left: 3px solid var(--sp-accent);" x-data='issueSidebar({ displayKey: {{ issue.display_key | tojson }}, lockVersion: {{ issue.lock_version }} })'>
   <div style="display: flex; flex-direction: column; gap: var(--sp-space-lg);">
@@ -290,10 +354,12 @@
   {% endif %}
 </div>
 
+{% endif %}
+
 {# Footer: Created / Updated #}
 <div style="padding: 0 var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); line-height: 1.8;">
   <div title="{{ issue.created_at | localtime(user.timezone) if issue.created_at else '' }}">
-    {% trans ago=issue.created_at | timeago(user.timezone) %}Created %(ago)s{% endtrans %}{% if issue.author %} {% trans name=issue.author.display_name or issue.author.login %}by %(name)s{% endtrans %}{% endif %}
+    {% trans ago=issue.created_at | timeago(user.timezone) %}Created %(ago)s{% endtrans %}{% if issue.author %} {% if anonymous %}{% trans name=issue.author.display_name %}by %(name)s{% endtrans %}{% else %}{% trans name=issue.author.display_name or issue.author.login %}by %(name)s{% endtrans %}{% endif %}{% endif %}
   </div>
   <div title="{{ (last_activity_at or issue.updated_at) | localtime(user.timezone) if (last_activity_at or issue.updated_at) else '' }}">
     {% trans ago=(last_activity_at or issue.updated_at) | timeago(user.timezone) %}Updated %(ago)s{% endtrans %}

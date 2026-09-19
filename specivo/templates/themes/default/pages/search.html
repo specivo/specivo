@@ -26,7 +26,10 @@
   </div>
 
   <div class="search-controls">
-    {# Mode toggle #}
+    {# Mode toggle. Semantic and hybrid both run an embedding model, which is
+       cost a visitor without an account must not be able to spend, so they get
+       keyword search and no switch to offer them anything else. #}
+    {% if not anonymous %}
     <div class="mode-toggle">
       {% set mode_labels = {'hybrid': _('Hybrid'), 'keyword': _('Keyword')} %}
       {% for m in ['hybrid', 'keyword'] %}
@@ -34,6 +37,7 @@
               @click="$refs.modeInput.value = '{{ m }}'; submitting = true; $el.closest('form').submit()">{{ mode_labels[m] }}</button>
       {% endfor %}
     </div>
+    {% endif %}
 
     {# Scope tabs with icons and backend counts #}
     <div class="scope-tabs">
@@ -69,7 +73,12 @@
 
 {# Tag filter — real tags across accessible projects (issues + wiki, AND logic).
    Lives outside the GET form: selecting/removing a tag reloads with updated
-   repeated `tag=` params via the tagFilter Alpine component. #}
+   repeated `tag=` params via the tagFilter Alpine component.
+
+   Absent for a visitor without an account: it is driven by the tag search
+   endpoint, which is not on the anonymous API allowlist, so the field could
+   only ever come back empty. #}
+{% if not anonymous %}
 <div class="search-tag-filter sp-tag-field"
      x-data='tagFilter({
        endpoint: "/api/v1/tags/search/",
@@ -122,6 +131,7 @@
     </template>
   </div>
 </div>
+{% endif %}
 
 {# Applied metadata filter — collapsed by default, only shown when a filter is active #}
 {% if mf %}

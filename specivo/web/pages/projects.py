@@ -18,10 +18,16 @@ from specivo.models.project import Project
 from specivo.models.time_entry import TimeEntry
 from specivo.services.computed_metadata_service import computed_values
 from specivo.services.issue_service import IssueService
+from specivo.services.permission_service import Permission
 from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
 from specivo.services.version_service import VersionService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import (
+    get_current_user_optional,
+    get_templates,
+    get_web_reader,
+    refuse_anonymous_web,
+)
 
 if TYPE_CHECKING:
     from specivo.models.user import User
@@ -40,14 +46,18 @@ _STATUS_LABELS = {1: "active", 5: "closed", 9: "archived"}
 @router.get("/projects/", response_class=HTMLResponse)
 async def projects_list(
     request: Request,
+    reader: object | None = Depends(get_web_reader),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the project list page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+    anonymous = user.is_anonymous
 
+    # ``list_projects`` decides the set, so an anonymous visitor sees exactly
+    # the public, active, opted-in projects — the listing cannot disagree with
+    # what the project pages themselves would serve.
     projects, total = await _svc.list_projects(db, user, limit=500)
 
     # Build tree: group by parent_id, enrich with status labels.
@@ -56,8 +66,11 @@ async def projects_list(
     visible_ids = {p.id for p in projects}
     all_project_ids = list(visible_ids)
 
-    # Batch-load stats for all visible projects
-    project_stats = await _svc.load_project_stats(db, all_project_ids)
+    # Batch-load stats for all visible projects. Not for an anonymous visitor:
+    # the counts include private issues, and the member list names people. A
+    # project opts in to its issues and its wiki being read, not to publishing
+    # its team or how much work it is hiding.
+    project_stats = {} if anonymous else await _svc.load_project_stats(db, all_project_ids)
 
     by_parent: dict[int | None, list] = {}
     for p in projects:
@@ -65,6 +78,18 @@ async def projects_list(
         open_count = pstats.get("open_count", 0)
         closed_count = pstats.get("closed_count", 0)
         total_issues = open_count + closed_count
+        if anonymous:
+            # Which of the two readable areas this project opted in to, read
+            # off the row already loaded rather than resolved per project:
+            # every project in this list is public, active and opted in, so
+            # the column is exactly what the anonymous role grants.
+            opted_in = p.anonymous_permissions or ()
+            modules = {
+                "issue_tracking": Permission.VIEW_ISSUES in opted_in,
+                "wiki": Permission.VIEW_WIKI in opted_in,
+            }
+        else:
+            modules = pstats.get("modules", {})
         item = {
             "project": p,
             "status_label": _STATUS_LABELS.get(p.status, "unknown"),
@@ -77,7 +102,7 @@ async def projects_list(
             "people_count": pstats.get("member_count", 0),
             "group_count": pstats.get("group_count", 0),
             "wiki_page_count": pstats.get("wiki_page_count", 0),
-            "modules": pstats.get("modules", {}),
+            "modules": modules,
             "members": pstats.get("members", []),
         }
         # Treat as root if parent is not visible to this user
@@ -86,12 +111,17 @@ async def projects_list(
 
     root_projects = by_parent.get(None, [])
 
-    # Build list of all projects for the parent dropdown in the create modal
-    all_projects_for_dropdown = [
-        {"key": p.key, "name": p.name}
-        for p in sorted(projects, key=lambda x: x.name)
-        if p.status == 1  # only active projects
-    ]
+    # Build list of all projects for the parent dropdown in the create modal.
+    # The modal is admin-only, so an anonymous visitor is not given the list.
+    all_projects_for_dropdown = (
+        []
+        if anonymous
+        else [
+            {"key": p.key, "name": p.name}
+            for p in sorted(projects, key=lambda x: x.name)
+            if p.status == 1  # only active projects
+        ]
+    )
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -99,6 +129,7 @@ async def projects_list(
         "pages/projects/list.html",
         context={
             "user": user,
+            "anonymous": anonymous,
             "active_page": "projects",
             "projects": root_projects,
             "children_by_parent": by_parent,
@@ -113,32 +144,56 @@ async def projects_list(
 async def project_detail(
     key: str,
     request: Request,
+    reader: object | None = Depends(get_web_reader),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the project detail/overview page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+    anonymous = user.is_anonymous
 
-    from specivo.core.exceptions import NotFoundError
+    from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError
+    from specivo.services.permission_service import Permission, check_permission
 
     try:
-        project = await _svc.get_by_key(db, key)
+        # One lookup for both halves: a key naming no project and one naming a
+        # project this visitor may not reach produce the same refusal, so the
+        # page cannot be used to find out which projects exist.
+        project = await _svc.get_readable_by_key(db, key, user)
+    except AnonymousAccessDeniedError:
+        return refuse_anonymous_web(request)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-    await _svc.require_project_access(db, project, user)
 
-    # The overview card shows faces, so its number is people — anyone the
-    # project's memberships reach, whether they hold one directly or sit in a
-    # group that does. ``list_members`` only ever returns the direct holders,
-    # so ``people_count`` is what tells the reader that more of them exist.
-    people_count = await _svc.count_people_with_access(db, project)
-    members = await _svc.list_members(db, project, limit=10)
-    modules = await _svc.get_modules(db, project)
+    if anonymous:
+        # No people, and no numbers derived from issues this visitor cannot
+        # see. The two readable areas are all the navigation there is: linking
+        # to the roadmap, time or settings would offer pages that refuse.
+        people_count = 0
+        members: list[dict] = []
+        modules = {
+            "issue_tracking": await check_permission(user, project.id, Permission.VIEW_ISSUES, db),
+            "wiki": await check_permission(user, project.id, Permission.VIEW_WIKI, db),
+        }
+    else:
+        # The overview card shows faces, so its number is people — anyone the
+        # project's memberships reach, whether they hold one directly or sit in a
+        # group that does. ``list_members`` only ever returns the direct holders,
+        # so ``people_count`` is what tells the reader that more of them exist.
+        people_count = await _svc.count_people_with_access(db, project)
+        members = await _svc.list_members(db, project, limit=10)
+        modules = await _svc.get_modules(db, project)
 
-    # Fetch subprojects
-    result = await db.execute(select(Project).where(Project.parent_id == project.id).order_by(Project.name))
+    # Fetch subprojects. For an anonymous visitor the list is narrowed to the
+    # projects they could open anyway: a public project may hold children that
+    # are private or not opted in, and naming those would disclose them.
+    sub_stmt = select(Project).where(Project.parent_id == project.id).order_by(Project.name)
+    if anonymous:
+        accessible = await _svc.accessible_projects_clause(db, user)
+        if accessible is not None:
+            sub_stmt = sub_stmt.where(accessible)
+    result = await db.execute(sub_stmt)
     subprojects = result.scalars().all()
 
     templates = get_templates()
@@ -147,6 +202,9 @@ async def project_detail(
         "pages/projects/detail.html",
         context={
             "user": user,
+            "anonymous": anonymous,
+            "anon_can_view_issues": modules.get("issue_tracking", False) if anonymous else False,
+            "anon_can_view_wiki": modules.get("wiki", False) if anonymous else False,
             "active_page": "overview",
             "active_project": project,
             "project": project,

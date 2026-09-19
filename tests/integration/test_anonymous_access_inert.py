@@ -7,15 +7,16 @@ endpoints, stores both settings, and compares the two snapshots:
 - a signed-in non-member gains exactly what the opted-in project now grants
   anonymous visitors — its wiki, in the wiki routes and in search — and
   nothing else changes, least of all anything in the private project;
-- an unauthenticated visitor gains exactly the allowlisted API routes on the
-  opted-in project, and nothing adjacent to them.
+- an unauthenticated visitor gains exactly the allowlisted routes on the
+  opted-in project — the JSON API's and the web pages' — and nothing adjacent
+  to them.
 
 The second comparison is deliberately written as a full diff of the snapshot
 rather than a list of things to check. It is therefore an independent reading
 of the anonymous surface: a route that starts serving anonymous visitors shows
 up here as an unexpected difference, whether or not anyone remembered to name
-it. Web pages are covered too, and they stay redirecting to the login page —
-serving them is a separate piece of work.
+it. Web pages are covered on the same footing as the API, so a page that began
+serving anonymous visitors without being declared would fail here.
 
 JSON bodies are compared in full except for ``updated_at``: writing the
 setting touches the project row, and that timestamp is not access. HTML pages
@@ -194,7 +195,7 @@ async def test_enabling_anonymous_access_gives_a_signed_in_non_member_only_the_o
     assert "Lighthouse page INPRIV" not in search_titles
 
 
-async def test_enabling_anonymous_access_opens_exactly_the_allowlisted_api_routes(
+async def test_enabling_anonymous_access_opens_exactly_the_allowlisted_routes(
     client: AsyncClient, db_session: AsyncSession, world: dict[str, Any]
 ) -> None:
     """An unauthenticated visitor gains the allowlist on the opted-in project, and nothing else."""
@@ -206,20 +207,42 @@ async def test_enabling_anonymous_access_opens_exactly_the_allowlisted_api_route
     after = await _snapshot(client, world, None)
 
     slug = world["slugs"]["INPUB"]
-    opened = {
+    # The JSON API's allowlist: refused with 401 before, served after.
+    opened_api = {
         "/api/v1/projects/",
         "/api/v1/search/?q=lighthouse",
         "/api/v1/projects/INPUB/issues/",
         "/api/v1/issues/INPUB-1/",
         f"/api/v1/projects/INPUB/wiki/{slug}/",
     }
+    # The web pages the same opt-in opens. Each answered the login redirect
+    # before and renders after.
+    opened_web = {
+        "/projects/",
+        "/search/?q=lighthouse",
+        "/projects/INPUB/",
+        "/projects/INPUB/issues/",
+        f"/projects/INPUB/wiki/{slug}/",
+    }
+    # The wiki index redirects either way — to the login page before, to the
+    # project's own home page after — so it changes without ever being a 200.
+    opened_wiki_index = {"/projects/INPUB/wiki/"}
+    opened = opened_api | opened_web | opened_wiki_index
 
     assert {path for path in before if after[path] != before[path]} == opened
-    for path in opened:
+
+    for path in opened_api:
         assert before[path][0] == 401 and after[path][0] == 200, path
+    for path in opened_web:
+        assert before[path][1].startswith("/login/"), path
+        assert after[path][0] == 200, path
+    for path in opened_wiki_index:
+        assert before[path][1].startswith("/login/"), path
+        assert after[path][1] == "/projects/INPUB/wiki/home/", path
 
     # Everything else an unauthenticated visitor can reach is untouched: the
-    # project detail and member list, the wiki page index, every path in the
-    # private project, and every web page.
+    # project detail and member list on the API, the API's wiki page index,
+    # every path in the private project, and every web page outside the
+    # allowlist.
     for path in set(before) - opened:
         assert after[path] == before[path], path

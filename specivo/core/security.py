@@ -36,7 +36,8 @@ the change-password page instead.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
+from contextlib import asynccontextmanager
 
 import jwt
 from fastapi import Depends, Request, Response
@@ -470,6 +471,20 @@ ANONYMOUS_SEARCH_RATE_LIMIT = (10, 60)
 # limit is here so a crafted search cannot hold a connection open.
 ANONYMOUS_STATEMENT_TIMEOUT_MS = 2000
 
+# What a visitor without an account may ask of search. Keyword only: semantic
+# and hybrid both run an embedding model, and that is cost a stranger must not
+# be able to spend. The page is short and close to the surface so the result
+# set cannot be walked wholesale.
+#
+# Declared here rather than beside either caller because both enforce them and
+# they must not drift: the JSON API refuses a request outside these bounds,
+# while the search *page* narrows one to them — a browser arrives with whatever
+# the form put in the URL, and refusing the default mode would turn the page
+# into a refusal for everyone.
+ANONYMOUS_SEARCH_MODE = "keyword"
+ANONYMOUS_SEARCH_MAX_LIMIT = 25
+ANONYMOUS_SEARCH_MAX_OFFSET = 500
+
 
 def has_credentials(request: Request) -> bool:
     """Return True if the request carries anything that claims to be a credential.
@@ -485,6 +500,60 @@ def has_credentials(request: Request) -> bool:
     if request.headers.get("x-api-key", "").strip():
         return True
     return bool(request.cookies.get("access_token") or request.cookies.get("refresh_token"))
+
+
+async def resolve_anonymous_principal(db: AsyncSession) -> User | None:
+    """Return the anonymous user row, or None when it must not be used.
+
+    None means "there is nothing to serve without an account": either the
+    instance switch is off, or the row is missing because the database was
+    never migrated. The two are deliberately not told apart — a stranger
+    learns nothing from either.
+    """
+    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+    from specivo.services.anonymous_user_service import get_anonymous_user
+
+    if not await is_anonymous_access_enabled(db):
+        return None
+    return await get_anonymous_user(db)
+
+
+@asynccontextmanager
+async def anonymous_read_scope(
+    request: Request,
+    response: Response,
+    db: AsyncSession,
+) -> AsyncIterator[None]:
+    """Run a block as an anonymous visitor: metered, flagged and read-only.
+
+    Shared by the JSON API (:func:`get_reader`) and the web pages
+    (``specivo.web.deps.get_web_reader``) so the two cannot drift. Everything
+    an anonymous request is subject to lives here and nowhere else:
+
+    - the scope-state flag that makes ``AnonymousResponseHeadersMiddleware``
+      mark the response uncacheable;
+    - the per-IP read budget, applied after the flag so that a 429 is marked
+      uncacheable too;
+    - a savepoint marked ``transaction_read_only`` with a short statement
+      timeout, so a handler attempting a write fails loudly instead of being
+      committed, and a crafted query cannot hold a connection open.
+
+    The savepoint is rolled back on the way out; ``SET LOCAL`` is scoped to it
+    either way, so neither the read-only flag nor the statement timeout escapes
+    into the surrounding transaction — which is what lets the same code run
+    under the test suite's outer transaction.
+    """
+    setattr(request.state, ANONYMOUS_READER_STATE_KEY, True)
+    await enforce_rate_limit(request, response, "anon_read", *ANONYMOUS_READ_RATE_LIMIT)
+
+    savepoint = await db.begin_nested()
+    try:
+        await db.execute(text("SET LOCAL transaction_read_only = on"))
+        await db.execute(text(f"SET LOCAL statement_timeout = {ANONYMOUS_STATEMENT_TIMEOUT_MS}"))
+        yield
+    finally:
+        if savepoint.is_active:
+            await savepoint.rollback()
 
 
 async def get_reader(
@@ -517,10 +586,7 @@ async def get_reader(
         yield await authenticate_request(request, db)
         return
 
-    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
-    from specivo.services.anonymous_user_service import get_anonymous_user
-
-    anonymous = await get_anonymous_user(db) if await is_anonymous_access_enabled(db) else None
+    anonymous = await resolve_anonymous_principal(db)
     if anonymous is None:
         # Nothing to serve: either the switch is off, or the row is missing.
         # With the switch off this is just an unauthenticated request to a
@@ -533,19 +599,8 @@ async def get_reader(
         await _log_auth_failure(db, "no_credentials", request)
         raise AnonymousAccessDeniedError()
 
-    # Flagged before the rate limit is applied so that a 429 is marked
-    # uncacheable too.
-    setattr(request.state, ANONYMOUS_READER_STATE_KEY, True)
-    await enforce_rate_limit(request, response, "anon_read", *ANONYMOUS_READ_RATE_LIMIT)
-
-    savepoint = await db.begin_nested()
-    try:
-        await db.execute(text("SET LOCAL transaction_read_only = on"))
-        await db.execute(text(f"SET LOCAL statement_timeout = {ANONYMOUS_STATEMENT_TIMEOUT_MS}"))
+    async with anonymous_read_scope(request, response, db):
         yield anonymous
-    finally:
-        if savepoint.is_active:
-            await savepoint.rollback()
 
 
 # ---------------------------------------------------------------------------

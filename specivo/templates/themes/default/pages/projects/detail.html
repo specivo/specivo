@@ -44,7 +44,9 @@
   {% if modules.get('wiki', false) %}
   <a href="/projects/{{ project.key }}/wiki/">{% trans %}Wiki{% endtrans %}</a>
   {% endif %}
+  {% if not anonymous %}
   <a href="/projects/{{ project.key }}/roadmap/">{% trans %}Roadmap{% endtrans %}</a>
+  {% endif %}
   {% if modules.get('time_tracking', false) %}
   <a href="/projects/{{ project.key }}/time/">{% trans %}Time{% endtrans %}</a>
   {% endif %}
@@ -72,10 +74,14 @@
           <td class="sp-info-table-label">{% trans %}Visibility{% endtrans %}</td>
           <td>{{ _("Public") if project.is_public else _("Private") }}</td>
         </tr>
+        {# issue_sequence counts every issue ever created here, private ones
+           included, so it is withheld exactly as the API withholds it. #}
+        {% if not anonymous %}
         <tr>
           <td class="sp-info-table-label">{% trans %}Issues{% endtrans %}</td>
           <td>{% trans count=project.issue_sequence %}%(count)s created{% endtrans %}</td>
         </tr>
+        {% endif %}
       </table>
     </div>
 
@@ -107,6 +113,7 @@
   </div>
 
   <!-- Right column: members -->
+  {% if not anonymous %}
   <div>
     <div class="card sp-card-pad">
       {#
@@ -144,6 +151,7 @@
       {% endif %}
     </div>
   </div>
+  {% endif %}
 </div>
 
 {% if user is defined and user and user.is_admin %}

@@ -1,17 +1,21 @@
 """The boundary of anonymous access, checked against the routing table itself.
 
-Two properties, both of which have to hold for the whole application rather
-than for the handful of routes somebody remembered to test:
+Anonymous access has two surfaces — the JSON API and the web pages — and each
+declares its own allowlist. The properties below hold for the whole
+application rather than for the handful of routes somebody remembered to test:
 
 - the set of routes that depend on ``get_reader`` equals
-  ``ANONYMOUS_READ_ROUTES`` exactly, and every one of them is a GET. A new
-  route cannot join the anonymous surface by accident, and one that is
+  ``ANONYMOUS_READ_ROUTES`` exactly, and the set of pages that depend on
+  ``get_web_reader`` equals ``ANONYMOUS_WEB_ROUTES`` exactly. Set equality
+  both ways, so a route cannot join either surface by accident and one that is
   declared cannot silently stop being served;
+- every route on either surface is a GET;
 - with the switch on and a project opted in, every non-GET route under
   ``/api/v1`` still refuses an unauthenticated caller.
 
-The first test reads the routing table, so it fails the moment a handler is
-given the wrong dependency — before anything is deployed.
+These tests read the routing table, so they fail the moment a handler is given
+the wrong dependency — before anything is deployed. The web pages' own
+behaviour is covered in ``test_anonymous_web_access.py``.
 """
 
 from __future__ import annotations
@@ -32,6 +36,7 @@ from specivo.services.anonymous_access_service import (
 )
 from specivo.services.permission_service import Permission
 from specivo.testing.conftest_base import _test_app
+from specivo.web.deps import ANONYMOUS_WEB_ROUTES, get_web_reader
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory
 
@@ -93,6 +98,44 @@ def test_the_allowlist_is_the_set_that_was_reviewed() -> None:
         "/api/v1/projects/{project_key}/wiki/{slug}/",
         "/api/v1/search/",
     }
+
+
+# ---------------------------------------------------------------------------
+# The same two properties, for the web pages
+# ---------------------------------------------------------------------------
+
+
+def _web_reader_routes() -> dict[str, set[str]]:
+    """Return every web route reached through ``get_web_reader``, by path."""
+
+    def uses_web_reader(dependant) -> bool:
+        if dependant.call is get_web_reader:
+            return True
+        return any(uses_web_reader(sub) for sub in dependant.dependencies)
+
+    return {
+        route.path: set(route.methods)
+        for route in _test_app.routes
+        if isinstance(route, APIRoute) and uses_web_reader(route.dependant)
+    }
+
+
+def test_web_reader_routes_match_the_declared_allowlist() -> None:
+    wired = _web_reader_routes()
+    assert set(wired) == set(ANONYMOUS_WEB_ROUTES), (
+        "A page's get_web_reader dependency and ANONYMOUS_WEB_ROUTES disagree. "
+        "Adding a page to the anonymous surface means doing both, deliberately."
+    )
+
+
+def test_every_anonymous_web_route_is_a_get() -> None:
+    for path, methods in _web_reader_routes().items():
+        assert methods <= {"GET", "HEAD"}, f"{path} is served to anonymous visitors with {sorted(methods)}"
+
+
+def test_the_two_allowlists_do_not_overlap() -> None:
+    """The API and the web surfaces are declared separately and stay separate."""
+    assert not (set(ANONYMOUS_READ_ROUTES) & set(ANONYMOUS_WEB_ROUTES))
 
 
 # ---------------------------------------------------------------------------

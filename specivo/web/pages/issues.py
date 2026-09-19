@@ -23,7 +23,12 @@ from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import (
+    get_current_user_optional,
+    get_templates,
+    get_web_reader,
+    refuse_anonymous_web,
+)
 from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
@@ -70,6 +75,35 @@ async def _resolve_issue_project(
     return project, issue
 
 
+async def _resolve_issue_project_for_reader(
+    db: AsyncSession,
+    issue_ref: str,
+    user: User,
+) -> tuple | None:
+    """Resolve ``(project, issue)`` for a reader, refusing anonymous uniformly.
+
+    Returns ``None`` when an anonymous visitor may not see the issue, whatever
+    the reason: the reference names nothing, it names an issue in a project
+    they cannot read, or it names a private issue in a project they can. The
+    caller turns all three into the one refusal every page produces, so the
+    URL cannot be used to find out which issues exist.
+
+    Signed-in users are untouched and keep the 404 ``_resolve_issue_project``
+    has always raised.
+    """
+    if not user.is_anonymous:
+        return await _resolve_issue_project(db, issue_ref, user)
+
+    from specivo.core.exceptions import AnonymousAccessDeniedError
+
+    try:
+        issue = await _issue_svc.get_by_display_key_with_relations(db, issue_ref, user=user)
+        project = await _project_svc.get_readable_by_key(db, issue.project_key, user)
+    except (NotFoundError, AnonymousAccessDeniedError):
+        return None
+    return project, issue
+
+
 async def _get_lookups(db: AsyncSession) -> dict:
     """Load trackers, statuses, priorities, activities for dropdown options.
 
@@ -88,6 +122,7 @@ async def _get_lookups(db: AsyncSession) -> dict:
 async def issues_list(
     project_key: str,
     request: Request,
+    reader: object | None = Depends(get_web_reader),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
     status: str = Query("open"),
     tracker_id: str = Query(""),
@@ -103,16 +138,30 @@ async def issues_list(
     """Render the issue list page for a project."""
     from specivo.core.utils import safe_int
 
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+    anonymous = user.is_anonymous
+
+    from specivo.core.exceptions import AnonymousAccessDeniedError
+    from specivo.services.permission_service import Permission, check_permission
 
     try:
-        project = await _project_svc.get_by_key(db, project_key)
+        project = await _project_svc.get_readable_by_key(db, project_key, user)
+    except AnonymousAccessDeniedError:
+        return refuse_anonymous_web(request)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
+
+    anon_can_view_wiki = False
+    if anonymous:
+        # Reaching the project is not enough. A project opted in to the wiki
+        # alone refuses issue pages outright: rendering an empty list would
+        # confirm both that the project exists and that it is open to
+        # anonymous visitors.
+        if not await check_permission(user, project.id, Permission.VIEW_ISSUES, db):
+            return refuse_anonymous_web(request)
+        anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
 
     filters: dict = {"status": status}
     if safe_int(tracker_id) is not None:
@@ -138,14 +187,24 @@ async def issues_list(
         user=user,
     )
 
-    saved_filters = await _saved_filter_svc.list_for_project(db, user, project.id)
     lookups = await _get_lookups(db)
 
-    # Get project members for assignee dropdown
-    members = await _project_svc.list_members(db, project)
+    if anonymous:
+        # A saved filter belongs to the person who created it; the member list
+        # names people; the tag vocabulary is project configuration. None of
+        # the three is part of what a project opts in to, and each drives a
+        # control an anonymous visitor has no use for.
+        saved_filters: list = []
+        members: list = []
+        project_tags: list = []
+    else:
+        saved_filters = await _saved_filter_svc.list_for_project(db, user, project.id)
 
-    # Project tag vocabulary for the tag filter dropdown
-    project_tags = _tags_to_dicts(await _tag_svc.list_for_project(db, project.id))
+        # Get project members for assignee dropdown
+        members = await _project_svc.list_members(db, project)
+
+        # Project tag vocabulary for the tag filter dropdown
+        project_tags = _tags_to_dicts(await _tag_svc.list_for_project(db, project.id))
 
     # Parse per-column offsets for board view: col_<status_id>_offset=N
     col_offsets: dict[int, int] = {}
@@ -169,6 +228,9 @@ async def issues_list(
         "pages/issues/list.html",
         context={
             "user": user,
+            "anonymous": anonymous,
+            "anon_can_view_issues": anonymous,
+            "anon_can_view_wiki": anon_can_view_wiki,
             "active_page": "issues",
             "active_project": project,
             "project": project,
@@ -185,7 +247,9 @@ async def issues_list(
             "board_base_params": board_base_params,
             "board_per_col": board_per_col,
             "filters": filters,
-            "active_sprint_id": await _get_active_sprint_id(db, project.id),
+            # The sidebar turns this into a "Current Sprint" link, which is not
+            # a page an anonymous visitor can open.
+            "active_sprint_id": None if anonymous else await _get_active_sprint_id(db, project.id),
             **lookups,
         },
     )
@@ -245,16 +309,20 @@ async def issue_create_form(
 async def issue_detail(
     issue_ref: str,
     request: Request,
+    reader: object | None = Depends(get_web_reader),  # noqa: B008
     activity_page: int | None = Query(None, ge=1),
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the issue detail page."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+    anonymous = user.is_anonymous
 
-    project, issue = await _resolve_issue_project(db, issue_ref, user)
+    resolved = await _resolve_issue_project_for_reader(db, issue_ref, user)
+    if resolved is None:
+        return refuse_anonymous_web(request)
+    project, issue = resolved
 
     from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
     from specivo.schemas.metadata_schema import MetadataSchemaOut
@@ -263,6 +331,12 @@ async def issue_detail(
 
     schema_svc = MetadataSchemaService()
     watcher_svc = WatcherService()
+
+    anon_can_view_wiki = False
+    if anonymous:
+        from specivo.services.permission_service import Permission, check_permission
+
+        anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -275,34 +349,55 @@ async def issue_detail(
     # htmx-deferred tabs.
     all_journals = await _journal_svc.list_for_issue(db, issue.id, include_private=user.is_admin)
     lookups = await _get_lookups(db)
-    members = await _project_svc.list_members(db, project)
-    # Load the current sprint (if any) for the sidebar autocomplete to pin it.
-    # Versions and sprints lists are no longer prefetched — the sidebar uses
-    # the /api/v1/projects/{key}/versions/search/ and /sprints/search/ endpoints
-    # for autocomplete.
-    current_sprint: Sprint | None = None
-    if issue.sprint_id is not None:
-        current_sprint = await db.get(Sprint, issue.sprint_id)
-    # Derive the current active sprint for project-wide UI bits (e.g. sprint
-    # badge on activity) with a single targeted query.
-    active_sprint_id_result = await db.execute(
-        select(Sprint.id).where(Sprint.project_id == project.id, Sprint.status == "active")
-    )
-    active_sprint_id = active_sprint_id_result.scalar_one_or_none()
-    issue_schemas = await schema_svc.list_for_project(db, project.id)
-    # Attachments are lazy-loaded via htmx when the Attachments tab is opened
-    # (see /partials/issues/{key}/attachments/). Time entries stay eager because
-    # the sidebar displays the time_logged sum derived from the list.
-    time_entries = await _issue_svc.list_time_entries(db, issue.id)
-    time_logged = sum((te.hours or 0) for te in time_entries)
-    tab_ctx = {
-        "time_entries": time_entries,
-        "time_entry_count": len(time_entries),
-        "time_logged": time_logged,
-    }
-    watchers = await watcher_svc.list_watchers(db, issue)
+
+    # Relations are visibility-filtered in the service, so one pointing at an
+    # issue this reader cannot see is dropped along with its key. It is the one
+    # list below that an anonymous visitor still gets.
     relations = await _relation_svc.list_for_issue(db, issue, user)
-    issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
+
+    if anonymous:
+        # Everything an anonymous visitor cannot see is not loaded at all,
+        # rather than loaded and hidden in the template: members and watchers
+        # name people, time entries name people and hours, attachments are
+        # outside the anonymous scope, metadata schemas and the move target
+        # list are project configuration, and reactions belong to a person who
+        # could make them.
+        members: list = []
+        current_sprint: Sprint | None = None
+        active_sprint_id = None
+        issue_schemas: list = []
+        time_entries: list = []
+        tab_ctx = {"time_entries": [], "time_entry_count": 0, "time_logged": 0}
+        watchers: list = []
+        issue_tags: list = []
+    else:
+        members = await _project_svc.list_members(db, project)
+        # Load the current sprint (if any) for the sidebar autocomplete to pin it.
+        # Versions and sprints lists are no longer prefetched — the sidebar uses
+        # the /api/v1/projects/{key}/versions/search/ and /sprints/search/ endpoints
+        # for autocomplete.
+        current_sprint = None
+        if issue.sprint_id is not None:
+            current_sprint = await db.get(Sprint, issue.sprint_id)
+        # Derive the current active sprint for project-wide UI bits (e.g. sprint
+        # badge on activity) with a single targeted query.
+        active_sprint_id_result = await db.execute(
+            select(Sprint.id).where(Sprint.project_id == project.id, Sprint.status == "active")
+        )
+        active_sprint_id = active_sprint_id_result.scalar_one_or_none()
+        issue_schemas = await schema_svc.list_for_project(db, project.id)
+        # Attachments are lazy-loaded via htmx when the Attachments tab is opened
+        # (see /partials/issues/{key}/attachments/). Time entries stay eager because
+        # the sidebar displays the time_logged sum derived from the list.
+        time_entries = await _issue_svc.list_time_entries(db, issue.id)
+        time_logged = sum((te.hours or 0) for te in time_entries)
+        tab_ctx = {
+            "time_entries": time_entries,
+            "time_entry_count": len(time_entries),
+            "time_logged": time_logged,
+        }
+        watchers = await watcher_svc.list_watchers(db, issue)
+        issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
     # Paginate activity feed
     activity_per_page = user.preferences.get("activity_per_page", ACTIVITY_DEFAULT_PER_PAGE)
@@ -331,28 +426,41 @@ async def issue_detail(
     if last_journal_at and (not last_activity_at or last_journal_at > last_activity_at):
         last_activity_at = last_journal_at
 
-    # Load emoji reactions for all journals (paginated subset)
-    journal_ids = [j.id for j in journals]
-    reactions_by_journal_raw = await _reaction_svc.list_reactions_bulk(db, journal_ids, user.id)
-    reactions_by_journal = {
-        jid: [{"emoji": r.emoji, "count": r.count, "reacted_by_me": r.reacted_by_me} for r in groups]
-        for jid, groups in reactions_by_journal_raw.items()
-    }
+    if anonymous:
+        # Reactions are a control, not content: rendering the row would offer
+        # a button that cannot be pressed.
+        reactions_by_journal: dict = {}
+        metadata_schemas_data: list = []
+        move_targets: list = []
+        # An empty set means "link nothing". Auto-linking a KEY-123 token tells
+        # the reader the issue exists, which for a private one is a disclosure
+        # the page must not make; the text itself is unchanged.
+        known_issue_refs: set[str] = set()
+    else:
+        # Load emoji reactions for all journals (paginated subset)
+        journal_ids = [j.id for j in journals]
+        reactions_by_journal_raw = await _reaction_svc.list_reactions_bulk(db, journal_ids, user.id)
+        reactions_by_journal = {
+            jid: [{"emoji": r.emoji, "count": r.count, "reacted_by_me": r.reacted_by_me} for r in groups]
+            for jid, groups in reactions_by_journal_raw.items()
+        }
 
-    # Filter to applicable schemas (project-wide + issue's tracker)
-    applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
-    metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas]
+        # Filter to applicable schemas (project-wide + issue's tracker)
+        applicable_schemas = [s for s in issue_schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
+        metadata_schemas_data = [
+            MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in applicable_schemas
+        ]
 
-    # Candidate target projects for the "Move" action (visible to the user,
-    # excluding the issue's current project).
-    visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
-    move_targets = [p for p in visible_projects if p.id != issue.project_id]
+        # Candidate target projects for the "Move" action (visible to the user,
+        # excluding the issue's current project).
+        visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
+        move_targets = [p for p in visible_projects if p.id != issue.project_id]
 
-    # Resolve which KEY-123 references in the rendered text actually exist (or
-    # previously existed) so the markdown filter only auto-links real issues.
-    known_issue_refs = await _issue_svc.resolve_known_issue_refs(
-        db, issue.description, *[j.notes for j in all_journals]
-    )
+        # Resolve which KEY-123 references in the rendered text actually exist (or
+        # previously existed) so the markdown filter only auto-links real issues.
+        known_issue_refs = await _issue_svc.resolve_known_issue_refs(
+            db, issue.description, *[j.notes for j in all_journals]
+        )
 
     # Build lookup maps for human-readable activity details.
     # Collect all sprint/version IDs referenced in journal details so we can
@@ -392,13 +500,38 @@ async def issue_detail(
         )).all()
         version_lookup = {str(r.id): r.name for r in version_rows}
 
+    if anonymous:
+        # The signed-in map is built from the member list, which names people
+        # by login. An anonymous visitor gets display names, and only for the
+        # people the activity feed actually mentions.
+        from specivo.models.user import User as UserModel
+
+        referenced_user_ids = {
+            int(value)
+            for j in all_journals
+            for d in j.details
+            if d.prop_key == "assigned_to_id"
+            for value in (d.old_value, d.new_value)
+            if value is not None and str(value).isdigit()
+        }
+        assignee_lookup: dict[str, str] = {}
+        if referenced_user_ids:
+            assignee_rows = (
+                await db.execute(
+                    select(UserModel.id, UserModel.display_name).where(UserModel.id.in_(referenced_user_ids))
+                )
+            ).all()
+            assignee_lookup = {str(r.id): r.display_name for r in assignee_rows}
+    else:
+        assignee_lookup = {
+            str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members
+        }
+
     lookup_maps: dict[str, dict[str, str]] = {
         "status_id": {str(s.id): s.name for s in lookups["statuses"]},
         "tracker_id": {str(t.id): t.name for t in lookups["trackers"]},
         "priority_id": {str(p.id): p.name for p in lookups["priorities"]},
-        "assigned_to_id": {
-            str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members
-        },
+        "assigned_to_id": assignee_lookup,
         "sprint_id": sprint_lookup,
         "fixed_version_id": version_lookup,
     }
@@ -415,6 +548,9 @@ async def issue_detail(
         "pages/issues/detail.html",
         context={
             "user": user,
+            "anonymous": anonymous,
+            "anon_can_view_issues": anonymous,
+            "anon_can_view_wiki": anon_can_view_wiki,
             "active_page": "issues",
             "active_project": project,
             "project": project,
@@ -430,7 +566,9 @@ async def issue_detail(
             "relations": relations,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
-            "issue_metadata": merge_computed(issue.issue_metadata, project.settings),
+            # Computed metadata is derived from the project's configuration,
+            # which is not part of what an anonymous visitor may read.
+            "issue_metadata": {} if anonymous else merge_computed(issue.issue_metadata, project.settings),
             "move_targets": move_targets,
             "known_issue_refs": known_issue_refs,
             "watchers": watchers,

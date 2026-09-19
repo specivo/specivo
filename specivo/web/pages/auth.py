@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.database import get_db
 from specivo.core.utils import utcnow
 from specivo.models.user import User
-from specivo.web.deps import get_current_user_optional, get_templates, require_user
+from specivo.web.deps import (
+    get_current_user_optional,
+    get_templates,
+    require_user,
+    safe_next_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,19 +31,30 @@ async def login_page(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     reset: str = Query(""),  # noqa: B008
+    next_url: str = Query("", alias="next"),  # noqa: B008
 ) -> HTMLResponse:
     """Render the login page (standalone layout, no sidebar).
 
     If the user is already authenticated, the template shows a
     'You are logged in' widget instead of the login form.
     Accepts ``?reset=ok`` query param to show a success banner after password reset.
+
+    ``?next=`` is where the visitor was heading: the pages that refuse a
+    visitor without an account send it along so signing in returns them to the
+    page they asked for instead of the dashboard. It is validated here rather
+    than trusted — only a path within this site survives ``safe_next_path`` —
+    so the parameter cannot be used to bounce somebody to another origin.
     """
     user = await get_current_user_optional(request, db)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/auth/login.html",
-        context={"user": user, "reset_ok": reset == "ok"},
+        context={
+            "user": user,
+            "reset_ok": reset == "ok",
+            "next_path": safe_next_path(next_url),
+        },
     )
 
 

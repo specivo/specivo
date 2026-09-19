@@ -153,6 +153,9 @@
       {% if p.description %}
       <div class="project-card-desc">{{ p.description }}</div>
       {% endif %}
+      {# The counts include issues a visitor without an account cannot see, and
+         the strip below names people, so neither is rendered for one. #}
+      {% if not anonymous %}
       <div class="project-card-stats">
         <div class="project-stats-header">
           <span class="project-stats-title">{% trans %}Issues{% endtrans %}</span>
@@ -171,8 +174,10 @@
           <strong>{{ item.open_count }}</strong> {% trans %}open{% endtrans %}<span>&middot;</span><strong>{{ item.closed_count }}</strong> {% trans %}closed{% endtrans %}
         </div>
       </div>
+      {% endif %}
     </a>
     <div class="project-card-footer">
+      {% if not anonymous %}
       <div class="project-card-members">
         {% for m in item.members[:5] %}
         {{ avatar(m.display_name, size='sm', color=m.avatar_color or '', avatar_url=m.avatar_url or '') }}
@@ -181,6 +186,7 @@
         <span class="more">+{{ item.people_count - 5 }}</span>
         {% endif %}
       </div>
+      {% endif %}
       <div class="module-badges">
         {% if item.modules.get('issue_tracking') %}
         <a href="/projects/{{ p.key }}/issues/" class="module-badge enabled" style="text-decoration:none">{% trans %}Issues{% endtrans %}</a>

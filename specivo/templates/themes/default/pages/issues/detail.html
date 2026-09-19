@@ -14,6 +14,30 @@
 <div class="issue-detail-layout">
   {# Main content #}
   <div>
+    {# A visitor without an account gets the issue as text. The editor is not
+       rendered and then disabled — it is absent, along with the version
+       history link beside it, which is a page of its own that refuses. #}
+    {% if anonymous %}
+    <div>
+      <div class="issue-header">
+        <div class="issue-key-line">
+          <span class="key">{{ issue.display_key }}</span>
+          {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
+          {{ status_badge(issue.status.name if issue.status else '') }}
+        </div>
+        <h1 class="issue-title">{{ issue.subject }}</h1>
+      </div>
+      <div class="description-card">
+        <div class="description-body">
+        {% if issue.description %}
+        {{ issue.description | wiki_markdown(project.key) }}
+        {% else %}
+        <span style="color:var(--sp-text-muted);font-style:italic;">{% trans %}No description.{% endtrans %}</span>
+        {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
     <div x-data='descriptionEditor({ subject: {{ issue.subject | tojson }}, description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
       "titleRequired": _("Title cannot be empty."),
       "saveFailed": _("Could not save changes."),
@@ -88,6 +112,7 @@
         </div>
       </template>
     </div>
+    {% endif %}
 
     {# Metadata panel -- collapsible, between description and activity #}
     {% if metadata_schemas_data is defined and metadata_schemas_data and (issue_metadata or metadata_schemas_data) %}
@@ -235,9 +260,16 @@
     <div class="activity-tabs" x-data="{ tab: 'activity' }">
       <div class="activity-tabs-header">
         <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        {# Time entries name people and hours, and attachments are outside the
+           anonymous scope, so neither tab exists for a visitor without an
+           account. Relations stay: the list is visibility-filtered already. #}
+        {% if not anonymous %}
         <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
+        {% endif %}
         <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
+        {% if not anonymous %}
         <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">{% trans %}Attachments{% endtrans %}</a>
+        {% endif %}
       </div>
 
       {# Activity content #}
@@ -280,6 +312,7 @@
       </div>
 
       {# Time entries tab #}
+      {% if not anonymous %}
       <div x-show="tab === 'time'">
         <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }}, i18n: {{ {
           "minimum": _("Enter at least 1 minute"),
@@ -376,6 +409,7 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
 
       {# Relations tab #}
       <div x-show="tab === 'relations'">
@@ -392,6 +426,7 @@
             <span class="badge-status sp-rel-status">{{ rel.issue_to_status }}</span>
             {% endif %}
             {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans count=rel.delay %}(%(count)s days){% endtrans %}</span>{% endif %}
+            {% if not anonymous %}
             <a class="sp-rel-remove"
                hx-delete="/api/v1/relations/{{ rel.id }}/"
                hx-swap="none"
@@ -399,6 +434,7 @@
                data-hx-reload>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </a>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -408,6 +444,7 @@
         </div>
         {% endif %}
 
+        {% if not anonymous %}
         <div x-data='relationForm({ issueKey: "{{ issue.display_key }}", i18n: {{ {
           "addFailed": _("Failed to add relation"),
           "connectFailed": _("Unable to connect.")
@@ -466,9 +503,11 @@
             </div>
           </div>
         </div>
+        {% endif %}
       </div>
 
       {# Attachments tab — lazy-loaded via htmx on first click #}
+      {% if not anonymous %}
       <div x-show="tab === 'attachments'"
            id="issue-attachments-tab"
            hx-get="/partials/issues/{{ issue.display_key }}/attachments/"
@@ -478,9 +517,11 @@
           {% trans %}Loading attachments…{% endtrans %}
         </div>
       </div>
+      {% endif %}
     </div>
 
     {# Comment form #}
+    {% if not anonymous %}
     <div class="comment-form" x-data='commentForm({ displayKey: {{ issue.display_key | tojson }} })'>
       <textarea x-model="notes" placeholder="{{ _('Write a comment (Markdown supported)...') }}"></textarea>
       <div class="comment-form-footer">
@@ -492,6 +533,7 @@
         </button>
       </div>
     </div>
+    {% endif %}
 
     {# Pro: reaction picker, additional plugins #}
     {% block issue_detail_plugins %}{% endblock %}

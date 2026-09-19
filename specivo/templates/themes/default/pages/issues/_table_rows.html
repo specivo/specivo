@@ -19,8 +19,15 @@
   <td style="padding: var(--sp-space-sm);">{{ tracker_badge(issue.tracker.name if issue.tracker else 'Unknown') }}</td>
   <td style="padding: var(--sp-space-sm);">
     {% if issue.assigned_to %}
+      {# People are named by display name only, and without an avatar, for a
+         visitor without an account: a login identifies an account to sign in
+         as, and the avatar file is served without authentication. #}
+      {% if anonymous %}
+      <span style="font-size: var(--sp-font-size-sm);">{{ issue.assigned_to.display_name }}</span>
+      {% else %}
       {{ avatar(issue.assigned_to.login, size='xs', color=issue.assigned_to.preferences.avatar_color|default(''), avatar_url=issue.assigned_to.avatar_url|default('')) }}
       <span style="font-size: var(--sp-font-size-sm);">{{ issue.assigned_to.login }}</span>
+      {% endif %}
     {% else %}
       <span style="color: var(--sp-text-muted); font-size: var(--sp-font-size-sm);">--</span>
     {% endif %}

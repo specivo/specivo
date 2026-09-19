@@ -13,7 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.database import get_db
 from specivo.core.exceptions import AnonymousAccessDeniedError, ValidationError
 from specivo.core.rate_limit import enforce_rate_limit
-from specivo.core.security import ANONYMOUS_SEARCH_RATE_LIMIT, get_reader
+from specivo.core.security import (
+    ANONYMOUS_SEARCH_MAX_LIMIT,
+    ANONYMOUS_SEARCH_MAX_OFFSET,
+    ANONYMOUS_SEARCH_MODE,
+    ANONYMOUS_SEARCH_RATE_LIMIT,
+    get_reader,
+)
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.search import SearchFilters, SearchResponse
@@ -36,13 +42,12 @@ _METADATA_FILTER_MAX_KEYS = 10
 _TAG_VALUE_MAX = 64
 _TAG_MAX = 20
 
-# What a visitor without an account may ask of search. Keyword only: semantic
-# and hybrid both run an embedding model, and that is cost a stranger must not
-# be able to spend. The page is short and close to the surface so the result
-# set cannot be walked wholesale.
-_ANONYMOUS_SEARCH_MODE = "keyword"
-_ANONYMOUS_SEARCH_MAX_LIMIT = 25
-_ANONYMOUS_SEARCH_MAX_OFFSET = 500
+# What a visitor without an account may ask of search. Defined in
+# specivo.core.security, which the web search page reads too, so the API's
+# bounds and the page's cannot drift apart.
+_ANONYMOUS_SEARCH_MODE = ANONYMOUS_SEARCH_MODE
+_ANONYMOUS_SEARCH_MAX_LIMIT = ANONYMOUS_SEARCH_MAX_LIMIT
+_ANONYMOUS_SEARCH_MAX_OFFSET = ANONYMOUS_SEARCH_MAX_OFFSET
 
 
 async def _anonymous_search_budget(
