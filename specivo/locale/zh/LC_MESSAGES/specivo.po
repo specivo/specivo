@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-15 20:27+0200\n"
+"POT-Creation-Date: 2026-09-19 10:23+0200\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -181,26 +181,26 @@ msgstr "该冲刺不属于此项目"
 msgid "Cannot assign issues to a completed sprint"
 msgstr "无法将工作项分配到已完成的冲刺"
 
-#: specivo/services/issue_service.py:720
+#: specivo/services/issue_service.py:742
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "该工作项已被其他请求修改，请重新加载后再试。"
 
-#: specivo/services/issue_service.py:869
+#: specivo/services/issue_service.py:891
 msgid "Issue is already in this project."
 msgstr "工作项已在此项目中。"
 
-#: specivo/services/issue_service.py:878
+#: specivo/services/issue_service.py:900
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr "无法移动处于层级结构中的工作项。请先将其与父工作项解除关联，并移动其子工作项或解除它们的关联。"
 
-#: specivo/services/issue_service.py:929
+#: specivo/services/issue_service.py:951
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "已从 {old} 移动到 {new}。"
 
-#: specivo/services/issue_service.py:1010
+#: specivo/services/issue_service.py:1032
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -251,7 +251,19 @@ msgstr "工作流字段规则重复"
 msgid "Workflow field rule not found"
 msgstr "未找到工作流字段规则"
 
-#: specivo/templates/themes/default/base.html:33
+#: specivo/templates/themes/default/base.html:37
+msgid "You are reading a public project. Sign in to take part."
+msgstr "你正在浏览一个公开项目。登录后即可参与。"
+
+#: specivo/templates/themes/default/base.html:38
+#: specivo/templates/themes/default/components/header.html:93
+#: specivo/templates/themes/default/pages/auth/login.html:3
+#: specivo/templates/themes/default/pages/auth/login.html:64
+#: specivo/templates/themes/default/pages/auth/login.html:125
+msgid "Sign in"
+msgstr "登录"
+
+#: specivo/templates/themes/default/base.html:43
 msgid "Powered by"
 msgstr "技术支持"
 
@@ -278,7 +290,7 @@ msgid "Font size"
 msgstr "字号"
 
 #: specivo/templates/themes/default/components/header.html:35
-#: specivo/templates/themes/default/components/sidebar.html:56
+#: specivo/templates/themes/default/components/sidebar.html:67
 msgid "Time Tracking"
 msgstr "工时记录"
 
@@ -291,11 +303,11 @@ msgid "Stop & Log"
 msgstr "停止并记录"
 
 #: specivo/templates/themes/default/components/header.html:47
-#: specivo/templates/themes/default/pages/issues/detail.html:224
+#: specivo/templates/themes/default/pages/issues/detail.html:249
 msgid "Discard"
 msgstr "放弃"
 
-#: specivo/templates/themes/default/components/header.html:62
+#: specivo/templates/themes/default/components/header.html:65
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
 #: specivo/templates/themes/default/pages/notifications.html:3
 #: specivo/templates/themes/default/pages/notifications.html:9
@@ -303,20 +315,20 @@ msgstr "放弃"
 msgid "Notifications"
 msgstr "通知"
 
-#: specivo/templates/themes/default/components/header.html:63
+#: specivo/templates/themes/default/components/header.html:66
 #: specivo/templates/themes/default/pages/notifications.html:16
 msgid "Mark all read"
 msgstr "全部标为已读"
 
-#: specivo/templates/themes/default/components/header.html:77
+#: specivo/templates/themes/default/components/header.html:80
 msgid "No notifications"
 msgstr "暂无通知"
 
-#: specivo/templates/themes/default/components/header.html:81
+#: specivo/templates/themes/default/components/header.html:84
 msgid "View all notifications"
 msgstr "查看所有通知"
 
-#: specivo/templates/themes/default/components/header.html:103
+#: specivo/templates/themes/default/components/header.html:114
 #: specivo/templates/themes/default/pages/auth/preferences.html:9
 #: specivo/templates/themes/default/pages/auth/profile.html:3
 #: specivo/templates/themes/default/pages/auth/profile.html:9
@@ -324,7 +336,7 @@ msgstr "查看所有通知"
 msgid "Profile"
 msgstr "个人资料"
 
-#: specivo/templates/themes/default/components/header.html:107
+#: specivo/templates/themes/default/components/header.html:118
 #: specivo/templates/themes/default/pages/auth/preferences.html:3
 #: specivo/templates/themes/default/pages/auth/preferences.html:11
 #: specivo/templates/themes/default/pages/auth/preferences.html:14
@@ -332,7 +344,7 @@ msgstr "个人资料"
 msgid "Preferences"
 msgstr "偏好设置"
 
-#: specivo/templates/themes/default/components/header.html:111
+#: specivo/templates/themes/default/components/header.html:122
 #: specivo/templates/themes/default/pages/admin/user_detail.html:92
 #: specivo/templates/themes/default/pages/auth/api_keys.html:3
 #: specivo/templates/themes/default/pages/auth/api_keys.html:9
@@ -342,7 +354,7 @@ msgstr "偏好设置"
 msgid "API Keys"
 msgstr "API 密钥"
 
-#: specivo/templates/themes/default/components/header.html:116
+#: specivo/templates/themes/default/components/header.html:127
 #: specivo/templates/themes/default/pages/auth/change_password.html:53
 #: specivo/templates/themes/default/pages/auth/login.html:47
 msgid "Sign out"
@@ -373,19 +385,19 @@ msgstr "第 %(first)s–%(last)s 条，共 %(total)s 条"
 
 #: specivo/templates/themes/default/components/macros.html:158
 #: specivo/templates/themes/default/pages/_my_issues.html:16
-#: specivo/templates/themes/default/pages/search.html:298
+#: specivo/templates/themes/default/pages/search.html:308
 msgid "Show"
 msgstr "显示"
 
-#: specivo/templates/themes/default/components/sidebar.html:20
+#: specivo/templates/themes/default/components/sidebar.html:21
 #: specivo/templates/themes/default/pages/dashboard.html:3
 #: specivo/templates/themes/default/pages/dashboard.html:8
 #: specivo/templates/themes/default/pages/error.html:46
 msgid "Dashboard"
 msgstr "仪表盘"
 
-#: specivo/templates/themes/default/components/sidebar.html:24
-#: specivo/templates/themes/default/components/sidebar.html:73
+#: specivo/templates/themes/default/components/sidebar.html:26
+#: specivo/templates/themes/default/components/sidebar.html:85
 #: specivo/templates/themes/default/pages/admin/dashboard.html:79
 #: specivo/templates/themes/default/pages/admin/groups.html:52
 #: specivo/templates/themes/default/pages/admin/projects.html:3
@@ -404,7 +416,7 @@ msgstr "仪表盘"
 msgid "Projects"
 msgstr "项目"
 
-#: specivo/templates/themes/default/components/sidebar.html:33
+#: specivo/templates/themes/default/components/sidebar.html:38
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:33
 #: specivo/templates/themes/default/pages/admin/projects.html:156
@@ -412,10 +424,10 @@ msgstr "项目"
 #: specivo/templates/themes/default/pages/issues/list.html:4
 #: specivo/templates/themes/default/pages/issues/list.html:14
 #: specivo/templates/themes/default/pages/projects/detail.html:42
-#: specivo/templates/themes/default/pages/projects/detail.html:76
+#: specivo/templates/themes/default/pages/projects/detail.html:81
 #: specivo/templates/themes/default/pages/projects/list.html:87
-#: specivo/templates/themes/default/pages/projects/list.html:158
-#: specivo/templates/themes/default/pages/projects/list.html:186
+#: specivo/templates/themes/default/pages/projects/list.html:161
+#: specivo/templates/themes/default/pages/projects/list.html:192
 #: specivo/templates/themes/default/pages/projects/settings.html:81
 #: specivo/templates/themes/default/pages/projects/settings.html:331
 #: specivo/templates/themes/default/pages/projects/settings.html:886
@@ -425,11 +437,11 @@ msgstr "项目"
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:56
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:109
 #: specivo/templates/themes/default/pages/projects/version_detail.html:81
-#: specivo/templates/themes/default/pages/search.html:43
+#: specivo/templates/themes/default/pages/search.html:47
 msgid "Issues"
 msgstr "工作项"
 
-#: specivo/templates/themes/default/components/sidebar.html:38
+#: specivo/templates/themes/default/components/sidebar.html:45
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:10
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:15
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:207
@@ -441,18 +453,18 @@ msgstr "工作项"
 msgid "Backlog"
 msgstr "待办列表"
 
-#: specivo/templates/themes/default/components/sidebar.html:43
+#: specivo/templates/themes/default/components/sidebar.html:50
 msgid "Current Sprint"
 msgstr "当前冲刺"
 
-#: specivo/templates/themes/default/components/sidebar.html:48
+#: specivo/templates/themes/default/components/sidebar.html:57
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:159
 #: specivo/templates/themes/default/pages/projects/detail.html:45
 #: specivo/templates/themes/default/pages/projects/list.html:88
-#: specivo/templates/themes/default/pages/projects/list.html:189
+#: specivo/templates/themes/default/pages/projects/list.html:195
 #: specivo/templates/themes/default/pages/projects/settings.html:85
-#: specivo/templates/themes/default/pages/search.html:44
+#: specivo/templates/themes/default/pages/search.html:48
 #: specivo/templates/themes/default/pages/wiki/diff.html:10
 #: specivo/templates/themes/default/pages/wiki/edit.html:11
 #: specivo/templates/themes/default/pages/wiki/edit.html:19
@@ -465,8 +477,8 @@ msgstr "当前冲刺"
 msgid "Wiki"
 msgstr "维基"
 
-#: specivo/templates/themes/default/components/sidebar.html:52
-#: specivo/templates/themes/default/pages/projects/detail.html:47
+#: specivo/templates/themes/default/components/sidebar.html:63
+#: specivo/templates/themes/default/pages/projects/detail.html:48
 #: specivo/templates/themes/default/pages/projects/roadmap.html:4
 #: specivo/templates/themes/default/pages/projects/roadmap.html:10
 #: specivo/templates/themes/default/pages/projects/roadmap.html:14
@@ -474,7 +486,7 @@ msgstr "维基"
 msgid "Roadmap"
 msgstr "路线图"
 
-#: specivo/templates/themes/default/components/sidebar.html:60
+#: specivo/templates/themes/default/components/sidebar.html:71
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:10
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:10
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:47
@@ -483,46 +495,46 @@ msgstr "路线图"
 msgid "Sprints"
 msgstr "冲刺"
 
-#: specivo/templates/themes/default/components/sidebar.html:64
+#: specivo/templates/themes/default/components/sidebar.html:75
 msgid "Recurring"
 msgstr "重复任务"
 
-#: specivo/templates/themes/default/components/sidebar.html:68
+#: specivo/templates/themes/default/components/sidebar.html:79
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:11
 #: specivo/templates/themes/default/pages/admin/dashboard.html:119
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:11
 #: specivo/templates/themes/default/pages/admin/settings.html:14
-#: specivo/templates/themes/default/pages/projects/detail.html:52
+#: specivo/templates/themes/default/pages/projects/detail.html:54
 #: specivo/templates/themes/default/pages/projects/settings.html:3
 #: specivo/templates/themes/default/pages/projects/settings.html:13
 #: specivo/templates/themes/default/pages/projects/settings.html:16
 msgid "Settings"
 msgstr "设置"
 
-#: specivo/templates/themes/default/components/sidebar.html:88
+#: specivo/templates/themes/default/components/sidebar.html:100
 #: specivo/templates/themes/default/pages/auth/preferences.html:70
 msgid "Security"
 msgstr "安全"
 
-#: specivo/templates/themes/default/components/sidebar.html:92
+#: specivo/templates/themes/default/components/sidebar.html:104
 msgid "Agent Policies"
 msgstr "代理策略"
 
-#: specivo/templates/themes/default/components/sidebar.html:98
+#: specivo/templates/themes/default/components/sidebar.html:110
 msgid "Credentials"
 msgstr "凭据"
 
-#: specivo/templates/themes/default/components/sidebar.html:104
+#: specivo/templates/themes/default/components/sidebar.html:116
 msgid "Audit Log"
 msgstr "审计日志"
 
-#: specivo/templates/themes/default/components/sidebar.html:112
+#: specivo/templates/themes/default/components/sidebar.html:124
 #: specivo/templates/themes/default/pages/admin/dashboard.html:51
 msgid "Administration"
 msgstr "管理"
 
-#: specivo/templates/themes/default/components/sidebar.html:115
+#: specivo/templates/themes/default/components/sidebar.html:127
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:3
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:10
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:3
@@ -576,9 +588,9 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/admin/settings.html:58
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:217
-#: specivo/templates/themes/default/pages/issues/detail.html:85
-#: specivo/templates/themes/default/pages/issues/detail.html:330
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:281
+#: specivo/templates/themes/default/pages/issues/detail.html:109
+#: specivo/templates/themes/default/pages/issues/detail.html:363
 #: specivo/templates/themes/default/pages/issues/form.html:373
 #: specivo/templates/themes/default/pages/projects/settings.html:65
 #: specivo/templates/themes/default/pages/projects/settings.html:88
@@ -627,10 +639,10 @@ msgstr "保存语言失败。"
 #: specivo/templates/themes/default/pages/_fts_i18n.html:9
 #: specivo/templates/themes/default/pages/admin/projects.html:16
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:8
-#: specivo/templates/themes/default/pages/issues/detail.html:287
-#: specivo/templates/themes/default/pages/issues/detail.html:413
+#: specivo/templates/themes/default/pages/issues/detail.html:320
+#: specivo/templates/themes/default/pages/issues/detail.html:450
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:15
-#: specivo/templates/themes/default/pages/projects/detail.html:153
+#: specivo/templates/themes/default/pages/projects/detail.html:161
 #: specivo/templates/themes/default/pages/projects/list.html:32
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:33
 #: specivo/templates/themes/default/pages/projects/settings.html:36
@@ -638,7 +650,7 @@ msgstr "保存语言失败。"
 #: specivo/templates/themes/default/pages/projects/settings.html:284
 #: specivo/templates/themes/default/pages/projects/settings.html:806
 #: specivo/templates/themes/default/pages/projects/settings.html:852
-#: specivo/templates/themes/default/pages/wiki/show.html:90
+#: specivo/templates/themes/default/pages/wiki/show.html:97
 msgid "Unable to connect."
 msgstr "无法连接。"
 
@@ -723,9 +735,9 @@ msgstr "/"
 #: specivo/templates/themes/default/pages/_my_issues.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:32
 #: specivo/templates/themes/default/pages/admin/settings.html:96
-#: specivo/templates/themes/default/pages/issues/list.html:245
-#: specivo/templates/themes/default/pages/projects/detail.html:68
-#: specivo/templates/themes/default/pages/projects/detail.html:175
+#: specivo/templates/themes/default/pages/issues/list.html:251
+#: specivo/templates/themes/default/pages/projects/detail.html:70
+#: specivo/templates/themes/default/pages/projects/detail.html:183
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:214
 #: specivo/templates/themes/default/pages/projects/settings.html:48
 #: specivo/templates/themes/default/pages/projects/version_detail.html:94
@@ -735,7 +747,7 @@ msgstr "标识"
 #: specivo/templates/themes/default/pages/_my_issues.html:32
 #: specivo/templates/themes/default/pages/admin/email.html:86
 #: specivo/templates/themes/default/pages/issues/form.html:61
-#: specivo/templates/themes/default/pages/issues/list.html:246
+#: specivo/templates/themes/default/pages/issues/list.html:252
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:130
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:215
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:208
@@ -750,9 +762,10 @@ msgstr "主题"
 #: specivo/templates/themes/default/pages/admin/versions.html:78
 #: specivo/templates/themes/default/pages/auth/api_keys.html:80
 #: specivo/templates/themes/default/pages/auth/profile.html:70
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:13
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:17
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:77
 #: specivo/templates/themes/default/pages/issues/form.html:88
-#: specivo/templates/themes/default/pages/issues/list.html:247
+#: specivo/templates/themes/default/pages/issues/list.html:253
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:63
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:216
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:226
@@ -768,7 +781,7 @@ msgstr "状态"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
-#: specivo/templates/themes/default/pages/issues/detail.html:448
+#: specivo/templates/themes/default/pages/issues/detail.html:485
 #: specivo/templates/themes/default/pages/issues/form.html:331
 msgid "Type"
 msgstr "类型"
@@ -781,7 +794,7 @@ msgid "Project"
 msgstr "项目"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:36
-#: specivo/templates/themes/default/pages/issues/list.html:250
+#: specivo/templates/themes/default/pages/issues/list.html:256
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:181
 msgid "Updated"
 msgstr "更新时间"
@@ -864,7 +877,7 @@ msgstr "评论了"
 
 #: specivo/templates/themes/default/pages/dashboard.html:130
 #: specivo/templates/themes/default/pages/dashboard.html:259
-#: specivo/templates/themes/default/pages/issues/_activity.html:36
+#: specivo/templates/themes/default/pages/issues/_activity.html:44
 msgid "updated"
 msgstr "更新了"
 
@@ -923,7 +936,7 @@ msgid "No active releases."
 msgstr "暂无进行中的发布。"
 
 #: specivo/templates/themes/default/pages/dashboard.html:201
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:101
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:165
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:108
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:185
 msgid "Sprint"
@@ -946,13 +959,13 @@ msgid "days"
 msgstr "天"
 
 #: specivo/templates/themes/default/pages/dashboard.html:241
-#: specivo/templates/themes/default/pages/projects/list.html:171
+#: specivo/templates/themes/default/pages/projects/list.html:174
 #: specivo/templates/themes/default/pages/projects/version_detail.html:58
 msgid "open"
 msgstr "待处理"
 
 #: specivo/templates/themes/default/pages/dashboard.html:245
-#: specivo/templates/themes/default/pages/projects/list.html:202
+#: specivo/templates/themes/default/pages/projects/list.html:208
 msgid "No projects yet."
 msgstr "暂无项目。"
 
@@ -1027,15 +1040,15 @@ msgstr "全部（%(count)s）"
 msgid "Unread (%(count)s)"
 msgstr "未读（%(count)s）"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:271
-#: specivo/templates/themes/default/pages/issues/list.html:199
+#: specivo/templates/themes/default/pages/issues/detail.html:303
+#: specivo/templates/themes/default/pages/issues/list.html:205
 #: specivo/templates/themes/default/pages/notifications.html:76
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:193
 msgid "Previous"
 msgstr "上一页"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:275
-#: specivo/templates/themes/default/pages/issues/list.html:211
+#: specivo/templates/themes/default/pages/issues/detail.html:307
+#: specivo/templates/themes/default/pages/issues/list.html:217
 #: specivo/templates/themes/default/pages/notifications.html:79
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:205
 msgid "Next"
@@ -1049,137 +1062,137 @@ msgstr "暂无通知。"
 msgid "Search everything..."
 msgstr "搜索全部内容……"
 
-#: specivo/templates/themes/default/pages/search.html:31
+#: specivo/templates/themes/default/pages/search.html:34
 msgid "Hybrid"
 msgstr "混合"
 
-#: specivo/templates/themes/default/pages/search.html:31
+#: specivo/templates/themes/default/pages/search.html:34
 msgid "Keyword"
 msgstr "关键词"
 
-#: specivo/templates/themes/default/pages/issues/list.html:42
+#: specivo/templates/themes/default/pages/issues/list.html:44
 #: specivo/templates/themes/default/pages/projects/roadmap.html:20
 #: specivo/templates/themes/default/pages/projects/version_detail.html:83
-#: specivo/templates/themes/default/pages/search.html:42
+#: specivo/templates/themes/default/pages/search.html:46
 msgid "All"
 msgstr "全部"
 
-#: specivo/templates/themes/default/pages/search.html:45
+#: specivo/templates/themes/default/pages/search.html:49
 #: specivo/templates/themes/default/pages/time/form.html:46
 #: specivo/templates/themes/default/pages/time/list.html:57
 msgid "Comments"
 msgstr "评论"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:13
-#: specivo/templates/themes/default/pages/issues/detail.html:240
+#: specivo/templates/themes/default/pages/issues/detail.html:271
 #: specivo/templates/themes/default/pages/issues/form.html:352
-#: specivo/templates/themes/default/pages/search.html:46
-#: specivo/templates/themes/default/pages/wiki/show.html:96
+#: specivo/templates/themes/default/pages/search.html:50
+#: specivo/templates/themes/default/pages/wiki/show.html:103
 msgid "Attachments"
 msgstr "附件"
 
-#: specivo/templates/themes/default/pages/search.html:65
+#: specivo/templates/themes/default/pages/search.html:69
 #, python-format
 msgid "Project: %(key)s"
 msgstr "项目：%(key)s"
 
-#: specivo/templates/themes/default/pages/search.html:85
+#: specivo/templates/themes/default/pages/search.html:94
 msgid "Filter by tags"
 msgstr "按标签筛选"
 
-#: specivo/templates/themes/default/pages/search.html:105
+#: specivo/templates/themes/default/pages/search.html:114
 msgid "Filter by tag..."
 msgstr "按标签筛选……"
 
-#: specivo/templates/themes/default/pages/search.html:105
+#: specivo/templates/themes/default/pages/search.html:114
 msgid "Add tag..."
 msgstr "添加标签……"
 
-#: specivo/templates/themes/default/pages/search.html:109
+#: specivo/templates/themes/default/pages/search.html:118
 msgid "Searching…"
 msgstr "正在搜索……"
 
-#: specivo/templates/themes/default/pages/search.html:112
+#: specivo/templates/themes/default/pages/search.html:121
 msgid "No matching tags"
 msgstr "没有匹配的标签"
 
-#: specivo/templates/themes/default/pages/search.html:131
+#: specivo/templates/themes/default/pages/search.html:141
 msgid "Applied metadata filter"
 msgstr "已应用的元数据筛选条件"
 
-#: specivo/templates/themes/default/pages/search.html:143
+#: specivo/templates/themes/default/pages/search.html:153
 #, python-format
 msgid "%(count)s result for &ldquo;%(query)s&rdquo;"
 msgid_plural "%(count)s results for &ldquo;%(query)s&rdquo;"
 msgstr[0] "找到 %(count)s 条与 &ldquo;%(query)s&rdquo; 相关的结果"
 
-#: specivo/templates/themes/default/pages/search.html:146
+#: specivo/templates/themes/default/pages/search.html:156
 #, python-format
 msgid "%(count)s result tagged %(tags)s"
 msgid_plural "%(count)s results tagged %(tags)s"
 msgstr[0] "找到 %(count)s 条带有标签 %(tags)s 的结果"
 
-#: specivo/templates/themes/default/pages/search.html:148
+#: specivo/templates/themes/default/pages/search.html:158
 #, python-format
 msgid "%(count)s issue where %(field)s = %(value)s"
 msgid_plural "%(count)s issues where %(field)s = %(value)s"
 msgstr[0] "找到 %(count)s 个 %(field)s = %(value)s 的工作项"
 
-#: specivo/templates/themes/default/pages/search.html:185
+#: specivo/templates/themes/default/pages/search.html:195
 #, python-format
 msgid "Comment on %(title)s"
 msgstr "对 %(title)s 的评论"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:74
-#: specivo/templates/themes/default/pages/issues/detail.html:344
-#: specivo/templates/themes/default/pages/issues/detail.html:491
-#: specivo/templates/themes/default/pages/search.html:189
+#: specivo/templates/themes/default/pages/issues/detail.html:377
+#: specivo/templates/themes/default/pages/issues/detail.html:532
+#: specivo/templates/themes/default/pages/search.html:199
 #: specivo/templates/themes/default/pages/wiki/history.html:33
 msgid "Comment"
 msgstr "评论"
 
-#: specivo/templates/themes/default/pages/search.html:210
+#: specivo/templates/themes/default/pages/search.html:220
 #: specivo/templates/themes/default/pages/time/list.html:54
 msgid "Issue"
 msgstr "工作项"
 
-#: specivo/templates/themes/default/pages/search.html:225
-#: specivo/templates/themes/default/pages/search.html:229
+#: specivo/templates/themes/default/pages/search.html:235
+#: specivo/templates/themes/default/pages/search.html:239
 msgid "Wiki Page"
 msgstr "维基页面"
 
-#: specivo/templates/themes/default/pages/search.html:236
-#: specivo/templates/themes/default/pages/search.html:240
+#: specivo/templates/themes/default/pages/search.html:246
+#: specivo/templates/themes/default/pages/search.html:250
 msgid "Attachment"
 msgstr "附件"
 
-#: specivo/templates/themes/default/pages/search.html:263
+#: specivo/templates/themes/default/pages/search.html:273
 msgid "Score:"
 msgstr "评分："
 
-#: specivo/templates/themes/default/pages/search.html:277
+#: specivo/templates/themes/default/pages/search.html:287
 #, python-format
 msgid "%(start)s–%(end)s of %(total)s"
 msgstr "第 %(start)s–%(end)s 条，共 %(total)s 条"
 
-#: specivo/templates/themes/default/pages/search.html:311
+#: specivo/templates/themes/default/pages/search.html:321
 #, python-format
 msgid ""
 "No results found for &ldquo;%(query)s&rdquo;. Try different keywords or "
 "search mode."
 msgstr "未找到与 &ldquo;%(query)s&rdquo; 相关的结果。请尝试其他关键词或搜索模式。"
 
-#: specivo/templates/themes/default/pages/search.html:314
+#: specivo/templates/themes/default/pages/search.html:324
 #, python-format
 msgid "No issues or wiki pages found tagged %(tags)s."
 msgstr "未找到带有标签 %(tags)s 的工作项或维基页面。"
 
-#: specivo/templates/themes/default/pages/search.html:316
+#: specivo/templates/themes/default/pages/search.html:326
 #, python-format
 msgid "No issues found where %(field)s = %(value)s."
 msgstr "未找到 %(field)s = %(value)s 的工作项。"
 
-#: specivo/templates/themes/default/pages/search.html:323
+#: specivo/templates/themes/default/pages/search.html:333
 msgid "Enter a search query to find issues, wiki pages, and comments."
 msgstr "输入搜索内容以查找工作项、维基页面和评论。"
 
@@ -1254,13 +1267,13 @@ msgstr "尚无项目选择加入匿名阅读。"
 #: specivo/templates/themes/default/pages/admin/users.html:156
 #: specivo/templates/themes/default/pages/admin/users.html:197
 #: specivo/templates/themes/default/pages/auth/api_keys.html:66
-#: specivo/templates/themes/default/pages/issues/_activity.html:103
-#: specivo/templates/themes/default/pages/issues/_activity.html:177
+#: specivo/templates/themes/default/pages/issues/_activity.html:116
+#: specivo/templates/themes/default/pages/issues/_activity.html:191
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:130
-#: specivo/templates/themes/default/pages/issues/detail.html:84
-#: specivo/templates/themes/default/pages/issues/detail.html:417
+#: specivo/templates/themes/default/pages/issues/detail.html:108
+#: specivo/templates/themes/default/pages/issues/detail.html:454
 #: specivo/templates/themes/default/pages/issues/form.html:379
-#: specivo/templates/themes/default/pages/projects/detail.html:186
+#: specivo/templates/themes/default/pages/projects/detail.html:194
 #: specivo/templates/themes/default/pages/projects/list.html:97
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:116
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:333
@@ -1278,7 +1291,7 @@ msgstr "尚无项目选择加入匿名阅读。"
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:214
 #: specivo/templates/themes/default/pages/time/form.html:56
 #: specivo/templates/themes/default/pages/wiki/edit.html:139
-#: specivo/templates/themes/default/pages/wiki/show.html:223
+#: specivo/templates/themes/default/pages/wiki/show.html:230
 msgid "Cancel"
 msgstr "取消"
 
@@ -1541,7 +1554,7 @@ msgid "Search by name or login..."
 msgstr "按名称或登录名搜索……"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
-#: specivo/templates/themes/default/pages/issues/detail.html:464
+#: specivo/templates/themes/default/pages/issues/detail.html:501
 #: specivo/templates/themes/default/pages/issues/form.html:342
 #: specivo/templates/themes/default/pages/projects/settings.html:147
 msgid "Add"
@@ -1554,7 +1567,7 @@ msgstr "正在添加……"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:71
 #: specivo/templates/themes/default/pages/admin/users.html:40
-#: specivo/templates/themes/default/pages/issues/detail.html:341
+#: specivo/templates/themes/default/pages/issues/detail.html:374
 #: specivo/templates/themes/default/pages/projects/settings.html:108
 #: specivo/templates/themes/default/pages/time/list.html:56
 msgid "User"
@@ -1644,9 +1657,9 @@ msgstr "用户组"
 #: specivo/templates/themes/default/pages/admin/groups.html:117
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:187
 #: specivo/templates/themes/default/pages/admin/projects.html:125
-#: specivo/templates/themes/default/pages/issues/_activity.html:36
+#: specivo/templates/themes/default/pages/issues/_activity.html:44
 #: specivo/templates/themes/default/pages/issues/form.html:77
-#: specivo/templates/themes/default/pages/projects/detail.html:180
+#: specivo/templates/themes/default/pages/projects/detail.html:188
 #: specivo/templates/themes/default/pages/projects/list.html:58
 #: specivo/templates/themes/default/pages/projects/settings.html:61
 #: specivo/templates/themes/default/pages/projects/settings.html:397
@@ -1655,7 +1668,7 @@ msgstr "描述"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:51
 #: specivo/templates/themes/default/pages/admin/projects.html:34
-#: specivo/templates/themes/default/pages/projects/detail.html:119
+#: specivo/templates/themes/default/pages/projects/detail.html:126
 msgid "People"
 msgstr "人员"
 
@@ -1669,7 +1682,7 @@ msgstr "暂无用户组。"
 #: specivo/templates/themes/default/pages/admin/projects.html:74
 #: specivo/templates/themes/default/pages/admin/settings.html:116
 #: specivo/templates/themes/default/pages/admin/versions.html:121
-#: specivo/templates/themes/default/pages/issues/detail.html:50
+#: specivo/templates/themes/default/pages/issues/detail.html:74
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:86
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
@@ -1685,7 +1698,7 @@ msgstr "暂无用户组。"
 #: specivo/templates/themes/default/pages/projects/version_detail.html:44
 #: specivo/templates/themes/default/pages/time/list.html:83
 #: specivo/templates/themes/default/pages/wiki/edit.html:13
-#: specivo/templates/themes/default/pages/wiki/show.html:31
+#: specivo/templates/themes/default/pages/wiki/show.html:35
 msgid "Edit"
 msgstr "编辑"
 
@@ -1703,10 +1716,10 @@ msgstr "编辑"
 #: specivo/templates/themes/default/pages/projects/settings.html:520
 #: specivo/templates/themes/default/pages/projects/settings.html:691
 #: specivo/templates/themes/default/pages/projects/settings.html:906
-#: specivo/templates/themes/default/pages/wiki/show.html:152
-#: specivo/templates/themes/default/pages/wiki/show.html:187
-#: specivo/templates/themes/default/pages/wiki/show.html:189
-#: specivo/templates/themes/default/pages/wiki/show.html:225
+#: specivo/templates/themes/default/pages/wiki/show.html:159
+#: specivo/templates/themes/default/pages/wiki/show.html:194
+#: specivo/templates/themes/default/pages/wiki/show.html:196
+#: specivo/templates/themes/default/pages/wiki/show.html:232
 msgid "Delete"
 msgstr "删除"
 
@@ -1719,7 +1732,7 @@ msgstr "新建用户组"
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:177
 #: specivo/templates/themes/default/pages/admin/user_detail.html:130
 #: specivo/templates/themes/default/pages/auth/api_keys.html:76
-#: specivo/templates/themes/default/pages/projects/detail.html:166
+#: specivo/templates/themes/default/pages/projects/detail.html:174
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:60
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:69
 #: specivo/templates/themes/default/pages/projects/settings.html:40
@@ -1785,7 +1798,7 @@ msgstr "此用户组未授予任何项目访问权限，因此不会撤销任何
 #: specivo/templates/themes/default/pages/projects/settings.html:448
 #: specivo/templates/themes/default/pages/projects/settings.html:549
 #: specivo/templates/themes/default/pages/projects/settings.html:975
-#: specivo/templates/themes/default/pages/wiki/show.html:226
+#: specivo/templates/themes/default/pages/wiki/show.html:233
 msgid "Deleting..."
 msgstr "正在删除……"
 
@@ -1836,9 +1849,9 @@ msgid "Reason"
 msgstr "原因"
 
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:49
-#: specivo/templates/themes/default/pages/issues/detail.html:238
-#: specivo/templates/themes/default/pages/projects/detail.html:49
-#: specivo/templates/themes/default/pages/projects/list.html:192
+#: specivo/templates/themes/default/pages/issues/detail.html:267
+#: specivo/templates/themes/default/pages/projects/detail.html:51
+#: specivo/templates/themes/default/pages/projects/list.html:198
 msgid "Time"
 msgstr "时间"
 
@@ -1905,7 +1918,7 @@ msgstr "预设已更新"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:27
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:6
-#: specivo/templates/themes/default/pages/wiki/show.html:88
+#: specivo/templates/themes/default/pages/wiki/show.html:95
 msgid "Delete failed"
 msgstr "删除失败"
 
@@ -2080,7 +2093,7 @@ msgstr "已归档"
 #: specivo/templates/themes/default/pages/admin/projects.html:65
 #: specivo/templates/themes/default/pages/admin/versions.html:36
 #: specivo/templates/themes/default/pages/admin/versions.html:55
-#: specivo/templates/themes/default/pages/issues/list.html:41
+#: specivo/templates/themes/default/pages/issues/list.html:43
 #: specivo/templates/themes/default/pages/projects/settings.html:406
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:106
 #: specivo/templates/themes/default/pages/projects/version_detail.html:85
@@ -2110,8 +2123,8 @@ msgid "e.g. Backend API"
 msgstr "例如：后端 API"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:114
-#: specivo/templates/themes/default/pages/projects/detail.html:64
-#: specivo/templates/themes/default/pages/projects/detail.html:171
+#: specivo/templates/themes/default/pages/projects/detail.html:66
+#: specivo/templates/themes/default/pages/projects/detail.html:179
 #: specivo/templates/themes/default/pages/projects/list.html:47
 #: specivo/templates/themes/default/pages/projects/settings.html:44
 msgid "Identifier"
@@ -2128,7 +2141,7 @@ msgid "2-128 uppercase letters/digits"
 msgstr "2-128 个大写字母或数字"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:125
-#: specivo/templates/themes/default/pages/projects/detail.html:180
+#: specivo/templates/themes/default/pages/projects/detail.html:188
 #: specivo/templates/themes/default/pages/projects/list.html:58
 msgid "optional"
 msgstr "可选"
@@ -2272,7 +2285,7 @@ msgstr "创建密钥失败"
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:27
 #: specivo/templates/themes/default/pages/auth/api_keys.html:14
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:13
-#: specivo/templates/themes/default/pages/auth/login.html:61
+#: specivo/templates/themes/default/pages/auth/login.html:62
 #: specivo/templates/themes/default/pages/auth/reset_password.html:53
 #: specivo/templates/themes/default/pages/wiki/edit.html:41
 msgid "Unable to connect. Please try again."
@@ -2358,7 +2371,7 @@ msgstr "上次登录"
 #: specivo/templates/themes/default/pages/admin/user_detail.html:81
 #: specivo/templates/themes/default/pages/admin/users.html:80
 #: specivo/templates/themes/default/pages/admin/users.html:131
-#: specivo/templates/themes/default/pages/auth/login.html:103
+#: specivo/templates/themes/default/pages/auth/login.html:104
 msgid "Password"
 msgstr "密码"
 
@@ -2624,7 +2637,7 @@ msgid "Delete version \"%(name)s\"?"
 msgstr "要删除版本“%(name)s”吗？"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:24
-#: specivo/templates/themes/default/pages/issues/detail.html:367
+#: specivo/templates/themes/default/pages/issues/detail.html:400
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
@@ -2633,7 +2646,7 @@ msgstr "总计"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:28
 #: specivo/templates/themes/default/pages/admin/versions.html:53
-#: specivo/templates/themes/default/pages/issues/list.html:40
+#: specivo/templates/themes/default/pages/issues/list.html:42
 #: specivo/templates/themes/default/pages/projects/roadmap.html:18
 #: specivo/templates/themes/default/pages/projects/settings.html:404
 #: specivo/templates/themes/default/pages/projects/version_detail.html:84
@@ -2665,12 +2678,12 @@ msgid "Reopen"
 msgstr "重新开放"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:76
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:56
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:120
 #: specivo/templates/themes/default/pages/issues/description_diff.html:71
 #: specivo/templates/themes/default/pages/issues/form.html:116
 #: specivo/templates/themes/default/pages/projects/settings.html:327
 #: specivo/templates/themes/default/pages/wiki/history.html:30
-#: specivo/templates/themes/default/pages/wiki/show.html:47
+#: specivo/templates/themes/default/pages/wiki/show.html:51
 msgid "Version"
 msgstr "版本"
 
@@ -2682,7 +2695,8 @@ msgid "Due date"
 msgstr "截止日期"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:80
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:174
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:36
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:238
 #: specivo/templates/themes/default/pages/projects/settings.html:330
 msgid "Progress"
 msgstr "进度"
@@ -2696,9 +2710,10 @@ msgid "Workflow Transitions"
 msgstr "工作流状态流转"
 
 #: specivo/templates/themes/default/pages/admin/workflows.html:20
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:50
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:32
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:114
 #: specivo/templates/themes/default/pages/issues/form.html:67
-#: specivo/templates/themes/default/pages/issues/list.html:248
+#: specivo/templates/themes/default/pages/issues/list.html:254
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:218
 #: specivo/templates/themes/default/pages/projects/version_detail.html:96
 msgid "Tracker"
@@ -2860,18 +2875,12 @@ msgid "Email address"
 msgstr "电子邮件地址"
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:61
-#: specivo/templates/themes/default/pages/auth/login.html:96
+#: specivo/templates/themes/default/pages/auth/login.html:97
 msgid "you@example.com"
 msgstr "you@example.com"
 
-#: specivo/templates/themes/default/pages/auth/login.html:3
-#: specivo/templates/themes/default/pages/auth/login.html:63
-#: specivo/templates/themes/default/pages/auth/login.html:124
-msgid "Sign in"
-msgstr "登录"
-
 #: specivo/templates/themes/default/pages/auth/login.html:24
-#: specivo/templates/themes/default/pages/auth/login.html:74
+#: specivo/templates/themes/default/pages/auth/login.html:75
 msgid "Your team's knowledge, finally findable."
 msgstr "让团队的知识，终于触手可及。"
 
@@ -2887,39 +2896,39 @@ msgstr "前往仪表盘"
 msgid "Signed in as"
 msgstr "当前登录身份"
 
-#: specivo/templates/themes/default/pages/auth/login.html:60
+#: specivo/templates/themes/default/pages/auth/login.html:61
 msgid "Invalid credentials"
 msgstr "凭据无效"
 
-#: specivo/templates/themes/default/pages/auth/login.html:62
+#: specivo/templates/themes/default/pages/auth/login.html:63
 msgid "Signing in..."
 msgstr "登录中……"
 
-#: specivo/templates/themes/default/pages/auth/login.html:81
+#: specivo/templates/themes/default/pages/auth/login.html:82
 msgid "Password reset successfully. Please sign in with your new password."
 msgstr "密码重置成功。请使用你的新密码登录。"
 
-#: specivo/templates/themes/default/pages/auth/login.html:91
+#: specivo/templates/themes/default/pages/auth/login.html:92
 msgid "Username or email"
 msgstr "用户名或电子邮件"
 
-#: specivo/templates/themes/default/pages/auth/login.html:108
+#: specivo/templates/themes/default/pages/auth/login.html:109
 msgid "Enter your password"
 msgstr "请输入你的密码"
 
-#: specivo/templates/themes/default/pages/auth/login.html:115
+#: specivo/templates/themes/default/pages/auth/login.html:116
 msgid "Remember me"
 msgstr "记住我"
 
-#: specivo/templates/themes/default/pages/auth/login.html:117
+#: specivo/templates/themes/default/pages/auth/login.html:118
 msgid "Forgot password?"
 msgstr "忘记密码？"
 
-#: specivo/templates/themes/default/pages/auth/login.html:129
+#: specivo/templates/themes/default/pages/auth/login.html:130
 msgid "Need an account?"
 msgstr "需要账户？"
 
-#: specivo/templates/themes/default/pages/auth/login.html:129
+#: specivo/templates/themes/default/pages/auth/login.html:130
 msgid "Contact your administrator"
 msgstr "请联系你的管理员"
 
@@ -3001,176 +3010,198 @@ msgstr "确认密码"
 msgid "Re-enter your password"
 msgstr "请再次输入你的密码"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:14
-#: specivo/templates/themes/default/pages/issues/_activity.html:79
-#: specivo/templates/themes/default/pages/issues/detail.html:354
+#: specivo/templates/themes/default/pages/issues/_activity.html:18
+#: specivo/templates/themes/default/pages/issues/_activity.html:90
+#: specivo/templates/themes/default/pages/issues/detail.html:387
 #: specivo/templates/themes/default/pages/wiki/history.html:48
 msgid "Unknown"
 msgstr "未知"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:16
+#: specivo/templates/themes/default/pages/issues/_activity.html:20
 msgid "Agent"
 msgstr "代理"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:27
+#: specivo/templates/themes/default/pages/issues/_activity.html:35
 msgid "Created from recurring pattern"
 msgstr "从重复模板创建"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:31
+#: specivo/templates/themes/default/pages/issues/_activity.html:39
 msgid "Added"
 msgstr "已添加"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:31
-#: specivo/templates/themes/default/pages/issues/_activity.html:33
+#: specivo/templates/themes/default/pages/issues/_activity.html:39
+#: specivo/templates/themes/default/pages/issues/_activity.html:41
 msgid "relation to"
 msgstr "与……的关系"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:33
+#: specivo/templates/themes/default/pages/issues/_activity.html:41
 msgid "Removed"
 msgstr "已移除"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:37
+#: specivo/templates/themes/default/pages/issues/_activity.html:47
 msgid "View changes"
 msgstr "查看变更"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:42
+#: specivo/templates/themes/default/pages/issues/_activity.html:53
 msgid "Issue Metadata"
 msgstr "工作项元数据"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:45
-#: specivo/templates/themes/default/pages/issues/_activity.html:61
+#: specivo/templates/themes/default/pages/issues/_activity.html:56
+#: specivo/templates/themes/default/pages/issues/_activity.html:72
 msgid "changed from"
 msgstr "由以下值更改"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:46
-#: specivo/templates/themes/default/pages/issues/_activity.html:62
+#: specivo/templates/themes/default/pages/issues/_activity.html:57
+#: specivo/templates/themes/default/pages/issues/_activity.html:73
 msgid "to"
 msgstr "至"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:48
+#: specivo/templates/themes/default/pages/issues/_activity.html:59
 msgid "set to"
 msgstr "设为"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:50
+#: specivo/templates/themes/default/pages/issues/_activity.html:61
 msgid "removed"
 msgstr "已移除"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:61
-#: specivo/templates/themes/default/pages/issues/_activity.html:62
+#: specivo/templates/themes/default/pages/issues/_activity.html:72
+#: specivo/templates/themes/default/pages/issues/_activity.html:73
 msgid "(none)"
 msgstr "（无）"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:79
+#: specivo/templates/themes/default/pages/issues/_activity.html:90
 #, python-format
 msgid "Resolved by %(name)s"
 msgstr "由 %(name)s 解决"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:88
+#: specivo/templates/themes/default/pages/issues/_activity.html:101
 msgid "↩ Reply"
 msgstr "↩ 回复"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:94
+#: specivo/templates/themes/default/pages/issues/_activity.html:107
 msgid "Unresolve"
 msgstr "取消解决"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:96
-#: specivo/templates/themes/default/pages/issues/_activity.html:178
+#: specivo/templates/themes/default/pages/issues/_activity.html:109
+#: specivo/templates/themes/default/pages/issues/_activity.html:192
 msgid "Resolve"
 msgstr "解决"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:101
+#: specivo/templates/themes/default/pages/issues/_activity.html:114
 msgid "Write a reply..."
 msgstr "撰写回复……"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:104
+#: specivo/templates/themes/default/pages/issues/_activity.html:117
 msgid "Reply"
 msgstr "回复"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:126
+#: specivo/templates/themes/default/pages/issues/_activity.html:139
 msgid "React"
 msgstr "回应"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:129
+#: specivo/templates/themes/default/pages/issues/_activity.html:142
 msgid "Thumbs up"
 msgstr "赞"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:130
+#: specivo/templates/themes/default/pages/issues/_activity.html:143
 msgid "Thumbs down"
 msgstr "踩"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:131
+#: specivo/templates/themes/default/pages/issues/_activity.html:144
 msgid "Heart"
 msgstr "爱心"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:132
+#: specivo/templates/themes/default/pages/issues/_activity.html:145
 msgid "Rocket"
 msgstr "火箭"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:133
+#: specivo/templates/themes/default/pages/issues/_activity.html:146
 msgid "Eyes"
 msgstr "关注"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:134
+#: specivo/templates/themes/default/pages/issues/_activity.html:147
 msgid "Tada"
 msgstr "庆祝"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:156
+#: specivo/templates/themes/default/pages/issues/_activity.html:169
 msgid "No activity yet."
 msgstr "暂无动态。"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:167
+#: specivo/templates/themes/default/pages/issues/_activity.html:181
 msgid "Resolve Thread"
 msgstr "解决讨论串"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:171
+#: specivo/templates/themes/default/pages/issues/_activity.html:185
 msgid "Mark this discussion thread as resolved."
 msgstr "将此讨论串标记为已解决。"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:172
+#: specivo/templates/themes/default/pages/issues/_activity.html:186
 msgid "Summary (optional)"
 msgstr "摘要（可选）"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:173
+#: specivo/templates/themes/default/pages/issues/_activity.html:187
 msgid "e.g. Agreed on approach"
 msgstr "例如：已就方案达成一致"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:23
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:21
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:87
 #: specivo/templates/themes/default/pages/issues/form.html:105
-#: specivo/templates/themes/default/pages/issues/list.html:249
+#: specivo/templates/themes/default/pages/issues/list.html:255
 #: specivo/templates/themes/default/pages/projects/version_detail.html:99
 msgid "Assignee"
 msgstr "负责人"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:31
-msgid "-- Unassigned --"
-msgstr "-- 未分配 --"
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:23
+#: specivo/templates/themes/default/pages/issues/form.html:107
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
+#: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
+msgid "Unassigned"
+msgstr "未分配"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:40
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:27
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:104
 #: specivo/templates/themes/default/pages/issues/form.html:96
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:238
 msgid "Priority"
 msgstr "优先级"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:75
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:46
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:262
+#: specivo/templates/themes/default/pages/issues/form.html:129
+msgid "Due Date"
+msgstr "截止日期"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:55
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:318
+#: specivo/templates/themes/default/pages/issues/detail.html:269
+#: specivo/templates/themes/default/pages/issues/form.html:307
+msgid "Relations"
+msgstr "关联"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:95
+msgid "-- Unassigned --"
+msgstr "-- 未分配 --"
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:139
 msgid "-- No version --"
 msgstr "-- 无版本 --"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:78
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:123
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:142
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:187
 msgid "No matches"
 msgstr "无匹配项"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:94
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:140
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:158
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:204
 #: specivo/templates/themes/default/pages/projects/settings.html:941
 msgid "Clear"
 msgstr "清除"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:120
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:184
 msgid "-- No sprint --"
 msgstr "-- 无冲刺 --"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:149
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:213
 #: specivo/templates/themes/default/pages/issues/form.html:255
 #: specivo/templates/themes/default/pages/projects/settings.html:27
 #: specivo/templates/themes/default/pages/projects/settings.html:858
@@ -3178,18 +3209,18 @@ msgstr "-- 无冲刺 --"
 msgid "Tags"
 msgstr "标签"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:155
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:219
 #: specivo/templates/themes/default/pages/issues/form.html:278
 #: specivo/templates/themes/default/pages/wiki/edit.html:88
-#: specivo/templates/themes/default/pages/wiki/show.html:69
+#: specivo/templates/themes/default/pages/wiki/show.html:73
 msgid "Add tags..."
 msgstr "添加标签……"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:162
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:226
 msgid "No tags"
 msgstr "无标签"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:190
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:254
 #: specivo/templates/themes/default/pages/issues/form.html:125
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:38
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:74
@@ -3197,84 +3228,73 @@ msgstr "无标签"
 msgid "Start Date"
 msgstr "开始日期"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:198
-#: specivo/templates/themes/default/pages/issues/form.html:129
-msgid "Due Date"
-msgstr "截止日期"
-
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:206
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:270
 #: specivo/templates/themes/default/pages/issues/form.html:133
 #: specivo/templates/themes/default/pages/projects/version_detail.html:166
 msgid "Estimated"
 msgstr "预计"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:223
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:287
 msgid "Time Logged"
 msgstr "已记录工时"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:235
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:299
 msgid "Watchers"
 msgstr "关注者"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:254
-#: specivo/templates/themes/default/pages/issues/detail.html:239
-#: specivo/templates/themes/default/pages/issues/form.html:307
-msgid "Relations"
-msgstr "关联"
-
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:273
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:337
 msgid "Move"
 msgstr "移动"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:277
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:341
 msgid "-- Select project --"
 msgstr "-- 选择项目 --"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:282
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:346
 msgid "Optional note"
 msgstr "可选备注"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:283
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:347
 msgid "Move issue"
 msgstr "移动工作项"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:286
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:350
 msgid ""
 "Version, sprint, category and tags are cleared. History and the old "
 "reference are kept."
 msgstr "版本、冲刺、类别和标签将被清除。历史记录和旧编号会保留。"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:289
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:353
 msgid "No other projects available"
 msgstr "没有其他可用项目"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:296
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:362
 #, python-format
 msgid "Created %(ago)s"
 msgstr "创建于 %(ago)s"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:296
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:362
 #, python-format
 msgid "by %(name)s"
 msgstr "由 %(name)s"
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:299
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:365
 #, python-format
 msgid "Updated %(ago)s"
 msgstr "更新于 %(ago)s"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:7
-#: specivo/templates/themes/default/pages/wiki/show.html:89
+#: specivo/templates/themes/default/pages/wiki/show.html:96
 msgid "Upload failed"
 msgstr "上传失败"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:9
-#: specivo/templates/themes/default/pages/wiki/show.html:91
+#: specivo/templates/themes/default/pages/wiki/show.html:98
 msgid "FILE"
 msgstr "文件"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:18
-#: specivo/templates/themes/default/pages/wiki/show.html:102
+#: specivo/templates/themes/default/pages/wiki/show.html:109
 msgid "Upload"
 msgstr "上传"
 
@@ -3287,43 +3307,43 @@ msgid "or click to browse"
 msgstr "或点击浏览"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:31
-#: specivo/templates/themes/default/pages/wiki/show.html:117
+#: specivo/templates/themes/default/pages/wiki/show.html:124
 msgid "Images, PDFs, documents up to 50 MB"
 msgstr "图片、PDF、文档，最大 50 MB"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:56
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:87
-#: specivo/templates/themes/default/pages/wiki/show.html:145
-#: specivo/templates/themes/default/pages/wiki/show.html:178
+#: specivo/templates/themes/default/pages/wiki/show.html:152
+#: specivo/templates/themes/default/pages/wiki/show.html:185
 msgid "Copy markdown link"
 msgstr "复制 Markdown 链接"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:59
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:91
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:93
-#: specivo/templates/themes/default/pages/wiki/show.html:148
-#: specivo/templates/themes/default/pages/wiki/show.html:182
-#: specivo/templates/themes/default/pages/wiki/show.html:184
+#: specivo/templates/themes/default/pages/wiki/show.html:155
+#: specivo/templates/themes/default/pages/wiki/show.html:189
+#: specivo/templates/themes/default/pages/wiki/show.html:191
 msgid "Download"
 msgstr "下载"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:89
-#: specivo/templates/themes/default/pages/wiki/show.html:180
+#: specivo/templates/themes/default/pages/wiki/show.html:187
 msgid "Link"
 msgstr "链接"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:108
-#: specivo/templates/themes/default/pages/wiki/show.html:201
+#: specivo/templates/themes/default/pages/wiki/show.html:208
 msgid "No attachments yet."
 msgstr "暂无附件。"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:127
-#: specivo/templates/themes/default/pages/wiki/show.html:220
+#: specivo/templates/themes/default/pages/wiki/show.html:227
 msgid "Delete attachment?"
 msgstr "删除附件？"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:128
-#: specivo/templates/themes/default/pages/wiki/show.html:221
+#: specivo/templates/themes/default/pages/wiki/show.html:228
 msgid "Are you sure you want to delete"
 msgstr "确定要删除"
 
@@ -3381,8 +3401,8 @@ msgid "Author"
 msgstr "作者"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:73
-#: specivo/templates/themes/default/pages/issues/detail.html:319
-#: specivo/templates/themes/default/pages/issues/detail.html:340
+#: specivo/templates/themes/default/pages/issues/detail.html:352
+#: specivo/templates/themes/default/pages/issues/detail.html:373
 #: specivo/templates/themes/default/pages/time/list.html:52
 #: specivo/templates/themes/default/pages/wiki/history.html:32
 msgid "Date"
@@ -3420,226 +3440,227 @@ msgstr "恢复"
 msgid "← Back to issue"
 msgstr "← 返回工作项"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:18
+#: specivo/templates/themes/default/pages/issues/detail.html:35
+#: specivo/templates/themes/default/pages/issues/detail.html:80
+msgid "No description."
+msgstr "暂无描述。"
+
+#: specivo/templates/themes/default/pages/issues/detail.html:42
 msgid "Title cannot be empty."
 msgstr "标题不能为空。"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:19
+#: specivo/templates/themes/default/pages/issues/detail.html:43
 msgid "Could not save changes."
 msgstr "无法保存更改。"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:20
+#: specivo/templates/themes/default/pages/issues/detail.html:44
 msgid "Network error. Please retry."
 msgstr "网络错误，请重试。"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:48
+#: specivo/templates/themes/default/pages/issues/detail.html:72
 #, python-format
 msgid "History (%(count)s)"
 msgstr "历史记录（%(count)s）"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:56
-msgid "No description."
-msgstr "暂无描述。"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:72
+#: specivo/templates/themes/default/pages/issues/detail.html:96
 #: specivo/templates/themes/default/pages/wiki/edit.html:63
 #: specivo/templates/themes/default/pages/wiki/edit.html:71
 msgid "Write your content here (Markdown)..."
 msgstr "在此撰写内容（Markdown）……"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:73
+#: specivo/templates/themes/default/pages/issues/detail.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:64
 msgid "Rendering..."
 msgstr "正在渲染……"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:74
+#: specivo/templates/themes/default/pages/issues/detail.html:98
 #: specivo/templates/themes/default/pages/wiki/edit.html:65
 msgid "Preview unavailable."
 msgstr "预览不可用。"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:82
-#: specivo/templates/themes/default/pages/issues/detail.html:487
+#: specivo/templates/themes/default/pages/issues/detail.html:106
+#: specivo/templates/themes/default/pages/issues/detail.html:528
 msgid "Supports Markdown. Use @username to mention."
 msgstr "支持 Markdown。使用 @用户名 来提及他人。"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:95
+#: specivo/templates/themes/default/pages/issues/detail.html:120
 #: specivo/templates/themes/default/pages/issues/form.html:147
 msgid "Type and press Enter..."
 msgstr "输入后按回车……"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:96
+#: specivo/templates/themes/default/pages/issues/detail.html:121
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "Yes"
 msgstr "是"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:97
+#: specivo/templates/themes/default/pages/issues/detail.html:122
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "No"
 msgstr "否"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:103
+#: specivo/templates/themes/default/pages/issues/detail.html:128
 #: specivo/templates/themes/default/pages/issues/form.html:155
 #: specivo/templates/themes/default/pages/projects/settings.html:26
 msgid "Metadata"
 msgstr "元数据"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:190
+#: specivo/templates/themes/default/pages/issues/detail.html:215
 msgid "Press Enter or comma to add"
 msgstr "按 Enter 或逗号添加"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:216
+#: specivo/templates/themes/default/pages/issues/detail.html:241
 #: specivo/templates/themes/default/pages/issues/form.html:241
 msgid "from"
 msgstr "来自"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:216
+#: specivo/templates/themes/default/pages/issues/detail.html:241
 #: specivo/templates/themes/default/pages/issues/form.html:241
 msgid "schema"
 msgstr "架构"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:223
+#: specivo/templates/themes/default/pages/issues/detail.html:248
 msgid "You have unsaved metadata changes"
 msgstr "您有尚未保存的元数据更改"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:237
-#: specivo/templates/themes/default/pages/issues/detail.html:309
-#: specivo/templates/themes/default/pages/issues/detail.html:343
+#: specivo/templates/themes/default/pages/issues/detail.html:262
+#: specivo/templates/themes/default/pages/issues/detail.html:342
+#: specivo/templates/themes/default/pages/issues/detail.html:376
 #: specivo/templates/themes/default/pages/time/list.html:55
 msgid "Activity"
 msgstr "动态"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:250
+#: specivo/templates/themes/default/pages/issues/detail.html:282
 #, python-format
 msgid "%(opt)s per page"
 msgstr "每页 %(opt)s 条"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:267
+#: specivo/templates/themes/default/pages/issues/detail.html:299
 #, python-format
 msgid "Showing %(from)s–%(to)s of %(total)s"
 msgstr "显示第 %(from)s–%(to)s 条，共 %(total)s 条"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:273
+#: specivo/templates/themes/default/pages/issues/detail.html:305
 #, python-format
 msgid "Page %(page)s of %(total)s"
 msgstr "第 %(page)s 页，共 %(total)s 页"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:285
+#: specivo/templates/themes/default/pages/issues/detail.html:318
 msgid "Enter at least 1 minute"
 msgstr "请至少输入 1 分钟"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:286
+#: specivo/templates/themes/default/pages/issues/detail.html:319
 msgid "Failed to log time"
 msgstr "记录工时失败"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:299
-#: specivo/templates/themes/default/pages/issues/detail.html:342
+#: specivo/templates/themes/default/pages/issues/detail.html:332
+#: specivo/templates/themes/default/pages/issues/detail.html:375
 #: specivo/templates/themes/default/pages/time/list.html:53
 msgid "Hours"
 msgstr "小时"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:304
+#: specivo/templates/themes/default/pages/issues/detail.html:337
 msgid "Minutes"
 msgstr "分钟"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:312
+#: specivo/templates/themes/default/pages/issues/detail.html:345
 msgid "-- Select --"
 msgstr "-- 选择 --"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:325
+#: specivo/templates/themes/default/pages/issues/detail.html:358
 msgid "Comment (optional)"
 msgstr "评论（可选）"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:368
+#: specivo/templates/themes/default/pages/issues/detail.html:401
 msgid "h est."
 msgstr "小时（预估）"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:375
+#: specivo/templates/themes/default/pages/issues/detail.html:408
 msgid "No time entries logged."
 msgstr "尚未记录任何工时条目。"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:394
+#: specivo/templates/themes/default/pages/issues/detail.html:428
 #, python-format
 msgid "(%(count)s days)"
 msgstr "（%(count)s 天）"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:398
+#: specivo/templates/themes/default/pages/issues/detail.html:433
 msgid "Remove this relation?"
 msgstr "移除此关联？"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:407
+#: specivo/templates/themes/default/pages/issues/detail.html:443
 msgid "No relations."
 msgstr "暂无关联。"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:412
+#: specivo/templates/themes/default/pages/issues/detail.html:449
 msgid "Failed to add relation"
 msgstr "添加关联失败"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:416
+#: specivo/templates/themes/default/pages/issues/detail.html:453
 msgid "Add relation"
 msgstr "添加关联"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:425
+#: specivo/templates/themes/default/pages/issues/detail.html:462
 #: specivo/templates/themes/default/pages/issues/form.html:318
 msgid "Related Issue"
 msgstr "关联工作项"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:426
+#: specivo/templates/themes/default/pages/issues/detail.html:463
 msgid "e.g. PROJ-42"
 msgstr "例如 PROJ-42"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:443
+#: specivo/templates/themes/default/pages/issues/detail.html:480
 msgid "Searching..."
 msgstr "正在搜索……"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:451
+#: specivo/templates/themes/default/pages/issues/detail.html:488
 #: specivo/templates/themes/default/pages/issues/form.html:47
 #: specivo/templates/themes/default/pages/issues/form.html:333
 msgid "Relates to"
 msgstr "关联到"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:452
+#: specivo/templates/themes/default/pages/issues/detail.html:489
 #: specivo/templates/themes/default/pages/issues/form.html:48
 #: specivo/templates/themes/default/pages/issues/form.html:334
 msgid "Blocks"
 msgstr "阻塞"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:453
+#: specivo/templates/themes/default/pages/issues/detail.html:490
 #: specivo/templates/themes/default/pages/issues/form.html:49
 #: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Blocked by"
 msgstr "被阻塞于"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:454
+#: specivo/templates/themes/default/pages/issues/detail.html:491
 #: specivo/templates/themes/default/pages/issues/form.html:50
 #: specivo/templates/themes/default/pages/issues/form.html:336
 msgid "Duplicates"
 msgstr "重复于"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:455
+#: specivo/templates/themes/default/pages/issues/detail.html:492
 #: specivo/templates/themes/default/pages/issues/form.html:52
 #: specivo/templates/themes/default/pages/issues/form.html:338
 msgid "Precedes"
 msgstr "先于"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:456
+#: specivo/templates/themes/default/pages/issues/detail.html:493
 #: specivo/templates/themes/default/pages/issues/form.html:53
 #: specivo/templates/themes/default/pages/issues/form.html:339
 msgid "Follows"
 msgstr "后继于"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:457
+#: specivo/templates/themes/default/pages/issues/detail.html:494
 msgid "Copied to"
 msgstr "复制到"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:458
+#: specivo/templates/themes/default/pages/issues/detail.html:495
 msgid "Copied from"
 msgstr "复制自"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:478
+#: specivo/templates/themes/default/pages/issues/detail.html:517
 msgid "Loading attachments…"
 msgstr "正在加载附件……"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:485
+#: specivo/templates/themes/default/pages/issues/detail.html:526
 msgid "Write a comment (Markdown supported)..."
 msgstr "撰写评论（支持 Markdown）……"
 
@@ -3649,7 +3670,7 @@ msgid "Edit %(key)s"
 msgstr "编辑 %(key)s"
 
 #: specivo/templates/themes/default/pages/issues/form.html:24
-#: specivo/templates/themes/default/pages/issues/list.html:18
+#: specivo/templates/themes/default/pages/issues/list.html:19
 msgid "New Issue"
 msgstr "新建工作项"
 
@@ -3673,12 +3694,6 @@ msgstr "支持 Markdown。使用 @用户名 来提及团队成员。"
 #: specivo/templates/themes/default/pages/issues/form.html:98
 msgid "-- Default --"
 msgstr "-- 默认 --"
-
-#: specivo/templates/themes/default/pages/issues/form.html:107
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
-#: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
-msgid "Unassigned"
-msgstr "未分配"
 
 #: specivo/templates/themes/default/pages/issues/form.html:118
 msgid "-- None --"
@@ -3717,75 +3732,75 @@ msgstr "创建工作项"
 msgid "+ Create and Continue"
 msgstr "+ 创建并继续"
 
-#: specivo/templates/themes/default/pages/issues/list.html:46
+#: specivo/templates/themes/default/pages/issues/list.html:48
 msgid "All Trackers"
 msgstr "全部追踪器"
 
-#: specivo/templates/themes/default/pages/issues/list.html:53
+#: specivo/templates/themes/default/pages/issues/list.html:58
 msgid "All Assignees"
 msgstr "所有指派人"
 
-#: specivo/templates/themes/default/pages/issues/list.html:60
+#: specivo/templates/themes/default/pages/issues/list.html:66
 msgid "All Priorities"
 msgstr "所有优先级"
 
-#: specivo/templates/themes/default/pages/issues/list.html:68
+#: specivo/templates/themes/default/pages/issues/list.html:74
 msgid "All Tags"
 msgstr "所有标签"
 
-#: specivo/templates/themes/default/pages/issues/list.html:75
+#: specivo/templates/themes/default/pages/issues/list.html:81
 msgid "Apply"
 msgstr "应用"
 
-#: specivo/templates/themes/default/pages/issues/list.html:81
+#: specivo/templates/themes/default/pages/issues/list.html:87
 msgid "List"
 msgstr "列表"
 
-#: specivo/templates/themes/default/pages/issues/list.html:85
+#: specivo/templates/themes/default/pages/issues/list.html:91
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:71
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:52
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:23
 msgid "Board"
 msgstr "看板"
 
-#: specivo/templates/themes/default/pages/issues/list.html:98
+#: specivo/templates/themes/default/pages/issues/list.html:104
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:94
 msgid "Cards per column:"
 msgstr "每列卡片数："
 
-#: specivo/templates/themes/default/pages/issues/list.html:104
+#: specivo/templates/themes/default/pages/issues/list.html:110
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:100
 #, python-format
 msgid "%(count)s issue total"
 msgid_plural "%(count)s issues total"
 msgstr[0] "共 %(count)s 个工作项"
 
-#: specivo/templates/themes/default/pages/issues/list.html:133
+#: specivo/templates/themes/default/pages/issues/list.html:139
 #, python-format
 msgid "%(done_count)s of %(total)s done"
 msgstr "已完成 %(done_count)s / %(total)s"
 
-#: specivo/templates/themes/default/pages/issues/list.html:185
+#: specivo/templates/themes/default/pages/issues/list.html:191
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:179
 msgid "No issues"
 msgstr "暂无工作项"
 
-#: specivo/templates/themes/default/pages/issues/list.html:195
+#: specivo/templates/themes/default/pages/issues/list.html:201
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:189
 msgid "First page"
 msgstr "首页"
 
-#: specivo/templates/themes/default/pages/issues/list.html:207
+#: specivo/templates/themes/default/pages/issues/list.html:213
 #, python-format
 msgid "%(from)s–%(to)s of %(total)s"
 msgstr "第 %(from)s–%(to)s 条，共 %(total)s 条"
 
-#: specivo/templates/themes/default/pages/issues/list.html:215
+#: specivo/templates/themes/default/pages/issues/list.html:221
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:209
 msgid "Last page"
 msgstr "末页"
 
-#: specivo/templates/themes/default/pages/issues/list.html:224
+#: specivo/templates/themes/default/pages/issues/list.html:230
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:145
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:218
 #, python-format
@@ -3793,11 +3808,12 @@ msgid "%(count)s issue"
 msgid_plural "%(count)s issues"
 msgstr[0] "%(count)s 个工作项"
 
-#: specivo/templates/themes/default/pages/issues/list.html:266
+#: specivo/templates/themes/default/pages/issues/list.html:272
+#: specivo/templates/themes/default/pages/issues/list.html:274
 msgid "No issues found"
 msgstr "未找到工作项"
 
-#: specivo/templates/themes/default/pages/issues/list.html:266
+#: specivo/templates/themes/default/pages/issues/list.html:274
 msgid "Create your first issue to get started."
 msgstr "创建第一个工作项以开始使用。"
 
@@ -3870,7 +3886,7 @@ msgid "Failed to skip occurrence."
 msgstr "跳过重复项失败。"
 
 #: specivo/templates/themes/default/pages/projects/detail.html:32
-#: specivo/templates/themes/default/pages/projects/detail.html:156
+#: specivo/templates/themes/default/pages/projects/detail.html:164
 msgid "New Subproject"
 msgstr "新建子项目"
 
@@ -3878,70 +3894,70 @@ msgstr "新建子项目"
 msgid "Overview"
 msgstr "概览"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:61
+#: specivo/templates/themes/default/pages/projects/detail.html:63
 msgid "Project Info"
 msgstr "项目信息"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:72
+#: specivo/templates/themes/default/pages/projects/detail.html:74
 msgid "Visibility"
 msgstr "可见性"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:73
+#: specivo/templates/themes/default/pages/projects/detail.html:75
 msgid "Public"
 msgstr "公开"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:73
+#: specivo/templates/themes/default/pages/projects/detail.html:75
 msgid "Private"
 msgstr "私有"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:77
+#: specivo/templates/themes/default/pages/projects/detail.html:82
 #, python-format
 msgid "%(count)s created"
 msgstr "已创建 %(count)s 个"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:84
+#: specivo/templates/themes/default/pages/projects/detail.html:90
 msgid "Subprojects"
 msgstr "子项目"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:98
+#: specivo/templates/themes/default/pages/projects/detail.html:104
 #: specivo/templates/themes/default/pages/projects/settings.html:266
 msgid "Enabled Modules"
 msgstr "已启用模块"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:134
+#: specivo/templates/themes/default/pages/projects/detail.html:141
 #, python-format
 msgid "%(count)s person with access"
 msgid_plural "%(count)s people with access"
 msgstr[0] "%(count)s 人拥有访问权限"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:140
+#: specivo/templates/themes/default/pages/projects/detail.html:147
 #, python-format
 msgid "%(count)s person has access through a group"
 msgid_plural "%(count)s people have access through a group"
 msgstr[0] "%(count)s 人通过用户组拥有访问权限"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:143
+#: specivo/templates/themes/default/pages/projects/detail.html:150
 msgid "No members yet."
 msgstr "暂无成员。"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:152
+#: specivo/templates/themes/default/pages/projects/detail.html:160
 #: specivo/templates/themes/default/pages/projects/list.html:31
 msgid "Failed to create project"
 msgstr "创建项目失败"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:163
+#: specivo/templates/themes/default/pages/projects/detail.html:171
 msgid "Parent project:"
 msgstr "父项目："
 
-#: specivo/templates/themes/default/pages/projects/detail.html:167
+#: specivo/templates/themes/default/pages/projects/detail.html:175
 msgid "My Subproject"
 msgstr "我的子项目"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:181
+#: specivo/templates/themes/default/pages/projects/detail.html:189
 msgid "What is this subproject about?"
 msgstr "这个子项目是关于什么的？"
 
-#: specivo/templates/themes/default/pages/projects/detail.html:187
+#: specivo/templates/themes/default/pages/projects/detail.html:195
 msgid "Create Subproject"
 msgstr "创建子项目"
 
@@ -3950,24 +3966,24 @@ msgstr "创建子项目"
 msgid "Subprojects (%(count)s)"
 msgstr "子项目（%(count)s）"
 
-#: specivo/templates/themes/default/pages/projects/list.html:161
+#: specivo/templates/themes/default/pages/projects/list.html:164
 #, python-format
 msgid "%(count)s person"
 msgid_plural "%(count)s people"
 msgstr[0] "%(count)s 人"
 
-#: specivo/templates/themes/default/pages/projects/list.html:163
+#: specivo/templates/themes/default/pages/projects/list.html:166
 #, python-format
 msgid "%(count)s wiki page"
 msgid_plural "%(count)s wiki pages"
 msgstr[0] "%(count)s 个 wiki 页面"
 
-#: specivo/templates/themes/default/pages/projects/list.html:171
+#: specivo/templates/themes/default/pages/projects/list.html:174
 #: specivo/templates/themes/default/pages/projects/version_detail.html:59
 msgid "closed"
 msgstr "已关闭"
 
-#: specivo/templates/themes/default/pages/projects/list.html:202
+#: specivo/templates/themes/default/pages/projects/list.html:208
 msgid "Create one to get started."
 msgstr "创建一个即可开始。"
 
@@ -5559,7 +5575,7 @@ msgstr "差异：v%(from_version)s → v%(to_version)s"
 
 #: specivo/templates/themes/default/pages/wiki/diff.html:12
 #: specivo/templates/themes/default/pages/wiki/history.html:12
-#: specivo/templates/themes/default/pages/wiki/show.html:26
+#: specivo/templates/themes/default/pages/wiki/show.html:29
 msgid "History"
 msgstr "历史记录"
 
@@ -5620,8 +5636,8 @@ msgstr "（无——根级别）"
 
 #: specivo/templates/themes/default/pages/wiki/edit.html:148
 #: specivo/templates/themes/default/pages/wiki/index.html:13
-#: specivo/templates/themes/default/pages/wiki/show.html:256
-#: specivo/templates/themes/default/pages/wiki/show.html:298
+#: specivo/templates/themes/default/pages/wiki/show.html:264
+#: specivo/templates/themes/default/pages/wiki/show.html:306
 msgid "Pages"
 msgstr "页面"
 
@@ -5651,42 +5667,42 @@ msgstr "暂无版本历史记录。"
 msgid "No wiki pages yet. Create one to get started."
 msgstr "尚无维基页面。创建一个以开始使用。"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:22
+#: specivo/templates/themes/default/pages/wiki/show.html:25
 msgid "All pages"
 msgstr "所有页面"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:37
+#: specivo/templates/themes/default/pages/wiki/show.html:41
 #, python-format
 msgid "Last edited by <strong>%(author)s</strong>"
 msgstr "最后编辑者 <strong>%(author)s</strong>"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:42
+#: specivo/templates/themes/default/pages/wiki/show.html:46
 #, python-format
 msgid "Version %(version)s"
 msgstr "版本 %(version)s"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:50
+#: specivo/templates/themes/default/pages/wiki/show.html:54
 #, python-format
 msgid "Edited by %(author)s"
 msgstr "由 %(author)s 编辑"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:116
+#: specivo/templates/themes/default/pages/wiki/show.html:123
 msgid "<strong>Drop files here</strong> or click to browse"
 msgstr "<strong>将文件拖放到此处</strong>或点击浏览"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:221
+#: specivo/templates/themes/default/pages/wiki/show.html:228
 msgid "? This cannot be undone."
 msgstr "吗？此操作无法撤销。"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:239
+#: specivo/templates/themes/default/pages/wiki/show.html:247
 msgid "On this page"
 msgstr "本页内容"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:277
+#: specivo/templates/themes/default/pages/wiki/show.html:285
 msgid "Add child page"
 msgstr "添加子页面"
 
-#: specivo/templates/themes/default/pages/wiki/show.html:310
+#: specivo/templates/themes/default/pages/wiki/show.html:318
 msgid "New page"
 msgstr "新建页面"
 
@@ -5718,19 +5734,19 @@ msgstr "已删除"
 msgid "No deleted pages."
 msgstr "暂无已删除的页面。"
 
-#: specivo/web/pages/auth.py:82
+#: specivo/web/pages/auth.py:98
 msgid "No reset token provided. Please use the link from your email."
 msgstr "未提供重置令牌。请使用邮件中的链接。"
 
-#: specivo/web/pages/auth.py:90
+#: specivo/web/pages/auth.py:106
 msgid "This password reset link is invalid. Please request a new one."
 msgstr "该密码重置链接无效。请重新申请一个。"
 
-#: specivo/web/pages/auth.py:92
+#: specivo/web/pages/auth.py:108
 msgid "This password reset link has already been used. Please request a new one."
 msgstr "该密码重置链接已被使用。请重新申请一个。"
 
-#: specivo/web/pages/auth.py:94
+#: specivo/web/pages/auth.py:110
 msgid "This password reset link has expired. Please request a new one."
 msgstr "该密码重置链接已过期。请重新申请一个。"
 
