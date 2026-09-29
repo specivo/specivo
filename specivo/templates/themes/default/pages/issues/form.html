@@ -302,6 +302,7 @@
 
     <div class="form-divider"></div>
 
+    {% if can_manage_relations %}
     {# Relations #}
     <div class="form-group">
       <label class="modal-label">{% trans %}Relations{% endtrans %}</label>
@@ -344,6 +345,7 @@
       </template>
       <button class="sp-btn sp-btn-ghost" type="button" x-show="!showRelationForm" @click="showRelationForm = true" style="margin-top:var(--sp-space-xs);">{% trans %}+ Add Relation{% endtrans %}</button>
     </div>
+    {% endif %}
 
     <div class="form-divider"></div>
 

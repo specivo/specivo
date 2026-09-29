@@ -6,13 +6,14 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
-from specivo.core.exceptions import NotFoundError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.relation import RelationCreate, RelationOut
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.relation_service import RELATION_TYPES, RelationService
 
 router = APIRouter(tags=["relations"])
@@ -52,8 +53,14 @@ async def create_relation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> RelationOut:
-    """Create a relation from the given issue to ``issue_to_key``."""
+    """Create a relation from the given issue to ``issue_to_key``.
+
+    The caller must see both issues and hold ``manage_issue_relations`` in the
+    project of the issue named in the path, as the MCP tool requires.
+    """
     issue_from = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
+    if not await check_permission(current_user, issue_from.project_id, Permission.MANAGE_ISSUE_RELATIONS, db):
+        raise PermissionDeniedError("You do not have permission to manage relations in this project")
 
     try:
         issue_to = await _issue_service.get_by_display_key(db, data.issue_to_key, user=current_user)

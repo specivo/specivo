@@ -281,10 +281,12 @@ async def issue_create_form(
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
     from specivo.services.metadata_schema_service import MetadataSchemaService
+    from specivo.services.permission_service import Permission, check_permission
 
     schema_svc = MetadataSchemaService()
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
+    can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -297,6 +299,7 @@ async def issue_create_form(
             "project": project,
             "issue": None,
             "mode": "create",
+            "can_manage_relations": can_manage_relations,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,
@@ -332,11 +335,15 @@ async def issue_detail(
     schema_svc = MetadataSchemaService()
     watcher_svc = WatcherService()
 
+    from specivo.services.permission_service import Permission, check_permission
+
     anon_can_view_wiki = False
     if anonymous:
-        from specivo.services.permission_service import Permission, check_permission
-
         anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
+    # Relation controls are shown only to readers the relations API would accept.
+    can_manage_relations = not anonymous and await check_permission(
+        user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db
+    )
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -564,6 +571,7 @@ async def issue_detail(
             "relation_count": relation_count,
             "current_sprint": current_sprint,
             "relations": relations,
+            "can_manage_relations": can_manage_relations,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             # Computed metadata is derived from the project's configuration,
@@ -607,10 +615,12 @@ async def issue_edit_form(
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
     from specivo.services.metadata_schema_service import MetadataSchemaService
+    from specivo.services.permission_service import Permission, check_permission
 
     schema_svc = MetadataSchemaService()
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
+    can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
 
     issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
@@ -625,6 +635,7 @@ async def issue_edit_form(
             "project": project,
             "issue": issue,
             "mode": "edit",
+            "can_manage_relations": can_manage_relations,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,

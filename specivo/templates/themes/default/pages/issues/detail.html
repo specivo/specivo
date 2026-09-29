@@ -426,7 +426,7 @@
             <span class="badge-status sp-rel-status">{{ rel.issue_to_status }}</span>
             {% endif %}
             {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans count=rel.delay %}(%(count)s days){% endtrans %}</span>{% endif %}
-            {% if not anonymous %}
+            {% if can_manage_relations %}
             <a class="sp-rel-remove"
                hx-delete="/api/v1/relations/{{ rel.id }}/"
                hx-swap="none"
@@ -444,7 +444,7 @@
         </div>
         {% endif %}
 
-        {% if not anonymous %}
+        {% if can_manage_relations %}
         <div x-data='relationForm({ issueKey: "{{ issue.display_key }}", i18n: {{ {
           "addFailed": _("Failed to add relation"),
           "connectFailed": _("Unable to connect.")
