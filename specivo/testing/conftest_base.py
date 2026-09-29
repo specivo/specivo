@@ -29,6 +29,17 @@ from sqlalchemy.pool import NullPool
 # Test env — ensure critical vars are set even if .env isn't loaded.
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://specivo:specivo@localhost:5433/specivo_test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6380/0")
+
+# Each xdist worker gets its own Redis database. Redis is flushed after every
+# test, and on a shared database one worker's flush would wipe another worker's
+# rate-limit counters and JWT blocklist entries in the middle of a test.
+# Database 0 stays with single-process runs; workers share 1-15 round robin.
+_xdist_worker = os.environ.get("PYTEST_XDIST_WORKER", "")
+if _xdist_worker.startswith("gw") and _xdist_worker[2:].isdigit():
+    from urllib.parse import urlsplit, urlunsplit
+
+    _redis_db = 1 + int(_xdist_worker[2:]) % 15
+    os.environ["REDIS_URL"] = urlunsplit(urlsplit(os.environ["REDIS_URL"])._replace(path=f"/{_redis_db}"))
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-minimum-32-bytes-for-hs256-signing")
 os.environ["DEBUG"] = "false"  # Always disable debug in tests (Makefile exports .env)
 os.environ.setdefault("KILL_TOKEN", "test-kill-token-secret")
