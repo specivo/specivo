@@ -185,14 +185,15 @@ async def project_detail(
         members = await _svc.list_members(db, project, limit=10)
         modules = await _svc.get_modules(db, project)
 
-    # Fetch subprojects. For an anonymous visitor the list is narrowed to the
-    # projects they could open anyway: a public project may hold children that
-    # are private or not opted in, and naming those would disclose them.
+    # Fetch subprojects, narrowed to the ones this visitor could open anyway,
+    # as the project list does: a project the visitor reaches may hold private
+    # children (or, for an anonymous visitor, children not opted in), and
+    # naming those would disclose them. Admins reach every project, so the
+    # clause is None for them and nothing is filtered.
     sub_stmt = select(Project).where(Project.parent_id == project.id).order_by(Project.name)
-    if anonymous:
-        accessible = await _svc.accessible_projects_clause(db, user)
-        if accessible is not None:
-            sub_stmt = sub_stmt.where(accessible)
+    accessible = await _svc.accessible_projects_clause(db, user)
+    if accessible is not None:
+        sub_stmt = sub_stmt.where(accessible)
     result = await db.execute(sub_stmt)
     subprojects = result.scalars().all()
 
