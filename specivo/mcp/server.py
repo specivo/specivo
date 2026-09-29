@@ -838,7 +838,8 @@ async def specivo_remove_relation(
 ) -> str:
     """Remove a relation by its ID.
 
-    Use specivo_list_relations first to find the relation ID.
+    Use specivo_list_relations first to find the relation ID. The relation must
+    be attached to issue_ref, and both of its issues must be visible to you.
     """
     async with _get_session_and_user() as (session, user):
         return await _remove_relation(session, user, issue_ref, relation_id)

@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import select as sa_select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
-from specivo.models.relation import IssueRelation
 from specivo.models.user import User
 from specivo.schemas.relation import RelationCreate, RelationOut
 from specivo.services.issue_service import IssueService
@@ -110,23 +108,20 @@ async def delete_relation(
     db: AsyncSession = Depends(get_db),
     _rl: None = Depends(rate_limit("relation_delete", max_requests=30, window_seconds=60)),
 ) -> None:
-    """Delete a relation by its ID."""
-    # Load relation + both issues BEFORE deleting so we can record journals
-    result = await db.execute(sa_select(IssueRelation).where(IssueRelation.id == relation_id))
-    relation = result.scalar_one_or_none()
-    if relation is not None:
-        issue_from = await _issue_service.get_by_id(db, relation.issue_from_id)
-        issue_to = await _issue_service.get_by_id(db, relation.issue_to_id)
-        canonical_type = relation.relation_type
-        sym_type = RELATION_TYPES[canonical_type]["sym"]
+    """Delete a relation by its ID.
 
-    await _relation_service.delete(db, relation_id, current_user)
+    The caller must see both linked issues and hold ``manage_issue_relations``
+    on at least one of their projects. A relation to an issue the caller
+    cannot see answers 404, like one that does not exist.
+    """
+    removed = await _relation_service.delete(db, relation_id, current_user)
 
     # Record journal entries on both issues after successful delete
-    if relation is not None:
-        await _journal_service.record_relation_change(
-            db, issue_from, current_user, canonical_type, issue_to.display_key, added=False,
-        )
-        await _journal_service.record_relation_change(
-            db, issue_to, current_user, sym_type, issue_from.display_key, added=False,
-        )
+    canonical_type = removed.relation_type
+    sym_type = str(RELATION_TYPES[canonical_type]["sym"])
+    await _journal_service.record_relation_change(
+        db, removed.issue_from, current_user, canonical_type, removed.issue_to.display_key, added=False
+    )
+    await _journal_service.record_relation_change(
+        db, removed.issue_to, current_user, sym_type, removed.issue_from.display_key, added=False
+    )

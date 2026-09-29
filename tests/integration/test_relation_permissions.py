@@ -3,8 +3,8 @@
 Covers:
 - Admin can delete any relation
 - Member can delete a relation in their own project
-- Non-member cannot delete a relation in a private project (403)
-- User can delete a relation when one project is public (even without membership in the other)
+- Non-member of both private projects gets 404 when deleting (neither issue is visible)
+- A relation from a public issue to a hidden private-project issue answers 404
 - Deleting a nonexistent relation returns 404
 - Unauthenticated delete returns 401
 - Create relation requires access to both issues (returns 404 for hidden issue)
@@ -164,7 +164,7 @@ async def dev_role(db_session: AsyncSession) -> Role:
         position=3,
         assignable=True,
         builtin=0,
-        permissions=["view_issues", "add_issues", "edit_issues"],
+        permissions=["view_issues", "add_issues", "edit_issues", "manage_issue_relations"],
         issues_visibility="default",
         settings={},
     )
@@ -277,7 +277,7 @@ async def test_non_member_cannot_delete_relation_in_private_project(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Non-member of both private projects gets 403 when deleting a relation."""
+    """Non-member of both private projects gets 404: neither linked issue is visible."""
     issue_a = await _create_issue(
         client, admin_token, private_project_a.key, tracker.id, open_status.id, priority.id, "NM del A"
     )
@@ -291,11 +291,11 @@ async def test_non_member_cannot_delete_relation_in_private_project(
 
     # Regular user has no membership in either project
     delete_sc = await _delete_relation(client, regular_token, relation_id)
-    assert delete_sc == 403
+    assert delete_sc == 404
 
 
 @pytest.mark.integration
-async def test_user_can_delete_relation_if_one_project_is_public(
+async def test_user_cannot_delete_relation_to_hidden_issue_via_public_project(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_token: str,
@@ -306,10 +306,10 @@ async def test_user_can_delete_relation_if_one_project_is_public(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """User without edit_issues permission cannot delete even if one project is public.
+    """Seeing the public side is not enough: the private-project issue stays hidden (404).
 
-    Public project visibility alone does not grant write permissions — the user
-    needs an explicit role with edit_issues to delete relations.
+    Deleting a relation requires seeing both linked issues, so the response is
+    the same as for a relation that does not exist.
     """
     issue_pub = await _create_issue(
         client, admin_token, public_project.key, tracker.id, open_status.id, priority.id, "Pub issue"
@@ -322,9 +322,9 @@ async def test_user_can_delete_relation_if_one_project_is_public(
     assert sc == 201, rel
     relation_id = rel["id"]
 
-    # Regular user has no edit_issues role on either project — should be denied
+    # Regular user cannot see the private-project issue — answered as not found
     delete_sc = await _delete_relation(client, regular_token, relation_id)
-    assert delete_sc == 403
+    assert delete_sc == 404
 
 
 @pytest.mark.integration
