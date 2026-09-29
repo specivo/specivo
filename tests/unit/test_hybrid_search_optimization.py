@@ -12,7 +12,7 @@ without hitting the database.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -125,6 +125,7 @@ async def test_search_with_skip_count_returns_zero_total():
     results, total, type_counts = await service.search(
         session=mock_session,
         query="test",
+        user=MagicMock(is_admin=True, id=1),
         skip_count=True,
     )
 

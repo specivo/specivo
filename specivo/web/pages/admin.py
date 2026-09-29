@@ -84,8 +84,9 @@ async def admin_users(
 ) -> Response:
     """Render the admin users page."""
     from specivo.models.role import Role
+    from specivo.services.anonymous_user_service import real_users_clause
 
-    result = await db.execute(select(UserModel).order_by(UserModel.id))
+    result = await db.execute(select(UserModel).where(real_users_clause()).order_by(UserModel.id))
     users = list(result.scalars().all())
 
     roles_result = await db.execute(
@@ -133,7 +134,8 @@ async def admin_user_detail(
 
     result = await db.execute(select(UserModel).where(UserModel.id == user_id))
     target_user = result.scalar_one_or_none()
-    if target_user is None:
+    # The anonymous user is not listed, so it has no page either.
+    if target_user is None or target_user.is_anonymous:
         raise HTTPException(status_code=404, detail="User not found")
 
     api_keys = await _api_key_svc.list_keys(session=db, user_id=target_user.id)
@@ -156,6 +158,7 @@ async def admin_user_detail(
         "display_name": target_user.display_name,
         "is_admin": target_user.is_admin,
         "is_service_account": target_user.is_service_account,
+        "must_change_password": target_user.must_change_password,
         "status": target_user.status,
         "created_at": target_user.created_at.isoformat() if target_user.created_at else None,
         "last_login_at": target_user.last_login_at.isoformat() if target_user.last_login_at else None,
@@ -211,7 +214,11 @@ async def admin_projects(
                 "color": p.color or "#c49a3c",
                 "status": p.status,
                 "issue_count": issue_count,
-                "member_count": s.get("member_count", 0),
+                # People with access, direct or through a group — not the
+                # number of membership rows. The table has a separate Groups
+                # column so the two are never conflated.
+                "people_count": s.get("member_count", 0),
+                "group_count": s.get("group_count", 0),
                 "has_issues": issue_count > 0,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
             }
@@ -230,6 +237,96 @@ async def admin_projects(
             "projects_data": projects_data,
             "all_projects": active_projects,
             "project_colors": DEFAULT_PROJECT_COLORS,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# User groups
+# ---------------------------------------------------------------------------
+
+# Groups are an administrative concept and a self-hosted instance has tens of
+# them, not thousands, so the list page renders them all and filters in the
+# browser rather than paging the API. The cap exists only so a pathological
+# instance degrades into a visible notice instead of an enormous page; the
+# template says so when it is hit.
+GROUP_LIST_CAP = 500
+
+
+@router.get("/admin/groups/", response_class=HTMLResponse)
+async def admin_groups(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the admin user groups page."""
+    from specivo.services.user_group_service import UserGroupService
+
+    svc = UserGroupService()
+    rows, total = await svc.list_groups(db, limit=GROUP_LIST_CAP)
+
+    groups_data = [
+        {
+            "id": row["id"],
+            "name": row["name"],
+            "description": row["description"] or "",
+            "user_count": row["user_count"],
+            "project_count": row["project_count"],
+        }
+        for row in rows
+    ]
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/groups.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "groups_data": groups_data,
+            "total_groups": total,
+            "list_cap": GROUP_LIST_CAP,
+        },
+    )
+
+
+@router.get("/admin/groups/{group_id}/", response_class=HTMLResponse)
+async def admin_group_detail(
+    request: Request,
+    group_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render one group: the users in it, and the projects it grants access to."""
+    from fastapi import HTTPException
+
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.user_group_service import UserGroupService
+
+    svc = UserGroupService()
+    try:
+        group = await svc.get(db, group_id)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    users, user_total = await svc.list_users(db, group_id, limit=GROUP_LIST_CAP)
+    projects = await svc.list_projects(db, group_id)
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/group_detail.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "group": {
+                "id": group.id,
+                "name": group.name,
+                "description": group.description or "",
+            },
+            "group_users": users,
+            "user_total": user_total,
+            "group_projects": projects,
         },
     )
 
@@ -286,7 +383,8 @@ async def admin_workflows(
 
     trackers = (await db.execute(select(Tracker).order_by(Tracker.position))).scalars().all()
     statuses = (await db.execute(select(IssueStatus).order_by(IssueStatus.position))).scalars().all()
-    roles = (await db.execute(select(Role).order_by(Role.position))).scalars().all()
+    # Builtin roles are never held through a membership, so no transition could apply to them.
+    roles = (await db.execute(select(Role).where(Role.builtin == 0).order_by(Role.position))).scalars().all()
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -336,6 +434,18 @@ async def admin_settings(
     fts_language = settings.get("search_fts_language") or get_settings().search_fts_language
     fts_reindex_needed = settings.get(reindex_needed_key(None)) == "1"
 
+    # Anonymous access has its own card with a confirmation step, so it is
+    # kept out of the generic key/value table (whose API refuses the key).
+    from specivo.services.anonymous_access_service import (
+        ANONYMOUS_ACCESS_SETTING_KEY,
+        is_anonymous_access_enabled,
+        list_projects_with_anonymous_permissions,
+    )
+
+    anonymous_access_enabled = await is_anonymous_access_enabled(db)
+    anonymous_access_projects = await list_projects_with_anonymous_permissions(db)
+    generic_settings = {k: v for k, v in settings.items() if k != ANONYMOUS_ACCESS_SETTING_KEY}
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -343,7 +453,9 @@ async def admin_settings(
         context={
             "user": user,
             "active_page": "admin",
-            "settings": settings,
+            "settings": generic_settings,
+            "anonymous_access_enabled": anonymous_access_enabled,
+            "anonymous_access_projects": anonymous_access_projects,
             "language_choices": language_choices,
             "current_default_language": current_default,
             "timezone_choices": timezone_choices,
@@ -402,6 +514,79 @@ async def admin_settings_defaults(
             set_default_language_override(to_set["default_language"])
 
     return RedirectResponse("/admin/settings/", status_code=303)
+
+
+def _render_anonymous_access_confirm(
+    request: Request,
+    user: User,
+    projects: list,
+    *,
+    stale: bool = False,
+    status_code: int = 200,
+) -> Response:
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/anonymous_access_confirm.html",
+        context={"user": user, "active_page": "admin", "projects": projects, "stale": stale},
+        status_code=status_code,
+    )
+
+
+@router.post("/admin/settings/anonymous-access/", response_model=None)
+async def admin_settings_anonymous_access(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    enabled: str = Form(""),
+    confirm: str = Form(""),
+    confirmed_projects: list[str] = Form(default=[]),  # noqa: B008
+) -> Response:
+    """Turn the anonymous access switch on or off.
+
+    ``enabled=1`` without ``confirm=1`` changes nothing and redirects to the
+    confirmation page. That page posts ``confirm=1`` with the keys it showed as
+    ``confirmed_projects``; if the opted-in projects changed in the meantime,
+    it is rendered again with the current list and a notice (409). Turning the
+    switch off needs no confirmation.
+    """
+    from specivo.services.anonymous_access_service import (
+        AnonymousAccessConfirmationRequiredError,
+        AnonymousAccessConfirmationStaleError,
+        set_anonymous_access_enabled,
+    )
+
+    try:
+        await set_anonymous_access_enabled(
+            db,
+            enabled == "1",
+            user,
+            confirmed_projects=confirmed_projects if confirm == "1" else None,
+            request=request,
+        )
+    except AnonymousAccessConfirmationRequiredError:
+        return RedirectResponse("/admin/settings/anonymous-access/confirm/", status_code=303)
+    except AnonymousAccessConfirmationStaleError as exc:
+        return _render_anonymous_access_confirm(request, user, exc.projects, stale=True, status_code=409)
+    await db.commit()
+    return RedirectResponse("/admin/settings/", status_code=303)
+
+
+@router.get("/admin/settings/anonymous-access/confirm/", response_class=HTMLResponse)
+async def admin_settings_anonymous_access_confirm(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Ask the administrator to confirm turning anonymous access on, naming the opted-in projects."""
+    from specivo.services.anonymous_access_service import (
+        is_anonymous_access_enabled,
+        list_projects_with_anonymous_permissions,
+    )
+
+    if await is_anonymous_access_enabled(db):
+        return RedirectResponse("/admin/settings/", status_code=303)
+    return _render_anonymous_access_confirm(request, user, await list_projects_with_anonymous_permissions(db))
 
 
 # ---------------------------------------------------------------------------
@@ -520,10 +705,7 @@ async def admin_metadata_presets(
 
     svc = MetadataPresetService()
     presets = await svc.list_presets(db)
-    presets_data = [
-        MetadataPresetOut.model_validate(p).model_dump(mode="json")
-        for p in presets
-    ]
+    presets_data = [MetadataPresetOut.model_validate(p).model_dump(mode="json") for p in presets]
 
     templates = get_templates()
     return templates.TemplateResponse(

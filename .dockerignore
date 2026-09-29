@@ -13,3 +13,8 @@ __pycache__
 .claude
 nginx/
 scripts/configure.py
+# Frontend: dependencies are installed and bundles built inside the image
+# (see the Dockerfile's frontend stage), never taken from the build context.
+node_modules
+**/node_modules
+specivo/static/dist

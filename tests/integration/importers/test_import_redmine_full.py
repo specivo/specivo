@@ -29,13 +29,16 @@ from specivo.models.attachment import Attachment
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
-from specivo.models.member import Member
+from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
 from specivo.models.relation import IssueRelation
+from specivo.models.role import Role
 from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.version import Version
 from specivo.models.wiki import WikiContent, WikiPage, WikiRedirect
+from specivo.services.permission_service import clear_role_cache, get_user_roles
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="function"),
@@ -75,10 +78,10 @@ class TestFullImport:
         return summary
 
     async def test_the_run_reports_no_failures(self, db_session, imported):
-        """Every warning the seeded fixture produces is the importer explaining
-        itself: group flattening, and hours rounded to two places."""
+        """The only warning the seeded fixture produces is the importer
+        explaining itself: hours rounded to two decimal places."""
         messages = [warning.message for warning in imported.warnings]
-        unexpected = [m for m in messages if "flattened" not in m and "rounded" not in m]
+        unexpected = [m for m in messages if "rounded" not in m]
         assert unexpected == []
 
     async def test_projects_including_the_subproject(self, db_session, imported):
@@ -222,11 +225,58 @@ class TestFullImport:
         page = await db_session.get(WikiPage, attachment.container_id)
         assert page is not None and page.title == "Architecture"
 
-    async def test_group_membership_was_flattened_to_its_members(self, db_session, imported):
+    async def test_the_group_came_across_with_its_members(self, db_session, imported):
+        group = (await db_session.execute(select(UserGroup).where(UserGroup.name == "Platform Team"))).scalar_one()
+        logins = set(
+            (
+                await db_session.execute(
+                    select(User.login)
+                    .join(UserGroupMember, UserGroupMember.user_id == User.id)
+                    .where(UserGroupMember.group_id == group.id)
+                )
+            ).scalars()
+        )
+        assert logins == {"fixture_dev", "fixture_thai"}
+
+    async def test_the_group_holds_its_roles_on_the_project(self, db_session, imported):
+        """One membership row held by the group, not a copy per member."""
         project = (await db_session.execute(select(Project).where(Project.identifier == "acme-app"))).scalar_one()
-        members = (await db_session.execute(select(Member).where(Member.project_id == project.id))).scalars().all()
-        # The direct membership plus one per member of the group.
-        assert len(members) >= 3
+        group = (await db_session.execute(select(UserGroup).where(UserGroup.name == "Platform Team"))).scalar_one()
+
+        member = (
+            await db_session.execute(select(Member).where(Member.project_id == project.id, Member.group_id == group.id))
+        ).scalar_one()
+        role_names = set(
+            (
+                await db_session.execute(
+                    select(Role.name)
+                    .join(MemberRole, MemberRole.role_id == Role.id)
+                    .where(MemberRole.member_id == member.id)
+                )
+            ).scalars()
+        )
+        assert role_names == {"Developer"}
+
+    async def test_the_groups_members_resolve_to_its_roles(self, db_session, imported):
+        """The access the group's grant is supposed to hand its members.
+
+        Neither account holds a membership of its own on this project, so
+        Developer can only be reaching them through the group.
+        """
+        project = (await db_session.execute(select(Project).where(Project.identifier == "acme-app"))).scalar_one()
+        clear_role_cache(db_session)
+
+        for login in ("fixture_dev", "fixture_thai"):
+            user = (await db_session.execute(select(User).where(User.login == login))).scalar_one()
+            direct = (
+                await db_session.execute(
+                    select(Member).where(Member.project_id == project.id, Member.user_id == user.id)
+                )
+            ).scalar_one_or_none()
+            assert direct is None, login
+
+            roles = await get_user_roles(db_session, user, project)
+            assert [role.name for role in roles] == ["Developer"], login
 
     async def test_logged_time_is_rounded_to_two_places(self, db_session, imported):
         entries = (await db_session.execute(select(TimeEntry))).scalars().all()
@@ -241,8 +291,19 @@ class TestFullImport:
         assert user.password_hash is not None
         assert not verify_password("fixture-password-not-a-secret", user.password_hash)
 
-    async def test_the_report_lists_the_accounts_needing_a_reset(self, db_session, imported):
-        assert "fixture_dev" in imported.notes["password_reset_required"]
+    async def test_the_report_lists_the_accounts_owing_a_password(self, db_session, imported):
+        note = imported.notes["accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"]
+        assert "fixture_dev" in note
+
+    async def test_imported_people_must_set_their_own_password(self, db_session, imported):
+        user = (await db_session.execute(select(User).where(User.login == "fixture_dev"))).scalar_one()
+        assert user.must_change_password is True
+
+    async def test_the_import_service_account_is_not_flagged(self, db_session, imported):
+        """It has no password to replace; the CHECK on users would reject the row."""
+        account = (await db_session.execute(select(User).where(User.login == "redmine-import"))).scalar_one()
+        assert account.is_service_account is True
+        assert account.must_change_password is False
 
 
 class TestRerun:

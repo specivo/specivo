@@ -1,4 +1,10 @@
 export function timeLogForm(initial) {
+        var i18n = Object.assign({
+            minimum: 'Enter at least 1 minute',
+            logFailed: 'Failed to log time',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
+
         return {
             showForm: false,
             hours: '',
@@ -23,7 +29,7 @@ export function timeLogForm(initial) {
                 try {
                     var total = this.totalHours;
                     if (total <= 0) {
-                        this.error = 'Enter at least 1 minute';
+                        this.error = i18n.minimum;
                         this.submitting = false;
                         return;
                     }
@@ -42,10 +48,10 @@ export function timeLogForm(initial) {
                         window.location.reload();
                     } else {
                         var data = await res.json();
-                        this.error = (data.errors && data.errors[0] && data.errors[0].message) || 'Failed to log time';
+                        this.error = (data.errors && data.errors[0] && data.errors[0].message) || i18n.logFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Unable to connect.';
+                    this.error = i18n.connectFailed;
                 }
                 this.submitting = false;
             }

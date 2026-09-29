@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Index, Integer, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from specivo.models.base import Base, TimestampMixin
@@ -10,29 +10,52 @@ from specivo.models.base import Base, TimestampMixin
 if TYPE_CHECKING:
     from specivo.models.role import Role
     from specivo.models.user import User
+    from specivo.models.user_group import UserGroup
 
 
 class Member(Base, TimestampMixin):
-    """Associates a user with a project.
+    """Associates a principal with a project.
 
-    A user can belong to many projects; a project has many members.
-    Roles are stored in the ``member_roles`` join table so a member can
-    hold multiple roles simultaneously within the same project.
+    The principal is **either** a user or a user group — exactly one of
+    ``user_id`` / ``group_id`` is set, enforced by ``ck_members_one_principal``.
+    A group-held membership works exactly like a user-held one: its roles hang
+    off this row via the ``member_roles`` join table, which is unchanged and
+    does not know or care which kind of principal holds the membership.
+
+    A principal can belong to many projects; a project has many members.
+    Roles live in ``member_roles`` so a member can hold several roles
+    simultaneously within the same project.
+
+    Uniqueness is expressed as two plain unique constraints rather than partial
+    indexes: PostgreSQL treats NULLs as distinct, so ``uq_members_user_project``
+    ignores group rows and ``uq_members_group_project`` ignores user rows, and
+    the CHECK guarantees a row is never both.
     """
 
     __tablename__ = "members"
 
     __table_args__ = (
         UniqueConstraint("user_id", "project_id", name="uq_members_user_project"),
+        UniqueConstraint("group_id", "project_id", name="uq_members_group_project"),
+        CheckConstraint(
+            "num_nonnulls(user_id, group_id) = 1",
+            name="ck_members_one_principal",
+        ),
         Index("ix_members_user_id", "user_id"),
+        Index("ix_members_group_id", "group_id"),
         Index("ix_members_project_id", "project_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
-    user_id: Mapped[int] = mapped_column(
+    user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
+    )
+
+    group_id: Mapped[int | None] = mapped_column(
+        ForeignKey("user_groups.id", ondelete="CASCADE"),
+        nullable=True,
     )
 
     project_id: Mapped[int] = mapped_column(
@@ -40,7 +63,8 @@ class Member(Base, TimestampMixin):
         nullable=False,
     )
 
-    user: Mapped["User"] = relationship("User", foreign_keys=[user_id], lazy="raise")
+    user: Mapped["User | None"] = relationship("User", foreign_keys=[user_id], lazy="raise")
+    group: Mapped["UserGroup | None"] = relationship("UserGroup", foreign_keys=[group_id], lazy="raise")
     member_roles: Mapped[list["MemberRole"]] = relationship(
         "MemberRole",
         back_populates="member",
@@ -49,7 +73,8 @@ class Member(Base, TimestampMixin):
     )
 
     def __repr__(self) -> str:
-        return f"<Member id={self.id} user_id={self.user_id} project_id={self.project_id}>"
+        principal = f"user_id={self.user_id}" if self.user_id is not None else f"group_id={self.group_id}"
+        return f"<Member id={self.id} {principal} project_id={self.project_id}>"
 
 
 class MemberRole(Base):

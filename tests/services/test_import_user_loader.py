@@ -15,15 +15,14 @@ from sqlalchemy import func, select
 
 from specivo.importers.core.ir import EntityType, IRGroup, IRUser
 from specivo.importers.load.user_loader import (
-    GROUP_MEMBERS_STATE_KEY,
-    NOTE_GROUPS_FLATTENED,
-    NOTE_PASSWORD_RESET,
+    NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN,
     NOTE_SYNTHETIC_EMAIL,
     ensure_import_account,
     load_groups,
     load_users,
 )
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.services.auth_utils import verify_password
 from tests.services.conftest import FakeAdapter
 
@@ -112,11 +111,19 @@ class TestCredentials:
         hashes = (await db_session.execute(stmt)).scalars().all()
         assert len(set(hashes)) == 2
 
-    async def test_every_login_is_listed_for_reset(self, db_session, make_context):
-        """The accounts are unreachable until somebody resets them."""
+    async def test_every_login_is_listed_as_owing_a_password(self, db_session, make_context):
+        """The accounts have no usable password until somebody gives them one."""
         ctx = make_context(FakeAdapter(users=[_user()]))
         await load_users(ctx)
-        assert ctx.summary.notes[NOTE_PASSWORD_RESET] == ["alex"]
+        assert ctx.summary.notes[NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN] == ["alex"]
+
+    async def test_the_account_must_set_its_own_password(self, db_session, make_context):
+        """Whatever password it is eventually given is not the one it keeps."""
+        ctx = make_context(FakeAdapter(users=[_user()]))
+        await load_users(ctx)
+
+        user_id = await ctx.id_map.get(db_session, EntityType.USER, "12")
+        assert (await db_session.get(User, user_id)).must_change_password is True
 
 
 class TestIdentityAdjustments:
@@ -203,6 +210,9 @@ class TestImportAccount:
         assert account.login == "redmine-import"
         assert account.is_service_account is True
         assert account.is_admin is False
+        # It has no password to replace, and the CHECK on users would reject
+        # the row if it were flagged.
+        assert account.must_change_password is False
 
     async def test_is_reused_on_a_second_call(self, db_session, make_context):
         ctx = make_context(FakeAdapter())
@@ -223,34 +233,107 @@ class TestImportAccount:
 
 
 class TestGroups:
-    async def test_membership_is_parked_for_the_memberships_phase(self, db_session, make_context):
+    async def test_the_group_is_created_with_its_members(self, db_session, make_context):
+        users = [
+            _user(source_ref="1", login="grp_alex", email="grp_alex@example.org"),
+            _user(source_ref="2", login="grp_sam", email="grp_sam@example.org"),
+        ]
         groups = [IRGroup(source_ref="20", name="Platform Team", member_refs=["1", "2"])]
+        ctx = make_context(FakeAdapter(users=users, groups=groups))
+        await load_users(ctx)
+        await load_groups(ctx)
+
+        group_id = await ctx.id_map.get(db_session, EntityType.GROUP, "20")
+        group = await db_session.get(UserGroup, group_id)
+        assert group.name == "Platform Team"
+
+        member_ids = set(
+            (
+                await db_session.execute(select(UserGroupMember.user_id).where(UserGroupMember.group_id == group_id))
+            ).scalars()
+        )
+        assert member_ids == {
+            await ctx.id_map.get(db_session, EntityType.USER, "1"),
+            await ctx.id_map.get(db_session, EntityType.USER, "2"),
+        }
+
+    async def test_created_groups_are_counted(self, db_session, make_context):
+        """The report says groups came across; it no longer warns about them."""
+        groups = [IRGroup(source_ref="20", name="Counted Team", member_refs=[])]
         ctx = make_context(FakeAdapter(groups=groups))
         await load_groups(ctx)
 
-        assert ctx.state[GROUP_MEMBERS_STATE_KEY] == {"20": ["1", "2"]}
+        assert ctx.summary.created[EntityType.GROUP] == 1
+        assert ctx.summary.warnings == []
 
-    async def test_no_rows_are_created(self, db_session, make_context):
-        """Specivo has no group that can hold project roles."""
-        before = (await db_session.execute(select(func.count()).select_from(User))).scalar_one()
-        ctx = make_context(FakeAdapter(groups=[IRGroup(source_ref="20", name="Platform Team", member_refs=["1"])]))
+    async def test_a_member_that_was_not_imported_is_reported_not_fatal(self, db_session, make_context):
+        users = [_user(source_ref="1", login="grp_kept", email="grp_kept@example.org")]
+        groups = [IRGroup(source_ref="20", name="Partial Team", member_refs=["1", "999"])]
+        ctx = make_context(FakeAdapter(users=users, groups=groups))
+        await load_users(ctx)
         await load_groups(ctx)
-        after = (await db_session.execute(select(func.count()).select_from(User))).scalar_one()
-        assert after == before
 
-    async def test_flattening_is_reported(self, db_session, make_context):
-        groups = [IRGroup(source_ref="20", name="Platform Team", member_refs=["1", "2"])]
+        group_id = await ctx.id_map.get(db_session, EntityType.GROUP, "20")
+        count = (
+            await db_session.execute(
+                select(func.count()).select_from(UserGroupMember).where(UserGroupMember.group_id == group_id)
+            )
+        ).scalar_one()
+        assert count == 1
+        assert any("left out of the group" in w.message for w in ctx.summary.warnings)
+
+    async def test_two_source_groups_differing_only_in_case_stay_separate(self, db_session, make_context):
+        """user_groups is unique on the lowercased name and Redmine is not."""
+        groups = [
+            IRGroup(source_ref="20", name="Case Team", member_refs=[]),
+            IRGroup(source_ref="21", name="case team", member_refs=[]),
+        ]
         ctx = make_context(FakeAdapter(groups=groups))
         await load_groups(ctx)
 
-        assert ctx.summary.notes[NOTE_GROUPS_FLATTENED] == ["Platform Team (2 members)"]
-        assert any("flattened" in w.message for w in ctx.summary.warnings)
+        first = await db_session.get(UserGroup, await ctx.id_map.get(db_session, EntityType.GROUP, "20"))
+        second = await db_session.get(UserGroup, await ctx.id_map.get(db_session, EntityType.GROUP, "21"))
+        assert first.id != second.id
+        assert second.name == "case team-2"
+        assert any("already taken" in w.message for w in ctx.summary.warnings)
+
+    async def test_a_name_an_existing_group_holds_is_suffixed_not_reused(self, db_session, make_context):
+        """Merging into it would hand its members access nobody granted them."""
+        existing = UserGroup(name="Existing Team")
+        db_session.add(existing)
+        await db_session.flush()
+
+        ctx = make_context(FakeAdapter(groups=[IRGroup(source_ref="20", name="Existing Team", member_refs=[])]))
+        await load_groups(ctx)
+
+        imported_id = await ctx.id_map.get(db_session, EntityType.GROUP, "20")
+        assert imported_id != existing.id
+        assert (await db_session.get(UserGroup, imported_id)).name == "Existing Team-2"
+
+    async def test_a_resumed_run_finds_the_group_it_already_made(self, db_session, make_context):
+        groups = [IRGroup(source_ref="20", name="Resumed Team", member_refs=[])]
+        first = make_context(FakeAdapter(groups=groups))
+        await load_groups(first)
+        group_id = await first.id_map.get(db_session, EntityType.GROUP, "20")
+
+        second = make_context(FakeAdapter(groups=groups))
+        await load_groups(second)
+
+        assert await second.id_map.get(db_session, EntityType.GROUP, "20") == group_id
+        assert second.summary.created[EntityType.GROUP] == 0
+        assert second.summary.skipped[EntityType.GROUP] == 1
+        count = (
+            await db_session.execute(
+                select(func.count()).select_from(UserGroup).where(UserGroup.name.like("Resumed Team%"))
+            )
+        ).scalar_one()
+        assert count == 1
 
     async def test_no_groups_means_no_warning(self, db_session, make_context):
         ctx = make_context(FakeAdapter(groups=[]))
         await load_groups(ctx)
         assert ctx.summary.warnings == []
-        assert ctx.state[GROUP_MEMBERS_STATE_KEY] == {}
+        assert ctx.summary.created[EntityType.GROUP] == 0
 
 
 class TestIdempotency:

@@ -23,6 +23,7 @@ class AuditEvent(StrEnum):
     LOGIN_FAILURE = "login_failure"
     SEARCH_QUERY = "search_query"
     MEMBER_CHANGE = "member_change"
+    GROUP_CHANGE = "group_change"
     ACCESS_GRANTED = "access_granted"
     ACCESS_DENIED = "access_denied"
     AUTH_FAILURE = "auth_failure"
@@ -71,6 +72,10 @@ class AuditEvent(StrEnum):
     PASSWORD_RESET_REQUESTED = "password_reset_requested"
     PASSWORD_RESET_COMPLETED = "password_reset_completed"
     PASSWORD_RESET_FAILED = "password_reset_failed"
+    PASSWORD_CHANGED = "password_changed"
+    PASSWORD_CHANGE_FAILED = "password_change_failed"
+    PROJECT_ANONYMOUS_PERMISSIONS_CHANGED = "project_anonymous_permissions_changed"
+    ANONYMOUS_ACCESS_SWITCH_CHANGED = "anonymous_access_switch_changed"
 
 
 class MemberAction(StrEnum):
@@ -80,6 +85,21 @@ class MemberAction(StrEnum):
     REMOVED = "removed"
     ROLES_CHANGED = "roles_changed"
     PERMISSION_DENIED = "permission_denied"
+
+
+class GroupAction(StrEnum):
+    """Valid actions for group_change audit events (details.action).
+
+    A user group is a membership principal, so changing one changes who can
+    reach which projects — the same class of event as a member change, but
+    not project-scoped, which is why it has its own event type.
+    """
+
+    CREATED = "created"
+    RENAMED = "renamed"
+    DELETED = "deleted"
+    USER_ADDED = "user_added"
+    USER_REMOVED = "user_removed"
 
 
 class SecurityAuditService:
@@ -331,24 +351,93 @@ class SecurityAuditService:
         action: MemberAction,
         user_id: int,
         project_id: int,
-        target_user_id: int,
-        target_login: str,
+        target_user_id: int | None = None,
+        target_login: str | None = None,
+        target_group_id: int | None = None,
+        target_group_name: str | None = None,
         roles: list[str] | None = None,
         request: Request | None = None,
     ) -> SecurityAuditLog:
-        """Log a project member change. Core feature — always persisted."""
+        """Log a project member change. Core feature — always persisted.
+
+        A membership is held by a user or by a user group, and granting a
+        group roles on a project is the same class of event as granting them
+        to a user: it changes who can reach this project.  Both therefore land
+        here, as a project-scoped ``member_change`` row, rather than a group
+        grant going to :meth:`log_group_change` — that one is about the group
+        itself, leaves ``project_id`` NULL and so could not name the project
+        whose access changed.
+
+        ``details.principal_type`` says which kind the row is about, and the
+        holder is named by ``target_user_id``/``target_login`` for a user or
+        ``target_group_id``/``target_group_name`` for a group.
+        """
         info = self._extract_request_info(request)
-        details: dict[str, Any] = {
-            "action": str(action),
-            "target_user_id": target_user_id,
-            "target_login": target_login,
-        }
+        details: dict[str, Any] = {"action": str(action)}
+        if target_group_id is not None:
+            details["principal_type"] = "group"
+            details["target_group_id"] = target_group_id
+            details["target_group_name"] = target_group_name or ""
+        else:
+            details["principal_type"] = "user"
+            details["target_user_id"] = target_user_id if target_user_id is not None else 0
+            details["target_login"] = target_login or ""
         if roles:
             details["roles"] = roles
         log = SecurityAuditLog(
             event_type=AuditEvent.MEMBER_CHANGE,
             user_id=user_id,
             project_id=project_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_group_change(
+        self,
+        session: AsyncSession,
+        action: GroupAction,
+        user_id: int,
+        group_id: int,
+        group_name: str,
+        target_user_id: int | None = None,
+        target_login: str | None = None,
+        extra: dict[str, Any] | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a user group change. Core feature — always persisted.
+
+        Unlike :meth:`log_member_change` this is not project-scoped: a group
+        exists outside any project and can grant access to several at once.
+        ``project_id`` is therefore left NULL and the group is identified by
+        ``resource_type``/``resource_id``.
+
+        *target_user_id* / *target_login* identify the user moved in or out of
+        the group, and are None for events about the group itself.  *extra*
+        carries action-specific facts — the old name on a rename, and what the
+        group was granting on a delete, which cannot be recovered afterwards.
+        """
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {
+            "action": str(action),
+            "group_id": group_id,
+            "group_name": group_name,
+        }
+        if target_user_id is not None:
+            details["target_user_id"] = target_user_id
+        if target_login is not None:
+            details["target_login"] = target_login
+        if extra:
+            details.update(extra)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.GROUP_CHANGE,
+            user_id=user_id,
+            resource_type="user_group",
+            resource_id=group_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
             user_agent=info["user_agent"],
@@ -483,6 +572,129 @@ class SecurityAuditService:
         log = SecurityAuditLog(
             event_type=AuditEvent.PASSWORD_RESET_FAILED,
             user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_password_changed(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        request: Request | None = None,
+        revoked_sessions: int = 0,
+    ) -> SecurityAuditLog:
+        """Log a successful self-service password change. Core feature.
+
+        *revoked_sessions* records how many of the user's other sessions were
+        revoked as part of the change. No password material is ever recorded.
+        """
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_CHANGED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"revoked_sessions": revoked_sessions},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_password_change_failed(
+        self,
+        session: AsyncSession,
+        reason: str,
+        user_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a rejected self-service password change. Core feature.
+
+        *reason* is the ``AppError`` code of the rejection — never the
+        submitted password or any part of it.
+        """
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_CHANGE_FAILED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"reason": reason},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_project_anonymous_permissions_change(
+        self,
+        session: AsyncSession,
+        user_id: int | None,
+        project_id: int,
+        project_key: str,
+        old: list[str],
+        new: list[str],
+        reason: str,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a change to what anonymous visitors may read in a project. Core feature.
+
+        *reason* says what caused it: an administrator editing the list, or
+        the project being made private. *user_id* is None only when the change
+        was made outside a request by nobody in particular.
+        """
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PROJECT_ANONYMOUS_PERMISSIONS_CHANGED,
+            user_id=user_id,
+            resource_type="project",
+            resource_id=project_id,
+            project_id=project_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"project_key": project_key, "old": old, "new": new, "reason": str(reason)},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_anonymous_access_switch_change(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        setting_key: str,
+        old: bool,
+        new: bool,
+        opted_in_projects: list[str],
+        confirmed_projects: list[str] | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log the instance-wide anonymous access switch being turned on or off. Core feature.
+
+        *opted_in_projects* records the keys of the projects carrying anonymous
+        permissions at the moment of the change. *confirmed_projects* records
+        the keys the administrator confirmed when turning the switch on, and is
+        omitted when turning it off.
+        """
+        info = self._extract_request_info(request)
+        details: dict[str, Any] = {
+            "setting": setting_key,
+            "old": old,
+            "new": new,
+            "opted_in_projects": opted_in_projects,
+        }
+        if confirmed_projects is not None:
+            details["confirmed_projects"] = confirmed_projects
+        log = SecurityAuditLog(
+            event_type=AuditEvent.ANONYMOUS_ACCESS_SWITCH_CHANGED,
+            user_id=user_id,
+            resource_type="setting",
             ip_address=info["ip_address"],
             request_id=info["request_id"],
             user_agent=info["user_agent"],

@@ -7,6 +7,7 @@ Implements:
 - Progressive account lockout on failed logins
 - Session listing and targeted revocation
 - Self-service password reset via email token
+- Self-service password change for an authenticated user
 """
 
 from __future__ import annotations
@@ -17,10 +18,11 @@ import secrets
 import uuid
 from datetime import timedelta
 from pathlib import Path
+from typing import cast
 
 import jwt
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
@@ -30,7 +32,7 @@ from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.auth import PasswordResetToken, RefreshToken
 from specivo.models.user import User
-from specivo.services.auth_utils import hash_password, verify_password
+from specivo.services.auth_utils import hash_password, validate_password_policy, verify_password
 from specivo.tasks.notifications import send_notification_email
 
 # ---------------------------------------------------------------------------
@@ -146,7 +148,10 @@ class AuthService:
         # --- Constant-time guard: prevent user enumeration ---
         # We always try to verify a password even when the user is not found,
         # then raise the same generic error.
-        if user is None:
+        # The anonymous user is not an account anybody can sign in to. It has no
+        # password either, but it is refused here explicitly, and exactly like an
+        # unknown login, rather than relying on that.
+        if user is None or user.is_anonymous:
             # Burn time comparable to bcrypt.checkpw so timing doesn't reveal existence
             verify_password(password, _get_enumeration_guard_hash())
             raise AppError(
@@ -286,8 +291,8 @@ class AuthService:
         # Load the associated user
         user_result = await session.execute(select(User).where(User.id == record.user_id))
         user = user_result.scalar_one_or_none()
-        if user is None or user.status not in ("active", "locked"):
-            # User deleted or deactivated — refuse refresh
+        if user is None or user.is_anonymous or user.status not in ("active", "locked"):
+            # User deleted or deactivated, or the anonymous user — refuse refresh
             await session.delete(record)
             await session.flush()
             raise AppError(
@@ -332,7 +337,36 @@ class AuthService:
     ) -> int:
         """Revoke all refresh tokens for *user_id*. Returns the count deleted."""
         stmt = delete(RefreshToken).where(RefreshToken.user_id == user_id)
-        result = await session.execute(stmt)
+        # execute() is typed as returning Result, which has no rowcount; a DML
+        # statement always yields a CursorResult at runtime.
+        result = cast(CursorResult, await session.execute(stmt))
+        await session.flush()
+        return result.rowcount
+
+    async def logout_other_sessions(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        keep_refresh_token_raw: str | None = None,
+    ) -> int:
+        """Revoke every refresh token for *user_id* except the caller's own.
+
+        Sibling of :meth:`logout_all`, used after a password change: the other
+        devices must lose their sessions, but the browser that performed the
+        change has to stay signed in — otherwise changing a password logs you
+        out of the page you changed it on.
+
+        *keep_refresh_token_raw* is the caller's own raw refresh token (from the
+        ``refresh_token`` cookie). When it is ``None`` — a Bearer-token client
+        that never received a refresh cookie — every session is revoked, which
+        is the same outcome as :meth:`logout_all`.
+
+        Returns the number of sessions revoked.
+        """
+        stmt = delete(RefreshToken).where(RefreshToken.user_id == user_id)
+        if keep_refresh_token_raw:
+            stmt = stmt.where(RefreshToken.token_hash != _hash_token(keep_refresh_token_raw))
+        result = cast(CursorResult, await session.execute(stmt))
         await session.flush()
         return result.rowcount
 
@@ -398,8 +432,9 @@ class AuthService:
         result = await session.execute(stmt)
         user = result.scalar_one_or_none()
 
-        # Silent return for nonexistent or inactive users — no enumeration
-        if user is None or user.status not in ("active", "locked"):
+        # Silent return for nonexistent or inactive users, and for the anonymous
+        # user, which no one may take over — no enumeration
+        if user is None or user.is_anonymous or user.status not in ("active", "locked"):
             return None
 
         # Invalidate any existing unused tokens for this user
@@ -481,7 +516,7 @@ class AuthService:
         # Load user
         user_result = await session.execute(select(User).where(User.id == record.user_id))
         user = user_result.scalar_one_or_none()
-        if user is None:
+        if user is None or user.is_anonymous:
             raise AppError(
                 code="password_reset_invalid",
                 message=_("Invalid or expired password reset link"),
@@ -493,6 +528,10 @@ class AuthService:
         user.password_changed_at = utcnow()
         user.failed_login_count = 0
         user.locked_until = None
+        # Somebody completing an email reset picked this password themselves,
+        # so a forced change has already happened. Leaving the flag set would
+        # demand a second change the moment they sign in.
+        user.must_change_password = False
 
         # If user was locked (brute-force), reactivate
         if user.status == "locked":
@@ -503,6 +542,70 @@ class AuthService:
 
         await session.flush()
         return user.id
+
+    # ------------------------------------------------------------------
+    # Self-service password change
+    # ------------------------------------------------------------------
+
+    async def change_password(
+        self,
+        session: AsyncSession,
+        user: User,
+        current_password: str,
+        new_password: str,
+    ) -> None:
+        """Change *user*'s password after verifying *current_password*.
+
+        Raises ``AppError`` (400) when the account has no password to change,
+        when the current password is wrong, or when the new password repeats
+        the current one; ``AppError`` (422) when the new password fails the
+        password policy.
+
+        The caller is responsible for revoking the user's other sessions and
+        for writing the audit trail.
+        """
+        # Accounts without a password (service accounts authenticate by API
+        # key) have nothing to verify against — reject before touching bcrypt.
+        if user.is_service_account or not user.password_hash:
+            raise AppError(
+                code="password_change_unavailable",
+                message=_("This account has no password. It authenticates with an API key."),
+                status_code=400,
+            )
+
+        # Verify the current password before any other check, so no other
+        # failure mode can be reached without knowing it.
+        if not verify_password(current_password, user.password_hash):
+            raise AppError(
+                code="password_current_invalid",
+                message=_("Current password is incorrect"),
+                status_code=400,
+                field="current_password",
+            )
+
+        validate_password_policy(new_password)
+
+        if new_password == current_password:
+            raise AppError(
+                code="password_unchanged",
+                message=_("The new password must be different from the current one"),
+                status_code=400,
+                field="new_password",
+            )
+
+        user.password_hash = hash_password(new_password)
+        user.password_changed_at = utcnow()
+        # Mirror the token-reset path: a successful password change clears the
+        # brute-force counters. status="locked" is not handled here because a
+        # locked account cannot authenticate with a JWT and so cannot reach
+        # this code path at all.
+        user.failed_login_count = 0
+        user.locked_until = None
+        # The password is now one the owner chose, which is the whole point of
+        # the flag. This is the way out of a forced change.
+        user.must_change_password = False
+
+        await session.flush()
 
     # ------------------------------------------------------------------
     # Helpers

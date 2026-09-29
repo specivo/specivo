@@ -1,5 +1,27 @@
 export function ftsReindex(initial) {
         initial = initial || {};
+        // User-facing strings are translated in the template and handed in via
+        // `i18n`; the English defaults only cover a caller that omits them.
+        // Counts stay out of plural agreement (the number is only known here),
+        // so translations phrase them in a count-neutral form.
+        var i18n = Object.assign({
+            inherit: 'Inherit (%(language)s)',
+            languageSaved: 'Language saved.',
+            saveLanguageFailed: 'Failed to save language.',
+            connectFailed: 'Unable to connect.',
+            reindexStarted: 'Reindex started.',
+            startFailed: 'Failed to start reindex.',
+            reindexComplete: 'Reindex complete.',
+            reindexFailed: 'Reindex failed.',
+            countIssues: '%(count)s issues',
+            countWiki: '%(count)s wiki',
+            countChunks: '%(count)s chunks',
+            justNow: 'just now',
+            minutesAgo: '%(count)s min ago',
+            hoursAgo: '%(count)s h ago',
+            daysAgo: '%(count)s d ago'
+        }, initial.i18n || {});
+
         return {
             baseUrl: (initial.baseUrl || '').replace(/\/+$/, ''),
             isProject: !!initial.isProject,
@@ -46,7 +68,7 @@ export function ftsReindex(initial) {
                 // Project scope prepends an "Inherit" pseudo-option (value "").
                 var opts = this.allowed.map(function (l) { return {value: l, label: l}; });
                 if (this.isProject) {
-                    opts.unshift({value: '', label: 'Inherit (' + this.instanceDefault + ')'});
+                    opts.unshift({value: '', label: i18n.inherit.replace('%(language)s', this.instanceDefault)});
                 }
                 return opts;
             },
@@ -116,15 +138,15 @@ export function ftsReindex(initial) {
                     });
                     if (res.ok) {
                         this._applyState(await res.json());
-                        this.message = 'Language saved.';
+                        this.message = i18n.languageSaved;
                         this.messageError = false;
                     } else {
                         var err = await res.json().catch(function () { return {}; });
-                        this.message = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to save language.';
+                        this.message = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || i18n.saveLanguageFailed;
                         this.messageError = true;
                     }
                 } catch (_e) {
-                    this.message = 'Unable to connect.';
+                    this.message = i18n.connectFailed;
                     this.messageError = true;
                 }
                 this.saving = false;
@@ -144,16 +166,16 @@ export function ftsReindex(initial) {
                         this.state = data.state || 'PENDING';
                         this.running = true;
                         this.progress = null;
-                        this.message = 'Reindex started.';
+                        this.message = i18n.reindexStarted;
                         this.messageError = false;
                         this._startPoll();
                     } else {
                         var err = await res.json().catch(function () { return {}; });
-                        this.message = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to start reindex.';
+                        this.message = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || i18n.startFailed;
                         this.messageError = true;
                     }
                 } catch (_e) {
-                    this.message = 'Unable to connect.';
+                    this.message = i18n.connectFailed;
                     this.messageError = true;
                 }
                 this.starting = false;
@@ -184,10 +206,10 @@ export function ftsReindex(initial) {
                         this._stopPoll();
                         this.progress = null;
                         if (this.lastResult && this.lastResult.status === 'success') {
-                            this.message = 'Reindex complete.';
+                            this.message = i18n.reindexComplete;
                             this.messageError = false;
                         } else if (this.lastResult && this.lastResult.status === 'failed') {
-                            this.message = 'Reindex failed.';
+                            this.message = i18n.reindexFailed;
                             this.messageError = true;
                         }
                     }
@@ -199,9 +221,9 @@ export function ftsReindex(initial) {
                 if (!r || !r.counts) return '';
                 var c = r.counts;
                 var parts = [];
-                if (c.issues != null) parts.push(this._fmt(c.issues) + ' issues');
-                if (c.wiki_contents != null) parts.push(this._fmt(c.wiki_contents) + ' wiki');
-                if (c.search_chunks != null) parts.push(this._fmt(c.search_chunks) + ' chunks');
+                if (c.issues != null) parts.push(i18n.countIssues.replace('%(count)s', this._fmt(c.issues)));
+                if (c.wiki_contents != null) parts.push(i18n.countWiki.replace('%(count)s', this._fmt(c.wiki_contents)));
+                if (c.search_chunks != null) parts.push(i18n.countChunks.replace('%(count)s', this._fmt(c.search_chunks)));
                 var summary = parts.join(' · ');
                 var when = this._timeAgo(r.finished_at);
                 return when ? summary + ' — ' + when : summary;
@@ -216,13 +238,13 @@ export function ftsReindex(initial) {
                 var then = Date.parse(iso);
                 if (isNaN(then)) return '';
                 var secs = Math.round((Date.now() - then) / 1000);
-                if (secs < 45) return 'just now';
+                if (secs < 45) return i18n.justNow;
                 var mins = Math.round(secs / 60);
-                if (mins < 60) return mins + ' min ago';
+                if (mins < 60) return i18n.minutesAgo.replace('%(count)s', mins);
                 var hrs = Math.round(mins / 60);
-                if (hrs < 24) return hrs + ' h ago';
+                if (hrs < 24) return i18n.hoursAgo.replace('%(count)s', hrs);
                 var days = Math.round(hrs / 24);
-                return days + ' d ago';
+                return i18n.daysAgo.replace('%(count)s', days);
             }
         };
     }

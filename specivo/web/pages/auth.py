@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.database import get_db
 from specivo.core.utils import utcnow
 from specivo.models.user import User
-from specivo.web.deps import get_current_user_optional, get_templates, require_user
+from specivo.web.deps import (
+    get_current_user_optional,
+    get_templates,
+    require_user,
+    safe_next_path,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,19 +31,30 @@ async def login_page(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     reset: str = Query(""),  # noqa: B008
+    next_url: str = Query("", alias="next"),  # noqa: B008
 ) -> HTMLResponse:
     """Render the login page (standalone layout, no sidebar).
 
     If the user is already authenticated, the template shows a
     'You are logged in' widget instead of the login form.
     Accepts ``?reset=ok`` query param to show a success banner after password reset.
+
+    ``?next=`` is where the visitor was heading: the pages that refuse a
+    visitor without an account send it along so signing in returns them to the
+    page they asked for instead of the dashboard. It is validated here rather
+    than trusted — only a path within this site survives ``safe_next_path`` —
+    so the parameter cannot be used to bounce somebody to another origin.
     """
     user = await get_current_user_optional(request, db)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/auth/login.html",
-        context={"user": user, "reset_ok": reset == "ok"},
+        context={
+            "user": user,
+            "reset_ok": reset == "ok",
+            "next_path": safe_next_path(next_url),
+        },
     )
 
 
@@ -156,6 +172,40 @@ async def preferences_page(
             "avatar_palette": palette,
             "language_choices": get_language_choices(settings.available_languages),
             "timezone_choices": TIMEZONE_CHOICES,
+            "password_min_length": settings.password_min_length,
+        },
+    )
+
+
+@router.get("/my/password/", response_model=None)
+async def change_password_page(
+    request: Request,
+    user: Annotated[User, Depends(require_user)],
+) -> Response:
+    """Render the standalone password-change page.
+
+    ``require_user`` sends a user carrying ``must_change_password`` here from
+    every other page and lets this one through, so this is the end of that
+    redirect rather than another hop in it. The same page serves a voluntary
+    visit, which gets the form without the explanation and without being sent
+    anywhere afterwards.
+    """
+    from specivo.core.config import get_settings
+
+    settings = get_settings()
+    forced = bool(user.must_change_password)
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/auth/change_password.html",
+        context={
+            "user": user,
+            "forced": forced,
+            "password_min_length": settings.password_min_length,
+            # A forced user came here trying to reach the app, so put them in
+            # it once the flag is cleared. A voluntary visitor asked for this
+            # page and stays on it.
+            "change_password_redirect": "/" if forced else "",
         },
     )
 

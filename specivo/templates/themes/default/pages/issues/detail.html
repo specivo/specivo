@@ -14,7 +14,35 @@
 <div class="issue-detail-layout">
   {# Main content #}
   <div>
-    <div x-data='descriptionEditor({ subject: {{ issue.subject | tojson }}, description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }} })'>
+    {# A visitor without an account gets the issue as text. The editor is not
+       rendered and then disabled — it is absent, along with the version
+       history link beside it, which is a page of its own that refuses. #}
+    {% if anonymous %}
+    <div>
+      <div class="issue-header">
+        <div class="issue-key-line">
+          <span class="key">{{ issue.display_key }}</span>
+          {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
+          {{ status_badge(issue.status.name if issue.status else '') }}
+        </div>
+        <h1 class="issue-title">{{ issue.subject }}</h1>
+      </div>
+      <div class="description-card">
+        <div class="description-body">
+        {% if issue.description %}
+        {{ issue.description | wiki_markdown(project.key) }}
+        {% else %}
+        <span style="color:var(--sp-text-muted);font-style:italic;">{% trans %}No description.{% endtrans %}</span>
+        {% endif %}
+        </div>
+      </div>
+    </div>
+    {% else %}
+    <div x-data='descriptionEditor({ subject: {{ issue.subject | tojson }}, description: {{ (issue.description or "") | tojson }}, displayKey: "{{ issue.display_key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
+      "titleRequired": _("Title cannot be empty."),
+      "saveFailed": _("Could not save changes."),
+      "networkError": _("Network error. Please retry.")
+    } | tojson }} })'>
       <div class="issue-header">
         <div class="issue-key-line">
           <span class="key">{{ issue.display_key }}</span>
@@ -64,7 +92,11 @@
             {# EasyMDE-wrapped editor — see markdownEditor in frontend/js/components/markdown-editor.js. The inner #}
             {# component exposes its current value via x-modelable, bound to the    #}
             {# outer descriptionEditor's `draft` state.                             #}
-            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue" })'
+            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue", i18n: {{ {
+              "placeholder": _("Write your content here (Markdown)..."),
+              "rendering": _("Rendering..."),
+              "previewUnavailable": _("Preview unavailable.")
+            } | tojson }} })'
                  x-modelable="value"
                  x-model="draft"
                  data-preview-url="/api/v1/markdown/preview/"
@@ -80,10 +112,15 @@
         </div>
       </template>
     </div>
+    {% endif %}
 
     {# Metadata panel -- collapsible, between description and activity #}
     {% if metadata_schemas_data is defined and metadata_schemas_data and (issue_metadata or metadata_schemas_data) %}
-    <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }} })'>
+    <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
+      "tagsPlaceholder": _("Type and press Enter..."),
+      "yes": _("Yes"),
+      "no": _("No")
+    } | tojson }} })'>
       {# Toggle header (always visible) #}
       <button class="sp-metadata-toggle" :class="{ open: expanded }" @click="expanded = !expanded" type="button">
         <svg class="sp-mt-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
@@ -223,9 +260,16 @@
     <div class="activity-tabs" x-data="{ tab: 'activity' }">
       <div class="activity-tabs-header">
         <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        {# Time entries name people and hours, and attachments are outside the
+           anonymous scope, so neither tab exists for a visitor without an
+           account. Relations stay: the list is visibility-filtered already. #}
+        {% if not anonymous %}
         <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
+        {% endif %}
         <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
+        {% if not anonymous %}
         <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">{% trans %}Attachments{% endtrans %}</a>
+        {% endif %}
       </div>
 
       {# Activity content #}
@@ -268,8 +312,13 @@
       </div>
 
       {# Time entries tab #}
+      {% if not anonymous %}
       <div x-show="tab === 'time'">
-        <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }} })'>
+        <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }}, i18n: {{ {
+          "minimum": _("Enter at least 1 minute"),
+          "logFailed": _("Failed to log time"),
+          "connectFailed": _("Unable to connect.")
+        } | tojson }} })'>
           {# Log time toggle button #}
           <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
             <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Log time'"></button>
@@ -360,6 +409,7 @@
         </div>
         {% endif %}
       </div>
+      {% endif %}
 
       {# Relations tab #}
       <div x-show="tab === 'relations'">
@@ -376,6 +426,7 @@
             <span class="badge-status sp-rel-status">{{ rel.issue_to_status }}</span>
             {% endif %}
             {% if rel.delay %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans count=rel.delay %}(%(count)s days){% endtrans %}</span>{% endif %}
+            {% if can_manage_relations %}
             <a class="sp-rel-remove"
                hx-delete="/api/v1/relations/{{ rel.id }}/"
                hx-swap="none"
@@ -383,6 +434,7 @@
                data-hx-reload>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </a>
+            {% endif %}
           </div>
           {% endfor %}
         </div>
@@ -392,7 +444,11 @@
         </div>
         {% endif %}
 
-        <div x-data='relationForm({ issueKey: "{{ issue.display_key }}" })' style="margin-top:var(--sp-space-lg);">
+        {% if can_manage_relations %}
+        <div x-data='relationForm({ issueKey: "{{ issue.display_key }}", i18n: {{ {
+          "addFailed": _("Failed to add relation"),
+          "connectFailed": _("Unable to connect.")
+        } | tojson }} })' style="margin-top:var(--sp-space-lg);">
           <button class="sp-btn sp-btn-sm sp-btn-ghost" @click="showForm = !showForm">
             <template x-if="!showForm"><span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;vertical-align:-2px;"><path d="M12 5v14M5 12h14"/></svg> {% trans %}Add relation{% endtrans %}</span></template>
             <template x-if="showForm"><span>{% trans %}Cancel{% endtrans %}</span></template>
@@ -447,9 +503,11 @@
             </div>
           </div>
         </div>
+        {% endif %}
       </div>
 
       {# Attachments tab — lazy-loaded via htmx on first click #}
+      {% if not anonymous %}
       <div x-show="tab === 'attachments'"
            id="issue-attachments-tab"
            hx-get="/partials/issues/{{ issue.display_key }}/attachments/"
@@ -459,9 +517,11 @@
           {% trans %}Loading attachments…{% endtrans %}
         </div>
       </div>
+      {% endif %}
     </div>
 
     {# Comment form #}
+    {% if not anonymous %}
     <div class="comment-form" x-data='commentForm({ displayKey: {{ issue.display_key | tojson }} })'>
       <textarea x-model="notes" placeholder="{{ _('Write a comment (Markdown supported)...') }}"></textarea>
       <div class="comment-form-footer">
@@ -473,6 +533,7 @@
         </button>
       </div>
     </div>
+    {% endif %}
 
     {# Pro: reaction picker, additional plugins #}
     {% block issue_detail_plugins %}{% endblock %}

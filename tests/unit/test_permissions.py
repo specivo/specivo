@@ -3,8 +3,8 @@
 All tests are pure — no database required. They validate:
 - Admin always has any permission.
 - check_permission against a Role.permissions list (M1.3 stub returns False for non-admins).
-- _role_grants helper: wildcard "*" grants all, specific string grants exactly that permission.
-- Missing permission returns False from _role_grants.
+- role_grants helper: wildcard "*" grants all, specific string grants exactly that permission.
+- Missing permission returns False from role_grants.
 - PERMISSIONS catalogue has expected keys.
 """
 
@@ -12,37 +12,37 @@ from __future__ import annotations
 
 import pytest
 
-from specivo.services.permission_service import PERMISSIONS, _role_grants
+from specivo.services.permission_service import PERMISSIONS, role_grants
 
 
 @pytest.mark.unit
 class TestRoleGrantsHelper:
-    """Unit tests for the _role_grants internal helper."""
+    """Unit tests for the role_grants internal helper."""
 
     def test_wildcard_grants_any_permission(self):
-        assert _role_grants(["*"], "add_issues") is True
+        assert role_grants(["*"], "add_issues") is True
 
     def test_wildcard_grants_unknown_permission(self):
-        assert _role_grants(["*"], "some_future_permission") is True
+        assert role_grants(["*"], "some_future_permission") is True
 
     def test_explicit_permission_grants_that_permission(self):
-        assert _role_grants(["add_issues", "view_issues"], "add_issues") is True
+        assert role_grants(["add_issues", "view_issues"], "add_issues") is True
 
     def test_explicit_permission_does_not_grant_other(self):
-        assert _role_grants(["add_issues", "view_issues"], "delete_issues") is False
+        assert role_grants(["add_issues", "view_issues"], "delete_issues") is False
 
     def test_empty_list_grants_nothing(self):
-        assert _role_grants([], "view_issues") is False
+        assert role_grants([], "view_issues") is False
 
     def test_missing_permission_returns_false(self):
-        assert _role_grants(["manage_members"], "log_time") is False
+        assert role_grants(["manage_members"], "log_time") is False
 
     def test_partial_match_is_not_a_grant(self):
         # "add_issue" should not match "add_issues"
-        assert _role_grants(["add_issue"], "add_issues") is False
+        assert role_grants(["add_issue"], "add_issues") is False
 
     def test_wildcard_in_mixed_list(self):
-        assert _role_grants(["view_issues", "*", "log_time"], "delete_issues") is True
+        assert role_grants(["view_issues", "*", "log_time"], "delete_issues") is True
 
 
 @pytest.mark.unit
@@ -120,17 +120,20 @@ class TestCheckPermissionAdmin:
 
     @pytest.mark.asyncio
     async def test_non_admin_no_membership_returns_false(self):
-        """Non-admin with no project membership returns False."""
+        """Non-admin with no membership on a private project returns False."""
         from unittest.mock import AsyncMock, MagicMock
 
+        from specivo.models.project import Project
         from specivo.services.permission_service import check_permission
         from tests.factories.user import UserFactory
 
-        user = UserFactory.build(is_admin=False)
-        # Mock session.execute to return empty result (no membership)
-        mock_result = MagicMock()
-        mock_result.scalars.return_value.all.return_value = []
+        user = UserFactory.build(id=7, is_admin=False, is_anonymous=False)
+        # A private project, and no membership rows for the user on it.
         mock_session = AsyncMock()
+        mock_session.get.return_value = Project(id=1, key="PRIV", is_public=False, status=1, anonymous_permissions=[])
+        mock_session.info = {}
+        mock_result = MagicMock()
+        mock_result.all.return_value = []
         mock_session.execute.return_value = mock_result
         result = await check_permission(user, project_id=1, permission="view_issues", session=mock_session)
         assert result is False

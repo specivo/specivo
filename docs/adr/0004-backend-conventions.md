@@ -1,6 +1,9 @@
 # ADR-0004: Backend Conventions
 
 **Date:** 2026-04-04
+**Revised:** 2026-09-08 — recorded the three middleware added since (CSRF, token refresh, SQL
+debug), the `Permission` enum, and project membership becoming principal-shaped; corrected the
+xdist distribution mode in §16.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -171,6 +174,10 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
+**Principals.** A `members` row is held by exactly one principal — a user (`user_id`) or a user group (`group_id`) — with the other column NULL and `ck_members_one_principal` enforcing it. Roles hang off the row through `member_roles` identically either way, so nothing downstream of a resolved role knows which kind granted it. Uniqueness per project is two plain `UniqueConstraint`s rather than partial indexes: PostgreSQL treats NULLs as distinct, so each ignores the other principal's rows.
+
+`AgentGroup` is unrelated — an AI-agent access-policy construct with no bearing on project membership. The membership principal is `UserGroup`.
+
 ### 5. Pydantic Schema Conventions
 
 **Naming pattern:**
@@ -226,7 +233,11 @@ def workflow_service(self) -> Any:
 
 **Service composition over inheritance.** Services compose other services (e.g., `IssueService` uses `JournalService`, `WatcherService`, `NestedSetService`) rather than inheriting from a common base.
 
-**Permission checks** live in a standalone module (`specivo.services.permission_service`), not inside services. Endpoints call `check_permission(user, project_id, permission, db)` explicitly. The permission catalog is a `PERMISSIONS` dict in the same module.
+**Permission checks** live in a standalone module (`specivo.services.permission_service`), not inside services. Endpoints call `check_permission(user, project_id, permission, db)` explicitly.
+
+The catalogue is the `Permission` `StrEnum` in that module; each member's value is the string stored in `roles.permissions` JSONB, so the constants are drop-in replacements for the literals. **Use the enum, not a string literal.** The `PERMISSIONS` dict maps the same values to human labels for the admin role editor.
+
+`get_user_roles(session, user, project)` is the one role resolution behind permission checks, issue visibility and (mirrored in SQL) search visibility: a membership's roles; otherwise, on a public project, the seeded read-only Non member role (`roles.builtin = 1`) plus the project's transient anonymous role when the instance switch is on; for the anonymous user, only that transient role, capped at `view_issues` / `view_wiki` inside `check_permission`. Resolved roles are cached in `session.info`, so the cache lives exactly as long as a request's session. There are no hardcoded `is_public` access branches. `member_principal_clause(user_id)` is the single definition of "this `members` row grants this user access" — see §4 on principals. Any membership read that feeds an access decision uses that clause; a row looked up in order to be *edited* (add, update or remove one user's roles) must stay user-only, or the edit lands on a group and reaches everyone in it.
 
 ### 7. Authentication and Authorization
 
@@ -252,11 +263,14 @@ Implemented in `specivo.core.security`:
 All middleware uses **raw ASGI** (not `BaseHTTPMiddleware`) to avoid event loop issues with asyncpg in tests. Stack order (outermost first, as registered in `create_app()`):
 
 1. `RequestIDMiddleware` -- generates/propagates `X-Request-ID`, adds security headers (CSP, X-Frame-Options, X-Content-Type-Options, etc.).
-2. `AuditBatchMiddleware` -- initializes `scope["state"]["audit_events"]` list; flushes collected audit events in a single batch INSERT after the response (only when enterprise plugin provides `security_audit_log` feature).
-3. `RateLimitHeaderMiddleware` -- copies `X-RateLimit-*` headers from `request.state` onto the ASGI response (survives endpoints that return custom `JSONResponse`).
-4. `LocaleMiddleware` -- detects language from cookie (`specivo_lang`) / `Accept-Language` header, activates per-request locale.
-5. `TrustedHostMiddleware` (Starlette) -- only added when `allowed_hosts != ["*"]`.
-6. `CORSMiddleware` -- standard FastAPI/Starlette CORS handling.
+2. `CSRFMiddleware` -- double-submit cookie CSRF protection: sets a signed, non-HttpOnly `csrf_token` cookie on GET responses and requires a matching `X-CSRF-Token` header on POST/PATCH/PUT/DELETE. Exempt: requests carrying an `X-API-Key` header (not cookie-based), and the login, password-reset and MCP prefixes.
+3. `AuditBatchMiddleware` -- initializes `scope["state"]["audit_events"]` list; flushes collected audit events in a single batch INSERT after the response (only when enterprise plugin provides `security_audit_log` feature).
+4. `SQLDebugMiddleware` -- per-request SQL profiler adding `X-SQL-Query-Count` and friends. Registered only when `settings.debug`; the middleware itself does not check the flag.
+5. `RateLimitHeaderMiddleware` -- copies `X-RateLimit-*` headers from `request.state` onto the ASGI response (survives endpoints that return custom `JSONResponse`).
+6. `TokenRefreshMiddleware` -- when `get_current_user_optional()` has transparently rotated an expired access token using the refresh cookie, it parks the new pair on `scope["state"]["refreshed_tokens"]`; this middleware appends the `Set-Cookie` headers for them.
+7. `LocaleMiddleware` -- detects language from cookie (`specivo_lang`) / `Accept-Language` header, activates per-request locale.
+8. `TrustedHostMiddleware` (Starlette) -- only added when `allowed_hosts != ["*"]`.
+9. `CORSMiddleware` -- standard FastAPI/Starlette CORS handling.
 
 ### 9. Rate Limiting
 
@@ -395,8 +409,9 @@ Template rendering uses `Jinja2Templates` with a `ChoiceLoader` for theme suppor
 - `service` -- service layer tests, requires database.
 - `slow` -- tests > 5 seconds.
 - `pro` / `enterprise` -- auto-skipped when the corresponding plugin is not installed.
-- `serial` -- cannot run under pytest-xdist (shared state like Redis rate limits).
+- `serial` -- cannot run under pytest-xdist (shared state like Redis rate limits, MCP globals).
 - `e2e` -- browser tests requiring a running server.
+- `redmine` -- importer tests against the on-demand Redmine fixture; skipped when it is not up.
 
 **Client fixtures** in `specivo.testing.conftest_base`:
 - `client` -- unauthenticated HTTPX `AsyncClient`.
@@ -406,7 +421,7 @@ Template rendering uses `Jinja2Templates` with a `ChoiceLoader` for theme suppor
 - `unauth_client` -- no DB override, for testing public endpoints.
 - `db_session` -- direct async DB session for test data setup.
 
-**Factories** in `specivo.testing.factories/` using `factory_boy`. Password hashing is done once at import time to avoid bcrypt cost per test:
+**Factories** are defined in `specivo.testing.factories` using `factory_boy`, and re-exported through `tests/factories/` shims that tests import from. Password hashing is done once at import time to avoid bcrypt cost per test:
 
 ```python
 _TEST_PASSWORD_HASH = hash_password("testpassword")  # Computed once
@@ -420,7 +435,9 @@ class UserFactory(factory.Factory):
 
 Variants: `AdminUserFactory`, `ServiceAccountFactory`.
 
-**Test parallelism:** `addopts = "-n auto --dist worksteal"` in `pyproject.toml` -- tests run in parallel via pytest-xdist by default. Tests marked `serial` are excluded from parallel runs.
+**Test parallelism:** `addopts = "-n auto --dist loadfile"` in `pyproject.toml` -- tests run in parallel via pytest-xdist by default, one module per worker. `loadfile` rather than `worksteal` because modules insert rows on fixed unique keys, and splitting a module across workers deadlocks PostgreSQL when two transactions take those locks in opposite order (ADR-0002). Tests marked `serial` are excluded from parallel runs.
+
+Operational detail — how to run the suite, the `DATABASE_URL` override the Makefile forces, fixtures, permission setup, and the gotchas — lives in the "Testing Conventions" wiki page in the SPECIVO project.
 
 **Plugin isolation:** `_restore_plugin_manager` autouse fixture restores the global `PluginManager` singleton after each test. `pytest_collection_modifyitems` auto-skips `pro`/`enterprise` tests when plugins are not installed.
 

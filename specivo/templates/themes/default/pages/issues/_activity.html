@@ -4,14 +4,18 @@
 {% macro render_journal(j, depth=0) %}
 <div class="journal-entry{% if depth > 0 %} sp-reply-indent{% endif %}" id="journal-{{ j.id }}">
   <div style="display:flex;gap:var(--sp-space-md);padding:var(--sp-space-md) 0;width:100%;">
+    {# The avatar is keyed on the login and the file is served without
+       authentication, so a visitor without an account gets neither. #}
+    {% if not anonymous %}
     <div style="flex-shrink:0;">
       {{ avatar(j.user.login if j.user else '?', 'sm',
          color=j.user.preferences.avatar_color|default('') if j.user else '',
          avatar_url=j.user.avatar_url|default('') if j.user else '') }}
     </div>
+    {% endif %}
     <div style="flex:1;min-width:0;width:100%;">
       <div style="display:flex;align-items:center;gap:var(--sp-space-sm);margin-bottom:var(--sp-space-xs);">
-        <strong style="font-size:var(--sp-font-size-sm);">{{ j.user.display_name or j.user.login if j.user else _('Unknown') }}</strong>
+        <strong style="font-size:var(--sp-font-size-sm);">{% if anonymous %}{{ j.user.display_name if j.user else _('Unknown') }}{% else %}{{ j.user.display_name or j.user.login if j.user else _('Unknown') }}{% endif %}</strong>
         {% if j.api_key_id %}
         <span class="badge-status" style="font-size:var(--sp-font-size-xs);">{% trans %}Agent{% endtrans %}</span>
         {% endif %}
@@ -21,11 +25,15 @@
 
       {# Field changes #}
       {% if j.details %}
-      {% for d in j.details %}
+      {# Relation changes name another issue by key, and the issue they name
+         may be one this reader cannot see — the relations list drops those,
+         and the feed must not put them back. For a visitor without an account
+         the whole row is left out rather than shown without its link. #}
+      {% for d in j.details if not (anonymous and d.property == 'relation') %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}
-        «<a href="/projects/{{ issue.project_key }}/recurring-patterns/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>»
+        {% if anonymous %}«{{ d.new_value }}»{% else %}«<a href="/projects/{{ issue.project_key }}/recurring-patterns/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>»{% endif %}
         {% elif d.property == 'relation' %}
         {% if d.new_value and not d.old_value %}
         {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
@@ -34,7 +42,10 @@
         {% endif %}
         {% elif d.prop_key == 'description' %}
         <strong class="sp-change-label">{% trans %}Description{% endtrans %}</strong> {% trans %}updated{% endtrans %}
+        {# The diff is its own page, and it is not on the anonymous surface. #}
+        {% if not anonymous %}
         <a href="/issue/{{ issue.display_key }}/versions/{{ j.id }}/" style="color:var(--sp-accent);font-size:var(--sp-font-size-xs);margin-left:var(--sp-space-xs);">{% trans %}View changes{% endtrans %}</a>
+        {% endif %}
         {% elif d.prop_key == 'issue_metadata' %}
         {% set diffs = metadata_diff(d.old_value, d.new_value) %}
         {% for md in diffs %}
@@ -76,13 +87,15 @@
       {% if j.is_resolved %}
       <div class="sp-resolved-banner">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
-        {% trans name=j.resolved_by.display_name or j.resolved_by.login if j.resolved_by else _('Unknown') %}Resolved by %(name)s{% endtrans %}
+        {% if anonymous %}{% trans name=j.resolved_by.display_name if j.resolved_by else _('Unknown') %}Resolved by %(name)s{% endtrans %}{% else %}{% trans name=j.resolved_by.display_name or j.resolved_by.login if j.resolved_by else _('Unknown') %}Resolved by %(name)s{% endtrans %}{% endif %}
         {% if j.resolved_summary %} — "{{ j.resolved_summary }}"{% endif %}
       </div>
       {% endif %}
 
-      {# Action links + inline reply #}
-      {% if j.notes %}
+      {# Action links + inline reply. Replying and resolving are writes, so
+         they are absent for a visitor without an account rather than offered
+         and refused. #}
+      {% if j.notes and not anonymous %}
       <div x-data='replyForm({ displayKey: "{{ issue.display_key }}", journalId: {{ j.id }} })'>
         <div class="sp-journal-actions">
           <a @click="showReply = !showReply" style="cursor:pointer;">{% trans %}↩ Reply{% endtrans %}</a>
@@ -108,7 +121,7 @@
       {% endif %}
 
       {# Emoji reactions #}
-      {% if j.notes %}
+      {% if j.notes and not anonymous %}
       {% set reactions = reactions_by_journal.get(j.id, []) if reactions_by_journal is defined else [] %}
       <div x-data='journalReactions({
         reactions: {{ reactions | tojson }},
@@ -158,6 +171,7 @@
 {% endif %}
 
 {# Shared resolve modal #}
+{% if not anonymous %}
 <div x-data='resolveThread({ issueKey: "{{ issue.display_key }}" })'
      @open-resolve.window="journalId = $event.detail.journalId; showModal = true">
   <div x-show="showModal" x-cloak style="position:fixed;inset:0;z-index:1050;">
@@ -180,3 +194,4 @@
     </div>
   </div>
 </div>
+{% endif %}

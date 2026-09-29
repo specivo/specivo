@@ -13,11 +13,16 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from specivo.models.base import Base, TimestampMixin
+
+# ``projects.status`` of a project in use (ck_projects_status). Anonymous
+# access applies only to active projects.
+PROJECT_STATUS_ACTIVE = 1
 
 
 class Project(Base, TimestampMixin):
@@ -54,6 +59,24 @@ class Project(Base, TimestampMixin):
             "status IN (1, 5, 9)",
             name="ck_projects_status",
         ),
+        # The only permissions an anonymous visitor can ever hold. The
+        # jsonb_typeof guard matters: ``<@`` also accepts a bare string.
+        CheckConstraint(
+            "jsonb_typeof(anonymous_permissions) = 'array' "
+            'AND anonymous_permissions <@ \'["view_issues", "view_wiki"]\'::jsonb',
+            name="ck_projects_anonymous_permissions_allowed",
+        ),
+        # A project that is not public cannot be opened to anonymous visitors.
+        CheckConstraint(
+            "is_public OR anonymous_permissions = '[]'::jsonb",
+            name="ck_projects_anonymous_permissions_public",
+        ),
+        # Partial index over the few projects opted in to anonymous reading.
+        Index(
+            "ix_projects_anonymous_readable",
+            "id",
+            postgresql_where=text("anonymous_permissions <> '[]'::jsonb"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -79,6 +102,14 @@ class Project(Base, TimestampMixin):
     is_public: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     inherit_members: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+
+    # What a visitor without an account may read here: a subset of
+    # ["view_issues", "view_wiki"], and empty unless ``is_public``. Written only
+    # through ``specivo.services.anonymous_access_service`` (instance admins,
+    # audited). Deliberately absent from the member-facing project schemas.
+    anonymous_permissions: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb")
+    )
 
     # 1=active, 5=closed, 9=archived
     status: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")

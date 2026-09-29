@@ -204,3 +204,38 @@ async def test_rate_limit_disabled_allows_all_requests(client: AsyncClient):
             assert "X-RateLimit-Limit" not in resp.headers
     finally:
         settings.rate_limit_enabled = original
+
+
+# ---------------------------------------------------------------------------
+# Change password
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_change_password_returns_429_after_limit_exceeded(
+    client: AsyncClient,
+    db_session,
+):
+    """A stolen session must not be a brute-force oracle: 6th attempt in 5 min is 429."""
+    from tests.factories.user import TEST_PASSWORD, UserFactory
+
+    user = UserFactory.build(login="ratelimit_chpw", status="active")
+    db_session.add(user)
+    await db_session.commit()
+
+    login = await client.post(
+        "/api/v1/auth/login/",
+        json={"login": "ratelimit_chpw", "password": TEST_PASSWORD},
+    )
+    assert login.status_code == 200
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    payload = {"current_password": "wrong-password", "new_password": "another-password"}
+
+    for i in range(5):
+        resp = await client.post("/api/v1/auth/change-password/", json=payload, headers=headers)
+        assert resp.status_code == 400, f"Request {i + 1} got unexpected {resp.status_code}"
+
+    resp = await client.post("/api/v1/auth/change-password/", json=payload, headers=headers)
+    assert resp.status_code == 429
+    assert resp.json()["errors"][0]["code"] == "rate_limit_exceeded"
+    assert int(resp.headers["X-RateLimit-Limit"]) == 5

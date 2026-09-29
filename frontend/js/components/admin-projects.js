@@ -1,4 +1,10 @@
 export function adminProjects(initial) {
+        var i18n = Object.assign({
+            saveFailed: 'Failed to save',
+            connectFailed: 'Unable to connect.',
+            confirmArchive: 'Archive %(name)s?'
+        }, (initial && initial.i18n) || {});
+
         return {
             projects: (initial && initial.projects) || [],
             colors: (initial && initial.colors) || [],
@@ -98,16 +104,16 @@ export function adminProjects(initial) {
                         this.formError = (data.errors && data.errors[0] && data.errors[0].message)
                             || (data.detail && data.detail[0] && data.detail[0].msg)
                             || data.detail
-                            || 'Failed to save';
+                            || i18n.saveFailed;
                     }
                 } catch (_e) {
-                    this.formError = 'Unable to connect.';
+                    this.formError = i18n.connectFailed;
                 }
                 this.saving = false;
             },
 
             async archiveProject(p) {
-                if (!confirm('Archive ' + p.name + '?')) return;
+                if (!confirm(i18n.confirmArchive.replace('%(name)s', p.name))) return;
                 await spFetch('/api/v1/admin/projects/' + p.key + '/archive/', { method: 'POST' });
                 location.reload();
             },

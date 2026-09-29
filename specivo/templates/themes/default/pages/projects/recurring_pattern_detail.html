@@ -13,11 +13,13 @@
 
 {# Single full-width column: hero header, then info cards, then sections. The
    Alpine component wraps the whole page (preview/skip handlers live below). #}
+{% from "pages/projects/_recurring_i18n.html" import recurring_labels %}
 <div
   x-data='recurringPatternDetail({
     pattern: {{ pattern_json | tojson }},
     projectKey: {{ project.key | tojson }},
-    canManage: {{ can_manage_recurring | tojson }}
+    canManage: {{ can_manage_recurring | tojson }},
+    labels: {{ recurring_labels() }}
   })'>
 
   {# Hero #}

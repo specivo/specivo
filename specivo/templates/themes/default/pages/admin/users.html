@@ -11,7 +11,23 @@
   <span class="current">{% trans %}Users{% endtrans %}</span>
 </div>
 
-<div x-data='adminUsers({ users: {{ users_data | tojson }}, roles: {{ roles | tojson }} })'>
+<div x-data='adminUsers({ users: {{ users_data | tojson }}, roles: {{ roles | tojson }}, i18n: {{ {
+  "passwordRequired": _("Password: required for regular users."),
+  "createFailed": _("Failed to create user."),
+  "passwordTooShort": _("Password must be at least 10 characters."),
+  "passwordReset": _("Password reset successfully."),
+  "resetFailed": _("Failed to reset password."),
+  "confirmLock": _("Lock user %(login)s?"),
+  "confirmUnlock": _("Unlock user %(login)s?"),
+  "lockFailed": _("Failed to lock user."),
+  "unlockFailed": _("Failed to unlock user."),
+  "never": _("Never"),
+  "justNow": _("Just now"),
+  "minutesAgo": _("%(count)s min ago"),
+  "hoursAgo": _("%(count)s hours ago"),
+  "yesterday": _("Yesterday"),
+  "daysAgo": _("%(count)s days ago")
+} | tojson }} })'>
   <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Users{% endtrans %}</h1>
     <button class="sp-btn sp-btn-primary" @click="showCreate = true">{% trans %}+ New User{% endtrans %}</button>
@@ -121,6 +137,12 @@
             </button>
           </div>
         </div>
+        <div style="margin-bottom: var(--sp-space-md);" x-show="!newUser.is_service_account">
+          <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer; font-size: var(--sp-font-size-sm);">
+            <input type="checkbox" x-model="newUser.must_change_password" style="accent-color: var(--sp-accent);"> {% trans %}Require a password change at first sign-in{% endtrans %}
+          </label>
+          <span style="display:block;font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs)">{% trans %}You know this password. Leave this on so the account replaces it with one only its owner knows.{% endtrans %}</span>
+        </div>
         <div class="form-group" style="margin-bottom: var(--sp-space-md);">
           <label class="form-label">{% trans %}Role{% endtrans %}</label>
           <select class="form-input" x-model="newUser.is_admin" style="max-width: 200px;">
@@ -161,6 +183,12 @@
               {% trans %}Generate{% endtrans %}
             </button>
           </div>
+        </div>
+        <div style="margin-bottom: var(--sp-space-md);" x-show="!resetUser?.is_service_account">
+          <label style="display: flex; align-items: center; gap: var(--sp-space-xs); cursor: pointer; font-size: var(--sp-font-size-sm);">
+            <input type="checkbox" x-model="resetMustChange" style="accent-color: var(--sp-accent);"> {% trans %}Require a password change at first sign-in{% endtrans %}
+          </label>
+          <span style="display:block;font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-top:var(--sp-space-xs)">{% trans %}You know this password. Leave this on so the account replaces it with one only its owner knows.{% endtrans %}</span>
         </div>
         <div x-show="resetError" style="color: var(--sp-danger); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-sm);" x-text="resetError"></div>
         <div x-show="resetSuccess" style="color: var(--sp-success); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-sm);" x-text="resetSuccess"></div>

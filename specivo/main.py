@@ -29,6 +29,7 @@ from specivo.core.exceptions import (
 )
 from specivo.core.logging import setup_logging
 from specivo.core.middleware import (
+    AnonymousResponseHeadersMiddleware,
     AuditBatchMiddleware,
     CSRFMiddleware,
     LocaleMiddleware,
@@ -41,34 +42,18 @@ from specivo.core.plugin_manager import PluginManager
 from specivo.core.redis import close_redis, get_redis
 from specivo.hooks.router import hooks_router
 from specivo.schemas.common import HealthResponse
+from specivo.web.assets import load_asset_manifests, warn_if_bundles_missing
 from specivo.web.router import web_router
-
-
-def _load_asset_manifests() -> dict[str, str]:
-    """Load the esbuild bundle manifests into one logical->hashed name map.
-
-    esbuild content-hashes each bundle at build time and writes a manifest.json
-    per output dir (specivo/static/dist/{js,css}/manifest.json) mapping the
-    logical name to the hashed one, e.g. ``{"app.min.js": "app.min.1a2b3c4d.js"}``.
-    Templates look up the served filename via the ``versioned`` global. Missing
-    manifests are skipped, so the un-hashed defaults in deps._versioned_assets
-    are used as a fallback (e.g. a dev checkout without a build).
-    """
-    import json
-
-    dist_dir = Path(__file__).resolve().parent / "static" / "dist"
-    merged: dict[str, str] = {}
-    for sub in ("js", "css"):
-        manifest = dist_dir / sub / "manifest.json"
-        if manifest.exists():
-            merged.update(json.loads(manifest.read_text()))
-    return merged
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
     setup_logging(debug=settings.debug)
+
+    # Frontend bundles are generated, not committed. Start anyway, but say so
+    # loudly: without them pages render with no Specivo CSS/JS.
+    warn_if_bundles_missing()
 
     # Eagerly validate DB and Redis connectivity at startup so the container
     # fails fast rather than surfacing errors on the first request.
@@ -193,6 +178,11 @@ def create_app() -> FastAPI:
     # return their own Response objects (e.g. JSONResponse).
     application.add_middleware(RateLimitHeaderMiddleware)
 
+    # Anonymous responses — Cache-Control: no-store and a Vary naming the
+    # headers that decide who the caller is, so nothing shared caches a page
+    # served to a visitor without an account.
+    application.add_middleware(AnonymousResponseHeadersMiddleware)
+
     # Silent token refresh — sets auth cookies on the response when
     # get_current_user_optional() transparently rotated an expired access
     # token using the refresh_token cookie.
@@ -270,7 +260,7 @@ def create_app() -> FastAPI:
     # busting in templates.
     from specivo.web.deps import setup_plugin_assets, setup_versioned_assets
 
-    setup_versioned_assets(_load_asset_manifests())
+    setup_versioned_assets(load_asset_manifests())
 
     # Collect plugin CSS/JS asset URLs for auto-inclusion in base.html.
     setup_plugin_assets(pm.plugins)

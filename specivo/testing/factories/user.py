@@ -51,6 +51,11 @@ class UserFactory(factory.Factory):
     status = "active"
     is_admin = False
     is_service_account = False
+    # Explicit so an unflushed instance is not None: the column default only
+    # applies at INSERT, and a service account must never carry this flag
+    # (users has a CHECK forbidding the combination).
+    must_change_password = False
+    is_anonymous = False
     failed_login_count = 0
     locked_until = None
     email_verified_at = None

@@ -1,4 +1,8 @@
 export function relationForm(initial) {
+        var i18n = Object.assign({
+            addFailed: 'Failed to add relation',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
         var _searchTimer = null;
         return {
             showForm: false,
@@ -93,10 +97,10 @@ export function relationForm(initial) {
                         window.location.reload();
                     } else {
                         var data = await res.json();
-                        this.error = (data.errors && data.errors[0] && data.errors[0].message) || 'Failed to add relation';
+                        this.error = (data.errors && data.errors[0] && data.errors[0].message) || i18n.addFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Unable to connect.';
+                    this.error = i18n.connectFailed;
                 }
                 this.submitting = false;
             }

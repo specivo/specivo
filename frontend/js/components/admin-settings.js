@@ -1,4 +1,11 @@
-export function adminSettings(initial) {
+export function adminSettings(initial, labels) {
+        // User-facing strings are translated in the template and passed as the
+        // second argument; the English defaults only cover a caller that omits them.
+        var i18n = Object.assign({
+            updated: 'Setting updated.',
+            saveFailed: 'Failed to save.'
+        }, labels || {});
+
         return {
             items: initial || {},
 
@@ -41,11 +48,11 @@ export function adminSettings(initial) {
                     var data = await res.json();
                     this.items = data;
                     this.editingKey = null;
-                    this.message = 'Setting updated.';
+                    this.message = i18n.updated;
                     this.messageError = false;
                 } else {
                     var err = await res.json().catch(function () { return {}; });
-                    this.message = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to save.';
+                    this.message = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || i18n.saveFailed;
                     this.messageError = true;
                 }
                 this.saving = false;

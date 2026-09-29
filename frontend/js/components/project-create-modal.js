@@ -1,13 +1,19 @@
 export function projectCreateModal(initial) {
+        initial = initial || {};
+        var i18n = Object.assign({
+            createFailed: 'Failed to create project',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
+
         return {
             name: '',
             identifier: '',
             key: '',
             description: '',
-            parentKey: (initial && initial.parentKey) || '',
-            color: (initial && initial.colors && initial.colors[0]) || '#c49a3c',
-            colors: (initial && initial.colors) || [],
-            allProjects: (initial && initial.allProjects) || [],
+            parentKey: initial.parentKey || '',
+            color: (initial.colors && initial.colors[0]) || '#c49a3c',
+            colors: initial.colors || [],
+            allProjects: initial.allProjects || [],
             moduleWiki: true,
             moduleTime: true,
             saving: false,
@@ -60,10 +66,10 @@ export function projectCreateModal(initial) {
                         this.error = (errData.errors && errData.errors[0] && errData.errors[0].message)
                             || (errData.detail && errData.detail[0] && errData.detail[0].msg)
                             || errData.detail
-                            || 'Failed to create project';
+                            || i18n.createFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Unable to connect.';
+                    this.error = i18n.connectFailed;
                 }
                 this.saving = false;
             }

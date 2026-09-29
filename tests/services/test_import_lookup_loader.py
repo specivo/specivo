@@ -170,10 +170,12 @@ class TestNameCollisions:
         assert existing.permissions == ["view_issues"]
 
     async def test_builtin_role_is_matched_on_its_flag(self, db_session, make_context):
-        """Either system may name the non-member role differently."""
-        existing = Role(name="Lookup Non member", builtin=1, permissions=[])
-        db_session.add(existing)
-        await db_session.flush()
+        """Either system may name the non-member role differently.
+
+        Every instance holds the seeded Non member role (migration 0032), so the
+        source's builtin non-member role maps onto it.
+        """
+        existing = (await db_session.execute(select(Role).where(Role.builtin == 1))).scalar_one()
 
         lookups = _lookups(roles=[IRRole(source_ref="1", name="Anonymous visitors", builtin=1)])
         ctx = make_context(FakeAdapter(lookups=lookups))

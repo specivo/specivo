@@ -27,6 +27,8 @@ from specivo.core.constants import (
     SEARCH_HYBRID_PREFETCH_LIMIT,
     SEARCH_SNIPPET_MAX_CHARS,
 )
+from specivo.models.project import PROJECT_STATUS_ACTIVE
+from specivo.models.role import RoleBuiltin
 from specivo.models.user import User
 from specivo.schemas.search import (
     SOURCE_TYPE_TO_DISPLAY,
@@ -35,6 +37,7 @@ from specivo.schemas.search import (
     SearchResultType,
     SearchSourceType,
 )
+from specivo.services.permission_service import Permission
 
 # Shortcuts for f-string interpolation into raw SQL. These expand to the
 # enum member's string value (e.g. ``_SST_ATTACHMENT == "attachment"``). Values
@@ -50,6 +53,46 @@ _SST_JOURNAL = SearchSourceType.JOURNAL.value
 _SST_ATTACHMENT = SearchSourceType.ATTACHMENT.value
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Shared visibility SQL fragments
+# ---------------------------------------------------------------------------
+#
+# The visibility clauses below are near-identical to one another, and every
+# copy is a chance for them to drift — which is how the wiki clauses came to
+# check less than the issue ones. The two rules that every clause needs are
+# defined here once and composed into each.
+
+
+def _principal_match(alias: str = "m") -> str:
+    """Return SQL matching the ``members`` rows that reach the current user.
+
+    A ``members`` row is held by exactly one principal: a user or a user
+    group. It reaches the user when it is their own row, or when it belongs
+    to a group they are in. This mirrors
+    ``permission_service.member_principal_clause()``, which is the ORM-side
+    definition of the same rule.
+    """
+    return (
+        f"({alias}.user_id = :current_user_id"
+        f" OR {alias}.group_id IN (SELECT ugm.group_id FROM user_group_members ugm"
+        f" WHERE ugm.user_id = :current_user_id))"
+    )
+
+
+def _role_grants(permission: str, alias: str = "r") -> str:
+    """Return SQL testing whether a role grants *permission* (or the wildcard).
+
+    ``roles.permissions`` is a JSONB array of permission strings, with
+    ``["*"]`` meaning all. ``jsonb_exists()`` is used rather than the ``?``
+    operator: a bare ``?`` in a raw SQL string sits badly next to parameter
+    handling and reads worse.
+
+    *permission* is always a ``Permission`` member, never user input, so
+    interpolating it is safe.
+    """
+    return f"(jsonb_exists({alias}.permissions, '{permission}') OR jsonb_exists({alias}.permissions, '*'))"
 
 
 def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int]:
@@ -156,260 +199,176 @@ class SearchService:
     """
 
     # ------------------------------------------------------------------
-    # Visibility SQL builders
+    # Visibility SQL
     # ------------------------------------------------------------------
+    #
+    # One definition, mirroring ``permission_service.get_user_roles``. The
+    # ``user_visibility`` CTE holds one row per project, with:
+    #
+    # - ``visibility_level``: 2 for "all"/"default", 1 for "own", 0 for none,
+    #   from the best role that grants ``view_issues``;
+    # - ``can_view_wiki``: whether any role grants ``view_wiki``.
+    #
+    # Its rows come from two disjoint sources joined with UNION ALL:
+    #
+    # - projects the user holds a membership on, directly or through a group:
+    #   the membership's roles and nothing else, even when they grant nothing;
+    # - public projects without a membership: the Non member role (never for
+    #   the anonymous user), plus the project's anonymous permissions while
+    #   the instance switch is on and the project is active.
+    #
+    # Whether the viewer is anonymous and the switch state are bound
+    # parameters (``_visibility_params``). Every clause below reads only the
+    # CTE, so no rule is written twice. Admins get no CTE and no clauses.
 
-    def _issue_visibility_clause(self, user: User, alias: str = "i") -> str:
-        """Generate SQL fragment that enforces issue visibility for non-admin users.
+    async def _visibility_params(self, session: AsyncSession, user: User) -> dict[str, Any]:
+        """Return the bind parameters the visibility CTE and clauses expect.
 
-        Args:
-            user: The authenticated user.
-            alias: Table alias for the issues table (e.g. "i" or "i2").
+        ``current_user_id`` is NULL for the anonymous user: it holds no
+        membership, and must never match an issue's author or assignee.
+        """
+        if user.is_admin:
+            return {"current_user_id": user.id}
 
-        Returns:
-            SQL AND clause (including the leading AND), or empty string for admins.
+        from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+
+        return {
+            "current_user_id": None if user.is_anonymous else user.id,
+            "viewer_is_anonymous": user.is_anonymous,
+            "anonymous_access_enabled": await is_anonymous_access_enabled(session),
+        }
+
+    def _visibility_cte_sql(self, user: User) -> str:
+        """Return the ``WITH user_visibility AS (...)`` prefix, or an empty string for admins.
+
+        Needs the parameters from :meth:`_visibility_params`.
         """
         if user.is_admin:
             return ""
 
-        return f"""
-            AND (
-                -- Member with "all" or "default" visibility: see non-private + own private
-                (EXISTS (SELECT 1 FROM members m
-                         JOIN member_roles mr ON mr.member_id = m.id
-                         JOIN roles r ON r.id = mr.role_id
-                         WHERE m.user_id = :current_user_id AND m.project_id = {alias}.project_id
-                         AND r.issues_visibility IN ('all', 'default'))
-                 AND ({alias}.is_private = false
-                      OR {alias}.author_id = :current_user_id
-                      OR {alias}.assigned_to_id = :current_user_id))
-                OR
-                -- Member with "own" only: author/assignee only
-                (EXISTS (SELECT 1 FROM members m
-                         JOIN member_roles mr ON mr.member_id = m.id
-                         JOIN roles r ON r.id = mr.role_id
-                         WHERE m.user_id = :current_user_id AND m.project_id = {alias}.project_id
-                         AND r.issues_visibility = 'own'
-                         AND NOT EXISTS (SELECT 1 FROM members m2
-                                         JOIN member_roles mr2 ON mr2.member_id = m2.id
-                                         JOIN roles r2 ON r2.id = mr2.role_id
-                                         WHERE m2.user_id = :current_user_id AND m2.project_id = {alias}.project_id
-                                         AND r2.issues_visibility IN ('all', 'default')))
-                 AND ({alias}.author_id = :current_user_id OR {alias}.assigned_to_id = :current_user_id))
-                OR
-                -- Non-member on public project: non-private only
-                (NOT EXISTS (SELECT 1 FROM members m
-                             WHERE m.user_id = :current_user_id
-                             AND m.project_id = {alias}.project_id)
-                 AND EXISTS (SELECT 1 FROM projects p
-                             WHERE p.id = {alias}.project_id AND p.is_public = true)
-                 AND {alias}.is_private = false)
-            )
-        """
-
-    def _wiki_visibility_clause(self, user: User, alias: str = "w") -> str:
-        """Generate SQL fragment that enforces wiki page visibility.
-
-        Args:
-            user: The authenticated user.
-            alias: Table alias for the wiki-owning entity with a project_id column.
-
-        Returns:
-            SQL AND clause (including the leading AND), or empty string for admins.
-        """
-        if user.is_admin:
-            return ""
+        grants_issues = _role_grants(Permission.VIEW_ISSUES, "r")
+        grants_wiki = _role_grants(Permission.VIEW_WIKI, "r")
+        non_member_grants_issues = _role_grants(Permission.VIEW_ISSUES, "nm")
+        non_member_grants_wiki = _role_grants(Permission.VIEW_WIKI, "nm")
+        signed_in = "NOT CAST(:viewer_is_anonymous AS boolean)"
+        anonymous_applies = f"(CAST(:anonymous_access_enabled AS boolean) AND p.status = {PROJECT_STATUS_ACTIVE})"
+        non_member = f"FROM roles nm WHERE nm.builtin = {int(RoleBuiltin.NON_MEMBER)}"
 
         return f"""
-            AND (
-                EXISTS (SELECT 1 FROM members m
-                        WHERE m.user_id = :current_user_id
-                        AND m.project_id = {alias}.project_id)
-                OR EXISTS (SELECT 1 FROM projects p2 WHERE p2.id = {alias}.project_id AND p2.is_public = true)
-            )
-        """
-
-    # Keep backward-compatible aliases
-    def _visibility_sql(self, user: User) -> str:
-        """Issue visibility clause with default alias 'i'."""
-        return self._issue_visibility_clause(user, alias="i")
-
-    def _wiki_visibility_sql(self, user: User) -> str:
-        """Wiki visibility clause with default alias 'w'."""
-        return self._wiki_visibility_clause(user, alias="w")
-
-    def _comment_visibility_clause(self, user: User | None, journal_alias: str = "j", issue_alias: str = "ci") -> str:
-        """Generate SQL AND clause for comment visibility via parent issue.
-
-        Comments inherit visibility from their parent issue. Uses the same
-        CTE-based approach as issue visibility.
-        """
-        if user is None or user.is_admin:
-            return ""
-
-        return f"""
-            AND (
-                -- Member with all/default visibility: see non-private + own private
-                (EXISTS (SELECT 1 FROM user_visibility uv
-                         WHERE uv.project_id = {issue_alias}.project_id AND uv.visibility_level >= 2)
-                 AND ({issue_alias}.is_private = false
-                      OR {issue_alias}.author_id = :current_user_id
-                      OR {issue_alias}.assigned_to_id = :current_user_id))
-                OR
-                -- Member with own-only visibility: author/assignee only
-                (EXISTS (SELECT 1 FROM user_visibility uv
-                         WHERE uv.project_id = {issue_alias}.project_id AND uv.visibility_level = 1)
-                 AND NOT EXISTS (SELECT 1 FROM user_visibility uv2
-                                 WHERE uv2.project_id = {issue_alias}.project_id AND uv2.visibility_level >= 2)
-                 AND ({issue_alias}.author_id = :current_user_id
-                      OR {issue_alias}.assigned_to_id = :current_user_id))
-                OR
-                -- Non-member on public project: non-private only
-                (NOT EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = {issue_alias}.project_id)
-                 AND EXISTS (SELECT 1 FROM public_projects pp
-                             WHERE pp.project_id = {issue_alias}.project_id)
-                 AND {issue_alias}.is_private = false)
-            )
-        """
-
-    # ------------------------------------------------------------------
-    # Visibility CTE optimization
-    # ------------------------------------------------------------------
-
-    def _visibility_cte_sql(self, user: User | None) -> str:
-        """Generate WITH clauses that pre-compute user visibility per project.
-
-        Returns SQL CTE prefix (WITH ... AS ...) for non-admin users,
-        or empty string for admins / anonymous.
-
-        CTEs:
-        - ``user_visibility``: projects where the user is a member, with max visibility level
-        - ``public_projects``: projects where is_public = true
-        """
-        if user is None or user.is_admin:
-            return ""
-
-        return """
             WITH user_visibility AS (
+                -- Projects the user holds a membership on: its roles, and only those.
                 SELECT m.project_id,
-                       MAX(CASE
-                           WHEN r.issues_visibility IN ('all', 'default') THEN 2
-                           WHEN r.issues_visibility = 'own' THEN 1
+                       COALESCE(MAX(CASE
+                           WHEN r.id IS NULL THEN 0
+                           WHEN {grants_issues} AND r.issues_visibility IN ('all', 'default') THEN 2
+                           WHEN {grants_issues} AND r.issues_visibility = 'own' THEN 1
                            ELSE 0
-                       END) AS visibility_level
+                       END), 0) AS visibility_level,
+                       COALESCE(bool_or(r.id IS NOT NULL AND {grants_wiki}), false) AS can_view_wiki
                 FROM members m
-                JOIN member_roles mr ON mr.member_id = m.id
-                JOIN roles r ON r.id = mr.role_id
-                WHERE m.user_id = :current_user_id
+                LEFT JOIN member_roles mr ON mr.member_id = m.id
+                LEFT JOIN roles r ON r.id = mr.role_id
+                WHERE {_principal_match("m")}
                 GROUP BY m.project_id
-            ),
-            public_projects AS (
-                SELECT id AS project_id FROM projects WHERE is_public = true
+                UNION ALL
+                -- Public projects without a membership: the Non member role for a
+                -- signed-in user, plus the project's anonymous permissions.
+                SELECT p.id AS project_id,
+                       GREATEST(
+                           CASE WHEN {signed_in} THEN COALESCE((
+                               SELECT MAX(CASE
+                                   WHEN {non_member_grants_issues} AND nm.issues_visibility IN ('all', 'default') THEN 2
+                                   WHEN {non_member_grants_issues} AND nm.issues_visibility = 'own' THEN 1
+                                   ELSE 0
+                               END)
+                               {non_member}
+                           ), 0) ELSE 0 END,
+                           CASE WHEN {anonymous_applies}
+                                     AND jsonb_exists(p.anonymous_permissions, '{Permission.VIEW_ISSUES.value}')
+                                THEN 2 ELSE 0 END
+                       ) AS visibility_level,
+                       ({signed_in} AND EXISTS (SELECT 1 {non_member} AND {non_member_grants_wiki}))
+                       OR ({anonymous_applies}
+                           AND jsonb_exists(p.anonymous_permissions, '{Permission.VIEW_WIKI.value}')) AS can_view_wiki
+                FROM projects p
+                WHERE p.is_public = true
+                  AND NOT EXISTS (SELECT 1 FROM members m
+                                  WHERE {_principal_match("m")} AND m.project_id = p.id)
             )
         """
 
-    def _issue_visibility_cte_clause(self, user: User | None, alias: str = "i") -> str:
-        """Generate SQL AND clause referencing pre-computed visibility CTEs.
+    @staticmethod
+    def _issue_visible_sql(alias: str) -> str:
+        """Return a predicate, without a leading AND, admitting issue row *alias* through ``user_visibility``.
 
-        Must be used with ``_visibility_cte_sql()`` as a CTE prefix.
+        Level 2 admits non-private issues and private ones the user authored
+        or is assigned to; level 1 admits only the latter; level 0 or no row
+        admits nothing.
         """
-        if user is None or user.is_admin:
+        own = f"({alias}.author_id = :current_user_id OR {alias}.assigned_to_id = :current_user_id)"
+        return f"""EXISTS (SELECT 1 FROM user_visibility uv
+                    WHERE uv.project_id = {alias}.project_id
+                    AND ((uv.visibility_level >= 2 AND ({alias}.is_private = false OR {own}))
+                         OR (uv.visibility_level = 1 AND {own})))"""
+
+    @staticmethod
+    def _wiki_visible_sql(project_id_column: str) -> str:
+        """Return a predicate, without a leading AND, admitting the wiki of the project in *project_id_column*."""
+        return (
+            f"EXISTS (SELECT 1 FROM user_visibility uv WHERE uv.project_id = {project_id_column} AND uv.can_view_wiki)"
+        )
+
+    def _issue_visibility_cte_clause(self, user: User, alias: str = "i") -> str:
+        """SQL AND clause for issue visibility. Needs the ``_visibility_cte_sql()`` prefix."""
+        if user.is_admin:
             return ""
+        return f"AND {self._issue_visible_sql(alias)}"
 
-        return f"""
-            AND (
-                -- Member with all/default visibility: see non-private + own private
-                (EXISTS (SELECT 1 FROM user_visibility uv
-                         WHERE uv.project_id = {alias}.project_id AND uv.visibility_level >= 2)
-                 AND ({alias}.is_private = false
-                      OR {alias}.author_id = :current_user_id
-                      OR {alias}.assigned_to_id = :current_user_id))
-                OR
-                -- Member with own-only visibility: author/assignee only
-                (EXISTS (SELECT 1 FROM user_visibility uv
-                         WHERE uv.project_id = {alias}.project_id AND uv.visibility_level = 1)
-                 AND NOT EXISTS (SELECT 1 FROM user_visibility uv2
-                                 WHERE uv2.project_id = {alias}.project_id AND uv2.visibility_level >= 2)
-                 AND ({alias}.author_id = :current_user_id
-                      OR {alias}.assigned_to_id = :current_user_id))
-                OR
-                -- Non-member on public project: non-private only
-                (NOT EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = {alias}.project_id)
-                 AND EXISTS (SELECT 1 FROM public_projects pp
-                             WHERE pp.project_id = {alias}.project_id)
-                 AND {alias}.is_private = false)
-            )
-        """
-
-    def _wiki_visibility_cte_clause(self, user: User | None, alias: str = "w") -> str:
-        """Generate SQL AND clause for wiki visibility referencing CTEs."""
-        if user is None or user.is_admin:
+    def _wiki_visibility_cte_clause(self, user: User, alias: str = "w") -> str:
+        """SQL AND clause for wiki visibility. Needs the ``_visibility_cte_sql()`` prefix."""
+        if user.is_admin:
             return ""
+        return f"AND {self._wiki_visible_sql(f'{alias}.project_id')}"
 
-        return f"""
-            AND (
-                EXISTS (SELECT 1 FROM user_visibility uv
-                        WHERE uv.project_id = {alias}.project_id)
-                OR EXISTS (SELECT 1 FROM public_projects pp
-                           WHERE pp.project_id = {alias}.project_id)
-            )
+    def _comment_visibility_clause(self, user: User, journal_alias: str = "j", issue_alias: str = "ci") -> str:
+        """SQL AND clause for comment visibility. Needs the ``_visibility_cte_sql()`` prefix.
+
+        A comment is visible when its issue is, and private notes only to
+        admins — the same rule the issue page and the issues API apply.
         """
+        if user.is_admin:
+            return ""
+        return f"AND {journal_alias}.is_private = false AND {self._issue_visible_sql(issue_alias)}"
 
     # ------------------------------------------------------------------
     # Attachment visibility
     # ------------------------------------------------------------------
 
-    def _attachment_visibility_cte_clause(self, user: User | None) -> str:
-        """SQL AND clause for attachment access control via container joins.
+    def _attachment_visibility_sql(self, user: User, attachment: str, issue: str, wiki_page: str, wiki: str) -> str:
+        """SQL AND clause for attachments, judged by their container. Needs the CTE prefix.
 
-        Expects the following table aliases in scope:
-        - ``att``  — attachments
-        - ``ai``   — LEFT JOIN issues (container_type='Issue')
-        - ``awp``  — LEFT JOIN wiki_pages (container_type='WikiPage')
-        - ``aw``   — LEFT JOIN wikis (via awp.wiki_id)
-
-        Must be used with ``_visibility_cte_sql()`` as a CTE prefix.
+        *attachment* aliases ``attachments``; *issue*, *wiki_page* and *wiki*
+        alias the LEFT JOINed container rows. The anonymous user never sees
+        attachments.
         """
-        if user is None:
-            return "AND 1=0"
         if user.is_admin:
             return ""
+        if user.is_anonymous:
+            return "AND 1=0"
 
-        return """
+        return f"""
             AND (
-                -- Issue attachments: user has project access + issue visibility
-                (att.container_type = 'Issue' AND ai.id IS NOT NULL AND (
-                    (EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = ai.project_id AND uv.visibility_level >= 2)
-                     AND (ai.is_private = false
-                          OR ai.author_id = :current_user_id
-                          OR ai.assigned_to_id = :current_user_id))
-                    OR
-                    (EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = ai.project_id AND uv.visibility_level = 1)
-                     AND NOT EXISTS (SELECT 1 FROM user_visibility uv2
-                                     WHERE uv2.project_id = ai.project_id AND uv2.visibility_level >= 2)
-                     AND (ai.author_id = :current_user_id
-                          OR ai.assigned_to_id = :current_user_id))
-                    OR
-                    (NOT EXISTS (SELECT 1 FROM user_visibility uv
-                                 WHERE uv.project_id = ai.project_id)
-                     AND EXISTS (SELECT 1 FROM public_projects pp
-                                 WHERE pp.project_id = ai.project_id)
-                     AND ai.is_private = false)
-                ))
+                ({attachment}.container_type = 'Issue' AND {issue}.id IS NOT NULL
+                 AND {self._issue_visible_sql(issue)})
                 OR
-                -- WikiPage attachments: user has project access or project is public
-                (att.container_type = 'WikiPage' AND awp.id IS NOT NULL AND (
-                    EXISTS (SELECT 1 FROM user_visibility uv
-                            WHERE uv.project_id = aw.project_id)
-                    OR EXISTS (SELECT 1 FROM public_projects pp
-                               WHERE pp.project_id = aw.project_id)
-                ))
+                ({attachment}.container_type = 'WikiPage' AND {wiki_page}.id IS NOT NULL
+                 AND {self._wiki_visible_sql(f"{wiki}.project_id")})
             )
         """
+
+    def _attachment_visibility_cte_clause(self, user: User) -> str:
+        """Attachment visibility for keyword search (aliases ``att``, ``ai``, ``awp``, ``aw``)."""
+        return self._attachment_visibility_sql(user, "att", "ai", "awp", "aw")
 
     @staticmethod
     def _att_project_filter(project_filter: str) -> str:
@@ -426,7 +385,7 @@ class SearchService:
 
     def _attachment_fts_sql(
         self,
-        user: User | None,
+        user: User,
         project_filter: str,
     ) -> str:
         """Build the FTS UNION ALL branch for attachment search.
@@ -475,7 +434,7 @@ class SearchService:
 
     def _attachment_fts_count_sql(
         self,
-        user: User | None,
+        user: User,
         project_filter: str,
     ) -> str:
         """Build the FTS COUNT query for attachment search.
@@ -501,91 +460,13 @@ class SearchService:
             {att_project_filter}
         """
 
-    def _attachment_semantic_vis(self, user: User | None) -> str:
-        """Attachment visibility for semantic search (main query).
+    def _attachment_semantic_vis(self, user: User) -> str:
+        """Attachment visibility for semantic search (aliases ``att``, ``att_iss``, ``att_wp``, ``att_w``)."""
+        return self._attachment_visibility_sql(user, "att", "att_iss", "att_wp", "att_w")
 
-        Uses aliases from the main semantic query LEFT JOINs:
-        att, att_iss, att_wp, att_w.
-        """
-        if user is None:
-            return "AND 1=0"
-        if user.is_admin:
-            return ""
-
-        return """
-            AND (
-                (att.container_type = 'Issue' AND att_iss.id IS NOT NULL AND (
-                    (EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = att_iss.project_id AND uv.visibility_level >= 2)
-                     AND (att_iss.is_private = false
-                          OR att_iss.author_id = :current_user_id
-                          OR att_iss.assigned_to_id = :current_user_id))
-                    OR
-                    (EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = att_iss.project_id AND uv.visibility_level = 1)
-                     AND NOT EXISTS (SELECT 1 FROM user_visibility uv2
-                                     WHERE uv2.project_id = att_iss.project_id AND uv2.visibility_level >= 2)
-                     AND (att_iss.author_id = :current_user_id
-                          OR att_iss.assigned_to_id = :current_user_id))
-                    OR
-                    (NOT EXISTS (SELECT 1 FROM user_visibility uv
-                                 WHERE uv.project_id = att_iss.project_id)
-                     AND EXISTS (SELECT 1 FROM public_projects pp
-                                 WHERE pp.project_id = att_iss.project_id)
-                     AND att_iss.is_private = false)
-                ))
-                OR
-                (att.container_type = 'WikiPage' AND att_wp.id IS NOT NULL AND (
-                    EXISTS (SELECT 1 FROM user_visibility uv
-                            WHERE uv.project_id = att_w.project_id)
-                    OR EXISTS (SELECT 1 FROM public_projects pp
-                               WHERE pp.project_id = att_w.project_id)
-                ))
-            )
-        """
-
-    def _attachment_semantic_count_vis(self, user: User | None) -> str:
-        """Attachment visibility for semantic count query.
-
-        Uses aliases from the count query LEFT JOINs:
-        att_c, att_c_iss, att_c_wp, att_c_w.
-        """
-        if user is None:
-            return "AND 1=0"
-        if user.is_admin:
-            return ""
-
-        return """
-            AND (
-                (att_c.container_type = 'Issue' AND att_c_iss.id IS NOT NULL AND (
-                    (EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = att_c_iss.project_id AND uv.visibility_level >= 2)
-                     AND (att_c_iss.is_private = false
-                          OR att_c_iss.author_id = :current_user_id
-                          OR att_c_iss.assigned_to_id = :current_user_id))
-                    OR
-                    (EXISTS (SELECT 1 FROM user_visibility uv
-                             WHERE uv.project_id = att_c_iss.project_id AND uv.visibility_level = 1)
-                     AND NOT EXISTS (SELECT 1 FROM user_visibility uv2
-                                     WHERE uv2.project_id = att_c_iss.project_id AND uv2.visibility_level >= 2)
-                     AND (att_c_iss.author_id = :current_user_id
-                          OR att_c_iss.assigned_to_id = :current_user_id))
-                    OR
-                    (NOT EXISTS (SELECT 1 FROM user_visibility uv
-                                 WHERE uv.project_id = att_c_iss.project_id)
-                     AND EXISTS (SELECT 1 FROM public_projects pp
-                                 WHERE pp.project_id = att_c_iss.project_id)
-                     AND att_c_iss.is_private = false)
-                ))
-                OR
-                (att_c.container_type = 'WikiPage' AND att_c_wp.id IS NOT NULL AND (
-                    EXISTS (SELECT 1 FROM user_visibility uv
-                            WHERE uv.project_id = att_c_w.project_id)
-                    OR EXISTS (SELECT 1 FROM public_projects pp
-                               WHERE pp.project_id = att_c_w.project_id)
-                ))
-            )
-        """
+    def _attachment_semantic_count_vis(self, user: User) -> str:
+        """Attachment visibility for the semantic count query (aliases ``att_c``, ``att_c_iss``, ...)."""
+        return self._attachment_visibility_sql(user, "att_c", "att_c_iss", "att_c_wp", "att_c_w")
 
     # ------------------------------------------------------------------
     # Metadata filter builder
@@ -694,7 +575,7 @@ class SearchService:
         self,
         session: AsyncSession,
         query: str,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         scope: str = "all",
@@ -732,14 +613,12 @@ class SearchService:
         normalized_query = query.replace("-", " ")
         params: dict[str, Any] = {"query": normalized_query}
 
-        # Add user ID for visibility checks
-        if user is not None:
-            params["current_user_id"] = user.id
+        params.update(await self._visibility_params(session, user))
 
         # Visibility SQL fragments: CTE-optimized visibility for all modes.
-        # Comments and attachments always reference the user_visibility /
-        # public_projects CTEs, so the CTE prefix is required whenever the
-        # user is non-admin (even for single-project searches).
+        # Comments and attachments always reference the user_visibility CTE,
+        # so the CTE prefix is required whenever the user is non-admin (even
+        # for single-project searches).
         cte_prefix = self._visibility_cte_sql(user)
         issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
         wiki_visibility = self._wiki_visibility_cte_clause(user, alias="w")
@@ -967,7 +846,7 @@ class SearchService:
     async def filter_issues(
         self,
         session: AsyncSession,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         offset: int = 0,
@@ -985,9 +864,7 @@ class SearchService:
         Returns the same ``(results, total, type_counts)`` shape as
         :meth:`search` (only the ``issues`` scope is meaningful here).
         """
-        params: dict[str, Any] = {}
-        if user is not None:
-            params["current_user_id"] = user.id
+        params: dict[str, Any] = await self._visibility_params(session, user)
 
         cte_prefix = self._visibility_cte_sql(user)
         issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
@@ -1063,7 +940,7 @@ class SearchService:
     async def filter_tagged(
         self,
         session: AsyncSession,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         scope: str = "all",
@@ -1079,9 +956,7 @@ class SearchService:
         uses the same CTE clauses as :meth:`search`, so the tag predicate only
         narrows the already-visible set.
         """
-        params: dict[str, Any] = {}
-        if user is not None:
-            params["current_user_id"] = user.id
+        params: dict[str, Any] = await self._visibility_params(session, user)
 
         cte_prefix = self._visibility_cte_sql(user)
         issue_visibility = self._issue_visibility_cte_clause(user, alias="i")
@@ -1200,7 +1075,7 @@ class SearchService:
         self,
         session: AsyncSession,
         query: str,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         offset: int = 0,
@@ -1240,9 +1115,7 @@ class SearchService:
             project_filter = "AND ss.project_id = :project_id"
             params["project_id"] = project_id
 
-        # Add user ID for visibility checks
-        if user is not None:
-            params["current_user_id"] = user.id
+        params.update(await self._visibility_params(session, user))
 
         # Visibility filters for semantic search (CTE-optimized)
         cte_prefix = self._visibility_cte_sql(user)
@@ -1312,7 +1185,7 @@ class SearchService:
 
         # Build CTE prefix: if user has visibility CTEs, comma-separate with nearest
         if cte_prefix:
-            # cte_prefix starts with "WITH user_visibility AS (...), public_projects AS (...)"
+            # cte_prefix is "WITH user_visibility AS (...)"
             # We append nearest as another CTE
             nearest_cte = f"""
             {cte_prefix},
@@ -1458,7 +1331,7 @@ class SearchService:
         self,
         session: AsyncSession,
         query: str,
-        user: User | None = None,
+        user: User,
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         scope: str = "all",

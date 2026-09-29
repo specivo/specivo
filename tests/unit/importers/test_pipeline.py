@@ -345,9 +345,9 @@ class TestSummary:
 
     def test_notes_group_by_category(self):
         summary = self._summary()
-        summary.add_note("password_reset_required", "alex")
-        summary.add_note("password_reset_required", "sam")
-        assert summary.notes["password_reset_required"] == ["alex", "sam"]
+        summary.add_note("accounts_needing_attention", "alex")
+        summary.add_note("accounts_needing_attention", "sam")
+        assert summary.notes["accounts_needing_attention"] == ["alex", "sam"]
 
     def test_as_dict_is_json_serialisable(self):
         import json
@@ -355,9 +355,9 @@ class TestSummary:
         summary = self._summary()
         summary.record_created("issue", 2)
         summary.add_warning("issues", "skipped one", {"issue": "7"})
-        summary.add_note("password_reset_required", "alex")
+        summary.add_note("accounts_needing_attention", "alex")
         payload = json.dumps(summary.as_dict())
-        assert "password_reset_required" in payload
+        assert "accounts_needing_attention" in payload
         assert "skipped one" in payload
 
     def test_text_report_flags_a_dry_run(self):

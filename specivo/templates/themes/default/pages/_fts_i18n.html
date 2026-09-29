@@ -1,0 +1,22 @@
+{# Translated strings for the ftsReindex Alpine component, shared by the admin
+   and project search cards. Renders a JSON object for the component's `i18n`
+   key, so it must be used inside a single-quoted x-data attribute. #}
+{% macro fts_i18n() -%}
+{{ {
+  "inherit": _("Inherit (%(language)s)"),
+  "languageSaved": _("Language saved."),
+  "saveLanguageFailed": _("Failed to save language."),
+  "connectFailed": _("Unable to connect."),
+  "reindexStarted": _("Reindex started."),
+  "startFailed": _("Failed to start reindex."),
+  "reindexComplete": _("Reindex complete."),
+  "reindexFailed": _("Reindex failed."),
+  "countIssues": _("%(count)s issues"),
+  "countWiki": _("%(count)s wiki"),
+  "countChunks": _("%(count)s chunks"),
+  "justNow": _("just now"),
+  "minutesAgo": _("%(count)s min ago"),
+  "hoursAgo": _("%(count)s h ago"),
+  "daysAgo": _("%(count)s d ago")
+} | tojson }}
+{%- endmacro %}

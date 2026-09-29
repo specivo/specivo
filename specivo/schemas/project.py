@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
@@ -125,12 +126,20 @@ class ProjectOut(BaseModel):
     description: str | None
     parent_id: int | None
     parent_key: str | None = None
-    path: str
     is_public: bool
-    inherit_members: bool
     status: int
-    issue_sequence: int
     color: str | None = None
+    # Undisclosed (``None``) for an anonymous visitor, populated for everyone
+    # else — the same "not disclosed" state ``computed_metadata`` documents
+    # below. ``path`` and ``parent_key`` name ancestor projects, which may be
+    # private even when this one is public; ``issue_sequence`` counts every
+    # issue ever created here, including the private ones a visitor cannot
+    # see; and ``inherit_members`` describes a membership model an anonymous
+    # visitor has no part in. None of the four is filled with a stand-in
+    # value, because a wrong number is worse than an absent one.
+    path: str | None = None
+    inherit_members: bool | None = None
+    issue_sequence: int | None = None
     created_at: datetime
     updated_at: datetime
     # Per-project derived (computed) metadata, echoed back so a configured
@@ -147,6 +156,25 @@ class ProjectOut(BaseModel):
     # ``permission_service.get_user_roles``, cached per (user, project)).
     # Read it from the single-project endpoint instead.
     computed_metadata: dict | None = None
+
+
+# ---------------------------------------------------------------------------
+# Anonymous access schemas (admin-only)
+# ---------------------------------------------------------------------------
+
+# Kept out of ProjectCreate/ProjectUpdate/ProjectOut on purpose: only instance
+# administrators read or change what anonymous visitors may see.
+AnonymousPermission = Literal["view_issues", "view_wiki"]
+
+
+class ProjectAnonymousPermissionsUpdate(BaseModel):
+    anonymous_permissions: list[AnonymousPermission]
+
+
+class ProjectAnonymousPermissionsOut(BaseModel):
+    key: str
+    is_public: bool
+    anonymous_permissions: list[str]
 
 
 # ---------------------------------------------------------------------------
@@ -198,8 +226,23 @@ class ProjectRenameOut(ProjectOut):
 
 
 class MemberAdd(BaseModel):
-    user_id: int
+    """Request body for adding a principal to a project.
+
+    A membership is held by a user or by a user group, never both and never
+    neither, so exactly one of ``user_id`` / ``group_id`` must be supplied.
+    """
+
+    user_id: int | None = None
+    group_id: int | None = None
     role_ids: list[int]
+
+    @model_validator(mode="after")
+    def check_principal(self) -> MemberAdd:
+        if self.user_id is not None and self.group_id is not None:
+            raise ValueError("Provide either user_id or group_id, not both")
+        if self.user_id is None and self.group_id is None:
+            raise ValueError("Provide either user_id or group_id")
+        return self
 
     @model_validator(mode="after")
     def check_role_ids(self) -> MemberAdd:
@@ -219,13 +262,33 @@ class MemberUpdateRoles(BaseModel):
 
 
 class MemberOut(BaseModel):
+    """One project membership row, held by a user or by a user group.
+
+    This is one flat shape with a ``principal_type`` discriminator rather than
+    a union of two schemas.  The two kinds share everything that matters to a
+    client — the roles, and the fact that this is a membership on this
+    project — and differ only in how the holder is named, so a union would
+    duplicate the common half and force every consumer to branch before
+    reading it.  The fields belonging to the other kind are simply ``None``:
+    a user row has no ``group_id``/``name``/``user_count``, and a group row
+    has no ``user_id``/``login``/``display_name``.
+    """
+
     model_config = {"from_attributes": True}
 
-    user_id: int
-    login: str
-    display_name: str
+    principal_type: Literal["user", "group"]
     roles: list[str]
     role_ids: list[int] = []
+
+    # Set on user rows only.
+    user_id: int | None = None
+    login: str | None = None
+    display_name: str | None = None
+
+    # Set on group rows only.
+    group_id: int | None = None
+    name: str | None = None
+    user_count: int | None = None
 
 
 # ---------------------------------------------------------------------------

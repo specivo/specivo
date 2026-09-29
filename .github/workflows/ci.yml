@@ -8,21 +8,24 @@ on:
   workflow_call:
 
 jobs:
+  # Build check for the esbuild bundles. They are generated, never committed:
+  # the test jobs below build their own copy, and the release image builds them
+  # in the Dockerfile's frontend stage.
   frontend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm ci
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - run: npm run build
         working-directory: frontend
-      # Built bundles under specivo/static/dist/ are committed. Fail if a source
-      # change was committed without rebuilding (stale artifacts).
-      - name: Verify committed bundles are up to date
-        run: git diff --exit-code -- specivo/static/dist/
+      - name: Check bundle manifests were written
+        run: test -s specivo/static/dist/js/manifest.json && test -s specivo/static/dist/css/manifest.json
 
   lint:
     runs-on: ubuntu-latest
@@ -61,10 +64,22 @@ jobs:
       DATABASE_URL: postgresql+asyncpg://specivo:specivo@localhost:5432/specivo_test
       REDIS_URL: redis://localhost:6379/1
       SECRET_KEY: ci-test-secret-key-minimum-32-bytes-for-hs256
+      # Bundle-serving tests fail instead of skipping when the build is missing.
+      SPECIVO_REQUIRE_BUNDLES: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --all-extras
+
+      # Bundles are not committed; build them before the web layer is tested.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend bundles
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: frontend
 
       - name: Create PostgreSQL extensions
         run: |
@@ -122,6 +137,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v4
       - run: uv sync --all-extras
+
+      # Bundles are not committed; the browser tests need them built.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Build frontend bundles
+        run: npm ci --no-audit --no-fund && npm run build
+        working-directory: frontend
 
       - name: Install Playwright browsers
         run: uv run playwright install chromium --with-deps

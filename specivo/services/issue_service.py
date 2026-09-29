@@ -3,20 +3,24 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, func, or_, select, tuple_, update
+from sqlalchemy import and_, delete, false, func, or_, select, tuple_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
-from specivo.models.member import Member
-from specivo.models.project import Project
+from specivo.models.member import Member, MemberRole
+from specivo.models.project import PROJECT_STATUS_ACTIVE, Project
+from specivo.models.role import Role
 from specivo.models.tag import TagLink
 from specivo.models.time_entry import ActiveTimer, TimeEntry
 from specivo.models.user import User
@@ -173,109 +177,167 @@ class IssueService:
     # Visibility helpers
     # ------------------------------------------------------------------
 
-    async def _get_best_visibility(self, session: AsyncSession, user: User, project_id: int) -> str | None:
-        """Return the most permissive issues_visibility across user's roles.
+    async def _get_best_visibility(self, session: AsyncSession, user: User, project: Project) -> str | None:
+        """Return the most permissive ``issues_visibility`` among *user*'s roles that grant ``view_issues``.
 
-        Returns None when the user is not a member of the project.
-        Visibility precedence: "all" > "default" > "own".
-
-        Uses the cached role lookup from ``permission_service`` to avoid
-        a duplicate 3-table JOIN when ``check_permission`` was already
-        called for the same user+project (e.g. in MCP tool paths).
+        Roles come from ``permission_service.get_user_roles``, so members,
+        signed-in non-members and the anonymous user are resolved by the same
+        rules as ``check_permission``. Returns None when no role grants
+        ``view_issues``. Precedence: "all" > "default" > "own".
         """
-        from specivo.services.permission_service import get_user_roles
+        from specivo.services.permission_service import Permission, get_user_roles
 
-        roles = await get_user_roles(session, user.id, project_id)
-        if not roles:
+        roles = await get_user_roles(session, user, project)
+        return self._best_visibility(r.issues_visibility for r in roles if r.grants(Permission.VIEW_ISSUES))
+
+    @staticmethod
+    def _best_visibility(visibilities: Iterable[str]) -> str | None:
+        """Return the most permissive of *visibilities*, or None when there are none.
+
+        Precedence: "all" > "default" > "own".
+        """
+        seen = set(visibilities)
+        if not seen:
             return None
-        visibilities = [r.issues_visibility for r in roles]
-        # Most permissive wins
-        if "all" in visibilities:
+        if "all" in seen:
             return "all"
-        if "default" in visibilities:
+        if "default" in seen:
             return "default"
         return "own"
 
-    def _apply_visibility_filter(self, stmt, user: User, visibility: str | None, is_public: bool):
-        """Add WHERE clauses to filter issues by user's visibility level.
+    @staticmethod
+    def _visibility_clause(user: User, visibility: str | None) -> ColumnElement[bool]:
+        """Return the predicate selecting the issues *user* may see in a project at *visibility*.
 
-        Admin: sees everything (caller should skip this method).
-        Role visibility "all": non-private + private where author/assignee.
-        Role visibility "default": non-private + own (author/assignee).
-        Role visibility "own": only own (author/assignee).
-        Non-member on public project: sees non-private issues only.
-        Non-member on private project: impossible (caller handles with 404).
+        "all" / "default": non-private issues, plus private ones the user
+        authored or is assigned to. "own": only the latter. None: nothing.
+        The anonymous user never authors or is assigned anything, so its
+        "own" part is always false.
+
+        Admins see everything; callers skip the filter for them.
         """
-        if visibility == "all":
-            # See everything except private issues not authored/assigned to them
-            stmt = stmt.where(
-                or_(
-                    Issue.is_private.is_(False),
-                    Issue.author_id == user.id,
-                    Issue.assigned_to_id == user.id,
-                )
+        own = false() if user.is_anonymous else or_(Issue.author_id == user.id, Issue.assigned_to_id == user.id)
+        if visibility in ("all", "default"):
+            return or_(Issue.is_private.is_(False), own)
+        if visibility == "own":
+            return own
+        return false()
+
+    async def visible_issues_clause(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """Return a cross-project predicate selecting every issue *user* may see.
+
+        The cross-project form of ``_get_best_visibility`` and
+        ``_visibility_clause``, following ``permission_service.get_user_roles``:
+
+        - a project the user holds a membership on: the best visibility among
+          the membership roles that grant ``view_issues``. A membership whose
+          roles grant none shows nothing and is not topped up by a fallback;
+        - a public project without a membership: the Non member role's
+          visibility, when it grants ``view_issues`` (never for the anonymous
+          user);
+        - a public, active project opted in to anonymous ``view_issues``,
+          without a membership, while the instance switch is on: "default".
+
+        Returns None for admins, who are not filtered.
+        """
+        if user.is_admin:
+            return None
+
+        from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+        from specivo.services.permission_service import (
+            Permission,
+            get_non_member_role,
+            member_principal_clause,
+            role_grants,
+        )
+
+        clauses: list[ColumnElement[bool]] = []
+        member_project_ids: set[int] = set()
+
+        if not user.is_anonymous:
+            rows = await session.execute(
+                select(Member.project_id, Role.issues_visibility, Role.permissions)
+                .select_from(Member)
+                .outerjoin(MemberRole, MemberRole.member_id == Member.id)
+                .outerjoin(Role, Role.id == MemberRole.role_id)
+                .where(member_principal_clause(user.id))
             )
-        elif visibility == "default":
-            # Non-private + own (private or not)
-            stmt = stmt.where(
-                or_(
-                    Issue.is_private.is_(False),
-                    Issue.author_id == user.id,
-                    Issue.assigned_to_id == user.id,
-                )
+            visibilities_by_project: dict[int, set[str]] = defaultdict(set)
+            for project_id, visibility, permissions in rows:
+                member_project_ids.add(project_id)
+                if visibility is not None and role_grants(permissions, Permission.VIEW_ISSUES):
+                    visibilities_by_project[project_id].add(visibility)
+
+            projects_by_level: dict[str, list[int]] = defaultdict(list)
+            for project_id, visibilities in visibilities_by_project.items():
+                level = self._best_visibility(visibilities)
+                if level is not None:
+                    projects_by_level[level].append(project_id)
+            clauses.extend(
+                and_(Issue.project_id.in_(project_ids), self._visibility_clause(user, level))
+                for level, project_ids in projects_by_level.items()
             )
-        elif visibility == "own":
-            # Only issues where user is author or assignee
-            stmt = stmt.where(
-                or_(
-                    Issue.author_id == user.id,
-                    Issue.assigned_to_id == user.id,
+
+            non_member = await get_non_member_role(session)
+            if non_member is not None and non_member.grants(Permission.VIEW_ISSUES):
+                public_projects = select(Project.id).where(Project.is_public.is_(True))
+                if member_project_ids:
+                    public_projects = public_projects.where(Project.id.not_in(sorted(member_project_ids)))
+                clauses.append(
+                    and_(
+                        Issue.project_id.in_(public_projects),
+                        self._visibility_clause(user, non_member.issues_visibility),
+                    )
                 )
+
+        if await is_anonymous_access_enabled(session):
+            opted_in = select(Project.id).where(
+                Project.is_public.is_(True),
+                Project.status == PROJECT_STATUS_ACTIVE,
+                Project.anonymous_permissions.contains([Permission.VIEW_ISSUES.value]),
             )
-        else:
-            # Non-member on public project: non-private only
-            if is_public:
-                stmt = stmt.where(Issue.is_private.is_(False))
-            else:
-                # Should not reach here — caller should 404 for private projects
-                # Use an impossible condition to return no results
-                stmt = stmt.where(Issue.id < 0)
-        return stmt
+            if member_project_ids:
+                opted_in = opted_in.where(Project.id.not_in(sorted(member_project_ids)))
+            clauses.append(and_(Issue.project_id.in_(opted_in), self._visibility_clause(user, "default")))
+
+        return or_(*clauses) if clauses else false()
 
     async def _check_visible(self, session: AsyncSession, issue: Issue, user: User) -> bool:
-        """Check if a single issue is visible to user.
-
-        Returns False if not visible. Caller should raise NotFoundError.
-        """
+        """Return whether *user* may see *issue*. Callers raise ``NotFoundError`` when not."""
         if user.is_admin:
             return True
 
-        # Check project access
-        project_result = await session.execute(select(Project).where(Project.id == issue.project_id))
-        project = project_result.scalar_one_or_none()
+        project = await session.get(Project, issue.project_id)
         if project is None:
             return False
 
-        visibility = await self._get_best_visibility(session, user, issue.project_id)
+        visibility = await self._get_best_visibility(session, user, project)
+        own = not user.is_anonymous and user.id in (issue.author_id, issue.assigned_to_id)
+        if visibility in ("all", "default"):
+            return not issue.is_private or own
+        if visibility == "own":
+            return own
+        return False
 
-        # Non-member on private project: cannot see anything
-        if visibility is None and not project.is_public:
-            return False
-
-        if visibility == "all":
-            # Can see all non-private + private where author/assignee
-            if issue.is_private:
-                return issue.author_id == user.id or issue.assigned_to_id == user.id
-            return True
-        elif visibility == "default":
-            if issue.is_private:
-                return issue.author_id == user.id or issue.assigned_to_id == user.id
-            return True
-        elif visibility == "own":
-            return issue.author_id == user.id or issue.assigned_to_id == user.id
-        else:
-            # Non-member on public project: can see non-private only
-            return not issue.is_private
+    async def list_visible_children(self, session: AsyncSession, issue: Issue, user: User) -> list[Issue]:
+        """Return *issue*'s direct children that *user* may see, in nested-set order."""
+        stmt = (
+            select(Issue)
+            .where(Issue.parent_id == issue.id)
+            .order_by(Issue.lft, Issue.id)
+            .options(
+                selectinload(Issue.tracker),
+                selectinload(Issue.status),
+                selectinload(Issue.priority),
+                selectinload(Issue.category),
+                selectinload(Issue.author),
+                selectinload(Issue.assigned_to),
+            )
+        )
+        visibility = await self.visible_issues_clause(session, user)
+        if visibility is not None:
+            stmt = stmt.where(visibility)
+        return list((await session.execute(stmt)).scalars().all())
 
     # ------------------------------------------------------------------
     # Core operations
@@ -441,22 +503,20 @@ class IssueService:
                 from specivo.services.embedding_service import EmbeddingService
 
                 chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
-                await EmbeddingService().embed_source(
-                    session, SearchSourceType.ISSUE, issue.id, project.id, chunks
-                )
+                await EmbeddingService().embed_source(session, SearchSourceType.ISSUE, issue.id, project.id, chunks)
             except Exception:
                 logger.debug("Embedding generation skipped for %s (no model or error)", issue.display_key)
 
         return issue
 
-    async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User | None = None) -> Issue:
+    async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key like 'ACME-42' to an Issue.
 
         Also accepts a bare numeric string (e.g. ``"42"``), which is treated
         as an internal ID lookup for backward compatibility.
 
-        When ``user`` is provided, a visibility check is applied.
-        Invisible issues raise ``NotFoundError`` (404, not 403).
+        A visibility check is applied for *user*: invisible issues raise
+        ``NotFoundError`` (404, not 403).
 
         Raises ``NotFoundError`` when no matching issue exists.
         """
@@ -480,7 +540,7 @@ class IssueService:
                     if aliased_id is not None:
                         return await self.get_by_id(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
-                if user is not None and not await self._check_visible(session, issue, user):
+                if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 return issue
 
@@ -533,12 +593,10 @@ class IssueService:
             raise NotFoundError(f"Issue {issue_id} not found")
         return issue
 
-    async def get_by_display_key_with_relations(
-        self, session: AsyncSession, display_key: str, user: User | None = None
-    ) -> Issue:
+    async def get_by_display_key_with_relations(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key or numeric ID, eager-loading all relations.
 
-        When ``user`` is provided, a visibility check is applied.
+        A visibility check is applied for *user*.
         Raises ``NotFoundError`` when no matching issue exists or is not visible.
         """
         if "-" in display_key:
@@ -575,7 +633,7 @@ class IssueService:
                     if aliased_id is not None:
                         return await self.get_with_relations(session, aliased_id, user=user)
                     raise NotFoundError(f"Issue {display_key!r} not found")
-                if user is not None and not await self._check_visible(session, issue, user):
+                if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 return issue
 
@@ -585,9 +643,7 @@ class IssueService:
             raise NotFoundError(f"Invalid issue reference: {display_key!r}")
         return await self.get_with_relations(session, issue_id, user=user)
 
-    async def _resolve_ref_alias(
-        self, session: AsyncSession, project_key: str, seq: int
-    ) -> int | None:
+    async def _resolve_ref_alias(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
         """Return the issue id a retired ``KEY-N`` reference points to, if any."""
         issue_id: int | None = await session.scalar(
             select(IssueRefAlias.issue_id).where(
@@ -598,9 +654,7 @@ class IssueService:
         return issue_id
 
     @staticmethod
-    def _autolink_ref_pairs(
-        texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS
-    ) -> list[tuple[str, int]]:
+    def _autolink_ref_pairs(texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS) -> list[tuple[str, int]]:
         """Extract ``(project_key, sequence_number)`` pairs from *texts*, capped.
 
         Deduplicates and sorts the candidate refs for a deterministic result,
@@ -839,9 +893,7 @@ class IssueService:
             )
 
         # Guard hierarchy: refuse to orphan a subtree across projects.
-        child_count = await session.scalar(
-            select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id)
-        )
+        child_count = await session.scalar(select(func.count()).select_from(Issue).where(Issue.parent_id == issue.id))
         if issue.parent_id is not None or (child_count or 0) > 0:
             raise ValidationError(
                 message=_(
@@ -886,9 +938,7 @@ class IssueService:
         await session.flush()
 
         # Re-sync denormalized project_id on issue-attached rows.
-        await session.execute(
-            update(Journal).where(Journal.issue_id == issue.id).values(project_id=target_project.id)
-        )
+        await session.execute(update(Journal).where(Journal.issue_id == issue.id).values(project_id=target_project.id))
         await session.execute(
             update(TimeEntry).where(TimeEntry.issue_id == issue.id).values(project_id=target_project.id)
         )
@@ -898,9 +948,7 @@ class IssueService:
 
         # Record the move in the issue history (notes-only journal entry).
         snapshot = {attr: getattr(issue, attr) for attr, _label in _JOURNALIZED_ATTRS}
-        move_note = _("Moved from {old} to {new}.").format(
-            old=f"{old_project_key}-{old_seq}", new=issue.display_key
-        )
+        move_note = _("Moved from {old} to {new}.").format(old=f"{old_project_key}-{old_seq}", new=issue.display_key)
         if notes:
             move_note = f"{move_note}\n\n{notes}"
         await self._journal_service.record_change(
@@ -920,9 +968,7 @@ class IssueService:
             from specivo.services.embedding_service import EmbeddingService
 
             chunks = ChunkingService().chunk_issue(issue.subject, issue.description)
-            await EmbeddingService().embed_source(
-                session, SearchSourceType.ISSUE, issue.id, target_project.id, chunks
-            )
+            await EmbeddingService().embed_source(session, SearchSourceType.ISSUE, issue.id, target_project.id, chunks)
         except Exception:
             logger.debug("Embedding regeneration skipped for %s after move", issue.display_key)
 
@@ -996,7 +1042,7 @@ class IssueService:
         sort: str,
         offset: int,
         limit: int,
-        user: User | None = None,
+        user: User,
     ) -> tuple[list[Issue], int]:
         """List issues with filtering, sorting, and pagination.
 
@@ -1015,8 +1061,8 @@ class IssueService:
         offset, limit:
             Pagination parameters.
         user:
-            When provided, visibility filtering is applied based on the
-            user's roles and ``issues_visibility`` setting.
+            Whose roles and ``issues_visibility`` setting filter the results.
+            Admins are not filtered.
         """
         stmt = select(Issue).options(
             selectinload(Issue.tracker),
@@ -1034,12 +1080,16 @@ class IssueService:
         # ------------------------------------------------------------------
         # Visibility filter
         # ------------------------------------------------------------------
-        if user is not None and not user.is_admin and project_id is not None:
-            project_result = await session.execute(select(Project).where(Project.id == project_id))
-            project = project_result.scalar_one_or_none()
-            if project is not None:
-                visibility = await self._get_best_visibility(session, user, project_id)
-                stmt = self._apply_visibility_filter(stmt, user, visibility, project.is_public)
+        if not user.is_admin:
+            if project_id is not None:
+                project = await session.get(Project, project_id)
+                if project is not None:
+                    visibility = await self._get_best_visibility(session, user, project)
+                    stmt = stmt.where(self._visibility_clause(user, visibility))
+            else:
+                across_projects = await self.visible_issues_clause(session, user)
+                if across_projects is not None:
+                    stmt = stmt.where(across_projects)
 
         # ------------------------------------------------------------------
         # Status filter
@@ -1071,9 +1121,7 @@ class IssueService:
         if filters.get("sprint_id") is not None:
             stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
         if filters.get("tag_id") is not None:
-            stmt = stmt.where(
-                Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"]))
-            )
+            stmt = stmt.where(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
 
         # ------------------------------------------------------------------
         # Text search
@@ -1246,7 +1294,8 @@ class IssueService:
     ) -> list[dict]:
         """Search issues by key or subject for autocomplete.
 
-        Only returns issues in projects the user has access to.
+        Returns only issues *user* may see, filtered by ``visible_issues_clause``
+        so autocomplete never exposes more than issue listing does.
         """
         q = query.strip()
         if not q:
@@ -1259,10 +1308,10 @@ class IssueService:
         # so we construct it as a SQL expression for filtering and selection.
         display_key_expr = func.concat(Issue.project_key, "-", Issue.sequence_number)
 
-        # Build base query
         stmt = (
             select(
                 display_key_expr.label("display_key"),
+                Issue.project_key,
                 Issue.subject,
                 IssueStatus.name.label("status_name"),
             )
@@ -1277,29 +1326,17 @@ class IssueService:
             .limit(limit)
         )
 
-        # Filter by accessible projects if not admin
-        if not user.is_admin:
-            from sqlalchemy import and_
-
-            accessible_project_ids = (select(Member.project_id).where(Member.user_id == user.id)).scalar_subquery()
-            stmt = stmt.where(
-                or_(
-                    Issue.project_id.in_(accessible_project_ids),
-                    and_(
-                        Issue.project_id.in_(select(Project.id).where(Project.is_public.is_(True))),
-                        Issue.is_private.is_(False),
-                    ),
-                )
-            )
-
-            # Hide private issues the user doesn't own/isn't assigned to
-            stmt = stmt.where(
-                or_(
-                    Issue.is_private.is_(False),
-                    Issue.author_id == user.id,
-                    Issue.assigned_to_id == user.id,
-                )
-            )
+        visibility = await self.visible_issues_clause(session, user)
+        if visibility is not None:
+            stmt = stmt.where(visibility)
 
         rows = (await session.execute(stmt)).all()
-        return [{"key": row.display_key, "subject": row.subject, "status": row.status_name} for row in rows]
+        return [
+            {
+                "key": row.display_key,
+                "subject": row.subject,
+                "project_key": row.project_key,
+                "status": row.status_name,
+            }
+            for row in rows
+        ]

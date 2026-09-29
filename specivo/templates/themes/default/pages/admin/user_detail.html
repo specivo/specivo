@@ -13,7 +13,17 @@
   <span class="current">{{ target_user.display_name }}</span>
 </div>
 
-<div x-data='adminUserDetail({ targetUser: {{ target_user | tojson }}, apiKeys: {{ api_keys | tojson }} })'>
+<div x-data='adminUserDetail({ targetUser: {{ target_user | tojson }}, apiKeys: {{ api_keys | tojson }}, i18n: {{ {
+  "createKeyFailed": _("Failed to create key"),
+  "connectFailed": _("Unable to connect. Please try again."),
+  "confirmRevoke": _("Revoke this API key? This cannot be undone."),
+  "never": _("Never"),
+  "justNow": _("Just now"),
+  "minutesAgo": _("%(count)s min ago"),
+  "hoursAgo": _("%(count)s hours ago"),
+  "yesterday": _("Yesterday"),
+  "daysAgo": _("%(count)s days ago")
+} | tojson }} })'>
 
   {# --- User header --- #}
   <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">
@@ -25,6 +35,9 @@
       <div style="display: flex; gap: var(--sp-space-sm); align-items: center;">
         <template x-if="targetUser.is_service_account">
           <span class="sp-badge sp-badge-info">{% trans %}Service Account{% endtrans %}</span>
+        </template>
+        <template x-if="targetUser.must_change_password">
+          <span class="sp-badge sp-badge-warning">{% trans %}Password change pending{% endtrans %}</span>
         </template>
         <span class="sp-role" :class="targetUser.is_admin ? 'sp-role-admin' : 'sp-role-member'"
               x-text="targetUser.is_admin ? '{% trans %}Admin{% endtrans %}' : '{% trans %}Member{% endtrans %}'"></span>
@@ -63,6 +76,15 @@
       <span class="sp-info-value" :style="!targetUser.last_login_at ? 'color: var(--sp-text-muted)' : ''"
             x-text="targetUser.last_login_at ? formatDate(targetUser.last_login_at) : '{% trans %}Never{% endtrans %}'"></span>
     </div>
+    <template x-if="!targetUser.is_service_account">
+      <div class="sp-info-row">
+        <span class="sp-info-label">{% trans %}Password{% endtrans %}</span>
+        <span class="sp-info-value" :style="targetUser.must_change_password ? 'color: var(--sp-warning)' : ''"
+              x-text="targetUser.must_change_password
+                ? '{% trans %}Must be replaced at next sign-in{% endtrans %}'
+                : '{% trans %}Chosen by the account owner{% endtrans %}'"></span>
+      </div>
+    </template>
   </div>
 
   {# --- API Keys --- #}

@@ -17,6 +17,7 @@ from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
 from specivo.schemas.user import UserCreate, UserOut
+from specivo.services.anonymous_user_service import real_users_clause, refuse_anonymous_user
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
@@ -27,6 +28,47 @@ _audit = SecurityAuditService()
 
 class ResetPasswordRequest(BaseModel):
     password: str = Field(max_length=128)
+    must_change_password: bool | None = Field(
+        default=None,
+        description=(
+            "Require the user to replace this password at first sign-in. "
+            "Left unset it defaults to true for a person and false for a "
+            "service account, which has no password to change."
+        ),
+    )
+
+
+def _forced_change_for(
+    requested: bool | None,
+    *,
+    is_service_account: bool,
+    has_password: bool,
+) -> bool:
+    """Resolve the forced password-change flag for an admin-set password.
+
+    An administrator who types somebody else's password knows it, so the safe
+    default is to make them replace it — that is what ``requested is None``
+    resolves to for a person with a password.
+
+    A service account is refused outright rather than quietly ignored. It
+    authenticates with an API key, cannot log in with a password and cannot use
+    the change-password endpoint, so the flag would strand it; the database
+    CHECK says the same thing, and this turns it into an answer the caller can
+    read instead of an integrity error.
+    """
+    if requested and is_service_account:
+        raise AppError(
+            code="validation_error",
+            message=(
+                "A service account cannot be required to change its password. "
+                "Service accounts authenticate with an API key and have no password to change."
+            ),
+            status_code=422,
+            field="must_change_password",
+        )
+    if requested is not None:
+        return requested
+    return has_password and not is_service_account
 
 
 @router.get("/admin/users/", response_model=list[UserOut])
@@ -39,7 +81,7 @@ async def list_users(
     limit: int = Query(50, ge=1, le=200),
 ) -> list[UserOut]:
     """List all users (admin only). Optional search by login/display_name."""
-    stmt = select(User)
+    stmt = select(User).where(real_users_clause())
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(or_(User.login.ilike(pattern), User.display_name.ilike(pattern)))
@@ -93,6 +135,11 @@ async def create_user(
         is_service_account=data.is_service_account,
         email_verified_at=now if data.status == "active" else None,
         password_changed_at=now if data.password else None,
+        must_change_password=_forced_change_for(
+            data.must_change_password,
+            is_service_account=data.is_service_account,
+            has_password=bool(data.password),
+        ),
     )
     db.add(user)
     await db.flush()
@@ -136,11 +183,21 @@ async def reset_password(
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
+
+    # Resolved before anything is written, so a refused combination leaves the
+    # stored password exactly as it was.
+    forced_change = _forced_change_for(
+        body.must_change_password,
+        is_service_account=user.is_service_account,
+        has_password=True,
+    )
 
     user.password_hash = hash_password(body.password)
     user.password_changed_at = utcnow()
     user.failed_login_count = 0
     user.locked_until = None
+    user.must_change_password = forced_change
     await db.flush()
 
     try:
@@ -187,6 +244,7 @@ async def lock_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
 
     user.status = "locked"
     user.locked_until = body.locked_until if body else None
@@ -222,6 +280,7 @@ async def unlock_user(
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
 
     user.status = "active"
     user.locked_until = None
@@ -359,4 +418,5 @@ async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
     user = result.scalar_one_or_none()
     if user is None:
         raise NotFoundError(message="User not found")
+    refuse_anonymous_user(user)
     return user

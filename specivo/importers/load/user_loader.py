@@ -1,20 +1,24 @@
-"""Load users, the import service account, and group membership.
+"""Load users, the import service account, and user groups.
 
 Three things happen here that are worth knowing about.
 
 **No password survives.** Redmine salts and hashes with SHA1 and Specivo uses
 bcrypt, so nothing is portable. Every imported account gets a random unusable
-hash and its login is listed in the import report, because the accounts are
-otherwise unreachable until somebody resets them.
+hash and is flagged ``must_change_password``, so whatever password it is
+eventually given — by an administrator, or by the person completing an email
+recovery — is not the password it keeps. The logins are listed in the report so
+the operator knows which accounts are waiting for one.
 
 **Identity has to be squeezed into narrower columns.** Specivo requires an email
 and enforces case-insensitive uniqueness on both login and email, while Redmine
 allows an account with no address at all. Anything that would collide or fail is
 adjusted rather than dropped, and the adjustment is reported.
 
-**Groups produce no rows.** Specivo cannot hang project roles off a group, so
-membership is collected here and flattened into per-user grants once projects
-exist.
+**Groups become groups.** A Specivo ``UserGroup`` holds project roles the same
+way a user does, so a source group is imported as one, with its members, and the
+memberships phase grants roles to the group itself. Group names are unique
+case-insensitively in Specivo and are not in Redmine, so a name that is already
+taken is suffixed rather than merged onto whatever holds it.
 """
 
 from __future__ import annotations
@@ -27,26 +31,27 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
+from specivo.core.exceptions import ConflictError
 from specivo.importers.core.backdate import backdate
-from specivo.importers.core.ir import EntityType, IRUser
+from specivo.importers.core.ir import EntityType, IRGroup, IRUser
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup
+from specivo.services.anonymous_user_service import real_users_clause
 from specivo.services.auth_utils import hash_password
+from specivo.services.user_group_service import UserGroupService
 
 logger = logging.getLogger(__name__)
-
-# Where the group membership map is parked for the memberships phase.
-GROUP_MEMBERS_STATE_KEY = "group_members"
 
 # Where the fallback author account's id is parked for later phases. Its id and
 # not the object: each phase runs in its own session, so an instance loaded in
 # an earlier one is detached by the time a later phase would use it.
 IMPORT_ACCOUNT_STATE_KEY = "import_account_id"
 
-# Report sections.
-NOTE_PASSWORD_RESET = "password_reset_required"
+# Report sections. The section name is printed as the heading of its list, so it
+# has to read as a statement about the accounts under it.
+NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN = "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"
 NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
-NOTE_GROUPS_FLATTENED = "groups_flattened_into_memberships"
 
 # Identifier under which the fallback author account is mapped, so a resumed
 # run finds the one it made rather than creating another.
@@ -59,6 +64,9 @@ _PLACEHOLDER_EMAIL_DOMAIN = "invalid"
 _MAX_LOGIN = 100
 _MAX_EMAIL = 255
 _MAX_DISPLAY_NAME = 255
+_MAX_GROUP_NAME = 255
+
+_user_group_service = UserGroupService()
 
 
 async def ensure_import_account(ctx: PhaseContext) -> User:
@@ -98,6 +106,9 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
             status="active",
             is_admin=False,
             is_service_account=True,
+            # Deliberately not flagged for a password change, and the CHECK on
+            # users would reject the row if it were: this account authenticates
+            # with an API key and has no password anyone could replace.
         )
         ctx.session.add(existing)
         await ctx.session.flush()
@@ -132,6 +143,11 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
         status=ir.status,
         is_admin=ir.is_admin,
         is_service_account=False,
+        # Nobody holds this password, so the first one the account actually has
+        # will have been chosen by somebody else. Making the owner replace it is
+        # the point; a person who recovers the account by email picks their own
+        # and the flag clears itself.
+        must_change_password=True,
         language=_supported_language(ir.language),
         last_login_at=ir.last_login_at,
     )
@@ -142,7 +158,7 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
     await ctx.id_map.put(ctx.session, EntityType.USER, ir.source_ref, "users", user.id)
 
     ctx.summary.record_created(EntityType.USER)
-    ctx.summary.add_note(NOTE_PASSWORD_RESET, login)
+    ctx.summary.add_note(NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN, login)
     if synthesised:
         ctx.summary.add_note(NOTE_SYNTHETIC_EMAIL, f"{login} ({email})")
     ctx.tick()
@@ -150,24 +166,57 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
 
 
 async def load_groups(ctx: PhaseContext) -> None:
-    """Collect group membership for the memberships phase to flatten.
+    """Create a user group per source group, with the members that exist.
 
-    Creates nothing. Specivo has no group that can hold project roles, so the
-    only thing a group can contribute is the list of people who inherit its
-    grants, and that can only be applied once projects exist.
+    Runs after :func:`load_users`, because a group can only hold the people the
+    run has already imported. The group itself is what the memberships phase
+    grants roles to, so this has to happen before projects are reached.
     """
-    members: dict[str, list[str]] = {}
-    async for group in ctx.adapter.extract_groups():
-        members[group.source_ref] = list(group.member_refs)
-        ctx.summary.add_note(NOTE_GROUPS_FLATTENED, f"{group.name} ({len(group.member_refs)} members)")
-        ctx.tick()
+    async for ir in ctx.adapter.extract_groups():
+        if await ctx.id_map.get(ctx.session, EntityType.GROUP, ir.source_ref):
+            # A resumed run finds the group the earlier attempt created. The
+            # mapping and the group are written in the same transaction, so
+            # either both survived or neither did.
+            ctx.summary.record_skipped(EntityType.GROUP)
+            continue
+        await load_group(ctx, ir)
 
-    ctx.state[GROUP_MEMBERS_STATE_KEY] = members
-    if members:
-        ctx.warn(
-            "Group memberships will be flattened into individual grants; the grouping itself is not imported",
-            groups=len(members),
-        )
+
+async def load_group(ctx: PhaseContext, ir: IRGroup) -> UserGroup | None:
+    """Create one group from *ir* and put its imported members in it.
+
+    Returns ``None`` when the group could not be created, which leaves its
+    project grants unimported and reported rather than ending the run.
+
+    A name collision is settled before the insert, twice: ``_unique_group_name``
+    picks a free one, and ``UserGroupService.create`` checks again and raises
+    :class:`ConflictError` rather than letting ``uq_user_groups_name_ci`` reject
+    the row. That matters because the index is the only backstop left, and an
+    ``IntegrityError`` from it cannot be handled here — it poisons the session,
+    so the phase would have to roll back whole rather than skip one group.
+    """
+    name = await _unique_group_name(ctx, ir)
+    try:
+        group = await _user_group_service.create(ctx.session, name)
+    except ConflictError:
+        # Only reachable if something claimed the name between the two checks.
+        # Reported and passed over: retrying under yet another name is the loop
+        # _unique_group_name just ran, and it would race the same way.
+        ctx.warn("Group name was taken while it was being imported; group skipped", group=ir.name, name=name)
+        return None
+
+    await ctx.id_map.put(ctx.session, EntityType.GROUP, ir.source_ref, "user_groups", group.id)
+    ctx.summary.record_created(EntityType.GROUP)
+
+    for member_ref in ir.member_refs:
+        user_id = await ctx.id_map.get(ctx.session, EntityType.USER, member_ref)
+        if user_id is None:
+            ctx.warn("Group member was not imported; left out of the group", group=name, source_ref=member_ref)
+            continue
+        await _user_group_service.add_user(ctx.session, group.id, user_id)
+
+    ctx.tick()
+    return group
 
 
 def _unusable_password() -> str:
@@ -189,7 +238,7 @@ def _supported_language(language: str | None) -> str:
 
 
 async def _find_user_by_login(session: AsyncSession, login: str) -> User | None:
-    stmt = select(User).where(func.lower(User.login) == login.lower()).limit(1)
+    stmt = select(User).where(func.lower(User.login) == login.lower(), real_users_clause()).limit(1)
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
@@ -218,6 +267,40 @@ async def _unique_login(ctx: PhaseContext, ir: IRUser) -> str:
 
     if candidate != base:
         ctx.warn("Login already taken; imported under a suffixed login", wanted=base, login=candidate)
+    return candidate
+
+
+async def _group_name_taken(session: AsyncSession, name: str) -> bool:
+    stmt = select(UserGroup.id).where(func.lower(UserGroup.name) == name.lower()).limit(1)
+    return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+
+async def _unique_group_name(ctx: PhaseContext, ir: IRGroup) -> str:
+    """Return a group name that fits the column and is not already taken.
+
+    ``user_groups`` is unique on the lowercased name and Redmine is not, so two
+    source groups differing only in case, and a source group whose name matches
+    one this instance already has, both land on the same row otherwise.
+
+    A taken name is suffixed rather than reused. Adding the source group's
+    members and grants to whichever group already holds the name would hand the
+    people already in it access nobody asked to give them, which is the one
+    outcome an import must not produce quietly.
+    """
+    base = (ir.name or "").strip()[:_MAX_GROUP_NAME]
+    if not base:
+        base = f"group-{ir.source_ref}"
+        ctx.warn("Source group has no name; one was generated", source_ref=ir.source_ref, name=base)
+
+    candidate = base
+    suffix = 2
+    while await _group_name_taken(ctx.session, candidate):
+        tail = f"-{suffix}"
+        candidate = f"{base[: _MAX_GROUP_NAME - len(tail)]}{tail}"
+        suffix += 1
+
+    if candidate != base:
+        ctx.warn("Group name already taken; imported under a suffixed name", wanted=base, name=candidate)
     return candidate
 
 

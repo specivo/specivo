@@ -7,8 +7,10 @@ export function forgotPasswordForm() {
             msgError: '',
             msgLoading: '',
             msgSubmit: '',
+            msgRateLimited: '',
 
             init() {
+                this.msgRateLimited = this.$el.dataset.msgRateLimited || 'Too many requests. Please wait.';
                 this.msgError = this.$el.dataset.msgError || 'Unable to connect. Please try again.';
                 this.msgLoading = this.$el.dataset.msgLoading || 'Sending...';
                 this.msgSubmit = this.$el.dataset.msgSubmit || 'Send reset link';
@@ -31,7 +33,7 @@ export function forgotPasswordForm() {
                         this.sent = true;
                     } else if (res.status === 429) {
                         var data = await res.json();
-                        this.error = (data.errors && data.errors[0] && data.errors[0].message) || 'Too many requests. Please wait.';
+                        this.error = (data.errors && data.errors[0] && data.errors[0].message) || this.msgRateLimited;
                     } else {
                         /* Always show success to prevent enumeration */
                         this.sent = true;

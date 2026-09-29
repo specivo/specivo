@@ -1,4 +1,9 @@
 export function projectTagsSettings(initial) {
+        var i18n = Object.assign({
+            saveFailed: 'Failed to save tag.',
+            connectFailed: 'Unable to connect.'
+        }, initial.i18n || {});
+
         return {
             tags: initial.tags || [],
             projectKey: initial.projectKey || '',
@@ -71,10 +76,10 @@ export function projectTagsSettings(initial) {
                         this.showModal = false;
                     } else {
                         var err = await res.json().catch(function () { return {}; });
-                        this.error = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || 'Failed to save tag.';
+                        this.error = (err.errors && err.errors[0] && err.errors[0].message) || err.detail || i18n.saveFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Unable to connect.';
+                    this.error = i18n.connectFailed;
                 }
                 this.saving = false;
             },

@@ -7,10 +7,11 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import PermissionDeniedError
+from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
+from specivo.models.relation import IssueRelation
 from specivo.models.role import Role
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate
@@ -256,3 +257,126 @@ class TestMcpRemoveRelation:
 
         with pytest.raises(PermissionDeniedError, match="manage_issue_relations"):
             await _remove_relation(db_session, limited_user, issue1.display_key, rel_id)
+
+
+# ---------------------------------------------------------------------------
+# Tests: remove relation — visibility of both issues
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def role_relations(db_session: AsyncSession) -> Role:
+    result = await db_session.execute(select(Role).where(Role.name == "RelManager"))
+    existing = result.scalar_one_or_none()
+    if existing:
+        return existing
+    role = Role(
+        name="RelManager",
+        position=11,
+        permissions=["view_issues", "manage_issue_relations"],
+        issues_visibility="default",
+        builtin=0,
+    )
+    db_session.add(role)
+    await db_session.commit()
+    await db_session.refresh(role)
+    return role
+
+
+@pytest_asyncio.fixture
+async def hidden_issue(
+    db_session: AsyncSession,
+    tracker: Tracker,
+    admin_user: User,
+):
+    """An issue in a private project that ``limited_user`` is not a member of."""
+    hidden_project = ProjectFactory.build(key="MRELH", name="MCP Relations Hidden", is_public=False)
+    db_session.add(hidden_project)
+    await db_session.commit()
+    await db_session.refresh(hidden_project)
+    issue = await IssueService().create(
+        db_session,
+        hidden_project,
+        IssueCreate(project_key=hidden_project.key, tracker_id=tracker.id, subject="Hidden issue"),
+        admin_user,
+    )
+    await db_session.commit()
+    return issue
+
+
+class TestMcpRemoveRelationVisibility:
+    async def test_remove_refused_when_other_issue_hidden(
+        self,
+        db_session,
+        admin_user,
+        limited_user,
+        role_relations,
+        project,
+        issues,
+        hidden_issue,
+    ):
+        from specivo.mcp.tools import _add_relation, _remove_relation
+
+        await _add_member(db_session, project, limited_user, role_relations)
+        issue1, _ = issues
+        add_result = await _add_relation(db_session, admin_user, issue1.display_key, hidden_issue.display_key, "blocks")
+        import re
+
+        rel_id = int(re.search(r"#(\d+)", add_result).group(1))
+
+        with pytest.raises(NotFoundError) as exc_info:
+            await _remove_relation(db_session, limited_user, issue1.display_key, rel_id)
+        assert hidden_issue.display_key not in str(exc_info.value)
+
+        remaining = await db_session.execute(select(IssueRelation.id).where(IssueRelation.id == rel_id))
+        assert remaining.scalar_one_or_none() == rel_id
+
+    async def test_remove_refused_when_relation_not_on_named_issue(
+        self,
+        db_session,
+        admin_user,
+        limited_user,
+        role_relations,
+        project,
+        issues,
+        tracker,
+    ):
+        from specivo.mcp.tools import _add_relation, _remove_relation
+
+        await _add_member(db_session, project, limited_user, role_relations)
+        issue1, issue2 = issues
+        issue3 = await IssueService().create(
+            db_session,
+            project,
+            IssueCreate(project_key=project.key, tracker_id=tracker.id, subject="Issue C"),
+            admin_user,
+        )
+        await db_session.commit()
+        add_result = await _add_relation(db_session, admin_user, issue2.display_key, issue3.display_key, "relates")
+        import re
+
+        rel_id = int(re.search(r"#(\d+)", add_result).group(1))
+
+        with pytest.raises(NotFoundError):
+            await _remove_relation(db_session, limited_user, issue1.display_key, rel_id)
+
+    async def test_remove_allowed_when_both_visible(
+        self,
+        db_session,
+        admin_user,
+        limited_user,
+        role_relations,
+        project,
+        issues,
+    ):
+        from specivo.mcp.tools import _add_relation, _remove_relation
+
+        await _add_member(db_session, project, limited_user, role_relations)
+        issue1, issue2 = issues
+        add_result = await _add_relation(db_session, admin_user, issue1.display_key, issue2.display_key, "blocks")
+        import re
+
+        rel_id = int(re.search(r"#(\d+)", add_result).group(1))
+
+        result = await _remove_relation(db_session, limited_user, issue2.display_key, rel_id)
+        assert "removed" in result.lower()

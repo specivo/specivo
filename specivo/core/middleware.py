@@ -285,6 +285,76 @@ class RateLimitHeaderMiddleware:
         await self.app(scope, receive, send_with_rate_limit_headers)
 
 
+# ---------------------------------------------------------------------------
+# Anonymous response headers
+# ---------------------------------------------------------------------------
+
+# The scope-state flag ``specivo.core.security.get_reader`` sets when it
+# resolves a request to the anonymous principal.
+ANONYMOUS_READER_STATE_KEY = "anonymous_reader"
+
+# What an anonymous response must be keyed on if anything caches it: the two
+# headers that decide which principal the request resolved to.
+_ANONYMOUS_VARY = ("Cookie", "Authorization")
+
+
+def _with_anonymous_headers(headers: list[tuple[bytes, bytes]]) -> list[tuple[bytes, bytes]]:
+    """Return *headers* with ``Cache-Control: no-store`` and a merged ``Vary``.
+
+    Any ``Vary`` already on the response — ``Origin``, from CORS — is kept and
+    extended rather than replaced, so adding the anonymous fields cannot
+    quietly break another cache key.
+    """
+    vary: list[str] = []
+    out: list[tuple[bytes, bytes]] = []
+    for name, value in headers:
+        lowered = name.lower()
+        if lowered == b"vary":
+            vary.extend(part.strip() for part in value.decode("latin-1").split(",") if part.strip())
+            continue
+        if lowered == b"cache-control":
+            continue
+        out.append((name, value))
+
+    for field in _ANONYMOUS_VARY:
+        if not any(existing.lower() == field.lower() for existing in vary):
+            vary.append(field)
+
+    out.append((b"cache-control", b"no-store"))
+    out.append((b"vary", ", ".join(vary).encode("latin-1")))
+    return out
+
+
+class AnonymousResponseHeadersMiddleware:
+    """Keep anonymous responses out of shared caches.
+
+    A response served to a visitor without an account looks cacheable in a way
+    an authenticated one does not, and a shared cache that stored one could
+    hand it to somebody else — or hand a signed-in user's response to an
+    anonymous visitor. Responses flagged by ``get_reader`` therefore carry
+    ``Cache-Control: no-store`` and a ``Vary`` naming the headers that decide
+    who the caller is.
+
+    ``X-Robots-Tag`` is not set here: ``RequestIDMiddleware`` already sends
+    ``noindex, nofollow, noarchive`` on every response.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_anonymous_headers(message: Message) -> None:
+            if message["type"] == "http.response.start" and scope.get("state", {}).get(ANONYMOUS_READER_STATE_KEY):
+                message["headers"] = _with_anonymous_headers(list(message.get("headers", [])))
+            await send(message)
+
+        await self.app(scope, receive, send_with_anonymous_headers)
+
+
 class RequestIDMiddleware:
     """Attach a unique request ID and security headers to every HTTP response.
 
@@ -308,11 +378,6 @@ class RequestIDMiddleware:
         # Extract request ID from incoming headers or generate one
         headers = dict(scope.get("headers", []))
         request_id = (headers.get(b"x-request-id") or b"").decode() or str(uuid.uuid4())
-
-        # Clear per-request caches
-        from specivo.services.permission_service import clear_role_cache
-
-        clear_role_cache()
 
         # Store in scope state (accessible via request.state.request_id)
         scope.setdefault("state", {})

@@ -7,8 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
-from specivo.core.exceptions import PermissionDeniedError
-from specivo.core.security import get_current_user
+from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
+from specivo.core.security import get_current_user, get_reader
 from specivo.models.project import EnabledModule
 from specivo.models.user import User
 from specivo.models.wiki import WikiContent, WikiPage
@@ -27,7 +27,7 @@ from specivo.schemas.wiki import (
     WikiTrashListResponse,
     WikiVersionsResponse,
 )
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.wiki_link_service import WikiLinkService
 from specivo.services.wiki_service import WikiService
@@ -43,14 +43,24 @@ _project_service = ProjectService()
 # ---------------------------------------------------------------------------
 
 
-async def _require_wiki_module(project_id: int, db: AsyncSession) -> None:
-    """Raise 403 if the wiki module is not enabled for the project."""
+async def _wiki_module_enabled(project_id: int, db: AsyncSession) -> bool:
+    """Return True if the wiki module is enabled for the project.
+
+    Split out from :func:`_require_wiki_module` because the anonymous read
+    path needs the answer without the 403: telling a stranger that the wiki
+    is switched off would confirm the project exists.
+    """
     stmt = select(EnabledModule).where(
         EnabledModule.project_id == project_id,
         EnabledModule.name == "wiki",
     )
     result = await db.execute(stmt)
-    if result.scalar_one_or_none() is None:
+    return result.scalar_one_or_none() is not None
+
+
+async def _require_wiki_module(project_id: int, db: AsyncSession) -> None:
+    """Raise 403 if the wiki module is not enabled for the project."""
+    if not await _wiki_module_enabled(project_id, db):
         raise PermissionDeniedError("Wiki module is not enabled for this project")
 
 
@@ -261,34 +271,60 @@ async def get_wiki_page(
     project_key: str,
     slug: str,
     request: Request,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_reader),
     db: AsyncSession = Depends(get_db),
 ) -> WikiPageWithContent:
-    """Get a wiki page by slug (follows redirects)."""
-    project = await _project_service.get_by_key(db, project_key.upper())
-    await _require_wiki_module(project.id, db)
-    await _require_view_wiki(current_user, project.id, db)
+    """Get a wiki page by slug (follows redirects).
 
-    page, content = await _service.get_page(db, project.id, slug)
+    Reading one page is the whole of the wiki an anonymous visitor may reach:
+    not the page list, the version history, a single old version, the trash or
+    the link graph. Each of those is a separate route and none of them uses
+    ``get_reader``.
+    """
+    anonymous = current_user.is_anonymous
+    project = await _project_service.get_readable_by_key(db, project_key.upper(), current_user)
 
-    # Audit log the resource view
+    if anonymous:
+        # One refusal for every reason. A project with the wiki module
+        # switched off and one opted in to issues alone both answer with the
+        # same 401 the missing and private projects produced above, rather
+        # than the 403 the signed-in path uses.
+        if not await _wiki_module_enabled(project.id, db) or not await check_permission(
+            current_user, project.id, Permission.VIEW_WIKI, db
+        ):
+            raise AnonymousAccessDeniedError()
+    else:
+        await _require_wiki_module(project.id, db)
+        await _require_view_wiki(current_user, project.id, db)
+
     try:
-        from specivo.services.security_audit_service import SecurityAuditService
+        page, content = await _service.get_page(db, project.id, slug)
+    except NotFoundError:
+        if anonymous:
+            raise AnonymousAccessDeniedError() from None
+        raise
 
-        _audit_service = SecurityAuditService()
-        await _audit_service.log_resource_viewed(
-            session=db,
-            user_id=current_user.id,
-            resource="wiki_page",
-            resource_key=page.slug,
-            resource_id=page.id,
-            project_id=project.id,
-            request=request,
-        )
-    except Exception:
-        import logging
+    # Audit log the resource view. Skipped for anonymous visitors so that a
+    # crawler walking the wiki cannot fill security_audit_logs with one row
+    # per page it reads.
+    if not anonymous:
+        try:
+            from specivo.services.security_audit_service import SecurityAuditService
 
-        logging.getLogger(__name__).warning("Failed to log wiki view audit", exc_info=True)
+            _audit_service = SecurityAuditService()
+            await _audit_service.log_resource_viewed(
+                session=db,
+                user_id=current_user.id,
+                resource="wiki_page",
+                resource_key=page.slug,
+                resource_id=page.id,
+                project_id=project.id,
+                request=request,
+            )
+        except Exception:
+            import logging
+
+            logging.getLogger(__name__).warning("Failed to log wiki view audit", exc_info=True)
 
     return _page_with_content(page, content)
 

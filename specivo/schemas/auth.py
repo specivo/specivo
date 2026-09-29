@@ -110,3 +110,17 @@ class ResetPasswordRequest(BaseModel):
 
     token: str
     new_password: str = Field(max_length=1024)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Request body for POST /auth/change-password/ (authenticated user)."""
+
+    current_password: str = Field(max_length=1024)
+    new_password: str = Field(max_length=1024)
+
+
+class ChangePasswordResponse(BaseModel):
+    """Result of a successful password change."""
+
+    detail: str
+    revoked_sessions: int

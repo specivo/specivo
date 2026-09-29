@@ -8,9 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.database import get_db
-from specivo.core.exceptions import NotFoundError, PermissionDeniedError
+from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
 from specivo.core.rate_limit import rate_limit
-from specivo.core.security import get_current_user
+from specivo.core.security import get_current_user, get_reader
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.user import User
@@ -35,7 +35,7 @@ from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
 from specivo.services.notification_service import NotificationService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.saved_filter_service import SavedFilterService
@@ -126,57 +126,10 @@ async def issue_autocomplete(
 ) -> list[dict]:
     """Lightweight issue autocomplete — searches by key and subject via SQL ILIKE.
 
-    Returns only issues the user has access to. No FTS, no vectors — just
-    a fast SQL query for autocomplete dropdowns.
+    Returns only issues the user may see, with the same visibility rules as
+    issue listing. No FTS, no vectors — a fast query for autocomplete dropdowns.
     """
-    from sqlalchemy import String, and_, cast, or_
-
-    from specivo.models.member import Member
-    from specivo.models.project import Project
-
-    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-    pattern = f"%{escaped}%"
-    display_key = Issue.project_key + "-" + cast(Issue.sequence_number, String)
-
-    stmt = (
-        select(
-            Issue.project_key,
-            Issue.sequence_number,
-            Issue.subject,
-        )
-        .where(
-            or_(
-                display_key.ilike(pattern, escape="\\"),
-                Issue.subject.ilike(pattern, escape="\\"),
-            )
-        )
-        .order_by(Issue.updated_at.desc())
-        .limit(limit)
-    )
-
-    # Access control: admin sees all, others see member + public projects
-    if not current_user.is_admin:
-        member_projects = select(Member.project_id).where(Member.user_id == current_user.id).scalar_subquery()
-        public_projects = select(Project.id).where(Project.is_public.is_(True)).scalar_subquery()
-        stmt = stmt.where(
-            or_(
-                Issue.project_id.in_(member_projects),
-                and_(
-                    Issue.project_id.in_(public_projects),
-                    Issue.is_private.is_(False),
-                ),
-            )
-        )
-
-    result = await db.execute(stmt)
-    return [
-        {
-            "key": f"{row.project_key}-{row.sequence_number}",
-            "subject": row.subject,
-            "project_key": row.project_key,
-        }
-        for row in result
-    ]
+    return await _service.autocomplete(db, q, current_user, limit=limit)
 
 
 # ---------------------------------------------------------------------------
@@ -245,12 +198,23 @@ async def list_issues(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=200),
     saved_filter_id: int | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_reader),
     db: AsyncSession = Depends(get_db),
 ) -> IssueListResponse:
     """List issues for a project with optional filtering, sorting, and pagination."""
-    project = await _project_service.get_by_key(db, project_key.upper())
-    await _project_service.require_project_access(db, project, current_user)
+    project = await _project_service.get_readable_by_key(db, project_key.upper(), current_user)
+
+    if current_user.is_anonymous:
+        # Reaching the project is not enough. A project opted in to the wiki
+        # alone must refuse issue reads outright: answering with an empty list
+        # would confirm both that the project exists and that it is open to
+        # anonymous visitors.
+        if not await check_permission(current_user, project.id, Permission.VIEW_ISSUES, db):
+            raise AnonymousAccessDeniedError()
+        # A saved filter belongs to the person who created it. Resolving one
+        # here would hand a stranger somebody else's filter definition.
+        if saved_filter_id is not None:
+            raise AnonymousAccessDeniedError()
 
     # If a saved filter is specified, load it and use its definition as defaults
     if saved_filter_id is not None:
@@ -318,33 +282,15 @@ async def list_issues(
         user=current_user,
     )
 
-    project_computed = computed_values(project.settings)
+    # Computed metadata is derived from the project's configuration, which is
+    # not part of what an anonymous visitor may read.
+    project_computed = None if current_user.is_anonymous else computed_values(project.settings)
     return IssueListResponse(
         total_count=total_count,
         offset=offset,
         limit=limit,
         items=[_issue_out(i, project_computed) for i in issues],
     )
-
-
-# ---------------------------------------------------------------------------
-# Autocomplete (must be before {issue_ref} routes to avoid path conflicts)
-# ---------------------------------------------------------------------------
-
-
-@router.get(
-    "/issues/autocomplete/",
-    tags=["issues"],
-)
-async def autocomplete_issues(
-    q: str = Query("", min_length=1),
-    limit: int = Query(10, ge=1, le=50),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    """Autocomplete issues by key or subject. Returns only issues the user can access."""
-    results = await _service.autocomplete(db, q, current_user, limit=limit)
-    return results
 
 
 # ---------------------------------------------------------------------------
@@ -377,12 +323,18 @@ async def bulk_delete_issues(
 # ---------------------------------------------------------------------------
 
 
+# What ``?include=`` may ask for on behalf of a visitor without an account.
+# Watchers name people and attachments are out of scope for anonymous reading
+# altogether, so both are dropped from the request rather than served empty.
+_ANONYMOUS_INCLUDES = frozenset({"children", "journals"})
+
+
 @router.get("/issues/{issue_ref}/", response_model=IssueWithChildren)
 async def get_issue(
     issue_ref: str,
     request: Request,
     include: str | None = Query(default=None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_reader),
     db: AsyncSession = Depends(get_db),
 ) -> IssueWithChildren:
     """Get an issue by display key (e.g. ACME-42) or internal numeric ID.
@@ -394,29 +346,50 @@ async def get_issue(
     - ``attachments`` — file attachments
 
     Unknown include values are silently ignored.
+
+    An anonymous visitor may ask only for ``children`` and ``journals``;
+    ``watchers`` and ``attachments`` are dropped exactly as an unknown value
+    would be. Both surviving includes are visibility-filtered in their own
+    right — children through ``list_visible_children``, journals by excluding
+    the private ones — so neither shows more than the issue itself does.
     """
-    issue = await _service.get_by_display_key_with_relations(db, issue_ref, user=current_user)
-    computed = computed_values(await load_project_settings(db, issue.project_id))
+    anonymous = current_user.is_anonymous
+    try:
+        issue = await _service.get_by_display_key_with_relations(db, issue_ref, user=current_user)
+    except NotFoundError:
+        # An anonymous visitor is never told that an issue exists but is out
+        # of reach. A reference naming nothing, one naming an issue in a
+        # project they cannot read, and one naming a private issue in a
+        # project they can all produce the same 401.
+        if anonymous:
+            raise AnonymousAccessDeniedError() from None
+        raise
+
+    computed = None if anonymous else computed_values(await load_project_settings(db, issue.project_id))
     out = _issue_out(issue, computed)
 
-    # Audit log the resource view
-    try:
-        from specivo.services.security_audit_service import SecurityAuditService
+    # Audit log the resource view. Skipped entirely for anonymous visitors:
+    # the log exists to attribute a read to somebody, and a crawler walking
+    # every issue would write one row per request under a single principal,
+    # burying the entries that identify a real person.
+    if not anonymous:
+        try:
+            from specivo.services.security_audit_service import SecurityAuditService
 
-        _audit_service = SecurityAuditService()
-        await _audit_service.log_resource_viewed(
-            session=db,
-            user_id=current_user.id,
-            resource="issue",
-            resource_key=issue.display_key,
-            resource_id=issue.id,
-            project_id=issue.project_id,
-            request=request,
-        )
-    except Exception:
-        import logging
+            _audit_service = SecurityAuditService()
+            await _audit_service.log_resource_viewed(
+                session=db,
+                user_id=current_user.id,
+                resource="issue",
+                resource_key=issue.display_key,
+                resource_id=issue.id,
+                project_id=issue.project_id,
+                request=request,
+            )
+        except Exception:
+            import logging
 
-        logging.getLogger(__name__).warning("Failed to log resource view audit", exc_info=True)
+            logging.getLogger(__name__).warning("Failed to log resource view audit", exc_info=True)
 
     children: list[IssueOut] = []
     journals_out: list[JournalOut] | None = None
@@ -427,23 +400,12 @@ async def get_issue(
     include_set: set[str] = set()
     if include:
         include_set = {v.strip() for v in include.split(",")}
+    if anonymous:
+        include_set &= _ANONYMOUS_INCLUDES
 
     if "children" in include_set:
-        # Direct children only: parent_id == issue.id (not all descendants)
-        result = await db.execute(
-            select(Issue)
-            .where(Issue.parent_id == issue.id)
-            .order_by(Issue.lft)
-            .options(
-                selectinload(Issue.tracker),
-                selectinload(Issue.status),
-                selectinload(Issue.priority),
-                selectinload(Issue.category),
-                selectinload(Issue.author),
-                selectinload(Issue.assigned_to),
-            )
-        )
-        child_issues = list(result.scalars().all())
+        # Direct children only (not all descendants), filtered by visibility.
+        child_issues = await _service.list_visible_children(db, issue, current_user)
         children = [_issue_out(c, computed) for c in child_issues]
 
     if "journals" in include_set:

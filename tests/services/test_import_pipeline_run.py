@@ -276,5 +276,5 @@ class TestSummaryShape:
         summary = await run_pipeline(_adapter()).run()
         assert isinstance(summary, ImportSummary)
         assert summary.phases_run
-        assert "password_reset_required" in summary.notes
+        assert "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in" in summary.notes
         assert "project_keys_assigned" in summary.notes

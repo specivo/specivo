@@ -12,11 +12,16 @@ from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
-from specivo.services.permission_service import check_permission
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
 from specivo.services.wiki_service import WikiService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import (
+    get_current_user_optional,
+    get_templates,
+    get_web_reader,
+    refuse_anonymous_web,
+)
 
 if TYPE_CHECKING:
     from specivo.models.user import User
@@ -39,22 +44,39 @@ def _wiki_tags_to_dicts(tags: list) -> list[dict]:
 async def wiki_index(
     project_key: str,
     request: Request,
+    reader: object | None = Depends(get_web_reader),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
-    """Render the wiki home page, or redirect to it after auto-creation."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
+    """Render the wiki home page, or redirect to it after auto-creation.
+
+    On the anonymous surface only because it is a redirect: without it the
+    "Wiki" link on a project people are allowed to read would send them to the
+    login screen. It loads nothing and, for a visitor without an account,
+    writes nothing — the home-page creation below is gated on ``manage_wiki``,
+    which the anonymous ceiling can never grant.
+    """
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+
+    from specivo.core.exceptions import AnonymousAccessDeniedError
 
     try:
-        project = await _project_svc.get_by_key(db, project_key)
+        project = await _project_svc.get_readable_by_key(db, project_key, user)
+    except AnonymousAccessDeniedError:
+        return refuse_anonymous_web(request)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
-    # Ensure Home page exists (auto-create if missing)
-    await _wiki_svc.ensure_home_page(db, project.id, user)
+    if user.is_anonymous and not await check_permission(user, project.id, Permission.VIEW_WIKI, db):
+        # Reaching the project is not enough: one opted in to issues alone
+        # refuses the wiki exactly as a project that does not exist does.
+        return refuse_anonymous_web(request)
+
+    # Create a missing Home page, but only for someone who may edit the wiki:
+    # a GET by a reader must never write.
+    if await check_permission(user, project.id, Permission.MANAGE_WIKI, db):
+        await _wiki_svc.ensure_home_page(db, project.id, user)
 
     return RedirectResponse(
         f"/projects/{project_key}/wiki/home/",
@@ -266,34 +288,52 @@ async def wiki_show(
     project_key: str,
     slug: str,
     request: Request,
+    reader: object | None = Depends(get_web_reader),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
-    """Render a wiki page with its content."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
+    """Render a wiki page with its content.
+
+    Reading one page is the whole of the wiki an anonymous visitor may reach:
+    not the page list, the history, a diff, an old version or the trash. Each
+    of those is a separate route and none of them uses ``get_web_reader``.
+    """
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+    anonymous = user.is_anonymous
+
+    from specivo.core.exceptions import AnonymousAccessDeniedError
 
     try:
-        project = await _project_svc.get_by_key(db, project_key)
+        project = await _project_svc.get_readable_by_key(db, project_key, user)
+    except AnonymousAccessDeniedError:
+        return refuse_anonymous_web(request)
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
-    await _project_svc.require_project_access(db, project, user)
 
-    if not await check_permission(user, project.id, "view_wiki", db, request=request):
+    if anonymous:
+        # One refusal for every reason: a project opted in to issues alone and
+        # a page that does not exist answer exactly as a missing project does,
+        # rather than with the 403/404 the signed-in path uses.
+        if not await check_permission(user, project.id, Permission.VIEW_WIKI, db):
+            return refuse_anonymous_web(request)
+    elif not await check_permission(user, project.id, "view_wiki", db, request=request):
         raise HTTPException(status_code=403, detail="Permission denied")
 
     try:
         page, content = await _wiki_svc.get_page(db, project.id, slug)
     except NotFoundError:
-        if slug == "home":
+        if anonymous:
+            return refuse_anonymous_web(request)
+        # Only an editor gets a missing Home page created; a reader's GET never writes.
+        if slug == "home" and await check_permission(user, project.id, Permission.MANAGE_WIKI, db):
             await _wiki_svc.ensure_home_page(db, project.id, user)
             page, content = await _wiki_svc.get_page(db, project.id, slug)
         else:
             raise HTTPException(status_code=404, detail="Wiki page not found")
 
     all_pages = await _wiki_svc.list_pages(db, project.id)
-    can_manage = await check_permission(user, project.id, "manage_wiki", db)
+    can_manage = False if anonymous else await check_permission(user, project.id, "manage_wiki", db)
 
     # Build tree structure for sidebar
     page_tree = _wiki_svc.build_page_tree(all_pages)
@@ -309,29 +349,44 @@ async def wiki_show(
     if page.id in page_tree:
         expanded_ids.add(page.id)
 
-    # Load attachments for the wiki page (serialized for Alpine.js)
-    raw_attachments = await _attachment_svc.list_for_container(db, "WikiPage", page.id)
-    attachments_json = [
-        {
-            "id": att.id,
-            "filename": att.filename,
-            "content_type": att.content_type or "application/octet-stream",
-            "filesize": att.filesize,
-            "author": {
-                "id": att.author_id,
-                "name": att.author.display_name or att.author.login,
-            },
-            "created_at": att.created_at.isoformat() if att.created_at else None,
-        }
-        for att in raw_attachments
-    ]
+    if anonymous:
+        # Attachments are outside the anonymous scope altogether — the API
+        # drops them from every response, and the endpoint that serves a file
+        # is not on either allowlist, so listing them would only produce names
+        # and links that refuse. The inline-image map goes with them.
+        attachments_json: list[dict] = []
+        attachment_map: dict = {}
+        # Tags are project vocabulary, which is not part of what a project
+        # opts in to.
+        wiki_tags: list[dict] = []
+        # An empty set means "link nothing": autolinking a KEY-123 token tells
+        # the reader that the issue exists, which for a private one is a
+        # disclosure the page must not make. The text itself is unchanged.
+        known_issue_refs: set[str] = set()
+    else:
+        # Load attachments for the wiki page (serialized for Alpine.js)
+        raw_attachments = await _attachment_svc.list_for_container(db, "WikiPage", page.id)
+        attachments_json = [
+            {
+                "id": att.id,
+                "filename": att.filename,
+                "content_type": att.content_type or "application/octet-stream",
+                "filesize": att.filesize,
+                "author": {
+                    "id": att.author_id,
+                    "name": att.author.display_name or att.author.login,
+                },
+                "created_at": att.created_at.isoformat() if att.created_at else None,
+            }
+            for att in raw_attachments
+        ]
 
-    # Project-wide filename → download URL map for inline image resolution
-    attachment_map = await _attachment_svc.build_project_attachment_map(db, project.id)
+        # Project-wide filename → download URL map for inline image resolution
+        attachment_map = await _attachment_svc.build_project_attachment_map(db, project.id)
 
-    wiki_tags = _wiki_tags_to_dicts(await _tag_svc.tags_for_wiki_page(db, page.id))
+        wiki_tags = _wiki_tags_to_dicts(await _tag_svc.tags_for_wiki_page(db, page.id))
 
-    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, content.text)
+        known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, content.text)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -339,6 +394,11 @@ async def wiki_show(
         "pages/wiki/show.html",
         context={
             "user": user,
+            "anonymous": anonymous,
+            "anon_can_view_issues": (
+                await check_permission(user, project.id, Permission.VIEW_ISSUES, db) if anonymous else False
+            ),
+            "anon_can_view_wiki": anonymous,
             "active_page": "wiki",
             "active_project": project,
             "project": project,

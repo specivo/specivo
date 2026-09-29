@@ -6,15 +6,22 @@ import re
 from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
+from specivo.core.rate_limit import enforce_rate_limit
+from specivo.core.security import (
+    ANONYMOUS_SEARCH_MAX_LIMIT,
+    ANONYMOUS_SEARCH_MAX_OFFSET,
+    ANONYMOUS_SEARCH_MODE,
+    ANONYMOUS_SEARCH_RATE_LIMIT,
+)
 from specivo.schemas.search import SearchFilters
 from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import SecurityAuditService
-from specivo.web.deps import get_current_user_optional, get_templates
+from specivo.web.deps import get_templates, get_web_reader, refuse_anonymous_web
 
 # Metadata filter slug charset and value length cap (defense against crafted input).
 _MF_SLUG_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
@@ -38,6 +45,8 @@ _audit_svc = SecurityAuditService()
 @router.get("/search/", response_class=HTMLResponse)
 async def search_page(
     request: Request,
+    response: Response,
+    reader: object | None = Depends(get_web_reader),  # noqa: B008
     db: AsyncSession = Depends(get_db),  # noqa: B008
     q: str = Query(""),
     mode: str = Query("hybrid"),
@@ -51,10 +60,25 @@ async def search_page(
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
     """Render the search page with results."""
-    user_obj = await get_current_user_optional(request, db)
-    if not user_obj:
-        return RedirectResponse("/login/", status_code=302)
-    user = cast("User", user_obj)
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+    anonymous = user.is_anonymous
+
+    if anonymous:
+        # Search is the expensive route, so it is metered in a bucket of its
+        # own rather than against the general anonymous read budget.
+        await enforce_rate_limit(request, response, "anon_search", *ANONYMOUS_SEARCH_RATE_LIMIT)
+        # The same bounds the JSON API enforces, reached by narrowing the
+        # request instead of refusing it. The API can refuse anything outside
+        # them because a client chooses what it sends; a browser arrives with
+        # whatever the form put in the URL, and this page's own default mode is
+        # hybrid — refusing that would turn the search page into a refusal for
+        # every anonymous visitor. Narrowing costs them a worse ranking, not
+        # the page, and the embedding model is never run.
+        mode = ANONYMOUS_SEARCH_MODE
+        limit = min(limit, ANONYMOUS_SEARCH_MAX_LIMIT)
+        offset = min(offset, ANONYMOUS_SEARCH_MAX_OFFSET)
 
     results: list = []
     total: int = 0
@@ -63,14 +87,25 @@ async def search_page(
     # Resolve project_key to project_id if provided
     project_id = None
     if project_key:
-        from specivo.core.exceptions import NotFoundError
+        from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError
 
-        try:
-            project = await _project_svc.get_by_key(db, project_key)
-            await _project_svc.require_project_access(db, project, user)
-            project_id = project.id
-        except NotFoundError:
-            pass  # Ignore invalid project key, search globally
+        if anonymous:
+            # Resolved through the reader's own project lookup, so a key naming
+            # no project and one naming a project this visitor may not read are
+            # refused identically. Falling back to a global search — what the
+            # signed-in path does — would answer the two differently, and the
+            # difference is the disclosure.
+            try:
+                project_id = (await _project_svc.get_readable_by_key(db, project_key, user)).id
+            except AnonymousAccessDeniedError:
+                return refuse_anonymous_web(request)
+        else:
+            try:
+                project = await _project_svc.get_by_key(db, project_key)
+                await _project_svc.require_project_access(db, project, user)
+                project_id = project.id
+            except NotFoundError:
+                pass  # Ignore invalid project key, search globally
 
     # Build an optional metadata containment filter from mf/mv/ma. Invalid or
     # incomplete pairs are ignored (treated as "no filter").
@@ -149,8 +184,12 @@ async def search_page(
             logging.getLogger(__name__).exception("Metadata filter failed for mf=%r mv=%r", mf_clean, mv_clean)
             results, total, type_counts = [], 0, {}
 
-    # Audit log the search/filter query
-    if q.strip() or active_filters is not None:
+    # Audit log the search/filter query. Never for an anonymous visitor: the
+    # log exists to attribute a search to somebody, a crawler would add a row
+    # per request under a single principal, and it is the only write on this
+    # path — which the read-only transaction the request runs in would refuse
+    # outright.
+    if not anonymous and (q.strip() or active_filters is not None):
         try:
             await _audit_svc.log_search_query(
                 session=db,
@@ -171,6 +210,7 @@ async def search_page(
         "pages/search.html",
         context={
             "user": user,
+            "anonymous": anonymous,
             "active_page": "search",
             "query": q,
             "mode": mode,

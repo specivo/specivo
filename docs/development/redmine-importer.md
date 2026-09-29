@@ -26,7 +26,7 @@ specivo/importers/
   load/
     registry.py         wires loaders onto phases — the one file that says what a full import consists of
     lookup_loader.py     statuses, trackers, priorities, activities, roles
-    user_loader.py        users, the import service account, group membership
+    user_loader.py        users, the import service account, user groups
     project_loader.py     projects, versions, categories, memberships, custom-field schemas
     issue_loader.py        issues, journals, relations, watchers, custom-field reference resolution
     wiki_loader.py          wiki pages, revisions, watchers, redirects
@@ -112,10 +112,10 @@ not register the wiki phases.
 |---|---|---|
 | 1 | `BOOTSTRAP` | Creates the service account that owns rows with no resolvable author. Everything after this can rely on it existing. |
 | 2 | `LOOKUPS` | Statuses, trackers, priorities, activities, roles — instance-wide, and every project and issue points at them. |
-| 3 | `USERS` | Users, then group membership (recorded, not yet applied — Specivo cannot hold roles on a group). |
+| 3 | `USERS` | Users, then the groups they belong to — in that order, since a group can only hold members the run has created. |
 | 4 | `PROJECTS` | Parents before children (the adapter guarantees the order); resolves `--project` scope. |
 | 5 | `PROJECT_LOOKUPS` | Versions and categories, which belong to a project that now exists. |
-| 6 | `MEMBERSHIPS` | Needs both users (3) and projects (5); flattens group grants into per-user ones here. |
+| 6 | `MEMBERSHIPS` | Needs users and groups (3) and projects (5); a group's grant is one membership row held by the group. |
 | 7 | `CUSTOM_FIELD_SCHEMAS` | Needs trackers (2) and projects (4) to scope a schema to. |
 | 8 | `ISSUES` | Needs trackers, statuses, priorities, categories, versions, and other issues (for parents) — the latest possible point before journals need issues to exist. |
 | 9 | `WATCHERS` | Issue watchers — needs issues (8) and users (3). |
@@ -210,6 +210,7 @@ relying on it in code — this table is a summary, not the source of truth.
 | `issue_relations.relation_type` (9 spellings) | `issue_relations.relation_type` (5 canonical) | `relates`, `duplicates`, `blocks`, `precedes`, `copied_to` are kept as-is; `duplicated`, `blocked`, `follows`, `copied_from` become their canonical form with `issue_from`/`issue_to` swapped. An unrecognized type is dropped and counted, not stored as something that would mean the wrong thing. |
 | `custom_fields.field_format` | JSON Schema fragment | `list`/`enumeration` -> string (with `enum` if choices are known); `user`/`version` -> integer (a Specivo id, resolved after import); `int`/`float`/`bool`/`date`/`link`/`text`/`string` -> the obvious JSON Schema type; anything unrecognized -> string, which stores the value faithfully even when its shape is not understood. `multiple` wraps the result in an array. `min_length`/`max_length` become `minLength`/`maxLength` on string-shaped formats. |
 | `projects.identifier` | `projects.key` | Redmine has no per-project prefix; Specivo's is derived from the identifier (uppercased, non-alphanumerics stripped, forced to start with a letter, suffixed on collision) unless `--project-key-map` supplies one. Every derived key is reported — this is the mapping operators most often want to correct. |
+| `users` rows of type `Group` | `user_groups` + `user_group_members` | Imported as a group, not expanded onto its members; the roles it held on a project become one `members` row with `group_id` set. `user_groups` is unique on `LOWER(name)` and Redmine is not, so a taken name is suffixed (`Platform Team-2`) and reported. A group is never merged onto one the target already has — that would grant the people already in it access nobody asked to give them. |
 | `wiki_content_versions.data` + `.compression` | `wiki_contents.text` | Bytes, gzip-decompressed when `compression == "gzip"`, decoded UTF-8 with `errors="replace"` — a garbled revision is kept rather than losing the page's history over one bad byte. |
 | `versions.status` | `versions.status`, applied late | Created `open` regardless of the source's recorded status (Specivo refuses an issue on a locked/closed version, and the source is full of issues sitting on exactly those); the real status is set in `ISSUE_REF_REWRITE` once every issue that might target the version exists. |
 | Redmine module names | `projects.modules` | Only `issue_tracking`, `wiki` and `time_tracking` have a Specivo equivalent (`MODULE_MAP` in `extract.py`); everything else (repository, boards, news, documents, calendar, gantt) is dropped and counted per project. |
@@ -220,10 +221,13 @@ relying on it in code — this table is a summary, not the source of truth.
 - **Passwords.** Redmine hashes with salted SHA1; Specivo uses bcrypt. Nothing
   is portable, so every imported account gets a random unusable hash and its
   login is listed in the report.
-- **Groups, as groups.** Specivo cannot hold a project role on a group, so a
-  group's grant is expanded into an identical grant for each of its current
-  members. Access matches the source exactly; the fact that it came from a
-  group does not survive.
+- **Redmine's inherited membership rows.** Redmine materialises a group
+  member's derived grant as a `member_roles` row with `inherited_from` set,
+  because that is how it answers "what can this person do here". Specivo
+  unions a user's own roles with those of the groups they belong to at read
+  time, so importing those rows would leave behind a duplicate grant that
+  outlives the person leaving the group. The group itself, its members, and
+  the grants it holds do come across.
 - **Role permissions.** Redmine's permission vocabulary is serialized Ruby
   YAML naming Redmine's own permission set, which does not correspond to
   Specivo's one to one. Translating it would silently widen or narrow access,

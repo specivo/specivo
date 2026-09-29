@@ -3,28 +3,125 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
+from typing import Literal
 
-from sqlalchemy import delete, func, or_, select
+from fastapi import Request
+from sqlalchemy import and_, delete, false, func, or_, select, text, union
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
-from specivo.core.exceptions import AppError, ConflictError, NotFoundError
+from specivo.core.exceptions import AnonymousAccessDeniedError, AppError, ConflictError, NotFoundError, ValidationError
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
-from specivo.models.role import Role
+from specivo.models.project import PROJECT_STATUS_ACTIVE, EnabledModule, Project, ProjectKeyAlias
+from specivo.models.role import Role, RoleBuiltin
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
+from specivo.services.anonymous_user_service import refuse_anonymous_user
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
+from specivo.services.permission_service import anonymous_role, member_principal_clause
 
 logger = logging.getLogger(__name__)
 
 # Default modules enabled for every new project
 _DEFAULT_MODULES = ("issue_tracking", "wiki", "time_tracking")
+
+PrincipalKind = Literal["user", "group"]
+
+
+@dataclass(frozen=True, slots=True)
+class Principal:
+    """The holder of one ``members`` row: a user or a user group, never both.
+
+    ``members`` allows exactly one of ``user_id`` / ``group_id`` to be set
+    (``ck_members_one_principal``).  Passing the pair around as two optional
+    arguments makes the invalid combinations — both set, neither set —
+    representable at every call site, and each site has to be trusted to
+    check.  This type makes them unrepresentable instead: the only ways in
+    are :meth:`user`, :meth:`group`, :meth:`of` and :meth:`parse`, so
+    "exactly one" is established once, at construction, and everything
+    downstream can simply use it.
+
+    The fields are deliberately not named ``user_id``/``group_id``: a
+    ``Principal`` is a kind plus an id, and the properties of those names are
+    provided for building queries and payloads.
+    """
+
+    kind: PrincipalKind
+    id: int
+
+    @classmethod
+    def user(cls, user_id: int) -> Principal:
+        """A principal holding a membership as a user."""
+        return cls("user", user_id)
+
+    @classmethod
+    def group(cls, group_id: int) -> Principal:
+        """A principal holding a membership as a user group."""
+        return cls("group", group_id)
+
+    @classmethod
+    def of(cls, *, user_id: int | None = None, group_id: int | None = None) -> Principal:
+        """Build a principal from an optional user id and an optional group id.
+
+        Exactly one must be given.  This is the boundary where request
+        payloads that name both, or neither, are rejected with a readable
+        :class:`ValidationError` rather than reaching the database and
+        failing the CHECK constraint.
+        """
+        if (user_id is None) == (group_id is None):
+            raise ValidationError("Exactly one of user_id or group_id must be given", field="user_id")
+        return cls.user(user_id) if user_id is not None else cls.group(group_id)  # type: ignore[arg-type]
+
+    @classmethod
+    def parse(cls, kind: str, principal_id: int) -> Principal:
+        """Build a principal from a URL path segment naming its kind."""
+        if kind not in ("user", "group"):
+            raise ValidationError(
+                f"principal_type must be 'user' or 'group', got '{kind}'",
+                field="principal_type",
+            )
+        return cls(kind, principal_id)  # type: ignore[arg-type]
+
+    @property
+    def is_user(self) -> bool:
+        return self.kind == "user"
+
+    @property
+    def user_id(self) -> int | None:
+        """The user id, or ``None`` for a group principal."""
+        return self.id if self.kind == "user" else None
+
+    @property
+    def group_id(self) -> int | None:
+        """The group id, or ``None`` for a user principal."""
+        return self.id if self.kind == "group" else None
+
+    @property
+    def label(self) -> str:
+        """How to name this principal in an error message."""
+        return f"User {self.id}" if self.kind == "user" else f"Group {self.id}"
+
+    def member_row_clause(self) -> ColumnElement[bool]:
+        """Match the one ``members`` row this principal holds, if any.
+
+        Deliberately narrow, and deliberately not
+        ``permission_service.member_principal_clause``: that one answers "does
+        this row grant the user access", folding in the groups they belong to.
+        This one addresses a row *to edit it*, so a user must never match a
+        group's row and a group must never match a user's — otherwise removing
+        a user could delete a group's grant, or the reverse.
+        """
+        if self.kind == "user":
+            return Member.user_id == self.id
+        return Member.group_id == self.id
 
 
 class ProjectService:
@@ -160,13 +257,28 @@ class ProjectService:
         return project
 
     async def require_project_access(self, session: AsyncSession, project: Project, user: User) -> None:
-        """Raise NotFoundError if non-admin user cannot access this project.
+        """Raise unless *user* may reach *project* at all.
 
-        Public projects: accessible to all authenticated users.
-        Private projects: accessible only to members.
-        Returns 404 (not 403) to prevent project key enumeration.
+        - Admins reach every project.
+        - The anonymous user reaches a project only while its anonymous role
+          applies there (``permission_service.anonymous_role``): the instance
+          switch is on, the project is public and active, and it is opted in
+          to at least one permission. Otherwise ``AnonymousAccessDeniedError``,
+          raised identically for a private, not opted-in or archived project
+          and for a switched-off instance.
+        - Signed-in users reach every public project.
+        - A private project is reached through membership, held by the user or
+          by a user group they belong to. Anyone else gets ``NotFoundError``
+          (404, not 403) so project keys cannot be enumerated.
+
+        Reaching a project grants nothing by itself: what can be read there is
+        decided by ``check_permission`` and issue visibility.
         """
         if user.is_admin:
+            return
+        if user.is_anonymous:
+            if await anonymous_role(session, project) is None:
+                raise AnonymousAccessDeniedError()
             return
         if project.is_public:
             return
@@ -174,13 +286,38 @@ class ProjectService:
             select(Member.id)
             .where(
                 Member.project_id == project.id,
-                Member.user_id == user.id,
+                member_principal_clause(user.id),
             )
             .limit(1)
         )
         result = await session.execute(stmt)
         if result.scalar_one_or_none() is None:
             raise NotFoundError(f"Project '{project.key}' not found")
+
+    async def get_readable_by_key(self, session: AsyncSession, key: str, user: User) -> Project:
+        """Resolve a project *user* may reach, refusing anonymous visitors uniformly.
+
+        The pair of :meth:`get_by_key` and :meth:`require_project_access` that
+        every reader-facing route needs, with the gap between them closed. On
+        its own ``get_by_key`` raises ``NotFoundError`` for a key that names no
+        project, and that answer arrives *before* ``require_project_access``
+        ever refuses anything — so an anonymous visitor comparing responses
+        could tell a project that does not exist from one that does but is
+        private, archived or not opted in. Here all four are the same
+        ``AnonymousAccessDeniedError``.
+
+        Signed-in users are unaffected and keep the ADR-0004 rule: 404 for a
+        project that does not exist, and 404 for a private one they hold no
+        membership on.
+        """
+        try:
+            project = await self.get_by_key(session, key)
+        except NotFoundError:
+            if user.is_anonymous:
+                raise AnonymousAccessDeniedError() from None
+            raise
+        await self.require_project_access(session, project, user)
+        return project
 
     async def get_parent_key(self, session: AsyncSession, project: Project) -> str | None:
         """Resolve the parent project's key, or None for root projects."""
@@ -197,25 +334,44 @@ class ProjectService:
         offset: int = 0,
         limit: int = 50,
     ) -> tuple[list[Project], int]:
-        """List projects visible to the user.
-
-        Admins see all projects.  Regular users see:
-        - All public projects.
-        - Private projects they are a member of.
-        """
-        if user.is_admin:
-            count_stmt = select(func.count()).select_from(Project)
-            stmt = select(Project).order_by(Project.name).offset(offset).limit(limit)
-        else:
-            # Subquery: project IDs the user is a member of
-            member_projects = select(Member.project_id).where(Member.user_id == user.id).scalar_subquery()
-            base = Project.is_public.is_(True) | Project.id.in_(member_projects)
-            count_stmt = select(func.count()).select_from(Project).where(base)
-            stmt = select(Project).where(base).order_by(Project.name).offset(offset).limit(limit)
+        """List the projects ``require_project_access`` admits for *user*."""
+        count_stmt = select(func.count()).select_from(Project)
+        stmt = select(Project).order_by(Project.name).offset(offset).limit(limit)
+        accessible = await self.accessible_projects_clause(session, user)
+        if accessible is not None:
+            count_stmt = count_stmt.where(accessible)
+            stmt = stmt.where(accessible)
 
         total = (await session.execute(count_stmt)).scalar_one()
         projects = (await session.execute(stmt)).scalars().all()
         return list(projects), total
+
+    async def accessible_projects_clause(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """Return a predicate over ``projects`` matching exactly what ``require_project_access`` admits.
+
+        None for admins, who reach every project. The anonymous user matches
+        public, active projects opted in to anonymous reading, and nothing
+        while the instance switch is off. Signed-in users match public
+        projects and projects they hold a membership on, directly or through
+        a user group.
+        """
+        if user.is_admin:
+            return None
+        if user.is_anonymous:
+            from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+
+            if not await is_anonymous_access_enabled(session):
+                return false()
+            # A non-empty list is always within the ceiling
+            # (ck_projects_anonymous_permissions_allowed); the predicate
+            # matches ix_projects_anonymous_readable.
+            return and_(
+                Project.is_public.is_(True),
+                Project.status == PROJECT_STATUS_ACTIVE,
+                Project.anonymous_permissions.op("<>")(text("'[]'::jsonb")),
+            )
+        member_projects = select(Member.project_id).where(member_principal_clause(user.id)).scalar_subquery()
+        return or_(Project.is_public.is_(True), Project.id.in_(member_projects))
 
     async def list_all_admin(self, session: AsyncSession, user: User) -> list[Project]:
         """List all projects (including archived). Admin use only."""
@@ -229,8 +385,14 @@ class ProjectService:
         session: AsyncSession,
         project: Project,
         data: ProjectUpdate,
+        actor: User | None = None,
+        request: Request | None = None,
     ) -> Project:
         """Apply partial update to an existing project.
+
+        Making the project private also clears its anonymous permissions in
+        the same transaction; *actor* and *request* are recorded in that audit
+        entry.
 
         When ``parent_id`` is present in the request payload (detected via
         ``model_fields_set``), the project is reparented.  A value of ``None``
@@ -241,6 +403,12 @@ class ProjectService:
         if data.description is not None:
             project.description = data.description
         if data.is_public is not None:
+            if not data.is_public:
+                # A private project cannot stay open to anonymous visitors
+                # (ck_projects_anonymous_permissions_public).
+                from specivo.services.anonymous_access_service import clear_anonymous_permissions_for_private
+
+                await clear_anonymous_permissions_for_private(session, project, actor, request=request)
             project.is_public = data.is_public
         if data.status is not None:
             project.status = data.status
@@ -436,42 +604,74 @@ class ProjectService:
     # Membership
     # -----------------------------------------------------------------------
 
+    async def _require_principal_exists(self, session: AsyncSession, principal: Principal) -> None:
+        """Raise :class:`NotFoundError` if the user or group does not exist."""
+        if principal.is_user:
+            user = (await session.execute(select(User).where(User.id == principal.id))).scalar_one_or_none()
+            if user is None:
+                raise NotFoundError(f"User {principal.id} not found")
+            refuse_anonymous_user(user, "The anonymous user cannot be a project member.")
+        else:
+            found = (
+                await session.execute(select(UserGroup.id).where(UserGroup.id == principal.id))
+            ).scalar_one_or_none()
+            if found is None:
+                raise NotFoundError(f"User group {principal.id} not found")
+
+    async def _require_roles_exist(self, session: AsyncSession, role_ids: list[int]) -> None:
+        """Raise unless every id names a role a membership may hold.
+
+        :class:`NotFoundError` names ids that do not exist;
+        :class:`ValidationError` names builtin roles, which apply to users
+        without a membership and are never assigned (the database refuses
+        them too, through ``trg_reject_builtin_role_membership``).
+        """
+        result = await session.execute(select(Role.id, Role.builtin).where(Role.id.in_(role_ids)))
+        builtin_by_id = {row.id: row.builtin for row in result}
+        missing = set(role_ids) - set(builtin_by_id)
+        if missing:
+            raise NotFoundError(f"Roles not found: {sorted(missing)}")
+        builtin = sorted(role_id for role_id, kind in builtin_by_id.items() if kind != RoleBuiltin.CUSTOM)
+        if builtin:
+            raise ValidationError(f"Builtin roles cannot be assigned to a membership: {builtin}", field="role_ids")
+
+    async def _find_member_row(
+        self,
+        session: AsyncSession,
+        project: Project,
+        principal: Principal,
+    ) -> Member | None:
+        """Return the membership row *principal* holds on *project*, if any."""
+        result = await session.execute(
+            select(Member).where(
+                principal.member_row_clause(),
+                Member.project_id == project.id,
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def add_member(
         self,
         session: AsyncSession,
         project: Project,
-        user_id: int,
+        principal: Principal,
         role_ids: list[int],
     ) -> Member:
-        """Add a user as a project member with the specified roles.
+        """Add a principal — a user or a user group — to *project* with roles.
 
-        If the user is already a member, adds the new roles to the existing
-        member record (skipping duplicates).
+        If the principal is already a member, the new roles are added to the
+        existing membership row, skipping ones it already holds.
         """
-        # Verify user exists
-        user_result = await session.execute(select(User).where(User.id == user_id))
-        user = user_result.scalar_one_or_none()
-        if user is None:
-            raise NotFoundError(f"User {user_id} not found")
+        await self._require_principal_exists(session, principal)
+        await self._require_roles_exist(session, role_ids)
 
-        # Verify all roles exist
-        roles_result = await session.execute(select(Role).where(Role.id.in_(role_ids)))
-        roles = roles_result.scalars().all()
-        if len(roles) != len(role_ids):
-            found_ids = {r.id for r in roles}
-            missing = set(role_ids) - found_ids
-            raise NotFoundError(f"Roles not found: {sorted(missing)}")
-
-        # Upsert member record
-        existing_result = await session.execute(
-            select(Member).where(
-                Member.user_id == user_id,
-                Member.project_id == project.id,
-            )
-        )
-        member = existing_result.scalar_one_or_none()
+        member = await self._find_member_row(session, project, principal)
         if member is None:
-            member = Member(user_id=user_id, project_id=project.id)
+            member = Member(
+                user_id=principal.user_id,
+                group_id=principal.group_id,
+                project_id=project.id,
+            )
             session.add(member)
             await session.flush()
 
@@ -490,28 +690,15 @@ class ProjectService:
         self,
         session: AsyncSession,
         project: Project,
-        user_id: int,
+        principal: Principal,
         role_ids: list[int],
     ) -> Member:
-        """Replace all roles for a project member with the given role_ids."""
-        # Verify member exists
-        result = await session.execute(
-            select(Member).where(
-                Member.user_id == user_id,
-                Member.project_id == project.id,
-            )
-        )
-        member = result.scalar_one_or_none()
+        """Replace all roles held by *principal* on *project* with *role_ids*."""
+        member = await self._find_member_row(session, project, principal)
         if member is None:
-            raise NotFoundError(f"User {user_id} is not a member of project '{project.key}'")
+            raise NotFoundError(f"{principal.label} is not a member of project '{project.key}'")
 
-        # Verify all roles exist
-        roles_result = await session.execute(select(Role).where(Role.id.in_(role_ids)))
-        roles = roles_result.scalars().all()
-        if len(roles) != len(role_ids):
-            found_ids = {r.id for r in roles}
-            missing = set(role_ids) - found_ids
-            raise NotFoundError(f"Roles not found: {sorted(missing)}")
+        await self._require_roles_exist(session, role_ids)
 
         # Delete existing roles and replace
         await session.execute(delete(MemberRole).where(MemberRole.member_id == member.id))
@@ -525,26 +712,56 @@ class ProjectService:
         self,
         session: AsyncSession,
         project: Project,
-        user_id: int,
+        principal: Principal,
     ) -> None:
-        """Remove a user from a project (deletes member + member_roles via CASCADE)."""
-        result = await session.execute(
-            select(Member).where(
-                Member.user_id == user_id,
-                Member.project_id == project.id,
-            )
-        )
-        member = result.scalar_one_or_none()
+        """Remove *principal* from *project* (member_roles go via CASCADE)."""
+        member = await self._find_member_row(session, project, principal)
         if member is None:
-            raise NotFoundError(f"User {user_id} is not a member of project '{project.key}'")
+            raise NotFoundError(f"{principal.label} is not a member of project '{project.key}'")
 
         await session.delete(member)
         await session.flush()
 
-    async def count_members(self, session: AsyncSession, project: Project) -> int:
-        """Return the total number of members in a project."""
+    async def count_membership_rows(self, session: AsyncSession, project: Project) -> int:
+        """Return the number of membership rows on a project — its access grants.
+
+        One row is one grant of a role set to one principal, so a group counts
+        as one however many users it holds.  This is the number the project
+        settings members tab reports, because that tab lists the rows
+        themselves and each row is separately editable and removable.
+
+        For a count of the *humans* those rows reach, which is what every
+        people-shaped surface wants, use :meth:`count_people_with_access`.
+        The two numbers differ as soon as a group is used, and they are
+        deliberately named apart so no screen can show one while meaning the
+        other.
+        """
         result = await session.execute(select(func.count()).select_from(Member).where(Member.project_id == project.id))
         return result.scalar_one()
+
+    async def count_people_with_access(self, session: AsyncSession, project: Project) -> int:
+        """Return the number of distinct users the project's memberships reach.
+
+        A user is counted once whether they hold a membership directly, belong
+        to a group that holds one, or both — the ``UNION`` deduplicates.  This
+        is the number shown wherever the UI says "people": the project cards,
+        the admin projects table and the project overview.  Counting rows
+        there would report a project whose access is entirely group-held as
+        having one or two members when it in fact reaches a whole team.
+
+        The counterpart is :meth:`count_membership_rows`.
+        """
+        direct = select(Member.user_id.label("user_id")).where(
+            Member.project_id == project.id,
+            Member.user_id.is_not(None),
+        )
+        via_group = (
+            select(UserGroupMember.user_id.label("user_id"))
+            .join(Member, Member.group_id == UserGroupMember.group_id)
+            .where(Member.project_id == project.id)
+        )
+        stmt = select(func.count()).select_from(union(direct, via_group).subquery())
+        return (await session.execute(stmt)).scalar_one()
 
     async def list_members(
         self,
@@ -552,10 +769,22 @@ class ProjectService:
         project: Project,
         limit: int | None = None,
     ) -> list[dict]:
-        """Return project members with their roles.
+        """Return the **user-held** membership rows of a project, with their roles.
 
         Returns a list of dicts sorted by last login (most recent first).
         Pass ``limit`` to cap the number of results (useful for overview cards).
+
+        Group-held rows are skipped, and that is this method's job rather than
+        a gap in it.  Nearly every caller is an assignee or user picker — the
+        issue, sprint, time and recurring-task screens, and the MCP
+        ``list_members`` tool — and they need people to assign work to, which
+        a group is not.  So this stays the user-only membership list and can
+        be relied on to be one.  Group-held rows have their own shape and are
+        returned by :meth:`list_group_memberships`; the callers that want both
+        kinds (the members API endpoint) ask for both and concatenate.
+
+        Each row carries ``principal_type == "user"`` so a row remains
+        self-describing once the two lists are mixed.
         """
         stmt = (
             select(Member)
@@ -575,11 +804,13 @@ class ProjectService:
         for member in members:
             user = member.user
             if user is None:
+                # Group-held membership row — see the docstring.
                 continue
             role_names = [mr.role.name for mr in member.member_roles if mr.role is not None]
             role_ids = [mr.role.id for mr in member.member_roles if mr.role is not None]
             out.append(
                 {
+                    "principal_type": "user",
                     "user_id": user.id,
                     "login": user.login,
                     "display_name": user.display_name,
@@ -598,6 +829,49 @@ class ProjectService:
         if limit is not None:
             out = out[:limit]
         return out
+
+    async def list_group_memberships(
+        self,
+        session: AsyncSession,
+        project: Project,
+    ) -> list[dict]:
+        """Return the **group-held** membership rows of a project, with their roles.
+
+        The counterpart to :meth:`list_members`, which covers the user-held
+        rows.  A group has no login, display name or last-login date, so its
+        row is shaped around what a group does have: its id, its name, and how
+        many users the grant reaches.  Rows are ordered by name, since there
+        is no "last active" to sort them by, and carry
+        ``principal_type == "group"`` so they stay identifiable when the two
+        lists are concatenated.
+        """
+        user_count = (
+            select(func.count())
+            .select_from(UserGroupMember)
+            .where(UserGroupMember.group_id == UserGroup.id)
+            .correlate(UserGroup)
+            .scalar_subquery()
+        )
+        stmt = (
+            select(Member, UserGroup, user_count)
+            .join(UserGroup, UserGroup.id == Member.group_id)
+            .where(Member.project_id == project.id)
+            .options(selectinload(Member.member_roles).joinedload(MemberRole.role))
+            .order_by(func.lower(UserGroup.name))
+        )
+        rows = (await session.execute(stmt)).all()
+
+        return [
+            {
+                "principal_type": "group",
+                "group_id": group.id,
+                "name": group.name,
+                "user_count": users,
+                "roles": [mr.role.name for mr in member.member_roles if mr.role is not None],
+                "role_ids": [mr.role.id for mr in member.member_roles if mr.role is not None],
+            }
+            for member, group, users in rows
+        ]
 
     # -----------------------------------------------------------------------
     # Modules
@@ -673,16 +947,26 @@ class ProjectService:
 
         Returns a dict keyed by project_id with:
         - open_count, closed_count (issue stats)
-        - member_count
+        - member_count — distinct **people** with access, direct or via a group
+        - group_count — how many of the memberships are held by a group
         - wiki_page_count
         - modules (dict of module_name -> bool)
         - members (list of dicts with user_id, display_name, avatar_url)
+
+        ``member_count`` and ``members`` describe humans, not membership rows,
+        because this feeds the avatar strips on project cards and the admin
+        projects table — surfaces that show faces, which a group does not
+        have.  ``group_count`` is carried alongside so those screens can say
+        how many of the people arrive through a group rather than pretending
+        every grant is direct.  The row count is a different number with its
+        own method, :meth:`count_membership_rows`.
         """
         stats: dict[int, dict] = {
             pid: {
                 "open_count": 0,
                 "closed_count": 0,
                 "member_count": 0,
+                "group_count": 0,
                 "wiki_page_count": 0,
                 "modules": {m: False for m in sorted(KNOWN_MODULES)},
                 "members": [],
@@ -711,8 +995,14 @@ class ProjectService:
             stats[row.project_id]["open_count"] = total - done
             stats[row.project_id]["closed_count"] = done
 
-        # --- Member counts + member details (first 6 per project) ---
-        member_stmt = (
+        # --- People with access + their avatars (first 6 per project) ---
+        # Two queries rather than one UNION: the direct rows keep their
+        # existing ``Member.id`` ordering so the avatar strip does not
+        # reshuffle for projects that use no groups, and the group-reached
+        # users are appended after them.  Duplicates — someone who is both a
+        # direct member and in a member group — collapse in the merge below,
+        # so the count is of distinct people either way.
+        direct_stmt = (
             select(
                 Member.project_id,
                 User.id.label("user_id"),
@@ -724,21 +1014,49 @@ class ProjectService:
             .where(Member.project_id.in_(project_ids))
             .order_by(Member.project_id, Member.id)
         )
-        member_rows = (await session.execute(member_stmt)).all()
-        members_by_project: dict[int, list[dict]] = {}
-        for row in member_rows:
-            prefs = row.preferences or {}
-            members_by_project.setdefault(row.project_id, []).append(
-                {
-                    "user_id": row.user_id,
-                    "display_name": row.display_name,
-                    "avatar_url": row.avatar_url,
-                    "avatar_color": prefs.get("avatar_color", ""),
-                }
+        via_group_stmt = (
+            select(
+                Member.project_id,
+                User.id.label("user_id"),
+                User.display_name,
+                User.avatar_url,
+                User.preferences,
             )
+            .join(UserGroupMember, UserGroupMember.group_id == Member.group_id)
+            .join(User, User.id == UserGroupMember.user_id)
+            .where(Member.project_id.in_(project_ids))
+            .order_by(Member.project_id, User.id)
+        )
+
+        members_by_project: dict[int, list[dict]] = {}
+        seen_by_project: dict[int, set[int]] = {}
+        for stmt in (direct_stmt, via_group_stmt):
+            for row in (await session.execute(stmt)).all():
+                seen = seen_by_project.setdefault(row.project_id, set())
+                if row.user_id in seen:
+                    continue
+                seen.add(row.user_id)
+                prefs = row.preferences or {}
+                members_by_project.setdefault(row.project_id, []).append(
+                    {
+                        "user_id": row.user_id,
+                        "display_name": row.display_name,
+                        "avatar_url": row.avatar_url,
+                        "avatar_color": prefs.get("avatar_color", ""),
+                    }
+                )
         for pid, members in members_by_project.items():
             stats[pid]["member_count"] = len(members)
             stats[pid]["members"] = members[:6]  # first 6 for avatars
+
+        # --- Group-held membership rows per project ---
+        group_stmt = (
+            select(Member.project_id, func.count().label("group_count"))
+            .where(Member.project_id.in_(project_ids), Member.group_id.is_not(None))
+            .group_by(Member.project_id)
+        )
+        for group_row in (await session.execute(group_stmt)).all():
+            stats[group_row.project_id]["group_count"] = group_row.group_count
 
         # --- Wiki page counts ---
         wiki_stmt = (

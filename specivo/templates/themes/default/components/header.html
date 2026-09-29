@@ -52,6 +52,9 @@
     {% endif %}
     {% endif %}
 
+    {# Notifications belong to an account, so they are absent for a visitor
+       without one — as is every link into the signed-in-only area below. #}
+    {% if not anonymous %}
     <div class="dropdown">
       <div class="header-icon-btn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
@@ -82,8 +85,16 @@
         </div>
       </div>
     </div>
+    {% endif %}
 
-    {% if user is defined and user %}
+    {% if anonymous %}
+    <a class="sp-btn sp-btn-primary sp-anon-signin" href="{{ sign_in_url() }}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+      <span class="sp-anon-signin-label">{% trans %}Sign in{% endtrans %}</span>
+    </a>
+    {% endif %}
+
+    {% if user is defined and user and not anonymous %}
     <div class="dropdown">
       <div class="header-user" data-bs-toggle="dropdown" aria-expanded="false" style="cursor:pointer">
         <div class="header-user-avatar"{% if user.avatar_url %} style="background-image:url('{{ user.avatar_url }}');background-size:cover;background-position:center;color:transparent;"{% elif user.preferences.avatar_color|default('') %} style="background:{{ user.preferences.avatar_color }}"{% endif %}>{{ user.login[:2] | upper if user.login else '?' }}</div>

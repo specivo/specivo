@@ -3,12 +3,14 @@
 Covers:
 - Admin can delete any relation
 - Member can delete a relation in their own project
-- Non-member cannot delete a relation in a private project (403)
-- User can delete a relation when one project is public (even without membership in the other)
+- Non-member of both private projects gets 404 when deleting (neither issue is visible)
+- A relation from a public issue to a hidden private-project issue answers 404
 - Deleting a nonexistent relation returns 404
 - Unauthenticated delete returns 401
 - Create relation requires access to both issues (returns 404 for hidden issue)
 - Member can create a relation between accessible issues (returns 201)
+- Create relation requires manage_issue_relations on the source issue's project (returns 403
+  for a signed-in non-member of a public project and for a role with edit_issues only)
 - Unauthenticated create returns 401
 """
 
@@ -19,11 +21,14 @@ import uuid
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.models.journal import Journal
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
+from specivo.models.relation import IssueRelation
 from specivo.models.role import Role
 from specivo.models.user import User
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
@@ -84,6 +89,19 @@ async def _delete_relation(client: AsyncClient, token: str | None, relation_id: 
     headers = {"Authorization": f"Bearer {token}"} if token else {}
     resp = await client.delete(f"/api/v1/relations/{relation_id}/", headers=headers)
     return resp.status_code
+
+
+async def _relation_and_journal_counts(db_session: AsyncSession, *issue_ids: int) -> tuple[int, int]:
+    """Count relations touching, and journal entries on, the given issues."""
+    relations = await db_session.execute(
+        select(func.count())
+        .select_from(IssueRelation)
+        .where(IssueRelation.issue_from_id.in_(issue_ids) | IssueRelation.issue_to_id.in_(issue_ids))
+    )
+    journals = await db_session.execute(
+        select(func.count()).select_from(Journal).where(Journal.issue_id.in_(issue_ids))
+    )
+    return relations.scalar_one(), journals.scalar_one()
 
 
 async def _grant_membership(db_session: AsyncSession, project: Project, user: User, role: Role) -> None:
@@ -164,7 +182,7 @@ async def dev_role(db_session: AsyncSession) -> Role:
         position=3,
         assignable=True,
         builtin=0,
-        permissions=["view_issues", "add_issues", "edit_issues"],
+        permissions=["view_issues", "add_issues", "edit_issues", "manage_issue_relations"],
         issues_visibility="default",
         settings={},
     )
@@ -277,7 +295,7 @@ async def test_non_member_cannot_delete_relation_in_private_project(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Non-member of both private projects gets 403 when deleting a relation."""
+    """Non-member of both private projects gets 404: neither linked issue is visible."""
     issue_a = await _create_issue(
         client, admin_token, private_project_a.key, tracker.id, open_status.id, priority.id, "NM del A"
     )
@@ -291,11 +309,11 @@ async def test_non_member_cannot_delete_relation_in_private_project(
 
     # Regular user has no membership in either project
     delete_sc = await _delete_relation(client, regular_token, relation_id)
-    assert delete_sc == 403
+    assert delete_sc == 404
 
 
 @pytest.mark.integration
-async def test_user_can_delete_relation_if_one_project_is_public(
+async def test_user_cannot_delete_relation_to_hidden_issue_via_public_project(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_token: str,
@@ -306,10 +324,10 @@ async def test_user_can_delete_relation_if_one_project_is_public(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """User without edit_issues permission cannot delete even if one project is public.
+    """Seeing the public side is not enough: the private-project issue stays hidden (404).
 
-    Public project visibility alone does not grant write permissions — the user
-    needs an explicit role with edit_issues to delete relations.
+    Deleting a relation requires seeing both linked issues, so the response is
+    the same as for a relation that does not exist.
     """
     issue_pub = await _create_issue(
         client, admin_token, public_project.key, tracker.id, open_status.id, priority.id, "Pub issue"
@@ -322,9 +340,9 @@ async def test_user_can_delete_relation_if_one_project_is_public(
     assert sc == 201, rel
     relation_id = rel["id"]
 
-    # Regular user has no edit_issues role on either project — should be denied
+    # Regular user cannot see the private-project issue — answered as not found
     delete_sc = await _delete_relation(client, regular_token, relation_id)
-    assert delete_sc == 403
+    assert delete_sc == 404
 
 
 @pytest.mark.integration
@@ -469,3 +487,154 @@ async def test_create_relation_requires_auth(
         json={"issue_to_key": issue_b["key"], "relation_type": "relates"},
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.integration
+async def test_non_member_of_public_project_cannot_create_relation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    regular_token: str,
+    public_project: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """Seeing two public issues is not enough: a non-member gets 403 and nothing is written."""
+    issue_a = await _create_issue(
+        client, admin_token, public_project.key, tracker.id, open_status.id, priority.id, "Public create A"
+    )
+    issue_b = await _create_issue(
+        client, admin_token, public_project.key, tracker.id, open_status.id, priority.id, "Public create B"
+    )
+    resp = await client.get(f"/api/v1/issues/{issue_a['key']}/", headers={"Authorization": f"Bearer {regular_token}"})
+    assert resp.status_code == 200, "precondition: the non-member can read the public issue"
+    before = await _relation_and_journal_counts(db_session, issue_a["id"], issue_b["id"])
+
+    sc, data = await _create_relation(client, regular_token, issue_a["key"], issue_b["key"])
+
+    assert sc == 403, data
+    assert await _relation_and_journal_counts(db_session, issue_a["id"], issue_b["id"]) == before
+
+
+@pytest.mark.integration
+async def test_edit_issues_without_manage_issue_relations_cannot_create_relation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    regular_user: User,
+    regular_token: str,
+    private_project_a: Project,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """A member whose role can edit issues but not manage relations gets 403."""
+    editor_role = Role(
+        name=f"RpEditor-{uuid.uuid4().hex[:8]}",
+        position=5,
+        assignable=True,
+        builtin=0,
+        permissions=["view_issues", "add_issues", "edit_issues"],
+        issues_visibility="default",
+        settings={},
+    )
+    db_session.add(editor_role)
+    await db_session.commit()
+    await _grant_membership(db_session, private_project_a, regular_user, editor_role)
+    issue_a = await _create_issue(
+        client, admin_token, private_project_a.key, tracker.id, open_status.id, priority.id, "Editor create A"
+    )
+    issue_b = await _create_issue(
+        client, admin_token, private_project_a.key, tracker.id, open_status.id, priority.id, "Editor create B"
+    )
+    before = await _relation_and_journal_counts(db_session, issue_a["id"], issue_b["id"])
+
+    sc, data = await _create_relation(client, regular_token, issue_a["key"], issue_b["key"])
+
+    assert sc == 403, data
+    assert await _relation_and_journal_counts(db_session, issue_a["id"], issue_b["id"]) == before
+
+
+@pytest.mark.integration
+async def test_member_with_manage_issue_relations_can_create_relation(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    regular_user: User,
+    regular_token: str,
+    private_project_a: Project,
+    dev_role: Role,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """The permission on the source issue's project is enough; journals are written on both issues."""
+    await _grant_membership(db_session, private_project_a, regular_user, dev_role)
+    issue_a = await _create_issue(
+        client, admin_token, private_project_a.key, tracker.id, open_status.id, priority.id, "Manager create A"
+    )
+    issue_b = await _create_issue(
+        client, admin_token, private_project_a.key, tracker.id, open_status.id, priority.id, "Manager create B"
+    )
+    relations_before, journals_before = await _relation_and_journal_counts(db_session, issue_a["id"], issue_b["id"])
+
+    sc, data = await _create_relation(client, regular_token, issue_a["key"], issue_b["key"])
+
+    assert sc == 201, data
+    assert await _relation_and_journal_counts(db_session, issue_a["id"], issue_b["id"]) == (
+        relations_before + 1,
+        journals_before + 2,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Web controls follow the same permission
+# ---------------------------------------------------------------------------
+
+
+async def _page(client: AsyncClient, token: str, path: str) -> str:
+    resp = await client.get(path, cookies={"access_token": token})
+    assert resp.status_code == 200, resp.text[:300]
+    return resp.text
+
+
+@pytest.mark.integration
+async def test_issue_pages_show_relation_controls_only_with_manage_issue_relations(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    regular_user: User,
+    regular_token: str,
+    public_project: Project,
+    dev_role: Role,
+    tracker: Tracker,
+    open_status: IssueStatus,
+    priority: IssuePriority,
+) -> None:
+    """A reader the relations API would refuse is not offered the add or remove controls."""
+    issue_a = await _create_issue(
+        client, admin_token, public_project.key, tracker.id, open_status.id, priority.id, "Controls A"
+    )
+    issue_b = await _create_issue(
+        client, admin_token, public_project.key, tracker.id, open_status.id, priority.id, "Controls B"
+    )
+    sc, data = await _create_relation(client, admin_token, issue_a["key"], issue_b["key"])
+    assert sc == 201, data
+
+    detail = f"/issue/{issue_a['key']}/"
+    new_form = f"/projects/{public_project.key}/issues/new/"
+
+    # Signed-in non-member of the public project: can read, cannot manage relations.
+    page = await _page(client, regular_token, detail)
+    assert issue_b["key"] in page, "precondition: the relation itself is listed"
+    assert "relationForm(" not in page
+    assert "sp-rel-remove" not in page
+    assert "pendingRelations" not in await _page(client, regular_token, new_form)
+
+    # Once a member with the permission, the same reader gets the controls.
+    await _grant_membership(db_session, public_project, regular_user, dev_role)
+    page = await _page(client, regular_token, detail)
+    assert "relationForm(" in page
+    assert "sp-rel-remove" in page
+    assert "pendingRelations" in await _page(client, regular_token, new_form)

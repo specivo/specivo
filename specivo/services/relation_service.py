@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections import deque
+from dataclasses import dataclass
 from datetime import date, timedelta
 
 from sqlalchemy import or_, select
@@ -42,6 +43,15 @@ RELATION_TYPES: dict[str, dict[str, str | None]] = {
 _CIRCULAR_CHECK_TYPES = frozenset({"blocks", "precedes"})
 
 _nested_set = NestedSetService()
+
+
+@dataclass(frozen=True, slots=True)
+class RemovedRelation:
+    """A deleted relation: both issues and the canonical (stored) relation type."""
+
+    issue_from: Issue
+    issue_to: Issue
+    relation_type: str
 
 
 class RelationService:
@@ -157,47 +167,73 @@ class RelationService:
     # Delete
     # ------------------------------------------------------------------
 
-    async def delete(self, session: AsyncSession, relation_id: int, user: User) -> None:
-        """Delete a relation by ID.
+    async def delete(
+        self,
+        session: AsyncSession,
+        relation_id: int,
+        user: User,
+        *,
+        via_issue: Issue | None = None,
+    ) -> RemovedRelation:
+        """Delete a relation by ID and return what was removed.
 
-        Permission: user must be admin or have access to at least one
-        of the two linked issues (via project membership or public project).
-        Raises ``NotFoundError`` when the relation does not exist.
-        Raises ``PermissionDeniedError`` when the user has no access.
+        Mirrors creation: *user* must be able to see **both** linked issues
+        and hold ``manage_issue_relations`` in the project of at least one of
+        them (a relation can be created from either side). Admins pass both
+        checks.
+
+        A relation whose other issue *user* cannot see is treated as if it
+        did not exist, like ``list_for_issue`` leaves it out: ``NotFoundError``
+        (404), so the response never discloses the hidden issue. When
+        *via_issue* is given (the issue the caller named), the relation must
+        be attached to it, otherwise ``NotFoundError`` as well.
+
+        Raises ``NotFoundError`` when the relation does not exist or is not
+        visible, ``PermissionDeniedError`` when both issues are visible but
+        the permission is missing.
         """
+        from specivo.services.issue_service import IssueService
+        from specivo.services.permission_service import Permission, check_permission
 
         result = await session.execute(select(IssueRelation).where(IssueRelation.id == relation_id))
         relation = result.scalar_one_or_none()
+        not_found = NotFoundError(f"Relation {relation_id} not found")
         if relation is None:
-            raise NotFoundError(f"Relation {relation_id} not found")
+            raise not_found
+        if via_issue is not None and via_issue.id not in (relation.issue_from_id, relation.issue_to_id):
+            raise not_found
 
-        if not user.is_admin:
-            from specivo.services.permission_service import check_permission
+        issue_service = IssueService()
+        try:
+            issue_from = await issue_service.get_by_id(session, relation.issue_from_id, user=user)
+            issue_to = await issue_service.get_by_id(session, relation.issue_to_id, user=user)
+        except NotFoundError:
+            raise not_found from None
 
-            # Check user has edit_issues permission on at least one of the related projects
-            issue_ids = [relation.issue_from_id, relation.issue_to_id]
-            issues_result = await session.execute(select(Issue.project_id).where(Issue.id.in_(issue_ids)))
-            project_ids = {row[0] for row in issues_result.all()}
+        allowed = False
+        for project_id in {issue_from.project_id, issue_to.project_id}:
+            if await check_permission(user, project_id, Permission.MANAGE_ISSUE_RELATIONS, session):
+                allowed = True
+                break
+        if not allowed:
+            raise PermissionDeniedError("You do not have permission to delete this relation")
 
-            has_permission = False
-            for pid in project_ids:
-                if await check_permission(user, pid, "edit_issues", session):
-                    has_permission = True
-                    break
-
-            if not has_permission:
-                raise PermissionDeniedError("You do not have permission to delete this relation")
-
+        removed = RemovedRelation(issue_from=issue_from, issue_to=issue_to, relation_type=relation.relation_type)
         await session.delete(relation)
         await session.flush()
         logger.info("Deleted relation id=%d by user=%d", relation_id, user.id)
+        return removed
 
     # ------------------------------------------------------------------
     # List
     # ------------------------------------------------------------------
 
-    async def list_for_issue(self, session: AsyncSession, issue: Issue) -> list[dict]:
-        """Return all relations for an issue, labelled from the issue's perspective.
+    async def list_for_issue(self, session: AsyncSession, issue: Issue, user: User) -> list[dict]:
+        """Return the relations of *issue* whose other issue *user* may see, labelled from *issue*'s side.
+
+        The caller has already checked that *user* may see *issue*. A
+        relation to an issue *user* cannot see is left out entirely, so its
+        key is never disclosed.
 
         For each relation the ``relation_type`` field reflects the label
         appropriate for the queried issue:
@@ -215,6 +251,19 @@ class RelationService:
             )
         )
         relations = list(result.scalars().all())
+
+        if relations and not user.is_admin:
+            from specivo.services.issue_service import IssueService
+
+            def counterpart(relation: IssueRelation) -> int:
+                return relation.issue_to_id if relation.issue_from_id == issue.id else relation.issue_from_id
+
+            visible_stmt = select(Issue.id).where(Issue.id.in_({counterpart(r) for r in relations}))
+            visibility = await IssueService().visible_issues_clause(session, user)
+            if visibility is not None:
+                visible_stmt = visible_stmt.where(visibility)
+            visible_ids = set((await session.execute(visible_stmt)).scalars().all())
+            relations = [r for r in relations if counterpart(r) in visible_ids]
 
         # Bulk-load all referenced issue keys in two queries
         related_ids: set[int] = set()

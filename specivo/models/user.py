@@ -21,6 +21,7 @@ class User(Base, TimestampMixin):
     - ix_users_status: for admin user listing
     - ix_users_github_id: partial, for OAuth lookup (WHERE github_id IS NOT NULL)
     - ix_users_google_id: partial, for OAuth lookup (WHERE google_id IS NOT NULL)
+    - uq_users_single_anonymous: partial unique, at most one anonymous row
     """
 
     __tablename__ = "users"
@@ -51,6 +52,31 @@ class User(Base, TimestampMixin):
             "status IN ('active', 'locked', 'pending_verification', 'deactivated')",
             name="ck_users_status",
         ),
+        # A service account has no password: it cannot log in with one and the
+        # change-password endpoint refuses it. A forced-change flag on such a
+        # row would lock an agent out of the instance with no visible cause,
+        # so the rule is enforced by the database rather than by every code
+        # path that remembers it.
+        CheckConstraint(
+            "NOT (must_change_password AND is_service_account)",
+            name="ck_users_no_forced_change_for_service_account",
+        ),
+        # The anonymous user (``specivo.services.anonymous_user_service``) is a
+        # single reserved row that must never be able to act: at most one such
+        # row, and never active, an administrator, a service account or the
+        # holder of a password. The ``reject_anonymous_principal`` trigger,
+        # which has no ORM counterpart, keeps it out of memberships and groups.
+        Index(
+            "uq_users_single_anonymous",
+            "is_anonymous",
+            unique=True,
+            postgresql_where=text("is_anonymous"),
+        ),
+        CheckConstraint(
+            "NOT is_anonymous OR (status = 'deactivated' AND NOT is_admin AND NOT is_service_account"
+            " AND password_hash IS NULL AND NOT must_change_password)",
+            name="ck_users_anonymous_inert",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -73,6 +99,14 @@ class User(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     is_service_account: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Set when somebody other than the account owner chose the current password
+    # (an administrator, an import). The owner is refused everything except the
+    # way out until they replace it — see ``specivo.core.security`` for the API
+    # side and ``specivo.web.deps.get_current_user_optional`` for the web side.
+    must_change_password: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # Marks the one reserved row that stands for a visitor without an account.
+    # Created by migration; see ``__table_args__`` for what keeps it inert.
+    is_anonymous: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     # --- Brute-force protection ---
     failed_login_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

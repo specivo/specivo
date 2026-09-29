@@ -62,6 +62,37 @@ def test_english_is_passthrough():
         deactivate()
 
 
+@pytest.mark.parametrize("locale", ["es", "fr", "ru", "th", "zh"])
+def test_named_placeholders_survive_translation(locale: str):
+    """A translation keeps exactly the ``%(name)s`` placeholders of its msgid.
+
+    Strings handed to Alpine components are filled in by JavaScript with
+    ``replace('%(name)s', value)``, so a renamed or dropped placeholder would
+    leave raw ``%(...)s`` text, or lose the value, in the page.
+    """
+    import re
+    from pathlib import Path
+
+    from babel.messages.pofile import read_po
+
+    import specivo
+
+    placeholder = re.compile(r"%\((\w+)\)[sd]")
+    po_path = Path(specivo.__file__).parent / "locale" / locale / "LC_MESSAGES" / "specivo.po"
+    with po_path.open("rb") as fh:
+        catalog = read_po(fh, locale=locale)
+
+    mismatched = [
+        message.id
+        for message in catalog
+        if isinstance(message.id, str)
+        and message.id
+        and message.string
+        and set(placeholder.findall(message.id)) != set(placeholder.findall(message.string))
+    ]
+    assert mismatched == [], f"{locale}: placeholders differ from the msgid in {mismatched}"
+
+
 def test_expected_native_translations():
     """Spot-check the actual translated values per language."""
     from specivo.core.i18n import activate, deactivate, gettext

@@ -25,6 +25,7 @@ from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.auth import ApiKey
 from specivo.models.user import User
+from specivo.services.anonymous_user_service import AnonymousUserProtectedError
 
 # Debounce interval for last_used_at updates
 _DEBOUNCE_SECONDS = 60
@@ -107,6 +108,10 @@ class ApiKeyService:
         - Without ``unlimited_api_keys``: max 20 keys per user.
         - Without ``api_key_scopes``: scopes are silently ignored.
         """
+        is_anonymous = (await session.execute(select(User.is_anonymous).where(User.id == user_id))).scalar_one_or_none()
+        if is_anonymous:
+            raise AnonymousUserProtectedError("The anonymous user cannot hold API keys.")
+
         registry = get_feature_registry()
 
         # Gate: enforce 5-key limit unless unlimited_api_keys feature is available
@@ -191,8 +196,9 @@ class ApiKeyService:
 
         # Per spec: locked accounts can still use API keys.
         # Locking is brute-force protection targeting password login.
-        # Only deactivated accounts (admin action) block all auth methods.
-        if user.status == "deactivated":
+        # Only deactivated accounts (admin action) block all auth methods. The
+        # anonymous user is refused explicitly as well: it never holds a key.
+        if user.is_anonymous or user.status == "deactivated":
             raise AppError(
                 code="api_key_invalid",
                 message=_("Invalid API key"),

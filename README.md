@@ -66,11 +66,13 @@ No Elasticsearch. No external search service. Search runs entirely inside Postgr
 
 ## Development
 
-Needs [uv](https://docs.astral.sh/uv/).
+Needs [uv](https://docs.astral.sh/uv/) and Docker. Node is optional: the frontend bundles are
+generated (never committed) and built in a container when `npm` is not installed.
 
 ```bash
 make install          # dependencies
-make dev-up           # dev server with hot-reload
+make dev-up           # dev server with hot-reload, rebuilds frontend bundles on change
+make frontend-build   # one-off frontend build (needed for tests that load bundles)
 make test-db-up       # test database
 make test             # run tests
 make lint             # ruff + mypy

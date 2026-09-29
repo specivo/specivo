@@ -17,6 +17,9 @@
     <div class="wiki-page-header">
       <h1 class="wiki-page-title">{{ wiki_page.title }}</h1>
       <div class="wiki-page-actions">
+        {# Reading one page is the whole of the wiki on the anonymous surface:
+           the page list and the history are separate routes that refuse. #}
+        {% if not anonymous %}
         <a href="/projects/{{ project.key }}/wiki/pages/" class="sp-btn sp-btn-ghost">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           {% trans %}All pages{% endtrans %}
@@ -25,6 +28,7 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           {% trans %}History{% endtrans %}
         </a>
+        {% endif %}
         {% if can_manage_wiki %}
         <a href="/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/edit/" class="sp-btn sp-btn-primary">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -34,7 +38,7 @@
       </div>
       <div class="wiki-page-meta">
         {% if content.author %}
-        {% trans author=content.author.display_name or content.author.login %}Last edited by <strong>%(author)s</strong>{% endtrans %}
+        {% trans author=content.author.display_name if anonymous else (content.author.display_name or content.author.login) %}Last edited by <strong>%(author)s</strong>{% endtrans %}
         {% endif %}
         {% if content.created_at %}
         &middot; {{ content.created_at | localtime(user.timezone) }}
@@ -47,7 +51,7 @@
       <span>{% trans %}Version{% endtrans %} <span class="version-num">{{ content.version }}</span></span>
       <span>&middot;</span>
       {% if content.author %}
-      <span>{% trans author=content.author.display_name or content.author.login %}Edited by %(author)s{% endtrans %}</span>
+      <span>{% trans author=content.author.display_name if anonymous else (content.author.display_name or content.author.login) %}Edited by %(author)s{% endtrans %}</span>
       <span>&middot;</span>
       {% endif %}
       {% if content.created_at %}
@@ -82,9 +86,16 @@
       {{ content.text | wiki_markdown(project.key, attachment_map) }}
     </div>
 
-    {# Attachments section #}
+    {# Attachments section. Outside the anonymous scope altogether: the endpoint
+       that serves a file is on neither allowlist, so the list could only offer
+       names and links that refuse. #}
+    {% if not anonymous %}
     <div class="attachments-section"
-         x-data="wikiAttachments({ pageId: {{ wiki_page.id }}, dataElementId: 'att-data-{{ wiki_page.id }}' })">
+         x-data="wikiAttachments({ pageId: {{ wiki_page.id }}, dataElementId: 'att-data-{{ wiki_page.id }}' })"
+         data-msg-delete-failed="{{ _('Delete failed') }}"
+         data-msg-upload-failed="{{ _('Upload failed') }}"
+         data-msg-connect-failed="{{ _('Unable to connect.') }}"
+         data-msg-file-label="{{ _('FILE') }}">
       <script type="application/json" id="att-data-{{ wiki_page.id }}">{{ attachments | tojson }}</script>
       <div class="attachments-header">
         <div class="attachments-title">
@@ -226,6 +237,7 @@
         </div>
       </template>
     </div>
+    {% endif %}
   </div>
 
   {# Right sidebar: TOC + pages button #}

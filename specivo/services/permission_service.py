@@ -1,70 +1,59 @@
-"""Permission constants and check utilities.
+"""Permission catalogue, role resolution and the permission check.
 
-- ``PERMISSIONS`` dict: canonical permission names + human labels.
-- ``check_permission(user, project_id, permission, session)``:
-  - Admin users always pass.
-  - For non-admins: queries member_roles + roles for this user+project,
-    and checks whether any role grants the requested permission or ``"*"``.
-- ``check_permission()`` async function for endpoint-level authorization.
-- ``get_user_roles(session, user_id, project_id)``: cacheable role lookup
-  used by both permission checks and visibility checks.
+Who may do what in a project is decided here and nowhere else.
+``get_user_roles`` resolves the roles a user holds in a project, and every
+access decision derives from it: ``check_permission``, issue visibility in
+``IssueService`` and, mirrored in SQL, the search visibility CTE.
+
+Role resolution
+---------------
+- **Member** — a ``members`` row held by the user, or by a user group the user
+  belongs to (``member_principal_clause``): the roles on those rows and
+  nothing else. A membership *replaces* the fallback below, even when its
+  roles grant nothing.
+- **Signed-in user without a membership, on a public project** — the seeded
+  Non member role (``roles.builtin = 1``), plus the project's anonymous role
+  when it applies, so a signed-in user never sees less than an anonymous
+  visitor would.
+- **The anonymous user** — only the project's anonymous role.
+- **Anything else** (a private project, no membership) — no roles.
+
+The *anonymous role* is transient. It is built from
+``projects.anonymous_permissions`` capped at ``ANONYMOUS_PERMISSION_CEILING``,
+and exists only while the instance switch is on, the project is public and
+active, and the capped list is not empty. No ``roles`` row stands for it.
+
+``check_permission`` additionally denies the anonymous user anything outside
+the ceiling before it looks at a single role.
+
+Caching
+-------
+Membership roles and the Non member role are cached in ``session.info``, so
+the cache lives exactly as long as the request's (or MCP tool call's)
+session and is never shared between concurrent requests. Anonymous access
+and the instance switch are never cached: a change applies to the next call.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Collection
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.models.member import Member, MemberRole
-from specivo.models.role import Role
+from specivo.models.project import PROJECT_STATUS_ACTIVE, Project
+from specivo.models.role import Role, RoleBuiltin
 from specivo.models.user import User
+from specivo.models.user_group import UserGroupMember
 
 logger = logging.getLogger(__name__)
-
-# ---------------------------------------------------------------------------
-# Role lookup (cacheable per request)
-# ---------------------------------------------------------------------------
-
-# Per-session role cache to avoid repeated 3-table JOINs within the same
-# request/tool call.  Keyed by (user_id, project_id) → list[Role].
-# Callers should call ``get_user_roles()`` instead of querying directly.
-_role_cache: dict[tuple[int, int], list[Role]] = {}
-
-
-def clear_role_cache() -> None:
-    """Clear the in-process role cache. Call at request boundaries."""
-    _role_cache.clear()
-
-
-async def get_user_roles(
-    session: AsyncSession,
-    user_id: int,
-    project_id: int,
-) -> list[Role]:
-    """Return roles for *user_id* on *project_id*, with per-request caching.
-
-    The 3-table JOIN (roles → member_roles → members) is the most
-    frequent query in the system.  This function caches the result so
-    repeated checks within the same request hit the DB only once.
-    """
-    cache_key = (user_id, project_id)
-    if cache_key in _role_cache:
-        return _role_cache[cache_key]
-
-    stmt = (
-        select(Role)
-        .join(MemberRole, MemberRole.role_id == Role.id)
-        .join(Member, Member.id == MemberRole.member_id)
-        .where(Member.project_id == project_id, Member.user_id == user_id)
-    )
-    roles = list((await session.execute(stmt)).scalars().all())
-    _role_cache[cache_key] = roles
-    return roles
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +129,201 @@ PERMISSIONS: dict[str, str] = {
     Permission.MANAGE_PROJECT: "Manage project settings",
 }
 
+# The only permissions the anonymous user can ever hold. Mirrors
+# ck_projects_anonymous_permissions_allowed, and is enforced again inside
+# check_permission whatever a project's JSON says.
+ANONYMOUS_PERMISSION_CEILING: frozenset[Permission] = frozenset({Permission.VIEW_ISSUES, Permission.VIEW_WIKI})
+
+_CEILING_VALUES: frozenset[str] = frozenset(p.value for p in ANONYMOUS_PERMISSION_CEILING)
+
+# Display name of the transient role an anonymous visitor holds.
+ANONYMOUS_ROLE_NAME = "Anonymous"
+
+
+def role_grants(permissions: Collection[Any], permission: str) -> bool:
+    """Return ``True`` if *permissions* grants *permission*, directly or through ``"*"``."""
+    return "*" in permissions or permission in permissions
+
+
+# ---------------------------------------------------------------------------
+# Membership predicate
+# ---------------------------------------------------------------------------
+
+
+def member_principal_clause(user_id: int) -> ColumnElement[bool]:
+    """Return a predicate selecting the ``members`` rows that grant *user_id* access.
+
+    A ``members`` row is held by exactly one principal: a user or a user
+    group.  A row reaches *user_id* when it is the user's own row, or when it
+    belongs to a group the user is in.  The ``OR`` keeps this to a single
+    join-free predicate over ``members``, so the planner can still use
+    ``ix_members_user_id`` / ``ix_members_group_id``.
+
+    This is the one definition of "is this user a member"; use it for every
+    membership read that feeds an access decision.  Membership rows looked up
+    to be *edited* (add/update/remove a specific user's roles) must stay
+    user-only and should not use this.
+    """
+    users_groups = select(UserGroupMember.group_id).where(UserGroupMember.user_id == user_id)
+    return or_(Member.user_id == user_id, Member.group_id.in_(users_groups))
+
+
+# ---------------------------------------------------------------------------
+# Role resolution
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedRole:
+    """A role as resolved for one user in one project.
+
+    A detached snapshot rather than an ORM ``Role``: it is cached in
+    ``session.info`` and must stay readable after the session commits, rolls
+    back or expires its instances. The anonymous role has no row, so its
+    ``id`` is None and ``transient`` is True.
+    """
+
+    id: int | None
+    name: str
+    permissions: frozenset[str]
+    issues_visibility: str
+    builtin: int = RoleBuiltin.CUSTOM
+    transient: bool = False
+
+    @classmethod
+    def of(cls, role: Role) -> ResolvedRole:
+        return cls(
+            id=role.id,
+            name=role.name,
+            permissions=frozenset(role.permissions or ()),
+            issues_visibility=role.issues_visibility,
+            builtin=role.builtin,
+        )
+
+    def grants(self, permission: str) -> bool:
+        return role_grants(self.permissions, permission)
+
+
+_ROLE_CACHE_KEY = "specivo.role_cache"
+_NON_MEMBER_CACHE_KEY = "non_member"
+
+
+def _role_cache(session: AsyncSession) -> dict[Any, Any]:
+    cache: dict[Any, Any] = session.info.setdefault(_ROLE_CACHE_KEY, {})
+    return cache
+
+
+def clear_role_cache(session: AsyncSession) -> None:
+    """Forget the roles resolved through *session*.
+
+    Only needed when a session changes memberships or roles and then asks
+    again; each request and MCP tool call starts with a fresh session and so
+    with an empty cache.
+    """
+    session.info.pop(_ROLE_CACHE_KEY, None)
+
+
+async def _membership_roles(session: AsyncSession, user: User, project: Project) -> tuple[ResolvedRole, ...] | None:
+    """Return the roles *user*'s membership rows carry on *project*, or None without a membership row.
+
+    The union of the user's own row and every row held by a group they are in,
+    deduplicated. A membership row that carries no roles still counts as a
+    membership and yields an empty tuple, not None.
+    """
+    cache = _role_cache(session)
+    key = ("member", user.id, project.id)
+    if key in cache:
+        cached: tuple[ResolvedRole, ...] | None = cache[key]
+        return cached
+
+    rows = (
+        await session.execute(
+            select(Member.id, Role)
+            .select_from(Member)
+            .outerjoin(MemberRole, MemberRole.member_id == Member.id)
+            .outerjoin(Role, Role.id == MemberRole.role_id)
+            .where(Member.project_id == project.id, member_principal_clause(user.id))
+        )
+    ).all()
+
+    result: tuple[ResolvedRole, ...] | None
+    if not rows:
+        result = None
+    else:
+        by_id: dict[int, ResolvedRole] = {}
+        for _member_id, role in rows:
+            if role is not None and role.id not in by_id:
+                by_id[role.id] = ResolvedRole.of(role)
+        result = tuple(by_id.values())
+    cache[key] = result
+    return result
+
+
+async def get_non_member_role(session: AsyncSession) -> ResolvedRole | None:
+    """Return the seeded Non member role, cached per session.
+
+    Returns None, with a warning, only when the row is missing, which means the
+    database was not migrated.
+    """
+    cache = _role_cache(session)
+    if _NON_MEMBER_CACHE_KEY not in cache:
+        role = (await session.execute(select(Role).where(Role.builtin == RoleBuiltin.NON_MEMBER))).scalar_one_or_none()
+        if role is None:
+            logger.warning("The Non member role is missing; run the database migrations to restore it")
+        cache[_NON_MEMBER_CACHE_KEY] = ResolvedRole.of(role) if role is not None else None
+    non_member: ResolvedRole | None = cache[_NON_MEMBER_CACHE_KEY]
+    return non_member
+
+
+async def anonymous_role(session: AsyncSession, project: Project) -> ResolvedRole | None:
+    """Return *project*'s transient anonymous role, or None when anonymous access does not apply there.
+
+    It applies only while the instance switch is on, the project is public and
+    active, and its anonymous permissions, capped at the ceiling, are not
+    empty. Never cached: the switch is read from the database on every call.
+    """
+    permissions = frozenset(project.anonymous_permissions or ()) & _CEILING_VALUES
+    if not permissions or not project.is_public or project.status != PROJECT_STATUS_ACTIVE:
+        return None
+
+    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+
+    if not await is_anonymous_access_enabled(session):
+        return None
+    return ResolvedRole(
+        id=None,
+        name=ANONYMOUS_ROLE_NAME,
+        permissions=permissions,
+        issues_visibility="default",
+        transient=True,
+    )
+
+
+async def get_user_roles(session: AsyncSession, user: User, project: Project) -> list[ResolvedRole]:
+    """Return the roles *user* holds in *project*, following the rules in the module docstring.
+
+    Admins are resolved like anyone else; callers short-circuit them.
+    """
+    if user.is_anonymous:
+        anonymous = await anonymous_role(session, project)
+        return [anonymous] if anonymous is not None else []
+
+    membership = await _membership_roles(session, user, project)
+    if membership is not None:
+        return list(membership)
+
+    if not project.is_public:
+        return []
+
+    roles: list[ResolvedRole] = []
+    non_member = await get_non_member_role(session)
+    if non_member is not None:
+        roles.append(non_member)
+    anonymous = await anonymous_role(session, project)
+    if anonymous is not None:
+        roles.append(anonymous)
+    return roles
+
 
 # ---------------------------------------------------------------------------
 # Core check
@@ -154,40 +338,43 @@ async def check_permission(
     api_key_scopes: dict | None = None,
     request: Request | None = None,
 ) -> bool:
-    """Return ``True`` if *user* holds *permission*.
+    """Return ``True`` if *user* holds *permission* in the project.
 
     Resolution order:
-    1. Admins always have all permissions.
-    2. API key scope check — if the key has scoped ``projects``, the
+    1. The anonymous user is denied anything outside
+       ``ANONYMOUS_PERMISSION_CEILING``, before anything else is consulted.
+    2. Admins always have all permissions.
+    3. API key scope check — if the key has scoped ``projects``, the
        project must be in the allowed list.
-    3. Project-scoped member role lookup.
-    4. Fallback: ``False``.
+    4. Any role from ``get_user_roles`` granting *permission* or ``"*"``.
 
     ``api_key_scopes`` is the ``scopes`` JSONB from the authenticating API key
     (``None`` when authenticated via JWT or when the key has no scope restrictions).
     """
+    if user.is_anonymous and permission not in ANONYMOUS_PERMISSION_CEILING:
+        return False
+
     if user.is_admin:
         return True
 
     if project_id is None:
         return False
 
+    project = await session.get(Project, project_id)
+
     # API key scope enforcement: check that the project is in the allowed list
     if api_key_scopes and api_key_scopes.get("projects"):
         allowed_projects = api_key_scopes["projects"]
         # Scopes may contain project keys (strings) or project IDs (ints)
-        from specivo.models.project import Project
-
-        project_result = await session.execute(select(Project.key).where(Project.id == project_id))
-        project_key = project_result.scalar_one_or_none()
-        # Check both numeric ID and string key
         if project_id not in allowed_projects and str(project_id) not in [str(p) for p in allowed_projects]:
-            if project_key is None or project_key not in allowed_projects:
+            if project is None or project.key not in allowed_projects:
                 return False
 
-    # Project-scoped member role lookup (cached per request)
-    roles = await get_user_roles(session, user.id, project_id)
-    granted = _any_role_grants(roles, permission)
+    if project is None:
+        return False
+
+    roles = await get_user_roles(session, user, project)
+    granted = any(role.grants(permission) for role in roles)
 
     # Audit logging (non-critical — never block permission checks).
     # Events are collected in request.state.audit_events for batch INSERT
@@ -218,13 +405,3 @@ async def check_permission(
             logger.warning("Security audit logging failed", exc_info=True)
 
     return granted
-
-
-def _role_grants(permissions_list: list[Any], permission: str) -> bool:
-    """Return ``True`` if *permissions_list* grants *permission* or ``"*"``."""
-    return "*" in permissions_list or permission in permissions_list
-
-
-def _any_role_grants(roles: list[Role], permission: str) -> bool:
-    """Return ``True`` if any role in *roles* grants *permission* or ``"*"``."""
-    return any(_role_grants(role.permissions, permission) for role in roles)

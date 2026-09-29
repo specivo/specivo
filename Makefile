@@ -4,7 +4,7 @@
        test-db-up test-db-down test-db-reset test-ci \
        test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
        install sync lock download-model \
-       build bundle
+       build bundle frontend-build frontend-watch
 
 # Load environment from .env and .env.local (if they exist).
 # .env.local overrides .env. Shell env overrides both.
@@ -22,8 +22,9 @@ export
 #   open http://localhost:9933/
 #
 # Development (build from source with hot-reload):
-#   make dev-up            # Build + start with hot-reload
+#   make dev-up            # Build + start with hot-reload (incl. frontend watcher)
 #   make dev-down          # Stop dev services
+#   make frontend-build    # One-off build of the frontend bundles (never committed)
 #
 # Testing:
 #   make test-db-up        # Start test DB
@@ -56,13 +57,16 @@ logs:
 status:
 	docker compose ps
 
-# Development mode (build from source, hot-reload, direct port 8000)
+# Development mode (build from source, hot-reload, direct port 8000).
+# The overlay's `frontend` service rebuilds the esbuild bundles into
+# ./specivo/static/dist on every change; api waits for its first build.
 dev-up:
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml build api
 	GIT_COMMIT=$$(git rev-parse --short HEAD) docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
+# Include the dev overlay so its extra services (the frontend watcher) stop too.
 dev-down:
-	docker compose down
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 
 # -----------------------------------------------------------------------------
 # Admin Management
@@ -123,21 +127,47 @@ test-service:
 test-cov:
 	$(RUN) pytest --cov=specivo --cov-report=html --cov-report=term
 
-# E2E (Playwright) — requires test DB running (make test-db-up)
-test-e2e:
+# E2E (Playwright) — requires test DB running (make test-db-up) and built
+# frontend bundles, which every e2e target builds first.
+test-e2e: frontend-build
 	$(RUN) pytest tests/e2e/ -m e2e -n 0
 
-test-e2e-headed:
+test-e2e-headed: frontend-build
 	$(RUN) pytest tests/e2e/ -m e2e -n 0 --headed --slowmo=300
 
-test-e2e-debug:
+test-e2e-debug: frontend-build
 	PWDEBUG=1 $(RUN) pytest tests/e2e/ -m e2e -n 0 --headed
 
-test-e2e-update-snapshots:
+test-e2e-update-snapshots: frontend-build
 	UPDATE_SNAPSHOTS=1 $(RUN) pytest tests/e2e/test_visual_regression.py -m e2e -n 0
 
 playwright-install:
 	$(RUN) playwright install chromium
+
+# -----------------------------------------------------------------------------
+# Frontend bundles (esbuild) — generated into specivo/static/dist/, never
+# committed. The Docker image and CI build their own; `make dev-up` runs a
+# watcher container. frontend-build uses host npm when available, otherwise a
+# Node container (force the container with FRONTEND_BUILD=docker).
+# -----------------------------------------------------------------------------
+
+FRONTEND_NODE_IMAGE ?= node:22-slim
+
+frontend-build:
+	@if [ "$(FRONTEND_BUILD)" != "docker" ] && command -v npm >/dev/null 2>&1; then \
+		cd frontend && npm ci --prefer-offline --no-audit --no-fund && npm run build; \
+	else \
+		docker run --rm \
+			-v "$(CURDIR)/frontend:/src/frontend" \
+			-v "$(CURDIR)/specivo/static/dist:/src/specivo/static/dist" \
+			-v specivo-frontend-node-modules:/src/frontend/node_modules \
+			-w /src/frontend $(FRONTEND_NODE_IMAGE) \
+			sh -c "npm ci --prefer-offline --no-audit --no-fund && npm run build"; \
+	fi
+
+# Host-Node alternative to the dev watcher container (do not run both at once).
+frontend-watch:
+	cd frontend && npm ci --prefer-offline --no-audit --no-fund && npm run watch
 
 # -----------------------------------------------------------------------------
 # Linting & Formatting

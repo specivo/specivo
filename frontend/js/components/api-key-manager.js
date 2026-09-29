@@ -7,8 +7,17 @@ export function apiKeyManager() {
             loading: false,
             error: '',
             copied: false,
+            msgCreateFailed: '',
+            msgConnectFailed: '',
+            msgConfirmDelete: '',
 
             init() {
+                // Translated strings arrive as data-msg-* attributes rendered by
+                // the template; the English defaults cover a template without them.
+                var d = this.$el.dataset;
+                this.msgCreateFailed = d.msgCreateFailed || 'Failed to create key';
+                this.msgConnectFailed = d.msgConnectFailed || 'Unable to connect. Please try again.';
+                this.msgConfirmDelete = d.msgConfirmDelete || 'Are you sure you want to permanently delete this API key?';
                 this.loadKeys();
             },
 
@@ -36,10 +45,10 @@ export function apiKeyManager() {
                         await this.loadKeys();
                     } else {
                         var errData = await res.json();
-                        this.error = (errData.errors && errData.errors[0] && errData.errors[0].message) || 'Failed to create key';
+                        this.error = (errData.errors && errData.errors[0] && errData.errors[0].message) || this.msgCreateFailed;
                     }
                 } catch (_e) {
-                    this.error = 'Unable to connect. Please try again.';
+                    this.error = this.msgConnectFailed;
                 }
                 this.loading = false;
             },
@@ -54,7 +63,7 @@ export function apiKeyManager() {
             },
 
             async deleteKey(id) {
-                if (!confirm('Are you sure you want to permanently delete this API key?')) return;
+                if (!confirm(this.msgConfirmDelete)) return;
                 var res = await spFetch('/api/v1/my/api-keys/' + id + '/', {
                     method: 'DELETE',
                     headers: {'Content-Type': 'application/json'}

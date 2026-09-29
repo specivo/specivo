@@ -327,7 +327,11 @@ a.sp-tag-name:hover { text-decoration: underline; color: var(--sp-accent); }
 /* Member dropdown suggestions (settings > members) */
 .sp-suggest-field { flex: 1; min-width: 200px; position: relative; z-index: 3; }
 .sp-suggest-panel { position: absolute; top: 100%; left: 0; right: 0; z-index: 1040; background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); box-shadow: var(--sp-shadow-lg); max-height: 200px; overflow-y: auto; }
-.sp-suggest-item { padding: var(--sp-space-sm) var(--sp-space-md); cursor: pointer; display: flex; gap: var(--sp-space-sm); }
+.sp-suggest-item { padding: var(--sp-space-sm) var(--sp-space-md); cursor: pointer; display: flex; align-items: center; gap: var(--sp-space-sm); }
+/* Hover lived in inline @mouseenter/@mouseleave handlers that wrote to
+   element.style. ADR-0001 section 5 wants :hover instead, and the picker now
+   renders two kinds of suggestion, so the highlight belongs to the row. */
+.sp-suggest-item:hover { background: var(--sp-bg-input); }
 .sp-suggest-name { font-weight: 500; }
 .sp-field-min-160 { min-width: 160px; }
 .sp-field-min-140 { min-width: 140px; }
@@ -581,3 +585,45 @@ a.sp-tag-name:hover { text-decoration: underline; color: var(--sp-accent); }
 .sp-ac-date { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); font-family: var(--sp-font-mono); }
 .sp-ac-empty { padding: var(--sp-space-sm); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); font-style: italic; }
 
+
+/* ------------------------------------------------------------------
+   Project settings > Members: user rows and group rows in one table
+   ------------------------------------------------------------------ */
+
+/* Wide tables scroll inside their own box so the page itself never
+   scrolls sideways (ADR-0005). */
+.sp-table-scroll { overflow-x: auto; }
+
+/* Kind marker on a membership row and in the picker's suggestions. The
+   two kinds are addressed by different URLs and mean different things,
+   so a row never leaves its kind to be inferred from context. */
+.sp-principal-kind {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-right: var(--sp-space-xs);
+  border-radius: 10px;
+  font-size: var(--sp-font-size-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.sp-principal-kind-group { background: var(--sp-accent-subtle); color: var(--sp-accent); }
+.sp-principal-kind-user { background: var(--sp-bg-input); color: var(--sp-text-secondary); }
+
+/* The people a group row covers, revealed under it on request. */
+.sp-group-people {
+  list-style: none;
+  margin: var(--sp-space-sm) 0 0 0;
+  padding: 0 0 0 var(--sp-space-md);
+  border-left: 2px solid var(--sp-border);
+}
+.sp-group-people li { padding: 2px 0; font-size: var(--sp-font-size-sm); }
+.sp-via-group {
+  margin-left: var(--sp-space-xs);
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--sp-info-subtle);
+  color: var(--sp-info);
+  font-size: var(--sp-font-size-xs);
+}

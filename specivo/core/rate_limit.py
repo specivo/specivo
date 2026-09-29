@@ -193,40 +193,63 @@ def rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
     limiter = RateLimiter(key_prefix, max_requests, window_seconds)
 
     async def _dependency(request: Request, response: Response) -> None:
-        from specivo.core.config import get_settings
-
-        if not get_settings().rate_limit_enabled:
-            return
-        # Prefer an authenticated user ID if one has been resolved upstream.
-        # For auth endpoints (login) we use IP because the user is not yet known.
-        user_id: str | None = getattr(request.state, "rate_limit_user_id", None)
-        identifier = str(user_id) if user_id else _get_client_ip(request)
-
-        allowed, remaining, retry_after = await limiter.check(identifier)
-
-        # Build rate limit headers
-        rl_headers = {
-            _HEADER_LIMIT: str(max_requests),
-            _HEADER_REMAINING: str(remaining),
-            _HEADER_RESET: str(int(time.time()) + window_seconds),
-        }
-
-        # Always attach informational headers on allowed requests.
-        # Set them both on the injected Response (works when the endpoint
-        # returns a model) and on request.state (so middleware can copy
-        # them onto custom Response objects like JSONResponse).
-        for k, v in rl_headers.items():
-            response.headers[k] = v
-        request.state.rate_limit_headers = dict(rl_headers)
-
-        if not allowed:
-            rl_headers[_HEADER_RETRY_AFTER] = str(retry_after)
-            raise AppError(
-                code="rate_limit_exceeded",
-                message=f"Rate limit exceeded. Try again in {retry_after} second(s).",
-                status_code=429,
-                details={"retry_after": retry_after},
-                headers=rl_headers,
-            )
+        await _apply(limiter, request, response)
 
     return _dependency
+
+
+async def _apply(limiter: RateLimiter, request: Request, response: Response) -> None:
+    """Check *limiter* for this request, attach the headers, and raise 429 when over."""
+    from specivo.core.config import get_settings
+
+    if not get_settings().rate_limit_enabled:
+        return
+    # Prefer an authenticated user ID if one has been resolved upstream.
+    # For auth endpoints (login) we use IP because the user is not yet known.
+    user_id: str | None = getattr(request.state, "rate_limit_user_id", None)
+    identifier = str(user_id) if user_id else _get_client_ip(request)
+
+    allowed, remaining, retry_after = await limiter.check(identifier)
+
+    # Build rate limit headers
+    rl_headers = {
+        _HEADER_LIMIT: str(limiter.max_requests),
+        _HEADER_REMAINING: str(remaining),
+        _HEADER_RESET: str(int(time.time()) + limiter.window_seconds),
+    }
+
+    # Always attach informational headers on allowed requests.
+    # Set them both on the injected Response (works when the endpoint
+    # returns a model) and on request.state (so middleware can copy
+    # them onto custom Response objects like JSONResponse).
+    for k, v in rl_headers.items():
+        response.headers[k] = v
+    request.state.rate_limit_headers = dict(rl_headers)
+
+    if not allowed:
+        rl_headers[_HEADER_RETRY_AFTER] = str(retry_after)
+        raise AppError(
+            code="rate_limit_exceeded",
+            message=f"Rate limit exceeded. Try again in {retry_after} second(s).",
+            status_code=429,
+            details={"retry_after": retry_after},
+            headers=rl_headers,
+        )
+
+
+async def enforce_rate_limit(
+    request: Request,
+    response: Response,
+    key_prefix: str,
+    max_requests: int,
+    window_seconds: int,
+) -> None:
+    """Apply a rate limit from inside another dependency.
+
+    The check :func:`rate_limit` performs, for callers that cannot declare it
+    as a route dependency because whether it applies at all is only known once
+    the request's principal has been resolved. The anonymous buckets are the
+    reason this exists: they must count anonymous reads only, and declaring
+    them on the route would start metering signed-in callers against them too.
+    """
+    await _apply(RateLimiter(key_prefix, max_requests, window_seconds), request, response)

@@ -5,14 +5,17 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from collections.abc import AsyncGenerator
 from pathlib import Path
+from urllib.parse import quote
 
-from fastapi import Depends, Request
+from fastapi import Depends, Request, Response
 from fastapi.templating import Jinja2Templates
-from jinja2 import ChoiceLoader, FileSystemLoader
+from jinja2 import ChoiceLoader, FileSystemLoader, pass_context
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
+from specivo.core.middleware import ANONYMOUS_READER_STATE_KEY
 from specivo.models.user import User
 
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "themes"
@@ -368,6 +371,12 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     templates.env.filters["metadata_diff"] = _format_metadata_diff
     templates.env.globals["metadata_diff"] = _format_metadata_diff
 
+    # Where the "Sign in" action on an anonymous page points. A context
+    # function rather than a per-handler context variable, because the header
+    # is included by every page and would otherwise need the value passed
+    # through all of them.
+    templates.env.globals["sign_in_url"] = _sign_in_url
+
     return templates
 
 
@@ -394,6 +403,46 @@ def setup_plugin_assets(plugins: list) -> None:
         _plugin_js_files.extend(assets.get("js", []))
 
 
+# Where a user carrying ``must_change_password`` is sent, and the only web
+# paths that survive the redirect. Anything else would bounce back here.
+#
+# The check runs in ``get_current_user_optional``, which every web page and
+# partial resolves its user through.
+#
+# ``/logout/`` resolves no user of its own today, so it is already out of reach
+# of this check. It is listed anyway: being able to leave an account whose
+# password somebody else chose must not depend on that staying true.
+#
+# Static files, ``/static/...``, are mounted outside the router and never touch
+# this dependency, so the page keeps its CSS and bundles. The form posts to
+# ``/api/v1/auth/change-password/``, which the API side exempts.
+CHANGE_PASSWORD_PATH = "/my/password/"
+_PASSWORD_CHANGE_ALLOWED_SUFFIXES = (CHANGE_PASSWORD_PATH, "/logout/")
+
+
+def redirect_if_password_change_required(request: Request, user: object) -> None:
+    """Send a user who must change their password to the page that lets them.
+
+    Raises the 302 ``HTTPException`` the web layer uses for redirects. Returns
+    quietly when the flag is not set, or when the request is already for one of
+    the pages a forced user is allowed to reach — without that exception the
+    change-password page would redirect to itself forever.
+    """
+    if not getattr(user, "must_change_password", False):
+        return
+
+    from specivo.core.config import get_settings
+
+    sp = get_settings().stealth_prefix.rstrip("/")
+    path = request.url.path
+    if any(path.startswith(sp + suffix) for suffix in _PASSWORD_CHANGE_ALLOWED_SUFFIXES):
+        return
+
+    from fastapi import HTTPException
+
+    raise HTTPException(status_code=302, headers={"Location": f"{sp}{CHANGE_PASSWORD_PATH}"})
+
+
 async def require_user(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -402,6 +451,10 @@ async def require_user(
 
     Uses HTTPException with Location header to trigger a 302 redirect
     when the user is not authenticated.
+
+    The redirect to the change-password page is not made here: it belongs to
+    ``get_current_user_optional`` below, which every web page goes through —
+    most of them without ever calling this dependency.
     """
     from fastapi import HTTPException
 
@@ -420,6 +473,11 @@ async def get_current_user_optional(
     Returns the User model if authenticated, None otherwise.
     Used by web pages that work for both logged-in and anonymous visitors.
 
+    Raises a 302 ``HTTPException`` — the redirect the web layer already uses —
+    when the resolved user must change their password and the request is not
+    for one of the pages that lets them. Returning the user instead would let
+    every page that only checks for ``None`` render normally.
+
     Silent refresh: when the access token has expired but a valid
     ``refresh_token`` cookie is present, the function calls
     ``AuthService.refresh()`` to obtain new tokens.  The new tokens
@@ -427,10 +485,15 @@ async def get_current_user_optional(
     ``TokenRefreshMiddleware`` can set the cookies on the response.
     """
     from specivo.core.exceptions import AppError
-    from specivo.core.security import get_current_user
+    from specivo.core.security import authenticate_request
 
     try:
-        user_obj = await get_current_user(request, db)
+        # The forced password-change gate is off here on purpose. It answers
+        # with 403, which this function would read as "not signed in" and turn
+        # into a redirect to the login page — where an already-signed-in user
+        # has nothing to do. The web layer needs the resolved user so it can
+        # send it to the change-password page instead; see ``require_user``.
+        user_obj = await authenticate_request(request, db, enforce_password_change=False)
     except AppError:
         # get_current_user now performs silent refresh internally for the
         # cookie-based paths ("auth_token_expired" + missing access_token).
@@ -454,4 +517,187 @@ async def get_current_user_optional(
         if user_language in get_available_locales():
             activate(user_language)
 
+    # Last step, and the reason it is here rather than in ``require_user``:
+    # only a handful of pages use that dependency. Every other page — issues,
+    # wiki, projects, sprints, the dashboard — resolves its user through this
+    # function and redirects to /login/ itself, so this is the one place a
+    # forced password change can be enforced across the whole web surface.
+    redirect_if_password_change_required(request, user_obj)
+
     return user_obj
+
+
+# ---------------------------------------------------------------------------
+# Anonymous web reading
+# ---------------------------------------------------------------------------
+
+# The web pages that may be served to a visitor without an account, as the
+# path templates FastAPI registers them under.
+#
+# This is the whole surface anonymous browsing has, and it is the web mirror
+# of ``specivo.core.security.ANONYMOUS_READ_ROUTES``: a page joins it by being
+# written here *and* by depending on ``get_web_reader``, and the contract test
+# in ``tests/integration/test_anonymous_route_contract.py`` fails when the two
+# disagree.
+#
+# What is deliberately absent is as much of the decision as what is present:
+# the dashboard, sprints, the backlog, the roadmap, versions, time entries,
+# recurring patterns, project settings, the wiki page list, history, diffs and
+# the trash, every form and every htmx partial. The wiki index is here only
+# because it is a redirect to the home page — without it the "Wiki" link on a
+# project people can read would send them to the login screen.
+ANONYMOUS_WEB_ROUTES: frozenset[str] = frozenset(
+    {
+        "/projects/",
+        "/projects/{key}/",
+        "/projects/{project_key}/issues/",
+        "/issue/{issue_ref}/",
+        "/projects/{project_key}/wiki/",
+        "/projects/{project_key}/wiki/{slug}/",
+        "/search/",
+    }
+)
+
+# Where a refused visitor is sent. Bare, exactly as ``require_user`` and every
+# page handler has always spelled it, so the refusal stays the redirect the web
+# layer already used.
+LOGIN_PATH = "/login/"
+
+# A ``next`` longer than this is dropped rather than echoed into a redirect.
+_MAX_NEXT_LENGTH = 2000
+
+
+def safe_next_path(raw: str | None) -> str:
+    """Return *raw* if it is somewhere this application may send a browser.
+
+    Only a path within this site survives: it must start with a single ``/``
+    and carry nothing that could turn it into another origin or a second
+    header. Everything else becomes the empty string, which callers read as
+    "no destination" and fall back to the dashboard.
+
+    ``//evil.example`` and ``/\\evil.example`` are the two forms browsers
+    resolve as protocol-relative URLs, so both are refused even though they
+    look local.
+    """
+    if not raw or len(raw) > _MAX_NEXT_LENGTH:
+        return ""
+    if not raw.startswith("/") or raw.startswith(("//", "/\\")):
+        return ""
+    if any(char in raw for char in "\r\n\t") or any(ord(char) < 0x20 for char in raw):
+        return ""
+    return raw
+
+
+def _current_path(request: Request) -> str:
+    """The path and query the visitor asked for, as a single relative URL."""
+    path = request.url.path
+    return f"{path}?{request.url.query}" if request.url.query else path
+
+
+def login_url_for(target: str) -> str:
+    """The login URL that returns a visitor to *target* once they sign in."""
+    destination = safe_next_path(target)
+    if not destination:
+        return LOGIN_PATH
+    return f"{LOGIN_PATH}?next={quote(destination, safe='')}"
+
+
+@pass_context
+def _sign_in_url(ctx) -> str:
+    """Template global: the login URL that comes back to the current page.
+
+    A context function so templates can call it as ``sign_in_url()`` without
+    every handler having to put the value in its context.
+    """
+    request = ctx.get("request")
+    if request is None:
+        return LOGIN_PATH
+    return login_url_for(_current_path(request))
+
+
+def refuse_anonymous_web(request: Request) -> Response:
+    """The one refusal every allowlisted web page produces.
+
+    A redirect to the login page, and nothing else. It is returned for a
+    project that does not exist, one that is private, one that is not opted in,
+    one that is archived, an issue the visitor may not see, a permission the
+    project did not grant, credentials that failed, and an instance whose
+    switch is off — so comparing responses tells a visitor nothing about which
+    projects exist or why a page was withheld.
+
+    The response is a pure function of the URL that was asked for: the only
+    part that varies is ``next``, which echoes back what the visitor typed.
+    That is what makes the refusals comparable at all, and it is why the cache
+    headers are set here rather than left to
+    ``AnonymousResponseHeadersMiddleware``. The middleware only marks responses
+    that resolved to the anonymous principal, so with the switch off a refusal
+    would arrive without them — and a shared cache header would then be enough
+    to tell a switched-off instance from a project that refused.
+    """
+    from fastapi.responses import RedirectResponse
+
+    response = RedirectResponse(login_url_for(_current_path(request)), status_code=302)
+    setattr(request.state, ANONYMOUS_READER_STATE_KEY, False)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Vary"] = "Cookie, Authorization"
+    return response
+
+
+async def get_web_reader(
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> AsyncGenerator[object | None, None]:
+    """Dependency: the signed-in user, the anonymous principal, or nothing.
+
+    The web counterpart of ``specivo.core.security.get_reader``, and a thin one
+    on purpose: the rules that decide what an anonymous visitor is subject to
+    live in ``anonymous_read_scope``, which both dependencies share, so the
+    pages cannot end up more permissive than the API.
+
+    Three cases, and the middle one is the point:
+
+    - **Credentials present** — resolved by ``get_current_user_optional``,
+      exactly as every page already resolved them, with the forced
+      password-change redirect and the per-user locale it performs. A
+      credential that fails resolves to ``None`` here, never to the anonymous
+      principal: a visitor whose session expired is asked to sign in again
+      rather than quietly shown the public half of the site while believing
+      they are signed in.
+    - **No credentials at all** — the anonymous principal, but only while the
+      instance switch is on and the row exists.
+    - **Neither** — ``None``, which every handler turns into
+      :func:`refuse_anonymous_web`.
+
+    Handlers receive ``None`` rather than an exception so the refusal stays a
+    returned ``RedirectResponse``, which is how the web layer has always
+    refused; nothing about a page outside this allowlist changes.
+    """
+    from specivo.core.security import (
+        anonymous_read_scope,
+        has_credentials,
+        resolve_anonymous_principal,
+    )
+
+    if has_credentials(request):
+        yield await get_current_user_optional(request, db)
+        return
+
+    try:
+        anonymous = await resolve_anonymous_principal(db)
+    except Exception:
+        # Fail closed. Resolving the principal reads the instance switch from
+        # the database, and a request that cannot establish whether anonymous
+        # access is switched on must not be served as though it were: the
+        # visitor gets the same refusal an instance with the switch off
+        # produces. Refusing on this path costs an unauthenticated visitor a
+        # login screen; guessing could publish a project nobody opted in.
+        logger.warning("Could not resolve anonymous access; refusing the request", exc_info=True)
+        anonymous = None
+
+    if anonymous is None:
+        yield None
+        return
+
+    async with anonymous_read_scope(request, response, db):
+        yield anonymous

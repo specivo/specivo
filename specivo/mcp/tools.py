@@ -1589,7 +1589,7 @@ async def _list_relations(
 ) -> str:
     issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue.project_id, "view_issues")
-    rows = await _relation_svc.list_for_issue(session, issue)
+    rows = await _relation_svc.list_for_issue(session, issue, user)
     await _log_tool(
         session,
         user,
@@ -1652,7 +1652,7 @@ async def _remove_relation(
 ) -> str:
     issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue.project_id, "manage_issue_relations")
-    await _relation_svc.delete(session, relation_id, user)
+    await _relation_svc.delete(session, relation_id, user, via_issue=issue)
     await session.flush()
     await _log_tool(
         session,

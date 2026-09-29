@@ -1,0 +1,64 @@
+/* ============================================================
+   Anonymous visitors — the read-only view of an opted-in project.
+
+   A page served without an account keeps the normal chrome but
+   loses every control behind it. These rules cover the two bits
+   that only exist in that state: the banner that says the page
+   is read-only, and the sign-in action that replaces the user
+   menu in the header.
+   ============================================================ */
+
+.sp-anon-banner {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-space-sm);
+    margin-bottom: var(--sp-space-lg);
+    padding: var(--sp-space-sm) var(--sp-space-md);
+    border: 1px solid var(--sp-border);
+    border-left: 3px solid var(--sp-accent);
+    border-radius: var(--sp-border-radius);
+    background: var(--sp-bg-surface);
+    color: var(--sp-text-secondary);
+    font-size: var(--sp-font-size-sm);
+}
+
+.sp-anon-banner-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    color: var(--sp-accent);
+}
+
+.sp-anon-banner-action {
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.sp-anon-signin {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--sp-space-xs);
+    white-space: nowrap;
+    text-decoration: none;
+}
+
+.sp-anon-signin svg {
+    width: 16px;
+    height: 16px;
+}
+
+@media (max-width: 480px) {
+    .sp-anon-banner {
+        flex-wrap: wrap;
+    }
+
+    .sp-anon-banner-action {
+        margin-left: 0;
+    }
+
+    /* The header is tight on a phone; the banner already carries a
+       sign-in link, so the header keeps the icon alone. */
+    .sp-anon-signin-label {
+        display: none;
+    }
+}
