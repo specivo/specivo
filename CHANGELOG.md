@@ -19,6 +19,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
   - Signed-in non-members no longer see a public project's wiki pages in search.
   - Private notes no longer appear in comment search for anyone but administrators.
   - Opening a project's wiki no longer creates its Home page unless the reader can manage the wiki.
+  - Adding or removing an issue relation needs *Manage issue relations* over REST and in the web pages, as it already did over MCP. Reporter, Non member and any custom role without it lose the ability, and the relation controls are hidden from them (see Security).
+  - The MCP `specivo_remove_relation` tool only removes a relation attached to the issue passed as `issue_ref`; a relation ID belonging to another issue is answered as not found.
 - Project cards and the overview count **people** with access, direct or through a group. The admin projects table shows separate People and Groups columns
 
 ### Fixed
