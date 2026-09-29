@@ -89,8 +89,14 @@ jobs:
       - name: Run migrations
         run: uv run alembic upgrade head
 
+      # Serial tests share instance-wide state (settings, advisory locks) and
+      # cannot run beside other xdist workers, so they get a pass of their own,
+      # as in `make test`. Coverage from both passes is combined.
       - name: Run tests
-        run: uv run pytest -m 'not e2e' --cov=specivo --cov-report=term --cov-report=xml:coverage.xml --cov-fail-under=0
+        run: uv run pytest -m 'not serial and not e2e' --cov=specivo --cov-report=
+
+      - name: Run serial tests
+        run: uv run pytest -m 'serial and not e2e' -n 0 --cov=specivo --cov-append --cov-report=term --cov-report=xml:coverage.xml --cov-fail-under=0
 
       - name: Upload coverage artifact
         if: always()
