@@ -44,6 +44,11 @@ make import-redmine ARGS='\
   --dry-run'
 ```
 
+`make import-redmine` runs `python -m specivo.cli.import_data --source redmine`
+inside the `api` container. Without `make`, run that yourself with
+`docker compose exec api`, followed by the same options.
+`--source redmine --help` lists every option.
+
 A dry run does the whole import and rolls it back, so nothing is written and no
 files are copied. Its report is the point: it lists the decisions the importer
 made that you may want to change before they are permanent.
@@ -164,7 +169,8 @@ LEGACY_PASSWORD_HASHES_EXPIRE_AT=2027-03-31T00:00:00Z
 
 Either way, the sign-in page shows the usual "Invalid login or password", so it
 doesn't reveal which accounts are affected. Coming from something other than
-Redmine? See [Writing a password hasher plugin](password-hasher-plugins.md).
+Redmine? See [Writing an import source plugin](import-source-plugins.md) and
+[Writing a password hasher plugin](password-hasher-plugins.md).
 
 ## Useful options
 
