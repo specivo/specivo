@@ -318,7 +318,7 @@ async def dashboard(
                     Journal.user_id.in_(sa_user_ids),
                     Journal.project_id.in_(visible_pids),
                 )
-                .order_by(Journal.created_at.desc())
+                .order_by(Journal.created_at.desc(), Journal.id.desc())
                 .limit(20)
             )
             journals = list((await db.execute(journal_stmt)).scalars().all())

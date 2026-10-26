@@ -708,7 +708,7 @@ async def issue_description_diff(
             .join(Journal, JournalDetail.journal_id == Journal.id)
             .join(UserModel, Journal.user_id == UserModel.id)
             .where(JournalDetail.prop_key == "description", Journal.issue_id == issue.id)
-            .order_by(Journal.created_at.desc())
+            .order_by(Journal.created_at.desc(), Journal.id.desc())
         )
     ).all()
 
