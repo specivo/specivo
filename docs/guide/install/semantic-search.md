@@ -71,9 +71,9 @@ Related settings, all in `.env`:
 
 | | |
 |---|---|
-| Name | `multilingual-e5-small` (from the `intfloat/multilingual-e5-small` repository on Hugging Face, MIT license) |
+| Name | `multilingual-e5-small` (from the `intfloat/multilingual-e5-small` repository on Hugging Face, MIT license), pinned to revision `fd1525a9fd15` |
 | Format | ONNX, run on the CPU with ONNX Runtime. No GPU, no external service, no API key |
-| Size | About 393 MB to download; the model file itself is about 370 MB |
+| Size | About 487 MB to download: the model file is about 470 MB, the tokenizer about 17 MB |
 | Vector size | 384 numbers per chunk |
 | Languages | About 100 |
 | Similarity | Cosine, on length-normalized vectors |
@@ -91,13 +91,12 @@ first use. You put its files in a `models` folder inside your data directory:
 <SPECIVO_DATA_DIR>/models/tokenizer.json
 ```
 
-`SPECIVO_DATA_DIR` defaults to `./specivo-data`, which Docker Compose mounts at `/app/data` in both
-the `api` and the `celery-worker` containers, so the files are found at `/app/data/models/`. They are
-also covered by your normal [backup](backup-restore.md) of the data directory.
+`SPECIVO_DATA_DIR` defaults to `./specivo-data`, which Docker Compose mounts at `/app/data` in the
+`api`, `celery-worker` and `celery-embeddings` containers, so the files are found at
+`/app/data/models/`. They are also covered by your normal [backup](backup-restore.md) of the data
+directory.
 
-Those two files are the only ones Specivo checks for. The download script fetches three more
-(`tokenizer_config.json`, `special_tokens_map.json`, `sentencepiece.bpe.model`) that the loader
-does not read.
+Those two files are all Specivo reads, and all the download command fetches.
 
 **There is no on/off setting.** The files being present is the switch. Specivo looks for them each
 time it needs an embedding, so you do not have to restart after adding them. A fresh install already
@@ -108,10 +107,15 @@ takes.
 
 - The model is loaded into memory the first time it is used by a process, and it stays there. Budget
   at least the size of the model file for each process that embeds: the `api` container, which
-  embeds search queries, and each `celery-worker` process that embeds content. The worker starts one
-  process per CPU core unless you pass `--concurrency`, and each one that picks up an embedding job
-  loads its own copy. Measure on your host; a small team fits the 2 CPU / 2 to 4 GB guidance in the
-  [overview](index.md).
+  embeds search queries, and the `celery-embeddings` container, which embeds content. Embedding jobs
+  go to a queue of their own (`embeddings`) that only `celery-embeddings` reads, and it runs **one
+  process** by default, so content embedding keeps one copy of the model in memory however many
+  cores you have. The general `celery-worker` never loads the model. Measure on your host; a small
+  team fits the 2 CPU / 2 to 4 GB guidance in the [overview](index.md).
+- To embed faster on a big host, set `EMBEDDING_WORKER_CONCURRENCY` in `.env` (default `1`); each
+  extra process costs another copy of the model. To run embedding in the general worker instead of
+  a separate container, set `EMBEDDING_QUEUE=celery` and stop `celery-embeddings`. Restart the stack
+  after changing either.
 - Inference uses **2 CPU threads** by default. Set `EMBEDDING_ONNX_THREADS` in `.env` to change that:
   a higher number makes indexing faster and uses more CPU, and `0` lets the model use every core.
   Restart the stack afterwards.
@@ -120,29 +124,24 @@ takes.
 
 ## Turn it on
 
-1. **Download the model** into the data directory. From a checkout of the repository:
+1. **Download the model** into the data directory, from inside the running `api` container:
 
     ```bash
-    make download-model
+    docker compose exec api python -m specivo.cli.download_model
     ```
 
-    This needs `curl` and a connection to `huggingface.co`, and writes to
-    `${SPECIVO_DATA_DIR:-specivo-data}/models`. If your data directory is somewhere else, give the
-    path: `bash scripts/download-model.sh /path/to/data/models`. The script skips files that are
-    already there.
+    `make download-model` runs the same command, from a checkout or from the release bundle. It
+    needs the `api` container to reach `huggingface.co` (set `HTTPS_PROXY` for the container if you
+    use a proxy) and writes to `/app/data/models`, which is `<SPECIVO_DATA_DIR>/models` on the host.
+    Each file comes from a pinned revision and is checked against its SHA-256 before it replaces
+    anything; a file that fails the check is discarded and the command exits with an error. Files
+    already present with the right checksum are skipped, so it is safe to run again. `--force`
+    downloads them anyway. When the host is offline, the command stops with the list of files, their
+    URLs and checksums.
 
-    Without a checkout (for example from the release bundle, which does not contain the script),
-    fetch the files by hand:
-
-    ```bash
-    mkdir -p specivo-data/models && cd specivo-data/models
-    BASE=https://huggingface.co/intfloat/multilingual-e5-small/resolve/main
-    curl -L "$BASE/onnx/model.onnx"        -o multilingual-e5-small.onnx
-    curl -L "$BASE/tokenizer.json"         -o tokenizer.json
-    curl -L "$BASE/tokenizer_config.json"  -o tokenizer_config.json
-    curl -L "$BASE/special_tokens_map.json" -o special_tokens_map.json
-    curl -L "$BASE/sentencepiece.bpe.model" -o sentencepiece.bpe.model
-    ```
+    `scripts/download-model.sh` (in the repository and the release bundle) does the same on a host
+    without Docker, for example to prepare the files for an air-gapped server:
+    `bash scripts/download-model.sh /path/to/models`. It needs `curl` and `sha256sum` or `shasum`.
 
 2. **Index the content you already have** (below). New content is picked up as described under
    [How content is indexed](#how-content-is-indexed).
@@ -161,7 +160,7 @@ Indexing happens in two steps, and only the second needs the model.
    change. Keyword search reads them straight away. This needs no model and no worker, and it is
    cheap enough not to slow saving down.
 2. **Embeddings, a few seconds later.** After the change is saved, Specivo queues a job for the
-   `celery-worker`, which embeds the new chunks. Semantic and hybrid search find the content once
+   `celery-embeddings` worker, which embeds the new chunks. Semantic and hybrid search find the content once
    that job has run, usually within seconds. Quick edits in a row are usually embedded once, from
    the latest text.
 
@@ -178,46 +177,70 @@ messages that reference an issue. An import indexes everything it brought in at 
 
 Things to know:
 
-- **The worker must be running for semantic indexing.** Without it, keyword search still finds
-  everything, but new and edited content waits for the worker (or the backfill below) before
-  semantic search finds it. The queued jobs are kept in Redis and run when the worker comes back.
+- **The `celery-embeddings` worker must be running for semantic indexing.** The standard Compose
+  file starts it. Without it, keyword search still finds everything, but new and edited content
+  waits for the worker (or the backfill below) before semantic search finds it. The queued jobs are
+  kept in Redis and run when the worker comes back.
 - **Without the model files nothing is queued.** Chunks are still written, so keyword search is
   complete. When you add the files later, run the backfill once to embed what was written in the
-  meantime. The worker logs at startup whether semantic indexing is on.
+  meantime. The embedding worker logs at startup whether semantic indexing is on.
 - If Redis cannot be reached when a change is saved, the change is still saved and keyword-searchable;
   the `api` logs a warning, and the backfill embeds the content later.
 - Indexing problems are logged at warning level, with the kind of content and its id. They never make
   the save itself fail.
 - The comment settings above are applied as comments are written and edited. Changing them later
-  affects comments written or edited afterwards.
+  affects comments written or edited afterwards; run the backfill to apply them to older comments
+  too.
 
 ## Index existing content
 
-The backfill goes through every issue, wiki page, comment and attachment description, rebuilds
-their chunks and embeds the ones that have no embedding yet. It is safe to run again whenever you
-like: chunks whose text has not changed keep their embeddings. Run it after you add the model files.
-Day to day there is no need to run it, because new and edited content is indexed as it is saved.
+The backfill goes through every issue, wiki page, comment and attachment, brings its chunks in line
+with the content and the current settings, and embeds the chunks that have no embedding yet. It
+indexes every attachment, with or without a description, whether it hangs off an issue, a comment
+or a wiki page. It removes the chunks of comments the comment settings now exclude, and of items
+that no longer exist. It is safe to run again whenever you like: chunks whose text has not changed
+keep their embeddings. Run it after you add the model files, and after you change a comment
+setting. Day to day there is no need to run it, because new and edited content is indexed as it is
+saved.
 
 ```bash
 docker compose exec api python -m specivo.cli.backfill_embeddings
 ```
 
-From a source checkout `make backfill-embeddings` does the same, but that target uses the
-development compose files, so on a normal install use the command above.
+`make backfill-embeddings` runs the same command (`make backfill-embeddings ARGS=--reembed` passes
+options). It runs in the foreground, prints progress, and ends with what it did:
 
-It runs in the foreground and prints progress as it goes. Work is saved in small batches, so
-stopping it with Ctrl+C loses very little, and you can start it again. The time it takes grows with
-the number of chunks and your CPU. Run a large first backfill when the server is quiet, and raise
-`EMBEDDING_ONNX_THREADS` for the duration if you have cores to spare.
+```
+Chunked 1840 sources into 2312 chunks; removed 3 stale sources.
+Embedded 2312 chunks with multilingual-e5-small; 2312 of 2312 chunks now have an embedding.
+```
 
-!!! note "It works without the model too"
+Work is saved in small batches, so stopping it with Ctrl+C loses very little, and you can start it
+again. The time it takes grows with the number of chunks and your CPU. Run a large first backfill
+when the server is quiet, and raise `EMBEDDING_ONNX_THREADS` for the duration if you have cores to
+spare.
+
+| Option | Effect |
+|---|---|
+| `--reembed` | Recompute the embedding of every chunk, not only of chunks that have none. Use it after replacing the model files. Old embeddings are replaced one by one, so semantic search keeps working meanwhile |
+| `--require-model` | Stop with exit status 2, without doing anything, when no model can run. Useful in scripts that expect semantic search to be on |
+
+The exit status is 0 when the run succeeded, with or without a model, and 1 when some items could
+not be indexed (the log names each one).
+
+!!! note "Without the model it writes keyword chunks only"
     If the model files are missing, the backfill still writes every chunk, which is all keyword
-    search needs, and writes no embeddings. Add the files and run it again for semantic search.
+    search needs, and embeds nothing. It says so at the end with a warning: *Only keyword-search
+    chunks were written; 0 chunks were embedded and semantic search stays off.* Add the files and
+    run it again for semantic search.
 
-An administrator can also start a *fill-the-gaps* backfill for one registered model with
-`POST /api/v1/admin/embedding-models/{id}/backfill/`. It runs in the Celery worker (so the worker
-must be up) and only adds embeddings for chunks that have none. It does not rebuild chunk text, so
-it does not fix stale content. There is no button for it in the web UI.
+An administrator can also start a backfill for one registered model in the background with
+`POST /api/v1/admin/embedding-models/{id}/backfill/`. It runs on the `celery-embeddings` worker and
+embeds the chunks that have none for that model; add `?reembed=true` to recompute every embedding,
+for example after replacing the model files. It does not rebuild chunk text (that is kept current
+as content is saved, and the command above rebuilds it). It answers `409` when the model cannot run
+here, for example because its files are missing. It needs an administrator account; there is no
+button for it in the web UI.
 
 ## Check that it works
 
@@ -229,12 +252,12 @@ it does not fix stale content. There is no button for it in the web UI.
 
     You should see `multilingual-e5-small.onnx` and `tokenizer.json`.
 
-2. **Does the log agree?** The worker says at startup whether semantic indexing is on, and each
-   process logs the line below when it first loads the model. When the model is missing, the `api`
-   logs a warning each time it needs to embed a search query.
+2. **Does the log agree?** The embedding worker says at startup whether semantic indexing is on,
+   and each process logs the line below when it first loads the model. When the model is missing,
+   the `api` logs a warning each time it needs to embed a search query.
 
     ```bash
-    docker compose logs celery-worker api | grep -iE "semantic indexing|embedding model|ONNX model"
+    docker compose logs celery-embeddings api | grep -iE "semantic indexing|embedding model|ONNX model"
     ```
 
     ```
@@ -253,8 +276,9 @@ it does not fix stale content. There is no button for it in the web UI.
     ```
 
     (Use your `POSTGRES_USER` and `POSTGRES_DB` if you changed them.) Many chunks and zero
-    embeddings means the chunks were built while the model files were missing, or the worker is not
-    running. Check the worker, add the files, and run the backfill again.
+    embeddings means the chunks were built while the model files were missing, or the
+    `celery-embeddings` worker is not running. Check the worker, add the files, and run the backfill
+    again.
 
 4. **Does a meaning-based search work?** Search for a paraphrase of something you know is in an
    issue, using an [API key](../ai-agents/api-keys.md):
@@ -295,26 +319,29 @@ Bring-your-own-key hosted embeddings are not available either, whatever older no
 Work down the list in [Check that it works](#check-that-it-works): the files in
 `/app/data/models`, the log line, and the chunks and embeddings counts. The usual causes are no
 model files, files in the wrong folder (it must be the `models` folder *inside* the folder mounted
-as `/app/data`, and `SPECIVO_DATA_DIR` in `.env` must point at the same place for both containers), a
-stopped `celery-worker`, or a backfill that has not run since the files were added.
+as `/app/data`, and `SPECIVO_DATA_DIR` in `.env` must point at the same place for all containers), a
+stopped `celery-embeddings` worker, or a backfill that has not run since the files were added.
 
 **A result I know exists is missing, or looks out of date.**
 In keyword mode, check that you can open the item: search only shows what you are allowed to see,
 and comments shorter than `SEARCH_MIN_COMMENT_LENGTH` or written by a bot are not indexed. In
-semantic mode, the worker may not have embedded the latest text yet; check that it is running and
-look for warnings in its log. Content from before 0.9.0 that was never backfilled may lack
+semantic mode, the `celery-embeddings` worker may not have embedded the latest text yet; check that
+it is running and look for warnings in its log. Content from before 0.9.0 that was never backfilled may lack
 embeddings; run the backfill. See [How content is indexed](#how-content-is-indexed).
 
-**`make download-model` fails.**
-The script first checks that it can reach `huggingface.co` and stops if not. Behind a proxy or
-firewall, allow that host, or download on another machine and copy the files over. See
-[Air-gapped install](air-gapped.md#semantic-search-offline). A failed download is removed, and
-re-running the script picks up where the completed files end. The five files are listed above if you
-would rather fetch them yourself.
+**The model download fails.**
+*Cannot reach huggingface.co* means the `api` container has no route to Hugging Face. Behind a
+proxy, set `HTTPS_PROXY` for the container; behind a firewall, allow that host; otherwise download on
+another machine with `scripts/download-model.sh` and copy the files over (see
+[Air-gapped install](air-gapped.md#semantic-search-offline)). The error lists both files with their
+URLs and checksums. *Checksum mismatch* means the file that arrived is not the pinned one, for
+example because a proxy altered it; it was discarded and nothing was replaced. A failed download
+leaves no partial file, and running the command again skips the files that are already complete.
 
 **Indexing is slow.**
 Embedding is one chunk at a time on the CPU. Raise `EMBEDDING_ONNX_THREADS` while you backfill, and
-give the `api` and `celery-worker` containers more cores. Saving is not slowed down: content is
+give the `api` and `celery-embeddings` containers more cores, or raise
+`EMBEDDING_WORKER_CONCURRENCY` if you have memory for another copy of the model. Saving is not slowed down: content is
 embedded by the worker after it is saved, so a burst of changes only means semantic search catches up
 a little later.
 
@@ -324,8 +351,9 @@ does not currently create a vector index for them, so the cost grows with the nu
 Thousands of chunks are fine. Very large instances should expect slower semantic and hybrid queries,
 and can fall back to keyword mode.
 
-**The `api` or `celery-worker` container uses a lot of memory.**
+**The `api` or `celery-embeddings` container uses a lot of memory.**
 The model is loaded into each process the first time it embeds something and stays loaded. This is
-expected: the model file alone is about 370 MB. If memory is tight, give the containers more, start
-the worker with fewer processes (`celery -A specivo.tasks worker --concurrency=2`), or leave the
-model files out and use keyword search.
+expected: the model file alone is about 470 MB. `celery-embeddings` runs one process by default; if
+you raised `EMBEDDING_WORKER_CONCURRENCY`, lower it. If memory is still tight, give the containers
+more, or leave the model files out and use keyword search. The general `celery-worker` does not load
+the model; if it does, check that `EMBEDDING_QUEUE` is not set to `celery`.

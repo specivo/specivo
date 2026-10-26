@@ -120,12 +120,16 @@ and [Writing a password hasher plugin](password-hasher-plugins.md).
 ## Semantic search model
 
 Hybrid and semantic search match by meaning, which needs an embedding model. Specivo runs one on
-your own CPU, `multilingual-e5-small` (about 393 MB, 384-dimensional vectors, about 100 languages).
-It is not part of the Docker image and is not downloaded automatically. You fetch it once:
+your own CPU, `multilingual-e5-small` (about 487 MB, 384-dimensional vectors, about 100 languages).
+It is not part of the Docker image and is not downloaded automatically. You fetch it once, with the
+stack running:
 
 ```bash
-make download-model      # saves into SPECIVO_DATA_DIR/models
+docker compose exec api python -m specivo.cli.download_model   # or: make download-model
 ```
+
+It saves into `SPECIVO_DATA_DIR/models` and checks each file against its published checksum. See
+[Semantic search and embeddings](semantic-search.md#turn-it-on).
 
 There is no setting that turns it on: when the model files are in `SPECIVO_DATA_DIR/models`, it is
 on. Without them, keyword search and everything else work normally and hybrid search behaves like
@@ -134,6 +138,8 @@ keyword search. Hosted ("bring your own key") providers and other models are not
 | Variable | Purpose / default |
 |---|---|
 | `EMBEDDING_ONNX_THREADS` | CPU threads the model may use. Default `2`; `0` uses every core. |
+| `EMBEDDING_WORKER_CONCURRENCY` | Processes in the `celery-embeddings` container. Default `1`; each one loads its own copy of the model. |
+| `EMBEDDING_QUEUE` | Celery queue for embedding jobs. Default `embeddings`, read by `celery-embeddings`; `celery` runs them in `celery-worker` instead. |
 | `SEARCH_INDEX_COMMENTS` | Index comments for search. Default `true`. |
 | `SEARCH_MIN_COMMENT_LENGTH` | Comments shorter than this many characters are not indexed. Default `20`. |
 | `SEARCH_EXCLUDE_BOT_COMMENTS` | Skip comments made through an API key or by a service account. Default `true`. |

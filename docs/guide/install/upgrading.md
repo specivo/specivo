@@ -92,25 +92,32 @@ which is the same flag the language setting uses; it clears when the reindex fin
 
 Before 0.9.0 a comment could not be found by any search until someone ran the embedding backfill,
 and edited issues and wiki pages kept their old text in semantic search. Now every change is
-indexed as it is saved: keyword search sees it at once, and the `celery-worker` adds the embeddings
-for semantic search a few seconds later. See
+indexed as it is saved: keyword search sees it at once, and a new `celery-embeddings` container adds
+the embeddings for semantic search a few seconds later. See
 [How content is indexed](semantic-search.md#how-content-is-indexed).
 
 - Migration 0037 makes existing comments searchable by keyword. It follows your
   `SEARCH_INDEX_COMMENTS`, `SEARCH_MIN_COMMENT_LENGTH` and `SEARCH_EXCLUDE_BOT_COMMENTS` settings.
   Nothing to do.
-- Make sure the `celery-worker` container is running; the standard Compose file starts it. Semantic
-  indexing now happens there instead of in the `api`, and it mounts the same data directory, so the
-  model files need no moving.
+- Take the new `docker-compose.yml`: it adds the `celery-embeddings` service, which runs the
+  embedding jobs in one process so the model is loaded once (`EMBEDDING_WORKER_CONCURRENCY`, default
+  `1`). If you keep your own Compose file, add the service, or set `EMBEDDING_QUEUE=celery` so
+  `celery-worker` runs the jobs. It mounts the same data directory, so the model files need no
+  moving.
 - If you use semantic search, run the backfill once after upgrading so the comments and the edits
-  made before the upgrade get embeddings too. It also indexes attachments brought in by an earlier
-  import. Without the model files it writes keyword chunks only, which is harmless:
+  made before the upgrade get embeddings too. It also indexes every attachment (including those
+  without a description and those on wiki pages) and drops the chunks of comments your settings
+  exclude. Without the model files it writes keyword chunks only and says so, which is harmless:
 
   ```bash
   docker compose exec api python -m specivo.cli.backfill_embeddings
   ```
 
   A scheduled backfill, if you set one up, is no longer needed.
+- `make download-model`, `make backfill-embeddings`, `make reindex-fts` and `make import-data` now
+  run in the `api` container of whichever stack the directory has, so they work from a release
+  bundle too. The model download is now `python -m specivo.cli.download_model`, which checks
+  checksums; the release bundle's `configure.py` moved to `scripts/configure.py`.
 
 ### Check time tracking permissions
 

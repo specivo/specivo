@@ -3,7 +3,7 @@
 Handles:
 - Generating embeddings via provider APIs (or mock for tests)
 - Embedding the chunks that have none yet (the Celery task, the import, the backfill)
-- Backfilling embeddings for all existing chunks with a new model
+- Backfilling embeddings for all existing chunks, or re-embedding them all
 
 Chunks themselves are written by :mod:`specivo.services.search_index_service`.
 """
@@ -14,7 +14,7 @@ import hashlib
 import logging
 import math
 
-from sqlalchemy import exists, select
+from sqlalchemy import ColumnElement, exists, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -295,12 +295,15 @@ class EmbeddingService:
         session: AsyncSession,
         sources: list[tuple[str, int]],
         model_id: int | None = None,
+        *,
+        reembed: bool = False,
     ) -> int:
         """Embed the chunks of *sources* that have no embedding for the model yet.
 
         Idempotent: chunks already embedded, and sources that no longer exist,
-        are skipped. Does nothing when the model cannot run here. Returns the
-        number of embeddings written.
+        are skipped. With *reembed*, every chunk of the sources is embedded
+        again and its stored embedding replaced. Does nothing when the model
+        cannot run here. Returns the number of embeddings written.
         """
         if model_id is not None:
             model = (
@@ -313,93 +316,90 @@ class EmbeddingService:
 
         count = 0
         for source_type, entity_id in sources:
-            rows = (
-                await session.execute(
-                    select(SearchChunk.id, SearchChunk.content)
-                    .join(SearchSource, SearchSource.id == SearchChunk.source_id)
-                    .where(
-                        SearchSource.source_type == source_type,
-                        SearchSource.entity_id == entity_id,
-                        ~exists(
-                            select(ChunkEmbedding.id).where(
-                                ChunkEmbedding.chunk_id == SearchChunk.id,
-                                ChunkEmbedding.model_id == model.id,
-                            )
-                        ),
-                    )
-                    .order_by(SearchChunk.chunk_index)
-                )
-            ).all()
-            for chunk_id, content in rows:
-                vector = await self.generate_embedding(content, model)
-                if vector is None:
-                    continue
-                await session.execute(
-                    pg_insert(ChunkEmbedding)
-                    .values(chunk_id=chunk_id, model_id=model.id, embedding=vector)
-                    .on_conflict_do_nothing(index_elements=["chunk_id", "model_id"])
-                )
-                count += 1
+            stmt = (
+                select(SearchChunk.id, SearchChunk.content)
+                .join(SearchSource, SearchSource.id == SearchChunk.source_id)
+                .where(SearchSource.source_type == source_type, SearchSource.entity_id == entity_id)
+                .order_by(SearchChunk.chunk_index)
+            )
+            if not reembed:
+                stmt = stmt.where(_lacks_embedding(model.id))
+            for chunk_id, content in (await session.execute(stmt)).all():
+                if await self._store_embedding(session, model, chunk_id, content, replace=reembed):
+                    count += 1
         return count
 
-    async def backfill_model(self, session: AsyncSession, model_id: int, batch_size: int = 1000) -> int:
-        """Generate embeddings for all existing chunks using a new model.
+    async def _store_embedding(
+        self, session: AsyncSession, model: EmbeddingModel, chunk_id: int, content: str, *, replace: bool
+    ) -> bool:
+        """Embed one chunk and store the vector; True when a vector was written."""
+        vector = await self.generate_embedding(content, model)
+        if vector is None:
+            return False
+        stmt = pg_insert(ChunkEmbedding).values(chunk_id=chunk_id, model_id=model.id, embedding=vector)
+        if replace:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["chunk_id", "model_id"], set_={"embedding": stmt.excluded.embedding}
+            )
+        else:
+            stmt = stmt.on_conflict_do_nothing(index_elements=["chunk_id", "model_id"])
+        await session.execute(stmt)
+        return True
 
-        Processes chunks in batches to avoid loading all into memory at once (OOM).
+    async def backfill_model(
+        self, session: AsyncSession, model_id: int, batch_size: int = 1000, *, reembed: bool = False
+    ) -> int:
+        """Embed every chunk that has no embedding for *model_id*, or all of them with *reembed*.
+
+        Re-embedding replaces each stored vector in place, so semantic search
+        keeps working while it runs. Processes chunks in id order and in batches
+        to keep memory flat. Does nothing when the model cannot run here.
 
         Args:
             session: Async DB session.
             model_id: The model to generate embeddings for.
             batch_size: Number of chunks to process per batch.
+            reembed: Recompute existing embeddings too.
 
         Returns:
-            Number of embeddings created.
+            Number of embeddings written.
         """
         model_result = await session.execute(select(EmbeddingModel).where(EmbeddingModel.id == model_id))
         model = model_result.scalar_one_or_none()
         if model is None:
             logger.error("Embedding model %d not found for backfill", model_id)
             return 0
+        if not self.is_model_usable(model):
+            logger.warning("Embedding model %s cannot run here (missing model files); nothing embedded", model.name)
+            return 0
 
-        # Batched iteration: process chunks in pages to avoid OOM
         count = 0
         last_id = 0
-
         while True:
-            batch_result = await session.execute(
-                select(SearchChunk)
-                .where(
-                    SearchChunk.id > last_id,
-                    ~exists(
-                        select(ChunkEmbedding.id).where(
-                            ChunkEmbedding.chunk_id == SearchChunk.id,
-                            ChunkEmbedding.model_id == model_id,
-                        )
-                    ),
-                )
-                .order_by(SearchChunk.id)
-                .limit(batch_size)
-            )
-            batch = batch_result.scalars().all()
-
+            stmt = select(SearchChunk.id, SearchChunk.content).where(SearchChunk.id > last_id)
+            if not reembed:
+                stmt = stmt.where(_lacks_embedding(model.id))
+            batch = (await session.execute(stmt.order_by(SearchChunk.id).limit(batch_size))).all()
             if not batch:
                 break
-
-            for chunk in batch:
-                vector = await self.generate_embedding(chunk.content, model)
-                if vector is None:
-                    last_id = chunk.id
-                    continue
-                embedding = ChunkEmbedding(
-                    chunk_id=chunk.id,
-                    model_id=model.id,
-                    embedding=vector,
-                )
-                session.add(embedding)
-                count += 1
-                last_id = chunk.id
-
+            for chunk_id, content in batch:
+                if await self._store_embedding(session, model, chunk_id, content, replace=reembed):
+                    count += 1
+                last_id = chunk_id
             await session.flush()
 
-        logger.info("Backfilled %d embeddings for model %s (id=%d)", count, model.name, model.id)
+        logger.info(
+            "%s %d embeddings for model %s (id=%d)",
+            "Re-embedded" if reembed else "Backfilled",
+            count,
+            model.name,
+            model.id,
+        )
         return count
+
+
+def _lacks_embedding(model_id: int) -> ColumnElement[bool]:
+    """WHERE clause: the chunk has no embedding for *model_id*."""
+    return ~exists(
+        select(ChunkEmbedding.id).where(ChunkEmbedding.chunk_id == SearchChunk.id, ChunkEmbedding.model_id == model_id)
+    )

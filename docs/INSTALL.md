@@ -28,7 +28,7 @@ tar xzf specivo-*-bundle.tar.gz
 docker load < specivo-image.tar
 
 # 3. Configure
-python3 configure.py
+python3 scripts/configure.py
 
 # 4. Start
 docker compose up -d
@@ -89,47 +89,38 @@ CREATE EXTENSION IF NOT EXISTS vector;
 ## Hybrid search (embedding model)
 
 Specivo supports hybrid search (keyword + semantic) using a local embedding model,
-`multilingual-e5-small`. No API keys are required; the model runs on the CPU inside the `api`
-container. It is not included in the image or in this bundle, so you download it once. Without it,
-search falls back to keyword matching and everything else works normally.
+`multilingual-e5-small`. No API keys are required; the model runs on the CPU. It is not included
+in the image or in this bundle, so you download it once (about 487 MB). Without it, search falls
+back to keyword matching and everything else works normally.
 
-The files live in `specivo-data/models/` (your `SPECIVO_DATA_DIR`). The two that matter are
-`multilingual-e5-small.onnx` and `tokenizer.json`.
+The files live in `specivo-data/models/` (your `SPECIVO_DATA_DIR`): `multilingual-e5-small.onnx`
+and `tokenizer.json`.
 
 ### Online setup
 
-From a checkout of the repository:
+With the stack running, download the model from inside the `api` container. It fetches a pinned
+revision and checks each file's SHA-256:
 
 ```bash
-make download-model
+docker compose exec api python -m specivo.cli.download_model    # or: make download-model
 ```
 
-Or fetch the files by hand (this bundle does not contain the script):
+No restart is needed. Then index the content you already have:
 
 ```bash
-mkdir -p specivo-data/models && cd specivo-data/models
-BASE=https://huggingface.co/intfloat/multilingual-e5-small/resolve/main
-curl -L "$BASE/onnx/model.onnx"         -o multilingual-e5-small.onnx
-curl -L "$BASE/tokenizer.json"          -o tokenizer.json
-curl -L "$BASE/tokenizer_config.json"   -o tokenizer_config.json
-curl -L "$BASE/special_tokens_map.json" -o special_tokens_map.json
-curl -L "$BASE/sentencepiece.bpe.model" -o sentencepiece.bpe.model
+docker compose exec api python -m specivo.cli.backfill_embeddings    # or: make backfill-embeddings
 ```
 
-That is about 393 MB. No restart is needed. Then index the content you already have:
-
-```bash
-docker compose exec api python -m specivo.cli.backfill_embeddings
-```
-
-New issues and wiki pages are embedded as they are created. Edits to existing issues and wiki pages, and
-new comments, are picked up the next time you run the backfill command, so run it again from time to
-time (for example nightly).
+It reports how many items it chunked and how many chunks it embedded. If the model files are
+missing it still writes the keyword-search chunks and says that semantic search stays off. After
+that, new and edited content is indexed as it is saved; the `celery-embeddings` container adds the
+embeddings a few seconds later, using one copy of the model in memory.
 
 ### Air-gapped / offline setup
 
-Download the files above on a machine with internet, copy the `models` folder to
-`specivo-data/models/` on the target machine, and run the backfill command.
+On a machine with internet, run `bash scripts/download-model.sh ./models` (from this bundle; needs
+`curl` and `sha256sum` or `shasum`). Copy the `models` folder to `specivo-data/models/` on the
+target machine and run the backfill command.
 
 ### Without the embedding model
 

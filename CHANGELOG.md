@@ -20,12 +20,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Markdown fields are limited to 262,144 characters; text too complex to render quickly is shown as plain text
 - Relative times stay relative for the first 24 hours instead of switching to "Yesterday" at midnight
 - `specivo.cli.import_redmine` is replaced by `specivo.cli.import_data --source redmine`
+- Embedding jobs run in a new single-process `celery-embeddings` service, so the model is loaded once
+- The model download is `python -m specivo.cli.download_model` (pinned revision, SHA-256 checked); `make` targets for it, the backfill, reindex and import work from the release bundle
 
 ### Fixed
 - The remaining untranslated interface text, and dates now follow the interface language
 - Keyword search returned short pages after the first one
 - Comments saved in the same moment could appear out of order
 - New comments were not found by any search, and edits were not re-indexed
+- The search backfill reported success without a model and skipped some attachments and stale comments; it now reports what it embedded and has `--reembed` and `--require-model`
+- The release bundle's `configure.py` wrote its files outside the bundle, and the model download pointed to a release asset that does not exist
 
 ### Security
 - Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages

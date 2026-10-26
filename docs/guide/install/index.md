@@ -29,7 +29,8 @@ when you clone the repo:
 | api | `specivo/specivo` | The application. Listens on port **8000** inside the network, behind nginx. |
 | db | `pgvector/pgvector:pg18` | **PostgreSQL 18** with pgvector for full-text and semantic search. |
 | redis | `redis:7-alpine` | Cache and Celery broker. |
-| celery-worker / celery-beat | `specivo/specivo` | Background jobs (search indexing, scheduled tasks). |
+| celery-worker / celery-beat | `specivo/specivo` | Background jobs and scheduled tasks. |
+| celery-embeddings | `specivo/specivo` | Embeds content for semantic search, in one process so the model is loaded once. |
 
 You reach Specivo at `http://your-specivo-host:9933`. Nothing else is exposed by default.
 

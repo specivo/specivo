@@ -86,7 +86,7 @@ reserved, and two hashers with the same id stop Specivo from starting.
 
 ## Install it
 
-The module has to be importable by the web app, the Celery worker and the
+The module has to be importable by the web app, the Celery workers and the
 import command. With Docker, mount it into `/app` in every service, for example
 in `docker-compose.override.yml`:
 
@@ -96,6 +96,9 @@ services:
     volumes:
       - ./plugins/acme_hashers.py:/app/acme_hashers.py:ro
   celery-worker:
+    volumes:
+      - ./plugins/acme_hashers.py:/app/acme_hashers.py:ro
+  celery-embeddings:
     volumes:
       - ./plugins/acme_hashers.py:/app/acme_hashers.py:ro
 ```

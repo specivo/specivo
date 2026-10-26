@@ -3,7 +3,10 @@
 Tasks:
 - embed_search_sources: Embed the chunks of the given sources that have no embedding yet.
   Queued after every commit that writes chunks (see ``search_index_service``).
-- backfill_model_embeddings: Generate embeddings for all existing chunks using a new model.
+- backfill_model_embeddings: Embed every chunk that has no embedding for a model, or re-embed them all.
+
+Both run on the ``EMBEDDING_QUEUE`` queue (see ``specivo.tasks``), so only the
+worker that consumes it loads the model.
 """
 
 from __future__ import annotations
@@ -13,7 +16,7 @@ import logging
 from celery.signals import worker_ready  # type: ignore[import-untyped]
 
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_EMBEDDING
-from specivo.tasks import celery_app
+from specivo.tasks import EMBEDDING_QUEUE, celery_app
 from specivo.tasks._async import run_async, task_session
 
 logger = logging.getLogger(__name__)
@@ -74,9 +77,20 @@ async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
                 logger.info("Embedded %d chunk(s) for %s %d", count, source_type, entity_id)
 
 
+def _consumes_embedding_queue(consumer: object) -> bool:
+    """Whether the starting worker listens on the embedding queue (True when unknown)."""
+    try:
+        queues = consumer.task_consumer.queues  # type: ignore[attr-defined]
+        return any(queue.name == EMBEDDING_QUEUE for queue in queues)
+    except Exception:  # noqa: BLE001 - only decides whether to log a status line
+        return True
+
+
 @worker_ready.connect
-def _log_embedding_model_status(**_kwargs) -> None:  # type: ignore[no-untyped-def]
-    """Say once, at worker start, whether semantic indexing can run here."""
+def _log_embedding_model_status(sender: object = None, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+    """Say once, at start of the worker that embeds, whether semantic indexing can run there."""
+    if sender is not None and not _consumes_embedding_queue(sender):
+        return
     try:
         run_async(_log_model_status_async())
     except Exception as exc:  # noqa: BLE001 - a status line must not stop the worker
@@ -102,26 +116,27 @@ async def _log_model_status_async() -> None:
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
-def backfill_model_embeddings(self, model_id: int) -> None:  # type: ignore[no-untyped-def]
-    """Generate embeddings for all existing chunks using a new model.
+def backfill_model_embeddings(self, model_id: int, reembed: bool = False) -> None:  # type: ignore[no-untyped-def]
+    """Embed the chunks that have no embedding for a model, or all chunks with *reembed*.
 
     Args:
         model_id: ID of the EmbeddingModel to backfill.
+        reembed: Recompute embeddings that already exist too.
     """
     try:
-        run_async(_backfill_async(model_id))
+        run_async(_backfill_async(model_id, reembed))
     except Exception as exc:
         logger.warning("Failed to backfill model %d: %s", model_id, exc)
         raise self.retry(exc=exc)
 
 
-async def _backfill_async(model_id: int) -> None:
+async def _backfill_async(model_id: int, reembed: bool = False) -> None:
     """Async implementation of model backfill."""
     from specivo.services.embedding_service import EmbeddingService
 
     embedding = EmbeddingService()
 
     async with task_session() as session:
-        count = await embedding.backfill_model(session, model_id)
+        count = await embedding.backfill_model(session, model_id, reembed=reembed)
         await session.commit()
         logger.info("Backfill complete: %d embeddings for model %d", count, model_id)

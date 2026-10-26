@@ -66,6 +66,17 @@ services:
       SECRET_KEY: "dev-secret-key-minimum-32-bytes-for-hs256-signing"
       PYTHONPATH: "/app"
 
+  celery-embeddings:
+    build: .
+    image: specivo/specivo:dev
+    volumes:
+      - ./specivo:/app/specivo
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://specivo:specivo@db:5432/specivo_dev"
+      REDIS_URL: "redis://redis:6379/0"
+      SECRET_KEY: "dev-secret-key-minimum-32-bytes-for-hs256-signing"
+      PYTHONPATH: "/app"
+
   celery-beat:
     build: .
     image: specivo/specivo:dev
