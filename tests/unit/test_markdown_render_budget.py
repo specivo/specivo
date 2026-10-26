@@ -1,8 +1,13 @@
 """Unit tests for the Markdown render budget.
 
 Inputs that Python-Markdown renders in super-linear time, or that exhaust the
-recursion limit, are shown as escaped plain text instead, in well under a
-second. Realistic large documents keep rendering exactly as before.
+recursion limit, are shown as escaped plain text instead. Realistic large
+documents keep rendering exactly as before.
+
+Nothing here asserts an absolute duration, which depends on the machine and
+its load. The pre-scan's decision is asserted directly, linear-time claims
+are asserted as scaling in CPU time (``scaling_ratio``), and the only
+absolute bound (``CATASTROPHE_SECONDS``) is far above any expected time.
 """
 
 from __future__ import annotations
@@ -12,12 +17,15 @@ import time
 import markdown
 import pytest
 
+from specivo.core.config import get_settings
 from specivo.core.exceptions import ValidationError
 from specivo.core.i18n import activate, deactivate
-from specivo.services import markdown_budget
+from specivo.services import markdown_budget, markdown_service
 from specivo.services.markdown_budget import (
     MAX_MARKDOWN_CHARS,
     MAX_NESTING_DEPTH,
+    RenderDeadline,
+    RenderDeadlineError,
     _backtick_scan_chars,
     check_markdown_length,
     estimate_render_cost,
@@ -29,21 +37,46 @@ from specivo.services.markdown_service import (
     _sanitize_html,
     render_plain_markdown,
     render_wiki_markdown,
+    substitute_links,
 )
 from specivo.services.search_service import _clean_snippet
 from specivo.services.wiki_link_service import WikiLinkService
 from specivo.services.wiki_utils import WIKI_LINK_RE
-from tests.fixtures.markdown_inputs import PATHOLOGICAL, RECURSION, large_page, links_list, links_paragraph
+from tests.fixtures.markdown_inputs import (
+    CATASTROPHE_SECONDS,
+    LINEAR_RATIO_LIMIT,
+    PATHOLOGICAL,
+    RECURSION,
+    cpu_time,
+    large_page,
+    links_list,
+    links_paragraph,
+    scaling_ratio,
+)
 
 pytestmark = pytest.mark.unit
 
 FALLBACK = 'class="sp-markdown-fallback"'
 
 
+def render(text: str) -> str:
+    return str(render_wiki_markdown(text, project_key="ACME"))
+
+
 def timed_render(text: str) -> tuple[str, float]:
-    started = time.perf_counter()
-    html = str(render_wiki_markdown(text, project_key="ACME"))
-    return html, time.perf_counter() - started
+    started = time.thread_time()
+    html = render(text)
+    return html, time.thread_time() - started
+
+
+@pytest.fixture
+def markdown_never_called(monkeypatch):
+    """Fail the test if Python-Markdown is asked to render anything."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("the guard let this text through to Python-Markdown")
+
+    monkeypatch.setattr(markdown_service._md, "markdown", refuse)
 
 
 def unguarded(text: str) -> str:
@@ -57,23 +90,35 @@ def unguarded(text: str) -> str:
 
 
 @pytest.mark.parametrize("name", list(PATHOLOGICAL))
-def test_pathological_input_is_shown_as_plain_text_quickly(name):
+def test_pre_scan_rejects_pathological_input(name):
+    text = PATHOLOGICAL[name]
+    assert render_hazard(substitute_links(text, "ACME"), len(text)) is not None
+
+
+@pytest.mark.parametrize("name", list(PATHOLOGICAL))
+def test_pathological_input_is_shown_as_plain_text_without_rendering(name, markdown_never_called):
     html, elapsed = timed_render(PATHOLOGICAL[name])
     assert FALLBACK in html
-    assert elapsed < 0.5, f"{name} took {elapsed:.2f}s"
+    assert elapsed < CATASTROPHE_SECONDS
+
+
+@pytest.mark.parametrize("name", list(PATHOLOGICAL))
+def test_guarded_render_of_pathological_input_scales_linearly(name):
+    """The pre-scan and the fallback are linear: a quarter of the text takes about a quarter of the time."""
+    text = PATHOLOGICAL[name]
+    assert scaling_ratio(render, text[: len(text) // 4], text) < LINEAR_RATIO_LIMIT
 
 
 def test_recursion_error_falls_back_to_plain_text():
+    # Nested emphasis passes the pre-scan; the render itself hits the recursion limit.
+    assert render_hazard(RECURSION) is None
     html, elapsed = timed_render(RECURSION)
     assert FALLBACK in html
-    assert elapsed < 0.5
+    assert elapsed < CATASTROPHE_SECONDS
 
 
-def test_plain_markdown_filter_is_guarded_too():
-    started = time.perf_counter()
-    html = str(render_plain_markdown(PATHOLOGICAL["unclosed-link-target"]))
-    assert FALLBACK in html
-    assert time.perf_counter() - started < 0.5
+def test_plain_markdown_filter_is_guarded_too(markdown_never_called):
+    assert FALLBACK in str(render_plain_markdown(PATHOLOGICAL["unclosed-link-target"]))
 
 
 def test_fallback_escapes_the_text_and_keeps_it_whole():
@@ -95,8 +140,29 @@ def test_fallback_notice_is_translated():
 
 
 def test_render_past_the_deadline_falls_back(monkeypatch):
-    monkeypatch.setattr(markdown_budget, "RENDER_DEADLINE_SECONDS", -1.0)
+    monkeypatch.setattr(get_settings(), "markdown_render_deadline_seconds", -1.0)
     assert FALLBACK in str(render_wiki_markdown("Just a *short* paragraph."))
+
+
+def test_deadline_defaults_to_a_wide_margin():
+    # The slowest realistic page needs well under a second of CPU time.
+    assert get_settings().markdown_render_deadline_seconds >= 5.0
+
+
+def test_deadline_counts_cpu_time_not_waiting():
+    """Time the thread spends not running (a busy host, a sleep) does not count."""
+    md = markdown.Markdown(extensions=[RenderDeadline(0.05)])
+    time.sleep(0.2)
+    assert md.convert("Still *renders*.") == "<p>Still <em>renders</em>.</p>"
+
+
+def test_deadline_stops_a_render_that_uses_the_cpu():
+    md = markdown.Markdown(extensions=[RenderDeadline(0.05)])
+    started = time.thread_time()
+    while time.thread_time() - started < 0.1:
+        pass
+    with pytest.raises(RenderDeadlineError):
+        md.convert("Too *late*.")
 
 
 # ---------------------------------------------------------------------------
@@ -123,11 +189,21 @@ def test_two_thousand_links_all_render():
 
 
 def test_large_page_with_wiki_links_and_issue_refs_renders():
-    html, elapsed = timed_render(large_page())
+    html = render(large_page())
     assert FALLBACK not in html
     assert '<a href="/projects/ACME/wiki/page-0/"' in html
     assert '<a href="/issue/ACME-0/"' in html
-    assert elapsed < 2.0
+
+
+def test_realistic_rendering_scales_linearly():
+    assert scaling_ratio(render, large_page(50 * 1024), large_page(200 * 1024)) < LINEAR_RATIO_LIMIT
+
+
+def test_realistic_page_renders_far_inside_the_deadline():
+    """The margin the deadline default relies on: a 250 KB page uses a fraction of it."""
+    assert (
+        cpu_time(lambda: render(large_page(250 * 1024)), repeat=1) < get_settings().markdown_render_deadline_seconds / 2
+    )
 
 
 def test_text_with_a_few_unclosed_openers_renders():
@@ -221,13 +297,15 @@ def test_check_markdown_length():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("text", ["[[" * 50000, "[[a|" * 30000, "[[a" * 30000])
-def test_wiki_link_parsing_is_linear(text):
-    started = time.perf_counter()
+def _parse_wiki_links(text: str) -> None:
     WIKI_LINK_RE.sub("", text)
     WikiLinkService().parse_links(text)
-    _clean_snippet(text[:20000])
-    assert time.perf_counter() - started < 0.5
+    _clean_snippet(text)
+
+
+@pytest.mark.parametrize("unit", ["[[", "[[a|", "[[a"])
+def test_wiki_link_parsing_is_linear(unit):
+    assert scaling_ratio(_parse_wiki_links, unit * 12500, unit * 50000) < LINEAR_RATIO_LIMIT
 
 
 def test_wiki_link_regex_still_matches_links():
