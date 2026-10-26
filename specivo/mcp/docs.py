@@ -93,10 +93,12 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: FastMCP | None = None
 ### Search modes
 - `mode="hybrid"` *(default)* -- FTS + pgvector semantic via RRF fusion.
   Best general-purpose recall. Use this unless you have a reason not to.
-- `mode="keyword"` -- tsvector FTS only. Fastest; best for exact identifiers
-  or literal strings when semantic recall adds noise.
+- `mode="keyword"` -- tsvector FTS only. Fastest; best for literal strings
+  when semantic recall adds noise.
 - `mode="semantic"` -- pgvector embeddings only. Best for conceptual queries
   where wording varies (requires embeddings to be populated).
+- Issue references (`ACME-42`) work in any mode: the issue itself comes
+  first, followed by issues, comments and wiki pages that mention it.
 
 ### Create an issue
 1. `specivo_list_lookups()` -- get tracker_id, priority_id

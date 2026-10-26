@@ -64,7 +64,8 @@ async def _state() -> dict[str, object]:
 async def test_downgrade_and_upgrade_round_trip() -> None:
     seeded = [("Non member", False, ["view_issues"], "default")]
     before = await _state()
-    assert before["revision"] == "0032"
+    # Head moves on as later migrations land; 0032 only has to be applied.
+    assert before["revision"] >= "0032"
     assert [tuple(r) for r in before["non_member_rows"]] == seeded
 
     try:
@@ -78,6 +79,6 @@ async def test_downgrade_and_upgrade_round_trip() -> None:
         _alembic("upgrade", "head")
 
     after = await _state()
-    assert after["revision"] == "0032"
+    assert after["revision"] == before["revision"]
     assert (after["index"], after["check"], after["triggers"]) == (1, 1, 2)
     assert [tuple(r) for r in after["non_member_rows"]] == seeded
