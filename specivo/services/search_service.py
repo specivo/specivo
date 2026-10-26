@@ -38,6 +38,7 @@ from specivo.schemas.search import (
     SearchSourceType,
 )
 from specivo.services.permission_service import Permission
+from specivo.services.wiki_utils import WIKI_LINK_RE
 
 # Shortcuts for f-string interpolation into raw SQL. These expand to the
 # enum member's string value (e.g. ``_SST_ATTACHMENT == "attachment"``). Values
@@ -112,8 +113,6 @@ def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int
     return sorted(scores, key=lambda x: scores[x], reverse=True)
 
 
-# Complete wiki links: [[target|display]] or [[target]]
-_WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
 # Partial wiki links truncated by ts_headline:
 #   "slug|Display Text]]"  (missing [[)
 #   "[[slug|Display Text"  (missing ]])
@@ -142,7 +141,7 @@ def _clean_snippet(snippet: str | None) -> str | None:
     # matches cleanly and HTML-escaping doesn't destroy them.
     clean = snippet.replace("<mark>", "\x00MARK_OPEN\x00").replace("</mark>", "\x00MARK_CLOSE\x00")
     # Complete links: [[target|display]] → display; [[target]] → target
-    clean = _WIKI_LINK_RE.sub(
+    clean = WIKI_LINK_RE.sub(
         lambda m: m.group(2) or m.group(1).replace("_", " "),
         clean,
     )
