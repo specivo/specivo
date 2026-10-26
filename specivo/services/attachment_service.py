@@ -463,7 +463,7 @@ class AttachmentService:
         session: AsyncSession,
         project: Project,
         reader: User,
-    ) -> Select[tuple[int, str, str, int]] | None:
+    ) -> Select[int, str, str, int] | None:
         """Select the issue and wiki-page attachments of *project* that *reader* may open.
 
         Rows are ``(id, filename, container_type, container_id)``, oldest

@@ -176,7 +176,7 @@ class ApiKeyService:
                 status_code=401,
             )
 
-        key, user = row._tuple()
+        key, user = row
 
         if not key.is_active:
             raise AppError(
