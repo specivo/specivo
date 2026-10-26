@@ -184,6 +184,16 @@ the app user's home (`/home/specivo/.local/state/specivo/`, mode 0700).
       and is reported, because changing it would change every name it is linked under.
     - If an earlier 0.9.0 build gave the data directory or `logs/` to the app, it gives them back
       to root, and it removes world-write permission from the data directory.
+    - It works through file descriptors (`specivo/ops/fix_ownership.py`): each entry is opened
+      without following symlinks and checked again before its owner changes, so renaming or
+      swapping entries while it runs cannot point it elsewhere.
+    - It does not enter a directory the app user already owns, because a running app container
+      could change it meanwhile. If such a directory holds files of root, it says so: stop all app
+      containers and run `docker compose run --rm init-data fix-permissions --all`, which does
+      enter them.
+- **Run `init-data` with the app containers stopped.** `docker compose up` starts it before `api`,
+  but on an upgrade the old `celery-worker`, `celery-embeddings` and `celery-beat` containers can
+  still be running at that moment. Stop them first (see [Upgrade](#upgrade)).
 - **Host directories you mount yourself** (another data path, extra theme or error-page
   directories, a Redmine `files` directory for the importer) must be readable by `10001`, and
   writable where the app writes to them. Give such a directory to the app user on the host:
@@ -437,7 +447,10 @@ tar czf specivo-backup-$(date +%Y%m%d).tar.gz specivo-data/
 # Pull new image
 docker compose pull
 
-# Restart (init-data prepares the app directories, the entrypoint runs migrations)
+# Stop the app containers, so none runs while init-data prepares the data directory
+docker compose stop api celery-worker celery-embeddings celery-beat
+
+# Start (init-data prepares the app directories, the entrypoint runs migrations)
 docker compose up -d
 ```
 
@@ -451,7 +464,8 @@ directories, with the files an older version wrote as root, to that user. See [C
 # Load new image from bundle
 docker load < specivo-image.tar
 
-# Restart
+# Stop the app containers, then start
+docker compose stop api celery-worker celery-embeddings celery-beat
 docker compose up -d
 ```
 

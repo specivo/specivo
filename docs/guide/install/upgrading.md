@@ -28,10 +28,12 @@ for a deployment you rely on, pin an explicit tag so you know exactly what is ru
 
 ```bash
 docker compose pull
+docker compose stop api celery-worker celery-embeddings celery-beat
 docker compose up -d
 ```
 
-`pull` fetches the new image; `up -d` recreates the containers. On startup the entrypoint waits for
+`pull` fetches the new image; `stop` stops the app containers so that none is running while the
+one-shot `init-data` service prepares the data directory; `up -d` recreates the containers. On startup the entrypoint waits for
 the database and applies any new migrations automatically — you do not run a migrate step yourself.
 
 Watch the API logs to confirm a clean start:
@@ -80,6 +82,12 @@ of the data directory, `attachments/`, `avatars/`, `models/`, `state/` and `logs
 the files an older version wrote there as root, and moves `.bootstrap.json` into `state/` if it is
 still there. On the first start this can take a moment on a large attachments folder; later starts
 skip directories that already belong to the app.
+
+- Stop the app containers before `docker compose up -d`, as in
+  [Pull and restart](#2-pull-and-restart): `init-data` must not run while an old `celery-worker`,
+  `celery-embeddings` or `celery-beat` container is still up.
+- It does not enter directories the app already owns. If it reports one that holds files of root,
+  stop all app containers and run `docker compose run --rm init-data fix-permissions --all`.
 
 - The data directory itself stays with root (or with you), as do `logs/`, `postgresql/`, `redis/`
   and `logs/nginx/`: the app cannot change entries at the top of the data directory.

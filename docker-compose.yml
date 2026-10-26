@@ -17,6 +17,12 @@ services:
   # directory itself stays with root. Needed for installs whose files were
   # written by root; when nothing is to change it exits at once. Everything
   # else in this file runs as uid 10001.
+  # Run it while no app container (api, celery-worker, celery-embeddings,
+  # celery-beat) is running: `up` starts it before the api, but on an upgrade
+  # stop the old app containers first (`docker compose stop api celery-worker
+  # celery-embeddings celery-beat`). Directories the app already owns are not
+  # entered; `docker compose run --rm init-data fix-permissions --all` does,
+  # with the app containers stopped.
   init-data:
     image: specivo/specivo:${SPECIVO_VERSION:-latest}
     user: "0:0"
