@@ -33,6 +33,7 @@ from specivo.core.middleware import (
     AuditBatchMiddleware,
     CSRFMiddleware,
     LocaleMiddleware,
+    MarkdownRenderBudgetMiddleware,
     RateLimitHeaderMiddleware,
     RequestIDMiddleware,
     SQLDebugMiddleware,
@@ -190,6 +191,10 @@ def create_app() -> FastAPI:
 
     # Locale — detect language from cookie/header and activate per-request.
     application.add_middleware(LocaleMiddleware)
+
+    # Markdown render budget — CPU time shared by every Markdown field
+    # rendered for one request.
+    application.add_middleware(MarkdownRenderBudgetMiddleware)
 
     # Trusted hosts — reject requests with unexpected Host headers in production
     if settings.allowed_hosts != ["*"]:
