@@ -14,6 +14,7 @@ from specivo.models.lookups import IssueStatus
 from specivo.models.project import Project
 from specivo.models.version import Version
 from specivo.schemas.version import RoadmapEntry, VersionCreate, VersionOut, VersionUpdate
+from specivo.services.markdown_budget import check_markdown_length
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ class VersionService:
         data: VersionCreate,
     ) -> Version:
         """Create a new version for *project*."""
+        check_markdown_length(data.description, "description")
         version = Version(
             project_id=project.id,
             name=data.name,
@@ -108,6 +110,7 @@ class VersionService:
         data: VersionUpdate,
     ) -> Version:
         """Apply a partial update to *version*."""
+        check_markdown_length(data.description, "description")
         if data.name is not None:
             version.name = data.name
         if data.description is not None:

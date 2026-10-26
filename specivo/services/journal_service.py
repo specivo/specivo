@@ -16,6 +16,7 @@ from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.user import User
+from specivo.services.markdown_budget import check_markdown_length
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +292,7 @@ class JournalService:
             and itself not be a reply.
         Returns the created ``Journal``.
         """
+        check_markdown_length(notes, "notes")
         if reply_to_id is not None:
             result = await session.execute(select(Journal).where(Journal.id == reply_to_id))
             parent_journal = result.scalar_one_or_none()

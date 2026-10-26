@@ -121,6 +121,17 @@ You can link by title (`[[Release Process]]`) or by slug (`[[release-process]]`)
 `[[My Page]]`, `[[my-page]]`, and `[[My_Page]]` all resolve to the same page. See
 [Linking & history](../wiki/history-linking.md) for more.
 
+## Size and complexity limits
+
+A description, a comment, a wiki page, or a version or recurring-issue description can hold up to
+**262,144 characters** (256 Ki). Saving longer text is refused with a message giving the limit; split
+the content across several pages or comments instead. The editor preview takes the same amount.
+
+Text that would take too long to format is shown **as plain text** instead, below a short notice, with
+nothing removed. Ordinary documents never hit this, including ones with thousands of links. It is
+meant for text such as thousands of unclosed `[` or `<`, the same heading repeated thousands of times,
+or lists and quotes nested more than 50 levels deep. Edit the text and it renders normally again.
+
 !!! tip "Keep it simple"
     Stick to the elements above. Specivo renders standard Markdown plus the two extensions on this page —
     if a construct isn't listed here, don't assume it renders.

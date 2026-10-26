@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
+from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.wiki_utils import slugify as _slugify
 
 logger = logging.getLogger(__name__)
@@ -59,14 +60,18 @@ class WikiService:
         *,
         skip_search_index: bool = False,
         skip_link_rebuild: bool = False,
+        limit_text_length: bool = True,
     ) -> tuple[WikiPage, WikiContent]:
         """Create a wiki page with initial content (version 1).
 
         ``skip_search_index`` suppresses the inline embedding call and
         ``skip_link_rebuild`` the link-graph task dispatch. Bulk callers such as
         the import pipeline set both and do that work once at the end of the
-        run, rather than per page.
+        run, rather than per page. ``limit_text_length=False`` lets it keep a
+        page longer than ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
         """
+        if limit_text_length:
+            check_markdown_length(text, "text")
         wiki = await self.get_or_create_wiki(session, project_id)
         slug = _slugify(title)
 
@@ -186,6 +191,7 @@ class WikiService:
         comment: str | None = None,
     ) -> tuple[WikiPage, WikiContent]:
         """Update page content, creating a new version."""
+        check_markdown_length(text, "text")
         page = await self._get_page_by_id(session, page_id)
         if page is None:
             raise NotFoundError("Wiki page not found")
