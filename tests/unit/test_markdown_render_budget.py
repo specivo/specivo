@@ -20,6 +20,7 @@ import pytest
 from specivo.core.config import get_settings
 from specivo.core.exceptions import ValidationError
 from specivo.core.i18n import activate, deactivate
+from specivo.core.middleware import MarkdownRenderBudgetMiddleware
 from specivo.services import markdown_budget, markdown_service
 from specivo.services.markdown_budget import (
     MAX_MARKDOWN_CHARS,
@@ -27,9 +28,13 @@ from specivo.services.markdown_budget import (
     RenderDeadline,
     RenderDeadlineError,
     _backtick_scan_chars,
+    charge_render,
     check_markdown_length,
+    end_request_budget,
     estimate_render_cost,
+    render_allowance,
     render_hazard,
+    start_request_budget,
 )
 from specivo.services.markdown_service import (
     _MD_EXTENSION_CONFIGS,
@@ -47,7 +52,6 @@ from tests.fixtures.markdown_inputs import (
     LINEAR_RATIO_LIMIT,
     PATHOLOGICAL,
     RECURSION,
-    cpu_time,
     large_page,
     links_list,
     links_paragraph,
@@ -139,30 +143,134 @@ def test_fallback_notice_is_translated():
     assert FALLBACK in html
 
 
-def test_render_past_the_deadline_falls_back(monkeypatch):
-    monkeypatch.setattr(get_settings(), "markdown_render_deadline_seconds", -1.0)
-    assert FALLBACK in str(render_wiki_markdown("Just a *short* paragraph."))
+class FakeClock:
+    """A clock that only moves when the test says so."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+
+    def __call__(self) -> float:
+        return self.now
 
 
-def test_deadline_defaults_to_a_wide_margin():
-    # The slowest realistic page needs well under a second of CPU time.
-    assert get_settings().markdown_render_deadline_seconds >= 5.0
+@pytest.fixture
+def clocks(monkeypatch):
+    """Replace the CPU and wall clocks the render budget reads."""
+    cpu, wall = FakeClock(), FakeClock()
+    monkeypatch.setattr(markdown_budget, "_cpu_clock", cpu)
+    monkeypatch.setattr(markdown_budget, "_wall_clock", wall)
+    return cpu, wall
 
 
-def test_deadline_counts_cpu_time_not_waiting():
-    """Time the thread spends not running (a busy host, a sleep) does not count."""
-    md = markdown.Markdown(extensions=[RenderDeadline(0.05)])
-    time.sleep(0.2)
+def test_render_within_both_limits_completes(clocks):
+    cpu, wall = clocks
+    md = markdown.Markdown(extensions=[RenderDeadline(2.0)])
+    cpu.now += 1.9
+    wall.now += 7.9  # just under 4x the CPU allowance
     assert md.convert("Still *renders*.") == "<p>Still <em>renders</em>.</p>"
 
 
-def test_deadline_stops_a_render_that_uses_the_cpu():
-    md = markdown.Markdown(extensions=[RenderDeadline(0.05)])
-    started = time.thread_time()
-    while time.thread_time() - started < 0.1:
-        pass
+def test_cpu_deadline_stops_a_render(clocks):
+    cpu, _wall = clocks
+    md = markdown.Markdown(extensions=[RenderDeadline(2.0)])
+    cpu.now += 2.1
     with pytest.raises(RenderDeadlineError):
         md.convert("Too *late*.")
+
+
+def test_wall_clock_ceiling_stops_a_starved_render(clocks):
+    """A thread that gets almost no CPU still cannot hold the request forever."""
+    _cpu, wall = clocks
+    md = markdown.Markdown(extensions=[RenderDeadline(2.0)])
+    wall.now += 2.0 * markdown_budget.WALL_CLOCK_FACTOR + 0.1
+    with pytest.raises(RenderDeadlineError):
+        md.convert("Too *late*.")
+
+
+def test_render_past_the_deadline_falls_back(clocks, monkeypatch):
+    cpu, _wall = clocks
+    real_markdown = markdown_service._md.markdown
+
+    def slow_markdown(*args, **kwargs):
+        cpu.now += 10.0  # the render has used far more than its allowance
+        return real_markdown(*args, **kwargs)
+
+    monkeypatch.setattr(markdown_service._md, "markdown", slow_markdown)
+    assert FALLBACK in render("Just a *short* paragraph.")
+
+
+def test_deadline_defaults():
+    settings = get_settings()
+    assert settings.markdown_render_deadline_seconds == 2.0
+    assert settings.markdown_render_request_budget_seconds == 5.0
+
+
+# ---------------------------------------------------------------------------
+# Per-request budget
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def renders_cost(clocks, monkeypatch):
+    """Make every Markdown render use *seconds* of (fake) CPU time; returns a setter."""
+    cpu, _wall = clocks
+    cost = {"seconds": 0.0}
+
+    def costly_markdown(text, **kwargs):
+        cpu.now += cost["seconds"]
+        return f"<p>{text}</p>"
+
+    monkeypatch.setattr(markdown_service._md, "markdown", costly_markdown)
+    return lambda seconds: cost.__setitem__("seconds", seconds)
+
+
+def test_request_budget_makes_later_fields_fall_back(renders_cost):
+    renders_cost(1.5)
+    token = start_request_budget(2.5)
+    try:
+        first, second, third = (render(f"field {i}") for i in range(3))
+    finally:
+        end_request_budget(token)
+    # 1.5 s of the 2.5 s budget left 1.0 s for the second field, which it
+    # overran; nothing is left for the third.
+    assert first == "<p>field 0</p>"
+    assert second == "<p>field 1</p>"
+    assert FALLBACK in third
+
+
+def test_request_budget_caps_a_fields_allowance(clocks, monkeypatch):
+    token = start_request_budget(0.5)
+    try:
+        assert render_allowance() == 0.5
+        charge_render(0.4)
+        assert render_allowance() == pytest.approx(0.1)
+    finally:
+        end_request_budget(token)
+
+
+def test_no_request_budget_outside_a_request():
+    assert render_allowance() == get_settings().markdown_render_deadline_seconds
+
+
+async def test_middleware_gives_each_request_a_fresh_budget(renders_cost):
+    renders_cost(3.0)
+    seen: list[str] = []
+
+    async def app(scope, receive, send):
+        # Two fields per request: the first spends 3.0 s of the 5.0 s budget,
+        # the second overruns it.
+        seen.append(render("first"))
+        seen.append(render("second"))
+        seen.append(render("third"))
+
+    middleware = MarkdownRenderBudgetMiddleware(app)
+    for _ in range(2):
+        await middleware({"type": "http"}, None, None)
+
+    assert seen[0] == seen[3] == "<p>first</p>"
+    assert seen[1] == seen[4] == "<p>second</p>"
+    assert FALLBACK in seen[2] and FALLBACK in seen[5]
+    assert render_allowance() == get_settings().markdown_render_deadline_seconds
 
 
 # ---------------------------------------------------------------------------
@@ -199,11 +307,14 @@ def test_realistic_rendering_scales_linearly():
     assert scaling_ratio(render, large_page(50 * 1024), large_page(200 * 1024)) < LINEAR_RATIO_LIMIT
 
 
-def test_realistic_page_renders_far_inside_the_deadline():
-    """The margin the deadline default relies on: a 250 KB page uses a fraction of it."""
-    assert (
-        cpu_time(lambda: render(large_page(250 * 1024)), repeat=1) < get_settings().markdown_render_deadline_seconds / 2
-    )
+def test_page_near_the_size_limit_renders_inside_a_request_budget():
+    """Under the default per-field deadline and request budget, a 250 KB page renders fully."""
+    token = start_request_budget()
+    try:
+        html = render(large_page(250 * 1024))
+    finally:
+        end_request_budget(token)
+    assert FALLBACK not in html
 
 
 def test_text_with_a_few_unclosed_openers_renders():

@@ -180,6 +180,35 @@ async def test_description_history_shows_pathological_text(
     assert elapsed < CATASTROPHE_SECONDS
 
 
+async def test_issue_page_with_fifty_comments_renders_every_field(
+    admin_client: AsyncClient, db_session: AsyncSession, world: World
+) -> None:
+    """The per-request render budget leaves room for a long, ordinary discussion."""
+    world.issue.description = large_page(20 * 1024)
+    world.admin.preferences = {**(world.admin.preferences or {}), "activity_per_page": 100}
+    comment = (
+        "Looked into this: see [the log](https://example.com/log/{i}) and `config.yaml`.\n\n"
+        "- **Cause**: the cache expires early\n- *Fix*: extend the TTL\n\n"
+        "```python\ncache.set(key, value, ttl=3600)\n```\n\n> Confirmed on staging {i}."
+    )
+    for i in range(50):
+        db_session.add(
+            Journal(
+                issue_id=world.issue.id,
+                project_id=world.project.id,
+                user_id=world.admin.id,
+                sequence=i + 1,
+                notes=comment.format(i=i),
+            )
+        )
+    await db_session.commit()
+
+    html, _elapsed = await _timed_get(admin_client, f"/issue/{world.project.key}-1/", world.token)
+    assert _FALLBACK not in html
+    assert html.count("Confirmed on staging") == 50
+    assert '<a href="https://example.com/log/49"' in html
+
+
 async def test_large_wiki_page_renders_normally(
     admin_client: AsyncClient, db_session: AsyncSession, world: World
 ) -> None:
