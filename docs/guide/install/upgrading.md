@@ -71,6 +71,28 @@ docker compose up -d
 Version 0.9.0 adds eight migrations (0033 to 0040), which the entrypoint applies on startup like any
 other. Most of it needs no action, but a few things are worth doing or checking afterwards.
 
+### The containers no longer run as root
+
+The `api` and Celery containers, and the commands you run with `docker compose exec api ...`, now
+run as the unprivileged user `specivo` (UID/GID `10001`). Take the new `docker-compose.yml`: its
+`init-data` service runs once as root before `api` starts and gives the files an older version
+wrote as root (`attachments/`, `avatars/`, `models/`, `themes/`, `errors/` and the app's logs) to
+that user. On the first start this can take a moment on a large attachments folder; later starts
+only check the top-level owners. `postgresql/`, `redis/` and `logs/nginx/` are left alone.
+
+- If you keep your own Compose file, add the `init-data` service and make `api` depend on it, or
+  change the owner yourself before you start the new image:
+  `sudo chown 10001:10001 <SPECIVO_DATA_DIR>` and
+  `sudo chown -R 10001:10001 <SPECIVO_DATA_DIR>/{attachments,avatars,models,themes}`.
+  Without that the api logs a warning at start and uploads fail.
+- Other host directories mounted into the app containers (custom theme or error-page folders, a
+  Redmine `files` directory for the importer) must be readable by UID `10001`.
+- To run with no root step at all, set `user: "10001:10001"` on `init-data`, `api` and the Celery
+  services in `docker-compose.override.yml`; `init-data` then changes nothing. The image also
+  works with a read-only root filesystem (`read_only: true` plus a `tmpfs` for `/tmp`).
+- The image now has its own `HEALTHCHECK`, so `docker ps` shows the health of every Specivo
+  container.
+
 ### Rebuild the search index
 
 Searching for an issue key such as `ACME-42` now works in every search mode. Older text has to be
