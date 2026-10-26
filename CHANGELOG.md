@@ -3,7 +3,7 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.9.0] - YYYY-MM-DD
+## [0.9.0] - 2026-10-26
 
 ### Added
 - **Imported users keep their passwords** — with `--import-passwords`, Redmine password hashes come across and are upgraded to bcrypt on first sign-in. Off by default; admins and LDAP accounts still reset
