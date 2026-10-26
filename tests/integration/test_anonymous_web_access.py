@@ -29,7 +29,6 @@ from urllib.parse import quote
 import jwt
 import pytest
 import pytest_asyncio
-from fastapi.routing import APIRoute
 from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +50,7 @@ from specivo.services.permission_service import Permission
 from specivo.services.relation_service import RelationService
 from specivo.services.wiki_service import WikiService
 from specivo.testing.conftest_base import _test_app
+from specivo.testing.routes import iter_api_routes
 from specivo.web.deps import ANONYMOUS_WEB_ROUTES
 from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
@@ -620,9 +620,7 @@ _NON_WEB_PREFIXES = ("/api/v1", "/mcp", "/health", "/hooks")
 def _mutating_web_routes() -> list[tuple[str, str]]:
     """Every non-GET web route, as ``(method, concrete path)`` pairs."""
     out: list[tuple[str, str]] = []
-    for route in _test_app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in iter_api_routes(_test_app):
         if route.path.startswith(_NON_WEB_PREFIXES):
             continue
         for method in sorted(route.methods - {"GET", "HEAD", "OPTIONS"}):
