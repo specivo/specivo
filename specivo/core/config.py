@@ -208,6 +208,11 @@ class Settings(BaseSettings):
     # together (description, comments, history); later fields are shown as
     # plain text once it is spent. 2.5x the per-field deadline.
     markdown_render_request_budget_seconds: float = Field(default=5.0, gt=0)
+    # Both limits above are for the machine they were calibrated on, and are
+    # multiplied by how much slower this host renders Markdown, measured once
+    # per process at first use (at least 1, at most 20). Set this to use a
+    # fixed factor instead, e.g. 1 to turn scaling off.
+    markdown_render_speed_factor: float | None = Field(default=None, gt=0)
 
     # Timeouts
     smtp_timeout: int = 30

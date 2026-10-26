@@ -29,6 +29,11 @@ Two layers keep a render bounded:
    multiply the per-field limit. Once it is spent, the remaining fields are
    shown as plain text.
 
+The time limits of layers 2 and 3 are multiplied by :func:`speed_factor`, how
+much slower this host renders a reference document than the calibration
+machine, so slow hardware gets proportionally more time. The pre-scan is not
+scaled: what it rejects is rejected on every host.
+
 The unit costs below were measured with Python-Markdown 3.11.2 on a developer
 laptop. They only need to be right to within a small factor: the budget leaves
 room for realistic documents (thousands of links, 200 KB wiki pages) and
@@ -37,7 +42,9 @@ pathological ones exceed it by orders of magnitude.
 
 from __future__ import annotations
 
+import logging
 import re
+import threading
 import time
 from collections import Counter
 from collections.abc import Callable
@@ -51,6 +58,8 @@ from markdown.extensions import Extension  # type: ignore[import-untyped]
 from specivo.core.config import get_settings
 from specivo.core.exceptions import ValidationError
 from specivo.core.i18n import gettext as _
+
+logger = logging.getLogger(__name__)
 
 # Longest Markdown text (in characters) that may be stored in an issue
 # description, a comment or a wiki page, or sent to the preview endpoint.
@@ -392,7 +401,7 @@ def start_request_budget(seconds: float | None = None) -> Token[RenderBudget | N
     share one budget.
     """
     if seconds is None:
-        seconds = get_settings().markdown_render_request_budget_seconds
+        seconds = request_budget_seconds()
     return _request_budget.set(RenderBudget(seconds))
 
 
@@ -401,15 +410,108 @@ def end_request_budget(token: Token[RenderBudget | None]) -> None:
     _request_budget.reset(token)
 
 
+def field_deadline() -> float:
+    """CPU seconds one field may use on this host: the setting, scaled by :func:`speed_factor`.
+
+    Never less than twice what the slowest text the pre-scan admits
+    (:data:`RENDER_BUDGET_US`, in calibration-machine time) needs on this host,
+    so whatever passes the pre-scan also renders.
+    """
+    base = max(get_settings().markdown_render_deadline_seconds, 2 * RENDER_BUDGET_US / 1_000_000)
+    return base * speed_factor()
+
+
+def request_budget_seconds() -> float:
+    """CPU seconds all the fields of one request may use on this host."""
+    return get_settings().markdown_render_request_budget_seconds * speed_factor()
+
+
 def render_allowance() -> float:
     """CPU seconds the next render may use: the per-field deadline, capped by the request budget.
 
     Zero or less means the request's budget is spent. Outside a request (a
     background task, a script) only the per-field deadline applies.
     """
-    allowance = get_settings().markdown_render_deadline_seconds
+    allowance = field_deadline()
     budget = _request_budget.get()
     return allowance if budget is None else min(allowance, budget.remaining)
+
+
+# ---------------------------------------------------------------------------
+# Host speed
+# ---------------------------------------------------------------------------
+
+# Best-of-3 CPU time of rendering ``_reference_document()`` on the machine the
+# costs and limits in this module were calibrated on (a current laptop).
+REFERENCE_RENDER_SECONDS = 0.012
+
+# The measured factor is clamped to this range: limits never get tighter than
+# the settings on a fast machine, and a wildly slow measurement (a host busy
+# at start-up) cannot make them unbounded.
+MIN_SPEED_FACTOR = 1.0
+MAX_SPEED_FACTOR = 20.0
+
+_speed_factor: float | None = None
+_speed_factor_lock = threading.Lock()
+
+
+def _reference_document() -> str:
+    """About 9 KB of ordinary Markdown: headings, links, emphasis, lists, tables, code."""
+    sections = []
+    for i in range(30):
+        sections.append(
+            f"## Section {i}\n\n"
+            f"See [the docs](https://example.com/p/{i}) and ![chart](https://example.com/c{i}.png), "
+            f"**bold** and *emphasis* with `code {i}`.\n\n"
+            f"- item [link](https://example.com/{i})\n- item two\n  - nested item\n\n"
+            f"| key | value |\n|---|---|\n| {i} | [file](https://example.com/f{i}.pdf) |\n\n"
+            f"```python\nprint({i})\n```\n\n> quote {i}\n\n"
+        )
+    return "".join(sections)
+
+
+def measure_render_seconds() -> float:
+    """Best-of-3 CPU time of rendering the reference document with the real Markdown configuration."""
+    from specivo.services.markdown_service import _MD_EXTENSION_CONFIGS, _MD_EXTENSIONS, _sanitize_html
+
+    document = _reference_document()
+    best = float("inf")
+    for _attempt in range(3):
+        started = _cpu_clock()
+        _sanitize_html(Markdown(extensions=_MD_EXTENSIONS, extension_configs=_MD_EXTENSION_CONFIGS).convert(document))
+        best = min(best, _cpu_clock() - started)
+    return best
+
+
+def speed_factor() -> float:
+    """How much slower than the calibration machine this host renders Markdown (at least 1).
+
+    ``MARKDOWN_RENDER_SPEED_FACTOR`` overrides it. Otherwise it is measured
+    once per process, on first use, by rendering a reference document, and
+    logged. The pre-scan threshold is not scaled: it is a cost model, so text
+    it rejects is rejected on every host.
+    """
+    override = get_settings().markdown_render_speed_factor
+    if override is not None:
+        return override
+    global _speed_factor
+    if _speed_factor is None:
+        with _speed_factor_lock:
+            if _speed_factor is None:
+                measured = measure_render_seconds()
+                _speed_factor = min(max(measured / REFERENCE_RENDER_SECONDS, MIN_SPEED_FACTOR), MAX_SPEED_FACTOR)
+                logger.info(
+                    "Markdown render speed factor %.2f (reference document took %.3f s of CPU)",
+                    _speed_factor,
+                    measured,
+                )
+    return _speed_factor
+
+
+def reset_speed_factor() -> None:
+    """Forget the measured factor, so the next use measures again (for tests)."""
+    global _speed_factor
+    _speed_factor = None
 
 
 def charge_render(cpu_seconds: float) -> None:
