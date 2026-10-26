@@ -68,7 +68,7 @@ async def test_downgrade_and_upgrade_round_trip() -> None:
     assert before == {"function": 1, "calling_triggers": 3, "lexemes": "'acme-42':1 'do-8795':1"}
 
     try:
-        _alembic("downgrade", "-1")
+        _alembic("downgrade", "0034-1")
         down = await _state()
         assert down == {"function": 0, "calling_triggers": 0, "lexemes": None}
     finally:
