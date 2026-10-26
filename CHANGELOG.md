@@ -3,6 +3,41 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.0] - 2026-10-26
+
+### Added
+- **Imported users keep their passwords** — with `--import-passwords`, Redmine password hashes come across and are upgraded to bcrypt on first sign-in. Off by default; admins and LDAP accounts still reset
+- **Password hasher plugins** — add support for another system's hashes through a plugin or the `PASSWORD_HASHERS` setting, enabled per algorithm with `LEGACY_PASSWORD_ALGORITHMS`
+- **Import source plugins** — plugins can add migration sources; one command, `python -m specivo.cli.import_data --source NAME`, runs any of them
+- **Redmine anonymous and non-member access is imported** onto per-project public access, without ever turning the instance switch on
+- **Role visibility settings** — a role can see all users or only members of its projects, and all time entries or only its own. Trackers can make new issues private by default. New admin pages for roles and trackers
+- **Search by issue key** — `ACME-42` finds the issue and its mentions in every search mode, including old keys of moved issues
+- **Link to any attachment by filename** — `[spec](spec.pdf)` and `![chart](chart.png)` now work in issue descriptions, comments, the preview and the wiki
+
+### Changed
+- **Time tracking permissions are enforced** — *View time entries*, *Log time* and *Edit/delete any time entries* now apply everywhere. With the default roles, Reporter and Non member no longer see time entries; Agent is granted *View time entries* by the upgrade
+- Change password, sign out and session revocation need a CSRF token when called with a session cookie
+- Markdown fields are limited to 262,144 characters; text too complex to render quickly is shown as plain text
+- Relative times stay relative for the first 24 hours instead of switching to "Yesterday" at midnight
+- `specivo.cli.import_redmine` is replaced by `specivo.cli.import_data --source redmine`
+
+### Fixed
+- The remaining untranslated interface text, and dates now follow the interface language
+- Keyword search returned short pages after the first one
+- Comments saved in the same moment could appear out of order
+
+### Security
+- Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
+- Crafted Markdown could keep a worker busy for minutes on every view, and deeply nested lists caused errors
+- Time entries could be read, logged and edited without the matching permissions, and timers could be started in any project
+- Shared versions of private projects were not filtered by access
+- A very deep search offset could make the database rank millions of rows
+
+### Internal
+- Migrations 0033–0036: role and tracker visibility columns, issue-key search terms, a wider `users.password_hash`, and *View time entries* for the Agent role. **Run a search reindex after upgrading** (Administration → Settings) so keys in older content are found
+- Plugins load in the web app, the import CLI and the Celery worker through one shared bootstrap
+- Python-Markdown upgraded to 3.11.2
+
 ## [0.8.0] - 2026-09-29
 
 ### Added
