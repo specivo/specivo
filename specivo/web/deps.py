@@ -6,6 +6,7 @@ import logging
 import os
 import subprocess
 from collections.abc import AsyncGenerator
+from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
@@ -84,9 +85,7 @@ async def get_active_sprint_id(db, project_id: int) -> int | None:
 
     from specivo.models.sprint import Sprint
 
-    result = await db.execute(
-        select(Sprint.id).where(Sprint.project_id == project_id, Sprint.status == "active")
-    )
+    result = await db.execute(select(Sprint.id).where(Sprint.project_id == project_id, Sprint.status == "active"))
     row = result.first()
     return row[0] if row else None
 
@@ -135,23 +134,41 @@ def _localdt(dt, tz_name: str = "UTC", fmt: str = "%Y-%m-%d %H:%M") -> str:
     return local_dt.strftime(fmt)
 
 
-def _timeago(dt, tz_name: str = "UTC", mode: str = "smart") -> str:
+def _timeago(
+    dt,
+    tz_name: str = "UTC",
+    mode: str = "smart",
+    now: datetime | None = None,
+) -> str:
     """Convert a datetime to a human-readable relative time string.
 
     The *tz_name* parameter is used when the mode falls back to an absolute
-    date — relative times ("5 min ago") are timezone-agnostic, but "today"
-    vs "yesterday" boundaries and formatted dates use the user's timezone.
+    date — relative times ("5 min ago") are timezone-agnostic, but the
+    "yesterday" boundary and formatted dates use the user's timezone.
 
     Modes:
-      "smart" (default): today → relative, yesterday → "Yesterday", older → date
+      "smart" (default): elapsed time wins for recent items, calendar labels
+        apply to older ones:
+          - under 24 hours old → relative ("just now", "5 min ago", "3 hrs ago"),
+            even when the item falls on the previous calendar day (a comment
+            posted at 23:58 still reads "7 min ago" at 00:05);
+          - 24 hours or older and on the previous calendar day in the user's
+            timezone → "Yesterday";
+          - anything older → date ("Mar 28", or "Mar 28, 2025" for other years).
       "relative": always relative ("5 min ago", "3 days ago", "2 months ago")
       "date": always show date ("Mar 28" or "Mar 28, 2025")
+
+    *now* defaults to the current time; pass an aware datetime to render
+    against a fixed reference point (naive values are treated as UTC).
     """
     if dt is None:
         return ""
-    from datetime import UTC, datetime, timedelta
+    from datetime import UTC, timedelta
 
-    now = datetime.now(UTC)
+    if now is None:
+        now = datetime.now(UTC)
+    elif now.tzinfo is None:
+        now = now.replace(tzinfo=UTC)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
 
@@ -194,8 +211,10 @@ def _timeago(dt, tz_name: str = "UTC", mode: str = "smart") -> str:
     if mode == "relative":
         return _relative()
 
-    # "smart" mode: today → relative, yesterday → "Yesterday", older → date
-    if dt_date == today:
+    # "smart" mode: recent → relative, previous day → "Yesterday", older → date.
+    # Elapsed time is checked before the calendar date so the midnight boundary
+    # never turns something minutes old into "Yesterday".
+    if seconds < 86400:
         return _relative()
 
     if dt_date == today - timedelta(days=1):
