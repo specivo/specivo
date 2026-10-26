@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from mcp.server.fastmcp import FastMCP
+    from mcp.server.mcpserver import MCPServer
 
 # Tool-table rows are maintained here so the guide stays accurate even
 # if a tool docstring is reworded.  Order matches the logical grouping.
@@ -57,7 +57,7 @@ _TOOL_SUMMARIES: dict[str, str] = {
 }
 
 
-def generate_setup_guide(fmt: str = "generic", mcp_server: FastMCP | None = None) -> str:
+def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = None) -> str:
     """Build the agent setup guide.
 
     Args:
@@ -266,18 +266,17 @@ No `mcp-remote` bridge needed — connects straight to `/mcp/`.
     return ""
 
 
-def _build_tool_table(mcp_server: FastMCP | None = None) -> str:
+def _build_tool_table(mcp_server: MCPServer | None = None) -> str:
     """Build markdown table rows from registered tools or fallback summaries."""
     summaries = dict(_TOOL_SUMMARIES)
 
     # Merge any tools from the actual server that are not in our static map
     if mcp_server is not None:
         try:
-            registered = mcp_server._tool_manager._tools
-            for name in registered:
-                if name not in summaries:
-                    desc = registered[name].description or ""
-                    summaries[name] = desc.split("\n")[0][:80]
+            for tool in mcp_server._tool_manager.list_tools():
+                if tool.name not in summaries:
+                    desc = tool.description or ""
+                    summaries[tool.name] = desc.split("\n")[0][:80]
         except Exception:
             pass
 

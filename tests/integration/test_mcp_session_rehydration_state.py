@@ -20,7 +20,7 @@ already finished its handshake before the restart never sends a second
 session is permanently stuck until a manual client reconnect.
 
 This module drives the *real* SDK ``ServerSession`` (via the production
-``mcp._mcp_server`` low-level app) end to end, unlike the heavily-mocked
+``mcp._lowlevel_server`` low-level app) end to end, unlike the heavily-mocked
 ``test_mcp_persistent_session_manager`` suite which stubs the session out
 entirely and therefore cannot observe the initialization-state machine.
 The strategy: run a full handshake on manager A, drop it (simulating the
@@ -125,7 +125,7 @@ def _make_manager(store: RedisSessionStore) -> PersistentStreamableHTTPSessionMa
         return store
 
     return PersistentStreamableHTTPSessionManager(
-        app=mcp._mcp_server,
+        app=mcp._lowlevel_server,
         event_store=None,
         # JSON responses make the reply a single parseable object instead of
         # an SSE stream, which keeps the test plumbing simple.

@@ -16,6 +16,8 @@ without extra infrastructure.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import anyio
@@ -71,16 +73,19 @@ class _FakeHTTPTransport:
 class _FakeLowLevelApp:
     """Replaces ``mcp.server.lowlevel.Server`` for tests.
 
-    Its ``run()`` simply sleeps forever (until the manager's task group is
-    cancelled). We never exercise real protocol behaviour here.
+    The session manager only enters its lifespan; the per-session server
+    loop is stubbed out by the ``fake_serve_session`` fixture. We never
+    exercise real protocol behaviour here.
     """
 
-    def create_initialization_options(self) -> dict[str, Any]:
-        return {}
+    @asynccontextmanager
+    async def lifespan(self, _server: Any) -> AsyncIterator[dict[str, Any]]:
+        yield {}
 
-    async def run(self, *_args: Any, **_kwargs: Any) -> None:
-        # Block until the manager cancels the task group.
-        await anyio.sleep_forever()
+
+async def _fake_serve_session(*_args: Any, **_kwargs: Any) -> None:
+    # Block until the manager cancels the task group.
+    await anyio.sleep_forever()
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +134,14 @@ async def _noop_receive() -> dict[str, Any]:  # pragma: no cover - never awaited
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def fake_serve_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the SDK server loop that drives each session."""
+    import specivo.mcp.persistent_session_manager as mod
+
+    monkeypatch.setattr(mod, "_serve_session", _fake_serve_session)
 
 
 @pytest.fixture
@@ -240,7 +253,7 @@ async def test_session_survives_manager_restart(
 ) -> None:
     """Client session id keeps working after the session manager is replaced.
 
-    This is the literal fix for SPECIVO-147: before this change,
+    This is the literal fix for the restart bug: before this change,
     restarting the api dropped every live MCP session and clients had to
     manually reconnect. The fix persists session ids in Redis and rehydrates
     a fresh transport on demand when a previously known id comes back.
