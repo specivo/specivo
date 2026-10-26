@@ -15,11 +15,12 @@ Three role permissions control time tracking in a project:
 | Permission | Allows |
 |---|---|
 | **View time entries** | Reading time: the project's Time area, an issue's time tab and logged total, a version's logged total and billable-time reports. Without it you see no entries, not even your own. |
-| **Log time** | Logging time, by hand or with a timer, and editing or deleting your own entries. |
+| **Log time** | Logging time, by hand or with a timer, and editing or deleting your own entries (as long as you can see them). |
 | **Edit/delete any time entries** | Editing or deleting anyone's entries in the project. |
 
-Out of the box, **Manager** has all three, **Developer** can view and log time, **Agent** can log time
-but not read it back, and **Reporter** and the built-in **Non member** role have none. Administrators
+Out of the box, **Manager** has all three, **Developer** and **Agent** can view and log time, and
+**Reporter** and the built-in **Non member** role have none. Without *Edit/delete any time entries*
+you can still edit or delete your own entries, as long as you have *Log time* in the project. Administrators
 can do everything. Buttons you can't use (*Log Time*, the log-time form on an issue, edit controls)
 are hidden.
 
