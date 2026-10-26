@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import hmac
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
@@ -56,7 +57,6 @@ def _cheap_bcrypt_and_clean_registry(monkeypatch):
     monkeypatch.setattr(settings, "bcrypt_rounds", 4)
     monkeypatch.setattr(settings, "legacy_password_algorithms", [])
     monkeypatch.setattr(settings, "legacy_password_hashes_expire_at", None)
-    monkeypatch.setattr(settings, "legacy_password_wrap_rounds", None)
     monkeypatch.setattr(settings, "password_hashers", [])
     monkeypatch.setattr(hashers_mod, "_registry", None)
     yield
@@ -75,16 +75,25 @@ def _user(password_hash: str | None) -> SimpleNamespace:
 
 
 class _CountingCheckpw:
-    """Wraps ``bcrypt.checkpw`` to count how many bcrypt checks a call costs."""
+    """Wraps ``bcrypt.checkpw`` to record the cost of every bcrypt check made.
+
+    Asserting on the work done rather than on wall-clock time keeps the timing
+    tests exact and fast.
+    """
 
     def __init__(self, monkeypatch) -> None:
-        self.calls = 0
+        self.costs: list[int] = []
         self._real = bcrypt.checkpw
         monkeypatch.setattr(bcrypt, "checkpw", self)
 
+    @property
+    def calls(self) -> int:
+        return len(self.costs)
+
     def __call__(self, password, hashed):
-        self.calls += 1
-        return self._real(password, hashed)
+        result = self._real(password, hashed)  # raises on a malformed hash, like the real one
+        self.costs.append(int(hashed.split(b"$")[2]))
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -142,8 +151,8 @@ class TestRedmineHasher:
             RedmineSHA1WrappedHasher().from_source(fields)
         assert REDMINE_DIGEST not in str(exc.value)
 
-    def test_wrap_cost_follows_the_setting(self, monkeypatch):
-        monkeypatch.setattr(get_settings(), "legacy_password_wrap_rounds", 5)
+    def test_the_wrap_costs_the_same_as_a_native_hash(self, monkeypatch):
+        monkeypatch.setattr(get_settings(), "bcrypt_rounds", 5)
         assert _redmine_hash().split("$")[4] == "05"
 
     def test_always_needs_an_update(self):
@@ -357,39 +366,163 @@ class TestVerifyPassword:
         _enable(monkeypatch, "exploding")
         assert verify_password("pw", "exploding$x") is False
 
+
+# ---------------------------------------------------------------------------
+# Timing floor: every verification costs one bcrypt at BCRYPT_ROUNDS
+# ---------------------------------------------------------------------------
+
+FLOOR = 5  # BCRYPT_ROUNDS in these tests; hashes made at 4 are "cheaper"
+
+
+class _NoBcryptPlugin:
+    """A plugin hasher that checks a fast digest itself and never calls bcrypt."""
+
+    algorithm = "fast_plugin"
+
+    def verify(self, password, encoded):
+        return hmac.compare_digest(encoded, "fast_plugin$" + hashlib.sha256(password.encode()).hexdigest())
+
+    def must_update(self, encoded):
+        return True
+
+    def from_source(self, fields):
+        return "fast_plugin$" + fields["digest"]
+
+
+class _ShortCircuitWrapped(AcmeTrackerMd5):
+    """A WrappedLegacyHasher subclass whose override skips the bcrypt check."""
+
+    algorithm = "short_circuit"
+
+    def verify(self, password, encoded):
+        return False
+
+
+class TestTimingFloor:
+    @pytest.fixture(autouse=True)
+    def _floor(self, monkeypatch):
+        monkeypatch.setattr(get_settings(), "bcrypt_rounds", FLOOR)
+        monkeypatch.setattr(
+            hashers_mod,
+            "_registry",
+            build_password_hasher_registry(
+                [("acme-hashers", [AcmeTrackerMd5()]), ("other", [_NoBcryptPlugin(), _ShortCircuitWrapped()])]
+            ),
+        )
+        _enable(
+            monkeypatch,
+            "redmine_sha1",
+            "django_pbkdf2_sha256",
+            "bcrypt_foreign",
+            "acme_md5",
+            "fast_plugin",
+            "short_circuit",
+        )
+        verify_password("warm-up", None)  # build the cached throwaway hash outside the counts
+
+    @staticmethod
+    def _cases(monkeypatch) -> dict[str, tuple[str | None, str]]:
+        """name -> (stored value, the right password)."""
+        acme_digest = hashlib.md5(b"NaCl" + b"open sesame").hexdigest()
+        php_cheap = "$2y$" + bcrypt.hashpw(b"pw", bcrypt.gensalt(4)).decode()[4:]
+        cheap_native = bcrypt.hashpw(b"pw", bcrypt.gensalt(4)).decode()
+        with monkeypatch.context() as m:
+            m.setattr(get_settings(), "bcrypt_rounds", 4)
+            cheap_wrapped = _redmine_hash()
+        return {
+            "native": (hash_password("pw"), "pw"),
+            "native-at-a-lower-cost": (cheap_native, "pw"),
+            "wrapped-redmine": (_redmine_hash(), PASSWORD),
+            "wrapped-redmine-at-a-lower-cost": (cheap_wrapped, PASSWORD),
+            "django-pbkdf2": (
+                DjangoPBKDF2SHA256Hasher().from_source({"password": _django_hash("pw")}),
+                "pw",
+            ),
+            "foreign-bcrypt-at-a-lower-cost": (ForeignBcryptHasher().from_source({"hash": php_cheap}), "pw"),
+            "plugin-wrapped": (
+                AcmeTrackerMd5().from_source({"salt": "NaCl", "password_digest": acme_digest}),
+                "open sesame",
+            ),
+            "plugin-without-bcrypt": ("fast_plugin$" + hashlib.sha256(b"pw").hexdigest(), "pw"),
+            "plugin-overriding-verify": (
+                _ShortCircuitWrapped().from_source({"salt": "s", "password_digest": "d"}),
+                "irrelevant",
+            ),
+        }
+
+    @pytest.mark.parametrize(
+        "case",
+        [
+            "native",
+            "native-at-a-lower-cost",
+            "wrapped-redmine",
+            "wrapped-redmine-at-a-lower-cost",
+            "django-pbkdf2",
+            "foreign-bcrypt-at-a-lower-cost",
+            "plugin-wrapped",
+            "plugin-without-bcrypt",
+            "plugin-overriding-verify",
+        ],
+    )
+    @pytest.mark.parametrize("right", [True, False], ids=["right", "wrong"])
+    def test_every_hasher_costs_at_least_one_bcrypt_at_the_floor(self, monkeypatch, case, right):
+        stored, password = self._cases(monkeypatch)[case]
+        counter = _CountingCheckpw(monkeypatch)
+        result = verify_password(password if right else password + "-wrong", stored)
+        if case != "plugin-overriding-verify":
+            assert result is right
+        assert max(counter.costs, default=0) >= FLOOR, counter.costs
+
+    @pytest.mark.parametrize("case", ["native", "wrapped-redmine", "plugin-wrapped"])
+    @pytest.mark.parametrize("right", [True, False], ids=["right", "wrong"])
+    def test_wrapped_and_native_cost_exactly_the_same(self, monkeypatch, case, right):
+        """No padding on top: a wrapped account is not slower than a native one."""
+        stored, password = self._cases(monkeypatch)[case]
+        counter = _CountingCheckpw(monkeypatch)
+        verify_password(password if right else "nope", stored)
+        assert counter.costs == [FLOOR]
+
     @pytest.mark.parametrize(
         ("encoded", "enabled", "expired"),
         [
-            pytest.param(None, (), False, id="no-hash"),
-            pytest.param("unknown_algo$x", (), False, id="unregistered"),
-            pytest.param("garbage", (), False, id="unrecognised"),
-            pytest.param("$2b$04$short", (), False, id="malformed-bcrypt"),
-            pytest.param("REDMINE", (), False, id="legacy-not-enabled"),
-            pytest.param("REDMINE", ("redmine_sha1",), True, id="legacy-expired"),
-            pytest.param("REDMINE", ("redmine_sha1",), False, id="legacy-wrong-password"),
-            pytest.param("NATIVE", (), False, id="native-wrong-password"),
+            pytest.param(None, None, False, id="no-hash"),
+            pytest.param("unknown_algo$x", None, False, id="unknown-prefix"),
+            pytest.param("garbage", None, False, id="unrecognised"),
+            pytest.param("$2b$05$short", None, False, id="malformed-bcrypt"),
+            pytest.param("redmine_sha1$salt$garbage", None, False, id="malformed-legacy"),
+            pytest.param("REDMINE", [], False, id="algorithm-not-enabled"),
+            pytest.param("REDMINE", None, True, id="legacy-expired"),
         ],
     )
-    def test_every_failure_costs_exactly_one_bcrypt(self, monkeypatch, encoded, enabled, expired):
-        """No failure path is faster than a real check, so timing reveals nothing."""
-        value = {"REDMINE": _redmine_hash(), "NATIVE": hash_password("pw")}.get(encoded, encoded)
-        _enable(monkeypatch, *enabled)
+    def test_every_refusal_costs_one_bcrypt_at_the_floor(self, monkeypatch, encoded, enabled, expired):
+        value = _redmine_hash() if encoded == "REDMINE" else encoded
+        if enabled is not None:
+            _enable(monkeypatch, *enabled)
         if expired:
             monkeypatch.setattr(get_settings(), "legacy_password_hashes_expire_at", datetime.now(UTC))
-        verify_password("warm-up", None)  # build the cached throwaway hash outside the count
+        counter = _CountingCheckpw(monkeypatch)
+        assert verify_password(PASSWORD, value) is False
+        assert counter.costs == [FLOOR]
+
+    def test_a_hasher_that_raises_still_costs_the_floor(self, monkeypatch):
+        class Exploding(_NoBcryptPlugin):
+            algorithm = "exploding"
+
+            def verify(self, password, encoded):
+                raise RuntimeError("plugin bug")
+
+        monkeypatch.setattr(hashers_mod, "_registry", build_password_hasher_registry([("buggy", [Exploding()])]))
+        _enable(monkeypatch, "exploding")
+        counter = _CountingCheckpw(monkeypatch)
+        assert verify_password("pw", "exploding$x") is False
+        assert counter.costs == [FLOOR]
+
+    def test_an_unknown_login_costs_the_floor(self, monkeypatch):
+        from specivo.services.auth_utils import burn_password_check
 
         counter = _CountingCheckpw(monkeypatch)
-        assert verify_password("not the password", value) is False
-        assert counter.calls == 1
-
-    def test_a_legacy_success_costs_one_bcrypt_like_a_native_one(self, monkeypatch):
-        _enable(monkeypatch, "redmine_sha1")
-        legacy, native = _redmine_hash(), hash_password("pw")
-        counter = _CountingCheckpw(monkeypatch)
-        assert verify_password(PASSWORD, legacy) is True
-        assert counter.calls == 1
-        assert verify_password("pw", native) is True
-        assert counter.calls == 2
+        burn_password_check("whatever")
+        assert counter.costs == [FLOOR]
 
 
 # ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ DIGEST = "aa" * 20
 
 @pytest.fixture(autouse=True)
 def _cheap_wrap(monkeypatch):
-    monkeypatch.setattr(get_settings(), "legacy_password_wrap_rounds", 4)
+    monkeypatch.setattr(get_settings(), "bcrypt_rounds", 4)
     monkeypatch.setattr(hashers_mod, "_registry", None)
 
 

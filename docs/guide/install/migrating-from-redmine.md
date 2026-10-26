@@ -141,11 +141,8 @@ Accounts that kept their password are listed in the report under *accounts that
 keep their existing password*; everyone else is under *accounts that will be
 asked to set a password at first sign in*.
 
-Each imported password costs one bcrypt, about a quarter of a second at the
-default cost, which adds roughly four minutes per thousand accounts. For a very
-large instance you can lower the cost of the import-time wrap with
-`LEGACY_PASSWORD_WRAP_ROUNDS=10`. The hash is replaced at the normal cost when
-the person signs in anyway.
+Each imported password costs one bcrypt at the normal cost, about a quarter of
+a second, which adds roughly four minutes per thousand accounts to the import.
 
 Redmine's SHA1 scheme is weak, and wrapping it doesn't make a weak password any
 stronger. Once most people have signed in, retire the old hashes:

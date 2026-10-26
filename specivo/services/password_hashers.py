@@ -30,6 +30,9 @@ hasher does not enable it: an algorithm verifies only when it is also listed in
 
 Every ``verify`` here is constant-time (``bcrypt.checkpw`` or
 ``hmac.compare_digest``) and never raises: a malformed value is "no match".
+Timing across schemes is evened out one level up: ``auth_utils.verify_password``
+pads any verification that spent less than one bcrypt at ``BCRYPT_ROUNDS``, so
+no hasher (a plugin's included) can answer faster than a native check.
 """
 
 from __future__ import annotations
@@ -43,9 +46,10 @@ import logging
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import ClassVar, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 from urllib.parse import quote, unquote
 
 import bcrypt
@@ -148,12 +152,37 @@ def is_wellformed_bcrypt(value: str) -> bool:
     return rounds is not None and 4 <= rounds <= 31
 
 
+# The highest bcrypt cost actually spent by ``_checkpw`` since the last
+# ``start_cost_tracking()``. ``auth_utils.verify_password`` reads it to make
+# sure every verification costs at least one bcrypt at ``BCRYPT_ROUNDS``,
+# whatever hasher ran: one that does no bcrypt of its own (PBKDF2, a plugin),
+# or one at a lower cost, is padded with a throwaway check.
+_bcrypt_cost_spent: ContextVar[int] = ContextVar("bcrypt_cost_spent", default=0)
+
+
+def start_cost_tracking() -> None:
+    """Reset the record of bcrypt work done in the current context."""
+    _bcrypt_cost_spent.set(0)
+
+
+def bcrypt_cost_spent() -> int:
+    """Return the highest bcrypt cost checked since :func:`start_cost_tracking`."""
+    return _bcrypt_cost_spent.get()
+
+
 def _checkpw(password: bytes, encoded: str) -> bool:
-    """``bcrypt.checkpw`` that answers ``False`` instead of raising."""
+    """``bcrypt.checkpw`` that answers ``False`` instead of raising.
+
+    Records the cost of the check once bcrypt has actually run it.
+    """
     try:
-        return bcrypt.checkpw(password, encoded.encode("ascii"))
+        result = bcrypt.checkpw(password, encoded.encode("ascii"))
     except (ValueError, TypeError, UnicodeError):
         return False
+    rounds = _bcrypt_rounds(encoded) or 0
+    if rounds > _bcrypt_cost_spent.get():
+        _bcrypt_cost_spent.set(rounds)
+    return result
 
 
 class BcryptHasher:
@@ -208,10 +237,8 @@ class WrappedLegacyHasher(ABC):
     constant-time check, parsing that never raises, and ``must_update`` always
     being true so the account moves to a native hash at its first sign-in.
 
-    ``wrap_rounds`` sets the bcrypt cost of the wrap. ``None`` uses
-    ``LEGACY_PASSWORD_WRAP_ROUNDS``, falling back to ``BCRYPT_ROUNDS``. A lower
-    cost makes a large import faster and costs nothing later: the value is
-    replaced at the account's first sign-in anyway.
+    The wrap uses ``BCRYPT_ROUNDS``, the cost of a native hash, so checking a
+    wrapped hash takes exactly as long as checking a native one.
 
     The default parameter encoding is ``key=value`` pairs joined by ``,`` with
     each part percent-encoded; override :meth:`encode_params` and
@@ -219,7 +246,6 @@ class WrappedLegacyHasher(ABC):
     """
 
     algorithm: str
-    wrap_rounds: ClassVar[int | None] = None
 
     @abstractmethod
     def source_params(self, fields: Mapping[str, str]) -> tuple[dict[str, str], str]:
@@ -248,10 +274,7 @@ class WrappedLegacyHasher(ABC):
     # -- PasswordHasher -----------------------------------------------------
 
     def _rounds(self) -> int:
-        if self.wrap_rounds is not None:
-            return self.wrap_rounds
-        settings = get_settings()
-        return settings.legacy_password_wrap_rounds or settings.bcrypt_rounds
+        return get_settings().bcrypt_rounds
 
     @staticmethod
     def _wrap_input(digest: str) -> bytes:

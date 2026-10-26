@@ -49,7 +49,6 @@ def _legacy_settings(monkeypatch):
     """Enable redmine_sha1, wrap cheaply, and isolate the process-wide registry."""
     settings = get_settings()
     monkeypatch.setattr(settings, "legacy_password_algorithms", ["redmine_sha1"])
-    monkeypatch.setattr(settings, "legacy_password_wrap_rounds", 4)
     monkeypatch.setattr(settings, "legacy_password_hashes_expire_at", None)
     monkeypatch.setattr(hashers_mod, "_registry", None)
 

@@ -7,8 +7,9 @@ then replaced with a bcrypt one on the first successful sign-in
 (:func:`verify_and_update`).
 
 ``verify_password`` never raises. An unknown, malformed, disabled or expired
-hash is simply "no match", and costs one bcrypt like any other failure, so the
-time a sign-in takes says nothing about how the account's hash is stored.
+hash is simply "no match". Every verification, matching or not, costs at least
+one bcrypt at ``BCRYPT_ROUNDS``, so the time a sign-in takes says nothing about
+whether the account exists or how its hash is stored.
 
 ``validate_password_policy`` is the single definition of what makes a new
 password acceptable. Every endpoint that sets a password (reset via token,
@@ -26,7 +27,12 @@ from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
-from specivo.services.password_hashers import get_password_hasher_registry, is_wellformed_bcrypt
+from specivo.services.password_hashers import (
+    bcrypt_cost_spent,
+    get_password_hasher_registry,
+    is_wellformed_bcrypt,
+    start_cost_tracking,
+)
 
 if TYPE_CHECKING:
     from specivo.models.user import User
@@ -54,6 +60,15 @@ def _warn_once(user_id: int | None, reason: str, algorithm: str | None) -> None:
             _warned.add(key)
     # The hash itself is never logged; the algorithm id is enough to act on.
     logger.warning("Password hash for user %s not verified: %s (algorithm=%s)", user_id, reason, algorithm)
+
+
+def burn_password_check(password: str) -> None:
+    """Spend one bcrypt at the configured cost, for a sign-in with no account.
+
+    Used when there is no hash to check at all (an unknown login), so the
+    response takes as long as a real wrong-password attempt.
+    """
+    _burn_bcrypt(password)
 
 
 def _burn_bcrypt(password: str) -> None:
@@ -131,12 +146,20 @@ def verify_password(plain_password: str, hashed_password: str | None, *, user_id
             _burn_bcrypt(plain_password)
             return False
 
+    start_cost_tracking()
     try:
-        return bool(hasher.verify(plain_password, hashed_password))
+        matched = bool(hasher.verify(plain_password, hashed_password))
     except Exception:  # noqa: BLE001 - a third-party hasher must never turn a sign-in into a 500
         logger.exception("Password hasher %r raised while verifying user %s; treated as no match", algorithm, user_id)
+        matched = False
+    # The timing floor, enforced here so no hasher can opt out: a check that
+    # did not spend one bcrypt at the configured cost (PBKDF2, a cheaper
+    # bcrypt, a plugin doing its own thing, a hasher that bailed out early)
+    # is padded with a throwaway one. Nothing answers faster than a native
+    # account, so response times reveal neither existence nor legacy status.
+    if bcrypt_cost_spent() < get_settings().bcrypt_rounds:
         _burn_bcrypt(plain_password)
-        return False
+    return matched
 
 
 def password_needs_rehash(hashed_password: str | None) -> bool:

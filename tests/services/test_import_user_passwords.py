@@ -47,7 +47,6 @@ SOURCE_SYSTEM = "pwimport"
 def _settings(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "legacy_password_algorithms", ["redmine_sha1"])
-    monkeypatch.setattr(settings, "legacy_password_wrap_rounds", 4)
     monkeypatch.setattr(hashers_mod, "_registry", None)
 
 

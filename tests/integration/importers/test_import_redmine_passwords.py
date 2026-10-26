@@ -50,7 +50,6 @@ FIXTURE_PASSWORD = "fixture-password-not-a-secret"
 def _enable_redmine_hashes(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "legacy_password_algorithms", ["redmine_sha1"])
-    monkeypatch.setattr(settings, "legacy_password_wrap_rounds", 4)
     monkeypatch.setattr(hashers_mod, "_registry", None)
 
 

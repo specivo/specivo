@@ -34,6 +34,7 @@ from specivo.core.utils import utcnow
 from specivo.models.auth import PasswordResetToken, RefreshToken
 from specivo.models.user import User
 from specivo.services.auth_utils import (
+    burn_password_check,
     hash_password,
     hash_upgrade_source,
     rehash_if_needed,
@@ -41,23 +42,6 @@ from specivo.services.auth_utils import (
     verify_password,
 )
 from specivo.tasks.notifications import send_notification_email
-
-# ---------------------------------------------------------------------------
-# Constant-time enumeration guard
-# ---------------------------------------------------------------------------
-# Generated lazily on first use — a random bcrypt hash used when a login
-# attempt targets a non-existent user. This ensures the response time is
-# identical to a real wrong-password attempt (bcrypt runs either way).
-# Lazy to avoid module-level get_settings() which breaks CI imports.
-_ENUMERATION_GUARD_HASH: str | None = None
-
-
-def _get_enumeration_guard_hash() -> str:
-    global _ENUMERATION_GUARD_HASH
-    if _ENUMERATION_GUARD_HASH is None:
-        _ENUMERATION_GUARD_HASH = hash_password(secrets.token_urlsafe(16))
-    return _ENUMERATION_GUARD_HASH
-
 
 # ---------------------------------------------------------------------------
 # Lockout thresholds (failures → lock duration in minutes)
@@ -176,8 +160,9 @@ class AuthService:
         # password either, but it is refused here explicitly, and exactly like an
         # unknown login, rather than relying on that.
         if user is None or user.is_anonymous:
-            # Burn time comparable to bcrypt.checkpw so timing doesn't reveal existence
-            verify_password(password, _get_enumeration_guard_hash())
+            # Burn one bcrypt at the configured cost, as a real check would, so
+            # timing doesn't reveal existence.
+            burn_password_check(password)
             raise AppError(
                 code="auth_invalid_credentials",
                 message=_("Invalid login or password"),

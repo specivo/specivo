@@ -97,10 +97,6 @@ class Settings(BaseSettings):
     # After this moment no legacy hash verifies, and the owners of the accounts
     # still holding one have to use password recovery. A naive value is UTC.
     legacy_password_hashes_expire_at: datetime | None = None
-    # bcrypt cost of the wrap applied to weak legacy digests at import. Unset
-    # uses ``bcrypt_rounds``; a lower one speeds up a large import, and the
-    # hash is replaced at the normal cost on first sign-in anyway.
-    legacy_password_wrap_rounds: int | None = None
 
     # App
     debug: bool = False
@@ -225,13 +221,6 @@ class Settings(BaseSettings):
     def legacy_cutoff_is_aware(cls, v: datetime | None) -> datetime | None:
         if v is not None and v.tzinfo is None:
             return v.replace(tzinfo=UTC)
-        return v
-
-    @field_validator("legacy_password_wrap_rounds")
-    @classmethod
-    def validate_wrap_rounds(cls, v: int | None) -> int | None:
-        if v is not None and not 4 <= v <= 31:
-            raise ValueError("legacy_password_wrap_rounds must be between 4 and 31")
         return v
 
     @field_validator("cors_origins", mode="before")
