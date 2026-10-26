@@ -1,4 +1,8 @@
-"""Admin API for embedding model management."""
+"""Admin API for embedding model management.
+
+Only the bundled local model, registered by the seed command, can run, so the
+API cannot register models: it lists them, deletes one and starts a backfill.
+"""
 
 from __future__ import annotations
 
@@ -19,17 +23,6 @@ router = APIRouter(tags=["admin"])
 # ---------------------------------------------------------------------------
 # Schemas
 # ---------------------------------------------------------------------------
-
-
-class EmbeddingModelCreate(BaseModel):
-    name: str
-    provider: str
-    model_name: str
-    dimensions: int
-    is_default: bool = False
-    api_key_encrypted: str | None = None
-    passage_prefix: str | None = None  # NULL = auto-detect from model name
-    query_prefix: str | None = None  # NULL = auto-detect from model name
 
 
 class EmbeddingModelOut(BaseModel):
@@ -58,29 +51,6 @@ async def list_embedding_models(
     """List all registered embedding models (admin only)."""
     result = await db.execute(select(EmbeddingModel).order_by(EmbeddingModel.id))
     return list(result.scalars().all())
-
-
-@router.post("/admin/embedding-models/", response_model=EmbeddingModelOut, status_code=201)
-async def create_embedding_model(
-    payload: EmbeddingModelCreate,
-    current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
-) -> EmbeddingModel:
-    """Register a new embedding model (admin only)."""
-    model = EmbeddingModel(
-        name=payload.name,
-        provider=payload.provider,
-        model_name=payload.model_name,
-        dimensions=payload.dimensions,
-        is_default=payload.is_default,
-        api_key_encrypted=payload.api_key_encrypted,
-        passage_prefix=payload.passage_prefix,
-        query_prefix=payload.query_prefix,
-    )
-    db.add(model)
-    await db.flush()
-    await db.refresh(model)
-    return model
 
 
 @router.delete("/admin/embedding-models/{model_id}/", status_code=204)

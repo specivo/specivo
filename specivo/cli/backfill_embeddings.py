@@ -52,6 +52,7 @@ from specivo.models.journal import Journal
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
 from specivo.models.wiki import WikiPage
 from specivo.schemas.search import SearchSourceType
+from specivo.services.search_index_service import describe_error
 
 logger = logging.getLogger("specivo.cli.backfill_embeddings")
 
@@ -201,7 +202,8 @@ async def run_backfill(
                         chunk_count, removed = await session.run_sync(_sync_in_session, source_type, entity_id)
                     except Exception as exc:  # noqa: BLE001 - one bad source must not stop the run
                         report.failures += 1
-                        logger.warning("  Could not index %s %d: %s", source_type, entity_id, exc)
+                        logger.warning("  Could not index %s %d: %s", source_type, entity_id, describe_error(exc))
+                        logger.debug("Index failure for %s %d", source_type, entity_id, exc_info=True)
                         continue
                     if removed:
                         report.sources_removed += 1
@@ -221,7 +223,8 @@ async def run_backfill(
                             )
                     except Exception as exc:  # noqa: BLE001 - keep the chunks, report the failure
                         report.failures += 1
-                        logger.warning("  Could not embed %s %d: %s", source_type, entity_id, exc)
+                        logger.warning("  Could not embed %s %d: %s", source_type, entity_id, describe_error(exc))
+                        logger.debug("Embed failure for %s %d", source_type, entity_id, exc_info=True)
                 await session.commit()
             if done % (BATCH_SIZE * 5) < BATCH_SIZE or done >= totals[source_type]:
                 log(f"  {_LABELS[source_type]}: {done}/{totals[source_type]} ({time.monotonic() - start:.1f}s)")
@@ -299,7 +302,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return asyncio.run(_main_async(args.reembed, args.require_model))
     except Exception as exc:  # pragma: no cover - CLI surface
-        logger.error("Backfill failed: %s", exc)
+        logger.error("Backfill failed: %s", describe_error(exc))
+        logger.debug("Backfill failure", exc_info=True)
         return EXIT_ERRORS
 
 

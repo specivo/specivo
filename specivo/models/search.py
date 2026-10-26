@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -20,17 +21,30 @@ from specivo.models.base import Base, TimestampMixin
 
 
 class EmbeddingModel(Base, TimestampMixin):
-    """Registry of embedding models (OpenAI, Cohere, Ollama, mock, etc.)."""
+    """Registry of embedding models.
+
+    Only the bundled local model (provider ``local``, registered by the seed
+    command) is supported; ``mock`` is used by the tests. At most one row is the
+    default, enforced by a partial unique index.
+    """
 
     __tablename__ = "embedding_models"
+    __table_args__ = (
+        Index(
+            "uq_embedding_models_single_default",
+            "is_default",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
-    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # openai, cohere, ollama, mock
-    model_name: Mapped[str] = mapped_column(String(200), nullable=False)  # text-embedding-3-small
-    dimensions: Mapped[int] = mapped_column(Integer, nullable=False)  # 1536, 768, etc.
+    provider: Mapped[str] = mapped_column(String(50), nullable=False)  # local (mock in tests)
+    model_name: Mapped[str] = mapped_column(String(200), nullable=False)  # multilingual-e5-small
+    dimensions: Mapped[int] = mapped_column(Integer, nullable=False)  # 384
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
-    api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)  # encrypted API key
+    api_key_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)  # unused: no hosted providers
 
     # Prefix prepended to text when generating embeddings for indexing.
     # Empty string means no prefix. NULL means "use provider default" (auto-detect).
