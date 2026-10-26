@@ -38,7 +38,7 @@ from specivo.core.middleware import (
     SQLDebugMiddleware,
     TokenRefreshMiddleware,
 )
-from specivo.core.plugin_manager import PluginManager
+from specivo.core.plugin_manager import PluginManager, bootstrap
 from specivo.core.redis import close_redis, get_redis
 from specivo.hooks.router import hooks_router
 from specivo.schemas.common import HealthResponse
@@ -206,19 +206,11 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Plugin system — discover and load plugins from settings.
-    pm = PluginManager()
-
-    # Register core services so that plugins can override them.
-    from specivo.services.api_key_service import ApiKeyService
-    from specivo.services.journal_service import JournalService
-    from specivo.services.notification_service import NotificationService
-    from specivo.services.workflow_service import WorkflowService
-
-    pm.service_registry.register("journal", JournalService)
-    pm.service_registry.register("api_key", ApiKeyService)
-    pm.service_registry.register("workflow", WorkflowService)
-    pm.service_registry.register("notification", NotificationService)
+    # Plugin system — load plugins and build the process-wide registries
+    # (services, features, password hashers). Shared with the import CLI and
+    # the Celery worker through ``bootstrap`` so every process sees the same
+    # plugins.
+    pm = bootstrap(settings)
 
     # Initialize the metadata target registry with core targets so
     # plugins can extend it in their on_startup hooks.
@@ -233,10 +225,6 @@ def create_app() -> FastAPI:
     if get_channel("email") is None:
         register_channel(EmailChannel())
 
-    if settings.installed_plugins:
-        pm.load_plugins(settings.installed_plugins)
-    pm.register_services()
-    pm.register_features()
     _plugin_manager = pm
 
     # Register plugin locale directories for i18n catalog merging.

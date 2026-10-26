@@ -45,6 +45,8 @@ class PluginConfig(Protocol):
 
     def get_locale_dirs(self) -> list[tuple[Path, str]]: ...
 
+    def get_password_hashers(self) -> list: ...
+
     def on_startup(self, app: Any) -> None: ...
 
 
@@ -97,6 +99,16 @@ class BasePluginConfig(ABC):
 
     def get_locale_dirs(self) -> list[tuple[Path, str]]:
         """Return ``(locale_directory, domain)`` tuples for translation catalogs."""
+        return []
+
+    def get_password_hashers(self) -> list:
+        """Return legacy password hashers to register (``PasswordHasher`` objects).
+
+        Usually ``WrappedLegacyHasher`` subclasses from
+        ``specivo.services.password_hashers``. Registering one does not enable
+        it: its ``algorithm`` must also be listed in
+        ``LEGACY_PASSWORD_ALGORITHMS``.
+        """
         return []
 
     def on_startup(self, app: Any) -> None:
