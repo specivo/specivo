@@ -68,7 +68,7 @@ docker compose up -d
 
 ## Upgrading to 0.9.0
 
-Version 0.9.0 adds five migrations (0033 to 0037), which the entrypoint applies on startup like any
+Version 0.9.0 adds six migrations (0033 to 0038), which the entrypoint applies on startup like any
 other. Most of it needs no action, but a few things are worth doing or checking afterwards.
 
 ### Rebuild the search index
@@ -118,6 +118,24 @@ the embeddings for semantic search a few seconds later. See
   run in the `api` container of whichever stack the directory has, so they work from a release
   bundle too. The model download is now `python -m specivo.cli.download_model`, which checks
   checksums; the release bundle's `configure.py` moved to `scripts/configure.py`.
+
+### Semantic search gets a vector index
+
+Migration 0038 builds an HNSW index on the stored embeddings, so semantic and hybrid search no
+longer compare the query with every chunk (see [Vector index](semantic-search.md#vector-index)).
+
+- The index is built with `CREATE INDEX CONCURRENTLY`: Specivo keeps working while it builds, but
+  the migration, and so the start of the `api` container, waits until it is done. Expect seconds
+  for a few tens of thousands of chunks (about 30 seconds for 100,000 on a laptop) and minutes for
+  millions. Count yours first with
+  `docker compose exec db psql -U specivo -d specivo -c "SELECT count(*) FROM chunk_embeddings"`.
+- Building is much faster when the index fits in PostgreSQL's `maintenance_work_mem` (64 MB by
+  default; budget roughly 2 KB per chunk). PostgreSQL logs a notice when it does not fit. On a large
+  install, raise it for the upgrade, for example with
+  `ALTER SYSTEM SET maintenance_work_mem = '1GB'; SELECT pg_reload_conf();`, and set it back after.
+- It needs pgvector 0.8 or later to be used, which the bundled `pgvector/pgvector:pg18` image has. On
+  an external database, check with `SELECT extversion FROM pg_extension WHERE extname = 'vector'`.
+- If the build is interrupted, the next start drops the half-built index and builds it again.
 
 ### Check time tracking permissions
 
