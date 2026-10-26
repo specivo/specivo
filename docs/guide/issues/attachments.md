@@ -20,6 +20,23 @@ Each attachment has an optional **description** field. It's worth filling in: de
 **searchable**, so "production error log, 2 Mar" turns up in [search](finding.md) later even though the
 filename was something like `app-2024.log`.
 
+## Who can open an attachment
+
+An attachment is visible to exactly the people who can see what it is attached to:
+
+- a file on an **issue** opens for anyone who can see that issue — so a file on a private issue, or on
+  an issue your role's issue visibility hides from you, stays hidden too;
+- a file on a **wiki page** opens for anyone who can read the project's wiki;
+- a file on an issue **comment** opens for anyone who can see the issue, except on a private note,
+  where it opens for administrators only.
+
+To anyone else, a hidden attachment looks exactly like one that doesn't exist: its download link answers
+"not found".
+
+On a wiki page, an image written by bare filename, such as `![chart](chart.png)`, is looked up among the
+project's issue and wiki attachments **that you can open**. If several share the name, the newest of
+those wins. A reader who can't see the issue holding `chart.png` sees no image there.
+
 ## Size and type
 
 - **Maximum upload size** is set by the operator who runs your Specivo server, so the limit depends on

@@ -264,6 +264,22 @@ class IssueService:
             return own
         return false()
 
+    async def project_visible_issues_clause(
+        self, session: AsyncSession, user: User, project: Project
+    ) -> ColumnElement[bool] | None:
+        """Return the predicate selecting the issues of *project* that *user* may see.
+
+        The per-project form behind the project issue list: the best
+        visibility among *user*'s roles there (``_get_best_visibility``)
+        turned into ``_visibility_clause``. It does not restrict
+        ``Issue.project_id`` itself; callers add that. Returns None for
+        admins, who are not filtered.
+        """
+        if user.is_admin:
+            return None
+        visibility = await self._get_best_visibility(session, user, project)
+        return self._visibility_clause(user, visibility)
+
     async def visible_issues_clause(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
         """Return a cross-project predicate selecting every issue *user* may see.
 
@@ -1139,8 +1155,9 @@ class IssueService:
             if project_id is not None:
                 project = await session.get(Project, project_id)
                 if project is not None:
-                    visibility = await self._get_best_visibility(session, user, project)
-                    stmt = stmt.where(self._visibility_clause(user, visibility))
+                    in_project = await self.project_visible_issues_clause(session, user, project)
+                    if in_project is not None:
+                        stmt = stmt.where(in_project)
             else:
                 across_projects = await self.visible_issues_clause(session, user)
                 if across_projects is not None:

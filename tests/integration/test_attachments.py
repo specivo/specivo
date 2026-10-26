@@ -410,7 +410,14 @@ async def test_delete_attachment_by_non_author_forbidden(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Non-author non-admin gets 403 when deleting someone else's attachment."""
+    """Non-author non-admin gets 403 when deleting someone else's attachment.
+
+    The project is public, so second_user can see the issue through the Non
+    member role; an attachment it cannot see answers 404 instead.
+    """
+    project.is_public = True
+    await db_session.commit()
+
     issue_data = await _create_issue_via_api(
         client, admin_token, project.key, tracker.id, open_status.id, priority.id, "Auth delete test"
     )
