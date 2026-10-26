@@ -565,6 +565,42 @@ class AttachmentService:
             att_map[filename] = self.download_url(att_id)
         return att_map
 
+    async def build_issue_attachment_map(
+        self,
+        session: AsyncSession,
+        issue_id: int,
+        reader: User,
+    ) -> dict[str, str]:
+        """Build a filename → download URL map of one issue's attachments *reader* may open.
+
+        Used to resolve bare-filename images and links in the issue's
+        description and comments. Only files attached to the issue itself or
+        to one of its comments take part — never files of another issue — and
+        only when *reader* may see the issue (``can_view_container``). Files
+        on a private note take part for admins only, as everywhere else. If
+        several share a filename, the most recent wins.
+        """
+        from specivo.models.journal import Journal
+
+        if reader.is_anonymous or not await self.can_view_container(session, reader, "Issue", issue_id):
+            return {}
+
+        journal_ids = select(Journal.id).where(Journal.issue_id == issue_id)
+        if not reader.is_admin:
+            journal_ids = journal_ids.where(Journal.is_private.is_(False))
+
+        rows = await session.execute(
+            select(Attachment.id, Attachment.filename)
+            .where(
+                or_(
+                    and_(Attachment.container_type == "Issue", Attachment.container_id == issue_id),
+                    and_(Attachment.container_type == "Journal", Attachment.container_id.in_(journal_ids)),
+                )
+            )
+            .order_by(Attachment.created_at.asc(), Attachment.id.asc())
+        )
+        return {filename: self.download_url(att_id) for att_id, filename in rows.all()}
+
     async def can_view_container(
         self,
         session: AsyncSession,

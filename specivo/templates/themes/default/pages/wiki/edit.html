@@ -59,7 +59,7 @@
         {# The wikiForm parent owns `text`; the wrapper's `value` is bound via #}
         {# x-modelable. `onPasteDrop` routes paste/drop events back to         #}
         {# wikiForm.handleEditorPasteDrop for image upload.                    #}
-        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", onPasteDrop: "handleEditorPasteDrop", i18n: {{ {
+        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", previewParams: {{ {"project_key": project.key} | tojson }}, onPasteDrop: "handleEditorPasteDrop", i18n: {{ {
           "placeholder": _("Write your content here (Markdown)..."),
           "rendering": _("Rendering..."),
           "previewUnavailable": _("Preview unavailable.")

@@ -11,6 +11,10 @@ export function markdownEditor(initial) {
             editor: null,
             previewUrl: initial.previewUrl || '/api/v1/markdown/preview/',
             context: initial.context || 'wiki',
+            /* Where the text will be stored, so the preview resolves bare
+             * attachment filenames like the saved page: {issue_id} for an
+             * issue, {project_key} for a wiki page. Empty resolves nothing. */
+            previewParams: initial.previewParams || {},
             onPasteDrop: initial.onPasteDrop || '',
             _previewTimer: null,
             _lastPreviewText: null,
@@ -246,7 +250,7 @@ export function markdownEditor(initial) {
                     var res = await spFetch(this.previewUrl, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({text: plainText, context: this.context})
+                        body: JSON.stringify(Object.assign({}, this.previewParams, {text: plainText, context: this.context}))
                     });
                     if (res.ok) {
                         var data = await res.json();

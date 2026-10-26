@@ -294,6 +294,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     # context by page handlers. When absent, every KEY-123 token is linked
     # (original behaviour); when present, only existing/previously-existing refs
     # are linked. See IssueService.resolve_known_issue_refs.
+    # Likewise, without an explicit ``attachment_map`` argument the filter uses
+    # the ``attachment_map`` in the context: the filenames the reader may open
+    # on the page's issue or project (AttachmentService.build_*_attachment_map).
+    # With neither, no bare filename is resolved.
     from jinja2 import pass_context
 
     @pass_context
@@ -301,7 +305,7 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
         return render_wiki_markdown(
             text,
             project_key,
-            attachment_map,
+            attachment_map if attachment_map is not None else ctx.get("attachment_map"),
             known_issue_refs=ctx.get("known_issue_refs"),
         )
 

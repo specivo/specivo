@@ -11,7 +11,7 @@ Pipeline:
 
     raw markdown
       -> wiki link substitution    [[Page]]    -> [Page](/projects/X/wiki/page/)
-      -> attachment image rewrite  ![a](b.png) -> ![a](/path/to/b.png)
+      -> attachment rewrite        ![a](b.png) / [a](b.pdf) -> attachment download URL
       -> issue ref auto-link       PROJ-123    -> [PROJ-123](/issue/PROJ-123/)
       -> markdown.markdown(...)    with fenced_code, tables, toc, codehilite
       -> nh3.clean(...)            HTML sanitizer with our allowlist
@@ -21,6 +21,7 @@ Pipeline:
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote
 
 import markdown as _md
 import markupsafe
@@ -99,7 +100,15 @@ _MD_EXTENSION_CONFIGS = {
 
 # Compiled once at import time
 _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
-_IMG_SRC_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+# Inline image or link: ``![alt](target)`` / ``[text](target)``, where the
+# target is either the angle-bracket form ``<my spec.pdf>`` or bare text, optionally followed by a
+# quoted title. The bare form is matched lazily, so ``my spec.pdf "Spec"``
+# splits into a target with a space in it and a title.
+_ATTACHMENT_REF_RE = re.compile(
+    r"(!?)\[((?:\\.|[^\]\\\n])*)\]\(\s*(<[^>\n]*>|[^)\n]+?)(\s+(?:\"[^\"\n]*\"|'[^'\n]*'))?\s*\)"
+)
+# A URL scheme (``https:``, ``mailto:``) at the start of a link target.
+_URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 # Issue reference: PROJ-123, but not inside markdown links or wiki links
 _ISSUE_REF_RE = re.compile(r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b")
 
@@ -147,6 +156,40 @@ def _replace_wiki_link(project_key: str):
     return _inner
 
 
+def _attachment_filename(target: str) -> str | None:
+    """Return the attachment filename a link *target* names, or None.
+
+    Only a bare filename qualifies: anything with a ``/`` or ``\\`` (a path or
+    URL), a scheme (``https:``, ``mailto:``) or starting with ``#`` or ``?`` is
+    left to the browser. The target is URL-decoded, so ``my%20spec.pdf``
+    names ``my spec.pdf``.
+    """
+    if target.startswith("<") and target.endswith(">"):
+        target = target[1:-1]
+    target = target.strip()
+    if not target or target[0] in "#?" or "/" in target or "\\" in target or _URL_SCHEME_RE.match(target):
+        return None
+    return unquote(target)
+
+
+def _resolve_attachment_refs(text: str, attachment_map: dict) -> str:
+    """Point bare-filename images and links found in *attachment_map* at their download URL.
+
+    ``![chart](chart.png)`` and ``[the spec](spec.pdf)`` resolve the same way:
+    an exact, case-sensitive match of the decoded filename. Unknown names, and
+    every target that is not a bare filename, stay exactly as written.
+    """
+
+    def _resolve(m: re.Match[str]) -> str:
+        bang, label, target, title = m.group(1), m.group(2), m.group(3), m.group(4) or ""
+        filename = _attachment_filename(target)
+        if filename is None or filename not in attachment_map:
+            return m.group(0)
+        return f"{bang}[{label}]({attachment_map[filename]}{title})"
+
+    return _ATTACHMENT_REF_RE.sub(_resolve, text)
+
+
 def render_wiki_markdown(
     text: str,
     project_key: str = "",
@@ -164,8 +207,10 @@ def render_wiki_markdown(
     target as-it-would-render and any project mismatch surfaces immediately.
 
     ``attachment_map``: optional dict mapping filenames to attachment download
-    URLs. When provided, bare-filename image references like
-    ``![alt](chart.png)`` are rewritten to the attachment URL.
+    URLs. When provided, bare-filename image and link targets like
+    ``![alt](chart.png)`` or ``[the spec](spec.pdf)`` are rewritten to the
+    attachment URL. Callers build it from the attachments the reader may
+    open, so a hidden file never resolves.
 
     ``known_issue_refs``: optional set of ``KEY-123`` references that actually
     exist (or previously existed, via a move alias). When provided, ONLY those
@@ -179,16 +224,9 @@ def render_wiki_markdown(
 
     processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
 
-    # Rewrite bare-filename image references to attachment URLs
+    # Rewrite bare-filename image and link targets to attachment URLs
     if attachment_map:
-
-        def _resolve_image(m: re.Match[str]) -> str:
-            alt, src = m.group(1), m.group(2)
-            if src in attachment_map:
-                return f"![{alt}]({attachment_map[src]})"
-            return m.group(0)
-
-        processed = _IMG_SRC_RE.sub(_resolve_image, processed)
+        processed = _resolve_attachment_refs(processed, attachment_map)
 
     # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
     # When known_issue_refs is provided, only link references that resolve to a
