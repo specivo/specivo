@@ -1,7 +1,8 @@
 """Celery tasks for async embedding generation.
 
 Tasks:
-- generate_embeddings: Chunk content and generate embeddings for a single entity.
+- embed_search_sources: Embed the chunks of the given sources that have no embedding yet.
+  Queued after every commit that writes chunks (see ``search_index_service``).
 - backfill_model_embeddings: Generate embeddings for all existing chunks using a new model.
 """
 
@@ -9,115 +10,87 @@ from __future__ import annotations
 
 import logging
 
+from celery.signals import worker_ready  # type: ignore[import-untyped]
+
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_EMBEDDING
-from specivo.schemas.search import SearchSourceType
 from specivo.tasks import celery_app
 from specivo.tasks._async import run_async, task_session
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMBEDDING)
-def generate_embeddings(self, source_type: str, entity_id: int, project_id: int) -> None:  # type: ignore[no-untyped-def]
-    """Chunk content and generate embeddings for a source entity.
+@celery_app.task(
+    bind=True, ignore_result=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMBEDDING
+)
+def embed_search_sources(self, sources: list[list]) -> None:  # type: ignore[no-untyped-def]
+    """Embed the chunks of *sources* that have no embedding for the default model.
 
-    Called on issue/wiki/journal create/update.
+    Idempotent: a source deleted or already embedded since the task was queued
+    is skipped, so a duplicate or late task costs one query per source. Does
+    nothing when no embedding model can run in this worker.
 
     Args:
-        source_type: One of :class:`SearchSourceType` string values
-            (``"issue"``, ``"wiki_page"``, ``"journal"``, ``"attachment"``).
-            Passed as a plain string because Celery serializes task args
-            to JSON via the broker.
-        entity_id: ID of the source entity.
-        project_id: ID of the project the entity belongs to.
+        sources: ``[source_type, entity_id]`` pairs, with source_type one of the
+            :class:`~specivo.schemas.search.SearchSourceType` values. Lists
+            rather than tuples because Celery serializes task args to JSON.
     """
     try:
-        run_async(_generate_embeddings_async(source_type, entity_id, project_id))
+        run_async(_embed_sources_async([(str(t), int(i)) for t, i in sources]))
     except Exception as exc:
-        logger.warning("Failed to generate embeddings for %s:%d: %s", source_type, entity_id, exc)
+        logger.warning("Embedding task failed for %d search source(s): %s", len(sources), exc)
         raise self.retry(exc=exc)
 
 
-async def _generate_embeddings_async(source_type: str, entity_id: int, project_id: int) -> None:
-    """Async implementation of embedding generation."""
-    from specivo.services.chunking_service import ChunkingService
+async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
+    """Embed each source in its own transaction, so one failure loses only that source."""
     from specivo.services.embedding_service import EmbeddingService
 
-    chunking = ChunkingService()
-    embedding = EmbeddingService()
+    service = EmbeddingService()
 
     async with task_session() as session:
-        chunks: list[str] = []
+        model = await service.get_default_model(session)
+        if model is None or not service.is_model_usable(model):
+            logger.debug("No usable embedding model; skipping %d search source(s)", len(sources))
+            return
+        model_id = model.id
 
-        if source_type == SearchSourceType.ISSUE:
-            from sqlalchemy import select
+        for source_type, entity_id in sources:
+            try:
+                count = await service.embed_pending(session, [(source_type, entity_id)], model_id=model_id)
+                await session.commit()
+            except Exception as exc:  # noqa: BLE001 - one bad source must not block the rest
+                await session.rollback()
+                logger.warning("Embedding failed for %s %d: %s", source_type, entity_id, exc)
+                continue
+            if count:
+                logger.info("Embedded %d chunk(s) for %s %d", count, source_type, entity_id)
 
-            from specivo.models.issue import Issue
 
-            issue_result = await session.execute(select(Issue).where(Issue.id == entity_id))
-            issue = issue_result.scalar_one_or_none()
-            if issue:
-                chunks = chunking.chunk_issue(issue.subject, issue.description)
+@worker_ready.connect
+def _log_embedding_model_status(**_kwargs) -> None:  # type: ignore[no-untyped-def]
+    """Say once, at worker start, whether semantic indexing can run here."""
+    try:
+        run_async(_log_model_status_async())
+    except Exception as exc:  # noqa: BLE001 - a status line must not stop the worker
+        logger.info("Could not check the embedding model at worker start: %s", exc)
 
-        elif source_type == SearchSourceType.WIKI_PAGE:
-            from sqlalchemy import select
 
-            from specivo.models.wiki import WikiContent, WikiPage
+async def _log_model_status_async() -> None:
+    from specivo.services.embedding_service import EmbeddingService
 
-            page_result = await session.execute(select(WikiPage).where(WikiPage.id == entity_id))
-            page = page_result.scalar_one_or_none()
-            if page:
-                # Get latest content version
-                content_result = await session.execute(
-                    select(WikiContent)
-                    .where(WikiContent.page_id == page.id)
-                    .order_by(WikiContent.version.desc())
-                    .limit(1)
-                )
-                content = content_result.scalar_one_or_none()
-                if content:
-                    chunks = chunking.chunk_wiki_page(page.title, content.text)
-
-        elif source_type == SearchSourceType.JOURNAL:
-            from sqlalchemy import select
-
-            from specivo.models.journal import Journal
-
-            journal_result = await session.execute(select(Journal).where(Journal.id == entity_id))
-            journal = journal_result.scalar_one_or_none()
-            if journal and journal.notes:
-                chunks = chunking.chunk_journal(journal.notes)
-
-        elif source_type == SearchSourceType.ATTACHMENT:
-            from sqlalchemy import select
-
-            from specivo.models.attachment import Attachment
-
-            att_result = await session.execute(select(Attachment).where(Attachment.id == entity_id))
-            att = att_result.scalar_one_or_none()
-            if att:
-                # Extract metadata content fields if available
-                meta: dict | None = getattr(att, "metadata", None)
-                extracted_text: str | None = None
-                ai_description: str | None = None
-                if meta:
-                    extracted_text = meta.get("extracted_text")
-                    ai_description = meta.get("ai_description")
-
-                description = att.description
-                if ai_description:
-                    description = f"{description}\n\n{ai_description}" if description else ai_description
-
-                chunks = chunking.chunk_attachment(
-                    att.filename,
-                    description,
-                    extracted_text=extracted_text,
-                )
-
-        if chunks:
-            await embedding.embed_source(session, source_type, entity_id, project_id, chunks)
-            await session.commit()
-            logger.info("Generated embeddings for %s:%d (%d chunks)", source_type, entity_id, len(chunks))
+    service = EmbeddingService()
+    async with task_session() as session:
+        model = await service.get_default_model(session)
+    if model is None:
+        logger.info("Semantic indexing is off: no default embedding model is registered")
+    elif service.is_model_usable(model):
+        logger.info("Semantic indexing is on: embedding with %s", model.name)
+    else:
+        logger.info(
+            "Semantic indexing is off: the files for embedding model %s are not in data/models; "
+            "keyword search is unaffected",
+            model.name,
+        )
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)

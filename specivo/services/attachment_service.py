@@ -16,7 +16,6 @@ from specivo.core.config import get_settings
 from specivo.core.exceptions import NotFoundError
 from specivo.models.attachment import Attachment
 from specivo.models.project import Project
-from specivo.models.search import SearchSource
 from specivo.models.user import User
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
@@ -102,7 +101,6 @@ class AttachmentService:
         description: str | None = None,
         content_type: str | None = None,
         *,
-        skip_search_index: bool = False,
         copy_file: bool = True,
     ) -> Attachment:
         """Attach a file that already exists on disk.
@@ -116,8 +114,6 @@ class AttachmentService:
           predates that policy, and dropping it would lose data the operator
           asked to migrate.
         * The size limit is not applied, for the same reason.
-        * ``skip_search_index`` lets a bulk caller index everything once at the
-          end rather than per file.
         * ``copy_file=False`` does everything except write the copy. A dry-run
           import rolls its transaction back, but a file already written would
           stay written, so the copy is the one step it has to leave out. The
@@ -176,14 +172,6 @@ class AttachmentService:
             except OSError:
                 pass
             raise
-
-        if not skip_search_index:
-            try:
-                from specivo.services.embedding_service import EmbeddingService
-
-                await EmbeddingService().embed_attachment(session, attachment)
-            except Exception:
-                logger.debug("Embedding generation skipped for attachment %d", attachment.id)
 
         logger.debug(
             "Imported attachment %d (%s, %d bytes) onto %s/%d",
@@ -280,14 +268,6 @@ class AttachmentService:
             author.id,
         )
 
-        # Index for search (inline, non-blocking on failure)
-        try:
-            from specivo.services.embedding_service import EmbeddingService
-
-            await EmbeddingService().embed_attachment(session, attachment)
-        except Exception:
-            logger.debug("Embedding generation skipped for attachment %d", attachment.id)
-
         # Audit log
         try:
             project_id = await self._resolve_project_id(session, container_type, container_id)
@@ -337,27 +317,15 @@ class AttachmentService:
         user: User | None = None,
         request: Request | None = None,
     ) -> None:
-        """Delete the DB record, search index, and the file on disk."""
+        """Delete the DB record and the file on disk.
+
+        The search index entry goes with the row (see ``search_index_service``).
+        """
         file_path = self._file_path(attachment.disk_filename)
         att_id = attachment.id
         att_filename = attachment.filename
         att_container_type = attachment.container_type
         att_container_id = attachment.container_id
-
-        # Remove search index (before deleting the attachment row)
-        try:
-            result = await session.execute(
-                select(SearchSource).where(
-                    SearchSource.source_type == "attachment",
-                    SearchSource.entity_id == att_id,
-                )
-            )
-            source = result.scalar_one_or_none()
-            if source is not None:
-                await session.delete(source)
-                await session.flush()
-        except Exception:
-            logger.debug("Search index cleanup skipped for attachment %d", att_id)
 
         await session.delete(attachment)
         await session.flush()
@@ -690,7 +658,7 @@ class AttachmentService:
         user: User,
         request: Request | None = None,
     ) -> Attachment:
-        """Update an attachment's description and re-index for search.
+        """Update an attachment's description; the session events re-index it.
 
         Args:
             session: Async DB session.
@@ -705,14 +673,6 @@ class AttachmentService:
         old_description = attachment.description
         attachment.description = new_description
         await session.flush()
-
-        # Re-index for search (inline, non-blocking on failure)
-        try:
-            from specivo.services.embedding_service import EmbeddingService
-
-            await EmbeddingService().embed_attachment(session, attachment)
-        except Exception:
-            logger.debug("Re-index skipped for attachment %d description update", attachment.id)
 
         # Audit log
         try:

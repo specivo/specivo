@@ -5,9 +5,10 @@ arrives makes an import of any size crawl, and dispatching a link-graph task per
 wiki page floods the queue — so they run once at the end over what was
 imported.
 
-Full-text search needs nothing here: its vectors are maintained by database
-triggers, which fire on the same inserts either way. What is missing is the
-chunk and embedding layer, which the application writes explicitly.
+Full-text search on issues and wiki pages needs nothing here: their vectors are
+maintained by database triggers. Comments and attachments are searched through
+their chunks, which the import sessions do not write as rows arrive (see
+``defer_search_index``), so this phase writes them for every imported source.
 """
 
 from __future__ import annotations
@@ -18,8 +19,7 @@ from sqlalchemy import select
 
 from specivo.importers.core.ir import EntityType
 from specivo.importers.core.pipeline import PhaseContext
-from specivo.models.issue import Issue
-from specivo.models.wiki import Wiki, WikiContent, WikiPage
+from specivo.models.wiki import WikiPage
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,11 @@ async def rebuild_wiki_link_graph(ctx: PhaseContext) -> None:
 
 
 async def backfill_search_index(ctx: PhaseContext) -> None:
-    """Generate search chunks and embeddings for everything imported.
+    """Write search chunks for everything imported, and embed them when a model can run.
+
+    Covers issues, wiki pages, comments (honouring the comment settings) and
+    attachments. Embedding runs inline because an import is usually run from a
+    shell where no worker need be listening.
 
     Skipped on a dry run: it is the slowest phase and none of it would survive
     the rollback. Failure is reported rather than fatal — an import with an
@@ -64,61 +68,26 @@ async def backfill_search_index(ctx: PhaseContext) -> None:
         return
 
     from specivo.schemas.search import SearchSourceType
-    from specivo.services.chunking_service import ChunkingService
     from specivo.services.embedding_service import EmbeddingService
 
-    chunker = ChunkingService()
     embedder = EmbeddingService()
+    for entity_type, source_type in (
+        (EntityType.ISSUE, SearchSourceType.ISSUE),
+        (EntityType.WIKI_PAGE, SearchSourceType.WIKI_PAGE),
+        (EntityType.JOURNAL, SearchSourceType.JOURNAL),
+        (EntityType.ATTACHMENT, SearchSourceType.ATTACHMENT),
+    ):
+        await _index(ctx, embedder, entity_type, source_type)
 
-    await _index_issues(ctx, chunker, embedder, SearchSourceType)
-    await _index_wiki_pages(ctx, chunker, embedder, SearchSourceType)
 
-
-async def _index_issues(ctx: PhaseContext, chunker, embedder, source_type) -> None:
-    """Chunk and embed the issues this source has imported."""
-    issue_ids = list((await ctx.id_map.preload(ctx.session, EntityType.ISSUE)).values())
-    for start in range(0, len(issue_ids), _INDEX_BATCH):
-        chunk_ids = issue_ids[start : start + _INDEX_BATCH]
-        rows = (
-            await ctx.session.execute(
-                select(Issue.id, Issue.project_id, Issue.subject, Issue.description).where(Issue.id.in_(chunk_ids))
-            )
-        ).all()
-        for issue_id, project_id, subject, description in rows:
+async def _index(ctx: PhaseContext, embedder, entity_type: EntityType, source_type) -> None:
+    """Chunk and embed the entities of one type this source has imported."""
+    entity_ids = sorted((await ctx.id_map.preload(ctx.session, entity_type)).values())
+    for start in range(0, len(entity_ids), _INDEX_BATCH):
+        for entity_id in entity_ids[start : start + _INDEX_BATCH]:
             try:
-                chunks = chunker.chunk_issue(subject, description)
-                await embedder.embed_source(ctx.session, source_type.ISSUE, issue_id, project_id, chunks)
-            except Exception as exc:  # noqa: BLE001 - see the docstring
-                ctx.warn("Could not index an issue for search", issue=issue_id, reason=str(exc))
-            ctx.tick()
-        await ctx.session.flush()
-
-
-async def _index_wiki_pages(ctx: PhaseContext, chunker, embedder, source_type) -> None:
-    """Chunk and embed the wiki pages this source has imported."""
-    page_ids = list((await ctx.id_map.preload(ctx.session, EntityType.WIKI_PAGE)).values())
-    for start in range(0, len(page_ids), _INDEX_BATCH):
-        chunk_ids = page_ids[start : start + _INDEX_BATCH]
-        rows = (
-            await ctx.session.execute(
-                select(WikiPage.id, WikiPage.title, Wiki.project_id)
-                .join(Wiki, Wiki.id == WikiPage.wiki_id)
-                .where(WikiPage.id.in_(chunk_ids))
-            )
-        ).all()
-        for page_id, title, project_id in rows:
-            text = (
-                await ctx.session.execute(
-                    select(WikiContent.text)
-                    .where(WikiContent.page_id == page_id)
-                    .order_by(WikiContent.version.desc())
-                    .limit(1)
-                )
-            ).scalar_one_or_none()
-            try:
-                chunks = chunker.chunk_wiki_page(title, text or "")
-                await embedder.embed_source(ctx.session, source_type.WIKI_PAGE, page_id, project_id, chunks)
-            except Exception as exc:  # noqa: BLE001 - see the docstring
-                ctx.warn("Could not index a wiki page for search", page=page_id, reason=str(exc))
+                await embedder.index_source(ctx.session, source_type, entity_id)
+            except Exception as exc:  # noqa: BLE001 - see backfill_search_index
+                ctx.warn("Could not index an item for search", source=str(source_type), id=entity_id, reason=str(exc))
             ctx.tick()
         await ctx.session.flush()

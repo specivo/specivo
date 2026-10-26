@@ -922,6 +922,7 @@ class SearchService:
                         GROUP BY page_id
                     ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
                     WHERE wc.search_vector @@ query
+                    AND wp.deleted_at IS NULL
                     {wiki_project_filter}
                     {wiki_visibility}
                     {wiki_tag_filter}
@@ -990,6 +991,7 @@ class SearchService:
                 GROUP BY page_id
             ) wc_latest ON wc_latest.page_id = wc.page_id AND wc_latest.max_ver = wc.version
             WHERE wc.search_vector @@ query
+            AND wp.deleted_at IS NULL
             {wiki_project_filter}
             {wiki_visibility}
             {wiki_tag_filter}

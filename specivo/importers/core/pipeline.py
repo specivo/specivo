@@ -363,12 +363,20 @@ class ImportPipeline:
 
         With a shared session (dry run) the caller owns the rollback. Otherwise
         the phase gets its own session and commits on success.
+
+        Either way the session does not index content as it is written: the
+        search backfill phase indexes everything once, after the references in
+        imported text have been rewritten.
         """
+        from specivo.services.search_index_service import defer_search_index
+
         if shared is not None:
+            defer_search_index(shared)
             yield shared
             return
 
         async with self._session_factory() as session:
+            defer_search_index(session)
             try:
                 yield session
                 await session.commit()

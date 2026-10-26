@@ -140,7 +140,6 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
                 metadata=metadata,
             ),
             author,
-            skip_search_index=True,
             # The source's own privacy flag is history, not a new choice: it
             # is kept as it was, whatever the tracker's default says.
             check_privacy_permission=False,
