@@ -212,3 +212,7 @@
 .diff-line.hunk-header { background: var(--sp-bg-input); }
 .diff-line.hunk-header .diff-line-content { color: var(--sp-text-muted); font-style: italic; border-left: 3px solid transparent; }
 
+
+/* Markdown too complex to render safely, shown as plain text (markdown_budget.py) */
+.sp-markdown-fallback-notice { font-size: var(--sp-font-size-sm); font-style: italic; color: var(--sp-text-muted); }
+.sp-markdown-fallback pre { white-space: pre-wrap; overflow-wrap: anywhere; }
