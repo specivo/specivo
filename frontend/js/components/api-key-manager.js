@@ -10,6 +10,14 @@ export function apiKeyManager() {
             msgCreateFailed: '',
             msgConnectFailed: '',
             msgConfirmDelete: '',
+            msgCopied: '',
+            msgCopy: '',
+            msgCreating: '',
+            msgCreate: '',
+            msgActive: '',
+            msgInactive: '',
+            msgDeactivate: '',
+            msgActivate: '',
 
             init() {
                 // Translated strings arrive as data-msg-* attributes rendered by
@@ -18,6 +26,14 @@ export function apiKeyManager() {
                 this.msgCreateFailed = d.msgCreateFailed || 'Failed to create key';
                 this.msgConnectFailed = d.msgConnectFailed || 'Unable to connect. Please try again.';
                 this.msgConfirmDelete = d.msgConfirmDelete || 'Are you sure you want to permanently delete this API key?';
+                this.msgCopied = d.msgCopied || 'Copied!';
+                this.msgCopy = d.msgCopy || 'Copy';
+                this.msgCreating = d.msgCreating || 'Creating...';
+                this.msgCreate = d.msgCreate || 'Create key';
+                this.msgActive = d.msgActive || 'Active';
+                this.msgInactive = d.msgInactive || 'Inactive';
+                this.msgDeactivate = d.msgDeactivate || 'Deactivate';
+                this.msgActivate = d.msgActivate || 'Activate';
                 this.loadKeys();
             },
 
@@ -86,9 +102,7 @@ export function apiKeyManager() {
             },
 
             formatDate(iso) {
-                if (!iso) return '-';
-                var d = new Date(iso);
-                return d.toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'});
+                return spFormatDate(iso) || '-';
             }
         };
     }

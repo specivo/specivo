@@ -1,9 +1,19 @@
 export function adminVersions(initial) {
         var i18n = Object.assign({
-            confirmDelete: 'Delete version "%(name)s"?'
+            confirmDelete: 'Delete version "%(name)s"?',
+            countVersions: '%(count)s versions',
+            countSelected: '%(count)s selected',
+            countOpen: '%(count)s open',
+            countClosed: '%(count)s closed'
         }, (initial && initial.i18n) || {});
 
         return {
+            i18n: i18n,
+
+            /* Fill a translated "%(count)s ..." label; string methods stay out of templates (ADR-0001). */
+            countLabel(template, count) {
+                return template.replace('%(count)s', count);
+            },
             allVersions: (initial && initial.versions) || [],
             projects: (initial && initial.projects) || [],
             filterProject: '',

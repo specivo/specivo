@@ -88,7 +88,9 @@
 
 <div class="card" style="padding: var(--sp-space-lg);" x-data='adminSettings({{ settings | tojson }}, {{ {
   "updated": _("Setting updated."),
-  "saveFailed": _("Failed to save.")
+  "saveFailed": _("Failed to save."),
+  "saving": _("Saving..."),
+  "save": _("Save")
 } | tojson }})'>
   <table class="issue-table">
     <thead>
@@ -118,7 +120,7 @@
             <template x-if="editingKey === key">
               <span style="display: flex; gap: var(--sp-space-xs);">
                 <button class="sp-btn-sm" @click="cancelEdit()">{% trans %}Cancel{% endtrans %}</button>
-                <button class="sp-btn-sm" style="background: var(--sp-accent); color: var(--sp-accent-text);" @click="save(key)" :disabled="saving" x-text="saving ? 'Saving...' : 'Save'"></button>
+                <button class="sp-btn-sm" style="background: var(--sp-accent); color: var(--sp-accent-text);" @click="save(key)" :disabled="saving" x-text="saving ? i18n.saving : i18n.save"></button>
               </span>
             </template>
           </td>

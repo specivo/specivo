@@ -2,10 +2,18 @@ export function adminProjects(initial) {
         var i18n = Object.assign({
             saveFailed: 'Failed to save',
             connectFailed: 'Unable to connect.',
-            confirmArchive: 'Archive %(name)s?'
+            confirmArchive: 'Archive %(name)s?',
+            statusActive: 'Active',
+            statusArchived: 'Archived',
+            statusClosed: 'Closed',
+            editProject: 'Edit Project',
+            newProject: 'New Project',
+            save: 'Save',
+            createProject: 'Create Project'
         }, (initial && initial.i18n) || {});
 
         return {
+            i18n: i18n,
             projects: (initial && initial.projects) || [],
             colors: (initial && initial.colors) || [],
             allProjects: (initial && initial.allProjects) || [],
@@ -17,10 +25,7 @@ export function adminProjects(initial) {
             form: { name: '', identifier: '', key: '', description: '', color: '', parentKey: '', moduleWiki: true, moduleTime: true },
 
             formatDate: function (iso) {
-                if (!iso) return '-';
-                var d = new Date(iso);
-                var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                return months[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
+                return spFormatDate(iso) || '-';
             },
 
             get parentOptions() {

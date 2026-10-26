@@ -123,15 +123,37 @@ def _localtime(dt, tz_name: str = "UTC") -> str:
     return local_dt.strftime("%Y-%m-%d %H:%M")
 
 
-def _localdt(dt, tz_name: str = "UTC", fmt: str = "%Y-%m-%d %H:%M") -> str:
-    """Jinja2 filter: convert UTC datetime to user timezone with custom format.
+def _localdt(dt, tz_name: str = "UTC", style: str = "datetime") -> str:
+    """Jinja2 filter: convert UTC datetime to user timezone, formatted for the active locale.
 
-    Usage in templates: ``{{ dt | localdt(user.timezone, '%b %d, %Y at %H:%M') }}``
+    *style* is ``"datetime"`` (medium date plus 24-hour time) or a CLDR date
+    skeleton such as ``"yMMMd"``. Month names and field order follow the
+    viewer's language, so no strftime pattern (which is always English) is used.
+
+    Usage in templates: ``{{ dt | localdt(user.timezone) }}``,
+    ``{{ dt | localdt(user.timezone, 'yMMMd') }}``
     """
+    from specivo.core.i18n import format_date, format_datetime
+
     local_dt = _to_user_tz(dt, tz_name)
     if local_dt is None:
         return ""
-    return local_dt.strftime(fmt)
+    if style == "datetime":
+        return format_datetime(local_dt)
+    return format_date(local_dt, style)
+
+
+def _localdate(value, skeleton: str = "yMMMd") -> str:
+    """Jinja2 filter: format a calendar date for the active locale.
+
+    For ``date`` values that carry no timezone (due dates, sprint ranges).
+    Usage in templates: ``{{ sprint.start_date | localdate('MMMd') }}``
+    """
+    from specivo.core.i18n import format_date
+
+    if value is None:
+        return ""
+    return format_date(value, skeleton)
 
 
 def _timeago(
@@ -158,12 +180,16 @@ def _timeago(
       "relative": always relative ("5 min ago", "3 days ago", "2 months ago")
       "date": always show date ("Mar 28" or "Mar 28, 2025")
 
-    *now* defaults to the current time; pass an aware datetime to render
-    against a fixed reference point (naive values are treated as UTC).
+    Labels and dates are rendered in the active locale. *now* defaults to the
+    current time; pass an aware datetime to render against a fixed reference
+    point (naive values are treated as UTC).
     """
     if dt is None:
         return ""
     from datetime import UTC, timedelta
+
+    from specivo.core.i18n import format_date, ngettext
+    from specivo.core.i18n import gettext as _
 
     if now is None:
         now = datetime.now(UTC)
@@ -181,32 +207,33 @@ def _timeago(
     today = local_now.date()
     dt_date = local_dt.date()
 
+    def _date() -> str:
+        return format_date(local_dt, "MMMd" if dt_date.year == today.year else "yMMMd")
+
     if mode == "date":
-        if dt_date.year == today.year:
-            return local_dt.strftime("%b %d")
-        return local_dt.strftime("%b %d, %Y")
+        return _date()
 
     # Relative time calculation (shared by "smart" and "relative")
     def _relative() -> str:
         if seconds < 60:
-            return "just now"
+            return _("just now")
         minutes = seconds // 60
         if minutes < 60:
-            return f"{minutes} min ago"
+            return _("%(count)s min ago") % {"count": minutes}
         hours = minutes // 60
         if hours < 24:
-            return f"{hours} hr{'s' if hours != 1 else ''} ago"
+            return ngettext("%(num)d hr ago", "%(num)d hrs ago", hours) % {"num": hours}
         days = seconds // 86400
         if days < 7:
-            return f"{days} day{'s' if days != 1 else ''} ago"
+            return ngettext("%(num)d day ago", "%(num)d days ago", days) % {"num": days}
         if days < 30:
             weeks = days // 7
-            return f"{weeks} week{'s' if weeks != 1 else ''} ago"
+            return ngettext("%(num)d week ago", "%(num)d weeks ago", weeks) % {"num": weeks}
         months = days // 30
         if months < 12:
-            return f"{months} month{'s' if months != 1 else ''} ago"
+            return ngettext("%(num)d month ago", "%(num)d months ago", months) % {"num": months}
         years = months // 12
-        return f"{years} year{'s' if years != 1 else ''} ago"
+        return ngettext("%(num)d year ago", "%(num)d years ago", years) % {"num": years}
 
     if mode == "relative":
         return _relative()
@@ -218,12 +245,9 @@ def _timeago(
         return _relative()
 
     if dt_date == today - timedelta(days=1):
-        return "Yesterday"
+        return _("Yesterday")
 
-    if dt_date.year == today.year:
-        return local_dt.strftime("%b %d")
-
-    return local_dt.strftime("%b %d, %Y")
+    return _date()
 
 
 def get_templates(theme: str = "default") -> Jinja2Templates:
@@ -275,6 +299,11 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
 
     templates.env.add_extension("jinja2.ext.i18n")
     templates.env.install_gettext_callables(gettext, ngettext)
+    # The active request locale, for <html lang> (read by the frontend's
+    # Intl date formatting) and anything else that needs the language code.
+    from specivo.core.i18n import get_locale
+
+    templates.env.globals["current_locale"] = get_locale
 
     # Feature-gating: expose has_feature() to every template
     from specivo.core.features import has_feature
@@ -346,11 +375,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     # Timezone-aware datetime filters
     templates.env.filters["localtime"] = _localtime
     templates.env.filters["localdt"] = _localdt
+    templates.env.filters["localdate"] = _localdate
 
     # Metadata diff formatting for activity log
-    def _format_metadata_diff(
-        old_json: str | None, new_json: str | None
-    ) -> list[dict[str, str]]:
+    def _format_metadata_diff(old_json: str | None, new_json: str | None) -> list[dict[str, str]]:
         """Parse two metadata JSON blobs and return per-key diffs.
 
         Returns a list of dicts with keys: ``key``, ``old``, ``new``.
@@ -380,11 +408,13 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
             ov = old_d.get(k)
             nv = new_d.get(k)
             if ov != nv:
-                diffs.append({
-                    "key": k,
-                    "old": _truncate(ov) if ov is not None else "",
-                    "new": _truncate(nv) if nv is not None else "",
-                })
+                diffs.append(
+                    {
+                        "key": k,
+                        "old": _truncate(ov) if ov is not None else "",
+                        "new": _truncate(nv) if nv is not None else "",
+                    }
+                )
         return diffs
 
     templates.env.filters["metadata_diff"] = _format_metadata_diff

@@ -83,6 +83,8 @@
      x-data='tagFilter({
        endpoint: "/api/v1/tags/search/",
        tags: {{ (tags if tags is defined else []) | tojson }},
+       placeholder: {{ _("Filter by tag...") | tojson }},
+       placeholderMore: {{ _("Add tag...") | tojson }},
        baseParams: {
          q: {{ query | tojson }},
          mode: {{ mode | tojson }},
@@ -111,7 +113,7 @@
            @keydown.enter.prevent="confirm()"
            @keydown.escape.prevent="open = false"
            @keydown.backspace="removeLast()"
-           :placeholder="tags.length === 0 ? '{{ _('Filter by tag...') }}' : '{{ _('Add tag...') }}'">
+           :placeholder="tags.length === 0 ? placeholder : placeholderMore">
   </div>
   <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
     <template x-if="loading">

@@ -5,10 +5,22 @@ export function projectVersions(initial) {
             versionDeleted: 'Version "%(name)s" deleted.',
             saveFailed: 'Failed to save version.',
             deleteFailed: 'Failed to delete version.',
-            connectFailed: 'Unable to connect.'
+            connectFailed: 'Unable to connect.',
+            emptyCanManage: 'Create versions to organize your issues into releases and milestones.',
+            emptyReadOnly: 'No versions have been created for this project yet.',
+            countOpen: '%(count)s open',
+            countClosed: '%(count)s closed',
+            editVersion: 'Edit version',
+            newVersion: 'New version',
+            saveChanges: 'Save changes',
+            createVersion: 'Create version'
         }, initial.i18n || {});
 
         return {
+            i18n: i18n,
+
+            openLabel(v) { return i18n.countOpen.replace('%(count)s', v.open_count); },
+            closedLabel(v) { return i18n.countClosed.replace('%(count)s', v.closed_count); },
             versions: initial.versions || [],
             projectKey: initial.projectKey || '',
             canManage: initial.canManage !== false,

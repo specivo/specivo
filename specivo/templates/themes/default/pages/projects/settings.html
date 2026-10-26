@@ -281,7 +281,15 @@
     "versionDeleted": _('Version "%(name)s" deleted.'),
     "saveFailed": _("Failed to save version."),
     "deleteFailed": _("Failed to delete version."),
-    "connectFailed": _("Unable to connect.")
+    "connectFailed": _("Unable to connect."),
+    "emptyCanManage": _("Create versions to organize your issues into releases and milestones."),
+    "emptyReadOnly": _("No versions have been created for this project yet."),
+    "countOpen": _("%(count)s open"),
+    "countClosed": _("%(count)s closed"),
+    "editVersion": _("Edit version"),
+    "newVersion": _("New version"),
+    "saveChanges": _("Save changes"),
+    "createVersion": _("Create version")
   } | tojson }} })'>
 
     <!-- Flash messages -->
@@ -310,7 +318,7 @@
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
           <h3>{% trans %}No versions yet{% endtrans %}</h3>
-          <p x-text="canManage ? 'Create versions to organize your issues into releases and milestones.' : 'No versions have been created for this project yet.'"></p>
+          <p x-text="canManage ? i18n.emptyCanManage : i18n.emptyReadOnly"></p>
           <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
             {% trans %}Create first version{% endtrans %}
@@ -358,8 +366,8 @@
                 </td>
                 <td>
                   <div class="issue-counts">
-                    <span class="open-count" x-text="v.open_count + ' open'"></span>
-                    <span class="closed-count" x-text="v.closed_count + ' closed'"></span>
+                    <span class="open-count" x-text="openLabel(v)"></span>
+                    <span class="closed-count" x-text="closedLabel(v)"></span>
                   </div>
                 </td>
                 <td class="td-actions sp-td-actions-right" x-show="canManage">
@@ -382,7 +390,7 @@
       <div class="sp-scrim open" @click.self="showModal = false" x-cloak>
         <div class="sp-modal">
           <div class="sp-modal-header">
-            <h2 x-text="editingVersion ? 'Edit version' : 'New version'"></h2>
+            <h2 x-text="editingVersion ? i18n.editVersion : i18n.newVersion"></h2>
             <button class="sp-modal-close" @click="showModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
@@ -420,7 +428,7 @@
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-spinner-svg"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
                 {% trans %}Saving...{% endtrans %}
               </span>
-              <span x-show="!saving" x-text="editingVersion ? 'Save changes' : 'Create version'"></span>
+              <span x-show="!saving" x-text="editingVersion ? i18n.saveChanges : i18n.createVersion"></span>
             </button>
           </div>
         </div>
@@ -481,7 +489,7 @@
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
           <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
-          <p x-text="canManage ? '{{ _('Create a pattern to generate issues automatically on a schedule.') }}' : '{{ _('No recurring patterns have been created for this project yet.') }}'"></p>
+          <p x-text="canManage ? labels.emptyCanManage : labels.emptyReadOnly"></p>
           <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
             {% trans %}Create first pattern{% endtrans %}
           </a>
@@ -506,12 +514,12 @@
                   <a class="version-name" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/'" x-text="p.name"></a>
                 </td>
                 <td><span class="date-val" x-text="scheduleLabel(p)"></span></td>
-                <td><span class="date-val" x-text="p.anchor_mode"></span></td>
+                <td><span class="date-val" x-text="anchorLabel(p)"></span></td>
                 <td>
-                  <span class="badge-version" :class="p.enabled ? 'open' : 'closed'" x-text="p.enabled ? 'Enabled' : 'Disabled'"></span>
+                  <span class="badge-version" :class="p.enabled ? 'open' : 'closed'" x-text="p.enabled ? labels.enabled : labels.disabled"></span>
                 </td>
                 <td class="td-actions sp-td-actions-right" x-show="canManage">
-                  <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'" :aria-label="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'">
+                  <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? labels.disable : labels.enable" :aria-label="p.enabled ? labels.disable : labels.enable">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 11-12.77.04"/></svg>
                   </button>
                   <a class="action-link" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/edit/'" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
@@ -565,7 +573,13 @@
     "schemaRequired": _("Schema definition is required."),
     "schemaNotObject": _('Root type must be "object".'),
     "invalidJson": _("Invalid JSON: %(error)s"),
-    "deleteBlocked": _("Cannot delete: %(count)s issue(s) use this schema.")
+    "deleteBlocked": _("Cannot delete: %(count)s issue(s) use this schema."),
+    "fromPreset": _("from %(preset)s"),
+    "countIssues": _("%(count)s issues"),
+    "editSchema": _("Edit Schema"),
+    "newSchema": _("New Custom Schema"),
+    "saveChanges": _("Save Changes"),
+    "createSchema": _("Create Schema")
   } | tojson }} })'>
 
     <!-- Available Presets section -->
@@ -652,7 +666,7 @@
                 <td>
                   <span class="sp-schema-name" x-text="schema.name"></span>
                   <template x-if="schema.preset_slug">
-                    <span class="sp-text-muted-xs-ml-4" x-text="'from ' + schema.preset_slug"></span>
+                    <span class="sp-text-muted-xs-ml-4" x-text="presetLabel(schema)"></span>
                   </template>
                 </td>
                 <td>
@@ -677,7 +691,7 @@
                 </td>
                 <td>
                   <template x-if="schema.usage_count > 0">
-                    <span class="sp-schema-usage in-use" x-text="schema.usage_count + ' issues'"></span>
+                    <span class="sp-schema-usage in-use" x-text="usageLabel(schema)"></span>
                   </template>
                   <template x-if="schema.usage_count === 0">
                     <span class="sp-schema-usage no-use">{% trans %}No usage{% endtrans %}</span>
@@ -714,7 +728,7 @@
       <div class="sp-scrim open" @click.self="showSchemaModal = false" x-cloak>
         <div class="sp-modal">
           <div class="sp-modal-header">
-            <h2 x-text="editingSchema ? 'Edit Schema' : 'New Custom Schema'"></h2>
+            <h2 x-text="editingSchema ? i18n.editSchema : i18n.newSchema"></h2>
             <button class="sp-modal-close" @click="showSchemaModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
@@ -751,7 +765,7 @@
           <div class="sp-modal-footer">
             <button class="sp-btn sp-btn-ghost" @click="showSchemaModal = false">{% trans %}Cancel{% endtrans %}</button>
             <button class="sp-btn sp-btn-primary" @click="saveSchema()" :disabled="!!schemaError">
-              <span x-text="editingSchema ? 'Save Changes' : 'Create Schema'"></span>
+              <span x-text="editingSchema ? i18n.saveChanges : i18n.createSchema"></span>
             </button>
           </div>
         </div>
@@ -849,7 +863,13 @@
   <!-- Tags tab -->
   <div x-show="tab === 'tags'" x-data='projectTagsSettings({ tags: {{ tags_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_tags | tojson }}, i18n: {{ {
     "saveFailed": _("Failed to save tag."),
-    "connectFailed": _("Unable to connect.")
+    "connectFailed": _("Unable to connect."),
+    "emptyCanManage": _("Create tags to label issues and wiki pages across this project."),
+    "emptyReadOnly": _("No tags have been created for this project yet."),
+    "editTag": _("Edit tag"),
+    "newTag": _("New tag"),
+    "saveChanges": _("Save changes"),
+    "createTag": _("Create tag")
   } | tojson }} })'>
 
     <div class="card">
@@ -869,7 +889,7 @@
         <div class="empty-state">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><path d="M7 7h.01"/></svg>
           <h3>{% trans %}No tags yet{% endtrans %}</h3>
-          <p x-text="canManage ? 'Create tags to label issues and wiki pages across this project.' : 'No tags have been created for this project yet.'"></p>
+          <p x-text="canManage ? i18n.emptyCanManage : i18n.emptyReadOnly"></p>
           <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
             {% trans %}Create first tag{% endtrans %}
           </button>
@@ -919,7 +939,7 @@
       <div class="sp-scrim open" @click.self="showModal = false" x-cloak>
         <div class="sp-modal">
           <div class="sp-modal-header">
-            <h2 x-text="editingTag ? 'Edit tag' : 'New tag'"></h2>
+            <h2 x-text="editingTag ? i18n.editTag : i18n.newTag"></h2>
             <button class="sp-modal-close" @click="showModal = false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
@@ -947,7 +967,7 @@
             <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
             <button class="sp-btn sp-btn-primary" @click="saveTag()" :disabled="!canSaveTag">
               <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
-              <span x-show="!saving" x-text="editingTag ? 'Save changes' : 'Create tag'"></span>
+              <span x-show="!saving" x-text="editingTag ? i18n.saveChanges : i18n.createTag"></span>
             </button>
           </div>
         </div>

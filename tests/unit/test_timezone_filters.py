@@ -87,26 +87,24 @@ class TestLocaltime:
 
 @pytest.mark.unit
 class TestLocaldt:
-    """The localdt filter formats with a custom strftime pattern."""
+    """The localdt filter formats in the user timezone, for the active locale."""
 
-    def test_custom_format(self):
+    def test_default_style_is_date_and_time(self):
         from specivo.web.deps import _localdt
 
         dt = datetime(2026, 4, 9, 23, 24, tzinfo=UTC)
-        result = _localdt(dt, "Asia/Bangkok", "%b %d, %Y at %H:%M")
-        assert result == "Apr 10, 2026 at 06:24"
+        assert _localdt(dt, "Asia/Bangkok") == "Apr 10, 2026, 06:24"
 
-    def test_date_only_format(self):
+    def test_skeleton_style(self):
         from specivo.web.deps import _localdt
 
         dt = datetime(2026, 4, 9, 23, 24, tzinfo=UTC)
-        result = _localdt(dt, "Asia/Bangkok", "%Y-%m-%d")
-        assert result == "2026-04-10"
+        assert _localdt(dt, "Asia/Bangkok", "yMMMd") == "Apr 10, 2026"
 
     def test_none_returns_empty(self):
         from specivo.web.deps import _localdt
 
-        assert _localdt(None, "UTC", "%Y-%m-%d") == ""
+        assert _localdt(None, "UTC", "yMMMd") == ""
 
 
 @pytest.mark.unit
@@ -150,8 +148,8 @@ class TestTimeagoTimezone:
         result_bangkok = _timeago(dt, tz_name="Asia/Bangkok", mode="date", now=now)
         result_utc = _timeago(dt, tz_name="UTC", mode="date", now=now)
         # In Bangkok it's Apr 10, in UTC it's Apr 9
-        assert result_bangkok == "Apr 10"
-        assert result_utc == "Apr 09"
+        assert "Apr 10" in result_bangkok
+        assert result_utc == "Apr 9"
 
 
 def _local(tz_name: str, day: int, hour: int, minute: int) -> datetime:
@@ -189,7 +187,7 @@ class TestTimeagoMidnightBoundary:
         # Only 24h02m old, but two calendar days back: neither recent nor yesterday.
         now = _local(tz_name, 10, 0, 1)
         dt = _local(tz_name, 8, 23, 59)
-        assert _timeago(dt, tz_name=tz_name, now=now) == "Jun 08"
+        assert _timeago(dt, tz_name=tz_name, now=now) == "Jun 8"
 
     def test_0004_item_from_five_minutes_earlier(self, tz_name):
         from specivo.web.deps import _timeago

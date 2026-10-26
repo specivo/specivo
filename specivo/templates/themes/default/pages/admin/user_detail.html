@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "pages/admin/_user_i18n.html" import user_status_labels %}
 
 {% block title %}{{ target_user.display_name }} - {% trans %}Users{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
 
@@ -22,8 +23,20 @@
   "minutesAgo": _("%(count)s min ago"),
   "hoursAgo": _("%(count)s hours ago"),
   "yesterday": _("Yesterday"),
-  "daysAgo": _("%(count)s days ago")
-} | tojson }} })'>
+  "daysAgo": _("%(count)s days ago"),
+  "roleAdmin": _("Administrator"),
+  "roleMember": _("Member"),
+  "lastApiCall": _("Last API call"),
+  "lastLogin": _("Last login"),
+  "passwordTemporary": _("Must be replaced at next sign-in"),
+  "passwordOwn": _("Chosen by the account owner"),
+  "copied": _("Copied!"),
+  "copy": _("Copy"),
+  "creating": _("Creating..."),
+  "createKey": _("Create Key"),
+  "keyActive": _("Active"),
+  "keyRevoked": _("Revoked")
+} | tojson }}, statusLabels: {{ user_status_labels() }} })'>
 
   {# --- User header --- #}
   <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">
@@ -40,9 +53,9 @@
           <span class="sp-badge sp-badge-warning">{% trans %}Password change pending{% endtrans %}</span>
         </template>
         <span class="sp-role" :class="targetUser.is_admin ? 'sp-role-admin' : 'sp-role-member'"
-              x-text="targetUser.is_admin ? '{% trans %}Admin{% endtrans %}' : '{% trans %}Member{% endtrans %}'"></span>
+              x-text="targetUser.is_admin ? i18n.roleAdmin : i18n.roleMember"></span>
         <span class="sp-user-status" :class="'sp-user-status-' + targetUser.status"
-              x-text="capitalize(targetUser.status)"></span>
+              x-text="statusLabel(targetUser.status)"></span>
       </div>
     </div>
   </div>
@@ -72,17 +85,17 @@
       <span class="sp-info-value" x-text="formatDate(targetUser.created_at)"></span>
     </div>
     <div class="sp-info-row">
-      <span class="sp-info-label" x-text="targetUser.is_service_account ? '{% trans %}Last API call{% endtrans %}' : '{% trans %}Last login{% endtrans %}'"></span>
+      <span class="sp-info-label" x-text="targetUser.is_service_account ? i18n.lastApiCall : i18n.lastLogin"></span>
       <span class="sp-info-value" :style="!targetUser.last_login_at ? 'color: var(--sp-text-muted)' : ''"
-            x-text="targetUser.last_login_at ? formatDate(targetUser.last_login_at) : '{% trans %}Never{% endtrans %}'"></span>
+            x-text="targetUser.last_login_at ? formatDate(targetUser.last_login_at) : i18n.never"></span>
     </div>
     <template x-if="!targetUser.is_service_account">
       <div class="sp-info-row">
         <span class="sp-info-label">{% trans %}Password{% endtrans %}</span>
         <span class="sp-info-value" :style="targetUser.must_change_password ? 'color: var(--sp-warning)' : ''"
               x-text="targetUser.must_change_password
-                ? '{% trans %}Must be replaced at next sign-in{% endtrans %}'
-                : '{% trans %}Chosen by the account owner{% endtrans %}'"></span>
+                ? i18n.passwordTemporary
+                : i18n.passwordOwn"></span>
       </div>
     </template>
   </div>
@@ -100,7 +113,7 @@
         <div class="sp-key-reveal-label">{% trans %}New API Key Created{% endtrans %}</div>
         <div class="sp-key-reveal-value" style="display: flex; align-items: center; gap: var(--sp-space-sm);">
           <code style="flex: 1; padding: var(--sp-space-sm) var(--sp-space-md); background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); word-break: break-all;" x-text="newKey"></code>
-          <button class="sp-btn-sm" @click="copyKey()" x-text="copied ? '{% trans %}Copied!{% endtrans %}' : '{% trans %}Copy{% endtrans %}'"></button>
+          <button class="sp-btn-sm" @click="copyKey()" x-text="copied ? i18n.copied : i18n.copy"></button>
         </div>
         <div class="sp-key-reveal-warn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 12px; height: 12px; display: inline; vertical-align: -1px; margin-right: 4px;"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -117,7 +130,7 @@
                placeholder="{% trans %}e.g. MCP Server, CI Pipeline{% endtrans %}" required style="flex: 1;">
         <button class="sp-btn sp-btn-primary" type="submit" :disabled="creating">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><path d="M12 5v14M5 12h14"/></svg>
-          <span x-text="creating ? '{% trans %}Creating...{% endtrans %}' : '{% trans %}Create Key{% endtrans %}'"></span>
+          <span x-text="creating ? i18n.creating : i18n.createKey"></span>
         </button>
       </form>
     </div>
@@ -150,10 +163,10 @@
               <code style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs);" x-text="key.key_prefix + '...'"></code>
             </td>
             <td style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="formatDate(key.created_at)"></td>
-            <td style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="key.last_used_at ? timeAgo(key.last_used_at) : '{% trans %}Never{% endtrans %}'"></td>
+            <td style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="key.last_used_at ? timeAgo(key.last_used_at) : i18n.never"></td>
             <td>
               <span class="badge-status" :class="key.is_active ? 'in-progress' : 'closed'"
-                    x-text="key.is_active ? '{% trans %}Active{% endtrans %}' : '{% trans %}Revoked{% endtrans %}'"></span>
+                    x-text="key.is_active ? i18n.keyActive : i18n.keyRevoked"></span>
             </td>
             <td>
               <template x-if="key.is_active">
@@ -192,7 +205,7 @@
       {# Claude / Cursor / Windsurf / Cline -- native SSE in JSON. #}
       <div x-show="mcpClient === 'claude'" style="position: relative; background: var(--sp-bg-sidebar); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); overflow-x: auto;">
         <button type="button" class="sp-btn-sm" @click="copyMcpConfig()"
-                x-text="mcpCopied ? '{% trans %}Copied!{% endtrans %}' : '{% trans %}Copy{% endtrans %}'"
+                x-text="mcpCopied ? i18n.copied : i18n.copy"
                 style="position: absolute; top: var(--sp-space-sm); right: var(--sp-space-sm);"></button>
         <pre x-ref="mcpConfigClaude" style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-inverse); margin: 0; line-height: 1.6;">{
   "mcpServers": {
@@ -210,7 +223,7 @@
       {# Codex CLI -- native Streamable HTTP via url field. Config lives in ~/.codex/config.toml. #}
       <div x-show="mcpClient === 'codex'" style="position: relative; background: var(--sp-bg-sidebar); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); overflow-x: auto;">
         <button type="button" class="sp-btn-sm" @click="copyMcpConfig()"
-                x-text="mcpCopied ? '{% trans %}Copied!{% endtrans %}' : '{% trans %}Copy{% endtrans %}'"
+                x-text="mcpCopied ? i18n.copied : i18n.copy"
                 style="position: absolute; top: var(--sp-space-sm); right: var(--sp-space-sm);"></button>
         <pre x-ref="mcpConfigCodex" style="font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-inverse); margin: 0; line-height: 1.6;">[mcp_servers.specivo]
 url = "https://your-specivo-host/mcp/"

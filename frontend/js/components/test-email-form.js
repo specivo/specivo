@@ -9,6 +9,8 @@ export function testEmailForm() {
             msgSent: '',
             msgUnknownError: '',
             msgRequestFailed: '',
+            msgSending: '',
+            msgSend: '',
 
             init() {
                 // Translated strings arrive as data-msg-* attributes rendered by
@@ -19,6 +21,8 @@ export function testEmailForm() {
                 this.msgSent = d.msgSent || 'Test email sent to %(email)s';
                 this.msgUnknownError = d.msgUnknownError || 'Unknown error';
                 this.msgRequestFailed = d.msgRequestFailed || 'Request failed: %(error)s';
+                this.msgSending = d.msgSending || 'Sending...';
+                this.msgSend = d.msgSend || 'Send Test';
             },
 
             async sendTest() {

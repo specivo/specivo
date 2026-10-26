@@ -33,6 +33,7 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
             msgUploadFailed: 'Upload failed',
             msgConnectFailed: 'Unable to connect.',
             msgFileLabel: 'FILE',
+            msgUploadedBy: 'Uploaded by %(name)s, %(date)s',
 
             init() {
                 // Translated strings arrive as data-msg-* attributes on the
@@ -43,6 +44,7 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
                 this.msgUploadFailed = d.msgUploadFailed || this.msgUploadFailed;
                 this.msgConnectFailed = d.msgConnectFailed || this.msgConnectFailed;
                 this.msgFileLabel = d.msgFileLabel || this.msgFileLabel;
+                this.msgUploadedBy = d.msgUploadedBy || this.msgUploadedBy;
             },
 
             get images() {
@@ -74,10 +76,13 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
             },
 
             formatDate(isoStr) {
-                if (!isoStr) return '';
-                var d = new Date(isoStr);
-                var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-                return months[d.getMonth()] + ' ' + d.getDate();
+                return spFormatDate(isoStr, {month: 'short', day: 'numeric'});
+            },
+
+            uploadedBy(att) {
+                return this.msgUploadedBy
+                    .replace('%(name)s', att.author.name)
+                    .replace('%(date)s', this.formatDate(att.created_at));
             },
 
             openLightbox(att) {

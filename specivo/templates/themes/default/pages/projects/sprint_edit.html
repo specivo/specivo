@@ -175,11 +175,11 @@
       </div>
       <div class="info-row">
         <span class="info-label">{% trans %}Created{% endtrans %}</span>
-        <span class="info-value">{{ sprint.created_at | localdt(user.timezone, '%b %-d, %Y') }}</span>
+        <span class="info-value">{{ sprint.created_at | localdt(user.timezone, 'yMMMd') }}</span>
       </div>
       <div class="info-row">
         <span class="info-label">{% trans %}Updated{% endtrans %}</span>
-        <span class="info-value">{{ sprint.updated_at | localdt(user.timezone, '%b %-d, %Y') }}</span>
+        <span class="info-value">{{ sprint.updated_at | localdt(user.timezone, 'yMMMd') }}</span>
       </div>
       {% if sprint.start_date and sprint.end_date %}
       <div class="info-row">

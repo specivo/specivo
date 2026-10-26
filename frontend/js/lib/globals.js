@@ -1,5 +1,6 @@
 /* ============================================================
-   Global helpers — CSRF + autocomplete dropdown anchoring.
+   Global helpers — CSRF, locale-aware dates and autocomplete
+   dropdown anchoring.
 
    Assigned to `window` (not exported) so the component bodies
    migrated verbatim from the old monolith keep calling them by
@@ -34,6 +35,38 @@ window.spFetch = function (url, opts) {
         }
     }
     return fetch(url, opts);
+};
+
+/* -------------------------------------------------------
+   Locale-aware dates — the server renders the viewer's
+   language into <html lang>, so dates follow it instead of
+   a hardcoded locale or the browser's own setting.
+   ------------------------------------------------------- */
+window.spLocale = function () {
+    return document.documentElement.lang || undefined;
+};
+
+/**
+ * Format a date (Date or ISO string) for the page's language with
+ * Intl.DateTimeFormat; defaults to a medium date ("Mar 28, 2026").
+ * The Gregorian calendar is forced so the year matches the dates the
+ * server renders with Babel (Intl would otherwise pick the Buddhist
+ * calendar for Thai). Returns '' for a missing or invalid value.
+ */
+window.spFormatDate = function (value, options) {
+    if (!value) return '';
+    var d = value instanceof Date ? value : new Date(value);
+    if (isNaN(d.getTime())) return '';
+    var opts = Object.assign(
+        {calendar: 'gregory'},
+        options || {year: 'numeric', month: 'short', day: 'numeric'}
+    );
+    try {
+        return new Intl.DateTimeFormat(spLocale(), opts).format(d);
+    } catch (_e) {
+        /* Unknown language tag: fall back to the browser's locale. */
+        return new Intl.DateTimeFormat(undefined, opts).format(d);
+    }
 };
 
 /* -------------------------------------------------------

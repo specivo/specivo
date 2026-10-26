@@ -2,10 +2,13 @@ export function timeLogForm(initial) {
         var i18n = Object.assign({
             minimum: 'Enter at least 1 minute',
             logFailed: 'Failed to log time',
-            connectFailed: 'Unable to connect.'
+            connectFailed: 'Unable to connect.',
+            cancel: 'Cancel',
+            logTime: 'Log time'
         }, initial.i18n || {});
 
         return {
+            i18n: i18n,
             showForm: false,
             hours: '',
             minutes: '',

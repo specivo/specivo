@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, tag_field_input %}
+{% from "pages/_markdown_editor_i18n.html" import markdown_editor_i18n %}
 
 {% block title %}{% if mode == 'create' %}{% trans %}New Page{% endtrans %}{% else %}{% trans name=wiki_page.title %}Edit %(name)s{% endtrans %}{% endif %} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -59,11 +60,7 @@
         {# The wikiForm parent owns `text`; the wrapper's `value` is bound via #}
         {# x-modelable. `onPasteDrop` routes paste/drop events back to         #}
         {# wikiForm.handleEditorPasteDrop for image upload.                    #}
-        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", onPasteDrop: "handleEditorPasteDrop", i18n: {{ {
-          "placeholder": _("Write your content here (Markdown)..."),
-          "rendering": _("Rendering..."),
-          "previewUnavailable": _("Preview unavailable.")
-        } | tojson }} })'
+        <div x-data='markdownEditor({ initial: text, previewUrl: "/api/v1/markdown/preview/", context: "wiki", onPasteDrop: "handleEditorPasteDrop", i18n: {{ markdown_editor_i18n() }} })'
              x-modelable="value"
              x-model="text"
              data-preview-url="/api/v1/markdown/preview/"

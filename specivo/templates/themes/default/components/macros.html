@@ -65,7 +65,7 @@
 #}
 {% macro tag_field_input(search_endpoint, save_url, tags_json, placeholder='Add tags...') %}
 <div class="sp-tag-field"
-     x-data='tagField({ endpoint: {{ search_endpoint | tojson }}, saveUrl: {{ save_url | tojson }}, tags: {{ tags_json }}, canEdit: true })'>
+     x-data='tagField({ endpoint: {{ search_endpoint | tojson }}, saveUrl: {{ save_url | tojson }}, tags: {{ tags_json }}, canEdit: true, placeholder: {{ placeholder | tojson }}, placeholderMore: {{ _("Add more...") | tojson }} })'>
   <div class="sp-meta-tags" @click="$refs.tagInput.focus()">
     <template x-for="(tag, i) in tags" :key="i">
       <span class="sp-meta-tag">
@@ -87,7 +87,7 @@
            @keydown.comma.prevent="commitTyped()"
            @keydown.escape.prevent="cancel()"
            @keydown.backspace="removeLast()"
-           :placeholder="tags.length === 0 ? '{{ placeholder }}' : '{{ _('Add more...') }}'">
+           :placeholder="tags.length === 0 ? placeholder : placeholderMore">
   </div>
   <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
     <template x-if="!loading && results.length === 0 && query.trim()">

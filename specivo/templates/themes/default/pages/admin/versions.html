@@ -12,7 +12,11 @@
 </div>
 
 <div x-data='adminVersions({ versions: {{ versions_data | tojson }}, projects: {{ projects_data | tojson }}, i18n: {{ {
-  "confirmDelete": _('Delete version "%(name)s"?')
+  "confirmDelete": _('Delete version "%(name)s"?'),
+  "countVersions": _("%(count)s versions"),
+  "countSelected": _("%(count)s selected"),
+  "countOpen": _("%(count)s open"),
+  "countClosed": _("%(count)s closed")
 } | tojson }} })'>
   <div class="page-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Versions{% endtrans %}</h1>
@@ -55,13 +59,13 @@
         <option value="closed">{% trans %}Closed{% endtrans %}</option>
       </select>
       <div style="flex:1"></div>
-      <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="filtered.length + ' version' + (filtered.length !== 1 ? 's' : '')"></span>
+      <span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);" x-text="countLabel(i18n.countVersions, filtered.length)"></span>
     </div>
 
     {# Bulk actions bar #}
     <template x-if="selected.length > 0">
       <div class="admin-versions-bulk">
-        <span class="bulk-count" x-text="selected.length + ' selected'"></span>
+        <span class="bulk-count" x-text="countLabel(i18n.countSelected, selected.length)"></span>
         <button class="sp-btn-sm" @click="bulkAction('closed')">{% trans %}Close{% endtrans %}</button>
         <button class="sp-btn-sm" @click="bulkAction('locked')">{% trans %}Lock{% endtrans %}</button>
         <button class="sp-btn-sm" @click="bulkAction('open')">{% trans %}Reopen{% endtrans %}</button>
@@ -113,8 +117,8 @@
             </td>
             <td>
               <div class="issue-counts">
-                <span class="open-count" x-text="v.open_count + ' open'"></span>
-                <span class="closed-count" x-text="v.closed_count + ' closed'"></span>
+                <span class="open-count" x-text="countLabel(i18n.countOpen, v.open_count)"></span>
+                <span class="closed-count" x-text="countLabel(i18n.countClosed, v.closed_count)"></span>
               </div>
             </td>
             <td class="td-actions">

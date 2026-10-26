@@ -43,7 +43,7 @@
       </div>
       <div class="version-meta-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        {% trans %}Mode{% endtrans %} <strong>{{ pattern.anchor_mode }}</strong>
+        {% trans %}Mode{% endtrans %} <strong>{{ _("Fixed") if pattern.anchor_mode == "fixed" else _("Flexible") }}</strong>
       </div>
     </div>
   </div>
@@ -102,7 +102,7 @@
       {% endif %}
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Anchor mode{% endtrans %}</span>
-        <span class="vd-info-value">{{ pattern.anchor_mode }}</span>
+        <span class="vd-info-value">{{ _("Fixed") if pattern.anchor_mode == "fixed" else _("Flexible") }}</span>
       </div>
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Timezone{% endtrans %}</span>
@@ -114,12 +114,12 @@
       </div>
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Start{% endtrans %}</span>
-        <span class="vd-info-value"><span class="mono">{{ pattern.dtstart | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
+        <span class="vd-info-value"><span class="mono">{{ pattern.dtstart | localdt(pattern.timezone) }}</span></span>
       </div>
       {% if pattern.until %}
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Until{% endtrans %}</span>
-        <span class="vd-info-value"><span class="mono">{{ pattern.until | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}</span></span>
+        <span class="vd-info-value"><span class="mono">{{ pattern.until | localdt(pattern.timezone) }}</span></span>
       </div>
       {% endif %}
     </div>
@@ -164,7 +164,7 @@
         <ul class="sp-occurrence-list">
           {% for occ in upcoming_occurrences %}
           <li class="sp-occurrence-row">
-            <span class="mono">{{ occ | localdt(pattern.timezone, '%b %d, %Y at %H:%M') }}</span>
+            <span class="mono">{{ occ | localdt(pattern.timezone) }}</span>
             {% if can_manage_recurring %}
             <button type="button" class="sp-btn-sm sp-btn-ghost" @click="skipOccurrence('{{ occ.isoformat() }}')" aria-label="{{ _('Skip this occurrence') }}">
               {% trans %}Skip{% endtrans %}
@@ -227,7 +227,7 @@
               </td>
               <td>
                 <span class="mono">
-                  {% if issue.original_occurrence_at %}{{ issue.original_occurrence_at | localdt(pattern.timezone, '%b %d, %Y %H:%M') }}{% else %}&mdash;{% endif %}
+                  {% if issue.original_occurrence_at %}{{ issue.original_occurrence_at | localdt(pattern.timezone) }}{% else %}&mdash;{% endif %}
                 </span>
               </td>
             </tr>
