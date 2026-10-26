@@ -36,7 +36,11 @@ from typing import Any
 
 import anyio
 import pytest
+from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+from mcp.server.auth.provider import AccessToken
 
+from specivo.core.constants import MCP_PENDING_CLIENT_ID
+from specivo.mcp.auth import key_principal
 from specivo.mcp.persistent_session_manager import (
     PersistentStreamableHTTPSessionManager,
 )
@@ -74,7 +78,23 @@ def _scope(session_id: str | None) -> dict[str, Any]:
         "path": "/",
         "headers": headers,
         "query_string": b"",
+        # What the auth middleware attaches for a valid ``Bearer spv_...`` key.
+        "user": AuthenticatedUser(
+            AccessToken(
+                token=_KEY,
+                client_id=MCP_PENDING_CLIENT_ID,
+                scopes=["mcp"],
+                subject=key_principal(_KEY),
+            )
+        ),
     }
+
+
+_KEY = "spv_rehydration_state_key"
+
+
+async def _resolve_owner(raw_key: str) -> tuple[int, int] | None:
+    return (1, 2) if raw_key == _KEY else None
 
 
 def _make_receive(body: dict[str, Any]):  # type: ignore[no-untyped-def]
@@ -132,6 +152,7 @@ def _make_manager(store: RedisSessionStore) -> PersistentStreamableHTTPSessionMa
         json_response=True,
         stateless=False,
         store_provider=provider,
+        owner_resolver=_resolve_owner,
     )
 
 

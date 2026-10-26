@@ -32,6 +32,17 @@ This subclass hooks the ``_handle_stateful_request`` dispatch in three places:
    ``initialize`` handshake before the restart keeps working without a
    reconnect — from its point of view, the session survived the restart.
 
+Ownership
+---------
+A session id is not a credential. Every session is bound to the API key
+that opened it: live sessions through the SDK's owner check (each key has
+its own ``AccessToken.subject``), persisted ones through the
+``api_key_id`` / ``user_id`` stored with the entry. A rehydration re-checks
+the request's key against the database and must resolve to that owner, so
+a different key, a revoked or expired key, a deactivated user, a request
+without a key, or an entry with no recorded owner all get the same 404 as
+an unknown id.
+
 What is persistent vs ephemeral
 -------------------------------
 Only the **identity** of a session is persistent across restarts: the
@@ -119,6 +130,27 @@ the shared Redis client, which is created during app startup — after the
 session manager itself is constructed in ``mount_mcp``.
 """
 
+OwnerResolver = Callable[[str], Awaitable["tuple[int, int] | None"]]
+"""Async callable mapping a raw API key to ``(api_key_id, user_id)``.
+
+Returns ``None`` when the key is unknown, revoked, expired or its user is
+deactivated. Sessions are persisted with this owner, and a session is only
+rehydrated for a request whose key resolves to the same owner.
+"""
+
+
+def _short(session_id: str) -> str:
+    """Session id prefix for log lines; the full id is a bearer secret."""
+    return f"{session_id[:8]}..."
+
+
+def _bearer_token(scope: Scope) -> str | None:
+    """The raw API key the auth middleware validated for this request."""
+    user = scope.get("user")
+    if isinstance(user, AuthenticatedUser):
+        return user.access_token.token
+    return None
+
 
 async def _serve_session(
     server: Server[Any],
@@ -184,10 +216,14 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         self,
         *args,  # type: ignore[no-untyped-def]
         store_provider: StoreProvider | None = None,
+        owner_resolver: OwnerResolver | None = None,
         **kwargs,  # type: ignore[no-untyped-def]
     ) -> None:
         super().__init__(*args, **kwargs)
         self._store_provider: StoreProvider | None = store_provider
+        # Without a resolver no session can prove its owner, so nothing is
+        # persisted and nothing is rehydrated (fail closed).
+        self._owner_resolver: OwnerResolver | None = owner_resolver
         if self.stateless:
             # The whole point of this subclass is stateful session continuity.
             # Running in stateless mode would silently disable it.
@@ -214,19 +250,37 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             logger.warning("MCP session store provider raised", exc_info=True)
             return None
 
+    async def _resolve_owner(self, scope: Scope) -> tuple[int, int] | None:
+        """Resolve the request's API key to ``(api_key_id, user_id)``, or ``None``."""
+        token = _bearer_token(scope)
+        if token is None or self._owner_resolver is None:
+            return None
+        try:
+            return await self._owner_resolver(token)
+        except Exception:
+            logger.warning("MCP session owner lookup failed", exc_info=True)
+            return None
+
     async def _persist_new_session(self, session_id: str, scope: Scope) -> None:
         store = await self._get_store()
         if store is None:
             return
+        owner = await self._resolve_owner(scope)
+        if owner is None:
+            # An entry without a verified owner could never be rehydrated,
+            # so do not write one.
+            logger.debug("MCP session %s has no verified owner; not persisted", _short(session_id))
+            return
+        api_key_id, user_id = owner
+        metadata = self._metadata_from_scope(scope)
+        metadata["api_key_id"] = api_key_id
+        metadata["user_id"] = user_id
         try:
-            await store.create(
-                session_id,
-                self._metadata_from_scope(scope),
-            )
+            await store.create(session_id, metadata)
         except Exception:
             logger.warning(
                 "Failed to persist MCP session %s to Redis; continuing without",
-                session_id,
+                _short(session_id),
                 exc_info=True,
             )
 
@@ -237,18 +291,20 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         try:
             await store.touch(session_id)
         except Exception:
-            logger.debug("Failed to touch MCP session %s in Redis", session_id, exc_info=True)
+            logger.debug("Failed to touch MCP session %s in Redis", _short(session_id), exc_info=True)
 
     async def _lookup_session(self, session_id: str) -> dict[str, str] | None:
         store = await self._get_store()
         if store is None:
             return None
         try:
-            return await store.get(session_id)
+            # ``peek`` rather than ``get``: an ownership check that fails must
+            # not extend the entry's TTL. A rehydration touches it explicitly.
+            return await store.peek(session_id)
         except Exception:
             logger.warning(
                 "MCP session lookup for %s failed; falling through to 404",
-                session_id,
+                _short(session_id),
                 exc_info=True,
             )
             return None
@@ -257,18 +313,10 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
     def _metadata_from_scope(scope: Scope) -> dict[str, object]:
         """Extract the bits we can safely pull from the ASGI scope at create time.
 
-        The authenticated user context is already attached to the scope by
-        ``AuthenticationMiddleware`` / ``AuthContextMiddleware`` upstream of
-        this handler. We grab what we can; anything missing is simply not
-        persisted, and the entry can be enriched later via ``touch``.
+        The owner (``api_key_id`` / ``user_id``) is added by the caller
+        after it has been verified against the database.
         """
         meta: dict[str, object] = {"transport": "streamable_http"}
-        user = scope.get("user")
-        if user is not None:
-            for attr in ("api_key_id", "user_id"):
-                value = getattr(user, attr, None)
-                if value is not None:
-                    meta[attr] = value
         headers = dict(scope.get("headers") or [])
         ua = headers.get(b"user-agent")
         if ua:
@@ -309,9 +357,13 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         # ---- Existing in-memory session ---------------------------------
         if request_mcp_session_id is not None and request_mcp_session_id in self._server_instances:
             transport = self._server_instances[request_mcp_session_id]
-            if requestor != self._session_owners.get(request_mcp_session_id):
+            if requestor is None or requestor != self._session_owners.get(request_mcp_session_id):
                 # A session can only be used with the credential that created
                 # it. Respond exactly as if the session did not exist.
+                logger.warning(
+                    "Rejecting request for MCP session %s: credential does not match its owner",
+                    _short(request_mcp_session_id),
+                )
                 await _session_not_found()(scope, receive, send)
                 return
             logger.debug("Session already exists, handling request directly")
@@ -333,10 +385,10 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         # ---- Header present but unknown to in-memory dict ---------------
         # Ask Redis before giving up. This is the restart-survival path.
         persisted = await self._lookup_session(request_mcp_session_id)
-        if persisted is not None:
+        if persisted is not None and await self._owns_persisted_session(persisted, scope, requestor):
             logger.info(
                 "Rehydrating MCP session %s from Redis after in-memory miss",
-                request_mcp_session_id,
+                _short(request_mcp_session_id),
             )
             await self._create_and_run_session(
                 scope,
@@ -349,6 +401,32 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
 
         # ---- Genuinely unknown — mirror upstream 404 --------------------
         await _session_not_found()(scope, receive, send)
+
+    async def _owns_persisted_session(
+        self,
+        persisted: dict[str, str],
+        scope: Scope,
+        requestor: AuthorizationContext | None,
+    ) -> bool:
+        """Whether the request's key owns a session persisted by an earlier process.
+
+        The key is re-checked against the database here, so a revoked or
+        expired key, or a deactivated user, cannot resume a session. Entries
+        without a recorded owner (written before owners were stored) are
+        refused: the client simply opens a new session.
+        """
+        if requestor is None:
+            logger.warning("Refusing MCP session rehydration: unauthenticated request")
+            return False
+        stored_key, stored_user = persisted.get("api_key_id"), persisted.get("user_id")
+        if not stored_key or not stored_user:
+            logger.warning("Refusing MCP session rehydration: the stored session has no owner")
+            return False
+        owner = await self._resolve_owner(scope)
+        if owner is None or (str(owner[0]), str(owner[1])) != (stored_key, stored_user):
+            logger.warning("Refusing MCP session rehydration: credential does not match the session owner")
+            return False
+        return True
 
     # ------------------------------------------------------------------
     # Shared create-or-rehydrate path
@@ -440,10 +518,10 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             if is_rehydration:
                 logger.info(
                     "Created rehydrated transport under existing session id %s",
-                    new_session_id,
+                    _short(new_session_id),
                 )
             else:
-                logger.info("Created new transport with session ID: %s", new_session_id)
+                logger.info("Created new transport with session ID: %s", _short(new_session_id))
 
             async def run_server(*, task_status: TaskStatus[None] = anyio.TASK_STATUS_IGNORED) -> None:
                 async with http_transport.connect() as streams:
@@ -468,11 +546,11 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
                                 protocol_version=protocol_version,
                             )
                         if idle_scope.cancelled_caught:
-                            logger.info("Session %s idle timeout", new_session_id)
+                            logger.info("Session %s idle timeout", _short(new_session_id))
                     except Exception as e:
                         logger.error(
                             "Session %s crashed: %s",
-                            new_session_id,
+                            _short(new_session_id),
                             e,
                             exc_info=True,
                         )

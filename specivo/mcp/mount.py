@@ -37,7 +37,7 @@ from starlette.responses import Response
 from starlette.routing import Mount, Route, request_response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from specivo.mcp.auth import SpvTokenVerifier
+from specivo.mcp.auth import SpvTokenVerifier, resolve_key_owner
 from specivo.mcp.persistent_session_manager import (
     PersistentStreamableHTTPSessionManager,
 )
@@ -140,6 +140,7 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
         json_response=False,
         stateless=False,
         store_provider=_default_store_provider,
+        owner_resolver=resolve_key_owner,
     )
 
     streamable_asgi = StreamableHTTPASGIApp(_session_manager)

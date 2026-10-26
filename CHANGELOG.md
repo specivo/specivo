@@ -48,6 +48,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Shared versions of private projects were not filtered by access
 - A very deep search offset could make the database rank millions of rows
 - Indexing errors could write content to the logs
+- An MCP session could be resumed with a different API key, or after its key was revoked, by anyone who knew the session id; MCP tool errors could expose internal exception text
 
 ### Internal
 - Migrations 0033–0040: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently), a single default embedding model and linear-time indexing of unclosed HTML comments. **Run a search reindex after upgrading** (Administration → Settings)

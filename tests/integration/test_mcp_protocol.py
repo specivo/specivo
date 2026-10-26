@@ -142,3 +142,43 @@ async def test_app_error_message_reaches_client(monkeypatch: pytest.MonkeyPatch)
     assert result.is_error is True
     text = result.content[0].text  # type: ignore[union-attr]
     assert text == "Error executing tool specivo_whoami: Wiki page 'missing-page' not found"
+
+
+# ---------------------------------------------------------------------------
+# Session owner resolution (gate for persisting and rehydrating sessions)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_resolve_key_owner_returns_key_and_user(mcp_key, db_engine) -> None:  # noqa: F811
+    from specivo.core.database import set_engine
+    from specivo.mcp.auth import resolve_key_owner
+
+    set_engine(db_engine)  # the resolver opens its own session on this loop's engine
+
+    raw_key, user_id, key_id = mcp_key
+    assert await resolve_key_owner(raw_key) == (key_id, user_id)
+    assert await resolve_key_owner("spv_" + "x" * 40) is None
+
+
+@pytest.mark.asyncio(loop_scope="function")
+@pytest.mark.parametrize(
+    "statement",
+    [
+        "UPDATE api_keys SET is_active = false WHERE id = :key_id",
+        "UPDATE users SET status = 'deactivated' WHERE id = :user_id",
+    ],
+    ids=["revoked-key", "deactivated-user"],
+)
+async def test_resolve_key_owner_refuses_unusable_key(mcp_key, db_engine, statement: str) -> None:  # noqa: F811
+    from sqlalchemy import text
+
+    from specivo.core.database import set_engine
+    from specivo.mcp.auth import resolve_key_owner
+
+    set_engine(db_engine)
+    raw_key, user_id, key_id = mcp_key
+    async with db_engine.begin() as conn:
+        await conn.execute(text(statement), {"key_id": key_id, "user_id": user_id})
+
+    assert await resolve_key_owner(raw_key) is None

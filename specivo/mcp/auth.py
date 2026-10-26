@@ -19,12 +19,14 @@ The raw key travels through a contextvar, never logged or exposed.
 from __future__ import annotations
 
 import contextvars
+import hashlib
 import logging
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import API_KEY_MIN_LENGTH, API_KEY_PREFIX, MCP_PENDING_CLIENT_ID
+from specivo.core.exceptions import AppError
 from specivo.models.auth import ApiKey
 from specivo.models.user import User
 from specivo.services.api_key_service import ApiKeyService
@@ -41,6 +43,17 @@ logger = logging.getLogger(__name__)
 mcp_raw_key_var: contextvars.ContextVar[str | None] = contextvars.ContextVar("mcp_raw_key", default=None)
 
 _api_key_svc = ApiKeyService()
+
+
+def key_principal(raw_key: str) -> str:
+    """Return a stable, non-reversible identifier for an API key.
+
+    Used as the ``AccessToken.subject`` so the SDK binds every MCP session
+    to the key that opened it: a request presenting a different key for a
+    live session id is answered as if the session did not exist. The
+    domain prefix keeps it distinct from the stored key hash.
+    """
+    return hashlib.sha256(b"specivo-mcp-session-owner:" + raw_key.encode()).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +85,27 @@ class SpvTokenVerifier(TokenVerifier):
             client_id=MCP_PENDING_CLIENT_ID,
             scopes=["mcp"],
             expires_at=None,
+            subject=key_principal(token),
         )
+
+
+async def resolve_key_owner(raw_key: str) -> tuple[int, int] | None:
+    """Return ``(api_key_id, user_id)`` for a usable key, else ``None``.
+
+    Runs the full DB check (revoked, expired, deactivated user), so a
+    session bound to a key that is no longer valid cannot be resumed.
+    Used when an MCP session is opened and when one is rehydrated after a
+    restart; regular requests stay format-only at the transport level.
+    """
+    from specivo.core.database import get_session_factory
+
+    async with get_session_factory()() as session:
+        try:
+            user, api_key = await _api_key_svc.authenticate(session, raw_key)
+        except AppError:
+            return None
+        await session.commit()
+        return api_key.id, user.id
 
 
 # ---------------------------------------------------------------------------
