@@ -91,7 +91,7 @@ async def world(db_session: AsyncSession) -> SimpleNamespace:
     db_session.add_all([tracker, priority, project, other, admin, reader, bot])
     await db_session.flush()
 
-    role = Role(name="SIX Reader", permissions=["view_issues", "view_wiki_pages"], builtin=0, issues_visibility="all")
+    role = Role(name="SIX Reader", permissions=["view_issues", "view_wiki"], builtin=0, issues_visibility="all")
     db_session.add(role)
     await db_session.flush()
     member = Member(user_id=reader.id, project_id=project.id)
@@ -592,3 +592,129 @@ async def test_upgrade_creates_chunks_for_existing_comments(db_session, world, n
     assert await _chunks(db_session, "journal", bot.id) == []
     assert await _source_project(db_session, "journal", human.id) == world.project.id
     assert await _found(db_session, world.admin, "jetty", "comments") == {human.id}
+
+
+# ---------------------------------------------------------------------------
+# Attachments on wiki pages in the trash
+# ---------------------------------------------------------------------------
+
+
+async def _semantic_ids(db: AsyncSession, user: User, query: str) -> set[int]:
+    results, _total = await _search.semantic_search(db, query, user, limit=50)
+    return {r.id for r in results if r.result_type == "attachment"}
+
+
+class TestTrashedWikiPageAttachments:
+    @staticmethod
+    async def _page_with_attachment(db: AsyncSession, world: SimpleNamespace) -> tuple:
+        page, _ = await WikiService().create_page(db, world.project.id, "Tide Tables", "Monthly tables.", world.admin)
+        attachment = Attachment(
+            container_type="WikiPage",
+            container_id=page.id,
+            filename="tides.csv",
+            disk_filename="six-tides-0001.csv",
+            filesize=5,
+            author_id=world.admin.id,
+            description="Estuary tide predictions",
+        )
+        db.add(attachment)
+        await db.commit()
+        return page, attachment
+
+    async def test_hidden_while_the_page_is_in_the_trash(self, db_session, world, mock_model, queued, monkeypatch):
+        from specivo.tasks.embeddings import _embed_sources_async
+
+        TestEmbeddingTask._use_session(monkeypatch, db_session)
+        page, attachment = await self._page_with_attachment(db_session, world)
+        await _embed_sources_async([("attachment", attachment.id)])
+        query = "Estuary tide predictions"
+        for user in (world.admin, world.reader):
+            assert attachment.id in await _found(db_session, user, "estuary", "attachments")
+            assert attachment.id in await _semantic_ids(db_session, user, query)
+
+        await WikiService().delete_page(db_session, page.id, world.admin)
+        await db_session.commit()
+        assert await _chunks(db_session, "attachment", attachment.id) == []
+        for user in (world.admin, world.reader):
+            assert attachment.id not in await _found(db_session, user, "estuary", "attachments")
+            assert attachment.id not in await _semantic_ids(db_session, user, query)
+
+        await WikiService().restore_page(db_session, page.id)
+        await db_session.commit()
+        assert await _chunks(db_session, "attachment", attachment.id) != []
+        assert ["attachment", attachment.id] in queued[-1]
+        await _embed_sources_async([("attachment", attachment.id)])
+        for user in (world.admin, world.reader):
+            assert attachment.id in await _found(db_session, user, "estuary", "attachments")
+            assert attachment.id in await _semantic_ids(db_session, user, query)
+
+    async def test_children_trashed_in_bulk_take_their_attachments(self, db_session, world, no_model):
+        wiki = WikiService()
+        parent, _ = await wiki.create_page(db_session, world.project.id, "Coastline", "Overview.", world.admin)
+        child, _ = await wiki.create_page(
+            db_session, world.project.id, "Sea Walls", "Wall list.", world.admin, parent_slug=parent.slug
+        )
+        attachment = Attachment(
+            container_type="WikiPage",
+            container_id=child.id,
+            filename="walls.csv",
+            disk_filename="six-walls-0001.csv",
+            filesize=5,
+            author_id=world.admin.id,
+            description="Sea wall inspection",
+        )
+        db_session.add(attachment)
+        await db_session.commit()
+
+        await wiki.delete_page(db_session, parent.id, world.admin, cascade_children=True)
+        await db_session.commit()
+        assert await _chunks(db_session, "attachment", attachment.id) == []
+
+    async def test_search_hides_stale_chunks_of_a_trashed_page(
+        self, db_session, world, mock_model, queued, monkeypatch
+    ):
+        """Chunks left from before the fix must not leak through either search mode."""
+        from specivo.models.wiki import WikiPage
+        from specivo.tasks.embeddings import _embed_sources_async
+
+        TestEmbeddingTask._use_session(monkeypatch, db_session)
+        page, attachment = await self._page_with_attachment(db_session, world)
+        await _embed_sources_async([("attachment", attachment.id)])
+        # Trash the page behind the index's back, as an older release would have.
+        await db_session.execute(update(WikiPage).where(WikiPage.id == page.id).values(deleted_at=func.now()))
+        await db_session.commit()
+        assert await _chunks(db_session, "attachment", attachment.id) != []
+
+        for user in (world.admin, world.reader):
+            assert attachment.id not in await _found(db_session, user, "estuary", "attachments")
+            assert attachment.id not in await _semantic_ids(db_session, user, "Estuary tide predictions")
+
+
+async def test_failure_log_does_not_quote_content(db_session, world, no_model, monkeypatch, caplog):
+    """A database error's message carries its parameters; the warning must not."""
+    from sqlalchemy import text
+
+    secret = "Confidential harbour lease terms"
+
+    def _fails_with_parameters(conn, *_args):
+        conn.execute(text("SELECT CAST(:value AS integer)"), {"value": secret})
+
+    monkeypatch.setattr(search_index_service, "load_source_chunks", _fails_with_parameters)
+    with caplog.at_level(logging.WARNING, logger="specivo.services.search_index_service"):
+        issue = await _new_issue(db_session, world, "Lease review")
+
+    warnings = [r.getMessage() for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any(f"Search indexing failed for issue {issue.id}" in m for m in warnings), warnings
+    assert any("SQLSTATE" in m for m in warnings), warnings
+    assert all(secret not in m and "harbour" not in m for m in warnings), warnings
+
+
+def test_describe_error_names_only_the_class():
+    from sqlalchemy.exc import DataError
+
+    from specivo.services.search_index_service import describe_error
+
+    assert describe_error(ValueError("secret text")) == "ValueError"
+    described = describe_error(DataError("SELECT :v", {"v": "secret text"}, Exception("bad value secret text")))
+    assert "secret" not in described
+    assert described.startswith("DataError")

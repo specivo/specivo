@@ -33,6 +33,7 @@ from sqlalchemy import Table, and_, delete, event, insert, inspect, literal, or_
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Connection
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
@@ -89,7 +90,12 @@ def _attachment_project_id(conn: Connection, container_type: str, container_id: 
     if container_type == "Issue":
         stmt = select(Issue.project_id).where(Issue.id == container_id)
     elif container_type == "WikiPage":
-        stmt = select(Wiki.project_id).join(WikiPage, WikiPage.wiki_id == Wiki.id).where(WikiPage.id == container_id)
+        # A page in the trash takes its attachments out of search with it.
+        stmt = (
+            select(Wiki.project_id)
+            .join(WikiPage, WikiPage.wiki_id == Wiki.id)
+            .where(WikiPage.id == container_id, WikiPage.deleted_at.is_(None))
+        )
     elif container_type == "Journal":
         stmt = select(Issue.project_id).join(Journal, Journal.issue_id == Issue.id).where(Journal.id == container_id)
     else:
@@ -109,7 +115,8 @@ def load_source_chunks(conn: Connection, source_type: str, entity_id: int) -> tu
     """Return ``(project_id, chunks)`` for a source, or None when it must not be indexed.
 
     None covers a deleted entity, a soft-deleted wiki page, a comment the
-    comment settings exclude, and an attachment whose container is gone.
+    comment settings exclude, and an attachment whose container is gone or is
+    a wiki page in the trash.
     """
     if source_type == _ISSUE:
         row = conn.execute(
@@ -339,21 +346,29 @@ def _sync_in_session(
     keys: Iterable[SourceKey],
     rescopes: Iterable[tuple[int, int]] = (),
     deleted_issues: Iterable[tuple[int, int]] = (),
+    trashed_pages: Iterable[int] = (),
 ) -> None:
     """Sync *keys* on the session's connection, each in its own savepoint.
 
-    A failure is logged and leaves that source as it was; it never fails the
-    write that triggered it.
+    The attachments of *trashed_pages* are synced too. A failure is logged and
+    leaves that source as it was; it never fails the write that triggered it.
     """
     conn = session.connection()
     pending: set[SourceKey] = session.info.setdefault(_PENDING_KEY, set())
+    keys = set(keys)
+    page_ids = sorted(set(trashed_pages))
+    if page_ids:
+        attachment_ids = conn.execute(
+            select(Attachment.id).where(Attachment.container_type == "WikiPage", Attachment.container_id.in_(page_ids))
+        ).scalars()
+        keys.update((_ATTACHMENT, attachment_id) for attachment_id in attachment_ids)
 
     for issue_id, project_id in deleted_issues:
         _guarded(conn, _ISSUE, issue_id, lambda i=issue_id, p=project_id: remove_issue_children(conn, i, p))
     for issue_id, project_id in rescopes:
         _guarded(conn, _ISSUE, issue_id, lambda i=issue_id, p=project_id: rescope_issue_children(conn, i, p))
 
-    for source_type, entity_id in sorted(set(keys)):
+    for source_type, entity_id in sorted(keys):
         changed = _guarded(conn, source_type, entity_id, lambda t=source_type, e=entity_id: sync_source(conn, t, e))
         if changed and _embeddable(session, conn):
             pending.add((source_type, entity_id))
@@ -364,8 +379,25 @@ def _guarded(conn: Connection, source_type: str, entity_id: int, work: Any) -> A
         with conn.begin_nested():
             return work()
     except Exception as exc:  # noqa: BLE001 - indexing must never fail the content write
-        logger.warning("Search indexing failed for %s %d: %s", source_type, entity_id, exc)
+        logger.warning("Search indexing failed for %s %d: %s", source_type, entity_id, describe_error(exc))
+        logger.debug("Search indexing failure for %s %d", source_type, entity_id, exc_info=True)
         return None
+
+
+def describe_error(exc: BaseException) -> str:
+    """Name an error without its message, which can quote the content being written.
+
+    A database error's message includes the statement's parameters, so only its
+    class and SQLSTATE are given. Log the full exception at DEBUG if needed.
+    """
+    name = type(exc).__name__
+    if isinstance(exc, DBAPIError):
+        orig = exc.orig
+        code = getattr(orig, "sqlstate", None) or getattr(orig, "pgcode", None)
+        inner = type(orig).__name__ if orig is not None else None
+        detail = ", ".join(part for part in (inner, f"SQLSTATE {code}" if code else None) if part)
+        return f"{name} ({detail})" if detail else name
+    return name
 
 
 def _changed(obj: object, attrs: tuple[str, ...]) -> bool:
@@ -375,11 +407,18 @@ def _changed(obj: object, attrs: tuple[str, ...]) -> bool:
     return any(state.attrs[name].history.has_changes() for name in attrs)
 
 
-def _collect(session: Session) -> tuple[set[SourceKey], list[tuple[int, int]], list[tuple[int, int]]]:
-    """Find the sources a flush touched, from the session's pre-flush state."""
+def _collect(
+    session: Session,
+) -> tuple[set[SourceKey], list[tuple[int, int]], list[tuple[int, int]], set[int]]:
+    """Find the sources a flush touched, from the session's pre-flush state.
+
+    Also returns the wiki pages moved to or from the trash, or deleted, whose
+    attachments must follow them in or out of search.
+    """
     keys: set[SourceKey] = set()
     rescopes: list[tuple[int, int]] = []
     deleted_issues: list[tuple[int, int]] = []
+    trashed_pages: set[int] = set()
 
     for obj in session.new:
         if isinstance(obj, Issue):
@@ -406,6 +445,8 @@ def _collect(session: Session) -> tuple[set[SourceKey], list[tuple[int, int]], l
             keys.add((_WIKI_PAGE, obj.page_id))
         elif isinstance(obj, WikiPage) and _changed(obj, _WIKI_PAGE_ATTRS):
             keys.add((_WIKI_PAGE, obj.id))
+            if _changed(obj, ("deleted_at",)):
+                trashed_pages.add(obj.id)
         elif isinstance(obj, Attachment) and _changed(obj, _ATTACHMENT_ATTRS):
             keys.add((_ATTACHMENT, obj.id))
 
@@ -419,19 +460,20 @@ def _collect(session: Session) -> tuple[set[SourceKey], list[tuple[int, int]], l
             keys.add((_WIKI_PAGE, obj.page_id))
         elif isinstance(obj, WikiPage):
             keys.add((_WIKI_PAGE, obj.id))
+            trashed_pages.add(obj.id)
         elif isinstance(obj, Attachment):
             keys.add((_ATTACHMENT, obj.id))
 
-    return keys, rescopes, deleted_issues
+    return keys, rescopes, deleted_issues, trashed_pages
 
 
 @event.listens_for(Session, "after_flush")
 def _after_flush(session: Session, _flush_context: Any) -> None:
     if session.info.get(DEFER_KEY):
         return
-    keys, rescopes, deleted_issues = _collect(session)
+    keys, rescopes, deleted_issues, trashed_pages = _collect(session)
     if keys:
-        _sync_in_session(session, keys, rescopes, deleted_issues)
+        _sync_in_session(session, keys, rescopes, deleted_issues, trashed_pages)
 
 
 @event.listens_for(Session, "after_commit")
@@ -470,16 +512,22 @@ def dispatch_embedding(sources: Iterable[SourceKey]) -> bool:
             "Could not queue embedding for %d search source(s) (%s); the backfill will catch up: %s",
             len(payload),
             ", ".join(f"{t} {i}" for t, i in payload[:5]),
-            exc,
+            describe_error(exc),
         )
+        logger.debug("Embedding dispatch failure", exc_info=True)
         return False
     return True
 
 
 async def sync_sources(session: AsyncSession, keys: Iterable[SourceKey]) -> None:
-    """Sync sources changed by bulk statements the session events cannot see."""
+    """Sync sources changed by bulk statements the session events cannot see.
+
+    The attachments of the wiki pages among *keys* are synced too, since a bulk
+    move to or from the trash takes them in or out of search.
+    """
     if session.info.get(DEFER_KEY):
         return
     key_list = [(str(t), int(i)) for t, i in keys]
+    pages = [entity_id for source_type, entity_id in key_list if source_type == _WIKI_PAGE]
     if key_list:
-        await session.run_sync(lambda s: _sync_in_session(s, key_list))
+        await session.run_sync(lambda s: _sync_in_session(s, key_list, trashed_pages=pages))

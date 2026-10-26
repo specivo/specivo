@@ -450,10 +450,11 @@ class SearchService:
 
         *attachment* aliases ``attachments``; *issue*, *wiki_page* and *wiki*
         alias the LEFT JOINed container rows. The anonymous user never sees
-        attachments.
+        attachments. An attachment on a wiki page in the trash is hidden from
+        everyone, administrators included, like the page itself.
         """
         if user.is_admin:
-            return ""
+            return f"AND ({attachment}.container_type <> 'WikiPage' OR {wiki_page}.deleted_at IS NULL)"
         if user.is_anonymous:
             return "AND 1=0"
 
@@ -463,6 +464,7 @@ class SearchService:
                  AND {self._issue_visible_sql(issue)})
                 OR
                 ({attachment}.container_type = 'WikiPage' AND {wiki_page}.id IS NOT NULL
+                 AND {wiki_page}.deleted_at IS NULL
                  AND {self._wiki_visible_sql(f"{wiki}.project_id")})
             )
         """

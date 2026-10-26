@@ -707,10 +707,17 @@ async def test_role_permission_edits_through_a_group_apply_to_visibility(
 
 @pytest.mark.asyncio
 async def test_admin_clauses_are_empty(admin: User):
-    """Admins bypass every clause, so the builders return nothing to append."""
+    """Admins bypass every permission clause, so the builders return nothing to append.
+
+    The one exception is the trash: attachments of a wiki page in it stay hidden.
+    """
     assert _service._visibility_cte_sql(admin) == ""
     assert _service._comment_visibility_clause(admin) == ""
-    assert _service._attachment_semantic_vis(admin) == ""
     assert _service._issue_visibility_cte_clause(admin) == ""
     assert _service._wiki_visibility_cte_clause(admin) == ""
-    assert _service._attachment_visibility_cte_clause(admin) == ""
+    assert _service._attachment_semantic_vis(admin) == (
+        "AND (att.container_type <> 'WikiPage' OR att_wp.deleted_at IS NULL)"
+    )
+    assert _service._attachment_visibility_cte_clause(admin) == (
+        "AND (att.container_type <> 'WikiPage' OR awp.deleted_at IS NULL)"
+    )
