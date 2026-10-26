@@ -48,7 +48,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Shared versions of private projects were not filtered by access
 - A very deep search offset could make the database rank millions of rows
 - Indexing errors could write content to the logs
-- The app containers ran as root; they now run as UID 10001, and a one-shot `init-data` service hands existing data files to that user. Custom compose files need it (see Upgrading)
+- The app containers ran as root; they now run as UID 10001, which owns only its own subdirectories of the data directory. A one-shot `init-data` service prepares them without following symlinks or hard links. Custom compose files need it (see Upgrading)
 - An MCP session could be resumed with a different API key, or after its key was revoked, by anyone who knew the session id; MCP tool errors could expose internal exception text
 
 ### Internal

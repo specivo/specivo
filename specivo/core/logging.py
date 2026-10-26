@@ -5,7 +5,7 @@ In production (debug=False) each log line is a JSON object with the fields:
 
 In debug mode a human-readable format is used instead for easier local dev.
 
-File logging: when LOG_FILE is set (or the default /app/data/logs/specivo.log
+File logging: when LOG_FILE is set (or the default /app/data/logs/app/specivo.log
 exists), logs are also written to a rotating file. Sensitive values (passwords,
 tokens, secrets, emails, usernames) are masked automatically.
 """
@@ -105,8 +105,9 @@ class _SanitizedJSONFormatter(_JSONFormatter):
         return json.dumps(payload, ensure_ascii=False)
 
 
-# Default log file path (inside the Docker data volume).
-_DEFAULT_LOG_FILE = "/app/data/logs/specivo.log"
+# Default log file path (inside the Docker data volume). In logs/app/, which the
+# app user owns: rotating renames files, and logs/ itself is not the app's.
+_DEFAULT_LOG_FILE = "/app/data/logs/app/specivo.log"
 _LOG_MAX_BYTES = 1024 * 1024 * 1024  # 1 GB per file
 _LOG_BACKUP_COUNT = 5  # keep 5 rotated files (5 GB total)
 

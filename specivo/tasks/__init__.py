@@ -5,10 +5,11 @@ that fail in CI/test environments where env vars aren't yet set.
 """
 
 import os
-import tempfile
 
 from celery import Celery
 from celery.signals import worker_init  # type: ignore[import-untyped]
+
+from specivo.tasks.beat import default_schedule_file
 
 # Use REDIS_URL env var directly for the broker — avoids triggering
 # pydantic-settings validation (which requires SECRET_KEY etc.) at import time.
@@ -27,12 +28,6 @@ _RECURRING_BEAT_INTERVAL_SECONDS = int(os.environ.get("RECURRING_TASKS_BEAT_INTE
 # EMBEDDING_QUEUE=celery to run them in the general worker instead.
 EMBEDDING_QUEUE = os.environ.get("EMBEDDING_QUEUE", "embeddings")
 
-# Where celery beat keeps its schedule state. Not the working directory: in the
-# container that is /app, which the unprivileged app user cannot write to.
-_BEAT_SCHEDULE_FILE = os.environ.get(
-    "CELERY_BEAT_SCHEDULE_FILE", os.path.join(tempfile.gettempdir(), "specivo-celerybeat-schedule")
-)
-
 celery_app = Celery("specivo")
 celery_app.config_from_object(
     {
@@ -46,7 +41,10 @@ celery_app.config_from_object(
             "specivo.tasks.embeddings.embed_search_sources": {"queue": EMBEDDING_QUEUE},
             "specivo.tasks.embeddings.backfill_model_embeddings": {"queue": EMBEDDING_QUEUE},
         },
-        "beat_schedule_filename": _BEAT_SCHEDULE_FILE,
+        # Beat's schedule (a pickle) lives in a private 0700 directory, never in
+        # the working directory or a shared temp dir; see specivo/tasks/beat.py.
+        "beat_scheduler": "specivo.tasks.beat:PrivateStateScheduler",
+        "beat_schedule_filename": default_schedule_file(),
         "beat_schedule": {
             "cleanup-expired-tokens": {
                 "task": "specivo.tasks.cleanup.cleanup_expired_tokens",
