@@ -27,7 +27,6 @@ from specivo.importers.core.ir import (
     ValueKind,
 )
 from specivo.importers.core.progress import CliProgressReporter, NullProgressReporter, ProgressReporter
-from specivo.importers.core.source import SourceAdapterRegistry
 
 pytestmark = pytest.mark.unit
 
@@ -144,37 +143,6 @@ class TestIrDefaults:
     def test_status_category_is_the_four_way_grouping(self):
         status = IRStatus(source_ref="5", name="Closed", category="closed")
         assert status.category in {"backlog", "active", "done", "closed"}
-
-
-class TestSourceAdapterRegistry:
-    def test_register_and_get(self):
-        registry = SourceAdapterRegistry()
-
-        class FakeAdapter:
-            source_system = "fake"
-
-        registry.register("fake", FakeAdapter)
-        assert registry.get("fake") is FakeAdapter
-        assert registry.names() == ["fake"]
-
-    def test_unknown_source_lists_what_is_available(self):
-        registry = SourceAdapterRegistry()
-        registry.register("redmine", object)
-        with pytest.raises(KeyError) as exc:
-            registry.get("jira")
-        assert "redmine" in str(exc.value)
-
-    def test_empty_registry_reports_none_registered(self):
-        registry = SourceAdapterRegistry()
-        with pytest.raises(KeyError) as exc:
-            registry.get("redmine")
-        assert "none" in str(exc.value)
-
-    def test_register_replaces_previous_entry(self):
-        registry = SourceAdapterRegistry()
-        registry.register("redmine", object)
-        registry.register("redmine", dict)
-        assert registry.get("redmine") is dict
 
 
 class TestConverter:

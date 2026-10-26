@@ -77,9 +77,9 @@ PHASE_ORDER: tuple[ImportPhase, ...] = tuple(ImportPhase)
 class ImportOptions:
     """Operator-supplied settings for one import run.
 
-    Most fields come straight from CLI flags. The mapping overrides exist
-    because a few source concepts cannot be translated automatically and the
-    operator needs the final say.
+    Most fields come straight from the generic flags of the import command.
+    Options only one source understands (Redmine's status and custom-field
+    maps, say) belong to that source's adapter, not here.
     """
 
     source_instance: str
@@ -91,8 +91,6 @@ class ImportOptions:
     strict: bool = False
     dispatch_celery: bool = False
     project_key_map: dict[str, str] = field(default_factory=dict)
-    status_category_map: dict[str, str] = field(default_factory=dict)
-    cf_key_map: dict[str, str] = field(default_factory=dict)
     flatten_excess_depth: bool = False
     merge_duplicate_statuses: bool = False
     # Carry source passwords over (opt-in). Takes effect only for algorithms

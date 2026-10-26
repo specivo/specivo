@@ -14,6 +14,7 @@ parents-first — projects and issues — say so on the method that produces the
 
 from __future__ import annotations
 
+import argparse
 import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -22,6 +23,8 @@ from typing import Any, ClassVar
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from specivo.importers.core.cli_args import parse_map
+from specivo.importers.core.converter import ContentConverter
 from specivo.importers.core.ir import (
     ContainerKind,
     IRAttachment,
@@ -42,6 +45,7 @@ from specivo.importers.core.ir import (
     IRWikiPage,
     PrincipalKind,
 )
+from specivo.importers.core.source import BaseSourceAdapter
 from specivo.importers.redmine import db, extract
 from specivo.importers.redmine.files import AttachmentPathError, resolve_attachment_path
 
@@ -57,15 +61,19 @@ _PRIORITY_TYPE = "IssuePriority"
 _ACTIVITY_TYPE = "TimeEntryActivity"
 
 
-class RedmineSourceAdapter:
+class RedmineSourceAdapter(BaseSourceAdapter):
     """Reads a Redmine 7.x database.
 
     ``status_category_overrides`` maps a status name, lower-cased, to one of
     Specivo's status categories. Redmine records only whether a status closes an
     issue, so the rest is inferred and the operator gets the final say.
+
+    Implements every stream itself; the base class contributes nothing but the
+    shared contract.
     """
 
     source_system: ClassVar[str] = "redmine"
+    description: ClassVar[str] = "Redmine 7.x, read from its database and files directory"
     credential_algorithms: ClassVar[tuple[str, ...]] = (extract.REDMINE_PASSWORD_ALGORITHM,)
 
     def __init__(
@@ -92,6 +100,60 @@ class RedmineSourceAdapter:
         self._custom_fields: dict[int, IRCustomField] | None = None
         self.relaxed_required_fields: list[str] = []
         self.unmapped_relation_types: list[str] = []
+
+    # ------------------------------------------------------------------
+    # Command line
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        """Add the Redmine connection and mapping options."""
+        group = parser.add_argument_group("redmine source")
+        group.add_argument(
+            "--source-db-url",
+            required=True,
+            help="Redmine database URL. MySQL and PostgreSQL are both supported, with or without an async driver.",
+        )
+        group.add_argument(
+            "--source-files-dir",
+            help="Redmine's files directory. Without it, attachments are skipped.",
+        )
+        group.add_argument(
+            "--status-category-map",
+            type=parse_map,
+            help=(
+                "Place a status in Specivo's backlog/active/done/closed grouping, as name=category pairs. "
+                "Redmine records only whether a status closes an issue, so the rest is guessed."
+            ),
+        )
+        group.add_argument(
+            "--cf-key-map",
+            type=parse_map,
+            help="Override the metadata key derived from a custom field name, as name=key pairs.",
+        )
+
+    @classmethod
+    def from_args(cls, args: argparse.Namespace) -> RedmineSourceAdapter:
+        """Build the adapter from ``--source-db-url`` and the other Redmine options.
+
+        ``--source-instance`` defaults to the database URL (password masked).
+        """
+        if args.source_files_dir is None:
+            logger.warning("No --source-files-dir given: attachments will be skipped.")
+        return cls(
+            source_db_url=args.source_db_url,
+            source_files_dir=args.source_files_dir,
+            source_instance=args.source_instance,
+            status_category_overrides=args.status_category_map,
+            cf_key_overrides=args.cf_key_map,
+            batch_size=args.batch_size,
+        )
+
+    def content_converter(self) -> ContentConverter:
+        """Convert Textile, or only rewrite links on an instance already on Markdown."""
+        from specivo.importers.redmine.textile_convert import RedmineTextileConverter
+
+        return RedmineTextileConverter()
 
     # ------------------------------------------------------------------
     # Lifecycle

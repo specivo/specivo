@@ -94,6 +94,12 @@ class FakeAdapter:
         self._dropped = dropped or {}
         self.source_format = source_format
 
+    def content_converter(self):
+        """Redmine's converter, which the loader tests were written against."""
+        from specivo.importers.redmine.textile_convert import RedmineTextileConverter
+
+        return RedmineTextileConverter()
+
     async def connect(self) -> None:
         return None
 

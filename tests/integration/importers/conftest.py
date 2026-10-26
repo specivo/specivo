@@ -4,6 +4,11 @@ These read the Redmine fixture started by ``make redmine-fixture-up`` and write
 into the ordinary rollback-isolated test session, so a full import can be
 exercised without leaving anything behind.
 
+A run is built the way ``python -m specivo.cli.import_data --source redmine``
+builds it: the command line is parsed with the registry's ``redmine`` source,
+the adapter comes from its ``from_args`` and the pipeline from the command's
+own ``build_pipeline``. Only the session factory differs.
+
 The pipeline normally opens a session per phase and commits each one. Here it
 is handed the test's session instead, which keeps every phase inside the
 transaction the fixture rolls back. That costs one property — a failed phase no
@@ -20,9 +25,10 @@ import pytest
 import pytest_asyncio
 from sqlalchemy import text
 
-from specivo.importers.core.pipeline import ImportOptions, ImportPipeline
+from specivo.cli.import_data import build_pipeline, parse_args
+from specivo.importers.core.pipeline import ImportPipeline
 from specivo.importers.core.progress import NullProgressReporter
-from specivo.importers.load.registry import register_all
+from specivo.importers.core.source import build_source_registry
 from specivo.importers.redmine import RedmineSourceAdapter
 
 # Where the fixture publishes each profile. Overridable so the same tests can
@@ -91,9 +97,36 @@ class _SharedSession:
         return None
 
 
+def _argv(profile: dict[str, str], **option_kwargs) -> list[str]:
+    """Translate the tests' option keywords into the import command's flags."""
+    argv = [
+        "--source",
+        "redmine",
+        "--source-db-url",
+        profile["url"],
+        "--source-files-dir",
+        str(Path(profile["files"]).resolve()),
+        "--source-instance",
+        "pytest-fixture",
+    ]
+    for name, value in option_kwargs.items():
+        flag = "--" + name.replace("_", "-")
+        if name == "resume_run_id":
+            argv += ["--resume", str(value)]
+        elif value is True:
+            argv.append(flag)
+        elif value not in (None, False):
+            argv += [flag, str(value)]
+    return argv
+
+
 @pytest.fixture
-def build_import(db_session, redmine_adapter, tmp_path, monkeypatch):
+def build_import(db_session, redmine_profile, redmine_adapter, tmp_path, monkeypatch):
     """Return a factory building a wired pipeline against the live fixture.
+
+    ``redmine_adapter`` is requested only so an unreachable or unseeded
+    fixture skips the test; each run gets its own adapter from the command
+    line, as the command does.
 
     Attachment storage is redirected to a temporary directory, so a run that
     copies files leaves them there rather than in the instance's own storage.
@@ -105,14 +138,13 @@ def build_import(db_session, redmine_adapter, tmp_path, monkeypatch):
     monkeypatch.setattr(attachment_service, "_upload_dir", storage)
 
     def _build(**option_kwargs) -> ImportPipeline:
-        options = ImportOptions(source_instance=redmine_adapter.source_instance, **option_kwargs)
-        return register_all(
-            ImportPipeline(
-                adapter=redmine_adapter,
-                session_factory=lambda: _SharedSession(db_session),
-                options=options,
-                reporter=NullProgressReporter(),
-            )
+        args, adapter_cls = parse_args(_argv(redmine_profile, **option_kwargs), build_source_registry())
+        assert adapter_cls is RedmineSourceAdapter
+        return build_pipeline(
+            args,
+            adapter_cls.from_args(args),
+            session_factory=lambda: _SharedSession(db_session),  # type: ignore[arg-type]
+            reporter=NullProgressReporter(),
         )
 
     _build.storage = storage  # type: ignore[attr-defined]

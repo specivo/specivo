@@ -276,7 +276,10 @@ reindex-fts:  ## Rebuild FTS vectors (optionally PROJECT=KEY) after a language c
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.reindex_fts $(if $(PROJECT),--project $(PROJECT),)
 
 import-redmine:  ## Import a Redmine instance (ARGS='--source-db-url ... --dry-run'; see --help)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.import_redmine $(ARGS)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.import_data --source redmine $(ARGS)
+
+import-data:  ## Import from any registered source (SOURCE=name ARGS='...'; SOURCE=name ARGS=--help for its options)
+	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.import_data $(if $(SOURCE),--source $(SOURCE),--list-sources) $(ARGS)
 
 # --- Redmine test fixture (importer development only) ----------------------
 # PROFILE=pg (default) or PROFILE=mysql — the importer supports both databases
