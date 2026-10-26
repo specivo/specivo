@@ -114,6 +114,7 @@ _DEFAULT_ROLES: list[dict] = [
             "view_issues",
             "view_wiki",
             "log_time",
+            "view_time_entries",
         ],
         "issues_visibility": "default",
         "settings": {},

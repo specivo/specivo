@@ -348,6 +348,10 @@ async def issue_detail(
     can_manage_relations = not anonymous and await check_permission(
         user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db
     )
+    # The time tab lists entries only with view_time_entries, and offers the
+    # log-time form only with log_time, as the time entries API requires.
+    can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
+    can_log_time = not anonymous and await check_permission(user, project.id, Permission.LOG_TIME, db)
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -400,7 +404,7 @@ async def issue_detail(
         # Attachments are lazy-loaded via htmx when the Attachments tab is opened
         # (see /partials/issues/{key}/attachments/). Time entries stay eager because
         # the sidebar displays the time_logged sum derived from the list.
-        time_entries = await _time_svc.list_for_issue(db, issue.id, project, user)
+        time_entries = await _time_svc.list_for_issue(db, issue.id, project, user) if can_view_time_entries else []
         time_logged = sum((te.hours or 0) for te in time_entries)
         tab_ctx = {
             "time_entries": time_entries,
@@ -576,6 +580,8 @@ async def issue_detail(
             "current_sprint": current_sprint,
             "relations": relations,
             "can_manage_relations": can_manage_relations,
+            "can_view_time_entries": can_view_time_entries,
+            "can_log_time": can_log_time,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             # Computed metadata is derived from the project's configuration,

@@ -5654,6 +5654,10 @@ msgstr[1] ""
 msgid "No time entries yet. Log time to start tracking."
 msgstr ""
 
+#: specivo/templates/themes/default/pages/time/list.html:96
+msgid "No time entries yet."
+msgstr ""
+
 #: specivo/templates/themes/default/pages/wiki/diff.html:4
 #, python-format
 msgid "Diff: v%(from_version)s → v%(to_version)s"

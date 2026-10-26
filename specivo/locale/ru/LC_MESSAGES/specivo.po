@@ -5675,6 +5675,10 @@ msgstr[2] "Итого: %(hours)s ч (%(count)s записей)"
 msgid "No time entries yet. Log time to start tracking."
 msgstr "Записей о времени пока нет. Залогируйте время, чтобы начать учёт."
 
+#: specivo/templates/themes/default/pages/time/list.html:96
+msgid "No time entries yet."
+msgstr "Записей о времени пока нет."
+
 #: specivo/templates/themes/default/pages/wiki/diff.html:4
 #, python-format
 msgid "Diff: v%(from_version)s → v%(to_version)s"

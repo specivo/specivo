@@ -61,8 +61,12 @@ limits the project's Time area, an issue's time tab and its logged total, a vers
 billable-time reports and the dashboard's agent activity. Restricting time is the usual setup for
 contractors on a billable project: they log and see their own hours and nobody else's.
 
+Time entries visibility only matters for roles that have the **View time entries** permission;
+a person whose roles in a project lack it sees no time there at all, not even their own.
+
 When someone holds several roles, the **widest** setting wins, as in Redmine: one role with
-*All time entries* on a project is enough to see every entry there, whatever their other roles say.
+*View time entries* and *All time entries* on a project is enough to see every entry there, whatever
+their other roles say.
 For users, any role on any of their projects with *All active users* is enough; a person without
 any project role follows the built-in **Non member** role. Administrators always see everything.
 

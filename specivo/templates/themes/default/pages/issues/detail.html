@@ -264,7 +264,7 @@
         {# Time entries name people and hours, and attachments are outside the
            anonymous scope, so neither tab exists for a visitor without an
            account. Relations stay: the list is visibility-filtered already. #}
-        {% if not anonymous %}
+        {% if can_view_time_entries or can_log_time %}
         <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
         {% endif %}
         <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
@@ -313,8 +313,9 @@
       </div>
 
       {# Time entries tab #}
-      {% if not anonymous %}
+      {% if can_view_time_entries or can_log_time %}
       <div x-show="tab === 'time'">
+        {% if can_log_time %}
         <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }}, i18n: {{ {
           "minimum": _("Enter at least 1 minute"),
           "logFailed": _("Failed to log time"),
@@ -368,8 +369,11 @@
             </div>
           </div>
         </div>
+        {% endif %}
 
-        {% if time_entries %}
+        {% if not can_view_time_entries %}
+        {# Logging time does not let one read the project's time entries. #}
+        {% elif time_entries %}
         <table class="sp-table" style="width: 100%; margin-top: var(--sp-space-md);">
           <thead>
             <tr>

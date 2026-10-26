@@ -5639,6 +5639,10 @@ msgstr[0] "รวม: %(hours)s ชม. (%(count)s รายการ)"
 msgid "No time entries yet. Log time to start tracking."
 msgstr "ยังไม่มีรายการเวลา บันทึกเวลาเพื่อเริ่มติดตาม"
 
+#: specivo/templates/themes/default/pages/time/list.html:96
+msgid "No time entries yet."
+msgstr "ยังไม่มีรายการเวลา"
+
 #: specivo/templates/themes/default/pages/wiki/diff.html:4
 #, python-format
 msgid "Diff: v%(from_version)s → v%(to_version)s"

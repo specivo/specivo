@@ -283,10 +283,12 @@
     </div>
 
     {# Time Logged #}
+    {% if can_view_time_entries %}
     <div>
       <label style="{{ lbl }}">{% trans %}Time Logged{% endtrans %}</label>
       <span style="font-size: var(--sp-font-size-sm); font-family: var(--sp-font-mono);">{{ '%.1f' | format(time_logged) if time_logged is defined else '0.0' }}h</span>
     </div>
+    {% endif %}
   </div>
 </div>
 

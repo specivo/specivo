@@ -5657,6 +5657,10 @@ msgstr[1] "Total : %(hours)s h (%(count)s entrées)"
 msgid "No time entries yet. Log time to start tracking."
 msgstr "Aucune saisie de temps pour le moment. Enregistrez du temps pour commencer le suivi."
 
+#: specivo/templates/themes/default/pages/time/list.html:96
+msgid "No time entries yet."
+msgstr "Aucune saisie de temps pour l’instant."
+
 #: specivo/templates/themes/default/pages/wiki/diff.html:4
 #, python-format
 msgid "Diff: v%(from_version)s → v%(to_version)s"

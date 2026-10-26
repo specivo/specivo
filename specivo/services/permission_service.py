@@ -32,7 +32,9 @@ Visibility settings
 Each role carries ``issues_visibility``, ``users_visibility`` and
 ``time_entries_visibility``. When a user holds several roles the most
 permissive value wins, as in Redmine (``best_time_entries_visibility``,
-``visible_users_clause``, ``IssueService._best_visibility``).
+``visible_users_clause``, ``IssueService._best_visibility``). For time entries
+only the roles granting ``view_time_entries`` count: without one, a user reads
+no time entries in the project, not even their own.
 
 ``check_permission`` additionally denies the anonymous user anything outside
 the ceiling before it looks at a single role.
@@ -355,29 +357,38 @@ async def get_user_roles(session: AsyncSession, user: User, project: Project) ->
 # ---------------------------------------------------------------------------
 
 
-def best_time_entries_visibility(visibilities: Iterable[str]) -> str:
+def best_time_entries_visibility(visibilities: Iterable[str]) -> str | None:
     """Return the most permissive of the roles' ``time_entries_visibility`` values.
 
-    ``"own"`` only when there is at least one value and every one is
-    ``"own"``; otherwise ``"all"``. Reading time entries is not gated by a
-    permission today (reaching the project is enough), so a user without any
-    role keeps seeing everything, exactly as before the setting existed.
+    *visibilities* must come only from the roles that grant
+    ``view_time_entries``, as in Redmine: a role without the permission
+    contributes nothing, whatever its setting. None when no such role exists
+    (the user reads no entries at all), ``"own"`` when every one is
+    ``"own"``, otherwise ``"all"``.
     """
     seen = set(visibilities)
-    if seen and seen <= {TIME_ENTRIES_VISIBILITY_OWN}:
+    if not seen:
+        return None
+    if seen <= {TIME_ENTRIES_VISIBILITY_OWN}:
         return TIME_ENTRIES_VISIBILITY_OWN
     return TIME_ENTRIES_VISIBILITY_ALL
 
 
-async def time_entries_visibility(session: AsyncSession, user: User, project: Project) -> str:
-    """Return the ``time_entries_visibility`` *user* has in *project*: ``"all"`` or ``"own"``.
+async def time_entries_visibility(session: AsyncSession, user: User, project: Project) -> str | None:
+    """Return the time entries *user* may read in *project*: ``"all"``, ``"own"`` or None for none.
 
-    Admins see all. Everyone else follows ``get_user_roles``.
+    Admins see all. Everyone else follows the roles from ``get_user_roles``
+    that grant ``view_time_entries``; the anonymous user never holds it
+    (``ANONYMOUS_PERMISSION_CEILING``).
     """
     if user.is_admin:
         return TIME_ENTRIES_VISIBILITY_ALL
+    if user.is_anonymous:
+        return None
     roles = await get_user_roles(session, user, project)
-    return best_time_entries_visibility(role.time_entries_visibility for role in roles)
+    return best_time_entries_visibility(
+        role.time_entries_visibility for role in roles if role.grants(Permission.VIEW_TIME_ENTRIES)
+    )
 
 
 async def sees_all_users(session: AsyncSession, user: User) -> bool:
