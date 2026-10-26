@@ -74,7 +74,10 @@ DATABASE_URL=postgresql+asyncpg://user:pass@db.example.com:5432/specivo
 REDIS_URL=redis://cache.example.com:6379/0
 ```
 
-Your PostgreSQL must have the **pgvector** extension available, since search relies on it. Once you
+Your PostgreSQL must have the **pgvector** extension available, since search relies on it. Use
+pgvector **0.8 or later**: semantic search only uses its vector index with 0.8's iterative index
+scans, and compares every embedding on older releases (the bundled `pgvector/pgvector:pg18` image
+ships 0.8). Once you
 point the URLs elsewhere, you can remove the `db` and `redis` services from `docker-compose.yml` —
 they are declared as optional dependencies, so the app starts without them.
 
@@ -143,6 +146,8 @@ keyword search. Hosted ("bring your own key") providers and other models are not
 | `SEARCH_INDEX_COMMENTS` | Index comments for search. Default `true`. |
 | `SEARCH_MIN_COMMENT_LENGTH` | Comments shorter than this many characters are not indexed. Default `20`. |
 | `SEARCH_EXCLUDE_BOT_COMMENTS` | Skip comments made through an API key or by a service account. Default `true`. |
+| `SEARCH_HNSW_EF_SEARCH` | Size of pgvector's candidate list for each vector index scan (`hnsw.ef_search`, 10 to 1000). Higher finds the true nearest matches more reliably and is a little slower. Default `100`. |
+| `SEARCH_SEMANTIC_OVERFETCH` | Nearest chunks read from the vector index per wanted result, before results the reader may not see are removed (1 to 50). Default `4`. See [Vector index](semantic-search.md#vector-index). |
 
 See [Semantic search and embeddings](semantic-search.md) for what it is used for, how existing
 content is indexed, how to check it works, and troubleshooting. For an offline host, see

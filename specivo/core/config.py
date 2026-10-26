@@ -190,6 +190,12 @@ class Settings(BaseSettings):
     search_index_comments: bool = True
     search_min_comment_length: int = 20
     search_exclude_bot_comments: bool = True
+    # Semantic search through the HNSW vector index: the size of pgvector's
+    # candidate list per index scan (``hnsw.ef_search``; higher finds the true
+    # nearest neighbours more reliably, at some speed), and how many nearest
+    # chunks are fetched per wanted result before visibility filtering.
+    search_hnsw_ef_search: int = Field(default=100, ge=10, le=1000)
+    search_semantic_overfetch: int = Field(default=4, ge=1, le=50)
 
     # Timeouts
     smtp_timeout: int = 30

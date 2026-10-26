@@ -67,6 +67,30 @@ Related settings, all in `.env`:
 | `SEARCH_MIN_COMMENT_LENGTH` | `20` | Shorter comments are not indexed |
 | `SEARCH_EXCLUDE_BOT_COMMENTS` | `true` | Comments made through an API key or by a service account are not indexed |
 
+### Vector index
+
+Embeddings are stored in PostgreSQL with pgvector, and an **HNSW index** on them (created by
+migration 0038) lets semantic and hybrid search find the nearest chunks without comparing the query
+with every stored embedding. It covers 384-number vectors, the size `multilingual-e5-small` produces.
+
+Search reads the nearest chunks from the index first and only then removes what the reader may not
+see: other projects, private issues, the trash. When too few of those chunks are visible, it reads a
+wider set from the index, and in the end compares every embedding in the projects the reader can
+see. A visible match is never dropped because content the reader cannot see ranks ahead of it. The
+cost is that someone who can see only a small part of a large instance gets slower semantic queries
+than an administrator.
+
+The index needs pgvector **0.8 or later**, for its iterative index scans; the bundled database image
+has it. On an older pgvector, search compares every embedding and logs a warning once per process.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `SEARCH_HNSW_EF_SEARCH` | `100` | Candidates pgvector keeps per index scan (`hnsw.ef_search`). Higher finds the true nearest chunks more reliably, at some speed |
+| `SEARCH_SEMANTIC_OVERFETCH` | `4` | Nearest chunks read per wanted result before invisible ones are removed. Raise it if many readers see only a few projects |
+
+Index lookups are approximate: on a large instance a close match can rank a place or two
+differently than an exact comparison would. Raising `SEARCH_HNSW_EF_SEARCH` narrows that.
+
 ## The default model
 
 | | |
@@ -305,7 +329,8 @@ The pieces that look like they allow it do not add up to a safe procedure:
 - A local model is read from `<model name>.onnx` plus a shared `tokenizer.json` in the one `models`
   folder, so two local models would overwrite each other's tokenizer.
 - Vectors from different models cannot be compared. After changing the default model every stored
-  embedding would have to be rebuilt, and no vector index is created for a new model's size.
+  embedding would have to be rebuilt, and the [vector index](#vector-index) only covers the 384
+  numbers of `multilingual-e5-small`; other sizes are compared one by one.
 
 Embeddings are stored with whatever size the model produces, so there is no database migration to
 resize anything. The practical consequence is for the future: moving to another model will be a full
@@ -346,10 +371,20 @@ embedded by the worker after it is saved, so a burst of changes only means seman
 a little later.
 
 **Searching is slow on a large instance.**
-Semantic search compares your query with the stored embeddings of the projects you can see. Specivo
-does not currently create a vector index for them, so the cost grows with the number of chunks.
-Thousands of chunks are fine. Very large instances should expect slower semantic and hybrid queries,
-and can fall back to keyword mode.
+Semantic search reads the nearest chunks from the [vector index](#vector-index), so its cost grows
+slowly with the number of chunks. Check that the index exists and is valid:
+
+    docker compose exec db psql -U specivo -d specivo -c \
+      "SELECT indisvalid FROM pg_index WHERE indexrelid = to_regclass('ix_chunk_embeddings_hnsw_384')"
+
+`t` is what you want. No row means it was not built, because the pgvector extension is older than
+0.5 (the upgrade log says so). `f` means it is broken; rebuild it without blocking search with
+`REINDEX INDEX CONCURRENTLY ix_chunk_embeddings_hnsw_384` in the same `psql`. Check the pgvector
+version too (`SELECT extversion FROM pg_extension WHERE extname = 'vector'`): before 0.8 the index
+is not used. With the index in place, a reader who can see only a few projects of a large instance is the
+slow case, because search widens its candidate set until it has enough results they may see; a
+higher `SEARCH_SEMANTIC_OVERFETCH` gets there in fewer steps. Hybrid search also runs a keyword
+search, which is often the larger part of its time.
 
 **The `api` or `celery-embeddings` container uses a lot of memory.**
 The model is loaded into each process the first time it embeds something and stays loaded. This is
