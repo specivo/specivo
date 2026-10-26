@@ -99,6 +99,7 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: FastMCP | None = None
   where wording varies (requires embeddings to be populated).
 - Issue references (`ACME-42`) work in any mode: the issue itself comes
   first, followed by issues, comments and wiki pages that mention it.
+- `limit` is clamped to 1-50; the tool has no offset.
 
 ### Create an issue
 1. `specivo_list_lookups()` -- get tracker_id, priority_id
@@ -183,6 +184,10 @@ the security audit log. Notable cases:
   audit event tagged with `source=mcp`.
 - Issue and wiki mutations require the matching `add_*` / `edit_*`
   permission and emit `ISSUE_*` / `WIKI_*` audit events.
+- `specivo_log_time` requires **`log_time`** on the project. Reading logged
+  time needs **`view_time_entries`**; the seeded Agent role has both.
+- `specivo_create_issue` follows the tracker's private-by-default setting
+  unless `is_private` is passed, which needs **`set_issues_private`**.
 
 If a tool returns a permission error, the caller's API key user lacks the
 required role on that project. Audit rows are visible to project managers
