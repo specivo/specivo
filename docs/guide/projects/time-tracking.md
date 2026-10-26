@@ -8,6 +8,24 @@ Specivo lets you **log time** against the work you do — hours spent on an issu
 with the kind of activity. Logged time rolls up into reports so you can see where effort goes and
 compare it against your estimates.
 
+## Who can do what
+
+Three role permissions control time tracking in a project:
+
+| Permission | Allows |
+|---|---|
+| **View time entries** | Reading time: the project's Time area, an issue's time tab and logged total, a version's logged total and billable-time reports. Without it you see no entries, not even your own. |
+| **Log time** | Logging time, by hand or with a timer, and editing or deleting your own entries. |
+| **Edit/delete any time entries** | Editing or deleting anyone's entries in the project. |
+
+Out of the box, **Manager** has all three, **Developer** can view and log time, **Agent** can log time
+but not read it back, and **Reporter** and the built-in **Non member** role have none. Administrators
+can do everything. Buttons you can't use (*Log Time*, the log-time form on an issue, edit controls)
+are hidden.
+
+A running timer is checked again when you stop it: if you have lost the right to log time on its
+project or issue in the meantime, the timer is discarded and no time is written.
+
 ## Log time against an issue
 
 Open the issue and add a time entry: the number of **hours**, the **date**, an **activity**, and an
@@ -43,7 +61,7 @@ activity, by person, and over a date range — so a [Manager](index.md) can see 
 across the project.
 
 !!! note "Who sees whose time"
-    By default everyone who can open the project sees every entry. A role set to **Own time entries**
+    By default everyone with **View time entries** sees every entry. A role set to **Own time entries**
     (see [What a role can see](index.md#what-a-role-can-see)) sees only the hours its holder logged —
     in the Time area, on issues, in version totals and in reports. A person with several roles gets
     the widest setting among them.
