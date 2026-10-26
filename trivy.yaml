@@ -1,0 +1,27 @@
+# Trivy settings shared by CI (.github/workflows/trivy.yml, release.yml) and
+# local runs. Trivy reads ./trivy.yaml automatically, so run it from the repo
+# root. What to scan for (--scanners, --severity, --exit-code) is given on the
+# command line per scan; see docs/development/security-scanning.md.
+#
+# This file also applies to image scans, so the skips below are written
+# relative to the repository root and match nothing inside the image
+# (where the virtualenv is /app/.venv and must be scanned).
+
+scan:
+  skip-dirs:
+    # Local virtualenv and frontend dependencies: lockfiles are scanned instead.
+    - .venv
+    - frontend/node_modules
+    # Test seeds and fixtures hold fake credentials on purpose.
+    - tests/fixtures
+    # Local fixture data and agent worktrees, never committed.
+    - .redmine-fixture
+    - .claude
+  skip-files:
+    # Local environment files are gitignored and hold real local secrets.
+    - .env
+    - .env.local
+
+
+# Accepted findings go in .trivyignore (Trivy's default, read when present),
+# each with a reason and an exp: date.

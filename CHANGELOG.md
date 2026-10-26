@@ -55,6 +55,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Migrations 0033–0040: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently), a single default embedding model and linear-time indexing of unclosed HTML comments. **Run a search reindex after upgrading** (Administration → Settings)
 - Plugins load in the web app, the import CLI and the Celery workers through one shared bootstrap
 - All dependencies upgraded to their latest versions, including the MCP SDK 2.x, Pillow 13 and PyJWT 2.15 (clears all open security advisories)
+- Trivy scans in CI: a release gate on the image (fixable HIGH/CRITICAL vulnerabilities block the push to Docker Hub), and report-only repository and published-image scans in GitHub code scanning
 
 ## [0.8.0] - 2026-09-29
 
