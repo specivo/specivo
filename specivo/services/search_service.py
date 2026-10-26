@@ -15,6 +15,7 @@ from __future__ import annotations
 import html
 import json
 import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -22,13 +23,18 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.config import get_settings
 from specivo.core.constants import (
     MAX_PAGE_LIMIT,
     MAX_SEARCH_OFFSET,
+    PGVECTOR_ITERATIVE_SCAN_VERSION,
     RRF_K,
     SEARCH_FTS_HEADLINE_OPTIONS,
     SEARCH_HYBRID_PREFETCH_LIMIT,
     SEARCH_SNIPPET_MAX_CHARS,
+    SEMANTIC_CANDIDATE_GROWTH,
+    SEMANTIC_INDEX_DIMENSIONS,
+    SEMANTIC_MAX_INDEX_CANDIDATES,
 )
 from specivo.models.project import PROJECT_STATUS_ACTIVE
 from specivo.models.role import RoleBuiltin
@@ -57,6 +63,15 @@ _SST_JOURNAL = SearchSourceType.JOURNAL.value
 _SST_ATTACHMENT = SearchSourceType.ATTACHMENT.value
 
 logger = logging.getLogger(__name__)
+
+# Whether the database's pgvector supports iterative index scans, read once per
+# process by ``_prepare_index_scan`` (None until then).
+_pgvector_iterative_scan: bool | None = None
+
+
+def _parse_extversion(version: str) -> tuple[int, ...]:
+    """Turn an extension version such as ``0.8.2`` into ``(0, 8, 2)``; unknown parts become 0."""
+    return tuple(int(part) if part.isdigit() else 0 for part in version.split("."))
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +229,7 @@ def _page_window(pinned: int, offset: int, limit: int) -> tuple[slice, int, int]
     pinned_slice = slice(min(offset, pinned), min(offset + limit, pinned))
     on_page = pinned_slice.stop - pinned_slice.start
     return pinned_slice, max(0, offset - pinned), limit - on_page
+
 
 # Partial wiki links truncated by ts_headline:
 #   "slug|Display Text]]"  (missing [[)
@@ -1310,6 +1326,37 @@ class SearchService:
         ]
         return results, total, type_counts
 
+    async def _prepare_index_scan(self, session: AsyncSession) -> bool:
+        """Set up this transaction for HNSW index scans; False when they cannot be used.
+
+        Needs pgvector 0.8 or later: its iterative scans let one index scan
+        return more rows than ``hnsw.ef_search``, which is what the candidate
+        rounds in :meth:`semantic_search` rely on. The settings are
+        transaction-local (``set_config(..., true)``).
+        """
+        global _pgvector_iterative_scan
+        if _pgvector_iterative_scan is None:
+            version = await session.scalar(text("SELECT extversion FROM pg_extension WHERE extname = 'vector'"))
+            _pgvector_iterative_scan = (
+                version is not None and _parse_extversion(version) >= PGVECTOR_ITERATIVE_SCAN_VERSION
+            )
+            if not _pgvector_iterative_scan:
+                logger.warning(
+                    "pgvector %s does not support iterative index scans (0.8 or later needed); "
+                    "semantic search ranks every embedding without the vector index",
+                    version,
+                )
+        if not _pgvector_iterative_scan:
+            return False
+        await session.execute(
+            text(
+                "SELECT set_config('hnsw.ef_search', :ef_search, true), "
+                "set_config('hnsw.iterative_scan', 'relaxed_order', true)"
+            ),
+            {"ef_search": str(get_settings().search_hnsw_ef_search)},
+        )
+        return True
+
     async def semantic_search(
         self,
         session: AsyncSession,
@@ -1379,9 +1426,8 @@ class SearchService:
         comment_vis = self._comment_visibility_clause(user, journal_alias="cj", issue_alias="ci2")
 
         # Semantic search query: find chunks closest to the query vector.
-        # The vector literal is interpolated directly (not a bind param) because
-        # asyncpg does not support pgvector's vector type as a bind parameter,
-        # and the value is fully derived from our embedding model (not user input).
+        # The vector is bound as a text literal and cast in SQL, because
+        # asyncpg has no codec for pgvector's vector type.
         #
         # Uses LEFT JOINs for title/subtitle/project_key resolution.
         #
@@ -1393,11 +1439,6 @@ class SearchService:
         #
         # Comment support: joins to journals + issues for metadata and
         # inherits parent issue visibility.
-        # Two-phase semantic search:
-        # CTE 1 (nearest): fast HNSW index-only scan for top-N closest chunks
-        # CTE 2: join to entity tables, apply visibility, dedup, limit
-        prefetch_limit = SEARCH_HYBRID_PREFETCH_LIMIT * 2  # over-fetch for visibility filtering
-
         att_sem_vis = self._attachment_semantic_vis(user)
 
         # Real-tag AND filter (hybrid parity with the keyword path). When active,
@@ -1443,35 +1484,58 @@ class SearchService:
         sem_where_or = "(\n                    " + _or_join.join(_result_branches) + "\n                )"
         count_where_or = "(\n                    " + _or_join.join(_count_branches) + "\n                )"
 
-        # Build CTE prefix: if user has visibility CTEs, comma-separate with nearest
-        if cte_prefix:
-            # cte_prefix is "WITH user_visibility AS (...)"
-            # We append nearest as another CTE
-            nearest_cte = f"""
-            {cte_prefix},
-            nearest AS (
-                SELECT ce.chunk_id,
-                       (1 - (ce.embedding <=> CAST(:query_vector AS vector))) as score
-                FROM chunk_embeddings ce
-                WHERE ce.model_id = :model_id
-                ORDER BY ce.embedding <=> CAST(:query_vector AS vector)
-                LIMIT :prefetch_limit
-            )
-            """
-        else:
-            nearest_cte = """
-            WITH nearest AS (
-                SELECT ce.chunk_id,
-                       (1 - (ce.embedding <=> CAST(:query_vector AS vector))) as score
-                FROM chunk_embeddings ce
-                WHERE ce.model_id = :model_id
-                ORDER BY ce.embedding <=> CAST(:query_vector AS vector)
-                LIMIT :prefetch_limit
-            )
-            """
+        # Two phases: the CTE ``nearest`` picks candidate chunks by cosine
+        # distance alone, then the outer query joins them to their entities,
+        # applies visibility, keeps the best chunk per entity and ranks.
+        #
+        # Through the HNSW index (a partial index on the cast expression, so the
+        # query repeats that expression), ``nearest`` holds the closest
+        # ``candidates`` chunks. Visibility is applied afterwards, so when too
+        # few candidates are visible the round is repeated with a wider set,
+        # and once that grows past SEMANTIC_MAX_INDEX_CANDIDATES (or the index
+        # scan returns fewer rows than asked) every embedding is ranked exactly.
+        # A visible match therefore never drops out because hidden chunks rank
+        # ahead of it. Without the index (another vector size, or a pgvector too
+        # old for iterative scans) the exact ranking is used straight away.
+        #
+        # The exact ranking first narrows the rows to the projects in scope and,
+        # for a non-admin, to projects where the user can see something at all
+        # (every visibility rule needs such a ``user_visibility`` row), so the
+        # planner can skip the distance for chunks that could never be shown.
+        # That narrowing stays out of the index rounds: there it makes the
+        # planner drop the index for a join plan.
+        exact_scope = project_filter.replace("ss.", "ss0.")
+        if not user.is_admin:
+            exact_scope += """
+                  AND ss0.project_id IN (SELECT uv0.project_id FROM user_visibility uv0
+                                         WHERE uv0.visibility_level > 0 OR uv0.can_view_wiki)"""
 
-        sem_sql = f"""
-            {nearest_cte}
+        def nearest_cte(candidates: int | None) -> str:
+            if candidates is None:
+                body = f"""nearest AS MATERIALIZED (
+                SELECT ce.chunk_id,
+                       (1 - (ce.embedding <=> CAST(:query_vector AS vector))) AS score
+                FROM chunk_embeddings ce
+                JOIN search_chunks sc0 ON sc0.id = ce.chunk_id
+                JOIN search_sources ss0 ON ss0.id = sc0.source_id
+                WHERE ce.model_id = :model_id
+                {exact_scope}
+            )"""
+            else:
+                dims = SEMANTIC_INDEX_DIMENSIONS
+                distance = f"ce.embedding::vector({dims}) <=> CAST(:query_vector AS vector({dims}))"
+                body = f"""nearest AS MATERIALIZED (
+                SELECT ce.chunk_id, (1 - ({distance})) AS score
+                FROM chunk_embeddings ce
+                WHERE ce.model_id = :model_id
+                  AND vector_dims(ce.embedding) = {dims}
+                ORDER BY {distance}
+                LIMIT :candidates
+            )"""
+            # cte_prefix is "WITH user_visibility AS (...)" or empty (admins).
+            return f"{cte_prefix},\n            {body}" if cte_prefix else f"WITH {body}"
+
+        ranked_sql = f"""
             SELECT result_type, id, title, subtitle, snippet, score, project_key
             FROM (
                 SELECT DISTINCT ON (ss.source_type, ss.entity_id)
@@ -1541,17 +1605,55 @@ class SearchService:
                 AND {sem_where_or}
                 ORDER BY ss.source_type, ss.entity_id, n.score DESC
             ) deduped
-            ORDER BY score DESC
-            LIMIT :limit OFFSET :offset
+            ORDER BY score DESC, result_type, id
+            LIMIT :needed
         """
-        params["limit"] = ranked_limit
-        params["offset"] = ranked_offset
-        params["prefetch_limit"] = prefetch_limit
 
-        result = await session.execute(text(sem_sql), params)
+        # Rank the first offset + limit entities; the page is cut in Python.
+        # The one-row ``fetched`` side reports how many candidates the round
+        # read, even when none of them is visible.
+        def semantic_sql(candidates: int | None) -> str:
+            return f"""
+            {nearest_cte(candidates)}
+            SELECT fetched.n AS candidate_count, page.*
+            FROM (SELECT count(*) AS n FROM nearest) fetched
+            LEFT JOIN ({ranked_sql}) page ON true
+            ORDER BY page.score DESC NULLS LAST, page.result_type, page.id
+        """
+
+        needed = ranked_offset + ranked_limit
+        params["needed"] = needed
+        rows: list[Any] = []
+        if needed > 0:
+            candidates: int | None = None
+            if model.dimensions == SEMANTIC_INDEX_DIMENSIONS and await self._prepare_index_scan(session):
+                candidates = needed * get_settings().search_semantic_overfetch
+            while True:
+                if candidates is not None and candidates > SEMANTIC_MAX_INDEX_CANDIDATES:
+                    candidates = None
+                params["candidates"] = candidates
+                fetched = (await session.execute(text(semantic_sql(candidates)), params)).all()
+                rows = [row for row in fetched if row._mapping["result_type"] is not None]
+                logger.debug(
+                    "Semantic search round: %s candidates, %d of %d results",
+                    "all" if candidates is None else candidates,
+                    len(rows),
+                    needed,
+                )
+                if candidates is None or len(rows) >= needed:
+                    break
+                if fetched[0]._mapping["candidate_count"] < candidates:
+                    # The index ran out before the limit: the table holds fewer
+                    # rows, or the scan hit pgvector's hnsw.max_scan_tuples.
+                    candidates = None
+                elif rows:
+                    # Widen by at least the share still missing, twice over.
+                    candidates *= max(SEMANTIC_CANDIDATE_GROWTH, math.ceil(2 * needed / len(rows)))
+                else:
+                    candidates *= SEMANTIC_CANDIDATE_GROWTH**2
 
         results: list[SearchResult] = []
-        for row in result:
+        for row in rows[ranked_offset:]:
             m = row._mapping
             results.append(
                 SearchResult(

@@ -169,28 +169,6 @@ class EmbeddingService:
         result = await session.execute(select(EmbeddingModel).where(EmbeddingModel.is_default.is_(True)).limit(1))
         return result.scalar_one_or_none()
 
-    async def ensure_hnsw_index(self, session: AsyncSession, model: EmbeddingModel) -> None:
-        """Create a partial HNSW index for a specific embedding model.
-
-        Uses ``CREATE INDEX IF NOT EXISTS`` so it is safe to call multiple times.
-        The semantic search WHERE clause filters by ``model_id``, allowing
-        PostgreSQL to select the partial index automatically.
-        """
-        from sqlalchemy import text
-
-        index_name = f"idx_hnsw_model_{model.id}"
-        dims = model.dimensions
-        await session.execute(
-            text(
-                f"CREATE INDEX IF NOT EXISTS {index_name} "
-                f"ON chunk_embeddings USING hnsw ((embedding::vector({dims})) vector_cosine_ops) "
-                f"WITH (m = 24, ef_construction = 128) "
-                f"WHERE model_id = :model_id"
-            ),
-            {"model_id": model.id},
-        )
-        logger.info("Ensured HNSW index %s for model %s (dims=%d)", index_name, model.name, dims)
-
     async def _should_skip_comment(
         self,
         session: AsyncSession,
