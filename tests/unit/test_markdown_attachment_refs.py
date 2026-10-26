@@ -92,3 +92,49 @@ def test_wiki_links_and_issue_refs_are_unaffected():
     assert 'href="/projects/ACME/wiki/spec/"' in html
     assert 'href="/issue/ACME-1/"' in html
     assert 'href="/api/v1/attachments/1/download/"' in html
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "Inline `[x](spec.pdf)` and `![c](chart.png)` code.",
+        "```\n[x](spec.pdf)\n![c](chart.png)\n```",
+        "    [x](spec.pdf)\n    ![c](chart.png)",
+    ],
+    ids=["inline-code", "fenced-block", "indented-block"],
+)
+def test_filenames_in_code_stay_as_written(source):
+    html = render(source)
+    assert "/api/v1/attachments/" not in html
+    assert "spec.pdf" in html
+    assert "chart.png" in html
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "[a](" + "x " * 20000,
+        "![a](" + "x " * 20000,
+        "[a](" + " " * 40000,
+        "[a](" + 'spec.pdf "' * 5000,
+        "[a](<" + "x " * 20000,
+        ("[a](" + "x " * 200 + "\n") * 100,
+        "[a](x" + " " * 20000 + "y",
+    ],
+    ids=[
+        "words",
+        "image-words",
+        "spaces",
+        "unclosed-titles",
+        "unclosed-angle",
+        "many-lines",
+        "spaces-before-word",
+    ],
+)
+def test_unterminated_targets_render_in_linear_time(source):
+    """Regression: a backtracking target pattern made these take seconds or more."""
+    import time
+
+    started = time.perf_counter()
+    render(source)
+    assert time.perf_counter() - started < 1.0
