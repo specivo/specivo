@@ -7,6 +7,7 @@ that fail in CI/test environments where env vars aren't yet set.
 import os
 
 from celery import Celery
+from celery.signals import worker_init  # type: ignore[import-untyped]
 
 # Use REDIS_URL env var directly for the broker — avoids triggering
 # pydantic-settings validation (which requires SECRET_KEY etc.) at import time.
@@ -43,6 +44,21 @@ celery_app.config_from_object(
         },
     }
 )
+
+
+@worker_init.connect
+def _bootstrap_worker(**_kwargs) -> None:
+    """Load plugins in the worker the same way ``create_app()`` does.
+
+    Runs once in the worker's main process, before the pool forks, so every
+    child inherits the plugins and the password hasher registry. Kept out of
+    module import for the same reason the settings are: importing this package
+    must not require a configured environment.
+    """
+    from specivo.core.plugin_manager import bootstrap
+
+    bootstrap()
+
 
 # Eagerly import every task module so that @celery_app.task decorators
 # run at worker startup. The worker entry point is

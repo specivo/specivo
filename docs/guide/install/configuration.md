@@ -104,6 +104,19 @@ SMTP_USER=notifications@example.com
 SMTP_PASSWORD=...      # put the password in .env.local
 ```
 
+## Imported passwords
+
+These settings matter only if you import accounts from another system and let
+them keep their passwords. See [Migrating from Redmine](migrating-from-redmine.md#keeping-peoples-passwords)
+and [Writing a password hasher plugin](password-hasher-plugins.md).
+
+| Variable | Purpose / default |
+|---|---|
+| `LEGACY_PASSWORD_ALGORITHMS` | Imported password formats allowed to sign in, e.g. `["redmine_sha1"]`. Default `[]`: none. |
+| `LEGACY_PASSWORD_HASHES_EXPIRE_AT` | After this moment no imported password works and those people use password recovery, e.g. `2027-03-31T00:00:00Z`. Default unset. |
+| `PASSWORD_HASHERS` | Extra hasher classes by dotted path, e.g. `["acme_hashers.AcmeTrackerMd5"]`. |
+| `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers. |
+
 ## Semantic search model
 
 Hybrid search combines keyword matching with semantic ("by meaning") matching. The semantic side

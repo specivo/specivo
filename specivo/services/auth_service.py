@@ -16,6 +16,7 @@ import hashlib
 import logging
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 from typing import cast
@@ -32,25 +33,15 @@ from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.auth import PasswordResetToken, RefreshToken
 from specivo.models.user import User
-from specivo.services.auth_utils import hash_password, validate_password_policy, verify_password
+from specivo.services.auth_utils import (
+    burn_password_check,
+    hash_password,
+    hash_upgrade_source,
+    rehash_if_needed,
+    validate_password_policy,
+    verify_password,
+)
 from specivo.tasks.notifications import send_notification_email
-
-# ---------------------------------------------------------------------------
-# Constant-time enumeration guard
-# ---------------------------------------------------------------------------
-# Generated lazily on first use — a random bcrypt hash used when a login
-# attempt targets a non-existent user. This ensures the response time is
-# identical to a real wrong-password attempt (bcrypt runs either way).
-# Lazy to avoid module-level get_settings() which breaks CI imports.
-_ENUMERATION_GUARD_HASH: str | None = None
-
-
-def _get_enumeration_guard_hash() -> str:
-    global _ENUMERATION_GUARD_HASH
-    if _ENUMERATION_GUARD_HASH is None:
-        _ENUMERATION_GUARD_HASH = hash_password(secrets.token_urlsafe(16))
-    return _ENUMERATION_GUARD_HASH
-
 
 # ---------------------------------------------------------------------------
 # Lockout thresholds (failures → lock duration in minutes)
@@ -118,6 +109,19 @@ def _render_email(template_name: str, **context: object) -> str:
     return template.render(**context)
 
 
+@dataclass(frozen=True, slots=True)
+class LoginResult:
+    """What a successful :meth:`AuthService.login` hands back to the endpoint."""
+
+    access_token: str
+    refresh_token: str
+    user_id: int
+    # Set when the stored hash was replaced during this sign-in: the algorithm
+    # it was on before (a legacy one, or bcrypt at an outdated cost). The
+    # endpoint audits it; the service has no request to audit with.
+    hash_upgraded_from: str | None = None
+
+
 class AuthService:
     """Stateless service class — all state lives in the DB session."""
 
@@ -133,11 +137,15 @@ class AuthService:
         device_info: str | None = None,
         ip: str | None = None,
         remember: bool = False,
-    ) -> tuple[str, str]:
-        """Authenticate a user and return *(access_token, refresh_token_raw)*.
+    ) -> LoginResult:
+        """Authenticate a user and return the tokens in a :class:`LoginResult`.
 
         Raises ``UnauthorizedError`` with a specific code on any failure.
         Uses a generic message for wrong credentials to prevent user enumeration.
+
+        A hash that needs it (legacy, or bcrypt at an outdated cost) is
+        upgraded once the password has verified and every account check has
+        passed, inside this sign-in's transaction.
         """
         settings = get_settings()
         normalized = login_or_email.strip().lower()
@@ -152,8 +160,9 @@ class AuthService:
         # password either, but it is refused here explicitly, and exactly like an
         # unknown login, rather than relying on that.
         if user is None or user.is_anonymous:
-            # Burn time comparable to bcrypt.checkpw so timing doesn't reveal existence
-            verify_password(password, _get_enumeration_guard_hash())
+            # Burn one bcrypt at the configured cost, as a real check would, so
+            # timing doesn't reveal existence.
+            burn_password_check(password)
             raise AppError(
                 code="auth_invalid_credentials",
                 message=_("Invalid login or password"),
@@ -191,8 +200,10 @@ class AuthService:
                 details={"locked_until": user.locked_until.isoformat()},
             )
 
-        # 4. Verify password
-        if not user.password_hash or not verify_password(password, user.password_hash):
+        # 4. Verify password. ``verify_password`` costs one bcrypt whatever the
+        # stored hash looks like (missing, legacy, unknown), so timing does not
+        # tell a legacy account from a native one.
+        if not verify_password(password, user.password_hash, user_id=user.id):
             # 5. Increment failure counter and apply lockout if threshold reached.
             # MUST commit before raising — otherwise get_db rollback loses the counter.
             new_count = (user.failed_login_count or 0) + 1
@@ -226,6 +237,11 @@ class AuthService:
             # locked_until is in the past — clear the lock and allow login
             user.status = "active"
 
+        # Upgrade the stored hash only now, after every account check: a locked,
+        # deactivated or service account must not get its hash rewritten. It
+        # commits with the rest of this sign-in.
+        hash_upgraded_from = rehash_if_needed(user, password)
+
         user.failed_login_count = 0
         user.locked_until = None
         user.last_login_at = utcnow()
@@ -249,7 +265,12 @@ class AuthService:
         await self._store_refresh_token(session, user.id, refresh_raw, device_info, ip, settings)
 
         await session.flush()
-        return access_token, refresh_raw
+        return LoginResult(
+            access_token=access_token,
+            refresh_token=refresh_raw,
+            user_id=user.id,
+            hash_upgraded_from=hash_upgraded_from,
+        )
 
     async def refresh(
         self,
@@ -553,8 +574,12 @@ class AuthService:
         user: User,
         current_password: str,
         new_password: str,
-    ) -> None:
+    ) -> str | None:
         """Change *user*'s password after verifying *current_password*.
+
+        Returns the algorithm the stored hash is upgraded from when it was a
+        legacy or outdated one (see ``hash_upgrade_source``), else ``None``, so the
+        caller can audit it.
 
         Raises ``AppError`` (400) when the account has no password to change,
         when the current password is wrong, or when the new password repeats
@@ -575,7 +600,7 @@ class AuthService:
 
         # Verify the current password before any other check, so no other
         # failure mode can be reached without knowing it.
-        if not verify_password(current_password, user.password_hash):
+        if not verify_password(current_password, user.password_hash, user_id=user.id):
             raise AppError(
                 code="password_current_invalid",
                 message=_("Current password is incorrect"),
@@ -593,6 +618,11 @@ class AuthService:
                 field="new_password",
             )
 
+        # The current password verified. If it was stored under a legacy or
+        # outdated hash, record that it is being upgraded — here by the new
+        # password replacing it — only now that nothing else can reject the
+        # change, so a rejected change leaves the hash exactly as it was.
+        upgraded_from = hash_upgrade_source(user.password_hash)
         user.password_hash = hash_password(new_password)
         user.password_changed_at = utcnow()
         # Mirror the token-reset path: a successful password change clears the
@@ -606,6 +636,7 @@ class AuthService:
         user.must_change_password = False
 
         await session.flush()
+        return upgraded_from
 
     # ------------------------------------------------------------------
     # Helpers

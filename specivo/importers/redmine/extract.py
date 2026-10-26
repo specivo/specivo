@@ -26,6 +26,7 @@ from specivo.importers.core.ir import (
     IRActivity,
     IRAttachment,
     IRCategory,
+    IRCredential,
     IRCustomField,
     IRCustomValue,
     IRGroup,
@@ -475,12 +476,34 @@ def build_public_access(
 # --------------------------------------------------------------------------
 
 
+# The algorithm id of Redmine's local password scheme; the hasher lives in
+# ``specivo.services.password_hashers``.
+REDMINE_PASSWORD_ALGORITHM = "redmine_sha1"
+
+
+def extract_credential(row: dict[str, Any]) -> IRCredential | None:
+    """Return the account's Redmine credential, or ``None`` if it has none.
+
+    The raw columns only — the adapter does no cryptography. ``None`` for an
+    account bound to an external auth source (LDAP), whose local hash Redmine
+    never checks, and for one with a blank salt or hash.
+    """
+    if row.get("auth_source_id") is not None:
+        return None
+    hashed = (row.get("hashed_password") or "").strip()
+    salt = (row.get("salt") or "").strip()
+    if not hashed or not salt:
+        return None
+    return IRCredential(REDMINE_PASSWORD_ALGORITHM, {"salt": salt, "hashed_password": hashed})
+
+
 def extract_user(row: dict[str, Any], email: str | None = None) -> IRUser:
     """Build an :class:`IRUser` from a ``users`` row and its default address.
 
-    No credential is carried: Redmine salts and hashes with SHA1 and Specivo
-    uses bcrypt, so the loader gives every imported account an unusable password
-    and reports the logins that need one set.
+    The credential is carried as Redmine's raw salt and hash (see
+    :func:`extract_credential`). Whether it is kept is the loader's call: only
+    with ``--import-passwords`` and the algorithm enabled, and never for an
+    administrator.
     """
     return IRUser(
         source_ref=str(row["id"]),
@@ -493,6 +516,10 @@ def extract_user(row: dict[str, Any], email: str | None = None) -> IRUser:
         last_login_at=as_utc(row.get("last_login_on")),
         created_at=as_utc(row.get("created_on")),
         updated_at=as_utc(row.get("updated_on")),
+        credential=extract_credential(row),
+        must_change_password=bool(row.get("must_change_passwd")),
+        password_changed_at=as_utc(row.get("passwd_changed_on")),
+        external_auth=row.get("auth_source_id") is not None,
     )
 
 

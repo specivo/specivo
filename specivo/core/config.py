@@ -1,5 +1,6 @@
 """Application configuration via pydantic-settings."""
 
+from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.metadata import version as _pkg_version
 
@@ -17,6 +18,7 @@ def _default_available_languages() -> list[str]:
     from specivo.core.locales import get_available_locales
 
     return get_available_locales()
+
 
 _ALLOWED_FTS_LANGUAGES: frozenset[str] = frozenset(
     {
@@ -82,6 +84,19 @@ class Settings(BaseSettings):
 
     # Password policy
     password_min_length: int = 8  # minimum 6, enforced by validator
+
+    # Legacy password hashes — accounts imported from another system keep their
+    # password until their first sign-in, which replaces the hash with a native
+    # bcrypt one. See ``specivo.services.password_hashers``.
+    # Dotted paths to extra hasher classes, for a hasher shipped as one module
+    # rather than as a plugin (``INSTALLED_PLUGINS``).
+    password_hashers: list[str] = []
+    # Allowlist of legacy algorithm ids that may verify a sign-in, and that the
+    # importer may store. Empty: no legacy hash ever verifies.
+    legacy_password_algorithms: list[str] = []
+    # After this moment no legacy hash verifies, and the owners of the accounts
+    # still holding one have to use password recovery. A naive value is UTC.
+    legacy_password_hashes_expire_at: datetime | None = None
 
     # App
     debug: bool = False
@@ -199,6 +214,13 @@ class Settings(BaseSettings):
     def validate_password_min_length(cls, v: int) -> int:
         if v < 6:
             raise ValueError("password_min_length must be at least 6")
+        return v
+
+    @field_validator("legacy_password_hashes_expire_at")
+    @classmethod
+    def legacy_cutoff_is_aware(cls, v: datetime | None) -> datetime | None:
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=UTC)
         return v
 
     @field_validator("cors_origins", mode="before")

@@ -118,6 +118,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Reuse an existing status, tracker or priority of the same name instead of creating a second one.",
     )
     mapping.add_argument(
+        "--import-passwords",
+        action="store_true",
+        help=(
+            "Let imported accounts keep their Redmine password until their first sign-in, which upgrades it. "
+            "Requires redmine_sha1 in LEGACY_PASSWORD_ALGORITHMS. Administrators and LDAP accounts always "
+            "set a new password. Without this flag every account does."
+        ),
+    )
+    mapping.add_argument(
         "--flatten-excess-depth",
         action="store_true",
         help="Import projects nested deeper than Specivo allows by re-parenting them higher up.",
@@ -152,6 +161,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 async def _run(args: argparse.Namespace) -> int:
     from specivo.core.database import get_session_factory
+    from specivo.core.plugin_manager import bootstrap
     from specivo.importers.core.pipeline import ImportOptions, ImportPhase, ImportPipeline
     from specivo.importers.core.progress import CliProgressReporter
     from specivo.importers.load.registry import register_all
@@ -165,6 +175,10 @@ async def _run(args: argparse.Namespace) -> int:
             known = ", ".join(phase.value for phase in ImportPhase)
             logger.error("Unknown phase %r. Known phases: %s", args.stop_after_phase, known)
             return 2
+
+    # Load plugins the way the web app does, so a password hasher a plugin
+    # provides is available to the import as well as to sign-in.
+    bootstrap()
 
     adapter = RedmineSourceAdapter(
         source_db_url=args.source_db_url,
@@ -188,6 +202,7 @@ async def _run(args: argparse.Namespace) -> int:
         cf_key_map=_parse_map(args.cf_key_map),
         flatten_excess_depth=args.flatten_excess_depth,
         merge_duplicate_statuses=args.merge_duplicate_statuses,
+        import_passwords=args.import_passwords,
     )
 
     if args.source_files_dir is None:

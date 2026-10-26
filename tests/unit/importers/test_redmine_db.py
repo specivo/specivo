@@ -168,7 +168,9 @@ class TestTableDefinitions:
         assert "value" in db.journal_details.c
         assert "new_value" not in db.journal_details.c
 
-    def test_no_credential_columns_are_declared(self):
-        """Nothing reads password material, so nothing exposes it."""
-        for forbidden in ("hashed_password", "salt", "twofa_totp_key"):
+    def test_only_the_password_columns_the_hasher_needs_are_declared(self):
+        """The salted hash is read for an opt-in password import; nothing else is."""
+        for needed in ("hashed_password", "salt", "auth_source_id"):
+            assert needed in db.users.c
+        for forbidden in ("twofa_scheme", "twofa_totp_key", "twofa_totp_last_used_at"):
             assert forbidden not in db.users.c

@@ -74,6 +74,7 @@ class AuditEvent(StrEnum):
     PASSWORD_RESET_FAILED = "password_reset_failed"
     PASSWORD_CHANGED = "password_changed"
     PASSWORD_CHANGE_FAILED = "password_change_failed"
+    PASSWORD_HASH_UPGRADED = "password_hash_upgraded"
     PROJECT_ANONYMOUS_PERMISSIONS_CHANGED = "project_anonymous_permissions_changed"
     ANONYMOUS_ACCESS_SWITCH_CHANGED = "anonymous_access_switch_changed"
 
@@ -601,6 +602,32 @@ class SecurityAuditService:
             request_id=info["request_id"],
             user_agent=info["user_agent"],
             details={"revoked_sessions": revoked_sessions},
+        )
+        session.add(log)
+        await session.flush()
+        return log
+
+    async def log_password_hash_upgraded(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        request: Request | None = None,
+        from_algorithm: str = "unknown",
+    ) -> SecurityAuditLog:
+        """Log that a stored password hash was replaced with a native one. Core feature.
+
+        Written when a sign-in (or a password change) verified a legacy or
+        outdated hash and re-hashed it. *from_algorithm* is the id it was
+        stored under; the hash itself is never recorded.
+        """
+        info = self._extract_request_info(request)
+        log = SecurityAuditLog(
+            event_type=AuditEvent.PASSWORD_HASH_UPGRADED,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"from_algorithm": from_algorithm},
         )
         session.add(log)
         await session.flush()

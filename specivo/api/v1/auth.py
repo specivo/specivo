@@ -150,7 +150,7 @@ async def login(
     ip = request.client.host if request.client else None
 
     try:
-        access_token, refresh_token = await _service.login(
+        result = await _service.login(
             session=db,
             login_or_email=body.login,
             password=body.password,
@@ -176,16 +176,21 @@ async def login(
             pass  # Non-critical — never block error response
         raise
 
-    # Log successful login
-    try:
-        import jwt as pyjwt
+    access_token, refresh_token = result.access_token, result.refresh_token
 
+    # Log successful login, and the hash upgrade it carried out if any.
+    try:
         from specivo.services.security_audit_service import SecurityAuditService
 
-        payload = pyjwt.decode(access_token, settings.secret_key, algorithms=["HS256"])
-        user_id = int(payload.get("sub", 0))
         audit = SecurityAuditService()
-        await audit.log_login_success(session=db, user_id=user_id, request=request)
+        await audit.log_login_success(session=db, user_id=result.user_id, request=request)
+        if result.hash_upgraded_from is not None:
+            await audit.log_password_hash_upgraded(
+                session=db,
+                user_id=result.user_id,
+                request=request,
+                from_algorithm=result.hash_upgraded_from,
+            )
     except Exception:
         pass  # Non-critical — never block login
 
@@ -472,7 +477,7 @@ async def change_password(
     audit = SecurityAuditService()
 
     try:
-        await _service.change_password(
+        hash_upgraded_from = await _service.change_password(
             session=db,
             user=current_user,
             current_password=body.current_password,
@@ -502,6 +507,13 @@ async def change_password(
     )
 
     try:
+        if hash_upgraded_from is not None:
+            await audit.log_password_hash_upgraded(
+                session=db,
+                user_id=current_user.id,
+                request=request,
+                from_algorithm=hash_upgraded_from,
+            )
         await audit.log_password_changed(
             session=db,
             user_id=current_user.id,

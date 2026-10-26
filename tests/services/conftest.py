@@ -68,8 +68,10 @@ class FakeAdapter:
         dropped: dict[str, list[str]] | None = None,
         source_format: str = "textile",
         source_system: str = "redmine",
+        credential_algorithms: tuple[str, ...] = (),
     ) -> None:
         self.source_system = source_system
+        self.credential_algorithms = credential_algorithms
         self.source_instance = "tracker.example.org"
         self.lookups = lookups or IRLookups()
         self.users = users or []

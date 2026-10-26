@@ -59,6 +59,24 @@ registered = make_user('fixture_new', 'Registered', 'Account', User::STATUS_REGI
 # A non-Latin display name, to catch encoding assumptions.
 thai = make_user('fixture_thai', 'ผู้ใช้', 'ทดสอบ', User::STATUS_ACTIVE)
 
+# Asked by Redmine to change its password at next sign-in, which an import that
+# keeps passwords has to carry over.
+registered.update!(must_change_passwd: true)
+
+# An account that signs in through a directory. Redmine never checks its local
+# hash, so the importer must not carry one. The host is never contacted.
+directory = AuthSourceLdap.create!(
+  name: 'Fixture Directory',
+  host: 'ldap.example.invalid',
+  port: 389,
+  base_dn: 'dc=example,dc=invalid',
+  attr_login: 'uid'
+)
+ldap_user = User.new(login: 'fixture_ldap', firstname: 'Directory', lastname: 'Account', language: 'en')
+ldap_user.auth_source = directory
+ldap_user.mail = 'fixture_ldap@example.invalid'
+ldap_user.save!
+
 group = Group.create!(lastname: 'Platform Team')
 group.users << developer
 group.users << thai

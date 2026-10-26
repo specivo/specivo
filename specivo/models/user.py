@@ -84,7 +84,11 @@ class User(Base, TimestampMixin):
     # --- Identity ---
     login: Mapped[str] = mapped_column(String(100), nullable=False)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
-    password_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # A native bcrypt hash (``$2b$...``), or ``<algorithm>$...`` for a hash
+    # imported from another system and verified by that legacy hasher until the
+    # first sign-in replaces it — see ``specivo.services.password_hashers``.
+    # NULL for accounts without a password (service accounts, anonymous).
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     # --- Display ---
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
