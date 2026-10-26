@@ -148,6 +148,10 @@ _IDENTIFIER_RE = re.compile(IDENTIFIER_PATTERN)
 
 # Bounds the per-query lookup; further tokens are searched as plain text.
 MAX_QUERY_IDENTIFIERS = 10
+# Longest search query (characters) parsed; the rest is ignored. Every term of
+# the free text must match, so a longer query finds nothing a shorter one
+# would not, and parsing stays cheap whatever the caller sends.
+MAX_QUERY_CHARS = 1000
 
 _PG_INT_MAX = 2**31 - 1
 
@@ -182,6 +186,7 @@ class _ParsedQuery:
 
     @classmethod
     def parse(cls, query: str) -> _ParsedQuery:
+        query = query[:MAX_QUERY_CHARS]
         identifiers = extract_identifiers(query)
         wanted = set(identifiers)
 
@@ -200,17 +205,19 @@ class _ParsedQuery:
         """Return a ``LATERAL`` FROM item exposing the tsquery as column ``query``.
 
         *cfg* is the regconfig expression for the row. Free text goes through
-        ``plainto_tsquery`` (bound as ``:query``); identifiers are ANDed in as
+        ``plainto_tsquery`` (bound as ``:query``), after ``specivo_fts_text``
+        so the parser reads it in linear time, as it does indexed text;
+        identifiers are ANDed in as
         exact lexemes (bound as ``:identifier_query``). Each operand is
         emitted only when present, since an empty tsquery operand makes
         PostgreSQL log a notice per row.
         """
         if not self.identifiers:
-            return f"plainto_tsquery({cfg}, :query) AS query"
+            return f"plainto_tsquery({cfg}, specivo_fts_text(:query)) AS query"
         identifier_query = "CAST(:identifier_query AS tsquery)"
         if not self.has_text:
             return f"(SELECT {identifier_query} AS query) AS query_src"
-        return f"(SELECT plainto_tsquery({cfg}, :query) && {identifier_query} AS query) AS query_src"
+        return f"(SELECT plainto_tsquery({cfg}, specivo_fts_text(:query)) && {identifier_query} AS query) AS query_src"
 
     def bind_params(self) -> dict[str, Any]:
         # Identifiers match [A-Za-z0-9_-] only, so quoting them as tsquery
@@ -557,7 +564,7 @@ class SearchService:
                     END as title,
                     att.filename as subtitle,
                     ts_headline(specivo_fts_config(COALESCE(ai.project_id, aw.project_id)),
-                        sc.content, query,
+                        specivo_fts_text(sc.content), query,
                         '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                     ts_rank_cd(sc.search_vector, query) as score,
                     COALESCE(ai_p.key, aw_p.key) as project_key
@@ -926,7 +933,7 @@ class SearchService:
                         i.project_key || '-' || i.sequence_number as title,
                         i.subject as subtitle,
                         ts_headline(specivo_fts_config(i.project_id),
-                            coalesce(i.description, ''), query,
+                            specivo_fts_text(i.description), query,
                             '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                         ts_rank_cd(i.search_vector, query) as score,
                         i.project_key
@@ -950,7 +957,7 @@ class SearchService:
                         wp.id,
                         wp.title,
                         wp.slug as subtitle,
-                        ts_headline(specivo_fts_config(w.project_id), wc.text, query,
+                        ts_headline(specivo_fts_config(w.project_id), specivo_fts_text(wc.text), query,
                             '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                         ts_rank_cd(wc.search_vector, query) as score,
                         p.key as project_key
@@ -985,7 +992,7 @@ class SearchService:
                         j.id,
                         ci.project_key || '-' || ci.sequence_number as title,
                         left(sc.content, {SEARCH_SNIPPET_MAX_CHARS}) as subtitle,
-                        ts_headline(specivo_fts_config(ci.project_id), sc.content, query,
+                        ts_headline(specivo_fts_config(ci.project_id), specivo_fts_text(sc.content), query,
                             '{SEARCH_FTS_HEADLINE_OPTIONS}') as snippet,
                         ts_rank_cd(sc.search_vector, query) as score,
                         ci.project_key

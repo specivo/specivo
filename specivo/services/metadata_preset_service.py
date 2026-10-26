@@ -39,7 +39,7 @@ class MetadataPresetService:
             MetadataSchema.preset_slug.isnot(None),
         )
         result = await session.execute(stmt)
-        return [row[0] for row in result.all()]
+        return [slug for (slug,) in result.all() if slug is not None]
 
     async def enable(
         self,

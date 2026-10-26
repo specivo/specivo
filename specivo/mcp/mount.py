@@ -24,9 +24,11 @@ from mcp.server.auth.middleware.bearer_auth import (
     BearerAuthBackend,
     RequireAuthMiddleware,
 )
-from mcp.server.fastmcp.server import StreamableHTTPASGIApp
 from mcp.server.sse import SseServerTransport
-from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+from mcp.server.streamable_http_manager import (
+    StreamableHTTPASGIApp,
+    StreamableHTTPSessionManager,
+)
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.middleware.authentication import AuthenticationMiddleware
@@ -35,7 +37,7 @@ from starlette.responses import Response
 from starlette.routing import Mount, Route, request_response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from specivo.mcp.auth import SpvTokenVerifier
+from specivo.mcp.auth import SpvTokenVerifier, resolve_key_owner
 from specivo.mcp.persistent_session_manager import (
     PersistentStreamableHTTPSessionManager,
 )
@@ -133,13 +135,13 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
     # before an api restart gets to keep using the same Mcp-Session-Id
     # without a client-side reconnect.
     _session_manager = PersistentStreamableHTTPSessionManager(
-        app=mcp._mcp_server,
+        app=mcp._lowlevel_server,
         event_store=None,
         json_response=False,
         stateless=False,
         store_provider=_default_store_provider,
+        owner_resolver=resolve_key_owner,
     )
-    mcp._session_manager = _session_manager
 
     streamable_asgi = StreamableHTTPASGIApp(_session_manager)
 
@@ -175,10 +177,10 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
             request.receive,
             request._send,
         ) as streams:
-            await mcp._mcp_server.run(
+            await mcp._lowlevel_server.run(
                 streams[0],
                 streams[1],
-                mcp._mcp_server.create_initialization_options(),
+                mcp._lowlevel_server.create_initialization_options(),
             )
         return Response()
 

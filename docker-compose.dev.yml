@@ -36,6 +36,16 @@ services:
       start_period: 180s
     restart: unless-stopped
 
+  # Same image as the api, so the ownership fix uses the dev build.
+  init-data:
+    image: specivo/specivo:dev
+
+  # The app runs as uid 10001 here too, as in production, so permission
+  # problems show up in development. ./specivo and ./alembic are only read
+  # (bytecode is precompiled in the image and not written back), so they only
+  # need to be world-readable, as a normal checkout is. To run as your own
+  # user instead, add `user: "<uid>:<gid>"` to the app services in an
+  # override file.
   api:
     build: .
     image: specivo/specivo:dev

@@ -8,6 +8,8 @@ is read on GitHub.
 
 - [The Redmine importer](redmine-importer.md) — how the migration framework is
   put together, how to add another source, and how to run its Redmine fixture.
+- [Security scanning with Trivy](security-scanning.md) — what CI scans, how to
+  run the same scans locally, and what to do when the release gate fails.
 
 Related, elsewhere in the repo:
 

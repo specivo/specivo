@@ -5,14 +5,86 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: read
+
+env:
+  # Trivy binary installed by trivy-action. Keep in step with trivy.yml and
+  # the local commands in docs/development/security-scanning.md.
+  TRIVY_VERSION: v0.76.1
+
 jobs:
   # Run full CI first
   ci:
     uses: ./.github/workflows/ci.yml
 
+  # Release gate: build the image for linux/amd64 without pushing it, and fail
+  # on HIGH or CRITICAL vulnerabilities that have a fixed version. Nothing is
+  # pushed unless this passes. The arm64 image is built from the same
+  # Dockerfile and lockfile, so its packages and versions are the same.
+  # See docs/development/security-scanning.md for handling a failure.
+  scan-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SCAN_IMAGE: specivo-release-scan:${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build image for scanning (amd64, not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: ${{ env.SCAN_IMAGE }}
+          cache-from: type=gha
+
+      - name: Write SARIF report
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          scan-type: image
+          image-ref: ${{ env.SCAN_IMAGE }}
+          trivy-config: trivy.yaml
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          limit-severities-for-sarif: true
+          format: sarif
+          output: trivy-image.sarif
+          exit-code: '0'
+
+      - name: Upload SARIF report
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: trivy-image-sarif
+          path: trivy-image.sarif
+          retention-days: 90
+
+      - name: Fail on fixable HIGH/CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          skip-setup-trivy: true
+          scan-type: image
+          image-ref: ${{ env.SCAN_IMAGE }}
+          trivy-config: trivy.yaml
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: '1'
+
   # Build and push Docker image to Docker Hub
   build-and-push:
-    needs: ci
+    needs: [ci, scan-image]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +126,7 @@ jobs:
 
       - name: Extract version
         id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Pull and save Docker image
         run: |

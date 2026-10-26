@@ -1,5 +1,7 @@
 """Version model — project milestones and releases for the roadmap."""
 
+from datetime import date
+
 from sqlalchemy import CheckConstraint, Date, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -52,7 +54,7 @@ class Version(Base, TimestampMixin):
 
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="open", server_default="open")
 
-    effective_date: Mapped[object] = mapped_column(Date, nullable=True)
+    effective_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     sharing: Mapped[str] = mapped_column(String(30), nullable=False, default="none", server_default="none")
 

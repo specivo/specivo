@@ -20,7 +20,7 @@ already finished its handshake before the restart never sends a second
 session is permanently stuck until a manual client reconnect.
 
 This module drives the *real* SDK ``ServerSession`` (via the production
-``mcp._mcp_server`` low-level app) end to end, unlike the heavily-mocked
+``mcp._lowlevel_server`` low-level app) end to end, unlike the heavily-mocked
 ``test_mcp_persistent_session_manager`` suite which stubs the session out
 entirely and therefore cannot observe the initialization-state machine.
 The strategy: run a full handshake on manager A, drop it (simulating the
@@ -36,7 +36,11 @@ from typing import Any
 
 import anyio
 import pytest
+from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+from mcp.server.auth.provider import AccessToken
 
+from specivo.core.constants import MCP_PENDING_CLIENT_ID
+from specivo.mcp.auth import key_principal
 from specivo.mcp.persistent_session_manager import (
     PersistentStreamableHTTPSessionManager,
 )
@@ -74,7 +78,23 @@ def _scope(session_id: str | None) -> dict[str, Any]:
         "path": "/",
         "headers": headers,
         "query_string": b"",
+        # What the auth middleware attaches for a valid ``Bearer spv_...`` key.
+        "user": AuthenticatedUser(
+            AccessToken(
+                token=_KEY,
+                client_id=MCP_PENDING_CLIENT_ID,
+                scopes=["mcp"],
+                subject=key_principal(_KEY),
+            )
+        ),
     }
+
+
+_KEY = "spv_rehydration_state_key"
+
+
+async def _resolve_owner(raw_key: str) -> tuple[int, int] | None:
+    return (1, 2) if raw_key == _KEY else None
 
 
 def _make_receive(body: dict[str, Any]):  # type: ignore[no-untyped-def]
@@ -125,13 +145,14 @@ def _make_manager(store: RedisSessionStore) -> PersistentStreamableHTTPSessionMa
         return store
 
     return PersistentStreamableHTTPSessionManager(
-        app=mcp._mcp_server,
+        app=mcp._lowlevel_server,
         event_store=None,
         # JSON responses make the reply a single parseable object instead of
         # an SSE stream, which keeps the test plumbing simple.
         json_response=True,
         stateless=False,
         store_provider=provider,
+        owner_resolver=_resolve_owner,
     )
 
 

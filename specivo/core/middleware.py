@@ -426,6 +426,32 @@ class RequestIDMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+class MarkdownRenderBudgetMiddleware:
+    """Give each HTTP request its own budget of CPU time for rendering Markdown.
+
+    Every Markdown field rendered while handling the request (a description,
+    each comment, each history entry) draws on the same budget, so a page of
+    many fields cannot multiply the per-field limit. See
+    ``specivo.services.markdown_budget``.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        from specivo.services.markdown_budget import end_request_budget, start_request_budget
+
+        token = start_request_budget()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            end_request_budget(token)
+
+
 class LocaleMiddleware:
     """Set the active locale for each request based on user preference, cookie, or Accept-Language.
 

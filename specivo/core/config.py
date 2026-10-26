@@ -197,6 +197,18 @@ class Settings(BaseSettings):
     search_hnsw_ef_search: int = Field(default=100, ge=10, le=1000)
     search_semantic_overfetch: int = Field(default=4, ge=1, le=50)
 
+    # CPU seconds one Markdown field may use to render before it is abandoned
+    # and shown as plain text; the wall-clock ceiling is 4x this. A backstop:
+    # the pre-scan in markdown_budget rejects costly text before rendering.
+    # The slowest realistic page measured (250 KB) needs about 0.4 s of CPU
+    # on a current laptop and the slowest text the pre-scan admits 0.75 s, so
+    # 2 s leaves 5x and 2.7x. CPU time is not inflated by load on the host.
+    markdown_render_deadline_seconds: float = Field(default=2.0, gt=0)
+    # CPU seconds all the Markdown fields rendered for one request may use
+    # together (description, comments, history); later fields are shown as
+    # plain text once it is spent. 2.5x the per-field deadline.
+    markdown_render_request_budget_seconds: float = Field(default=5.0, gt=0)
+
     # Timeouts
     smtp_timeout: int = 30
     webhook_timeout: int = 30

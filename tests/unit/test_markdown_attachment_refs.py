@@ -10,8 +10,11 @@ from __future__ import annotations
 import pytest
 
 from specivo.services.markdown_service import render_wiki_markdown
+from tests.fixtures.markdown_inputs import CATASTROPHE_SECONDS, LINEAR_RATIO_LIMIT, cpu_time, scaling_ratio
 
 pytestmark = pytest.mark.unit
+
+FALLBACK = 'class="sp-markdown-fallback"'
 
 ATTACHMENTS = {
     "spec.pdf": "/api/v1/attachments/1/download/",
@@ -110,31 +113,30 @@ def test_filenames_in_code_stay_as_written(source):
     assert "chart.png" in html
 
 
-@pytest.mark.parametrize(
-    "source",
-    [
-        "[a](" + "x " * 20000,
-        "![a](" + "x " * 20000,
-        "[a](" + " " * 40000,
-        "[a](" + 'spec.pdf "' * 5000,
-        "[a](<" + "x " * 20000,
-        ("[a](" + "x " * 200 + "\n") * 100,
-        "[a](x" + " " * 20000 + "y",
-    ],
-    ids=[
-        "words",
-        "image-words",
-        "spaces",
-        "unclosed-titles",
-        "unclosed-angle",
-        "many-lines",
-        "spaces-before-word",
-    ],
-)
-def test_unterminated_targets_render_in_linear_time(source):
-    """Regression: a backtracking target pattern made these take seconds or more."""
-    import time
+# Each builder makes an unterminated link target that grows with *k*.
+_UNTERMINATED_TARGETS = {
+    "words": lambda k: "[a](" + "x " * (5000 * k),
+    "image-words": lambda k: "![a](" + "x " * (5000 * k),
+    "spaces": lambda k: "[a](" + " " * (10000 * k),
+    "unclosed-titles": lambda k: "[a](" + 'spec.pdf "' * (1250 * k),
+    "unclosed-angle": lambda k: "[a](<" + "x " * (5000 * k),
+    "many-lines": lambda k: ("[a](" + "x " * (50 * k) + "\n") * 100,
+    "spaces-before-word": lambda k: "[a](x" + " " * (5000 * k) + "y",
+}
 
-    started = time.perf_counter()
-    render(source)
-    assert time.perf_counter() - started < 1.0
+
+@pytest.mark.parametrize("name", list(_UNTERMINATED_TARGETS))
+def test_unterminated_targets_render_in_linear_time(name):
+    """Regression: a backtracking target pattern made these take seconds or more.
+
+    Measured as scaling (CPU time at 4x the size), not as absolute time, so a
+    slow or busy machine cannot fail it.
+    """
+    build = _UNTERMINATED_TARGETS[name]
+    assert scaling_ratio(render, build(1), build(4)) < LINEAR_RATIO_LIMIT
+    assert cpu_time(lambda: render(build(16)), repeat=1) < CATASTROPHE_SECONDS
+
+
+def test_many_unterminated_targets_in_one_paragraph_are_not_rendered():
+    """Python-Markdown rescans the paragraph once per unclosed target; the render budget stops that."""
+    assert FALLBACK in render(("[a](" + "x " * 200 + "\n") * 1000)

@@ -28,10 +28,12 @@ for a deployment you rely on, pin an explicit tag so you know exactly what is ru
 
 ```bash
 docker compose pull
+docker compose stop api celery-worker celery-embeddings celery-beat
 docker compose up -d
 ```
 
-`pull` fetches the new image; `up -d` recreates the containers. On startup the entrypoint waits for
+`pull` fetches the new image; `stop` stops the app containers so that none is running while the
+one-shot `init-data` service prepares the data directory; `up -d` recreates the containers. On startup the entrypoint waits for
 the database and applies any new migrations automatically — you do not run a migrate step yourself.
 
 Watch the API logs to confirm a clean start:
@@ -68,8 +70,44 @@ docker compose up -d
 
 ## Upgrading to 0.9.0
 
-Version 0.9.0 adds seven migrations (0033 to 0039), which the entrypoint applies on startup like any
+Version 0.9.0 adds eight migrations (0033 to 0040), which the entrypoint applies on startup like any
 other. Most of it needs no action, but a few things are worth doing or checking afterwards.
+
+### The containers no longer run as root
+
+The `api` and Celery containers, and the commands you run with `docker compose exec api ...`, now
+run as the unprivileged user `specivo` (UID/GID `10001`). Take the new `docker-compose.yml`: its
+`init-data` service runs once as root before `api` starts. It gives the app its own subdirectories
+of the data directory, `attachments/`, `avatars/`, `models/`, `state/` and `logs/app/`, including
+the files an older version wrote there as root, and moves `.bootstrap.json` into `state/` if it is
+still there. On the first start this can take a moment on a large attachments folder; later starts
+skip directories that already belong to the app.
+
+- Stop the app containers before `docker compose up -d`, as in
+  [Pull and restart](#2-pull-and-restart): `init-data` must not run while an old `celery-worker`,
+  `celery-embeddings` or `celery-beat` container is still up.
+- It does not enter directories the app already owns. If it reports one that holds files of root,
+  stop all app containers and run `docker compose run --rm init-data fix-permissions --all`.
+
+- The data directory itself stays with root (or with you), as do `logs/`, `postgresql/`, `redis/`
+  and `logs/nginx/`: the app cannot change entries at the top of the data directory.
+- The app's log file moves from `logs/specivo.log` to `logs/app/specivo.log`. The old file is left
+  where it is; delete it when you no longer need it.
+- If one of the app directories is a symlink, sits on another filesystem or belongs to another
+  user, `init-data` leaves it alone and logs a warning. Mount the target at that path instead of
+  symlinking, or run `sudo chown -R 10001:10001` on it yourself.
+- If you keep your own Compose file, add the `init-data` service and make `api` depend on it, or
+  prepare the directories yourself before you start the new image:
+  `cd <SPECIVO_DATA_DIR> && sudo mkdir -p attachments avatars models state logs/app` and
+  `sudo chown -R 10001:10001 attachments avatars models state logs/app`.
+  Without that the api logs a warning at start and uploads fail.
+- Other host directories mounted into the app containers (custom theme or error-page folders, a
+  Redmine `files` directory for the importer) must be readable by UID `10001`.
+- To run with no root step at all, set `user: "10001:10001"` on `init-data`, `api` and the Celery
+  services in `docker-compose.override.yml`; `init-data` then changes nothing. The image also
+  works with a read-only root filesystem (`read_only: true` plus a `tmpfs` for `/tmp`).
+- The image now has its own `HEALTHCHECK`, so `docker ps` shows the health of every Specivo
+  container.
 
 ### Rebuild the search index
 

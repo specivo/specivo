@@ -3,7 +3,7 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [0.9.0] - YYYY-MM-DD
+## [0.9.0] - 2026-10-26
 
 ### Added
 - **Imported users keep their passwords** — with `--import-passwords`, Redmine password hashes come across and are upgraded to bcrypt on first sign-in. Off by default; admins and LDAP accounts still reset
@@ -21,6 +21,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **New `celery-embeddings` service** runs embedding jobs in one process, so the model is loaded once. Custom compose files need it, or `EMBEDDING_QUEUE=celery`
 - Only the bundled local embedding model is supported; the endpoint for registering other models is removed
 - Change password, sign out and session revocation need a CSRF token when called with a session cookie
+- MCP: an unexpected server error in a tool call is reported as "Internal error while executing tool" instead of the raw exception text, request bodies are capped at 4 MiB (HTTP 413), and `serverInfo.version` reports the Specivo version
 - Markdown fields are limited to 262,144 characters; text too complex to render quickly is shown as plain text
 - Relative times stay relative for the first 24 hours instead of switching to "Yesterday" at midnight
 - `specivo.cli.import_redmine` is replaced by `specivo.cli.import_data --source redmine`
@@ -36,20 +37,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - The remaining untranslated interface text, and dates now follow the interface language
 - Keyword search returned short pages after the first one
 - Comments saved in the same moment could appear out of order
+- Large wiki pages could show as plain text on a busy server; Markdown render limits now count CPU time, per field and per request (`MARKDOWN_RENDER_DEADLINE_SECONDS`, `MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS`)
 
 ### Security
 - Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
 - Attachments of deleted wiki pages stayed searchable
 - Crafted Markdown could keep a worker busy for minutes on every view, and deeply nested lists caused errors
+- Text with many unclosed `<!--` took minutes to index and to show in search results, and long search queries could fail
 - Time entries could be read, logged and edited without the matching permissions, and timers started in any project
 - Shared versions of private projects were not filtered by access
 - A very deep search offset could make the database rank millions of rows
 - Indexing errors could write content to the logs
+- The app containers ran as root; they now run as UID 10001, which owns only its own subdirectories of the data directory. A one-shot `init-data` service prepares them without following symlinks or hard links. Custom compose files need it (see Upgrading)
+- An MCP session could be resumed with a different API key, or after its key was revoked, by anyone who knew the session id; MCP tool errors could expose internal exception text
 
 ### Internal
-- Migrations 0033–0039: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently) and a single default embedding model. **Run a search reindex after upgrading** (Administration → Settings)
+- Migrations 0033–0040: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently), a single default embedding model and linear-time indexing of unclosed HTML comments. **Run a search reindex after upgrading** (Administration → Settings)
 - Plugins load in the web app, the import CLI and the Celery workers through one shared bootstrap
-- Python-Markdown upgraded to 3.11.2
+- All dependencies upgraded to their latest versions, including the MCP SDK 2.x, Pillow 13 and PyJWT 2.15 (clears all open security advisories)
+- Trivy scans in CI: a release gate on the image (fixable HIGH/CRITICAL vulnerabilities block the push to Docker Hub), and report-only repository and published-image scans in GitHub code scanning
 
 ## [0.8.0] - 2026-09-29
 

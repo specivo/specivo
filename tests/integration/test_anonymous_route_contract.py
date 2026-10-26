@@ -24,7 +24,6 @@ import re
 
 import pytest
 import pytest_asyncio
-from fastapi.routing import APIRoute
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +35,7 @@ from specivo.services.anonymous_access_service import (
 )
 from specivo.services.permission_service import Permission
 from specivo.testing.conftest_base import _test_app
+from specivo.testing.routes import iter_api_routes
 from specivo.web.deps import ANONYMOUS_WEB_ROUTES, get_web_reader
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory
@@ -64,11 +64,7 @@ def _reader_routes() -> dict[str, set[str]]:
             return True
         return any(uses_reader(sub) for sub in dependant.dependencies)
 
-    return {
-        route.path: set(route.methods)
-        for route in _test_app.routes
-        if isinstance(route, APIRoute) and uses_reader(route.dependant)
-    }
+    return {route.path: set(route.methods) for route in iter_api_routes(_test_app) if uses_reader(route.dependant)}
 
 
 # ---------------------------------------------------------------------------
@@ -113,11 +109,7 @@ def _web_reader_routes() -> dict[str, set[str]]:
             return True
         return any(uses_web_reader(sub) for sub in dependant.dependencies)
 
-    return {
-        route.path: set(route.methods)
-        for route in _test_app.routes
-        if isinstance(route, APIRoute) and uses_web_reader(route.dependant)
-    }
+    return {route.path: set(route.methods) for route in iter_api_routes(_test_app) if uses_web_reader(route.dependant)}
 
 
 def test_web_reader_routes_match_the_declared_allowlist() -> None:
@@ -166,8 +158,8 @@ async def anonymous_access_live(db_session: AsyncSession) -> Project:
 def _mutating_api_routes() -> list[tuple[str, str]]:
     """Every non-GET API route, as ``(method, concrete path)`` pairs."""
     out: list[tuple[str, str]] = []
-    for route in _test_app.routes:
-        if not isinstance(route, APIRoute) or not route.path.startswith("/api/v1"):
+    for route in iter_api_routes(_test_app):
+        if not route.path.startswith("/api/v1"):
             continue
         if route.path.startswith(_AUTH_PREFIX):
             continue

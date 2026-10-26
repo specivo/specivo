@@ -11,7 +11,19 @@ normally.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
+
 from specivo.services.markdown_budget import MAX_MARKDOWN_CHARS
+
+# A render of anything in this module, even the worst case, must finish within
+# this many seconds on any machine. It only catches a regression to the
+# minutes these inputs took before the guard; the timing properties are
+# tested by scaling (``scaling_ratio``), not by absolute time.
+CATASTROPHE_SECONDS = 10.0
+
+# t(4n) / t(n) for linear work is about 4 and for quadratic work about 16.
+LINEAR_RATIO_LIMIT = 8.0
 
 
 def fill(unit: str, prefix: str = "", suffix: str = "", size: int = MAX_MARKDOWN_CHARS) -> str:
@@ -96,3 +108,27 @@ def large_page(size: int = 200 * 1024) -> str:
         total += len(part)
         i += 1
     return "".join(parts)
+
+
+def cpu_time(func: Callable[[], object], repeat: int = 3) -> float:
+    """Best-of-*repeat* CPU time of ``func()`` on this thread, in seconds.
+
+    CPU time of the calling thread does not grow when other processes compete
+    for the CPU, and the best of a few runs drops one-off pauses.
+    """
+    best = float("inf")
+    for _ in range(repeat):
+        started = time.thread_time()
+        func()
+        best = min(best, time.thread_time() - started)
+    return best
+
+
+def scaling_ratio(func: Callable[[str], object], small: str, large: str) -> float:
+    """How much longer ``func(large)`` takes than ``func(small)``, in CPU time.
+
+    Times below 2 ms are rounded up to 2 ms, so timer resolution cannot make a
+    fast input look super-linear.
+    """
+    floor = 0.002
+    return max(cpu_time(lambda: func(large)), floor) / max(cpu_time(lambda: func(small)), floor)

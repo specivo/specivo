@@ -16,11 +16,17 @@ without extra infrastructure.
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 import anyio
 import pytest
+from mcp.server.auth.middleware.bearer_auth import AuthenticatedUser
+from mcp.server.auth.provider import AccessToken
 
+from specivo.core.constants import MCP_PENDING_CLIENT_ID
+from specivo.mcp.auth import key_principal
 from specivo.mcp.persistent_session_manager import (
     PersistentStreamableHTTPSessionManager,
 )
@@ -71,16 +77,19 @@ class _FakeHTTPTransport:
 class _FakeLowLevelApp:
     """Replaces ``mcp.server.lowlevel.Server`` for tests.
 
-    Its ``run()`` simply sleeps forever (until the manager's task group is
-    cancelled). We never exercise real protocol behaviour here.
+    The session manager only enters its lifespan; the per-session server
+    loop is stubbed out by the ``fake_serve_session`` fixture. We never
+    exercise real protocol behaviour here.
     """
 
-    def create_initialization_options(self) -> dict[str, Any]:
-        return {}
+    @asynccontextmanager
+    async def lifespan(self, _server: Any) -> AsyncIterator[dict[str, Any]]:
+        yield {}
 
-    async def run(self, *_args: Any, **_kwargs: Any) -> None:
-        # Block until the manager cancels the task group.
-        await anyio.sleep_forever()
+
+async def _fake_serve_session(*_args: Any, **_kwargs: Any) -> None:
+    # Block until the manager cancels the task group.
+    await anyio.sleep_forever()
 
 
 # ---------------------------------------------------------------------------
@@ -88,17 +97,43 @@ class _FakeLowLevelApp:
 # ---------------------------------------------------------------------------
 
 
-def _make_scope(session_id: str | None = None) -> dict[str, Any]:
+# Test API keys and the (api_key_id, user_id) owner each resolves to. The
+# revoked key resolves to nothing, as ``resolve_key_owner`` does for a key
+# that is revoked, expired or whose user is deactivated.
+KEY_A = "spv_key_owner_a"
+KEY_SAME_USER = "spv_key_same_user_other_key"
+KEY_OTHER_USER = "spv_key_other_user"
+KEY_REVOKED = "spv_key_revoked"
+_OWNERS: dict[str, tuple[int, int]] = {
+    KEY_A: (1, 2),
+    KEY_SAME_USER: (3, 2),
+    KEY_OTHER_USER: (4, 5),
+}
+_NO_KEY = ""
+
+
+def _make_scope(session_id: str | None = None, key: str = KEY_A) -> dict[str, Any]:
     headers: list[tuple[bytes, bytes]] = [(b"user-agent", b"pytest-mcp")]
     if session_id is not None:
         headers.append((b"mcp-session-id", session_id.encode("ascii")))
-    return {
+    scope: dict[str, Any] = {
         "type": "http",
         "method": "POST",
         "path": "/",
         "headers": headers,
         "query_string": b"",
     }
+    if key != _NO_KEY:
+        # What ``AuthenticationMiddleware`` + ``SpvTokenVerifier`` attach.
+        scope["user"] = AuthenticatedUser(
+            AccessToken(
+                token=key,
+                client_id=MCP_PENDING_CLIENT_ID,
+                scopes=["mcp"],
+                subject=key_principal(key),
+            )
+        )
+    return scope
 
 
 class _Sender:
@@ -131,6 +166,14 @@ async def _noop_receive() -> dict[str, Any]:  # pragma: no cover - never awaited
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def fake_serve_session(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Replace the SDK server loop that drives each session."""
+    import specivo.mcp.persistent_session_manager as mod
+
+    monkeypatch.setattr(mod, "_serve_session", _fake_serve_session)
+
+
 @pytest.fixture
 def patch_transport(monkeypatch: pytest.MonkeyPatch) -> None:
     """Replace the real StreamableHTTPServerTransport the manager creates."""
@@ -161,7 +204,12 @@ def _make_manager(
         json_response=False,
         stateless=False,
         store_provider=provider,
+        owner_resolver=_resolve_owner,
     )
+
+
+async def _resolve_owner(raw_key: str) -> tuple[int, int] | None:
+    return _OWNERS.get(raw_key)
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +250,9 @@ async def test_new_session_is_persisted_to_redis(
         assert entry is not None
         assert entry["transport"] == "streamable_http"
         assert entry["user_agent"] == "pytest-mcp"
+        # The owner is persisted so a rehydration can verify it.
+        assert entry["api_key_id"] == "1"
+        assert entry["user_id"] == "2"
 
     assert send.status == 200
 
@@ -240,7 +291,7 @@ async def test_session_survives_manager_restart(
 ) -> None:
     """Client session id keeps working after the session manager is replaced.
 
-    This is the literal fix for SPECIVO-147: before this change,
+    This is the literal fix for the restart bug: before this change,
     restarting the api dropped every live MCP session and clients had to
     manually reconnect. The fix persists session ids in Redis and rehydrates
     a fresh transport on demand when a previously known id comes back.
@@ -414,3 +465,99 @@ async def test_long_lived_request_does_not_block_other_sessions(
             assert send_b.status == 200
             assert len(manager._server_instances) == 2
             tg.cancel_scope.cancel()
+
+
+# ---------------------------------------------------------------------------
+# Session ownership: a session id alone must never resume a session
+# ---------------------------------------------------------------------------
+
+
+async def _rehydrate(store: RedisSessionStore, session_id: str, key: str) -> _Sender:
+    """Replay *session_id* with *key* on a fresh manager (as after a restart)."""
+    manager = _make_manager(store)
+    send = _Sender()
+    async with manager.run():
+        await manager._handle_stateful_request(_make_scope(session_id, key=key), _noop_receive, send)
+        if send.status == 404:
+            assert session_id not in manager._server_instances
+    return send
+
+
+async def _open_session(store: RedisSessionStore) -> str:
+    """Open a session with KEY_A on one manager, then let that manager die."""
+    manager = _make_manager(store)
+    async with manager.run():
+        await manager._handle_stateful_request(_make_scope(None, key=KEY_A), _noop_receive, _Sender())
+        return next(iter(manager._server_instances))
+
+
+def _assert_not_found(send: _Sender) -> None:
+    # Byte-for-byte the answer for an id that never existed.
+    assert send.status == 404
+    assert b"Session not found" in send.body
+
+
+@pytest.mark.unit
+async def test_owner_key_can_rehydrate(patch_transport: None, store: RedisSessionStore) -> None:
+    session_id = await _open_session(store)
+    send = await _rehydrate(store, session_id, KEY_A)
+    assert send.status == 200
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize(
+    "key",
+    [KEY_SAME_USER, KEY_OTHER_USER, _NO_KEY],
+    ids=["different-key-same-user", "different-user", "no-key"],
+)
+async def test_foreign_credential_cannot_rehydrate(
+    patch_transport: None, store: RedisSessionStore, key: str
+) -> None:
+    session_id = await _open_session(store)
+    _assert_not_found(await _rehydrate(store, session_id, key))
+    # The refused attempt did not destroy the owner's session.
+    assert (await _rehydrate(store, session_id, KEY_A)).status == 200
+
+
+@pytest.mark.unit
+async def test_legacy_entry_without_owner_is_refused(patch_transport: None, store: RedisSessionStore) -> None:
+    await store.create("legacy", {"transport": "streamable_http"})
+    _assert_not_found(await _rehydrate(store, "legacy", KEY_A))
+
+
+@pytest.mark.unit
+async def test_revoked_key_cannot_rehydrate(patch_transport: None, store: RedisSessionStore) -> None:
+    # The session was opened by a key that has since been revoked: the DB
+    # check behind the resolver no longer maps it to an owner.
+    await store.create("revoked", {"api_key_id": 9, "user_id": 2})
+    _assert_not_found(await _rehydrate(store, "revoked", KEY_REVOKED))
+
+
+@pytest.mark.unit
+async def test_session_from_unverified_key_is_not_persisted(patch_transport: None, store: RedisSessionStore) -> None:
+    manager = _make_manager(store)
+    async with manager.run():
+        await manager._handle_stateful_request(_make_scope(None, key=KEY_REVOKED), _noop_receive, _Sender())
+        session_id = next(iter(manager._server_instances))
+        assert await store.peek(session_id) is None
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("key", [KEY_SAME_USER, _NO_KEY], ids=["different-key", "no-key"])
+async def test_live_session_rejects_foreign_credential(
+    patch_transport: None, store: RedisSessionStore, key: str
+) -> None:
+    manager = _make_manager(store)
+    async with manager.run():
+        await manager._handle_stateful_request(_make_scope(None, key=KEY_A), _noop_receive, _Sender())
+        session_id = next(iter(manager._server_instances))
+        transport = manager._server_instances[session_id]
+
+        send = _Sender()
+        await manager._handle_stateful_request(_make_scope(session_id, key=key), _noop_receive, send)
+        _assert_not_found(send)
+        assert len(transport.handled) == 1  # only the opening request reached it
+
+        owner = _Sender()
+        await manager._handle_stateful_request(_make_scope(session_id, key=KEY_A), _noop_receive, owner)
+        assert owner.status == 200

@@ -39,10 +39,19 @@ Open http://localhost:9933
 ## What happens on first start
 
 1. PostgreSQL and Redis start
-2. Database migrations run automatically
-3. Default data (roles, statuses, priorities) is seeded
-4. Admin account is created (from your configure answers)
-5. API starts on port 8000, nginx proxies on port 9933
+2. `init-data` creates the app's folders in the data directory (`attachments`, `avatars`, `models`,
+   `state`, `logs/app`), gives them to the app user (UID/GID `10001`) and exits; the data directory
+   itself stays yours. The app containers then run as that user, not root
+3. Database migrations run automatically
+4. Default data (roles, statuses, priorities) is seeded
+5. Admin account is created (from your configure answers)
+6. API starts on port 8000, nginx proxies on port 9933
+
+If you mount other host directories into the app containers, or point the data directory at an
+existing folder, make them readable (and, for uploads, writable) by that user:
+`sudo chown -R 10001:10001 <dir>`. To run without any root step, set `user: "10001:10001"` on the
+`init-data`, `api` and Celery services in `docker-compose.override.yml`; see "Container user" in
+`docs/deployment.md`.
 
 ## Multiple instances on one host
 

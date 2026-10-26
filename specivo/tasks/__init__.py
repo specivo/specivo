@@ -9,6 +9,8 @@ import os
 from celery import Celery
 from celery.signals import worker_init  # type: ignore[import-untyped]
 
+from specivo.core.celery_beat import default_schedule_file
+
 # Use REDIS_URL env var directly for the broker — avoids triggering
 # pydantic-settings validation (which requires SECRET_KEY etc.) at import time.
 _broker = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
@@ -39,6 +41,10 @@ celery_app.config_from_object(
             "specivo.tasks.embeddings.embed_search_sources": {"queue": EMBEDDING_QUEUE},
             "specivo.tasks.embeddings.backfill_model_embeddings": {"queue": EMBEDDING_QUEUE},
         },
+        # Beat's schedule (a pickle) lives in a private 0700 directory, never in
+        # the working directory or a shared temp dir; see specivo/core/celery_beat.py.
+        "beat_scheduler": "specivo.core.celery_beat:PrivateStateScheduler",
+        "beat_schedule_filename": default_schedule_file(),
         "beat_schedule": {
             "cleanup-expired-tokens": {
                 "task": "specivo.tasks.cleanup.cleanup_expired_tokens",

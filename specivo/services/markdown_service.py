@@ -39,7 +39,14 @@ from markdown.extensions import Extension  # type: ignore[import-untyped]
 from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
 
 from specivo.core.i18n import gettext as _
-from specivo.services.markdown_budget import RenderDeadline, RenderDeadlineError, render_hazard
+from specivo.services import markdown_budget
+from specivo.services.markdown_budget import (
+    RenderDeadline,
+    RenderDeadlineError,
+    charge_render,
+    render_allowance,
+    render_hazard,
+)
 from specivo.services.wiki_utils import WIKI_LINK_RE as _WIKI_LINK_RE
 from specivo.services.wiki_utils import slugify as _wiki_slugify
 
@@ -152,10 +159,15 @@ def _render_markdown(source: str, original: str, extensions: list) -> markupsafe
     """
     hazard = render_hazard(source, len(original))
     if hazard is None:
+        allowance = render_allowance()
+        if allowance <= 0:
+            hazard = "request budget"
+    if hazard is None:
+        started = markdown_budget._cpu_clock()
         try:
             html = _md.markdown(
                 source,
-                extensions=[*extensions, RenderDeadline()],
+                extensions=[*extensions, RenderDeadline(allowance)],
                 extension_configs=_MD_EXTENSION_CONFIGS,
             )
         except RenderDeadlineError:
@@ -164,6 +176,8 @@ def _render_markdown(source: str, original: str, extensions: list) -> markupsafe
             hazard = "recursion"
         else:
             return markupsafe.Markup(_sanitize_html(html))
+        finally:
+            charge_render(markdown_budget._cpu_clock() - started)
     logger.warning("Markdown shown as plain text (%s, %d characters)", hazard, len(original))
     return _plain_text_fallback(original)
 
@@ -243,6 +257,27 @@ class _AttachmentRefExtension(Extension):
         md.treeprocessors.register(_AttachmentRefTreeprocessor(md, self.attachment_map), "attachment_refs", 5)
 
 
+def substitute_links(text: str, project_key: str = "", known_issue_refs: set[str] | None = None) -> str:
+    """Rewrite ``[[Page]]`` wiki links and ``KEY-123`` refs in *text* as Markdown links.
+
+    The first step of :func:`render_wiki_markdown`, and the text the render
+    budget is checked against: what Python-Markdown will actually parse.
+    """
+    processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
+
+    # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
+    # When known_issue_refs is provided, only link references that resolve to a
+    # real (or previously-existing) issue; leave the rest as plain text.
+    def _link_issue_ref(m: re.Match[str]) -> str:
+        ref = m.group(1)
+        if known_issue_refs is None or ref in known_issue_refs:
+            return f"[{ref}](/issue/{ref}/)"
+        return ref
+
+    processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
+    return processed
+
+
 def render_wiki_markdown(
     text: str,
     project_key: str = "",
@@ -275,18 +310,7 @@ def render_wiki_markdown(
     if not text:
         return markupsafe.Markup("")
 
-    processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
-
-    # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
-    # When known_issue_refs is provided, only link references that resolve to a
-    # real (or previously-existing) issue; leave the rest as plain text.
-    def _link_issue_ref(m: re.Match[str]) -> str:
-        ref = m.group(1)
-        if known_issue_refs is None or ref in known_issue_refs:
-            return f"[{ref}](/issue/{ref}/)"
-        return ref
-
-    processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
+    processed = substitute_links(text, project_key, known_issue_refs)
 
     # Bare-filename image and link targets are resolved to attachment URLs on
     # the parsed tree, not by rewriting the source.

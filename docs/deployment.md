@@ -94,6 +94,7 @@ The bundle includes:
 | Service | Image | Purpose |
 |---------|-------|---------|
 | **nginx** | nginx:1-alpine | Reverse proxy, static files, TLS termination |
+| **init-data** | specivo/specivo | Runs once as root before `api` starts, prepares the app's directories in the data directory for the app user, then exits |
 | **api** | specivo/specivo | FastAPI application server |
 | **celery-worker** | specivo/specivo | Async task processing (emails, webhooks, search reindex) |
 | **celery-embeddings** | specivo/specivo | Embedding jobs for semantic search, on the `embeddings` queue; one process, so one copy of the model in memory |
@@ -147,6 +148,94 @@ revision, SHA-256 checked), then run
 to index existing content. The `celery-embeddings` service embeds new content as it is saved. See
 [Semantic search and embeddings](https://specivo.io/docs/specivo/install/semantic-search/) for
 what is indexed when, offline setup, and troubleshooting.
+
+### Container user
+
+The app containers (`api`, the Celery services and anything you run with
+`docker compose exec api ...`) run as the unprivileged user `specivo`, UID/GID `10001`. The
+application files in the image are read-only for that user. In the data directory
+(`/app/data`, i.e. `SPECIVO_DATA_DIR`) it owns only these subdirectories:
+
+| Directory | Holds |
+|-----------|-------|
+| `attachments/` | Uploaded files |
+| `avatars/` | Profile photos |
+| `models/` | The embedding model |
+| `logs/app/` | `specivo.log` and its rotations (earlier versions wrote `logs/specivo.log`) |
+| `state/` | The one-time admin bootstrap file (mode 0700) |
+
+The data directory itself, `logs/`, `postgresql/`, `redis/` and `logs/nginx/` are **not** the
+app's. The data directory stays with root, or with the user who created it, and the app cannot
+create, rename or replace entries in it. That matters because Docker mounts the host paths of
+`postgresql/`, `redis/` and `logs/nginx/` into other containers. Celery beat keeps its schedule in
+the app user's home (`/home/specivo/.local/state/specivo/`, mode 0700).
+
+- **Ownership is set on start.** The one-shot `init-data` service runs as root before `api`. It
+  creates the directories above when they are missing, gives them to `10001:10001`, and moves the
+  installer's `.bootstrap.json` into `state/`. The image's entrypoint does the same when a container
+  is started as root (`docker run --user 0 ...`) and then drops to `10001` with `setpriv`. The root
+  step is careful about what it changes:
+    - A directory that already belongs to `10001` is not walked again, so restarts stay fast.
+    - It never follows a symlink. If one of these directories is a symlink, it warns and leaves it
+      alone: mount the target there instead. It also skips a directory on another filesystem (for
+      example a separate volume) or owned by another user; `chown` those yourself.
+    - Inside a directory it changes only entries owned by root or by the data directory's owner,
+      and only directories and regular files with a single link. A hard-linked file keeps its owner
+      and is reported, because changing it would change every name it is linked under.
+    - If an earlier 0.9.0 build gave the data directory or `logs/` to the app, it gives them back
+      to root, and it removes world-write permission from the data directory.
+    - It works through file descriptors (`specivo/ops/fix_ownership.py`): each entry is opened
+      without following symlinks and checked again before its owner changes, so renaming or
+      swapping entries while it runs cannot point it elsewhere.
+    - It does not enter a directory the app user already owns, because a running app container
+      could change it meanwhile. If such a directory holds files of root, it says so: stop all app
+      containers and run `docker compose run --rm init-data fix-permissions --all`, which does
+      enter them.
+- **Run `init-data` with the app containers stopped.** `docker compose up` starts it before `api`,
+  but on an upgrade the old `celery-worker`, `celery-embeddings` and `celery-beat` containers can
+  still be running at that moment. Stop them first (see [Upgrade](#upgrade)).
+- **Host directories you mount yourself** (another data path, extra theme or error-page
+  directories, a Redmine `files` directory for the importer) must be readable by `10001`, and
+  writable where the app writes to them. Give such a directory to the app user on the host:
+
+  ```bash
+  sudo chown -R 10001:10001 /srv/specivo-uploads
+  ```
+
+- **Running without root at all.** Set `user:` on the app services and the entrypoint skips the
+  ownership step and runs as given; this also works with a read-only root filesystem. Create the
+  app directories and give them to that user on the host first, because nothing will do it for
+  you, e.g. `cd <SPECIVO_DATA_DIR> && sudo mkdir -p attachments avatars models state logs/app &&
+  sudo chown 10001:10001 attachments avatars models state logs/app && sudo chmod 700 state`
+  (plus `chown -R` for directories that already hold files). A minimal
+  `docker-compose.override.yml`:
+
+  ```yaml
+  services:
+    init-data:
+      user: "10001:10001"   # not root: it leaves ownership alone and exits
+    api:
+      user: "10001:10001"
+      read_only: true       # optional
+      tmpfs: [/tmp]
+    celery-worker:
+      user: "10001:10001"
+    celery-embeddings:
+      user: "10001:10001"
+    celery-beat:
+      user: "10001:10001"
+  ```
+
+  With a read-only root filesystem the home directory is read-only too, so Celery beat keeps its
+  schedule in a private directory under `/tmp` (hence the `tmpfs`), which starts over on every
+  restart: the periodic jobs then run once soon after a restart, which is harmless. To keep it, mount
+  a volume at `/home/specivo/.local/state/specivo` or set `CELERY_BEAT_SCHEDULE_FILE`.
+
+  For a different UID, build the image with `--build-arg SPECIVO_UID=... --build-arg
+  SPECIVO_GID=...`, or use that UID in `user:` and own the data directory accordingly.
+- **Health check.** The image has a `HEALTHCHECK` that requests `/health/` (behind
+  `STEALTH_PREFIX` when set) in the container that runs the web server; in the Celery containers it
+  passes without probing.
 
 ### Using External Database
 
@@ -358,9 +447,16 @@ tar czf specivo-backup-$(date +%Y%m%d).tar.gz specivo-data/
 # Pull new image
 docker compose pull
 
-# Restart (entrypoint runs migrations automatically)
+# Stop the app containers, so none runs while init-data prepares the data directory
+docker compose stop api celery-worker celery-embeddings celery-beat
+
+# Start (init-data prepares the app directories, the entrypoint runs migrations)
 docker compose up -d
 ```
+
+Since 0.9.0 the containers run as UID `10001` instead of root. Take the new
+`docker-compose.yml` with the upgrade: on the first start its `init-data` service gives the app
+directories, with the files an older version wrote as root, to that user. See [Container user](#container-user).
 
 ### Offline
 
@@ -368,7 +464,8 @@ docker compose up -d
 # Load new image from bundle
 docker load < specivo-image.tar
 
-# Restart
+# Stop the app containers, then start
+docker compose stop api celery-worker celery-embeddings celery-beat
 docker compose up -d
 ```
 
