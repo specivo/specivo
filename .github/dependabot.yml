@@ -1,0 +1,14 @@
+version: 2
+updates:
+  # Workflow actions are pinned to full commit SHAs; this keeps the pins (and
+  # their "# vX.Y.Z" comments) current.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - '*'
+    commit-message:
+      prefix: ci
