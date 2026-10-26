@@ -11,6 +11,20 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Runs once as root before the api: gives the app's own paths in the data
+  # directory (attachments, avatars, models, themes, errors, app logs) to the
+  # unprivileged user the app runs as (uid/gid 10001). Needed for installs
+  # whose files were written by root; when nothing is to change it exits at
+  # once. Everything else in this file runs as uid 10001.
+  init-data:
+    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    user: "0:0"
+    command: fix-permissions
+    network_mode: none
+    volumes:
+      - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
+    restart: "no"
+
   api:
     image: specivo/specivo:${SPECIVO_VERSION:-latest}
     extra_hosts:
@@ -27,6 +41,8 @@ services:
     volumes:
       - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
     depends_on:
+      init-data:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
         required: false
@@ -34,7 +50,8 @@ services:
         condition: service_healthy
         required: false
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      # GETs /health/ (behind STEALTH_PREFIX when set); see scripts/healthcheck.py.
+      test: ["CMD", "specivo-healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 5

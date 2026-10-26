@@ -47,6 +47,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - Shared versions of private projects were not filtered by access
 - A very deep search offset could make the database rank millions of rows
 - Indexing errors could write content to the logs
+- The app containers ran as root; they now run as UID 10001, and a one-shot `init-data` service hands existing data files to that user. Custom compose files need it (see Upgrading)
 
 ### Internal
 - Migrations 0033–0040: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently), a single default embedding model and linear-time indexing of unclosed HTML comments. **Run a search reindex after upgrading** (Administration → Settings)

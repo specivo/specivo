@@ -94,6 +94,7 @@ The bundle includes:
 | Service | Image | Purpose |
 |---------|-------|---------|
 | **nginx** | nginx:1-alpine | Reverse proxy, static files, TLS termination |
+| **init-data** | specivo/specivo | Runs once as root before `api` starts, gives the app's paths in the data directory to the app user, then exits |
 | **api** | specivo/specivo | FastAPI application server |
 | **celery-worker** | specivo/specivo | Async task processing (emails, webhooks, search reindex) |
 | **celery-embeddings** | specivo/specivo | Embedding jobs for semantic search, on the `embeddings` queue; one process, so one copy of the model in memory |
@@ -147,6 +148,55 @@ revision, SHA-256 checked), then run
 to index existing content. The `celery-embeddings` service embeds new content as it is saved. See
 [Semantic search and embeddings](https://specivo.io/docs/specivo/install/semantic-search/) for
 what is indexed when, offline setup, and troubleshooting.
+
+### Container user
+
+The app containers (`api`, the Celery services and anything you run with
+`docker compose exec api ...`) run as the unprivileged user `specivo`, UID/GID `10001`. The
+application files in the image are read-only for that user; it writes only to the data directory
+(`/app/data`, i.e. `SPECIVO_DATA_DIR`) and `/tmp`.
+
+- **Ownership is fixed on start.** The one-shot `init-data` service runs as root before `api` and
+  gives `attachments/`, `avatars/`, `models/`, `themes/`, `errors/` and the app's files in `logs/`
+  to `10001:10001`. It looks at the owner of each path first and only changes it (recursively) when
+  it is wrong, so later starts are fast. `postgresql/`, `redis/` and `logs/nginx/` keep their
+  owners. The image's entrypoint does the same when a container is started as root
+  (`docker run --user 0 ...`) and then drops to `10001` with `setpriv`.
+- **Host directories you mount yourself** (another data path, extra theme or error-page
+  directories, a Redmine `files` directory for the importer) must be readable by `10001`, and
+  writable where the app writes to them. If a path is not covered above, give it to the app user
+  on the host:
+
+  ```bash
+  sudo chown -R 10001:10001 /srv/specivo-data/attachments
+  ```
+
+- **Running without root at all.** Set `user:` on the app services and the entrypoint skips the
+  ownership step and runs as given; this also works with a read-only root filesystem. Give the data
+  directory to that user on the host first (as above), because nothing will change ownership for
+  you. A minimal `docker-compose.override.yml`:
+
+  ```yaml
+  services:
+    init-data:
+      user: "10001:10001"   # not root: it leaves ownership alone and exits
+    api:
+      user: "10001:10001"
+      read_only: true       # optional
+      tmpfs: [/tmp]
+    celery-worker:
+      user: "10001:10001"
+    celery-embeddings:
+      user: "10001:10001"
+    celery-beat:
+      user: "10001:10001"
+  ```
+
+  For a different UID, build the image with `--build-arg SPECIVO_UID=... --build-arg
+  SPECIVO_GID=...`, or use that UID in `user:` and own the data directory accordingly.
+- **Health check.** The image has a `HEALTHCHECK` that requests `/health/` (behind
+  `STEALTH_PREFIX` when set) in the container that runs the web server; in the Celery containers it
+  passes without probing.
 
 ### Using External Database
 
@@ -358,9 +408,13 @@ tar czf specivo-backup-$(date +%Y%m%d).tar.gz specivo-data/
 # Pull new image
 docker compose pull
 
-# Restart (entrypoint runs migrations automatically)
+# Restart (init-data fixes data ownership, the entrypoint runs migrations)
 docker compose up -d
 ```
+
+Since 0.9.0 the containers run as UID `10001` instead of root. Take the new
+`docker-compose.yml` with the upgrade: its `init-data` service gives the files an older version
+wrote as root to that user on the first start. See [Container user](#container-user).
 
 ### Offline
 
