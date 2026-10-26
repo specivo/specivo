@@ -15,6 +15,9 @@ what the schema allows:
   row once the operator has seen the list and agrees.
 * **Activities and roles** are always reused: both names are unique in
   Specivo's schema, so a second row is not possible.
+* **Builtin roles** are never created. The source's non-member role is mapped
+  onto the one Specivo seeds, and its anonymous role onto nothing: Specivo
+  expresses anonymous access per project instead (see ``public_access_loader``).
 * **Roles** are additionally never created with permissions. Redmine's
   permission vocabulary is its own, so an unmatched role arrives empty and is
   listed for an administrator to fill in — an empty role grants nothing, which
@@ -43,6 +46,7 @@ from specivo.models.role import (
     USERS_VISIBILITY_ALL,
     USERS_VISIBILITY_MEMBERS,
     Role,
+    RoleBuiltin,
 )
 from specivo.models.time_entry import TimeEntryActivity
 
@@ -222,35 +226,62 @@ async def _load_activities(ctx: PhaseContext, activities: list[IRActivity]) -> N
 
 async def _load_roles(ctx: PhaseContext, roles: list[IRRole]) -> None:
     for ir in roles:
+        if ir.builtin == RoleBuiltin.ANONYMOUS:
+            # Specivo has no anonymous role: a visitor without an account gets a
+            # transient role built from the project's anonymous permissions,
+            # which the public-access step fills in. Creating one would also be
+            # refused by the database, which keeps builtin roles unassignable.
+            continue
+
         if await ctx.id_map.get(ctx.session, EntityType.ROLE, ir.source_ref):
             ctx.summary.record_skipped(EntityType.ROLE)
             continue
 
-        # roles.name is unique, so same-named roles are always reused. The
-        # builtin non-member and anonymous roles are matched on that flag
-        # instead, since either system may name them differently.
-        existing = None
-        if ir.builtin:
-            stmt = select(Role).where(Role.builtin == ir.builtin).limit(1)
+        if ir.builtin == RoleBuiltin.NON_MEMBER:
+            # Matched on the flag, since either system may name it differently.
+            # Its permissions are left alone: the role is instance-wide, and the
+            # public-access step reports how the source's role differs.
+            stmt = select(Role).where(Role.builtin == RoleBuiltin.NON_MEMBER).limit(1)
             existing = (await ctx.session.execute(stmt)).scalar_one_or_none()
-        if existing is None:
-            existing = await _find_by_name(ctx.session, Role, ir.name)
-
-        if existing is not None:
+            if existing is None:
+                ctx.warn("This instance has no Non member role; the source's was not mapped", role=ir.name)
+                continue
             _warn_if_reused_role_is_wider(ctx, ir, existing)
             await _map(ctx, EntityType.ROLE, ir.source_ref, "roles", existing.id)
             continue
 
+        # roles.name is unique, so a same-named role is reused. A builtin role
+        # cannot hold a membership, so an ordinary source role whose name
+        # matches one gets a role of its own under another name.
+        name = ir.name
+        existing = await _find_by_name(ctx.session, Role, name)
+        if existing is not None and existing.builtin == RoleBuiltin.CUSTOM:
+            _warn_if_reused_role_is_wider(ctx, ir, existing)
+            await _map(ctx, EntityType.ROLE, ir.source_ref, "roles", existing.id)
+            continue
+        if existing is not None:
+            name = await _unused_role_name(ctx.session, f"{ir.name} (imported)")
+            ctx.warn("Role name is reserved for a builtin role; imported under another name", role=ir.name, name=name)
+
         row = Role(
-            name=ir.name,
-            builtin=ir.builtin,
+            name=name,
+            builtin=RoleBuiltin.CUSTOM,
             permissions=[],
             assignable=True,
             users_visibility=ir.users_visibility or USERS_VISIBILITY_ALL,
             time_entries_visibility=ir.time_entries_visibility or TIME_ENTRIES_VISIBILITY_ALL,
         )
         await _create(ctx, row, EntityType.ROLE, ir.source_ref, "roles")
-        ctx.summary.add_note(NOTE_ROLES_NEED_PERMISSIONS, ir.name)
+        ctx.summary.add_note(NOTE_ROLES_NEED_PERMISSIONS, name)
+
+
+async def _unused_role_name(session: AsyncSession, base: str) -> str:
+    """Return *base*, or *base* with a counter, whichever no role has yet."""
+    candidate, counter = base, 2
+    while await _find_by_name(session, Role, candidate) is not None:
+        candidate = f"{base} {counter}"
+        counter += 1
+    return candidate
 
 
 def _warn_if_reused_role_is_wider(ctx: PhaseContext, ir: IRRole, existing: Role) -> None:

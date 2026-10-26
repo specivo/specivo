@@ -35,6 +35,7 @@ from specivo.importers.core.ir import (
     IRMembership,
     IRPriority,
     IRProject,
+    IRPublicAccess,
     IRRelation,
     IRRole,
     IRStatus,
@@ -97,6 +98,10 @@ _DONE_HINTS = frozenset({"resolved", "done", "fixed", "completed", "complete", "
 TYPE_USER = "User"
 TYPE_GROUP = "Group"
 TYPE_ANONYMOUS = "AnonymousUser"
+# Redmine 4.1+ builtin group principals. A project membership held by one of
+# them overrides the builtin Anonymous or Non member role on that project.
+TYPE_GROUP_ANONYMOUS = "GroupAnonymous"
+TYPE_GROUP_NON_MEMBER = "GroupNonMember"
 
 
 def as_utc(value: datetime | None) -> datetime | None:
@@ -254,7 +259,10 @@ def extract_role(row: dict[str, Any]) -> IRRole:
     setting rather than the wider one.
 
     ``builtin`` carries over directly — both systems use 0 for an ordinary role,
-    1 for the non-member role and 2 for the anonymous one.
+    1 for the non-member role and 2 for the anonymous one. The loader maps the
+    non-member role onto Specivo's seeded one and creates no anonymous role;
+    what those two roles allowed is translated separately, by
+    :func:`build_public_access`.
     """
     return IRRole(
         source_ref=str(row["id"]),
@@ -276,6 +284,190 @@ def _visibility(value: Any, known: tuple[str, ...], *, narrowest: str) -> str | 
         return None
     value = str(value).strip()
     return value if value in known else narrowest
+
+
+# --------------------------------------------------------------------------
+# Non-member and anonymous access
+# --------------------------------------------------------------------------
+
+# Redmine builtin role kinds (``roles.builtin``).
+BUILTIN_NON_MEMBER = 1
+BUILTIN_ANONYMOUS = 2
+
+# The only Redmine permissions that carry over to people without a
+# membership, with the Specivo permission each becomes and the Redmine module
+# that has to be enabled on the project for it to apply. Anonymous visitors in
+# Specivo can read issues and wiki pages and nothing else, and the seeded Non
+# member role is read-only, so every other permission is reported instead.
+READ_PERMISSION_MAP: dict[str, tuple[str, str]] = {
+    "view_issues": ("view_issues", "issue_tracking"),
+    "view_wiki_pages": ("view_wiki", "wiki"),
+}
+
+# Redmine project statuses under which anonymous visitors can read a project:
+# STATUS_ACTIVE (1) and STATUS_CLOSED (5), where Redmine still allows read
+# actions. Archived (9) grants nothing to anyone, members included, and
+# scheduled for deletion (10) or any status Redmine adds later grants nothing
+# here either: an allowlist fails closed.
+_REDMINE_READABLE_STATUSES = frozenset({1, 5})
+
+_PERMISSION_LINE_RE = re.compile(r"^\s*-\s*:?([A-Za-z0-9_]+)\s*$", re.MULTILINE)
+
+
+def parse_role_permissions(raw: str | None) -> list[str]:
+    """Return the permission names in a ``roles.permissions`` value.
+
+    Redmine serialises the list as Ruby YAML, one symbol per line
+    (``- :view_issues``). Read with a pattern rather than a YAML parser: the
+    format is fixed, and a symbol is not something a safe YAML loader should
+    be asked to interpret.
+    """
+    if not raw:
+        return []
+    seen: dict[str, None] = {}
+    for name in _PERMISSION_LINE_RE.findall(raw):
+        seen.setdefault(name, None)
+    return list(seen)
+
+
+def anonymous_login_allowed(login_required: str | None) -> bool:
+    """Whether a Redmine instance served anonymous visitors.
+
+    Only an explicit ``'0'`` counts. Redmine stores only settings that differ
+    from its defaults, so an absent row cannot be told apart from one an
+    administrator never looked at, and guessing in the permissive direction
+    would publish a tracker. Anything but ``'0'`` is treated as "sign-in
+    required".
+    """
+    return login_required is not None and login_required.strip() == "0"
+
+
+def describe_login_required(login_required: str | None) -> str:
+    """Return the report line saying what the source's sign-in setting was."""
+    not_carried = "so no anonymous access was carried over"
+    if login_required is None:
+        return f"login_required is not set in the source; treated as sign-in required, {not_carried}"
+    if anonymous_login_allowed(login_required):
+        return "login_required = '0' in the source: anonymous visitors could read public projects"
+    return f"login_required = {login_required.strip()!r} in the source: sign-in required, {not_carried}"
+
+
+def readable_permissions(source_permissions: list[str], modules: list[str] | None = None) -> list[str]:
+    """Translate Redmine permissions into the read permissions Specivo carries over.
+
+    With *modules*, a permission counts only when its module is enabled on the
+    project, which is how Redmine itself decides. The result is sorted.
+    """
+    granted: set[str] = set()
+    for name in source_permissions:
+        mapped = READ_PERMISSION_MAP.get(name)
+        if mapped is None:
+            continue
+        specivo_name, module = mapped
+        if modules is None or module in modules:
+            granted.add(specivo_name)
+    return sorted(granted)
+
+
+def build_public_access(
+    *,
+    login_required: str | None,
+    roles: list[dict[str, Any]],
+    projects: list[dict[str, Any]],
+    modules: dict[int, list[str]],
+    overrides: dict[tuple[int, str], list[int]],
+) -> IRPublicAccess:
+    """Translate Redmine's non-member and anonymous access into Specivo's model.
+
+    *roles* are ``roles`` rows. *projects* are ``projects`` rows (``id``,
+    ``identifier``, ``is_public``, ``status``) and *modules* their enabled
+    module names. *overrides* maps ``(project_id, principal type)`` to the
+    role ids a ``GroupAnonymous`` or ``GroupNonMember`` membership holds on
+    that project.
+
+    Anonymous access follows Redmine's own resolution: on a public project that
+    is active or closed an anonymous visitor holds the roles of the project's
+    ``GroupAnonymous`` membership if it has one, and the builtin Anonymous role
+    otherwise. Of those roles' permissions only ``view_issues`` and
+    ``view_wiki_pages`` carry over, each only when its module is enabled. None
+    of it applies unless :func:`anonymous_login_allowed` says the source
+    served anonymous visitors.
+
+    The Non member role is translated the same way, without the per-project
+    part: Specivo has one Non member role for the whole instance, so a
+    ``GroupNonMember`` membership is reported rather than applied.
+    """
+    by_id = {int(row["id"]): row for row in roles}
+    builtin: dict[int, dict[str, Any]] = {}
+    for row in roles:
+        kind = int(row.get("builtin") or 0)
+        if kind in (BUILTIN_NON_MEMBER, BUILTIN_ANONYMOUS):
+            builtin.setdefault(kind, row)
+
+    def permissions_of(role_ids: list[int]) -> list[str]:
+        merged: dict[str, None] = {}
+        for role_id in role_ids:
+            for name in parse_role_permissions((by_id.get(role_id) or {}).get("permissions")):
+                merged.setdefault(name, None)
+        return list(merged)
+
+    def role_names(role_ids: list[int]) -> str:
+        return ", ".join(sorted((by_id.get(r) or {}).get("name") or f"role {r}" for r in role_ids))
+
+    allowed = anonymous_login_allowed(login_required)
+    access = IRPublicAccess(anonymous_allowed=allowed, anonymous_source_setting=describe_login_required(login_required))
+    not_carried: list[str] = []
+
+    non_member = builtin.get(BUILTIN_NON_MEMBER)
+    if non_member is not None:
+        access.non_member_source_name = (non_member.get("name") or "").strip() or "Non member"
+        source = parse_role_permissions(non_member.get("permissions"))
+        access.non_member_permissions = readable_permissions(source)
+        dropped = sorted(name for name in source if name not in READ_PERMISSION_MAP)
+        if dropped:
+            not_carried.append(f"{access.non_member_source_name} role: {', '.join(dropped)}")
+
+    anonymous = builtin.get(BUILTIN_ANONYMOUS)
+    anonymous_default = parse_role_permissions(anonymous.get("permissions")) if anonymous is not None else []
+    if anonymous is not None:
+        dropped = sorted(name for name in anonymous_default if name not in READ_PERMISSION_MAP)
+        if dropped:
+            name = (anonymous.get("name") or "").strip() or "Anonymous"
+            not_carried.append(f"{name} role: {', '.join(dropped)}")
+
+    for project in projects:
+        project_id = int(project["id"])
+        identifier = (project.get("identifier") or "").strip().lower() or str(project_id)
+        is_public = bool(project.get("is_public"))
+        readable = project.get("status") in _REDMINE_READABLE_STATUSES
+
+        non_member_roles = overrides.get((project_id, TYPE_GROUP_NON_MEMBER))
+        if non_member_roles:
+            not_carried.append(
+                f"{identifier}: per-project Non member override ({role_names(non_member_roles)}): "
+                f"{', '.join(sorted(permissions_of(non_member_roles))) or 'no permissions'}"
+            )
+
+        anonymous_roles = overrides.get((project_id, TYPE_GROUP_ANONYMOUS))
+        if anonymous_roles:
+            source = permissions_of(anonymous_roles)
+            dropped = sorted(name for name in source if name not in READ_PERMISSION_MAP)
+            if dropped:
+                not_carried.append(
+                    f"{identifier}: per-project Anonymous override ({role_names(anonymous_roles)}): "
+                    f"{', '.join(dropped)}"
+                )
+        else:
+            source = anonymous_default
+
+        if not (allowed and is_public and readable):
+            continue
+        granted = readable_permissions(source, modules.get(project_id, []))
+        if granted:
+            access.anonymous_permissions[str(project_id)] = granted
+
+    access.not_carried_over = not_carried
+    return access
 
 
 # --------------------------------------------------------------------------

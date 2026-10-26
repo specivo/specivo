@@ -34,6 +34,7 @@ from specivo.importers.core.ir import (
     IRLookups,
     IRMembership,
     IRProject,
+    IRPublicAccess,
     IRRelation,
     IRTimeEntry,
     IRUser,
@@ -271,6 +272,50 @@ class RedmineSourceAdapter:
             self._dropped_modules[project.source_ref] = dropped
             yield project
 
+    async def extract_public_access(self) -> IRPublicAccess:
+        """Read what non-members and anonymous visitors could see, translated.
+
+        Reads the ``login_required`` setting, the roles, every project with its
+        modules, and the project memberships held by the builtin
+        ``GroupAnonymous`` / ``GroupNonMember`` principals, which override the
+        builtin roles on that project. The translation is
+        :func:`extract.build_public_access`.
+        """
+        async with self.engine.connect() as conn:
+            login_required = await db.fetch_setting(conn, "login_required")
+            role_rows = [dict(row) for row in (await conn.execute(select(db.roles))).mappings().all()]
+            p = db.projects.c
+            project_columns = (p.id, p.identifier, p.is_public, p.status)
+            project_rows = [dict(row) for row in (await conn.execute(select(*project_columns))).mappings().all()]
+            modules: dict[int, list[str]] = {}
+            for row in (await conn.execute(select(db.enabled_modules))).mappings().all():
+                modules.setdefault(row["project_id"], []).append(row["name"])
+
+            builtin_types = (extract.TYPE_GROUP_ANONYMOUS, extract.TYPE_GROUP_NON_MEMBER)
+            override_rows = (
+                await conn.execute(
+                    select(db.members.c.project_id, db.users.c.type, db.member_roles.c.role_id)
+                    .select_from(
+                        db.members.join(db.users, db.users.c.id == db.members.c.user_id).join(
+                            db.member_roles, db.member_roles.c.member_id == db.members.c.id
+                        )
+                    )
+                    .where(db.users.c.type.in_(builtin_types))
+                )
+            ).all()
+
+        overrides: dict[tuple[int, str], list[int]] = {}
+        for project_id, principal_type, role_id in override_rows:
+            overrides.setdefault((project_id, principal_type), []).append(role_id)
+
+        return extract.build_public_access(
+            login_required=login_required,
+            roles=role_rows,
+            projects=project_rows,
+            modules=modules,
+            overrides=overrides,
+        )
+
     def dropped_modules(self, project_ref: str) -> list[str]:
         """Return the modules of *project_ref* that Specivo has no equivalent for."""
         return self._dropped_modules.get(project_ref, [])
@@ -346,7 +391,9 @@ class RedmineSourceAdapter:
                 kind = PrincipalKind.GROUP
             else:
                 # The builtin non-member and anonymous group principals, whose
-                # access Specivo expresses with a role rather than a membership.
+                # access Specivo expresses with a role and the project's
+                # anonymous permissions rather than a membership. See
+                # extract_public_access.
                 continue
 
             roles = roles_by_member.get(row["id"], [])
