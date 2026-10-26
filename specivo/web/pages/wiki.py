@@ -381,8 +381,9 @@ async def wiki_show(
             for att in raw_attachments
         ]
 
-        # Project-wide filename → download URL map for inline image resolution
-        attachment_map = await _attachment_svc.build_project_attachment_map(db, project.id)
+        # Project-wide filename → download URL map for inline image resolution,
+        # limited to the attachments this reader may open.
+        attachment_map = await _attachment_svc.build_project_attachment_map(db, project, user)
 
         wiki_tags = _wiki_tags_to_dicts(await _tag_svc.tags_for_wiki_page(db, page.id))
 

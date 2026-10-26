@@ -7,13 +7,15 @@ import uuid
 from pathlib import Path
 
 from fastapi import Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.config import get_settings
 from specivo.core.exceptions import NotFoundError
 from specivo.models.attachment import Attachment
+from specivo.models.project import Project
 from specivo.models.search import SearchSource
 from specivo.models.user import User
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
@@ -483,39 +485,166 @@ class AttachmentService:
         )
         return list(issue_att.scalars().all()) + list(wiki_att.scalars().all())
 
-    async def build_project_attachment_map(
+    @staticmethod
+    def download_url(attachment_id: int) -> str:
+        """Return the download URL of an attachment."""
+        return f"/api/v1/attachments/{attachment_id}/download/"
+
+    async def visible_attachments_stmt(
         self,
         session: AsyncSession,
-        project_id: int,
-    ) -> dict[str, str]:
-        """Build filename → download URL map for all attachments in a project.
+        project: Project,
+        reader: User,
+    ) -> Select[tuple[int, str, str, int]] | None:
+        """Select the issue and wiki-page attachments of *project* that *reader* may open.
 
-        Used by the wiki markdown renderer to resolve inline image references.
-        If multiple attachments share a filename, the most recent one wins.
+        Rows are ``(id, filename, container_type, container_id)``, oldest
+        first, so a caller folding them into a filename map lets the newest
+        visible file win. Callers may narrow the statement further (for
+        example to a single container) before executing it.
+
+        - Wiki-page attachments take part only when *reader* holds
+          ``view_wiki`` in the project.
+        - Issue attachments take part only for issues *reader* may see,
+          judged by ``IssueService.project_visible_issues_clause`` — the
+          predicate behind the project issue list.
+        - Admins see everything; the anonymous user sees nothing, matching
+          the API, which drops attachments from every anonymous response.
+
+        Returns None when *reader* may open no attachment in the project.
         """
         from specivo.models.issue import Issue
         from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.issue_service import IssueService
+        from specivo.services.permission_service import Permission, check_permission
 
-        # Issue attachments
-        issue_result = await session.execute(
-            select(Attachment.id, Attachment.filename)
-            .join(Issue, (Attachment.container_type == "Issue") & (Attachment.container_id == Issue.id))
-            .where(Issue.project_id == project_id)
-            .order_by(Attachment.created_at.asc())
-        )
-        # WikiPage attachments
-        wiki_result = await session.execute(
-            select(Attachment.id, Attachment.filename)
-            .join(WikiPage, (Attachment.container_type == "WikiPage") & (Attachment.container_id == WikiPage.id))
-            .join(Wiki, WikiPage.wiki_id == Wiki.id)
-            .where(Wiki.project_id == project_id)
-            .order_by(Attachment.created_at.asc())
+        if reader.is_anonymous:
+            return None
+
+        branches: list[ColumnElement[bool]] = []
+
+        issue_visibility = await IssueService().project_visible_issues_clause(session, reader, project)
+        issue_branch = and_(Attachment.container_type == "Issue", Issue.project_id == project.id)
+        if issue_visibility is not None:
+            issue_branch = and_(issue_branch, issue_visibility)
+        branches.append(issue_branch)
+
+        if await check_permission(reader, project.id, Permission.VIEW_WIKI, session):
+            branches.append(and_(Attachment.container_type == "WikiPage", Wiki.project_id == project.id))
+
+        return (
+            select(Attachment.id, Attachment.filename, Attachment.container_type, Attachment.container_id)
+            .outerjoin(Issue, and_(Attachment.container_type == "Issue", Attachment.container_id == Issue.id))
+            .outerjoin(
+                WikiPage,
+                and_(Attachment.container_type == "WikiPage", Attachment.container_id == WikiPage.id),
+            )
+            .outerjoin(Wiki, WikiPage.wiki_id == Wiki.id)
+            .where(or_(*branches))
+            .order_by(Attachment.created_at.asc(), Attachment.id.asc())
         )
 
+    async def build_project_attachment_map(
+        self,
+        session: AsyncSession,
+        project: Project,
+        reader: User,
+    ) -> dict[str, str]:
+        """Build a filename → download URL map of the attachments *reader* may open in *project*.
+
+        Used by the wiki markdown renderer to resolve inline image references.
+        Only attachments from ``visible_attachments_stmt`` take part, so a
+        filename never resolves to a file the reader could not download. If
+        several visible attachments share a filename, the most recent wins.
+        """
+        stmt = await self.visible_attachments_stmt(session, project, reader)
+        if stmt is None:
+            return {}
         att_map: dict[str, str] = {}
-        for att_id, filename in list(issue_result.all()) + list(wiki_result.all()):
-            att_map[filename] = f"/api/v1/attachments/{att_id}/download/"
+        for att_id, filename, _container_type, _container_id in (await session.execute(stmt)).all():
+            att_map[filename] = self.download_url(att_id)
         return att_map
+
+    async def can_view_container(
+        self,
+        session: AsyncSession,
+        user: User,
+        container_type: str,
+        container_id: int,
+    ) -> bool:
+        """Return whether *user* may open attachments of the given container.
+
+        The per-container form of ``visible_attachments_stmt``:
+
+        - ``Issue``: the issue is visible to *user*
+          (``IssueService.project_visible_issues_clause``).
+        - ``Journal``: an issue comment whose issue is visible and which is
+          not a private note (private notes are shown to admins only).
+          Comments on wiki pages carry no attachments outside admin access,
+          as before.
+        - ``WikiPage``: *user* holds ``view_wiki`` in the page's project.
+
+        Admins may open everything, the anonymous user nothing. A missing
+        container or an unknown type answers False.
+        """
+        from specivo.models.issue import Issue
+        from specivo.models.journal import Journal
+        from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.issue_service import IssueService
+        from specivo.services.permission_service import Permission, check_permission
+
+        if user.is_admin:
+            return True
+        if user.is_anonymous:
+            return False
+
+        if container_type == "WikiPage":
+            project_id = (
+                await session.execute(
+                    select(Wiki.project_id)
+                    .join(WikiPage, WikiPage.wiki_id == Wiki.id)
+                    .where(WikiPage.id == container_id)
+                )
+            ).scalar_one_or_none()
+            if project_id is None:
+                return False
+            return await check_permission(user, project_id, Permission.VIEW_WIKI, session)
+
+        if container_type == "Journal":
+            row = (
+                await session.execute(select(Journal.issue_id, Journal.is_private).where(Journal.id == container_id))
+            ).one_or_none()
+            if row is None or row.issue_id is None or row.is_private:
+                return False
+            issue_id = row.issue_id
+        elif container_type == "Issue":
+            issue_id = container_id
+        else:
+            return False
+
+        project_id = (await session.execute(select(Issue.project_id).where(Issue.id == issue_id))).scalar_one_or_none()
+        if project_id is None:
+            return False
+        project = await session.get(Project, project_id)
+        if project is None:
+            return False
+        visibility = await IssueService().project_visible_issues_clause(session, user, project)
+        stmt = select(Issue.id).where(Issue.id == issue_id)
+        if visibility is not None:
+            stmt = stmt.where(visibility)
+        return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def get_visible(self, session: AsyncSession, attachment_id: int, user: User) -> Attachment:
+        """Fetch an attachment *user* may open, eagerly loading author.
+
+        Raises ``NotFoundError`` — the same error as for a missing id — when
+        the attachment does not exist or its container is hidden from *user*,
+        so ids of hidden files cannot be probed.
+        """
+        attachment = await self.get_by_id(session, attachment_id)
+        if not await self.can_view_container(session, user, attachment.container_type, attachment.container_id):
+            raise NotFoundError(f"Attachment {attachment_id} not found")
+        return attachment
 
     async def update_description(
         self,
