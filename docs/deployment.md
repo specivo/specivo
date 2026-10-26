@@ -62,7 +62,7 @@ cd specivo-*
 docker load < specivo-image.tar
 
 # Run the setup wizard
-python3 configure.py
+python3 scripts/configure.py
 
 # Start
 docker compose up -d
@@ -72,9 +72,12 @@ The bundle includes:
 - Pre-built Docker image (`specivo-image.tar`)
 - Docker Compose configuration
 - Nginx reverse proxy config
-- Setup wizard (`configure.py`)
+- Setup wizard (`scripts/configure.py`)
 - Container entrypoint script
-- Installation guide
+- Host-side model download script (`scripts/download-model.sh`), for air-gapped setups
+- `Makefile` (`make help`; the `download-model`, `backfill-embeddings`, `reindex-fts` and
+  `import-data` targets work against the bundle's compose file)
+- Installation guide (`docs/INSTALL.md`)
 
 ## Architecture
 
@@ -92,7 +95,8 @@ The bundle includes:
 |---------|-------|---------|
 | **nginx** | nginx:1-alpine | Reverse proxy, static files, TLS termination |
 | **api** | specivo/specivo | FastAPI application server |
-| **celery-worker** | specivo/specivo | Async task processing (emails, webhooks, search reindex, embedding-model backfill) |
+| **celery-worker** | specivo/specivo | Async task processing (emails, webhooks, search reindex) |
+| **celery-embeddings** | specivo/specivo | Embedding jobs for semantic search, on the `embeddings` queue; one process, so one copy of the model in memory |
 | **celery-beat** | specivo/specivo | Scheduled task runner |
 | **db** | pgvector/pgvector:pg18 | PostgreSQL with pgvector (optional — use external) |
 | **redis** | redis:7-alpine | Cache, task broker, pub/sub (optional — use external) |
@@ -120,6 +124,8 @@ All configuration is via environment variables. Set in `.env` (committed) or `.e
 | `SMTP_FROM` | No | `noreply@specivo.dev` | Sender address |
 | `KILL_TOKEN` | No | — | Emergency kill switch token |
 | `EMBEDDING_ONNX_THREADS` | No | `2` | CPU threads for the embedding model (`0` = all cores) |
+| `EMBEDDING_WORKER_CONCURRENCY` | No | `1` | Processes in `celery-embeddings`; each loads its own copy of the model |
+| `EMBEDDING_QUEUE` | No | `embeddings` | Celery queue for embedding jobs; `celery` runs them in `celery-worker` instead |
 | `SEARCH_INDEX_COMMENTS` | No | `true` | Index comments for search |
 | `SEARCH_MIN_COMMENT_LENGTH` | No | `20` | Comments shorter than this are not indexed |
 | `SEARCH_EXCLUDE_BOT_COMMENTS` | No | `true` | Skip comments made by API keys or service accounts |
@@ -134,9 +140,11 @@ The last three are explained in the user guide under
 ### Semantic search
 
 Semantic and hybrid search need the `multilingual-e5-small` embedding model, which is not in the
-image or the release bundle. Download it into `$SPECIVO_DATA_DIR/models/` (`make download-model`, or
-the five files listed in the guide), then run
-`docker compose exec api python -m specivo.cli.backfill_embeddings` to index existing content. See
+image or the release bundle. Download it into `$SPECIVO_DATA_DIR/models/` with
+`docker compose exec api python -m specivo.cli.download_model` (or `make download-model`; pinned
+revision, SHA-256 checked), then run
+`docker compose exec api python -m specivo.cli.backfill_embeddings` (or `make backfill-embeddings`)
+to index existing content. The `celery-embeddings` service embeds new content as it is saved. See
 [Semantic search and embeddings](https://specivo.io/docs/specivo/install/semantic-search/) for
 what is indexed when, offline setup, and troubleshooting.
 

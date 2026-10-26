@@ -236,7 +236,7 @@ enable it.
 
 The import runs inside the `api` container, so the plugin, and the export it
 reads, have to be there. `INSTALLED_PLUGINS` is read by every service, so mount
-the plugin into the Celery worker as well, or the worker fails to start. For
+the plugin into both Celery workers as well, or they fail to start. For
 example, in `docker-compose.override.yml`:
 
 ```yaml
@@ -247,6 +247,10 @@ services:
       - ./plugins/acme_hashers.py:/app/acme_hashers.py:ro
       - ./acme-export.json:/data/acme-export.json:ro
   celery-worker:
+    volumes:
+      - ./plugins/acme_import.py:/app/acme_import.py:ro
+      - ./plugins/acme_hashers.py:/app/acme_hashers.py:ro
+  celery-embeddings:
     volumes:
       - ./plugins/acme_import.py:/app/acme_import.py:ro
       - ./plugins/acme_hashers.py:/app/acme_hashers.py:ro

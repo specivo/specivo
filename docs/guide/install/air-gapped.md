@@ -87,12 +87,14 @@ Open `http://your-specivo-host:9933` and sign in.
 ## Semantic search offline
 
 The embedding model is not in the Docker image or the release bundle; it is a separate download of
-about 393 MB from Hugging Face. To use semantic search on an air-gapped host, fetch it on the
+about 487 MB from Hugging Face. To use semantic search on an air-gapped host, fetch it on the
 connected machine and copy it into `SPECIVO_DATA_DIR` on the offline host (default `./specivo-data`).
 
-1. On the connected machine, download the model with `make download-model` from a checkout, or by
-   hand as listed in [Semantic search and embeddings](semantic-search.md#turn-it-on). You need
-   `multilingual-e5-small.onnx` and `tokenizer.json`; the script fetches three small files besides.
+1. On the connected machine, download the model with `bash scripts/download-model.sh ./models`
+   (the script is in the repository and in the release bundle; it needs `curl` and `sha256sum` or
+   `shasum`). It fetches `multilingual-e5-small.onnx` and `tokenizer.json` from a pinned revision and
+   checks their SHA-256. If the offline host itself reports *cannot reach huggingface.co* from
+   `python -m specivo.cli.download_model`, that message lists the same files and checksums.
 2. Copy the resulting `models` folder to `<SPECIVO_DATA_DIR>/models/` on the offline host, so
    that `<SPECIVO_DATA_DIR>/models/multilingual-e5-small.onnx` exists.
 3. Index the content you already have:

@@ -76,7 +76,7 @@ make frontend-build   # one-off frontend build (needed for tests that load bundl
 make test-db-up       # test database
 make test             # run tests
 make lint             # ruff + mypy
-make download-model   # embedding model (~393 MB)
+make download-model   # embedding model (~487 MB), with the stack running
 ```
 
 ## Documentation
