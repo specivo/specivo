@@ -147,7 +147,6 @@ async def world(db_session: AsyncSession) -> World:
         "Charts",
         "![secret](secret.png) ![roadmap](roadmap.png) ![diagram](diagram.png) ![tie](tie.png)",
         admin,
-        skip_search_index=True,
     )
 
     private_note = Journal(

@@ -25,6 +25,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - The remaining untranslated interface text, and dates now follow the interface language
 - Keyword search returned short pages after the first one
 - Comments saved in the same moment could appear out of order
+- New comments were not found by any search, and edits were not re-indexed
 
 ### Security
 - Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
@@ -34,7 +35,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - A very deep search offset could make the database rank millions of rows
 
 ### Internal
-- Migrations 0033–0036: role and tracker visibility columns, issue-key search terms, a wider `users.password_hash`, and *View time entries* for the Agent role. **Run a search reindex after upgrading** (Administration → Settings) so keys in older content are found
+- Migrations 0033–0037: role and tracker visibility columns, issue-key search terms, a wider `users.password_hash`, *View time entries* for the Agent role, and search chunks for existing comments. **Run a search reindex after upgrading** (Administration → Settings) so keys in older content are found
 - Plugins load in the web app, the import CLI and the Celery worker through one shared bootstrap
 - Python-Markdown upgraded to 3.11.2
 

@@ -25,9 +25,10 @@ embedding model that the operator downloads, and an index that is built afterwar
 If semantic results are empty, the model files are probably missing from the server's data directory, or
 the existing content hasn't been indexed yet. Keyword search still works in the meantime. The operator
 downloads the model (`make download-model`) and runs the indexing command
-(`docker compose exec api python -m specivo.cli.backfill_embeddings`). Comments, and issues or wiki pages
-edited since the last run, also only reach the search index when that command runs again. The
-steps, a way to check each one, and fixes are in
+(`docker compose exec api python -m specivo.cli.backfill_embeddings`). After that, new and edited
+content is indexed as it is saved: keyword search sees it at once, and semantic search a few seconds
+later, provided the `celery-worker` container is running. The steps, a way to check each one, and
+fixes are in
 [Semantic search and embeddings](../install/semantic-search.md). See also [Finding issues](../issues/finding.md).
 
 If searching for an issue key like `ACME-42` finds the issue itself but not older issues or wiki pages

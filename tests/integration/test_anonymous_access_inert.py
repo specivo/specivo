@@ -104,7 +104,6 @@ async def world(db_session: AsyncSession, client: AsyncClient) -> dict[str, Any]
             f"Lighthouse page {proj.key}",
             "Lighthouse wiki text",
             admin,
-            skip_search_index=True,
             skip_link_rebuild=True,
         )
         slugs[proj.key] = page.slug

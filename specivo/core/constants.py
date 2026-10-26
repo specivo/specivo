@@ -27,6 +27,9 @@ MAX_SEARCH_OFFSET = 1000
 # Results the MCP search tool returns at most.
 MCP_SEARCH_MAX_LIMIT = 50
 SEARCH_FTS_HEADLINE_OPTIONS = "MaxWords=35, MinWords=15, StartSel=<mark>, StopSel=</mark>"
+# Delay before a queued embedding task runs, so a burst of edits to one source
+# is embedded once, from its latest text.
+SEARCH_EMBED_DEBOUNCE_SECONDS = 5
 
 # Hierarchy
 MAX_HIERARCHY_DEPTH = 10  # Issue nesting (parent/child issues)

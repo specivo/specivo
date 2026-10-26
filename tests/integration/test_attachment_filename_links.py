@@ -156,7 +156,7 @@ async def world(db_session: AsyncSession) -> World:
     db.add_all([main_issue, other_issue, private_issue])
     await db.flush()
 
-    page, _content = await WikiService().create_page(db, project.id, "Links", WIKI_TEXT, admin, skip_search_index=True)
+    page, _content = await WikiService().create_page(db, project.id, "Links", WIKI_TEXT, admin)
 
     comment = Journal(issue_id=main_issue.id, project_id=project.id, user_id=author.id, sequence=1, notes=COMMENT)
     private_note = Journal(

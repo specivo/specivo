@@ -1,4 +1,7 @@
-"""Backfill search index: chunk all issues and wiki pages, then generate embeddings.
+"""Backfill search index: chunk all issues, wiki pages, comments and attachments, then embed them.
+
+Without a usable embedding model it still writes the chunks, which is all
+keyword search needs.
 
 Each batch of entities is committed independently so progress survives
 crashes. Safe to re-run — existing sources are updated in place
@@ -14,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import sys
 import time
 
 from sqlalchemy import func, select
@@ -50,10 +52,11 @@ async def _backfill() -> None:
             await session.execute(select(EmbeddingModel).where(EmbeddingModel.is_default.is_(True)))
         ).scalar_one_or_none()
         if model is None:
-            logger.error("No default embedding model found. Run 'make seed' first.")
-            sys.exit(1)
-
-        logger.info("Embedding model: %s (provider=%s, dims=%d)", model.name, model.provider, model.dimensions)
+            logger.warning("No default embedding model registered: writing keyword-search chunks only.")
+        elif not embedder.is_model_usable(model):
+            logger.warning("Embedding model %s has no model files: writing keyword-search chunks only.", model.name)
+        else:
+            logger.info("Embedding model: %s (provider=%s, dims=%d)", model.name, model.provider, model.dimensions)
         # Count entities
         issue_count = (await session.execute(select(func.count()).select_from(Issue))).scalar_one()
         wiki_count = (await session.execute(select(func.count()).select_from(WikiPage))).scalar_one()

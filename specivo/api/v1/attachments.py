@@ -185,15 +185,9 @@ async def update_attachment(
             request=request,
         )
     else:
-        # If only metadata changed, still need to flush and re-index
+        # Only metadata changed: flushing re-indexes it (see search_index_service)
         if payload.metadata is not None:
             await db.flush()
-            try:
-                from specivo.services.embedding_service import EmbeddingService
-
-                await EmbeddingService().embed_attachment(db, attachment)
-            except Exception:
-                pass
             await db.refresh(attachment)
 
     return _attachment_out(attachment, author_name=author_name)

@@ -23,6 +23,7 @@ from specivo.models.project import EnabledModule, Project
 from specivo.models.role import Role
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
 from specivo.models.user import User
+from specivo.services.embedding_service import EmbeddingService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, UserFactory
@@ -253,8 +254,14 @@ async def test_embed_issue_on_create(
     project: Project,
     lookups: tuple[Tracker, IssueStatus, IssuePriority],
     mock_model: EmbeddingModel,
+    monkeypatch: pytest.MonkeyPatch,
 ):
-    """Creating an issue generates search chunks and embeddings (mock provider)."""
+    """Creating an issue writes its chunks and queues their embedding (mock provider)."""
+    from specivo.tasks.embeddings import embed_search_sources
+
+    queued: list[list] = []
+    monkeypatch.setattr(embed_search_sources, "apply_async", lambda args, **_kw: queued.extend(args[0]))
+
     tracker, _, _ = lookups
     await _create_issue(
         authed_client,
@@ -281,14 +288,16 @@ async def test_embed_issue_on_create(
     assert len(chunks) >= 1
     assert "authentication" in chunks[0].content.lower()
 
-    # Verify embeddings were generated
-    result = await db_session.execute(
-        select(ChunkEmbedding).where(
-            ChunkEmbedding.chunk_id == chunks[0].id,
-            ChunkEmbedding.model_id == mock_model.id,
-        )
+    # The request only queued the embedding; run what the task runs.
+    assert ["issue", source.entity_id] in queued
+    embedding_query = select(ChunkEmbedding).where(
+        ChunkEmbedding.chunk_id == chunks[0].id,
+        ChunkEmbedding.model_id == mock_model.id,
     )
-    embeddings = result.scalars().all()
+    assert (await db_session.execute(embedding_query)).scalars().all() == []
+    await EmbeddingService().embed_pending(db_session, [(t, i) for t, i in queued])
+
+    embeddings = (await db_session.execute(embedding_query)).scalars().all()
     assert len(embeddings) == 1
     assert len(embeddings[0].embedding) == 1536
 
