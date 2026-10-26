@@ -42,4 +42,10 @@ Each project has a **Time** area that lists time entries and rolls them into rep
 activity, by person, and over a date range — so a [Manager](index.md) can see how effort is spread
 across the project.
 
+!!! note "Who sees whose time"
+    By default everyone who can open the project sees every entry. A role set to **Own time entries**
+    (see [What a role can see](index.md#what-a-role-can-see)) sees only the hours its holder logged —
+    in the Time area, on issues, in version totals and in reports. A person with several roles gets
+    the widest setting among them.
+
 ![The project time entries](../assets/img/time-entries.webp)

@@ -20,6 +20,8 @@ Creating an issue takes seconds. The only things Specivo insists on are a **subj
    them in.
 5. **Set the optional fields** that apply — assignee, priority, target version, sprint, start and due
    dates, and an estimate. You can skip any of these and fill them in once the issue exists.
+   If you are allowed to set issues private, there is also a **Private** box. It starts ticked for a
+   tracker that makes issues private by default (see below).
 6. Click **Create** (or **Save**).
 
 That's it. The issue gets the next number in the project (for example `ACME-57`) and opens on its own
@@ -31,6 +33,17 @@ page.
 |---|---|
 | Subject | Description, assignee, priority, category |
 | Tracker | Target version, sprint, start/due dates, estimate, parent, watchers, metadata |
+
+## Private by default
+
+An administrator can mark a tracker **Private by default** under **Administration → Trackers** — a
+Security or HR tracker, say. Every new issue of that tracker is then created private, from the web
+form, the API, an [AI agent](../ai-agents/index.md) or a [recurring task](../projects/recurring-tasks.md),
+without anyone having to remember to tick a box. Only members with the **Set issues private**
+permission can untick it; everyone else gets the tracker's default. The same permission is needed
+to make an issue of an ordinary tracker private.
+
+A private issue is visible only to its author, its assignee and administrators.
 
 !!! tip "Write a description you'll thank yourself for later"
     A good description says what the problem or goal is, how to reproduce a bug, and what "done"
