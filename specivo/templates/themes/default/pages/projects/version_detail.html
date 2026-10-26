@@ -158,10 +158,12 @@
         <span class="vd-info-label">{% trans %}Closed issues{% endtrans %}</span>
         <span class="vd-info-value" style="color:var(--sp-success)">{{ closed_count }}</span>
       </div>
+      {% if can_view_time_entries %}
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Time logged{% endtrans %}</span>
         <span class="vd-info-value"><span class="mono">{{ "%.1f"|format(time_logged) }}h</span></span>
       </div>
+      {% endif %}
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Estimated{% endtrans %}</span>
         <span class="vd-info-value"><span class="mono">{{ "%.1f"|format(estimated_hours) }}h</span></span>

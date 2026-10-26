@@ -296,6 +296,7 @@ async def test_own_role_on_issue_tab_and_version_sum(
     await _entry(db_session, project, colleague, activity, comments="issue-colleague", issue=issue, hours="3.00")
     role = await _role(db_session, "Rolevis Own Issue", time_entries_visibility="own")
     await _member(db_session, project, [role], user=viewer)
+    await _member(db_session, project, [await _role(db_session, "Rolevis All Issue")], user=colleague)
 
     entries = await _svc.list_for_issue(db_session, issue.id, project, viewer)
     assert [e.comments for e in entries] == ["issue-viewer"]
@@ -312,6 +313,7 @@ async def test_own_role_on_billing_report(db_session: AsyncSession, setup: dict,
     db_session.add(BillingRate(project_id=project.id, hourly_rate=Decimal("10"), effective_from=date(2026, 1, 1)))
     role = await _role(db_session, "Rolevis Own Billing", time_entries_visibility="own")
     await _member(db_session, project, [role], user=viewer)
+    await _member(db_session, project, [await _role(db_session, "Rolevis All Billing")], user=colleague)
 
     service = BillingRateService()
     span = (date(2026, 1, 1), date(2026, 12, 31))
@@ -372,6 +374,7 @@ async def test_non_member_role_restricts_public_project(
     await _entry(db_session, project, viewer, activity, comments="public-viewer")
     await _entry(db_session, project, colleague, activity, comments="public-colleague")
     non_member = await _non_member_role(db_session)
+    non_member.permissions = [*non_member.permissions, "view_time_entries"]
     non_member.time_entries_visibility = "own"
     await db_session.commit()
 
@@ -428,9 +431,15 @@ async def test_cross_project_clause_matches_the_per_project_rule(
         "RVCRC-colleague",
         "RVCRP-viewer",
     }
-    assert await visible() == expected_always | {"RVCRP-colleague"}
+    # The seeded Non member role does not grant view_time_entries: nothing on the public project.
+    assert await visible() == expected_always - {"RVCRP-viewer"}
 
     non_member = await _non_member_role(db_session)
+    non_member.permissions = [*non_member.permissions, "view_time_entries"]
+    await db_session.flush()
+    clear_role_cache(db_session)
+    assert await visible() == expected_always | {"RVCRP-colleague"}
+
     non_member.time_entries_visibility = "own"
     await db_session.flush()
     clear_role_cache(db_session)

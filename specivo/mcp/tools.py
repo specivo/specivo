@@ -1683,11 +1683,12 @@ async def _log_time(
     spent_on: date | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
-    await _require_permission(session, user, project.id, "log_time")
+    await _time_entry_svc.require_can_log(session, user, project)
     issue_id: int | None = None
     if issue_ref:
         issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
         issue_id = issue.id
+        await _time_entry_svc.require_can_log(session, user, project, issue_id)
 
     data = TimeEntryCreate(
         issue_id=issue_id,

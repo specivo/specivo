@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
+from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.agent_cost import (
@@ -24,6 +25,7 @@ from specivo.schemas.agent_cost import (
 from specivo.services.agent_cost_service import AgentCostService
 from specivo.services.billing_rate_service import BillingRateService
 from specivo.services.issue_service import IssueService
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 
 router = APIRouter(tags=["agent-costs"])
@@ -170,12 +172,16 @@ async def delete_billing_rate(
 )
 async def get_billing_report(
     project_key: str,
+    request: Request,
     date_from: date = Query(...),
     date_to: date = Query(...),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> BillingReportOut:
+    """Billable time in the period at the effective rates; requires ``view_time_entries`` (403 without it)."""
     project = await _project_service.get_by_key(db, project_key)
     await _project_service.require_project_access(db, project, current_user)
+    if not await check_permission(current_user, project.id, Permission.VIEW_TIME_ENTRIES, db, request=request):
+        raise PermissionDeniedError("You do not have permission to view time entries in this project")
     report = await _billing_service.billable_report(db, project, current_user, date_from, date_to)
     return BillingReportOut(**report)
