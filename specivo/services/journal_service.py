@@ -448,6 +448,10 @@ class JournalService:
     ) -> list[Journal]:
         """List journals for an issue, ordered by created_at ascending.
 
+        Ties on ``created_at`` (entries written in one transaction share the
+        same server-side timestamp) are broken by id, so the order — and the
+        activity pages sliced from it — is deterministic.
+
         Eagerly loads ``user`` and ``details`` relationships.
         """
         stmt = (
@@ -461,7 +465,7 @@ class JournalService:
                 # details is a collection — keep as selectinload (one extra query).
                 selectinload(Journal.details),
             )
-            .order_by(Journal.created_at.asc())
+            .order_by(Journal.created_at.asc(), Journal.id.asc())
         )
 
         if not include_private:
