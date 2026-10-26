@@ -30,12 +30,23 @@ from specivo.importers.load.project_loader import (
 from specivo.importers.load.reference_rewrite import rewrite_issue_references
 from specivo.importers.load.search_index import backfill_search_index, rebuild_wiki_link_graph
 from specivo.importers.load.time_entry_loader import load_time_entries
-from specivo.importers.load.user_loader import ensure_import_account, load_groups, load_users
+from specivo.importers.load.user_loader import (
+    check_credential_import,
+    ensure_import_account,
+    load_groups,
+    load_users,
+)
 from specivo.importers.load.wiki_loader import load_wiki_pages, load_wiki_redirects, load_wiki_watchers
 
 
 async def _bootstrap(ctx: PhaseContext) -> None:
-    """Create the account that owns anything with no resolvable author."""
+    """Check the run can do what it was asked, then create the import account.
+
+    The account owns anything with no resolvable author. The check comes first
+    so a run that cannot import the passwords it was asked to stops before it
+    writes anything.
+    """
+    check_credential_import(ctx)
     await ensure_import_account(ctx)
 
 

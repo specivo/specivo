@@ -174,12 +174,40 @@ class IRLookups:
 
 
 @dataclass(slots=True)
+class IRCredential:
+    """A source account's password, as the source system stored it.
+
+    ``algorithm`` names the legacy hasher that understands the source's scheme
+    (``redmine_sha1``, or an id a plugin registers); ``fields`` holds the source
+    row's raw credential columns under the names that hasher reads (a salt and a
+    digest, say). It is never a ready-made Specivo hash: an adapter does no
+    cryptography, and the loader turns this into a stored value with
+    ``PasswordHasher.from_source`` — and only when the operator asked for
+    passwords to be imported and enabled the algorithm.
+
+    ``fields`` is secret material. It must never be logged or put in a report.
+    """
+
+    algorithm: str
+    fields: dict[str, str] = field(default_factory=dict)
+
+    def __repr__(self) -> str:
+        return f"IRCredential(algorithm={self.algorithm!r}, fields=<{len(self.fields)} hidden>)"
+
+
+@dataclass(slots=True)
 class IRUser:
     """A person.
 
-    Credentials are deliberately absent: password hashes are never portable
-    between systems, so imported accounts get an unusable hash and the operator
-    is told which logins need a reset.
+    ``credential`` is the source's password when the adapter can read one and
+    the account authenticates locally; ``None`` for an account bound to an
+    external directory (LDAP) or with no usable password. Whether it is used is
+    the loader's decision: without ``--import-passwords``, or for an
+    administrator, the account gets an unusable hash and the operator is told
+    which logins need a reset.
+
+    ``must_change_password`` and ``password_changed_at`` carry the source's own
+    state, used only when the credential is kept.
     """
 
     source_ref: str
@@ -192,6 +220,12 @@ class IRUser:
     last_login_at: datetime | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    credential: IRCredential | None = None
+    must_change_password: bool = False
+    password_changed_at: datetime | None = None
+    # True when the account authenticates against an external directory
+    # (LDAP) rather than a local password, so it has no credential to carry.
+    external_auth: bool = False
 
 
 @dataclass(slots=True)

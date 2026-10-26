@@ -66,6 +66,7 @@ class RedmineSourceAdapter:
     """
 
     source_system: ClassVar[str] = "redmine"
+    credential_algorithms: ClassVar[tuple[str, ...]] = (extract.REDMINE_PASSWORD_ALGORITHM,)
 
     def __init__(
         self,

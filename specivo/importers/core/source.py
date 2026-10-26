@@ -41,10 +41,16 @@ class SourceAdapter(Protocol):
     ``source_system`` is stored on every ``import_id_map`` row, so mappings from
     different systems can coexist in one Specivo database. ``source_instance``
     distinguishes two installations of the same system.
+
+    ``credential_algorithms`` lists the password hasher ids the adapter may put
+    in :attr:`IRUser.credential <specivo.importers.core.ir.IRUser.credential>`.
+    An import with passwords checks every one of them is registered and enabled
+    before it writes anything. Empty for an adapter that carries no passwords.
     """
 
     source_system: ClassVar[str]
     source_instance: str
+    credential_algorithms: ClassVar[tuple[str, ...]]
 
     async def connect(self) -> None:
         """Open connections and validate the source is readable."""

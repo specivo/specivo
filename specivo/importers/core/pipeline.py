@@ -95,6 +95,9 @@ class ImportOptions:
     cf_key_map: dict[str, str] = field(default_factory=dict)
     flatten_excess_depth: bool = False
     merge_duplicate_statuses: bool = False
+    # Carry source passwords over (opt-in). Takes effect only for algorithms
+    # also listed in LEGACY_PASSWORD_ALGORITHMS, and never for administrators.
+    import_passwords: bool = False
 
 
 @dataclass(slots=True)

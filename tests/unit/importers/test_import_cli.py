@@ -71,6 +71,10 @@ class TestParser:
         assert args.flatten_excess_depth is False
         assert args.project is None
         assert args.batch_size == 500
+        assert args.import_passwords is False
+
+    def test_passwords_are_imported_only_when_asked(self):
+        assert self._parse("--import-passwords").import_passwords is True
 
     def test_flags_are_parsed(self):
         args = self._parse("--dry-run", "--strict", "--merge-duplicate-statuses", "--flatten-excess-depth")
@@ -91,3 +95,27 @@ class TestParser:
     def test_help_points_at_the_dry_run(self):
         """It is the first thing anyone should run."""
         assert "--dry-run" in build_parser().format_help()
+
+
+class TestBootstrap:
+    async def test_the_cli_loads_plugin_password_hashers(self, monkeypatch):
+        """A hasher a plugin provides must reach the import, not only create_app()."""
+        import specivo.services.password_hashers as hashers_mod
+        from specivo.cli.import_redmine import _run
+        from specivo.core.config import get_settings
+
+        monkeypatch.setattr(get_settings(), "installed_plugins", ["tests.fixtures.acme_hashers.Plugin"])
+        monkeypatch.setattr(hashers_mod, "_registry", None)
+
+        class _StopBeforeConnectingError(Exception):
+            pass
+
+        def _adapter(**_kwargs):
+            raise _StopBeforeConnectingError
+
+        monkeypatch.setattr("specivo.importers.redmine.RedmineSourceAdapter", _adapter)
+        args = build_parser().parse_args(["--source-db-url", "postgresql://u:p@h/redmine"])
+        with pytest.raises(_StopBeforeConnectingError):
+            await _run(args)
+
+        assert hashers_mod.get_password_hasher_registry().get("acme_md5") is not None

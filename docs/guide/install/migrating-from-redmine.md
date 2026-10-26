@@ -93,6 +93,82 @@ Each phase commits as it finishes, so a resumed run keeps what landed and
 continues. Re-running an import that already finished is safe: everything is
 recognised and skipped.
 
+## Keeping people's passwords
+
+By default every imported account arrives without a usable password (see
+[What does not come across](#what-does-not-come-across)). If you would rather
+people keep signing in with the password they already have, the importer can
+bring it over. You have to ask for it twice: once in the configuration and once
+on the command line.
+
+1. Enable Redmine's password format in `.env` and restart the stack:
+
+    ```bash
+    LEGACY_PASSWORD_ALGORITHMS=["redmine_sha1"]
+    ```
+
+2. Run the import with `--import-passwords`:
+
+    ```
+    make import-redmine ARGS='\
+      --source-db-url postgresql://redmine:secret@db.internal/redmine \
+      --source-files-dir /mnt/redmine-files \
+      --import-passwords'
+    ```
+
+If the algorithm isn't enabled, an import with `--import-passwords` stops before
+it writes anything. Without the flag, every account takes the reset path even
+when the algorithm is enabled.
+
+What happens to each account:
+
+- **Local Redmine accounts keep their password.** Redmine stores a salted SHA1
+  digest. Specivo never stores that digest on its own: it wraps it in bcrypt at
+  import, so a copy of the database holds nothing weaker than a native Specivo
+  hash. At the person's first sign-in the stored value is replaced with an
+  ordinary bcrypt hash of their password. They don't notice anything, and the
+  upgrade is recorded in the security audit log. If Redmine had asked an
+  account to change its password at next sign-in, Specivo asks too.
+- **Administrators always set a new password.** An administrator account is the
+  one most worth taking over, so its Redmine password is never carried over. The
+  report lists these accounts under *administrators asked to set a new
+  password*.
+- **LDAP accounts and accounts without a local password** take the reset path,
+  as they would without the flag. Redmine never checks their local hash, so
+  there is nothing to keep. The report counts LDAP accounts separately.
+
+Accounts that kept their password are listed in the report under *accounts that
+keep their existing password*; everyone else is under *accounts that will be
+asked to set a password at first sign in*.
+
+Each imported password costs one bcrypt, about a quarter of a second at the
+default cost, which adds roughly four minutes per thousand accounts. For a very
+large instance you can lower the cost of the import-time wrap with
+`LEGACY_PASSWORD_WRAP_ROUNDS=10`. The hash is replaced at the normal cost when
+the person signs in anyway.
+
+Redmine's SHA1 scheme is weak, and wrapping it doesn't make a weak password any
+stronger. Once most people have signed in, retire the old hashes:
+
+```bash
+# Who still holds an imported password, with their last sign-in:
+docker compose exec api python -m specivo.cli.admin legacy-passwords
+
+# Make them use password recovery from now on:
+docker compose exec api python -m specivo.cli.admin legacy-passwords expire --yes
+```
+
+Or set a date in `.env`, after which no imported password works and the
+remaining people use password recovery:
+
+```bash
+LEGACY_PASSWORD_HASHES_EXPIRE_AT=2027-03-31T00:00:00Z
+```
+
+Either way, the sign-in page shows the usual "Invalid login or password", so it
+doesn't reveal which accounts are affected. Coming from something other than
+Redmine? See [Writing a password hasher plugin](password-hasher-plugins.md).
+
 ## Useful options
 
 | Option | What it does |
@@ -102,6 +178,7 @@ recognised and skipped.
 | `--flatten-excess-depth` | Import projects nested deeper than Specivo allows by re-parenting them higher up. |
 | `--cf-key-map "Story Points=points"` | Choose the metadata key a custom field is stored under. |
 | `--source-instance name` | Name this Redmine, so two installations can be imported into one Specivo. |
+| `--import-passwords` | Let accounts keep their Redmine password. Needs `redmine_sha1` in `LEGACY_PASSWORD_ALGORITHMS`; see [Keeping people's passwords](#keeping-peoples-passwords). |
 | `--report-json path` | Write the report as JSON as well as printing it. |
 | `--batch-size n` | Rows read per page from the source (default 500). Lower it if the source database is memory-constrained; raise it to reduce round trips on a fast connection to a large instance. |
 
@@ -110,13 +187,14 @@ recognised and skipped.
 Some things have no Specivo equivalent. The importer says so rather than
 guessing:
 
-- **Passwords.** The two systems hash differently and nothing is portable.
-  Every imported account arrives with a password nobody holds, and is marked as
-  owing one. Give an account a password from **Administration → Users** and the
-  person is asked to replace it the first time they sign in, so the one you
-  typed is not the one they keep. If mail is configured they can instead use
-  password recovery and set their own straight away. Either way the logins are
-  in the report.
+- **Passwords, unless you ask for them.** Without `--import-passwords` (see
+  [Keeping people's passwords](#keeping-peoples-passwords)), every imported
+  account arrives with a password nobody holds, and is marked as owing one.
+  Administrators and LDAP accounts are always treated this way. Give an account
+  a password from **Administration → Users** and the person is asked to replace
+  it the first time they sign in, so the one you typed is not the one they
+  keep. If mail is configured they can instead use password recovery and set
+  their own straight away. Either way the logins are in the report.
 - **Modules Specivo does not have** — repositories, forums, news, documents,
   calendars and Gantt.
 - **Custom fields on anything but issues.** Fields on users, projects, versions
@@ -155,10 +233,11 @@ before you look at real numbers:
 
 ## After the import
 
-- Give the imported accounts a way in: set a password for each from
+- Give the accounts that owe a password a way in: set a password for each from
   **Administration → Users** and pass it on, or tell those people to use
   password recovery. A password you set is replaced at first sign-in, so
-  neither route leaves an account whose password somebody else knows.
+  neither route leaves an account whose password somebody else knows. If you
+  imported passwords, that is only the administrators and LDAP accounts.
 - Give any newly created roles their permissions.
 - Check the imported groups under **Administration → Groups**, and any that were
   suffixed on a name collision in particular — a suffixed group is a second one

@@ -2,12 +2,16 @@
 
 Three things happen here that are worth knowing about.
 
-**No password survives.** Redmine salts and hashes with SHA1 and Specivo uses
-bcrypt, so nothing is portable. Every imported account gets a random unusable
-hash and is flagged ``must_change_password``, so whatever password it is
-eventually given — by an administrator, or by the person completing an email
-recovery — is not the password it keeps. The logins are listed in the report so
-the operator knows which accounts are waiting for one.
+**Passwords survive only when asked to.** With ``--import-passwords``, an
+account whose source credential uses an algorithm listed in
+``LEGACY_PASSWORD_ALGORITHMS`` keeps its password: the credential's raw source
+columns go through the legacy hasher's ``from_source`` (for Redmine, the SHA1
+digest wrapped in bcrypt), and the first sign-in replaces it with a native
+hash. Everybody else — no flag, no credential (an LDAP account, a blank hash),
+or an administrator, who always has to choose a new one — gets a random
+unusable hash and is flagged ``must_change_password``, so whatever password the
+account is eventually given by somebody else is not the one it keeps. The
+report lists which accounts kept their password and which are waiting for one.
 
 **Identity has to be squeezed into narrower columns.** Specivo requires an email
 and enforces case-insensitive uniqueness on both login and email, while Redmine
@@ -34,11 +38,12 @@ from specivo.core.config import get_settings
 from specivo.core.exceptions import ConflictError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.ir import EntityType, IRGroup, IRUser
-from specivo.importers.core.pipeline import PhaseContext
+from specivo.importers.core.pipeline import PhaseContext, PhaseFailedError
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.services.anonymous_user_service import real_users_clause
 from specivo.services.auth_utils import hash_password
+from specivo.services.password_hashers import CredentialImportError, get_password_hasher_registry
 from specivo.services.user_group_service import UserGroupService
 
 logger = logging.getLogger(__name__)
@@ -52,6 +57,9 @@ IMPORT_ACCOUNT_STATE_KEY = "import_account_id"
 # has to read as a statement about the accounts under it.
 NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN = "accounts_that_will_be_asked_to_set_a_password_at_first_sign_in"
 NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
+NOTE_PASSWORD_KEPT = "accounts_that_keep_their_existing_password"
+NOTE_ADMIN_PASSWORD_RESET = "administrators_asked_to_set_a_new_password"
+NOTE_EXTERNAL_AUTH = "accounts_that_signed_in_through_an_external_directory"
 
 # Identifier under which the fallback author account is mapped, so a resumed
 # run finds the one it made rather than creating another.
@@ -121,6 +129,38 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
     return existing
 
 
+def check_credential_import(ctx: PhaseContext) -> None:
+    """Refuse to start an import with passwords that could not store them.
+
+    Runs before anything is written. With ``--import-passwords``, every
+    algorithm the adapter may emit has to be registered and listed in
+    ``LEGACY_PASSWORD_ALGORITHMS``; otherwise the run stops here rather than
+    importing accounts that would silently lose their passwords.
+    """
+    if not ctx.options.import_passwords:
+        return
+    algorithms = tuple(getattr(ctx.adapter, "credential_algorithms", ()))
+    if not algorithms:
+        ctx.warn("--import-passwords was given, but this source carries no passwords; every account will be reset")
+        return
+    for algorithm in algorithms:
+        _require_enabled(algorithm)
+
+
+def _require_enabled(algorithm: str) -> None:
+    registry = get_password_hasher_registry()
+    if registry.get(algorithm) is None:
+        known = ", ".join(sorted(registry.legacy())) or "none"
+        raise PhaseFailedError(
+            f"Cannot import passwords: no password hasher is registered for '{algorithm}' (registered: {known})."
+        )
+    if algorithm not in get_settings().legacy_password_algorithms:
+        raise PhaseFailedError(
+            f"Cannot import passwords: the '{algorithm}' algorithm is not enabled. Add it to "
+            "LEGACY_PASSWORD_ALGORITHMS, or run without --import-passwords to have every account set a new password."
+        )
+
+
 async def load_users(ctx: PhaseContext) -> None:
     """Create every source user that is not already imported."""
     async for ir in ctx.adapter.extract_users():
@@ -134,20 +174,23 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
     """Create one user from *ir*, adjusting identity where Specivo is stricter."""
     login = await _unique_login(ctx, ir)
     email, synthesised = await _unique_email(ctx, ir, login)
+    kept_hash = _imported_password(ctx, ir, login)
 
     user = User(
         login=login,
         email=email,
         display_name=(ir.display_name or login)[:_MAX_DISPLAY_NAME],
-        password_hash=_unusable_password(),
+        password_hash=kept_hash or _unusable_password(),
         status=ir.status,
         is_admin=ir.is_admin,
         is_service_account=False,
-        # Nobody holds this password, so the first one the account actually has
-        # will have been chosen by somebody else. Making the owner replace it is
-        # the point; a person who recovers the account by email picks their own
-        # and the flag clears itself.
-        must_change_password=True,
+        # Without a kept password nobody holds this one, so the first password
+        # the account actually has will have been chosen by somebody else.
+        # Making the owner replace it is the point; a person who recovers the
+        # account by email picks their own and the flag clears itself. A kept
+        # password keeps the source's own flag.
+        must_change_password=ir.must_change_password if kept_hash else True,
+        password_changed_at=ir.password_changed_at if kept_hash else None,
         language=_supported_language(ir.language),
         last_login_at=ir.last_login_at,
     )
@@ -158,7 +201,12 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
     await ctx.id_map.put(ctx.session, EntityType.USER, ir.source_ref, "users", user.id)
 
     ctx.summary.record_created(EntityType.USER)
-    ctx.summary.add_note(NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN, login)
+    if kept_hash:
+        ctx.summary.add_note(NOTE_PASSWORD_KEPT, login)
+    else:
+        ctx.summary.add_note(NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN, login)
+    if ir.external_auth:
+        ctx.summary.add_note(NOTE_EXTERNAL_AUTH, login)
     if synthesised:
         ctx.summary.add_note(NOTE_SYNTHETIC_EMAIL, f"{login} ({email})")
     ctx.tick()
@@ -217,6 +265,43 @@ async def load_group(ctx: PhaseContext, ir: IRGroup) -> UserGroup | None:
 
     ctx.tick()
     return group
+
+
+def _imported_password(ctx: PhaseContext, ir: IRUser, login: str) -> str | None:
+    """Return the stored value that keeps the account's source password, or ``None``.
+
+    ``None`` means the account takes the reset path: passwords were not asked
+    for, it has no credential, it is an administrator, or the credential could
+    not be converted (reported as a warning, without any of its contents).
+    """
+    if not ctx.options.import_passwords:
+        return None
+    if ir.is_admin:
+        # An administrator's account is the one most worth taking over, and the
+        # source system's hash is weaker than ours. Never carried over.
+        ctx.summary.add_note(NOTE_ADMIN_PASSWORD_RESET, login)
+        return None
+    credential = ir.credential
+    if credential is None:
+        return None
+
+    # Checked up front by check_credential_import for the algorithms the
+    # adapter declares; checked again for whatever it actually emitted.
+    _require_enabled(credential.algorithm)
+    hasher = get_password_hasher_registry().get(credential.algorithm)
+    assert hasher is not None
+    try:
+        return hasher.from_source(credential.fields)
+    except CredentialImportError as exc:
+        ctx.warn("Password could not be carried over; the account will set a new one", login=login, reason=str(exc))
+    except Exception:  # noqa: BLE001 - a plugin hasher's bug must not end the import
+        logger.exception("Password hasher %r failed on an imported account", credential.algorithm)
+        ctx.warn(
+            "Password could not be carried over; the account will set a new one",
+            login=login,
+            reason=f"{credential.algorithm} hasher failed",
+        )
+    return None
 
 
 def _unusable_password() -> str:
