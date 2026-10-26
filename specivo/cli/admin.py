@@ -23,8 +23,10 @@ Usage::
     uv run python -m specivo.cli.admin legacy-passwords expire --yes
 
 The ``create`` subcommand is idempotent: existing admins are skipped,
-non-admin users are promoted.  When no CLI args are given it reads from
-``/app/data/.bootstrap.json`` and deletes the file after success.
+non-admin users are promoted.  When no CLI args are given it reads the
+bootstrap file and deletes it after success: ``/app/data/state/bootstrap.json``,
+where the container's root step moves it, or ``/app/data/.bootstrap.json``,
+where the installer writes it.
 """
 
 from __future__ import annotations
@@ -56,7 +58,14 @@ from specivo.services.password_hashers import (
 
 logger = logging.getLogger(__name__)
 
-BOOTSTRAP_PATH = Path("/app/data/.bootstrap.json")
+# In the order they are tried. The entrypoint, when started as root, moves the
+# installer's file from the top of the data directory into state/, which the
+# unprivileged app user owns and so can delete it from.
+BOOTSTRAP_PATHS = (Path("/app/data/state/bootstrap.json"), Path("/app/data/.bootstrap.json"))
+
+
+def _bootstrap_path() -> Path | None:
+    return next((path for path in BOOTSTRAP_PATHS if path.exists()), None)
 
 
 async def _create_admin(
@@ -126,14 +135,13 @@ async def _run_create(args: argparse.Namespace) -> None:
     login = args.login
     email = args.email
     password = args.password
-    bootstrap_used = False
+    bootstrap_path = _bootstrap_path() if not password else None
 
-    if not password and BOOTSTRAP_PATH.exists():
-        data = json.loads(BOOTSTRAP_PATH.read_text())
+    if bootstrap_path is not None:
+        data = json.loads(bootstrap_path.read_text())
         login = login or data.get("login", "admin")
         email = email or data.get("email", "admin@localhost")
         password = data.get("password", "")
-        bootstrap_used = True
 
     if not password:
         print("Error: password required (via --password or bootstrap file).", file=sys.stderr)
@@ -152,9 +160,13 @@ async def _run_create(args: argparse.Namespace) -> None:
 
     await engine.dispose()
 
-    if bootstrap_used and BOOTSTRAP_PATH.exists():
-        BOOTSTRAP_PATH.unlink()
-        print("Bootstrap file consumed and deleted.")
+    if bootstrap_path is not None:
+        try:
+            bootstrap_path.unlink(missing_ok=True)
+        except OSError as exc:
+            print(f"Warning: could not delete {bootstrap_path} ({exc}); delete it by hand.", file=sys.stderr)
+        else:
+            print("Bootstrap file consumed and deleted.")
 
 
 async def _run_reset(args: argparse.Namespace) -> None:

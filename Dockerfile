@@ -65,13 +65,20 @@ COPY --from=frontend /build/specivo/static/dist /app/specivo/static/dist
 COPY scripts/entrypoint.sh /entrypoint.sh
 COPY scripts/healthcheck.py /usr/local/bin/specivo-healthcheck
 
-# App files stay owned by root and read-only for the app user. Only the data
-# directory (normally a mounted volume) belongs to it. HOME and the caches
-# point at writable places for libraries that write there.
+# App files stay owned by root and read-only for the app user. The data
+# directory stays with root too; the app owns only the subdirectories it
+# writes to (the same layout the entrypoint sets up on a mounted directory,
+# and what Docker copies into a new named volume). The app's private state
+# (celery beat's schedule) is in its home. See scripts/entrypoint.sh.
 RUN chmod 0755 /entrypoint.sh /usr/local/bin/specivo-healthcheck \
     && chmod -R u+rwX,go+rX,go-w /app \
-    && mkdir -p /app/data \
-    && chown "$SPECIVO_UID:$SPECIVO_GID" /app/data
+    && mkdir -p /app/data/attachments /app/data/avatars /app/data/models \
+                /app/data/state /app/data/logs/app \
+                /home/specivo/.local/state/specivo \
+    && chown "$SPECIVO_UID:$SPECIVO_GID" /app/data/attachments /app/data/avatars \
+             /app/data/models /app/data/state /app/data/logs/app \
+    && chown -R "$SPECIVO_UID:$SPECIVO_GID" /home/specivo \
+    && chmod 0700 /app/data/state /home/specivo /home/specivo/.local/state/specivo
 ENV SPECIVO_UID=$SPECIVO_UID \
     SPECIVO_GID=$SPECIVO_GID \
     HOME=/home/specivo \

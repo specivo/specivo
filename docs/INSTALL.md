@@ -39,8 +39,9 @@ Open http://localhost:9933
 ## What happens on first start
 
 1. PostgreSQL and Redis start
-2. `init-data` gives the app's folders in the data directory to the app user (UID/GID `10001`)
-   and exits; the app containers then run as that user, not root
+2. `init-data` creates the app's folders in the data directory (`attachments`, `avatars`, `models`,
+   `state`, `logs/app`), gives them to the app user (UID/GID `10001`) and exits; the data directory
+   itself stays yours. The app containers then run as that user, not root
 3. Database migrations run automatically
 4. Default data (roles, statuses, priorities) is seeded
 5. Admin account is created (from your configure answers)

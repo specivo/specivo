@@ -75,15 +75,23 @@ other. Most of it needs no action, but a few things are worth doing or checking 
 
 The `api` and Celery containers, and the commands you run with `docker compose exec api ...`, now
 run as the unprivileged user `specivo` (UID/GID `10001`). Take the new `docker-compose.yml`: its
-`init-data` service runs once as root before `api` starts and gives the files an older version
-wrote as root (`attachments/`, `avatars/`, `models/`, `themes/`, `errors/` and the app's logs) to
-that user. On the first start this can take a moment on a large attachments folder; later starts
-only check the top-level owners. `postgresql/`, `redis/` and `logs/nginx/` are left alone.
+`init-data` service runs once as root before `api` starts. It gives the app its own subdirectories
+of the data directory, `attachments/`, `avatars/`, `models/`, `state/` and `logs/app/`, including
+the files an older version wrote there as root, and moves `.bootstrap.json` into `state/` if it is
+still there. On the first start this can take a moment on a large attachments folder; later starts
+skip directories that already belong to the app.
 
+- The data directory itself stays with root (or with you), as do `logs/`, `postgresql/`, `redis/`
+  and `logs/nginx/`: the app cannot change entries at the top of the data directory.
+- The app's log file moves from `logs/specivo.log` to `logs/app/specivo.log`. The old file is left
+  where it is; delete it when you no longer need it.
+- If one of the app directories is a symlink, sits on another filesystem or belongs to another
+  user, `init-data` leaves it alone and logs a warning. Mount the target at that path instead of
+  symlinking, or run `sudo chown -R 10001:10001` on it yourself.
 - If you keep your own Compose file, add the `init-data` service and make `api` depend on it, or
-  change the owner yourself before you start the new image:
-  `sudo chown 10001:10001 <SPECIVO_DATA_DIR>` and
-  `sudo chown -R 10001:10001 <SPECIVO_DATA_DIR>/{attachments,avatars,models,themes}`.
+  prepare the directories yourself before you start the new image:
+  `cd <SPECIVO_DATA_DIR> && sudo mkdir -p attachments avatars models state logs/app` and
+  `sudo chown -R 10001:10001 attachments avatars models state logs/app`.
   Without that the api logs a warning at start and uploads fail.
 - Other host directories mounted into the app containers (custom theme or error-page folders, a
   Redmine `files` directory for the importer) must be readable by UID `10001`.

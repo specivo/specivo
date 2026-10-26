@@ -11,11 +11,12 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Runs once as root before the api: gives the app's own paths in the data
-  # directory (attachments, avatars, models, themes, errors, app logs) to the
-  # unprivileged user the app runs as (uid/gid 10001). Needed for installs
-  # whose files were written by root; when nothing is to change it exits at
-  # once. Everything else in this file runs as uid 10001.
+  # Runs once as root before the api: creates the app's directories in the
+  # data directory (attachments, avatars, models, state, logs/app) and gives
+  # them to the unprivileged user the app runs as (uid/gid 10001). The data
+  # directory itself stays with root. Needed for installs whose files were
+  # written by root; when nothing is to change it exits at once. Everything
+  # else in this file runs as uid 10001.
   init-data:
     image: specivo/specivo:${SPECIVO_VERSION:-latest}
     user: "0:0"
