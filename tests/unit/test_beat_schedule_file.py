@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from specivo.tasks import beat, celery_app
+from specivo.core import celery_beat as beat
+from specivo.tasks import celery_app
 
 pytestmark = pytest.mark.unit
 
@@ -22,7 +23,7 @@ def _home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def test_app_uses_the_private_scheduler():
-    assert celery_app.conf.beat_scheduler == "specivo.tasks.beat:PrivateStateScheduler"
+    assert celery_app.conf.beat_scheduler == "specivo.core.celery_beat:PrivateStateScheduler"
     assert not celery_app.conf.beat_schedule_filename.startswith("/app/")
 
 

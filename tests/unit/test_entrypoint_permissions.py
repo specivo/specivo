@@ -30,15 +30,20 @@ pytestmark = [
 ]
 
 ENTRYPOINT = Path(__file__).resolve().parents[2] / "scripts" / "entrypoint.sh"
+VENV_BIN = Path("/app/.venv/bin")
 APP = 10001
 DB = 999
 INSTALLER = 1000
 
 
-def _run(data: Path) -> subprocess.CompletedProcess[str]:
+def _run(data: Path, *args: str) -> subprocess.CompletedProcess[str]:
     env = {**os.environ, "SPECIVO_DATA_PATH": str(data), "SPECIVO_UID": str(APP), "SPECIVO_GID": str(APP)}
+    # The entrypoint runs `python -I -m specivo.ops.fix_ownership`: use the
+    # interpreter that has specivo installed (the image's venv), not pytest's.
+    if VENV_BIN.is_dir():
+        env["PATH"] = f"{VENV_BIN}:{env.get('PATH', '')}"
     result = subprocess.run(
-        ["sh", str(ENTRYPOINT), "fix-permissions"], env=env, capture_output=True, text=True, check=False
+        ["sh", str(ENTRYPOINT), "fix-permissions", *args], env=env, capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
     return result
@@ -166,3 +171,31 @@ def test_a_hard_linked_bootstrap_file_is_ignored(data: Path):
     assert "not a plain file" in result.stderr
     assert not (data / "state" / "bootstrap.json").exists()
     assert _uid(secret) == 0
+
+
+def test_app_owned_directories_with_root_files_are_refused_until_all(data: Path):
+    _run(data)
+    sub = data / "attachments" / "sub"
+    sub.mkdir()
+    os.chown(sub, APP, APP)
+    late = _write(sub / "late-root-file")
+    # A root start with an app-owned top level takes the cheap path; force a
+    # walk by handing the top level back to root.
+    os.chown(data / "attachments", 0, 0)
+    result = _run(data)
+    assert "belongs to the app but holds files of root" in result.stderr
+    assert _uid(late) == 0
+    assert _uid(data / "attachments") == APP
+
+    _run(data, "--all")
+    assert _uid(late) == APP
+
+
+def test_a_bootstrap_destination_that_exists_is_not_overwritten(data: Path):
+    _run(data)
+    existing = _write(data / "state" / "bootstrap.json", "old", uid=APP)
+    _write(data / ".bootstrap.json", "new", uid=INSTALLER)
+    result = _run(data)
+    assert "already exists" in result.stderr
+    assert existing.read_text() == "old"
+    assert (data / ".bootstrap.json").read_text() == "new"
