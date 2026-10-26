@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.config import get_settings
-from specivo.core.constants import SEARCH_SNIPPET_MAX_CHARS
+from specivo.core.constants import MCP_SEARCH_MAX_LIMIT, SEARCH_SNIPPET_MAX_CHARS
 from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
@@ -470,6 +470,8 @@ async def _search(
 ) -> str:
     if mode not in SEARCH_MODES:
         raise ValidationError(f"Invalid mode '{mode}'. Must be one of: {', '.join(SEARCH_MODES)}")
+    # The tool has no offset; its limit is the only depth a caller controls.
+    limit = max(1, min(limit, MCP_SEARCH_MAX_LIMIT))
 
     project_id: int | None = None
     if project_key:

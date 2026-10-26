@@ -16,12 +16,15 @@ import html
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import (
+    MAX_PAGE_LIMIT,
+    MAX_SEARCH_OFFSET,
     RRF_K,
     SEARCH_FTS_HEADLINE_OPTIONS,
     SEARCH_HYBRID_PREFETCH_LIMIT,
@@ -110,6 +113,106 @@ def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int
     for rank_0, item_id in enumerate(sem_ids):
         scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + rank_0 + 1)
     return sorted(scores, key=lambda x: scores[x], reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# Identifier tokens (KEY-42)
+# ---------------------------------------------------------------------------
+#
+# PostgreSQL's text-search parser reads ``ACME-42`` as the word ``acme`` and
+# the signed integer ``-42``, in every regconfig. So the index triggers also
+# store each identifier-shaped token as one lowercase lexeme (``'acme-42'``,
+# via ``specivo_fts_identifiers()`` from migration 0034), and the query side
+# pulls identifier tokens out of the query and matches them against that
+# lexeme. The pattern must stay identical to the one in that migration.
+
+IDENTIFIER_PATTERN = r"(?<![A-Za-z0-9_])([A-Za-z][A-Za-z0-9_]{0,63})-([0-9]{1,18})(?![A-Za-z0-9_])"
+_IDENTIFIER_RE = re.compile(IDENTIFIER_PATTERN)
+
+# Bounds the per-query lookup; further tokens are searched as plain text.
+MAX_QUERY_IDENTIFIERS = 10
+
+_PG_INT_MAX = 2**31 - 1
+
+# Most rows one keyword-search part ranks: the deepest offset plus one page.
+_MAX_PART_ROWS = MAX_SEARCH_OFFSET + MAX_PAGE_LIMIT
+
+
+def extract_identifiers(query: str) -> list[str]:
+    """Return the distinct identifier tokens in *query*, uppercased, in order of appearance."""
+    seen: list[str] = []
+    for match in _IDENTIFIER_RE.finditer(query):
+        ident = f"{match.group(1)}-{match.group(2)}".upper()
+        if ident not in seen:
+            seen.append(ident)
+            if len(seen) == MAX_QUERY_IDENTIFIERS:
+                break
+    return seen
+
+
+@dataclass(frozen=True)
+class _ParsedQuery:
+    """A search query split into identifier tokens and the remaining free text.
+
+    ``text`` has hyphens normalised to spaces, so ``plainto_tsquery`` does not
+    build compound tokens (``'jwt-rotat'``) that miss the individual lexemes
+    the index holds. Identifiers are taken out first, because for them the
+    hyphen is what the index lexeme is built around.
+    """
+
+    text: str
+    identifiers: list[str]
+
+    @classmethod
+    def parse(cls, query: str) -> _ParsedQuery:
+        identifiers = extract_identifiers(query)
+        wanted = set(identifiers)
+
+        def _strip(match: re.Match[str]) -> str:
+            ident = f"{match.group(1)}-{match.group(2)}".upper()
+            return " " if ident in wanted else match.group(0)
+
+        remainder = _IDENTIFIER_RE.sub(_strip, query)
+        return cls(text=remainder.replace("-", " "), identifiers=identifiers)
+
+    @property
+    def has_text(self) -> bool:
+        return bool(self.text.strip())
+
+    def tsquery_from_sql(self, cfg: str) -> str:
+        """Return a ``LATERAL`` FROM item exposing the tsquery as column ``query``.
+
+        *cfg* is the regconfig expression for the row. Free text goes through
+        ``plainto_tsquery`` (bound as ``:query``); identifiers are ANDed in as
+        exact lexemes (bound as ``:identifier_query``). Each operand is
+        emitted only when present, since an empty tsquery operand makes
+        PostgreSQL log a notice per row.
+        """
+        if not self.identifiers:
+            return f"plainto_tsquery({cfg}, :query) AS query"
+        identifier_query = "CAST(:identifier_query AS tsquery)"
+        if not self.has_text:
+            return f"(SELECT {identifier_query} AS query) AS query_src"
+        return f"(SELECT plainto_tsquery({cfg}, :query) && {identifier_query} AS query) AS query_src"
+
+    def bind_params(self) -> dict[str, Any]:
+        # Identifiers match [A-Za-z0-9_-] only, so quoting them as tsquery
+        # lexemes needs no escaping.
+        return {
+            "query": self.text,
+            "identifier_query": " & ".join(f"'{ident.lower()}'" for ident in self.identifiers),
+        }
+
+
+def _page_window(pinned: int, offset: int, limit: int) -> tuple[slice, int, int]:
+    """Split a page between *pinned* leading results and the ranked results after them.
+
+    Returns the slice of the pinned list on this page, and the offset and
+    limit to apply to the ranked results (which exclude the pinned ones).
+    """
+    pinned_slice = slice(min(offset, pinned), min(offset + limit, pinned))
+    on_page = pinned_slice.stop - pinned_slice.start
+    return pinned_slice, max(0, offset - pinned), limit - on_page
 
 
 # Complete wiki links: [[target|display]] or [[target]]
@@ -387,6 +490,7 @@ class SearchService:
         self,
         user: User,
         project_filter: str,
+        parsed: _ParsedQuery,
     ) -> str:
         """Build the FTS UNION ALL branch for attachment search.
 
@@ -397,6 +501,7 @@ class SearchService:
         """
         att_vis = self._attachment_visibility_cte_clause(user)
         att_project_filter = self._att_project_filter(project_filter)
+        tsquery = parsed.tsquery_from_sql("specivo_fts_config(COALESCE(ai.project_id, aw.project_id))")
 
         return f"""
             SELECT * FROM (
@@ -423,12 +528,11 @@ class SearchService:
                 LEFT JOIN wiki_pages awp ON att.container_type = 'WikiPage' AND awp.id = att.container_id
                 LEFT JOIN wikis aw ON aw.id = awp.wiki_id
                 LEFT JOIN projects aw_p ON aw_p.id = aw.project_id
-                CROSS JOIN LATERAL plainto_tsquery(
-                    specivo_fts_config(COALESCE(ai.project_id, aw.project_id)), :query) AS query
+                CROSS JOIN LATERAL {tsquery}
                 WHERE sc.search_vector @@ query
                 {att_vis}
                 {att_project_filter}
-                ORDER BY score DESC LIMIT :limit
+                ORDER BY score DESC LIMIT :part_limit
             ) attachments_sub
         """
 
@@ -436,6 +540,7 @@ class SearchService:
         self,
         user: User,
         project_filter: str,
+        parsed: _ParsedQuery,
     ) -> str:
         """Build the FTS COUNT query for attachment search.
 
@@ -444,6 +549,7 @@ class SearchService:
         """
         att_vis = self._attachment_visibility_cte_clause(user)
         att_project_filter = self._att_project_filter(project_filter)
+        tsquery = parsed.tsquery_from_sql("specivo_fts_config(COALESCE(ai.project_id, aw.project_id))")
 
         return f"""
             SELECT COUNT(*) as cnt
@@ -453,8 +559,7 @@ class SearchService:
             LEFT JOIN issues ai ON att.container_type = 'Issue' AND ai.id = att.container_id
             LEFT JOIN wiki_pages awp ON att.container_type = 'WikiPage' AND awp.id = att.container_id
             LEFT JOIN wikis aw ON aw.id = awp.wiki_id
-            CROSS JOIN LATERAL plainto_tsquery(
-                specivo_fts_config(COALESCE(ai.project_id, aw.project_id)), :query) AS query
+            CROSS JOIN LATERAL {tsquery}
             WHERE sc.search_vector @@ query
             {att_vis}
             {att_project_filter}
@@ -568,6 +673,108 @@ class SearchService:
         return "\n                ".join(clauses)
 
     # ------------------------------------------------------------------
+    # Exact issue references
+    # ------------------------------------------------------------------
+
+    async def _identifier_hits(
+        self,
+        session: AsyncSession,
+        identifiers: list[str],
+        user: User,
+        project_id: int | None = None,
+        project_ids: list[int] | None = None,
+        filters: SearchFilters | None = None,
+    ) -> list[SearchResult]:
+        """Resolve identifier tokens to the issues they name, in query order.
+
+        A ``KEY-N`` token names an issue by its current reference, by a
+        reference it had before moving to another project
+        (``issue_ref_aliases``), or under a renamed project's retired key
+        (``project_key_aliases``). The hits go through the same visibility,
+        project and metadata filters as full-text results, so a reference
+        the user cannot see resolves to nothing.
+        """
+        refs = [(key, int(num)) for key, _, num in (ident.rpartition("-") for ident in identifiers)]
+        refs = [(key, num) for key, num in refs if num <= _PG_INT_MAX]
+        if not refs:
+            return []
+
+        params: dict[str, Any] = {
+            "ref_keys": [key for key, _ in refs],
+            "ref_seqs": [num for _, num in refs],
+        }
+        params.update(await self._visibility_params(session, user))
+
+        project_filter = ""
+        if project_ids is not None:
+            project_filter = "AND i.project_id = ANY(:project_ids)"
+            params["project_ids"] = project_ids
+        elif project_id is not None:
+            project_filter = "AND i.project_id = :project_id"
+            params["project_id"] = project_id
+        issue_filter_sql = self._build_issue_filters(filters, params)
+
+        cte_prefix = self._visibility_cte_sql(user)
+        ref_ctes = """
+            refs AS (
+                SELECT t.key, t.seq, t.ord
+                FROM unnest(CAST(:ref_keys AS text[]), CAST(:ref_seqs AS integer[]))
+                     WITH ORDINALITY AS t(key, seq, ord)
+            ),
+            resolved AS (
+                SELECT ri.id AS issue_id, refs.ord
+                FROM refs JOIN issues ri ON ri.project_key = refs.key AND ri.sequence_number = refs.seq
+                UNION ALL
+                SELECT a.issue_id, refs.ord
+                FROM refs JOIN issue_ref_aliases a
+                    ON a.old_project_key = refs.key AND a.old_sequence_number = refs.seq
+                UNION ALL
+                SELECT ri.id, refs.ord
+                FROM refs
+                JOIN project_key_aliases pka ON pka.old_key = refs.key
+                JOIN issues ri ON ri.project_id = pka.project_id AND ri.sequence_number = refs.seq
+            )
+        """
+        with_clause = f"{cte_prefix}, {ref_ctes}" if cte_prefix else f"WITH {ref_ctes}"
+
+        sql = f"""
+            {with_clause}
+            SELECT i.id,
+                   i.project_key || '-' || i.sequence_number AS title,
+                   i.subject AS subtitle,
+                   left(coalesce(i.description, ''), {SEARCH_SNIPPET_MAX_CHARS}) AS snippet,
+                   i.project_key,
+                   MIN(r.ord) AS ord
+            FROM resolved r
+            JOIN issues i ON i.id = r.issue_id
+            WHERE 1=1
+            {project_filter}
+            {self._issue_visibility_cte_clause(user, alias="i")}
+            {issue_filter_sql}
+            GROUP BY i.id
+            ORDER BY ord
+        """
+        result = await session.execute(text(sql), params)
+        return [
+            SearchResult(
+                result_type=_SRT_ISSUE,
+                id=row.id,
+                title=row.title,
+                subtitle=row.subtitle,
+                snippet=_clean_snippet(row.snippet) or None,
+                score=1.0,
+                project_key=row.project_key,
+            )
+            for row in result
+        ]
+
+    @staticmethod
+    def _rank_pinned_first(pinned: list[SearchResult], ranked: list[SearchResult]) -> list[SearchResult]:
+        """Put *pinned* ahead of *ranked*, raising their score to keep scores non-increasing."""
+        top = max([1.0, *(r.score for r in ranked)])
+        return [r.model_copy(update={"score": top}) for r in pinned] + ranked
+
+    # ------------------------------------------------------------------
     # Full-text search
     # ------------------------------------------------------------------
 
@@ -583,6 +790,8 @@ class SearchService:
         limit: int = 25,
         filters: SearchFilters | None = None,
         skip_count: bool = False,
+        *,
+        resolve_identifiers: bool = True,
     ) -> tuple[list[SearchResult], int, dict[str, int]]:
         """Execute a full-text search and return (results, total_count, type_counts).
 
@@ -597,6 +806,9 @@ class SearchService:
             limit: Pagination limit.
             filters: Optional metadata filters for issues.
             skip_count: If True, skip COUNT queries and return total=0 / empty counts.
+            resolve_identifiers: If True, issues named by an identifier token in
+                the query (``ACME-42``) are resolved directly and ranked first.
+                ``hybrid_search`` passes False and ranks them itself.
 
         Returns:
             Tuple of (results, total count for current scope, per-type counts dict).
@@ -607,11 +819,8 @@ class SearchService:
         # Always populated for all 4 types (regardless of scope) so that
         # a single query can return per-type totals for filter tabs.
         count_parts: dict[str, str] = {}
-        # Normalize hyphens to spaces so plainto_tsquery doesn't generate
-        # compound tokens (e.g. 'jwt-rotat') that fail to match individual
-        # tsvector lexemes.
-        normalized_query = query.replace("-", " ")
-        params: dict[str, Any] = {"query": normalized_query}
+        parsed = _ParsedQuery.parse(query)
+        params: dict[str, Any] = parsed.bind_params()
 
         params.update(await self._visibility_params(session, user))
 
@@ -642,6 +851,22 @@ class SearchService:
 
         # Issue metadata filters
         issue_filter_sql = self._build_issue_filters(filters, params)
+
+        tsq_i = parsed.tsquery_from_sql("specivo_fts_config(i.project_id)")
+        tsq_w = parsed.tsquery_from_sql("specivo_fts_config(w.project_id)")
+        tsq_ci = parsed.tsquery_from_sql("specivo_fts_config(ci.project_id)")
+
+        # Issues the query names by reference lead the results, and are kept
+        # out of the ranked issue rows and their count so they appear once.
+        pinned: list[SearchResult] = []
+        if resolve_identifiers and parsed.identifiers and scope in ("all", "issues"):
+            pinned = await self._identifier_hits(
+                session, parsed.identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+            )
+        pinned_exclusion = ""
+        if pinned:
+            pinned_exclusion = "AND i.id <> ALL(:pinned_issue_ids)"
+            params["pinned_issue_ids"] = [r.id for r in pinned]
         # Real-tag AND filter for wiki pages (issue side is folded into
         # issue_filter_sql above). When a tag filter is active, only taggable
         # entities (issues, wiki pages) can match — comments and attachments are
@@ -665,12 +890,13 @@ class SearchService:
                         ts_rank_cd(i.search_vector, query) as score,
                         i.project_key
                     FROM issues i
-                    CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(i.project_id), :query) AS query
+                    CROSS JOIN LATERAL {tsq_i}
                     WHERE i.search_vector @@ query
                     {issue_project_filter}
                     {issue_visibility}
                     {issue_filter_sql}
-                    ORDER BY score DESC LIMIT :limit
+                    {pinned_exclusion}
+                    ORDER BY score DESC LIMIT :part_limit
                 ) issues_sub
             """
             parts.append(issue_sql)
@@ -691,7 +917,7 @@ class SearchService:
                     JOIN wiki_pages wp ON wp.id = wc.page_id
                     JOIN wikis w ON w.id = wp.wiki_id
                     JOIN projects p ON p.id = w.project_id
-                    CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(w.project_id), :query) AS query
+                    CROSS JOIN LATERAL {tsq_w}
                     JOIN (
                         SELECT page_id, MAX(version) as max_ver
                         FROM wiki_contents
@@ -701,7 +927,7 @@ class SearchService:
                     {wiki_project_filter}
                     {wiki_visibility}
                     {wiki_tag_filter}
-                    ORDER BY score DESC LIMIT :limit
+                    ORDER BY score DESC LIMIT :part_limit
                 ) wiki_sub
             """
             parts.append(wiki_sql)
@@ -725,12 +951,12 @@ class SearchService:
                     JOIN search_sources ss ON ss.id = sc.source_id
                     JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
                     JOIN issues ci ON ci.id = j.issue_id
-                    CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(ci.project_id), :query) AS query
+                    CROSS JOIN LATERAL {tsq_ci}
                     WHERE sc.search_vector @@ query
                     AND ss.source_type = '{_SST_JOURNAL}'
                     {comment_project_filter}
                     {comment_visibility}
-                    ORDER BY score DESC LIMIT :limit
+                    ORDER BY score DESC LIMIT :part_limit
                 ) comments_sub
             """
             parts.append(comment_sql)
@@ -739,18 +965,19 @@ class SearchService:
         # Skipped when a tag filter is active (attachments are not taggable).
         att_pf = issue_project_filter  # same params, different alias handled in helper
         if scope in ("all", "attachments") and not tags_active:
-            parts.append(self._attachment_fts_sql(user, att_pf))
+            parts.append(self._attachment_fts_sql(user, att_pf, parsed))
 
         # --- Count parts: ALWAYS build for all 4 types (single-query per-type counts) ---
 
         count_parts["issues"] = f"""
             SELECT COUNT(*) as cnt
             FROM issues i
-            CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(i.project_id), :query) AS query
+            CROSS JOIN LATERAL {tsq_i}
             WHERE i.search_vector @@ query
             {issue_project_filter}
             {issue_visibility}
             {issue_filter_sql}
+            {pinned_exclusion}
         """
 
         count_parts["wiki"] = f"""
@@ -758,7 +985,7 @@ class SearchService:
             FROM wiki_contents wc
             JOIN wiki_pages wp ON wp.id = wc.page_id
             JOIN wikis w ON w.id = wp.wiki_id
-            CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(w.project_id), :query) AS query
+            CROSS JOIN LATERAL {tsq_w}
             JOIN (
                 SELECT page_id, MAX(version) as max_ver
                 FROM wiki_contents
@@ -781,19 +1008,21 @@ class SearchService:
                 JOIN search_sources ss ON ss.id = sc.source_id
                 JOIN journals j ON j.id = ss.entity_id AND ss.source_type = '{_SST_JOURNAL}'
                 JOIN issues ci ON ci.id = j.issue_id
-                CROSS JOIN LATERAL plainto_tsquery(specivo_fts_config(ci.project_id), :query) AS query
+                CROSS JOIN LATERAL {tsq_ci}
                 WHERE sc.search_vector @@ query
                 AND ss.source_type = '{_SST_JOURNAL}'
                 {comment_project_filter}
                 {comment_visibility}
             """
 
-            count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf)
+            count_parts["attachments"] = self._attachment_fts_count_sql(user, att_pf, parsed)
 
         if not parts:
             return [], 0, {}
 
-        # Combined query with UNION ALL, ordered by score desc
+        # Combined query with UNION ALL, ordered by score desc. The pinned
+        # issues take the first places, so the ranked rows start after them.
+        pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
         union_sql = " UNION ALL ".join(parts)
         full_sql = f"""
             {cte_prefix}
@@ -801,8 +1030,13 @@ class SearchService:
             ORDER BY score DESC
             LIMIT :limit OFFSET :offset
         """
-        params["limit"] = limit
-        params["offset"] = offset
+        params["limit"] = ranked_limit
+        params["offset"] = ranked_offset
+        # Each part must supply every row up to the end of the page, not just
+        # one page's worth, or later pages come back short. Capped whatever the
+        # caller passes, so no request makes a part rank more than the deepest
+        # page search serves; a page past the cap comes back empty.
+        params["part_limit"] = min(ranked_offset + ranked_limit, _MAX_PART_ROWS)
 
         result = await session.execute(text(full_sql), params)
 
@@ -818,6 +1052,8 @@ class SearchService:
             )
             for row in result
         ]
+        if pinned:
+            results = self._rank_pinned_first(pinned[pinned_slice], results)
 
         # Per-type counts in a single query (skipped when called from hybrid_search)
         type_counts: dict[str, int] = {}
@@ -834,6 +1070,7 @@ class SearchService:
             row = count_result.one()
             for type_name in count_parts:
                 type_counts[type_name] = row._mapping[f"{type_name}_count"]
+            type_counts["issues"] += len(pinned)
             type_counts["all"] = sum(type_counts.values())
             # Total for the current scope: sum of active scope types only
             if scope == "all":
@@ -1082,6 +1319,8 @@ class SearchService:
         limit: int = 25,
         skip_count: bool = False,
         filters: SearchFilters | None = None,
+        *,
+        resolve_identifiers: bool = True,
     ) -> tuple[list[SearchResult], int]:
         """Semantic-only search using pgvector cosine similarity.
 
@@ -1092,17 +1331,31 @@ class SearchService:
         When ``filters.tag_names`` is set, only tagged issues and wiki pages can
         match (comments and attachments are excluded), keeping hybrid results
         consistent with the keyword path's tag filter.
+
+        An embedding carries no reliable trace of an identifier like
+        ``ACME-42``, so issues the query names by reference are resolved
+        directly and ranked first (unless *resolve_identifiers* is False), even
+        when no embedding model is configured.
         """
         from specivo.services.embedding_service import EmbeddingService
+
+        pinned: list[SearchResult] = []
+        if resolve_identifiers:
+            identifiers = extract_identifiers(query)
+            if identifiers:
+                pinned = await self._identifier_hits(
+                    session, identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+                )
+        pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
 
         emb_service = EmbeddingService()
         model = await emb_service.get_default_model(session)
         if model is None:
-            return [], 0
+            return pinned[pinned_slice], len(pinned)
 
         query_vector = await emb_service.generate_embedding(query, model, intent="query")
         if query_vector is None:
-            return [], 0
+            return pinned[pinned_slice], len(pinned)
         # Format vector as PostgreSQL literal: '[0.1,0.2,...]'
         vec_literal = "[" + ",".join(str(v) for v in query_vector) + "]"
 
@@ -1149,12 +1402,17 @@ class SearchService:
         # only tagged issues and wiki pages survive; comments/attachments drop out.
         tags_active = bool(filters and filters.tag_names)
         issue_tag_vis = self._tag_exists_clauses(filters, params, "issue_id", "i2")
+        pinned_exclusion = ""
+        if pinned:
+            pinned_exclusion = "AND i2.id <> ALL(:pinned_issue_ids)"
+            params["pinned_issue_ids"] = [r.id for r in pinned]
         wiki_tag_vis = self._tag_exists_clauses(filters, params, "wiki_page_id", "wp2")
 
         issue_branch = f"""(ss.source_type = '{_SST_ISSUE}' AND EXISTS (
                         SELECT 1 FROM issues i2 WHERE i2.id = ss.entity_id
                         {issue_vis}
                         {issue_tag_vis}
+                        {pinned_exclusion}
                     ))"""
         wiki_branch = f"""(ss.source_type = '{_SST_WIKI_PAGE}' AND EXISTS (
                         SELECT 1 FROM wiki_pages wp2
@@ -1284,8 +1542,8 @@ class SearchService:
             ORDER BY score DESC
             LIMIT :limit OFFSET :offset
         """
-        params["limit"] = limit
-        params["offset"] = offset
+        params["limit"] = ranked_limit
+        params["offset"] = ranked_offset
         params["prefetch_limit"] = prefetch_limit
 
         result = await session.execute(text(sem_sql), params)
@@ -1304,6 +1562,8 @@ class SearchService:
                     project_key=m["project_key"] or "",
                 )
             )
+        if pinned:
+            results = self._rank_pinned_first(pinned[pinned_slice], results)
 
         # Count total semantic results (skipped when called from hybrid_search)
         total = 0
@@ -1323,7 +1583,7 @@ class SearchService:
                 AND {count_where_or}
             """
             count_result = await session.execute(text(count_sql), params)
-            total = count_result.scalar_one()
+            total = count_result.scalar_one() + len(pinned)
 
         return results, total
 
@@ -1346,10 +1606,21 @@ class SearchService:
         3. Merge using RRF (k=60): score = 1/(k+rank_fts) + 1/(k+rank_semantic)
         4. Sort by combined score, apply offset/limit
 
+        Issues the query names by reference (``ACME-42``) are resolved
+        directly and placed ahead of the fused ranking, rather than fused:
+        RRF would let a strong semantic neighbour outrank the exact hit.
+
         Returns:
             Tuple of (results, total, type_counts). The type_counts are derived
             from the FTS count query (accurate per-type totals from the DB).
         """
+        pinned: list[SearchResult] = []
+        identifiers = extract_identifiers(query)
+        if identifiers and scope in ("all", "issues"):
+            pinned = await self._identifier_hits(
+                session, identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+            )
+
         # Get both result sets (unpaginated for RRF merging).
         # skip_count=True for both — hybrid computes its own counts from merged results.
         fts_results, _fts_total, _ = await self.search(
@@ -1363,6 +1634,7 @@ class SearchService:
             limit=SEARCH_HYBRID_PREFETCH_LIMIT,
             filters=filters,
             skip_count=True,
+            resolve_identifiers=False,
         )
         sem_results, sem_total = await self.semantic_search(
             session,
@@ -1374,10 +1646,16 @@ class SearchService:
             limit=SEARCH_HYBRID_PREFETCH_LIMIT,
             skip_count=True,
             filters=filters,
+            resolve_identifiers=False,
         )
 
-        if not fts_results and not sem_results:
+        if not fts_results and not sem_results and not pinned:
             return [], 0, _empty_type_counts(include_all=True)
+
+        # The pinned issues lead; drop them from the fused lists.
+        pinned_keys = {f"{r.result_type}:{r.id}" for r in pinned}
+        fts_results = [r for r in fts_results if f"{r.result_type}:{r.id}" not in pinned_keys]
+        sem_results = [r for r in sem_results if f"{r.result_type}:{r.id}" not in pinned_keys]
 
         # Build ID lists and rank maps for RRF (using composite key: "type:id")
         fts_keys = [f"{r.result_type}:{r.id}" for r in fts_results]
@@ -1431,11 +1709,13 @@ class SearchService:
             allowed = scope_types.get(scope, set())
             sorted_keys = [k for k in sorted_keys if SOURCE_TYPE_TO_DISPLAY.get(result_map[k].result_type) in allowed]
 
-        total = len(sorted_keys)
+        type_counts["issues"] += len(pinned)
+        total = len(pinned) + len(sorted_keys)
         type_counts["all"] = sum(type_counts.values())
 
-        # Apply pagination
-        page_keys = sorted_keys[offset : offset + limit]
+        # Apply pagination: the pinned issues take the first places.
+        pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
+        page_keys = sorted_keys[ranked_offset : ranked_offset + ranked_limit]
 
         results = []
         for key in page_keys:
@@ -1453,5 +1733,7 @@ class SearchService:
                     sem_rank=sem_rank_map.get(key),
                 )
             )
+        if pinned:
+            results = self._rank_pinned_first(pinned[pinned_slice], results)
 
         return results, total, type_counts

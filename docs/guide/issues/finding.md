@@ -42,6 +42,14 @@ surface an issue you wrote about the "login sequence". It searches across:
 - comments
 - attachment descriptions
 
+!!! tip "Search by issue key"
+    Type an issue key such as `ACME-42` (in any case) to put that issue at the top of the results, in
+    any search mode. A key the issue had before it was [moved](updating.md#move-an-issue-to-another-project) to another project, or
+    under a project's old key after a rename, finds it too. Below it you get the issues, comments,
+    and wiki pages that mention the key. Keys from other trackers that appear in your text, like
+    `DO-8795`, are found the same way. You can add other words too: `ACME-42 login` finds what
+    mentions both.
+
 !!! note "Semantic results not showing up?"
     Semantic search relies on an index the operator builds on the server. Until that's in place, keyword
     search still works — you just won't get the meaning-based matches. See

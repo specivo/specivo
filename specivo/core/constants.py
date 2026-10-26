@@ -20,6 +20,12 @@ MAX_PAGE_LIMIT = 200
 RRF_K = 60
 SEARCH_SNIPPET_MAX_CHARS = 200
 SEARCH_HYBRID_PREFETCH_LIMIT = 100
+# Deepest result offset search accepts. Each keyword-search part ranks every
+# row up to the end of the requested page, so an unbounded offset would let a
+# client make the database rank and sort arbitrarily many rows per request.
+MAX_SEARCH_OFFSET = 1000
+# Results the MCP search tool returns at most.
+MCP_SEARCH_MAX_LIMIT = 50
 SEARCH_FTS_HEADLINE_OPTIONS = "MaxWords=35, MinWords=15, StartSel=<mark>, StopSel=</mark>"
 
 # Hierarchy

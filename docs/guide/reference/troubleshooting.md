@@ -27,6 +27,11 @@ indexed yet. Keyword search still works in the meantime. To enable semantic sear
 model download (`make download-model`) and a backfill to index existing content. See
 [Finding issues](../issues/finding.md).
 
+If searching for an issue key like `ACME-42` finds the issue itself but not older issues or wiki pages
+that mention it, the search index predates key matching. An administrator can rebuild it with
+**Reindex now** under **Administration → Settings**, or `make reindex-fts` from the command line. The
+reindex runs in the background in small batches. Content you edit is updated as you save it.
+
 ## An AI agent gets a permission error
 
 When a tool call through the [MCP server](../ai-agents/index.md) fails with a permission error, check two
