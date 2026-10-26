@@ -64,9 +64,9 @@ path above.
 ## Semantic search is optional
 
 Keyword search and the rest of Specivo work out of the box. Semantic ("by meaning") search needs an
-embedding model. You can use the bundled on-device model (runs on CPU, no external calls) or bring
-your own provider key (BYOK). Either way it is opt-in — see
-[Configuration](configuration.md#semantic-search-model) for how to enable it.
+embedding model. Specivo runs a small one on your own CPU, with no external calls, but the model
+files are not in the image: you download them once. See
+[Semantic search and embeddings](semantic-search.md) for what it does and how to enable it.
 
 ## Next steps
 
