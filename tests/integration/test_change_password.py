@@ -242,9 +242,11 @@ class TestChangePasswordSessions:
         """Other devices are signed out; the browser doing the change is not.
 
         The Secure cookie flag stops httpx from replaying cookies over the
-        plain-HTTP test transport, so they are passed explicitly.
+        plain-HTTP test transport, so they are passed explicitly. A
+        cookie-authenticated request needs the CSRF token, as from the browser.
         """
         user = await _create_user(db_session, "chpw_sessions")
+        csrf_token = (await client.get("/api/v1/health/")).cookies["csrf_token"]
 
         other = await _login_tokens(client, "chpw_sessions", TEST_PASSWORD)
         caller = await _login_tokens(client, "chpw_sessions", TEST_PASSWORD)
@@ -258,7 +260,9 @@ class TestChangePasswordSessions:
             cookies={
                 "access_token": caller["access_token"],
                 "refresh_token": caller["refresh_token"],
+                "csrf_token": csrf_token,
             },
+            headers={"X-CSRF-Token": csrf_token},
         )
         assert resp.status_code == 200, resp.text
         assert resp.json()["revoked_sessions"] == 1
