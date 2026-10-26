@@ -1,6 +1,11 @@
 .git
 .venv
-.env.local
+# Local environment files hold secrets; only the committed examples may
+# enter the build context.
+.env
+.env.*
+!.env.example
+!.env.local.example
 specivo-data/
 specivo-dev-data/
 data/
@@ -11,6 +16,7 @@ __pycache__
 .pytest_cache
 .ruff_cache
 .claude
+.redmine-fixture
 nginx/
 scripts/configure.py
 # Frontend: dependencies are installed and bundles built inside the image
