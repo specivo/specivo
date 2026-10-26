@@ -11,9 +11,10 @@ Pipeline:
 
     raw markdown
       -> wiki link substitution    [[Page]]    -> [Page](/projects/X/wiki/page/)
-      -> attachment image rewrite  ![a](b.png) -> ![a](/path/to/b.png)
       -> issue ref auto-link       PROJ-123    -> [PROJ-123](/issue/PROJ-123/)
       -> markdown.markdown(...)    with fenced_code, tables, toc, codehilite
+           + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
+             -> attachment download URL (parsed tree, so code is never touched)
       -> nh3.clean(...)            HTML sanitizer with our allowlist
       -> markupsafe.Markup
 """
@@ -21,10 +22,14 @@ Pipeline:
 from __future__ import annotations
 
 import re
+from urllib.parse import unquote
+from xml.etree.ElementTree import Element
 
 import markdown as _md
 import markupsafe
 import nh3
+from markdown.extensions import Extension  # type: ignore[import-untyped]
+from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
 
 from specivo.services.wiki_utils import slugify as _wiki_slugify
 
@@ -99,7 +104,8 @@ _MD_EXTENSION_CONFIGS = {
 
 # Compiled once at import time
 _WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
-_IMG_SRC_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+# A URL scheme (``https:``, ``mailto:``) at the start of a link target.
+_URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 # Issue reference: PROJ-123, but not inside markdown links or wiki links
 _ISSUE_REF_RE = re.compile(r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b")
 
@@ -147,6 +153,56 @@ def _replace_wiki_link(project_key: str):
     return _inner
 
 
+def _attachment_filename(target: str) -> str | None:
+    """Return the attachment filename a link or image *target* names, or None.
+
+    The target is URL-decoded first, so ``my%20spec.pdf`` names
+    ``my spec.pdf``. Only a bare filename qualifies: anything with a ``/`` or
+    ``\\`` (a path or URL), a scheme (``https:``, ``mailto:``) or starting
+    with ``#`` or ``?`` is left to the browser.
+    """
+    name = unquote(target).strip()
+    if not name or name[0] in "#?" or "/" in name or "\\" in name or _URL_SCHEME_RE.match(name):
+        return None
+    return name
+
+
+class _AttachmentRefTreeprocessor(Treeprocessor):
+    """Point bare-filename ``<img src>`` and ``<a href>`` at their attachment's download URL.
+
+    Runs on the parsed tree, after inline patterns, so Markdown itself has
+    already handled ``<my spec.pdf>`` targets, titles and escapes, and code
+    spans and blocks (text, or stashed HTML) are never rewritten. Matching is
+    exact and case-sensitive; unknown names stay as written.
+    """
+
+    def __init__(self, md: _md.Markdown, attachment_map: dict) -> None:
+        super().__init__(md)
+        self.attachment_map = attachment_map
+
+    def run(self, root: Element) -> None:
+        for element in root.iter():
+            attribute = {"img": "src", "a": "href"}.get(element.tag)
+            if attribute is None:
+                continue
+            target = element.get(attribute)
+            if not target:
+                continue
+            filename = _attachment_filename(target)
+            if filename is not None and filename in self.attachment_map:
+                element.set(attribute, self.attachment_map[filename])
+
+
+class _AttachmentRefExtension(Extension):
+    def __init__(self, attachment_map: dict) -> None:
+        super().__init__()
+        self.attachment_map = attachment_map
+
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below "inline" (20), so links and images exist when it runs.
+        md.treeprocessors.register(_AttachmentRefTreeprocessor(md, self.attachment_map), "attachment_refs", 5)
+
+
 def render_wiki_markdown(
     text: str,
     project_key: str = "",
@@ -164,8 +220,10 @@ def render_wiki_markdown(
     target as-it-would-render and any project mismatch surfaces immediately.
 
     ``attachment_map``: optional dict mapping filenames to attachment download
-    URLs. When provided, bare-filename image references like
-    ``![alt](chart.png)`` are rewritten to the attachment URL.
+    URLs. When provided, bare-filename image and link targets like
+    ``![alt](chart.png)`` or ``[the spec](spec.pdf)`` are rewritten to the
+    attachment URL. Callers build it from the attachments the reader may
+    open, so a hidden file never resolves.
 
     ``known_issue_refs``: optional set of ``KEY-123`` references that actually
     exist (or previously existed, via a move alias). When provided, ONLY those
@@ -179,17 +237,6 @@ def render_wiki_markdown(
 
     processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
 
-    # Rewrite bare-filename image references to attachment URLs
-    if attachment_map:
-
-        def _resolve_image(m: re.Match[str]) -> str:
-            alt, src = m.group(1), m.group(2)
-            if src in attachment_map:
-                return f"![{alt}]({attachment_map[src]})"
-            return m.group(0)
-
-        processed = _IMG_SRC_RE.sub(_resolve_image, processed)
-
     # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
     # When known_issue_refs is provided, only link references that resolve to a
     # real (or previously-existing) issue; leave the rest as plain text.
@@ -201,9 +248,14 @@ def render_wiki_markdown(
 
     processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
 
+    # Bare-filename image and link targets are resolved to attachment URLs on
+    # the parsed tree, not by rewriting the source.
+    extensions: list = list(_MD_EXTENSIONS)
+    if attachment_map:
+        extensions.append(_AttachmentRefExtension(attachment_map))
     rendered = _md.markdown(
         processed,
-        extensions=_MD_EXTENSIONS,
+        extensions=extensions,
         extension_configs=_MD_EXTENSION_CONFIGS,
     )
     return markupsafe.Markup(_sanitize_html(rendered))

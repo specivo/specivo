@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
 
 router = APIRouter(prefix="/partials", tags=["web-partials"], include_in_schema=False)
 
+_attachment_svc = AttachmentService()
 _issue_svc = IssueService()
 _journal_svc = JournalService()
 _project_svc = ProjectService()
@@ -111,6 +113,8 @@ async def issue_activity_partial(
     from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
 
     all_journals = await _journal_svc.list_for_issue(db, issue.id, include_private=user.is_admin)
+    # Bare filenames in comments resolve against the issue's own visible attachments.
+    attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
     # Paginate activity feed
     activity_per_page = user.preferences.get("activity_per_page", ACTIVITY_DEFAULT_PER_PAGE)
@@ -172,6 +176,7 @@ async def issue_activity_partial(
             "user": user,
             "lookup_maps": lookup_maps,
             "reactions_by_journal": reactions_by_journal,
+            "attachment_map": attachment_map,
             "activity_page": activity_page,
             "activity_per_page": activity_per_page,
             "activity_total_pages": activity_total_pages,

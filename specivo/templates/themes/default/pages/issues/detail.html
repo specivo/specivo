@@ -93,7 +93,7 @@
             {# EasyMDE-wrapped editor — see markdownEditor in frontend/js/components/markdown-editor.js. The inner #}
             {# component exposes its current value via x-modelable, bound to the    #}
             {# outer descriptionEditor's `draft` state.                             #}
-            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue", i18n: {{ markdown_editor_i18n() }} })'
+            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue", previewParams: {{ {"issue_id": issue.id} | tojson }}, i18n: {{ markdown_editor_i18n() }} })'
                  x-modelable="value"
                  x-model="draft"
                  data-preview-url="/api/v1/markdown/preview/"

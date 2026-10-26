@@ -14,6 +14,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
+from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
@@ -39,6 +40,7 @@ router = APIRouter(tags=["web-issues"], include_in_schema=False)
 # Short-URL router: /issue/{issue_ref}/ (canonical)
 short_router = APIRouter(tags=["web-issues-short"], include_in_schema=False)
 
+_attachment_svc = AttachmentService()
 _issue_svc = IssueService()
 _time_svc = TimeEntryService()
 _journal_svc = JournalService()
@@ -477,6 +479,10 @@ async def issue_detail(
             db, issue.description, *[j.notes for j in all_journals]
         )
 
+    # Bare filenames in the description and comments resolve against this
+    # issue's own attachments that the reader may open (none for anonymous).
+    attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
+
     # Build lookup maps for human-readable activity details.
     # Collect all sprint/version IDs referenced in journal details so we can
     # bulk-load names instead of showing raw IDs.
@@ -589,6 +595,7 @@ async def issue_detail(
             "issue_metadata": {} if anonymous else merge_computed(issue.issue_metadata, project.settings),
             "move_targets": move_targets,
             "known_issue_refs": known_issue_refs,
+            "attachment_map": attachment_map,
             "watchers": watchers,
             "is_watching": is_watching,
             "last_activity_at": last_activity_at,
@@ -783,6 +790,7 @@ async def issue_description_diff(
     prev_num = selected_num - 1 if selected_num != "?" and selected_num > 1 else None
 
     known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, old_text, new_text)
+    attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -801,6 +809,7 @@ async def issue_description_diff(
             "versions": versions,
             "diff_lines": diff_lines,
             "known_issue_refs": known_issue_refs,
+            "attachment_map": attachment_map,
         },
     )
 

@@ -135,15 +135,23 @@ class TestWikiLinks:
 
 class TestAttachments:
     def test_image_macro_becomes_a_bare_filename_image(self, convert):
-        """The renderer resolves a bare filename against the page's attachments."""
+        """The renderer resolves a bare filename against the issue's or page's attachments."""
         assert convert("See attachment:diagram.png here.") == "See ![diagram.png](diagram.png) here."
 
     def test_quoted_filename_with_spaces(self, convert):
-        assert convert('See attachment:"my file.png" here.') == "See ![my file.png](my file.png) here."
+        """A target with a space uses CommonMark's angle-bracket form."""
+        assert convert('See attachment:"my file.png" here.') == "See ![my file.png](<my file.png>) here."
 
-    def test_non_image_becomes_plain_text(self, convert):
-        """Only images resolve by filename, and a link that 404s reads worse."""
-        assert convert("See attachment:notes.pdf here.") == "See notes.pdf here."
+    def test_non_image_becomes_a_bare_filename_link(self, convert):
+        assert convert("See attachment:notes.pdf here.") == "See [notes.pdf](notes.pdf) here."
+
+    def test_non_image_with_spaces(self, convert):
+        assert convert('See attachment:"release notes.pdf" here.') == (
+            "See [release notes.pdf](<release notes.pdf>) here."
+        )
+
+    def test_non_image_in_a_markdown_source(self, convert):
+        assert convert("See attachment:notes.pdf", MARKDOWN) == "See [notes.pdf](notes.pdf)"
 
     def test_textile_inline_image(self, convert):
         assert convert("!logo.png!") == "![](logo.png)"
@@ -277,6 +285,35 @@ class TestRendersInSpecivo:
             attachment_map={"chart.png": "/api/v1/attachments/7/download"},
         )
         assert "/api/v1/attachments/7/download" in rendered
+
+    @pytest.mark.parametrize("ctx", [TEXTILE, MARKDOWN])
+    def test_attachment_link_is_resolved_by_filename(self, convert, ctx):
+        """Textile ``attachment:spec.pdf`` → Markdown → a link to the download URL."""
+        from specivo.services.markdown_service import render_wiki_markdown
+
+        rendered = render_wiki_markdown(
+            convert("See attachment:spec.pdf for details.", ctx),
+            project_key="ACME",
+            attachment_map={"spec.pdf": "/api/v1/attachments/8/download/"},
+        )
+        assert '<a href="/api/v1/attachments/8/download/"' in rendered
+        assert ">spec.pdf</a>" in rendered
+
+    def test_quoted_attachment_with_spaces_round_trips(self, convert):
+        from specivo.services.markdown_service import render_wiki_markdown
+
+        rendered = render_wiki_markdown(
+            convert('Read attachment:"release notes (final).pdf" first.'),
+            project_key="ACME",
+            attachment_map={"release notes (final).pdf": "/api/v1/attachments/9/download/"},
+        )
+        assert '<a href="/api/v1/attachments/9/download/"' in rendered
+
+    def test_unknown_attachment_link_is_left_as_written(self, convert):
+        from specivo.services.markdown_service import render_wiki_markdown
+
+        rendered = render_wiki_markdown(convert("See attachment:spec.pdf"), project_key="ACME", attachment_map={})
+        assert 'href="spec.pdf"' in rendered
 
     def test_code_block_content_is_not_swallowed(self, convert):
         from specivo.services.markdown_service import render_wiki_markdown

@@ -33,9 +33,30 @@ An attachment is visible to exactly the people who can see what it is attached t
 To anyone else, a hidden attachment looks exactly like one that doesn't exist: its download link answers
 "not found".
 
-On a wiki page, an image written by bare filename, such as `![chart](chart.png)`, is looked up among the
-project's issue and wiki attachments **that you can open**. If several share the name, the newest of
-those wins. A reader who can't see the issue holding `chart.png` sees no image there.
+## Link to an attachment by filename
+
+In Markdown you can point at an attachment by its filename alone. Write an image to show it inline or a
+link to any other file, and Specivo turns it into the attachment's download link when the page renders:
+
+```markdown
+![chart](chart.png)
+See [the spec](spec.pdf) and the [crash log](crash.log).
+[release notes](<release notes.pdf>)
+```
+
+- The filename has to match exactly, including upper and lower case. A name with spaces can be written
+  in angle brackets, as above, or URL-encoded, as `release%20notes.pdf`.
+- Only a bare filename is looked up. A full URL (`https://…`), a path containing `/`, an anchor (`#…`)
+  and a `mailto:` link are left as you wrote them. A filename with no matching attachment is left alone
+  too.
+- In an **issue's description and comments**, the name is looked up among the files attached to **that
+  issue** and its comments. A file on another issue doesn't resolve there, even if it has the same name.
+- On a **wiki page**, the name is looked up among the project's issue and wiki attachments. If several
+  share the name, the newest wins.
+- Only attachments **you can open** take part. A reader who can't see the issue holding `chart.png`, or
+  a visitor reading without an account, sees the filename but gets no image or link.
+
+The editor's preview resolves filenames the same way, so it shows what the saved text will look like.
 
 ## Size and type
 
