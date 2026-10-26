@@ -36,6 +36,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - The remaining untranslated interface text, and dates now follow the interface language
 - Keyword search returned short pages after the first one
 - Comments saved in the same moment could appear out of order
+- Large wiki pages could show as plain text on a busy server; the render time limit now counts CPU time and is set with `MARKDOWN_RENDER_DEADLINE_SECONDS`
 
 ### Security
 - Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
