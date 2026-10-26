@@ -692,3 +692,32 @@ async def test_starting_a_timer_discards_a_running_one_that_can_no_longer_be_log
     assert await _entry_count(db_session, user) == before
     timer = await _timer(db_session, user)
     assert timer is not None and timer.project_id == world["other"].id
+
+
+async def test_seeded_agent_role_reads_back_its_own_time(
+    client: AsyncClient, db_session: AsyncSession, world: dict, activity: TimeEntryActivity
+) -> None:
+    """A service account with the seeded Agent permissions logs time, then lists and reads it back."""
+    from specivo.cli.seed import _DEFAULT_ROLES
+
+    agent_def = next(r for r in _DEFAULT_ROLES if r["name"] == "Agent")
+    assert {VIEW, LOG} <= set(agent_def["permissions"])
+    role = Role(name="Ttp Seeded Agent", permissions=agent_def["permissions"], builtin=0, issues_visibility="default")
+    db_session.add(role)
+    await db_session.flush()
+    bot = await _user(db_session, "ttp_bot")
+    await _member(db_session, world["project"], bot, [role])
+    await db_session.commit()
+
+    headers = await _headers(client, "ttp_bot")
+    created = await client.post(
+        "/api/v1/projects/TTPRV/time-entries/",
+        json=_entry_body(activity, issue_id=world["issue"].id, comments="by-bot"),
+        headers=headers,
+    )
+    assert created.status_code == 201, created.text
+    listed = await client.get(f"/api/v1/projects/TTPRV/time-entries/?user_id={bot.id}", headers=headers)
+    assert listed.status_code == 200
+    assert [item["comments"] for item in listed.json()["items"]] == ["by-bot"]
+    single = await client.get(f"/api/v1/time-entries/{created.json()['id']}/", headers=headers)
+    assert single.status_code == 200
