@@ -34,16 +34,23 @@ def embed_search_sources(self, sources: list[list]) -> None:  # type: ignore[no-
             :class:`~specivo.schemas.search.SearchSourceType` values. Lists
             rather than tuples because Celery serializes task args to JSON.
     """
+    from specivo.services.search_index_service import describe_error
+
     try:
         run_async(_embed_sources_async([(str(t), int(i)) for t, i in sources]))
     except Exception as exc:
-        logger.warning("Embedding task failed for %d search source(s): %s", len(sources), exc)
-        raise self.retry(exc=exc)
+        # The message of a database error quotes its parameters, i.e. content:
+        # keep it out of the warning and of the retry Celery records.
+        reason = describe_error(exc)
+        logger.warning("Embedding task failed for %d search source(s): %s", len(sources), reason)
+        logger.debug("Embedding task failure", exc_info=True)
+        raise self.retry(exc=RuntimeError(reason)) from None
 
 
 async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
     """Embed each source in its own transaction, so one failure loses only that source."""
     from specivo.services.embedding_service import EmbeddingService
+    from specivo.services.search_index_service import describe_error
 
     service = EmbeddingService()
 
@@ -60,7 +67,8 @@ async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
                 await session.commit()
             except Exception as exc:  # noqa: BLE001 - one bad source must not block the rest
                 await session.rollback()
-                logger.warning("Embedding failed for %s %d: %s", source_type, entity_id, exc)
+                logger.warning("Embedding failed for %s %d: %s", source_type, entity_id, describe_error(exc))
+                logger.debug("Embedding failure for %s %d", source_type, entity_id, exc_info=True)
                 continue
             if count:
                 logger.info("Embedded %d chunk(s) for %s %d", count, source_type, entity_id)

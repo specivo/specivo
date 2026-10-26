@@ -82,12 +82,19 @@ async def backfill_search_index(ctx: PhaseContext) -> None:
 
 async def _index(ctx: PhaseContext, embedder, entity_type: EntityType, source_type) -> None:
     """Chunk and embed the entities of one type this source has imported."""
+    from specivo.services.search_index_service import describe_error
+
     entity_ids = sorted((await ctx.id_map.preload(ctx.session, entity_type)).values())
     for start in range(0, len(entity_ids), _INDEX_BATCH):
         for entity_id in entity_ids[start : start + _INDEX_BATCH]:
             try:
                 await embedder.index_source(ctx.session, source_type, entity_id)
             except Exception as exc:  # noqa: BLE001 - see backfill_search_index
-                ctx.warn("Could not index an item for search", source=str(source_type), id=entity_id, reason=str(exc))
+                ctx.warn(
+                    "Could not index an item for search",
+                    source=str(source_type),
+                    id=entity_id,
+                    reason=describe_error(exc),
+                )
             ctx.tick()
         await ctx.session.flush()
