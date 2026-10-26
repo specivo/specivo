@@ -86,10 +86,23 @@ Open `http://your-specivo-host:9933` and sign in.
 
 ## Semantic search offline
 
-The bundled embedding model is normally fetched over the network. To use semantic search on an
-air-gapped host, pre-fetch the model on the connected machine and copy it into `SPECIVO_DATA_DIR`
-on the offline host (default `./specivo-data`). Once the file is in place, Specivo loads it locally
-and runs the model on CPU — no external calls.
+The embedding model is not in the Docker image or the release bundle; it is a separate download of
+about 393 MB from Hugging Face. To use semantic search on an air-gapped host, fetch it on the
+connected machine and copy it into `SPECIVO_DATA_DIR` on the offline host (default `./specivo-data`).
+
+1. On the connected machine, download the model with `make download-model` from a checkout, or by
+   hand as listed in [Semantic search and embeddings](semantic-search.md#turn-it-on). You need
+   `multilingual-e5-small.onnx` and `tokenizer.json`; the script fetches three small files besides.
+2. Copy the resulting `models` folder to `<SPECIVO_DATA_DIR>/models/` on the offline host, so
+   that `<SPECIVO_DATA_DIR>/models/multilingual-e5-small.onnx` exists.
+3. Index the content you already have:
+
+    ```bash
+    docker compose exec api python -m specivo.cli.backfill_embeddings
+    ```
+
+Specivo looks for the files whenever it needs them, so no restart is needed. It loads them locally and
+runs the model on CPU, with no external calls.
 
 Without the model, keyword search and the rest of Specivo work normally; only meaning-based search
 is unavailable.

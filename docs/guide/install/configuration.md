@@ -119,17 +119,25 @@ and [Writing a password hasher plugin](password-hasher-plugins.md).
 
 ## Semantic search model
 
-Hybrid search combines keyword matching with semantic ("by meaning") matching. The semantic side
-needs an embedding model, which you enable in one of two ways:
+Hybrid and semantic search match by meaning, which needs an embedding model. Specivo runs one on
+your own CPU, `multilingual-e5-small` (about 393 MB, 384-dimensional vectors, about 100 languages).
+It is not part of the Docker image and is not downloaded automatically. You fetch it once:
 
-- **Bundled on-device model.** Download once and it runs on CPU with no external calls:
+```bash
+make download-model      # saves into SPECIVO_DATA_DIR/models
+```
 
-  ```bash
-  make download-model      # ~393 MB, stored under SPECIVO_DATA_DIR
-  ```
+There is no setting that turns it on: when the model files are in `SPECIVO_DATA_DIR/models`, it is
+on. Without them, keyword search and everything else work normally and hybrid search behaves like
+keyword search. Hosted ("bring your own key") providers and other models are not supported.
 
-- **Bring your own key (BYOK).** Use an external embedding provider instead of the local model.
+| Variable | Purpose / default |
+|---|---|
+| `EMBEDDING_ONNX_THREADS` | CPU threads the model may use. Default `2`; `0` uses every core. |
+| `SEARCH_INDEX_COMMENTS` | Index comments for search. Default `true`. |
+| `SEARCH_MIN_COMMENT_LENGTH` | Comments shorter than this many characters are not indexed. Default `20`. |
+| `SEARCH_EXCLUDE_BOT_COMMENTS` | Skip comments made through an API key or by a service account. Default `true`. |
 
-Keyword search and everything else work without either. If you skip this, search still functions —
-it just matches on words rather than meaning. For an offline host, pre-fetch the model as described
-in [Air-gapped install](air-gapped.md).
+See [Semantic search and embeddings](semantic-search.md) for what it is used for, how existing
+content is indexed, how to check it works, and troubleshooting. For an offline host, see
+[Air-gapped install](air-gapped.md#semantic-search-offline).

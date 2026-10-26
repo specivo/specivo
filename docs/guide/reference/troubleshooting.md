@@ -20,12 +20,15 @@ you. Repeated failed attempts may temporarily lock you out; wait a moment and tr
 
 Specivo has two search modes. **Keyword search** works out of the box and matches text in issues, comments,
 wiki pages, and attachment descriptions. **Semantic search** (finding results by meaning) needs an on-device
-embedding model that the operator downloads and an index that is built afterward.
+embedding model that the operator downloads, and an index that is built afterward.
 
-If semantic results are empty, the model probably hasn't been fetched and the existing content hasn't been
-indexed yet. Keyword search still works in the meantime. To enable semantic search, the operator runs the
-model download (`make download-model`) and a backfill to index existing content. See
-[Finding issues](../issues/finding.md).
+If semantic results are empty, the model files are probably missing from the server's data directory, or
+the existing content hasn't been indexed yet. Keyword search still works in the meantime. The operator
+downloads the model (`make download-model`) and runs the indexing command
+(`docker compose exec api python -m specivo.cli.backfill_embeddings`). Comments, and issues or wiki pages
+edited since the last run, also only reach the search index when that command runs again. The
+steps, a way to check each one, and fixes are in
+[Semantic search and embeddings](../install/semantic-search.md). See also [Finding issues](../issues/finding.md).
 
 If searching for an issue key like `ACME-42` finds the issue itself but not older issues or wiki pages
 that mention it, the search index predates key matching. An administrator can rebuild it with

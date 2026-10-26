@@ -92,7 +92,7 @@ The bundle includes:
 |---------|-------|---------|
 | **nginx** | nginx:1-alpine | Reverse proxy, static files, TLS termination |
 | **api** | specivo/specivo | FastAPI application server |
-| **celery-worker** | specivo/specivo | Async task processing (emails, embeddings, webhooks) |
+| **celery-worker** | specivo/specivo | Async task processing (emails, webhooks, search reindex, embedding-model backfill) |
 | **celery-beat** | specivo/specivo | Scheduled task runner |
 | **db** | pgvector/pgvector:pg18 | PostgreSQL with pgvector (optional — use external) |
 | **redis** | redis:7-alpine | Cache, task broker, pub/sub (optional — use external) |
@@ -119,6 +119,10 @@ All configuration is via environment variables. Set in `.env` (committed) or `.e
 | `SMTP_PORT` | No | `587` | Email server port |
 | `SMTP_FROM` | No | `noreply@specivo.dev` | Sender address |
 | `KILL_TOKEN` | No | — | Emergency kill switch token |
+| `EMBEDDING_ONNX_THREADS` | No | `2` | CPU threads for the embedding model (`0` = all cores) |
+| `SEARCH_INDEX_COMMENTS` | No | `true` | Index comments for search |
+| `SEARCH_MIN_COMMENT_LENGTH` | No | `20` | Comments shorter than this are not indexed |
+| `SEARCH_EXCLUDE_BOT_COMMENTS` | No | `true` | Skip comments made by API keys or service accounts |
 | `INSTALLED_PLUGINS` | No | `[]` | Plugins by dotted path (JSON array). A plugin can add password hashers and import sources |
 | `PASSWORD_HASHERS` | No | `[]` | Extra password hasher classes by dotted path (JSON array) |
 | `LEGACY_PASSWORD_ALGORITHMS` | No | `[]` | Imported password formats allowed to sign in, e.g. `["redmine_sha1"]` |
@@ -126,6 +130,15 @@ All configuration is via environment variables. Set in `.env` (committed) or `.e
 
 The last three are explained in the user guide under
 [Configuration](https://specivo.io/docs/specivo/install/configuration/#imported-passwords).
+
+### Semantic search
+
+Semantic and hybrid search need the `multilingual-e5-small` embedding model, which is not in the
+image or the release bundle. Download it into `$SPECIVO_DATA_DIR/models/` (`make download-model`, or
+the five files listed in the guide), then run
+`docker compose exec api python -m specivo.cli.backfill_embeddings` to index existing content. See
+[Semantic search and embeddings](https://specivo.io/docs/specivo/install/semantic-search/) for
+what is indexed when, offline setup, and troubleshooting.
 
 ### Using External Database
 
