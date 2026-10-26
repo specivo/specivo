@@ -76,8 +76,8 @@ async def test_upgrade_grants_and_downgrade_removes_view_time_entries() -> None:
     assert await _revision() >= "0036"
     await _execute("DELETE FROM roles WHERE name = ANY(:names)", {"names": list(_ROLES)})
     try:
-        _alembic("downgrade", "-1")
-        assert await _revision() == "0033"
+        _alembic("downgrade", "0036-1")
+        assert await _revision() == "0035"
         for name, perms in _ROLES.items():
             await _execute(
                 "INSERT INTO roles (name, position, assignable, builtin, permissions, issues_visibility, settings) "
@@ -91,7 +91,7 @@ async def test_upgrade_grants_and_downgrade_removes_view_time_entries() -> None:
             "Mig36 Renamed Agent": ["log_time", "view_issues"],
         }
 
-        _alembic("downgrade", "-1")
+        _alembic("downgrade", "0036-1")
         assert await _permissions() == {name: sorted(perms) for name, perms in _ROLES.items()}
 
         # Round trip back to head grants it once again, not twice.
