@@ -182,14 +182,16 @@ class RedmineTextileConverter:
 
         def on_attachment(match: re.Match[str]) -> str:
             filename = match.group(1) or match.group(2)
-            if not _is_image(filename):
-                # Only images resolve by filename today, and a link that 404s
-                # reads worse than a filename; the file is still attached.
-                return filename
             token = _TOKEN.format(index=len(protected))
-            # The bare-filename image form, which the renderer resolves against
-            # the attachment map of the issue or page it is stored on.
-            protected[token] = f"![{filename}]({filename})"
+            # A bare-filename reference, which the renderer resolves against
+            # the attachments of the issue (description and comments) or the
+            # project (wiki pages) the text is stored on: the image form for
+            # images, a plain link for every other file.
+            target = _link_target(filename)
+            if _is_image(filename):
+                protected[token] = f"![{_escape_label(filename)}]({target})"
+            else:
+                protected[token] = f"[{_escape_label(filename)}]({target})"
             return token
 
         def on_version(match: re.Match[str]) -> str:
@@ -228,6 +230,22 @@ def _is_image(filename: str) -> bool:
     """Whether *filename* is one Specivo's renderer can show inline."""
     lowered = filename.lower()
     return any(lowered.endswith(extension) for extension in _IMAGE_EXTENSIONS)
+
+
+def _link_target(filename: str) -> str:
+    """Return *filename* as a Markdown link target.
+
+    A name with a space or bracket in it is wrapped in ``<...>``, CommonMark's
+    form for such targets, which the renderer also accepts.
+    """
+    if any(char in filename for char in " ()<>"):
+        return f"<{filename.replace('<', '%3C').replace('>', '%3E')}>"
+    return filename
+
+
+def _escape_label(filename: str) -> str:
+    """Escape the brackets that would end a Markdown link label early."""
+    return filename.replace("[", "\\[").replace("]", "\\]")
 
 
 def _unescape(text: str) -> str:
