@@ -240,3 +240,56 @@ class TestStrictMode:
         ctx = make_context(FakeAdapter(lookups=_lookups()), strict=True)
         with pytest.raises(PhaseFailedError):
             await load_lookups(ctx)
+
+
+class TestVisibilityAndPrivacy:
+    async def test_created_role_keeps_the_source_visibility(self, db_session, make_context):
+        roles = [
+            IRRole(
+                source_ref="3",
+                name="Lookup Contractor",
+                users_visibility="members_of_visible_projects",
+                time_entries_visibility="own",
+            )
+        ]
+        ctx = make_context(FakeAdapter(lookups=_lookups(roles=roles)))
+        await load_lookups(ctx)
+
+        role = await db_session.get(Role, await ctx.id_map.get(db_session, EntityType.ROLE, "3"))
+        assert role.users_visibility == "members_of_visible_projects"
+        assert role.time_entries_visibility == "own"
+
+    async def test_created_role_without_settings_gets_the_defaults(self, db_session, make_context):
+        ctx = make_context(FakeAdapter(lookups=_lookups()))
+        await load_lookups(ctx)
+
+        role = await db_session.get(Role, await ctx.id_map.get(db_session, EntityType.ROLE, "3"))
+        assert (role.users_visibility, role.time_entries_visibility) == ("all", "all")
+
+    async def test_reused_wider_role_is_left_alone_and_reported(self, db_session, make_context):
+        existing = Role(name="Lookup Contractor", permissions=["view_issues"])
+        db_session.add(existing)
+        await db_session.flush()
+        roles = [
+            IRRole(
+                source_ref="3",
+                name="Lookup Contractor",
+                users_visibility="members_of_visible_projects",
+                time_entries_visibility="own",
+            )
+        ]
+        ctx = make_context(FakeAdapter(lookups=_lookups(roles=roles)))
+        await load_lookups(ctx)
+
+        assert (existing.users_visibility, existing.time_entries_visibility) == ("all", "all")
+        messages = [w.message for w in ctx.summary.warnings]
+        assert any("members of visible projects" in m for m in messages)
+        assert any("own time entries" in m for m in messages)
+
+    async def test_tracker_private_by_default_carries_over(self, db_session, make_context):
+        trackers = [IRTracker(source_ref="1", name="Security", default_status_ref="1", private_by_default=True)]
+        ctx = make_context(FakeAdapter(lookups=_lookups(trackers=trackers)))
+        await load_lookups(ctx)
+
+        tracker = await db_session.get(Tracker, await ctx.id_map.get(db_session, EntityType.TRACKER, "1"))
+        assert tracker.private_by_default is True

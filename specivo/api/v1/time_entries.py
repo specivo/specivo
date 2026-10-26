@@ -123,12 +123,17 @@ async def list_time_entries(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryListResponse:
-    """List time entries for a project with optional filters."""
+    """List the project's time entries the caller may read, with optional filters.
+
+    A role with ``time_entries_visibility = 'own'`` limits the list to the
+    caller's own entries.
+    """
     project = await _project_service.get_by_key(db, project_key.upper())
     await _project_service.require_project_access(db, project, current_user)
     entries, total = await _service.list_for_project(
         db,
-        project.id,
+        project,
+        current_user,
         user_id=user_id,
         from_date=from_date,
         to_date=to_date,
@@ -157,8 +162,8 @@ async def get_time_entry(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryOut:
-    """Get a single time entry by ID."""
-    entry = await _service.get_by_id(db, entry_id)
+    """Get a single time entry by ID; 404 unless the caller may read it."""
+    entry = await _service.get_visible(db, entry_id, current_user)
     return _entry_out(entry)
 
 
@@ -173,7 +178,7 @@ async def update_time_entry(
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryOut:
     """Update a time entry (owner or admin)."""
-    entry = await _service.get_by_id(db, entry_id)
+    entry = await _service.get_visible(db, entry_id, current_user)
     entry = await _service.update(db, entry, data, current_user)
     entry = await _service.get_by_id(db, entry.id)
     return _entry_out(entry)
@@ -189,7 +194,7 @@ async def delete_time_entry(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a time entry (owner or admin)."""
-    entry = await _service.get_by_id(db, entry_id)
+    entry = await _service.get_visible(db, entry_id, current_user)
     await _service.delete(db, entry, current_user)
 
 

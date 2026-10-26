@@ -105,6 +105,8 @@ class IRTracker:
     default_status_ref: str | None = None
     disabled_core_fields: list[str] = field(default_factory=list)
     position: int = 0
+    # New issues of this type start private.
+    private_by_default: bool = False
 
 
 @dataclass(slots=True)
@@ -149,12 +151,18 @@ class IRRole:
     ``builtin`` follows Specivo's encoding: 0 for an ordinary role, 1 for the
     non-member role, 2 for the anonymous one. Sources without that concept leave
     it at 0.
+
+    ``users_visibility`` (``all`` / ``members_of_visible_projects``) and
+    ``time_entries_visibility`` (``all`` / ``own``) use Specivo's values; None
+    means the source has no such setting and Specivo's default applies.
     """
 
     source_ref: str
     name: str
     builtin: int = 0
     permissions: list[str] = field(default_factory=list)
+    users_visibility: str | None = None
+    time_entries_visibility: str | None = None
 
 
 @dataclass(slots=True)

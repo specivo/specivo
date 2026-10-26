@@ -21,7 +21,8 @@ description, and fields like assignee, priority, and due date. Issues are number
 ## Tracker
 
 A **tracker** is the *type* of an issue. Specivo ships with four: **Bug**, **Feature**, **Task**, and
-**Support**. The tracker affects which fields and workflow apply. See
+**Support**. The tracker affects which fields and workflow apply, and a tracker can make its new
+issues [private by default](../issues/creating.md#private-by-default). See
 [What is an issue?](../issues/index.md).
 
 ## Status

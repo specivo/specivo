@@ -135,6 +135,12 @@ guessing:
 A few things come across but not unchanged, and each is worth knowing about
 before you look at real numbers:
 
+- **Role visibility and private trackers** come across as they were: a role's
+  *users visibility* and *time entries visibility*, and a tracker's *private by
+  default*. A role or tracker matched to one you already had is not changed,
+  so when the Redmine one was narrower — a role that saw only its own time,
+  say — the import reports it and you decide whether to restrict yours.
+  Imported issues keep their own private flag either way.
 - **Logins and email addresses that collide with an existing account** are
   suffixed (`jsmith-2`, `jsmith+2@example.com`) rather than skipped, and every
   suffixed one is listed in the report.

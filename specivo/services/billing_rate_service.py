@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import NotFoundError
 from specivo.models.agent_cost import BillingRate
+from specivo.models.project import Project
 from specivo.models.time_entry import TimeEntry
+from specivo.models.user import User
 from specivo.schemas.agent_cost import BillingRateCreate, BillingRateUpdate
 
 logger = logging.getLogger(__name__)
@@ -130,12 +132,20 @@ class BillingRateService:
     async def billable_report(
         self,
         session: AsyncSession,
-        project_id: int,
+        project: Project,
+        viewer: User,
         date_from: date,
         date_to: date,
     ) -> dict:
-        """Generate a billing report: billable time entries * rate."""
-        result = await session.execute(
+        """Generate a billing report: billable time entries * rate.
+
+        Only the entries *viewer* may read count (``TimeEntryService``), so a
+        role restricted to its own time reports on its own time.
+        """
+        from specivo.services.time_entry_service import TimeEntryService
+
+        project_id = project.id
+        stmt = (
             select(TimeEntry)
             .where(TimeEntry.project_id == project_id)
             .where(TimeEntry.is_billable.is_(True))
@@ -143,7 +153,10 @@ class BillingRateService:
             .where(TimeEntry.spent_on <= date_to)
             .order_by(TimeEntry.spent_on)
         )
-        entries = list(result.scalars().all())
+        visible = await TimeEntryService().visible_entries_clause(session, viewer, project)
+        if visible is not None:
+            stmt = stmt.where(visible)
+        entries = list((await session.execute(stmt)).scalars().all())
 
         report_entries = []
         total_hours = Decimal("0")

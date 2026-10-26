@@ -59,9 +59,7 @@ msgstr ""
 
 #: specivo/services/api_key_service.py:122
 #, python-brace-format
-msgid ""
-"API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited "
-"keys."
+msgid "API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited keys."
 msgstr ""
 
 #: specivo/services/api_key_service.py:175
@@ -190,9 +188,7 @@ msgid "Issue is already in this project."
 msgstr ""
 
 #: specivo/services/issue_service.py:900
-msgid ""
-"Cannot move an issue that is part of a hierarchy. Detach it from its "
-"parent and move or detach its children first."
+msgid "Cannot move an issue that is part of a hierarchy. Detach it from its parent and move or detach its children first."
 msgstr ""
 
 #: specivo/services/issue_service.py:951
@@ -202,9 +198,7 @@ msgstr ""
 
 #: specivo/services/issue_service.py:1032
 #, python-brace-format
-msgid ""
-"Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
-"id, or one of: {known}"
+msgid "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status id, or one of: {known}"
 msgstr ""
 
 #: specivo/services/journal_service.py:300
@@ -622,9 +616,7 @@ msgid "Effective:"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_card.html:27
-msgid ""
-"Controls how text is tokenized and stemmed for full-text search. Changing"
-" it does not update already-indexed content until you reindex."
+msgid "Controls how text is tokenized and stemmed for full-text search. Changing it does not update already-indexed content until you reindex."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:6
@@ -1256,9 +1248,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/search.html:323
 #, python-format
-msgid ""
-"No results found for &ldquo;%(query)s&rdquo;. Try different keywords or "
-"search mode."
+msgid "No results found for &ldquo;%(query)s&rdquo;. Try different keywords or search mode."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/search.html:326
@@ -1342,16 +1332,11 @@ msgid "Turn on anonymous access"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:20
-msgid ""
-"The projects opted in to anonymous reading changed while you were "
-"reviewing them. Check the current list and confirm again."
+msgid "The projects opted in to anonymous reading changed while you were reviewing them. Check the current list and confirm again."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:23
-msgid ""
-"The switch alone exposes nothing. A public project can only be read "
-"without an account while this switch is on and the project is opted in, "
-"in its own settings."
+msgid "The switch alone exposes nothing. A public project can only be read without an account while this switch is on and the project is opted in, in its own settings."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:26
@@ -1537,9 +1522,7 @@ msgid "SMTP Configuration"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/email.html:34
-msgid ""
-"Email delivery is configured via environment variables. Showing current "
-"connection details."
+msgid "Email delivery is configured via environment variables. Showing current connection details."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/email.html:38
@@ -1746,9 +1729,7 @@ msgid "+ New Group"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/groups.html:29
-msgid ""
-"A group is an access grant. Everyone in a group holds every role the "
-"group has been given on every project it is a member of."
+msgid "A group is an access grant. Everyone in a group holds every role the group has been given on every project it is a member of."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/groups.html:34
@@ -1902,9 +1883,7 @@ msgid "projects they lose it on"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/groups.html:159
-msgid ""
-"Anyone who also holds a membership directly, or through another group, "
-"keeps that access."
+msgid "Anyone who also holds a membership directly, or through another group, keeps that access."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/groups.html:166
@@ -2090,9 +2069,7 @@ msgid "No custom presets yet"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:111
-msgid ""
-"Create custom metadata presets to define reusable field schemas that any "
-"project can activate."
+msgid "Create custom metadata presets to define reusable field schemas that any project can activate."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:114
@@ -2128,9 +2105,7 @@ msgid "e.g. code, bug, star, book"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:193
-msgid ""
-"Icon identifier used in the UI. Available: code, bug, megaphone, sprint, "
-"book, star"
+msgid "Icon identifier used in the UI. Available: code, bug, megaphone, sprint, book, star"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:196
@@ -2139,9 +2114,7 @@ msgid "Schema Definition (JSON)"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:205
-msgid ""
-"JSON Schema defining the metadata fields. Must be a valid JSON Schema "
-"with \"type\": \"object\"."
+msgid "JSON Schema defining the metadata fields. Must be a valid JSON Schema with \"type\": \"object\"."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:226
@@ -2153,9 +2126,7 @@ msgid "This will permanently delete the preset"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:227
-msgid ""
-"Projects that already have this preset enabled will keep their existing "
-"schemas."
+msgid "Projects that already have this preset enabled will keep their existing schemas."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:233
@@ -2302,9 +2273,7 @@ msgid "Defaults"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:21
-msgid ""
-"Workspace-wide fallbacks for anonymous visitors and users without their "
-"own saved preference."
+msgid "Workspace-wide fallbacks for anonymous visitors and users without their own saved preference."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:25
@@ -2326,10 +2295,7 @@ msgid "Search analyzer language"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:55
-msgid ""
-"Full-text search analyzer language for the whole instance. Projects can "
-"override this. Changing it does not update already-indexed content until "
-"you reindex."
+msgid "Full-text search analyzer language for the whole instance. Projects can override this. Changing it does not update already-indexed content until you reindex."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:63
@@ -2338,11 +2304,7 @@ msgid "Anonymous access"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:65
-msgid ""
-"This is the instance-wide gate for anonymous reading, and turning it on "
-"exposes nothing by itself. A public project can only be read without an "
-"account while this switch is on and the project is opted in, one project "
-"at a time, in its own settings."
+msgid "This is the instance-wide gate for anonymous reading, and turning it on exposes nothing by itself. A public project can only be read without an account while this switch is on and the project is opted in, one project at a time, in its own settings."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:68
@@ -2494,9 +2456,7 @@ msgid "Account Details"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:68
-msgid ""
-"Service accounts authenticate via API keys only. They cannot log in via "
-"the web interface."
+msgid "Service accounts authenticate via API keys only. They cannot log in via the web interface."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:71
@@ -2517,9 +2477,7 @@ msgid "Password"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:107
-msgid ""
-"Keys are used for MCP server connections, CI/CD pipelines, and "
-"programmatic access. The full key is shown only once when created."
+msgid "Keys are used for MCP server connections, CI/CD pipelines, and programmatic access. The full key is shown only once when created."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:113
@@ -2577,23 +2535,11 @@ msgid "Codex CLI"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:234
-msgid ""
-"Replace <code>your-specivo-host</code> with this instance's hostname (use"
-" <code>http://</code> for local development, <code>https://</code> in "
-"production) and <code>spv_your_api_key_here</code> with an API key "
-"created above. The agent connects to Specivo over HTTP — no database "
-"access or local installation required."
+msgid "Replace <code>your-specivo-host</code> with this instance's hostname (use <code>http://</code> for local development, <code>https://</code> in production) and <code>spv_your_api_key_here</code> with an API key created above. The agent connects to Specivo over HTTP — no database access or local installation required."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:237
-msgid ""
-"Codex CLI reads MCP servers from <code>~/.codex/config.toml</code> and "
-"speaks Streamable HTTP natively. Replace <code>your-specivo-host</code> "
-"with this instance's hostname, then export your API key in the shell: "
-"<code>export SPECIVO_API_KEY=spv_your_api_key_here</code>. Codex will "
-"read it via <code>bearer_token_env_var</code> and send "
-"<code>Authorization: Bearer &lt;key&gt;</code> on every request — no "
-"<code>mcp-remote</code> bridge needed."
+msgid "Codex CLI reads MCP servers from <code>~/.codex/config.toml</code> and speaks Streamable HTTP natively. Replace <code>your-specivo-host</code> with this instance's hostname, then export your API key in the shell: <code>export SPECIVO_API_KEY=spv_your_api_key_here</code>. Codex will read it via <code>bearer_token_env_var</code> and send <code>Authorization: Bearer &lt;key&gt;</code> on every request — no <code>mcp-remote</code> bridge needed."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/users.html:16
@@ -2710,9 +2656,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/users.html:148
 #: specivo/templates/themes/default/pages/admin/users.html:195
-msgid ""
-"You know this password. Leave this on so the account replaces it with one"
-" only its owner knows."
+msgid "You know this password. Leave this on so the account replaces it with one only its owner knows."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/users.html:174
@@ -2962,10 +2906,7 @@ msgid "Choose your password"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/change_password.html:41
-msgid ""
-"The password on this account was set by somebody else — an administrator,"
-" or an import from another system. Choose your own before you continue; "
-"nothing else is available until you do."
+msgid "The password on this account was set by somebody else — an administrator, or an import from another system. Choose your own before you continue; nothing else is available until you do."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/change_password.html:50
@@ -2990,9 +2931,7 @@ msgid "Check your email"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:40
-msgid ""
-"If an account with that email exists, we've sent a password reset link. "
-"Please check your inbox."
+msgid "If an account with that email exists, we've sent a password reset link. Please check your inbox."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:43
@@ -3003,9 +2942,7 @@ msgid "Back to login"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:55
-msgid ""
-"Enter the email address associated with your account and we'll send you a"
-" link to reset your password."
+msgid "Enter the email address associated with your account and we'll send you a link to reset your password."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:60
@@ -3397,9 +3334,7 @@ msgid "Move issue"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:353
-msgid ""
-"Version, sprint, category and tags are cleared. History and the old "
-"reference are kept."
+msgid "Version, sprint, category and tags are cleared. History and the old reference are kept."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:356
@@ -3530,9 +3465,7 @@ msgid "(after)"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:57
-msgid ""
-"This is the first recorded description edit. No previous version to "
-"compare against."
+msgid "This is the first recorded description edit. No previous version to compare against."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:65
@@ -4238,9 +4171,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:69
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:61
-msgid ""
-"Editing a pattern affects future instances only. Already-generated issues"
-" keep the values they were created with."
+msgid "Editing a pattern affects future instances only. Already-generated issues keep the values they were created with."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:78
@@ -4466,9 +4397,7 @@ msgid "Leave empty to repeat on the start date's weekday."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:118
-msgid ""
-"Combine a weekday with a set position below to schedule e.g. \"the 2nd "
-"Tuesday\"."
+msgid "Combine a weekday with a set position below to schedule e.g. \"the 2nd Tuesday\"."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:123
@@ -4480,9 +4409,7 @@ msgid "e.g. 1, 15, -1 (last day)"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:125
-msgid ""
-"Comma-separated day numbers. Negative counts from the month end (-1 = "
-"last day). Leave empty if using weekday + set position."
+msgid "Comma-separated day numbers. Negative counts from the month end (-1 = last day). Leave empty if using weekday + set position."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:130
@@ -4494,9 +4421,7 @@ msgid "e.g. 1 (first), 2 (second), -1 (last)"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:132
-msgid ""
-"Pick the nth weekday within each period. Requires at least one weekday "
-"selected above (e.g. weekday Tuesday + position 2 = \"2nd Tuesday\")."
+msgid "Pick the nth weekday within each period. Requires at least one weekday selected above (e.g. weekday Tuesday + position 2 = \"2nd Tuesday\")."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:139
@@ -4520,9 +4445,7 @@ msgid "Every occurrence is created on its scheduled date; overdue ones stack up.
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:186
-msgid ""
-"Only the next occurrence is created, and only once the previous instance "
-"is closed."
+msgid "Only the next occurrence is created, and only once the previous instance is closed."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:190
@@ -4538,9 +4461,7 @@ msgid "Completion date"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:195
-msgid ""
-"Whether the next occurrence is measured from the scheduled date or the "
-"actual completion date of the previous instance."
+msgid "Whether the next occurrence is measured from the scheduled date or the actual completion date of the previous instance."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:199
@@ -4608,15 +4529,11 @@ msgid "Assignee rotation"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:290
-msgid ""
-"Rotate the assignee across these members on each occurrence (overrides "
-"the default assignee)."
+msgid "Rotate the assignee across these members on each occurrence (overrides the default assignee)."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:298
-msgid ""
-"Hold Ctrl (Cmd on Mac) to select or deselect multiple members. Leave "
-"empty for no rotation."
+msgid "Hold Ctrl (Cmd on Mac) to select or deselect multiple members. Leave empty for no rotation."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:302
@@ -4624,9 +4541,7 @@ msgid "Next occurrences"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:305
-msgid ""
-"Edits affect future instances only — issues already generated keep their "
-"original values."
+msgid "Edits affect future instances only — issues already generated keep their original values."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:308
@@ -4700,9 +4615,7 @@ msgid "Could not save anonymous access."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:73
-msgid ""
-"Choose which parts of this public project are opted in to anonymous "
-"reading. Only instance administrators can see or change this section."
+msgid "Choose which parts of this public project are opted in to anonymous reading. Only instance administrators can see or change this section."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:75
@@ -4710,9 +4623,7 @@ msgid "Anonymous access is turned on for the whole instance."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:77
-msgid ""
-"These settings have no effect while anonymous access is turned off for "
-"the whole instance."
+msgid "These settings have no effect while anonymous access is turned off for the whole instance."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:77
@@ -4755,9 +4666,7 @@ msgid "Add Member"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:116
-msgid ""
-"Grant access to one person, or to a group so everyone in it gets the same"
-" roles."
+msgid "Grant access to one person, or to a group so everyone in it gets the same roles."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:120
@@ -4946,9 +4855,7 @@ msgid "Available Presets"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:587
-msgid ""
-"Enable presets to add predefined metadata fields to issues in this "
-"project. Each preset can be scoped to all trackers or a specific one."
+msgid "Enable presets to add predefined metadata fields to issues in this project. Each preset can be scoped to all trackers or a specific one."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:626
@@ -4990,9 +4897,7 @@ msgid "No metadata schemas"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:721
-msgid ""
-"Enable a preset above or create a custom schema to add metadata fields to"
-" issues."
+msgid "Enable a preset above or create a custom schema to add metadata fields to issues."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:739
@@ -5004,15 +4909,11 @@ msgid "Tracker Scope"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:749
-msgid ""
-"Limit this schema to a specific tracker, or leave as \"All trackers\" for"
-" project-wide."
+msgid "Limit this schema to a specific tracker, or leave as \"All trackers\" for project-wide."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:761
-msgid ""
-"JSON Schema with \"type\": \"object\" and \"properties\" defining the "
-"fields."
+msgid "JSON Schema with \"type\": \"object\" and \"properties\" defining the fields."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:783
@@ -5024,9 +4925,7 @@ msgid "This will permanently remove"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:784
-msgid ""
-"from this project. Issues that already have metadata will retain their "
-"data."
+msgid "from this project. Issues that already have metadata will retain their data."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:788
@@ -5055,17 +4954,11 @@ msgid "Computed Fields"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:823
-msgid ""
-"Fields whose value is fixed by the project. Each one is filled in "
-"automatically on every issue here, is never stored on the issue itself, "
-"and cannot be overridden by a client — so it can never drift, and it "
-"recomputes when an issue moves to another project."
+msgid "Fields whose value is fixed by the project. Each one is filled in automatically on every issue here, is never stored on the issue itself, and cannot be overridden by a client — so it can never drift, and it recomputes when an issue moves to another project."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:827
-msgid ""
-"One of these fields holds a non-text value, which this editor cannot "
-"represent. Edit it through the projects API instead."
+msgid "One of these fields holds a non-text value, which this editor cannot represent. Edit it through the projects API instead."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:833
@@ -5147,9 +5040,7 @@ msgid "Are you sure you want to delete tag"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:989
-msgid ""
-"? It will be removed from all issues and wiki pages. This action cannot "
-"be undone."
+msgid "? It will be removed from all issues and wiki pages. This action cannot be undone."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1009
@@ -5157,9 +5048,7 @@ msgid "Search indexing"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1011
-msgid ""
-"Full-text search analyzer language for this project. Leave on Inherit to "
-"use the instance default."
+msgid "Full-text search analyzer language for this project. Leave on Inherit to use the instance default."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:11
@@ -5387,9 +5276,7 @@ msgid "All issues are assigned to sprints, or no issues exist yet."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:61
-msgid ""
-"Incomplete issues will be moved to the selected sprint or back to the "
-"backlog."
+msgid "Incomplete issues will be moved to the selected sprint or back to the backlog."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:64
@@ -5544,9 +5431,7 @@ msgid "Sprint Details"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:69
-msgid ""
-"Describe what this sprint should accomplish. Visible to the team on the "
-"board."
+msgid "Describe what this sprint should accomplish. Visible to the team on the board."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:90
@@ -5566,9 +5451,7 @@ msgid "Danger Zone"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:152
-msgid ""
-"Deleting a sprint will unassign all issues back to the backlog. This "
-"action cannot be undone."
+msgid "Deleting a sprint will unassign all issues back to the backlog. This action cannot be undone."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:153
@@ -5576,9 +5459,7 @@ msgid "Active sprints must be completed before deletion."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:157
-msgid ""
-"Are you sure you want to delete this sprint? All issues will be moved to "
-"the backlog."
+msgid "Are you sure you want to delete this sprint? All issues will be moved to the backlog."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:161
@@ -5799,9 +5680,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/wiki/diff.html:31
 #, python-format
-msgid ""
-"No differences between version %(from_version)s and version "
-"%(to_version)s."
+msgid "No differences between version %(from_version)s and version %(to_version)s."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/wiki/edit.html:5
@@ -5990,71 +5869,71 @@ msgstr ""
 msgid "This password reset link has expired. Please request a new one."
 msgstr ""
 
-#~ msgid "Cannot reply to a reply (only 1-level threading is supported)"
-#~ msgstr ""
+#: specivo/services/issue_service.py:134
+msgid "You do not have permission to set issue privacy"
+msgstr ""
 
-#~ msgid ""
-#~ "Feature 'threaded_comments' is not available."
-#~ " Thread resolution requires Specivo Pro."
-#~ msgstr ""
+#: specivo/services/issue_service.py:136
+msgid "Issues of this tracker are private by default; you do not have permission to change that"
+msgstr ""
 
-#~ msgid "AI & Agents"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/dashboard.html:110
+msgid "Choose which users and time entries each role can see."
+msgstr ""
 
-#~ msgid "Agent Sessions"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/dashboard.html:119
+#: specivo/templates/themes/default/pages/admin/trackers.html:3
+#: specivo/templates/themes/default/pages/admin/trackers.html:11
+#: specivo/templates/themes/default/pages/admin/trackers.html:14
+msgid "Trackers"
+msgstr ""
 
-#~ msgid "Cost Tracking"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/dashboard.html:120
+msgid "Make new issues of a tracker private by default."
+msgstr ""
 
-#~ msgid "Overview"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/roles.html:16
+msgid "What each role can see beyond its permissions. A user who holds several roles gets the widest setting among them."
+msgstr ""
 
-#~ msgid "ALL SYSTEMS OPERATIONAL"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/roles.html:24
+#: specivo/templates/themes/default/pages/admin/roles.html:37
+msgid "Users visibility"
+msgstr ""
 
-#~ msgid "Tracker"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/roles.html:25
+#: specivo/templates/themes/default/pages/admin/roles.html:43
+msgid "Time entries visibility"
+msgstr ""
 
-#~ msgid "Your work. Your knowledge. Your infrastructure."
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/roles.html:38
+msgid "All active users"
+msgstr ""
 
-#~ msgid "% done"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/roles.html:39
+msgid "Members of visible projects"
+msgstr ""
 
-#~ msgid "Default language"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/roles.html:44
+msgid "All time entries"
+msgstr ""
 
-#~ msgid ""
-#~ "The fallback language for anonymous "
-#~ "visitors and users without a saved "
-#~ "preference."
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/roles.html:45
+msgid "Own time entries"
+msgstr ""
 
-#~ msgid "Save default language"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/trackers.html:16
+msgid "New issues of a private-by-default tracker are created private. Members allowed to set issues private can still untick it."
+msgstr ""
 
-#~ msgid "Default timezone"
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/trackers.html:24
+msgid "Private by default"
+msgstr ""
 
-#~ msgid ""
-#~ "The instance-wide default timezone, used"
-#~ " as a fallback for users without "
-#~ "their own timezone preference."
-#~ msgstr ""
+#: specivo/templates/themes/default/pages/admin/trackers.html:35
+msgid "New issues are private"
+msgstr ""
 
-#~ msgid "Save default timezone"
-#~ msgstr ""
-
-#~ msgid "Password change will be available in a future release."
-#~ msgstr ""
-
-#~ msgid "... %(count)s total"
-#~ msgstr ""
-
-#~ msgid "Project Members"
-#~ msgstr ""
-
-#~ msgid "Service"
-#~ msgstr ""
-
+#: specivo/templates/themes/default/pages/issues/form.html:84
+msgid "Only its author, its assignee and administrators can see a private issue."
+msgstr ""

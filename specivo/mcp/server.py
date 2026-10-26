@@ -267,6 +267,15 @@ async def specivo_create_issue(
             )
         ),
     ] = None,
+    is_private: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "Omit to use the tracker's private-by-default setting. "
+                "Overriding it needs the set_issues_private permission."
+            )
+        ),
+    ] = None,
 ) -> str:
     """Create a new issue in a project.
 
@@ -287,6 +296,7 @@ async def specivo_create_issue(
             fixed_version_id,
             sprint_id,
             metadata,
+            is_private,
         )
 
 

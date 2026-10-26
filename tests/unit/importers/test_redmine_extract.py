@@ -188,6 +188,10 @@ class TestExtractTracker:
     def test_blank_description_becomes_none(self):
         assert extract_tracker(self._row(description="")).description is None
 
+    def test_private_by_default_carries_over(self):
+        assert extract_tracker(self._row()).private_by_default is False
+        assert extract_tracker(self._row(private_by_default=True)).private_by_default is True
+
 
 class TestExtractStatus:
     def test_maps_and_categorises(self):
@@ -236,6 +240,31 @@ class TestExtractRole:
 
     def test_ordinary_role_has_builtin_zero(self):
         assert extract_role({"id": 3, "name": "Developer", "builtin": 0}).builtin == 0
+
+    def test_visibility_settings_carry_over(self):
+        role = extract_role(
+            {
+                "id": 4,
+                "name": "Contractor",
+                "builtin": 0,
+                "users_visibility": "members_of_visible_projects",
+                "time_entries_visibility": "own",
+            }
+        )
+        assert role.users_visibility == "members_of_visible_projects"
+        assert role.time_entries_visibility == "own"
+
+    def test_missing_visibility_settings_keep_specivo_defaults(self):
+        role = extract_role({"id": 4, "name": "Contractor", "builtin": 0})
+        assert role.users_visibility is None
+        assert role.time_entries_visibility is None
+
+    def test_unknown_visibility_values_become_the_narrower_setting(self):
+        role = extract_role(
+            {"id": 4, "name": "Contractor", "builtin": 0, "users_visibility": "x", "time_entries_visibility": "y"}
+        )
+        assert role.users_visibility == "members_of_visible_projects"
+        assert role.time_entries_visibility == "own"
 
 
 class TestExtractUser:

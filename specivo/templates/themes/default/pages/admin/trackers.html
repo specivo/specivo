@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Trackers{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Trackers{% endtrans %}</span>
+</div>
+
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-md);">{% trans %}Trackers{% endtrans %}</h1>
+<p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-xl); max-width: 720px;">
+  {% trans %}New issues of a private-by-default tracker are created private. Members allowed to set issues private can still untick it.{% endtrans %}
+</p>
+
+<div class="card" style="padding: var(--sp-space-lg); overflow-x: auto;">
+  <table class="issue-table">
+    <thead>
+      <tr>
+        <th>{% trans %}Tracker{% endtrans %}</th>
+        <th>{% trans %}Private by default{% endtrans %}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in trackers %}
+      <tr>
+        <td>{{ t.name }}</td>
+        <td>
+          <label class="checkbox-row" for="private_by_default_{{ t.id }}">
+            <input type="checkbox" form="tracker-form-{{ t.id }}" id="private_by_default_{{ t.id }}" name="private_by_default" value="1" {{ 'checked' if t.private_by_default else '' }}>
+            {% trans %}New issues are private{% endtrans %}
+          </label>
+        </td>
+        <td>
+          <form id="tracker-form-{{ t.id }}" method="post" action="/admin/trackers/{{ t.id }}/">
+            <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -22,6 +22,7 @@ from specivo.services.reaction_service import ReactionService
 from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
+from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
     get_current_user_optional,
@@ -39,6 +40,7 @@ router = APIRouter(tags=["web-issues"], include_in_schema=False)
 short_router = APIRouter(tags=["web-issues-short"], include_in_schema=False)
 
 _issue_svc = IssueService()
+_time_svc = TimeEntryService()
 _journal_svc = JournalService()
 _project_svc = ProjectService()
 _reaction_svc = ReactionService()
@@ -287,6 +289,7 @@ async def issue_create_form(
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
     can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
+    can_set_private = await check_permission(user, project.id, Permission.SET_ISSUES_PRIVATE, db)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -300,6 +303,7 @@ async def issue_create_form(
             "issue": None,
             "mode": "create",
             "can_manage_relations": can_manage_relations,
+            "can_set_private": can_set_private,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,
@@ -396,14 +400,14 @@ async def issue_detail(
         # Attachments are lazy-loaded via htmx when the Attachments tab is opened
         # (see /partials/issues/{key}/attachments/). Time entries stay eager because
         # the sidebar displays the time_logged sum derived from the list.
-        time_entries = await _issue_svc.list_time_entries(db, issue.id)
+        time_entries = await _time_svc.list_for_issue(db, issue.id, project, user)
         time_logged = sum((te.hours or 0) for te in time_entries)
         tab_ctx = {
             "time_entries": time_entries,
             "time_entry_count": len(time_entries),
             "time_logged": time_logged,
         }
-        watchers = await watcher_svc.list_watchers(db, issue)
+        watchers = await watcher_svc.list_watchers(db, issue, viewer=user)
         issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
     # Paginate activity feed
@@ -621,6 +625,7 @@ async def issue_edit_form(
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
     can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
+    can_set_private = await check_permission(user, project.id, Permission.SET_ISSUES_PRIVATE, db)
 
     issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
@@ -636,6 +641,7 @@ async def issue_edit_form(
             "issue": issue,
             "mode": "edit",
             "can_manage_relations": can_manage_relations,
+            "can_set_private": can_set_private,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,

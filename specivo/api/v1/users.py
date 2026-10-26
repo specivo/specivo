@@ -14,6 +14,7 @@ from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.reaction import UserAutocompleteOut
 from specivo.services.anonymous_user_service import real_users_clause
+from specivo.services.permission_service import visible_users_clause
 
 router = APIRouter(tags=["users"])
 
@@ -27,9 +28,15 @@ async def user_autocomplete(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[UserAutocompleteOut]:
-    """Search users by login or display name prefix for @mention autocomplete."""
+    """Search users by login or display name for @mention and member pickers.
+
+    Limited to the users the caller may list (``visible_users_clause``): a
+    caller whose roles all have ``users_visibility =
+    'members_of_visible_projects'`` finds only themselves and members of the
+    projects they can reach.
+    """
     pattern = f"%{q}%"
-    result = await db.execute(
+    stmt = (
         select(User)
         .where(
             User.status == "active",
@@ -42,6 +49,10 @@ async def user_autocomplete(
         .order_by(User.login)
         .limit(20)
     )
+    visible = await visible_users_clause(db, current_user)
+    if visible is not None:
+        stmt = stmt.where(visible)
+    result = await db.execute(stmt)
     users = list(result.scalars().all())
     return [
         UserAutocompleteOut(

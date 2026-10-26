@@ -166,7 +166,7 @@ async def update_recurring_pattern(
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
     pattern = await _get_pattern_in_project(pattern_id, project, db)
-    pattern = await _pattern_service.update(db, pattern, data)
+    pattern = await _pattern_service.update(db, pattern, data, current_user)
     # ``updated_at`` is refreshed server-side (onupdate=now()); reload so the
     # response serialiser does not trigger lazy IO in the async sync boundary.
     await db.refresh(pattern)
@@ -304,7 +304,7 @@ async def split_recurring_pattern(
     await _require_manage_recurring_tasks(project, current_user, db)
     pattern = await _get_pattern_in_project(pattern_id, project, db)
     new_pattern = await _pattern_service.split_from(
-        db, pattern, body.occurrence_at, body.new_pattern
+        db, pattern, body.occurrence_at, body.new_pattern, current_user
     )
     # Reload so server-defaulted timestamps are populated before serialising.
     await db.refresh(new_pattern)

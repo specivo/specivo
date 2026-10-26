@@ -59,9 +59,7 @@ msgstr "客户端 IP 不在密钥允许列表中"
 
 #: specivo/services/api_key_service.py:122
 #, python-brace-format
-msgid ""
-"API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited "
-"keys."
+msgid "API key limit reached ({limit}). Upgrade to Specivo Pro for unlimited keys."
 msgstr "已达到 API 密钥上限（{limit}）。升级到 Specivo Pro 即可创建无限数量的密钥。"
 
 #: specivo/services/api_key_service.py:175
@@ -190,9 +188,7 @@ msgid "Issue is already in this project."
 msgstr "工作项已在此项目中。"
 
 #: specivo/services/issue_service.py:900
-msgid ""
-"Cannot move an issue that is part of a hierarchy. Detach it from its "
-"parent and move or detach its children first."
+msgid "Cannot move an issue that is part of a hierarchy. Detach it from its parent and move or detach its children first."
 msgstr "无法移动处于层级结构中的工作项。请先将其与父工作项解除关联，并移动其子工作项或解除它们的关联。"
 
 #: specivo/services/issue_service.py:951
@@ -202,9 +198,7 @@ msgstr "已从 {old} 移动到 {new}。"
 
 #: specivo/services/issue_service.py:1032
 #, python-brace-format
-msgid ""
-"Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
-"id, or one of: {known}"
+msgid "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status id, or one of: {known}"
 msgstr "未知的状态筛选条件“{value}”。请使用 'open'、'closed'、'all'、状态 ID，或以下之一：{known}"
 
 #: specivo/services/journal_service.py:300
@@ -622,9 +616,7 @@ msgid "Effective:"
 msgstr "当前生效："
 
 #: specivo/templates/themes/default/pages/_fts_card.html:27
-msgid ""
-"Controls how text is tokenized and stemmed for full-text search. Changing"
-" it does not update already-indexed content until you reindex."
+msgid "Controls how text is tokenized and stemmed for full-text search. Changing it does not update already-indexed content until you reindex."
 msgstr "控制全文搜索时如何对文本进行分词和词干提取。更改此项后，已索引的内容在重建索引前不会更新。"
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:6
@@ -1253,9 +1245,7 @@ msgstr "第 %(start)s–%(end)s 条，共 %(total)s 条"
 
 #: specivo/templates/themes/default/pages/search.html:323
 #, python-format
-msgid ""
-"No results found for &ldquo;%(query)s&rdquo;. Try different keywords or "
-"search mode."
+msgid "No results found for &ldquo;%(query)s&rdquo;. Try different keywords or search mode."
 msgstr "未找到与 &ldquo;%(query)s&rdquo; 相关的结果。请尝试其他关键词或搜索模式。"
 
 #: specivo/templates/themes/default/pages/search.html:326
@@ -1339,16 +1329,11 @@ msgid "Turn on anonymous access"
 msgstr "开启匿名访问"
 
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:20
-msgid ""
-"The projects opted in to anonymous reading changed while you were "
-"reviewing them. Check the current list and confirm again."
+msgid "The projects opted in to anonymous reading changed while you were reviewing them. Check the current list and confirm again."
 msgstr "在你查看期间，已选择加入匿名阅读的项目发生了变化。请检查当前列表并再次确认。"
 
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:23
-msgid ""
-"The switch alone exposes nothing. A public project can only be read "
-"without an account while this switch is on and the project is opted in, "
-"in its own settings."
+msgid "The switch alone exposes nothing. A public project can only be read without an account while this switch is on and the project is opted in, in its own settings."
 msgstr "仅打开此开关不会公开任何内容。只有在此开关开启、且项目已在其自身设置中选择加入时，公开项目才能在无账户的情况下被阅读。"
 
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:26
@@ -1533,9 +1518,7 @@ msgid "SMTP Configuration"
 msgstr "SMTP 配置"
 
 #: specivo/templates/themes/default/pages/admin/email.html:34
-msgid ""
-"Email delivery is configured via environment variables. Showing current "
-"connection details."
+msgid "Email delivery is configured via environment variables. Showing current connection details."
 msgstr "电子邮件发送通过环境变量进行配置。下方显示当前的连接详情。"
 
 #: specivo/templates/themes/default/pages/admin/email.html:38
@@ -1744,9 +1727,7 @@ msgid "+ New Group"
 msgstr "+ 新建用户组"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:29
-msgid ""
-"A group is an access grant. Everyone in a group holds every role the "
-"group has been given on every project it is a member of."
+msgid "A group is an access grant. Everyone in a group holds every role the group has been given on every project it is a member of."
 msgstr "用户组是一种访问授权。用户组中的每个人，都拥有该用户组在其所属的每个项目上被授予的全部角色。"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:34
@@ -1900,9 +1881,7 @@ msgid "projects they lose it on"
 msgstr "个项目上失去访问权限"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:159
-msgid ""
-"Anyone who also holds a membership directly, or through another group, "
-"keeps that access."
+msgid "Anyone who also holds a membership directly, or through another group, keeps that access."
 msgstr "直接拥有成员资格或通过其他用户组拥有成员资格的人员，仍会保留相应的访问权限。"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:166
@@ -2088,9 +2067,7 @@ msgid "No custom presets yet"
 msgstr "尚无自定义预设"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:111
-msgid ""
-"Create custom metadata presets to define reusable field schemas that any "
-"project can activate."
+msgid "Create custom metadata presets to define reusable field schemas that any project can activate."
 msgstr "创建自定义元数据预设，以定义任何项目都可启用的可复用字段架构。"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:114
@@ -2126,9 +2103,7 @@ msgid "e.g. code, bug, star, book"
 msgstr "例如 code、bug、star、book"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:193
-msgid ""
-"Icon identifier used in the UI. Available: code, bug, megaphone, sprint, "
-"book, star"
+msgid "Icon identifier used in the UI. Available: code, bug, megaphone, sprint, book, star"
 msgstr "界面中使用的图标标识符。可选值：code、bug、megaphone、sprint、book、star"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:196
@@ -2137,9 +2112,7 @@ msgid "Schema Definition (JSON)"
 msgstr "架构定义（JSON）"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:205
-msgid ""
-"JSON Schema defining the metadata fields. Must be a valid JSON Schema "
-"with \"type\": \"object\"."
+msgid "JSON Schema defining the metadata fields. Must be a valid JSON Schema with \"type\": \"object\"."
 msgstr "定义元数据字段的 JSON Schema。必须是包含 \"type\": \"object\" 的有效 JSON Schema。"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:226
@@ -2151,9 +2124,7 @@ msgid "This will permanently delete the preset"
 msgstr "此操作将永久删除该预设"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:227
-msgid ""
-"Projects that already have this preset enabled will keep their existing "
-"schemas."
+msgid "Projects that already have this preset enabled will keep their existing schemas."
 msgstr "已启用此预设的项目将保留其现有的架构。"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:233
@@ -2300,9 +2271,7 @@ msgid "Defaults"
 msgstr "默认值"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:21
-msgid ""
-"Workspace-wide fallbacks for anonymous visitors and users without their "
-"own saved preference."
+msgid "Workspace-wide fallbacks for anonymous visitors and users without their own saved preference."
 msgstr "适用于匿名访客和未保存个人偏好的用户的工作区级回退值。"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:25
@@ -2324,10 +2293,7 @@ msgid "Search analyzer language"
 msgstr "搜索分析器语言"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:55
-msgid ""
-"Full-text search analyzer language for the whole instance. Projects can "
-"override this. Changing it does not update already-indexed content until "
-"you reindex."
+msgid "Full-text search analyzer language for the whole instance. Projects can override this. Changing it does not update already-indexed content until you reindex."
 msgstr "整个实例的全文搜索分析器语言，项目可以覆盖此设置。更改此项后，已索引的内容在重建索引前不会更新。"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:63
@@ -2336,11 +2302,7 @@ msgid "Anonymous access"
 msgstr "匿名访问"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:65
-msgid ""
-"This is the instance-wide gate for anonymous reading, and turning it on "
-"exposes nothing by itself. A public project can only be read without an "
-"account while this switch is on and the project is opted in, one project "
-"at a time, in its own settings."
+msgid "This is the instance-wide gate for anonymous reading, and turning it on exposes nothing by itself. A public project can only be read without an account while this switch is on and the project is opted in, one project at a time, in its own settings."
 msgstr "这是整个实例的匿名阅读总开关，开启它本身不会公开任何内容。只有在此开关开启、且项目已在其自身设置中逐个选择加入时，公开项目才能在无账户的情况下被阅读。"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:68
@@ -2491,9 +2453,7 @@ msgid "Account Details"
 msgstr "账户详情"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:68
-msgid ""
-"Service accounts authenticate via API keys only. They cannot log in via "
-"the web interface."
+msgid "Service accounts authenticate via API keys only. They cannot log in via the web interface."
 msgstr "服务账户仅通过 API 密钥进行身份验证，无法通过 Web 界面登录。"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:71
@@ -2514,9 +2474,7 @@ msgid "Password"
 msgstr "密码"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:107
-msgid ""
-"Keys are used for MCP server connections, CI/CD pipelines, and "
-"programmatic access. The full key is shown only once when created."
+msgid "Keys are used for MCP server connections, CI/CD pipelines, and programmatic access. The full key is shown only once when created."
 msgstr "密钥用于 MCP 服务器连接、CI/CD 流水线以及程序化访问。完整密钥仅在创建时显示一次。"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:113
@@ -2574,34 +2532,12 @@ msgid "Codex CLI"
 msgstr "Codex CLI"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:234
-msgid ""
-"Replace <code>your-specivo-host</code> with this instance's hostname (use"
-" <code>http://</code> for local development, <code>https://</code> in "
-"production) and <code>spv_your_api_key_here</code> with an API key "
-"created above. The agent connects to Specivo over HTTP — no database "
-"access or local installation required."
-msgstr ""
-"请将 <code>your-specivo-host</code> 替换为此实例的主机名（本地开发使用 "
-"<code>http://</code>，生产环境使用 <code>https://</code>），并将 "
-"<code>spv_your_api_key_here</code> 替换为上方创建的 API 密钥。代理通过 HTTP 连接到 Specivo "
-"—— 无需访问数据库或在本地安装。"
+msgid "Replace <code>your-specivo-host</code> with this instance's hostname (use <code>http://</code> for local development, <code>https://</code> in production) and <code>spv_your_api_key_here</code> with an API key created above. The agent connects to Specivo over HTTP — no database access or local installation required."
+msgstr "请将 <code>your-specivo-host</code> 替换为此实例的主机名（本地开发使用 <code>http://</code>，生产环境使用 <code>https://</code>），并将 <code>spv_your_api_key_here</code> 替换为上方创建的 API 密钥。代理通过 HTTP 连接到 Specivo —— 无需访问数据库或在本地安装。"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:237
-msgid ""
-"Codex CLI reads MCP servers from <code>~/.codex/config.toml</code> and "
-"speaks Streamable HTTP natively. Replace <code>your-specivo-host</code> "
-"with this instance's hostname, then export your API key in the shell: "
-"<code>export SPECIVO_API_KEY=spv_your_api_key_here</code>. Codex will "
-"read it via <code>bearer_token_env_var</code> and send "
-"<code>Authorization: Bearer &lt;key&gt;</code> on every request — no "
-"<code>mcp-remote</code> bridge needed."
-msgstr ""
-"Codex CLI 从 <code>~/.codex/config.toml</code> 读取 MCP 服务器配置，并原生支持 "
-"Streamable HTTP。请将 <code>your-specivo-host</code> 替换为此实例的主机名，然后在 shell "
-"中导出你的 API 密钥：<code>export "
-"SPECIVO_API_KEY=spv_your_api_key_here</code>。Codex 会通过 "
-"<code>bearer_token_env_var</code> 读取它，并在每次请求时发送 <code>Authorization: "
-"Bearer &lt;key&gt;</code> —— 无需 <code>mcp-remote</code> 桥接。"
+msgid "Codex CLI reads MCP servers from <code>~/.codex/config.toml</code> and speaks Streamable HTTP natively. Replace <code>your-specivo-host</code> with this instance's hostname, then export your API key in the shell: <code>export SPECIVO_API_KEY=spv_your_api_key_here</code>. Codex will read it via <code>bearer_token_env_var</code> and send <code>Authorization: Bearer &lt;key&gt;</code> on every request — no <code>mcp-remote</code> bridge needed."
+msgstr "Codex CLI 从 <code>~/.codex/config.toml</code> 读取 MCP 服务器配置，并原生支持 Streamable HTTP。请将 <code>your-specivo-host</code> 替换为此实例的主机名，然后在 shell 中导出你的 API 密钥：<code>export SPECIVO_API_KEY=spv_your_api_key_here</code>。Codex 会通过 <code>bearer_token_env_var</code> 读取它，并在每次请求时发送 <code>Authorization: Bearer &lt;key&gt;</code> —— 无需 <code>mcp-remote</code> 桥接。"
 
 #: specivo/templates/themes/default/pages/admin/users.html:16
 msgid "Password: required for regular users."
@@ -2717,9 +2653,7 @@ msgstr "要求首次登录时更改密码"
 
 #: specivo/templates/themes/default/pages/admin/users.html:148
 #: specivo/templates/themes/default/pages/admin/users.html:195
-msgid ""
-"You know this password. Leave this on so the account replaces it with one"
-" only its owner knows."
+msgid "You know this password. Leave this on so the account replaces it with one only its owner knows."
 msgstr "你知道此密码。请保持开启，以便该账户将其替换为只有账户所有者知道的密码。"
 
 #: specivo/templates/themes/default/pages/admin/users.html:174
@@ -2969,10 +2903,7 @@ msgid "Choose your password"
 msgstr "设置你的密码"
 
 #: specivo/templates/themes/default/pages/auth/change_password.html:41
-msgid ""
-"The password on this account was set by somebody else — an administrator,"
-" or an import from another system. Choose your own before you continue; "
-"nothing else is available until you do."
+msgid "The password on this account was set by somebody else — an administrator, or an import from another system. Choose your own before you continue; nothing else is available until you do."
 msgstr "此账户的密码由他人设置 — 可能是管理员，也可能来自其他系统的导入。请先设置你自己的密码再继续；在此之前无法使用其他功能。"
 
 #: specivo/templates/themes/default/pages/auth/change_password.html:50
@@ -2997,9 +2928,7 @@ msgid "Check your email"
 msgstr "请查收你的邮件"
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:40
-msgid ""
-"If an account with that email exists, we've sent a password reset link. "
-"Please check your inbox."
+msgid "If an account with that email exists, we've sent a password reset link. Please check your inbox."
 msgstr "如果该邮箱对应的账户存在，我们已发送密码重置链接。请查收你的收件箱。"
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:43
@@ -3010,9 +2939,7 @@ msgid "Back to login"
 msgstr "返回登录"
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:55
-msgid ""
-"Enter the email address associated with your account and we'll send you a"
-" link to reset your password."
+msgid "Enter the email address associated with your account and we'll send you a link to reset your password."
 msgstr "请输入与你账户关联的电子邮件地址，我们将向你发送重置密码的链接。"
 
 #: specivo/templates/themes/default/pages/auth/forgot_password.html:60
@@ -3404,9 +3331,7 @@ msgid "Move issue"
 msgstr "移动工作项"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:353
-msgid ""
-"Version, sprint, category and tags are cleared. History and the old "
-"reference are kept."
+msgid "Version, sprint, category and tags are cleared. History and the old reference are kept."
 msgstr "版本、冲刺、类别和标签将被清除。历史记录和旧编号会保留。"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:356
@@ -3537,9 +3462,7 @@ msgid "(after)"
 msgstr "（变更后）"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:57
-msgid ""
-"This is the first recorded description edit. No previous version to "
-"compare against."
+msgid "This is the first recorded description edit. No previous version to compare against."
 msgstr "这是首次记录的描述编辑，没有可供比较的历史版本。"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:65
@@ -4239,9 +4162,7 @@ msgstr "每"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:69
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:61
-msgid ""
-"Editing a pattern affects future instances only. Already-generated issues"
-" keep the values they were created with."
+msgid "Editing a pattern affects future instances only. Already-generated issues keep the values they were created with."
 msgstr "编辑模板仅影响后续实例。已生成的议题仍保留创建时的取值。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:78
@@ -4465,9 +4386,7 @@ msgid "Leave empty to repeat on the start date's weekday."
 msgstr "留空则按起始日期所在的星期重复。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:118
-msgid ""
-"Combine a weekday with a set position below to schedule e.g. \"the 2nd "
-"Tuesday\"."
+msgid "Combine a weekday with a set position below to schedule e.g. \"the 2nd Tuesday\"."
 msgstr "将星期与下方的序号位置组合，可排期如\"每月第二个周二\"。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:123
@@ -4479,9 +4398,7 @@ msgid "e.g. 1, 15, -1 (last day)"
 msgstr "例如：1, 15, -1（最后一天）"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:125
-msgid ""
-"Comma-separated day numbers. Negative counts from the month end (-1 = "
-"last day). Leave empty if using weekday + set position."
+msgid "Comma-separated day numbers. Negative counts from the month end (-1 = last day). Leave empty if using weekday + set position."
 msgstr "以逗号分隔的日期数字。负数从月末倒数（-1 = 最后一天）。若使用星期 + 序号位置，请留空。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:130
@@ -4493,9 +4410,7 @@ msgid "e.g. 1 (first), 2 (second), -1 (last)"
 msgstr "例如：1（第一个）、2（第二个）、-1（最后一个）"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:132
-msgid ""
-"Pick the nth weekday within each period. Requires at least one weekday "
-"selected above (e.g. weekday Tuesday + position 2 = \"2nd Tuesday\")."
+msgid "Pick the nth weekday within each period. Requires at least one weekday selected above (e.g. weekday Tuesday + position 2 = \"2nd Tuesday\")."
 msgstr "选取每个周期内的第 n 个指定星期。需在上方至少选择一个星期（例如：星期为周二 + 位置为 2 = \"每月第二个周二\"）。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:139
@@ -4519,9 +4434,7 @@ msgid "Every occurrence is created on its scheduled date; overdue ones stack up.
 msgstr "每个重复项都在其排期日期创建；逾期的会持续累积。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:186
-msgid ""
-"Only the next occurrence is created, and only once the previous instance "
-"is closed."
+msgid "Only the next occurrence is created, and only once the previous instance is closed."
 msgstr "仅在上一个实例关闭后才创建下一个重复项。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:190
@@ -4537,9 +4450,7 @@ msgid "Completion date"
 msgstr "完成日期"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:195
-msgid ""
-"Whether the next occurrence is measured from the scheduled date or the "
-"actual completion date of the previous instance."
+msgid "Whether the next occurrence is measured from the scheduled date or the actual completion date of the previous instance."
 msgstr "下一个重复项是从排期日期起算，还是从上一个实例的实际完成日期起算。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:199
@@ -4607,15 +4518,11 @@ msgid "Assignee rotation"
 msgstr "指派人轮换"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:290
-msgid ""
-"Rotate the assignee across these members on each occurrence (overrides "
-"the default assignee)."
+msgid "Rotate the assignee across these members on each occurrence (overrides the default assignee)."
 msgstr "在每个重复项中于这些成员之间轮换指派人（覆盖默认指派人）。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:298
-msgid ""
-"Hold Ctrl (Cmd on Mac) to select or deselect multiple members. Leave "
-"empty for no rotation."
+msgid "Hold Ctrl (Cmd on Mac) to select or deselect multiple members. Leave empty for no rotation."
 msgstr "按住 Ctrl（Mac 上为 Cmd）可选择或取消选择多个成员。留空则不进行轮换。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:302
@@ -4623,9 +4530,7 @@ msgid "Next occurrences"
 msgstr "后续重复项"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:305
-msgid ""
-"Edits affect future instances only — issues already generated keep their "
-"original values."
+msgid "Edits affect future instances only — issues already generated keep their original values."
 msgstr "编辑仅影响后续实例 — 已生成的议题仍保留其原始取值。"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:308
@@ -4699,9 +4604,7 @@ msgid "Could not save anonymous access."
 msgstr "无法保存匿名访问设置。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:73
-msgid ""
-"Choose which parts of this public project are opted in to anonymous "
-"reading. Only instance administrators can see or change this section."
+msgid "Choose which parts of this public project are opted in to anonymous reading. Only instance administrators can see or change this section."
 msgstr "选择此公开项目中要选择加入匿名阅读的部分。只有实例管理员可以查看或更改此部分。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:75
@@ -4709,9 +4612,7 @@ msgid "Anonymous access is turned on for the whole instance."
 msgstr "整个实例已开启匿名访问。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:77
-msgid ""
-"These settings have no effect while anonymous access is turned off for "
-"the whole instance."
+msgid "These settings have no effect while anonymous access is turned off for the whole instance."
 msgstr "整个实例的匿名访问关闭时，这些设置不起作用。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:77
@@ -4754,9 +4655,7 @@ msgid "Add Member"
 msgstr "添加成员"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:116
-msgid ""
-"Grant access to one person, or to a group so everyone in it gets the same"
-" roles."
+msgid "Grant access to one person, or to a group so everyone in it gets the same roles."
 msgstr "向单个人员授予访问权限，或向用户组授予，使组内所有人获得相同的角色。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:120
@@ -4945,9 +4844,7 @@ msgid "Available Presets"
 msgstr "可用预设"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:587
-msgid ""
-"Enable presets to add predefined metadata fields to issues in this "
-"project. Each preset can be scoped to all trackers or a specific one."
+msgid "Enable presets to add predefined metadata fields to issues in this project. Each preset can be scoped to all trackers or a specific one."
 msgstr "启用预设可为此项目的工作项添加预定义元数据字段。每个预设的作用范围可设为全部追踪器或某个特定追踪器。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:626
@@ -4989,9 +4886,7 @@ msgid "No metadata schemas"
 msgstr "暂无元数据架构"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:721
-msgid ""
-"Enable a preset above or create a custom schema to add metadata fields to"
-" issues."
+msgid "Enable a preset above or create a custom schema to add metadata fields to issues."
 msgstr "启用上方的预设或创建自定义架构，以为工作项添加元数据字段。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:739
@@ -5003,15 +4898,11 @@ msgid "Tracker Scope"
 msgstr "追踪器范围"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:749
-msgid ""
-"Limit this schema to a specific tracker, or leave as \"All trackers\" for"
-" project-wide."
+msgid "Limit this schema to a specific tracker, or leave as \"All trackers\" for project-wide."
 msgstr "将此架构限定于某个特定追踪器，或保留为 \"All trackers\" 以应用于整个项目。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:761
-msgid ""
-"JSON Schema with \"type\": \"object\" and \"properties\" defining the "
-"fields."
+msgid "JSON Schema with \"type\": \"object\" and \"properties\" defining the fields."
 msgstr "包含 \"type\": \"object\" 和 \"properties\" 字段定义的 JSON Schema。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:783
@@ -5023,9 +4914,7 @@ msgid "This will permanently remove"
 msgstr "此操作将永久移除"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:784
-msgid ""
-"from this project. Issues that already have metadata will retain their "
-"data."
+msgid "from this project. Issues that already have metadata will retain their data."
 msgstr "出此项目。已有元数据的工作项将保留其数据。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:788
@@ -5054,19 +4943,11 @@ msgid "Computed Fields"
 msgstr "计算字段"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:823
-msgid ""
-"Fields whose value is fixed by the project. Each one is filled in "
-"automatically on every issue here, is never stored on the issue itself, "
-"and cannot be overridden by a client — so it can never drift, and it "
-"recomputes when an issue moves to another project."
-msgstr ""
-"由项目固定取值的字段。每个字段都会在此项目的每个工作项上自动填充，从不存储在工作项本身，也不能被客户端覆盖 — "
-"因此它永远不会出现偏差，并会在工作项移动到其他项目时重新计算。"
+msgid "Fields whose value is fixed by the project. Each one is filled in automatically on every issue here, is never stored on the issue itself, and cannot be overridden by a client — so it can never drift, and it recomputes when an issue moves to another project."
+msgstr "由项目固定取值的字段。每个字段都会在此项目的每个工作项上自动填充，从不存储在工作项本身，也不能被客户端覆盖 — 因此它永远不会出现偏差，并会在工作项移动到其他项目时重新计算。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:827
-msgid ""
-"One of these fields holds a non-text value, which this editor cannot "
-"represent. Edit it through the projects API instead."
+msgid "One of these fields holds a non-text value, which this editor cannot represent. Edit it through the projects API instead."
 msgstr "其中某个字段包含非文本值，此编辑器无法显示。请改用项目 API 进行编辑。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:833
@@ -5148,9 +5029,7 @@ msgid "Are you sure you want to delete tag"
 msgstr "确定要删除标签"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:989
-msgid ""
-"? It will be removed from all issues and wiki pages. This action cannot "
-"be undone."
+msgid "? It will be removed from all issues and wiki pages. This action cannot be undone."
 msgstr "吗？它将从所有工作项和维基页面中移除。此操作无法撤销。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1009
@@ -5158,9 +5037,7 @@ msgid "Search indexing"
 msgstr "搜索索引"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1011
-msgid ""
-"Full-text search analyzer language for this project. Leave on Inherit to "
-"use the instance default."
+msgid "Full-text search analyzer language for this project. Leave on Inherit to use the instance default."
 msgstr "此项目的全文搜索分析器语言。保持为“Inherit”即可使用实例默认值。"
 
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:11
@@ -5388,9 +5265,7 @@ msgid "All issues are assigned to sprints, or no issues exist yet."
 msgstr "所有工作项均已分配到冲刺，或尚无工作项。"
 
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:61
-msgid ""
-"Incomplete issues will be moved to the selected sprint or back to the "
-"backlog."
+msgid "Incomplete issues will be moved to the selected sprint or back to the backlog."
 msgstr "未完成的工作项将被移至所选冲刺或移回待办列表。"
 
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:64
@@ -5544,9 +5419,7 @@ msgid "Sprint Details"
 msgstr "冲刺详情"
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:69
-msgid ""
-"Describe what this sprint should accomplish. Visible to the team on the "
-"board."
+msgid "Describe what this sprint should accomplish. Visible to the team on the board."
 msgstr "描述此冲刺应达成的目标。团队可在看板上查看。"
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:90
@@ -5566,9 +5439,7 @@ msgid "Danger Zone"
 msgstr "危险操作区"
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:152
-msgid ""
-"Deleting a sprint will unassign all issues back to the backlog. This "
-"action cannot be undone."
+msgid "Deleting a sprint will unassign all issues back to the backlog. This action cannot be undone."
 msgstr "删除冲刺会将所有工作项退回到待办列表。此操作无法撤销。"
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:153
@@ -5576,9 +5447,7 @@ msgid "Active sprints must be completed before deletion."
 msgstr "进行中的冲刺必须先完成才能删除。"
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:157
-msgid ""
-"Are you sure you want to delete this sprint? All issues will be moved to "
-"the backlog."
+msgid "Are you sure you want to delete this sprint? All issues will be moved to the backlog."
 msgstr "确定要删除此冲刺吗？所有工作项将被移回待办列表。"
 
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:161
@@ -5796,9 +5665,7 @@ msgstr "返回历史记录"
 
 #: specivo/templates/themes/default/pages/wiki/diff.html:31
 #, python-format
-msgid ""
-"No differences between version %(from_version)s and version "
-"%(to_version)s."
+msgid "No differences between version %(from_version)s and version %(to_version)s."
 msgstr "版本 %(from_version)s 与版本 %(to_version)s 之间没有差异。"
 
 #: specivo/templates/themes/default/pages/wiki/edit.html:5
@@ -5982,37 +5849,71 @@ msgstr "该密码重置链接已被使用。请重新申请一个。"
 msgid "This password reset link has expired. Please request a new one."
 msgstr "该密码重置链接已过期。请重新申请一个。"
 
-#~ msgid "% done"
-#~ msgstr "% done 完成"
+#: specivo/services/issue_service.py:134
+msgid "You do not have permission to set issue privacy"
+msgstr "你没有设置问题私有性的权限"
 
-#~ msgid "Default language"
-#~ msgstr "默认语言"
+#: specivo/services/issue_service.py:136
+msgid "Issues of this tracker are private by default; you do not have permission to change that"
+msgstr "此追踪器的问题默认私有；你没有更改它的权限"
 
-#~ msgid "Save default language"
-#~ msgstr "保存默认语言"
+#: specivo/templates/themes/default/pages/admin/dashboard.html:110
+msgid "Choose which users and time entries each role can see."
+msgstr "选择每个角色可以看到哪些用户和工时记录。"
 
-#~ msgid "Default timezone"
-#~ msgstr "默认时区"
+#: specivo/templates/themes/default/pages/admin/dashboard.html:119
+#: specivo/templates/themes/default/pages/admin/trackers.html:3
+#: specivo/templates/themes/default/pages/admin/trackers.html:11
+#: specivo/templates/themes/default/pages/admin/trackers.html:14
+msgid "Trackers"
+msgstr "追踪器"
 
-#~ msgid ""
-#~ "The instance-wide default timezone, used"
-#~ " as a fallback for users without "
-#~ "their own timezone preference."
-#~ msgstr "整个实例的默认时区，用作未设置个人时区的用户的回退值。"
+#: specivo/templates/themes/default/pages/admin/dashboard.html:120
+msgid "Make new issues of a tracker private by default."
+msgstr "让追踪器的新问题默认私有。"
 
-#~ msgid "Save default timezone"
-#~ msgstr "保存默认时区"
+#: specivo/templates/themes/default/pages/admin/roles.html:16
+msgid "What each role can see beyond its permissions. A user who holds several roles gets the widest setting among them."
+msgstr "每个角色在权限之外可以看到的内容。拥有多个角色的用户取其中最宽的设置。"
 
-#~ msgid "Password change will be available in a future release."
-#~ msgstr "修改密码功能将在未来版本中提供。"
+#: specivo/templates/themes/default/pages/admin/roles.html:24
+#: specivo/templates/themes/default/pages/admin/roles.html:37
+msgid "Users visibility"
+msgstr "用户可见性"
 
-#~ msgid "... %(count)s total"
-#~ msgstr "…… 共 %(count)s 个"
+#: specivo/templates/themes/default/pages/admin/roles.html:25
+#: specivo/templates/themes/default/pages/admin/roles.html:43
+msgid "Time entries visibility"
+msgstr "工时记录可见性"
 
-#~ msgid "%(count)s member"
-#~ msgid_plural "%(count)s members"
-#~ msgstr[0] "%(count)s 位成员"
+#: specivo/templates/themes/default/pages/admin/roles.html:38
+msgid "All active users"
+msgstr "所有活跃用户"
 
-#~ msgid "Service"
-#~ msgstr "服务器"
+#: specivo/templates/themes/default/pages/admin/roles.html:39
+msgid "Members of visible projects"
+msgstr "可见项目的成员"
 
+#: specivo/templates/themes/default/pages/admin/roles.html:44
+msgid "All time entries"
+msgstr "所有工时记录"
+
+#: specivo/templates/themes/default/pages/admin/roles.html:45
+msgid "Own time entries"
+msgstr "仅自己的工时记录"
+
+#: specivo/templates/themes/default/pages/admin/trackers.html:16
+msgid "New issues of a private-by-default tracker are created private. Members allowed to set issues private can still untick it."
+msgstr "默认私有追踪器的新问题创建时即为私有。有权设置问题私有的成员仍可取消勾选。"
+
+#: specivo/templates/themes/default/pages/admin/trackers.html:24
+msgid "Private by default"
+msgstr "默认私有"
+
+#: specivo/templates/themes/default/pages/admin/trackers.html:35
+msgid "New issues are private"
+msgstr "新问题为私有"
+
+#: specivo/templates/themes/default/pages/issues/form.html:84
+msgid "Only its author, its assignee and administrators can see a private issue."
+msgstr "只有作者、负责人和管理员可以看到私有问题。"

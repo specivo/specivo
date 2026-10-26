@@ -27,6 +27,17 @@ class RoleBuiltin(IntEnum):
 # through the application, but code finds it by ``builtin``, never by name.
 NON_MEMBER_ROLE_NAME = "Non member"
 
+# ``roles.users_visibility`` values (``ck_roles_users_visibility``), Redmine's
+# own spelling so imported values carry over unchanged.
+USERS_VISIBILITY_ALL = "all"
+USERS_VISIBILITY_MEMBERS = "members_of_visible_projects"
+USERS_VISIBILITY_VALUES: tuple[str, ...] = (USERS_VISIBILITY_ALL, USERS_VISIBILITY_MEMBERS)
+
+# ``roles.time_entries_visibility`` values (``ck_roles_time_entries_visibility``).
+TIME_ENTRIES_VISIBILITY_ALL = "all"
+TIME_ENTRIES_VISIBILITY_OWN = "own"
+TIME_ENTRIES_VISIBILITY_VALUES: tuple[str, ...] = (TIME_ENTRIES_VISIBILITY_ALL, TIME_ENTRIES_VISIBILITY_OWN)
+
 
 class Role(Base, TimestampMixin):
     """Project role with a set of permissions.
@@ -49,6 +60,18 @@ class Role(Base, TimestampMixin):
     - ``"default"`` - non-private issues, plus private ones the user authored or is assigned to
     - ``"all"``     - currently the same as ``"default"``
     - ``"own"``     - only issues the user authored or is assigned to
+
+    ``users_visibility``:
+    - ``"all"``                         - every active user
+    - ``"members_of_visible_projects"`` - the user themselves and the members
+      of projects the user can reach
+
+    ``time_entries_visibility``:
+    - ``"all"`` - every time entry in the project
+    - ``"own"`` - only the entries the user logged
+
+    Both default to ``"all"``. When a user holds several roles the most
+    permissive value wins; see ``permission_service``.
     """
 
     __tablename__ = "roles"
@@ -61,6 +84,14 @@ class Role(Base, TimestampMixin):
         CheckConstraint(
             "issues_visibility IN ('default', 'all', 'own')",
             name="ck_roles_issues_visibility",
+        ),
+        CheckConstraint(
+            "users_visibility IN ('all', 'members_of_visible_projects')",
+            name="ck_roles_users_visibility",
+        ),
+        CheckConstraint(
+            "time_entries_visibility IN ('all', 'own')",
+            name="ck_roles_time_entries_visibility",
         ),
         CheckConstraint(
             "builtin = 0 OR NOT assignable",
@@ -94,6 +125,16 @@ class Role(Base, TimestampMixin):
     # Issue visibility scope for this role
     issues_visibility: Mapped[str] = mapped_column(
         String(30), nullable=False, default="default", server_default="default"
+    )
+
+    # Which users this role may list: every user, or members of reachable projects
+    users_visibility: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=USERS_VISIBILITY_ALL, server_default=USERS_VISIBILITY_ALL
+    )
+
+    # Which time entries this role may read in a project: all, or the user's own
+    time_entries_visibility: Mapped[str] = mapped_column(
+        String(30), nullable=False, default=TIME_ENTRIES_VISIBILITY_ALL, server_default=TIME_ENTRIES_VISIBILITY_ALL
     )
 
     # Extensible settings JSONB (reserved for future use, e.g. Phase 2 workflow)

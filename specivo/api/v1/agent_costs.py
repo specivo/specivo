@@ -177,5 +177,5 @@ async def get_billing_report(
 ) -> BillingReportOut:
     project = await _project_service.get_by_key(db, project_key)
     await _project_service.require_project_access(db, project, current_user)
-    report = await _billing_service.billable_report(db, project.id, date_from, date_to)
+    report = await _billing_service.billable_report(db, project, current_user, date_from, date_to)
     return BillingReportOut(**report)

@@ -35,7 +35,9 @@ class IssueCreate(BaseModel):
     done_ratio: int = Field(default=0, ge=0, le=100)
     fixed_version_id: int | None = None
     sprint_id: int | None = None
-    is_private: bool = False
+    # None takes the tracker's private_by_default; a different explicit value
+    # needs the set_issues_private permission.
+    is_private: bool | None = None
     metadata: dict = Field(default_factory=dict)
 
     @field_validator("subject")

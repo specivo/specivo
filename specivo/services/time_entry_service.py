@@ -1,4 +1,12 @@
-"""Time entry service — CRUD for time entries and timer operations."""
+"""Time entry service — CRUD for time entries and timer operations.
+
+Which time entries a user may read is decided here, in
+``visible_entries_clause`` (one project) and ``visible_entries_clause_any``
+(across projects), from the roles ``permission_service.get_user_roles``
+resolves. Every reader goes through one of them: the project list (web and
+REST), a single entry, the issue's time tab and its logged-time sum, a
+version's logged-time sum, the billing report and the dashboard's agent feed.
+"""
 
 from __future__ import annotations
 
@@ -6,13 +14,17 @@ import logging
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.config import get_settings
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
+from specivo.models.member import Member, MemberRole
+from specivo.models.project import Project
+from specivo.models.role import TIME_ENTRIES_VISIBILITY_OWN, Role
 from specivo.models.time_entry import ActiveTimer, TimeEntry, TimeEntryActivity
 from specivo.models.user import User
 from specivo.schemas.time_entry import TimeEntryCreate, TimeEntryUpdate
@@ -56,6 +68,131 @@ def _compute_elapsed_hours(started_at: datetime, now: datetime) -> Decimal:
 
 class TimeEntryService:
     """Service layer for time entry and timer operations."""
+
+    # -------------------------------------------------------------------
+    # Visibility
+    # -------------------------------------------------------------------
+
+    async def visible_entries_clause(
+        self, session: AsyncSession, user: User, project: Project
+    ) -> ColumnElement[bool] | None:
+        """Return the predicate limiting *project*'s time entries to those *user* may read, or None.
+
+        None means every entry (admins, or a role with
+        ``time_entries_visibility = 'all'``); otherwise only the entries the
+        user logged. Reaching the project is the caller's job
+        (``ProjectService.require_project_access``).
+        """
+        from specivo.services.permission_service import time_entries_visibility
+
+        if await time_entries_visibility(session, user, project) == TIME_ENTRIES_VISIBILITY_OWN:
+            return TimeEntry.user_id == user.id
+        return None
+
+    async def visible_entries_clause_any(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """Return the cross-project form of ``visible_entries_clause``, or None for no limit.
+
+        Mirrors ``get_user_roles`` + ``best_time_entries_visibility`` in SQL,
+        the way ``IssueService.visible_issues_clause`` does for issues: a
+        project is restricted to the user's own entries when the user's
+        membership roles there are all ``'own'``, or, on a public project
+        without a membership, when the Non member role is. It narrows only by
+        visibility; callers still limit the query to projects the user can
+        reach.
+        """
+        if user.is_admin:
+            return None
+        if user.is_anonymous:
+            return TimeEntry.user_id == user.id
+
+        from specivo.services.permission_service import (
+            best_time_entries_visibility,
+            get_non_member_role,
+            member_principal_clause,
+        )
+
+        rows = await session.execute(
+            select(Member.project_id, Role.time_entries_visibility)
+            .select_from(Member)
+            .outerjoin(MemberRole, MemberRole.member_id == Member.id)
+            .outerjoin(Role, Role.id == MemberRole.role_id)
+            .where(member_principal_clause(user.id))
+        )
+        by_project: dict[int, set[str]] = {}
+        for project_id, visibility in rows:
+            values = by_project.setdefault(project_id, set())
+            if visibility is not None:
+                values.add(visibility)
+
+        restricted = sorted(
+            project_id
+            for project_id, values in by_project.items()
+            if best_time_entries_visibility(values) == TIME_ENTRIES_VISIBILITY_OWN
+        )
+
+        visible: list[ColumnElement[bool]] = [TimeEntry.user_id == user.id]
+        unrestricted: ColumnElement[bool] | None = TimeEntry.project_id.not_in(restricted) if restricted else None
+
+        non_member = await get_non_member_role(session)
+        if non_member is not None and non_member.time_entries_visibility == TIME_ENTRIES_VISIBILITY_OWN:
+            public_without_membership = select(Project.id).where(Project.is_public.is_(True))
+            if by_project:
+                public_without_membership = public_without_membership.where(Project.id.not_in(sorted(by_project)))
+            outside = TimeEntry.project_id.not_in(public_without_membership)
+            unrestricted = outside if unrestricted is None else and_(unrestricted, outside)
+
+        if unrestricted is None:
+            return None
+        visible.append(unrestricted)
+        return or_(*visible)
+
+    async def get_visible(self, session: AsyncSession, entry_id: int, user: User) -> TimeEntry:
+        """Return time entry *entry_id* if *user* may read it, else raise ``NotFoundError``.
+
+        404 rather than 403 for an entry in an unreachable project or outside
+        the user's visibility, so entry ids cannot be probed.
+        """
+        from specivo.services.project_service import ProjectService
+
+        entry = await self.get_by_id(session, entry_id)
+        project = await session.get(Project, entry.project_id)
+        if project is None:
+            raise NotFoundError(f"Time entry {entry_id} not found")
+        try:
+            await ProjectService().require_project_access(session, project, user)
+        except NotFoundError:
+            raise NotFoundError(f"Time entry {entry_id} not found") from None
+        clause = await self.visible_entries_clause(session, user, project)
+        if clause is not None and entry.user_id != user.id:
+            raise NotFoundError(f"Time entry {entry_id} not found")
+        return entry
+
+    async def list_for_issue(
+        self, session: AsyncSession, issue_id: int, project: Project, user: User
+    ) -> list[TimeEntry]:
+        """Return the time entries logged on *issue_id* that *user* may read, newest first."""
+        stmt = (
+            select(TimeEntry)
+            .where(TimeEntry.issue_id == issue_id)
+            .options(selectinload(TimeEntry.user), selectinload(TimeEntry.activity))
+            .order_by(TimeEntry.spent_on.desc(), TimeEntry.id.desc())
+        )
+        clause = await self.visible_entries_clause(session, user, project)
+        if clause is not None:
+            stmt = stmt.where(clause)
+        return list((await session.execute(stmt)).scalars().all())
+
+    async def sum_hours_for_issues(
+        self, session: AsyncSession, issue_ids: list[int], project: Project, user: User
+    ) -> Decimal:
+        """Return the hours logged on *issue_ids* (all in *project*) that *user* may read."""
+        if not issue_ids:
+            return Decimal(0)
+        stmt = select(func.coalesce(func.sum(TimeEntry.hours), 0)).where(TimeEntry.issue_id.in_(issue_ids))
+        clause = await self.visible_entries_clause(session, user, project)
+        if clause is not None:
+            stmt = stmt.where(clause)
+        return Decimal(str((await session.execute(stmt)).scalar_one()))
 
     # -------------------------------------------------------------------
     # Time entry CRUD
@@ -111,7 +248,8 @@ class TimeEntryService:
     async def list_for_project(
         self,
         session: AsyncSession,
-        project_id: int,
+        project: Project,
+        viewer: User,
         *,
         user_id: int | None = None,
         from_date: date | None = None,
@@ -119,9 +257,14 @@ class TimeEntryService:
         offset: int = 0,
         limit: int = 25,
     ) -> tuple[list[TimeEntry], int]:
-        """List time entries for a project with optional filters."""
-        base = select(TimeEntry).where(TimeEntry.project_id == project_id)
-        count_base = select(func.count()).select_from(TimeEntry).where(TimeEntry.project_id == project_id)
+        """List the time entries of *project* that *viewer* may read, with optional filters."""
+        base = select(TimeEntry).where(TimeEntry.project_id == project.id)
+        count_base = select(func.count()).select_from(TimeEntry).where(TimeEntry.project_id == project.id)
+
+        visible = await self.visible_entries_clause(session, viewer, project)
+        if visible is not None:
+            base = base.where(visible)
+            count_base = count_base.where(visible)
 
         if user_id is not None:
             base = base.where(TimeEntry.user_id == user_id)

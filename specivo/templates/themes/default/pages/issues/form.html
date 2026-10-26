@@ -35,7 +35,9 @@
        due_date: {{ (issue.due_date.isoformat() if issue and issue.due_date else "") | tojson }},
        estimated_hours: {{ (issue.estimated_hours | string if issue and issue.estimated_hours else "") | tojson }},
        done_ratio: {{ issue.done_ratio if issue else 0 }},
-       is_private: {{ "true" if issue and issue.is_private else "false" }},
+       is_private: {{ "true" if (issue.is_private if issue else (trackers[0].private_by_default if trackers else false)) else "false" }},
+       canSetPrivate: {{ "true" if can_set_private else "false" }},
+       trackerPrivateDefaults: { {% for t in trackers %}"{{ t.id }}": {{ "true" if t.private_by_default else "false" }}{{ "," if not loop.last }}{% endfor %} },
        version_id: {{ issue.version_id if issue and issue.version_id else "null" }},
        mode: {{ mode | tojson }},
        projectKey: {{ project.key | tojson }},
@@ -65,12 +67,23 @@
     {# Tracker #}
     <div class="form-group">
       <label class="modal-label" for="tracker">{% trans %}Tracker{% endtrans %}</label>
-      <select id="tracker" class="modal-input" x-model.number="tracker_id">
+      <select id="tracker" class="modal-input" x-model.number="tracker_id" @change="applyTrackerPrivacyDefault()">
         {% for t in trackers %}
         <option value="{{ t.id }}">{{ t.name }}</option>
         {% endfor %}
       </select>
     </div>
+
+    {# Private: only for users allowed to override the tracker's default #}
+    {% if can_set_private %}
+    <div class="form-group">
+      <label class="checkbox-row" for="is_private">
+        <input type="checkbox" id="is_private" x-model="is_private" class="sp-checkbox-accent-pointer">
+        {% trans %}Private{% endtrans %}
+      </label>
+      <div class="form-hint">{% trans %}Only its author, its assignee and administrators can see a private issue.{% endtrans %}</div>
+    </div>
+    {% endif %}
 
     {# Description #}
     <div class="form-group">

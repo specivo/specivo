@@ -25,6 +25,7 @@ from specivo.models.wiki import Wiki, WikiContent, WikiPage
 from specivo.services.issue_service import IssueService
 from specivo.services.notification_service import NotificationService
 from specivo.services.project_service import ProjectService
+from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_current_user_optional, get_templates
 
 router = APIRouter(tags=["web-dashboard"], include_in_schema=False)
@@ -32,6 +33,7 @@ router = APIRouter(tags=["web-dashboard"], include_in_schema=False)
 _project_svc = ProjectService()
 _issue_svc = IssueService()
 _notif_svc = NotificationService()
+_time_svc = TimeEntryService()
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -395,6 +397,9 @@ async def dashboard(
                 .order_by(TimeEntry.created_at.desc())
                 .limit(10)
             )
+            te_visible = await _time_svc.visible_entries_clause_any(db, user)
+            if te_visible is not None:
+                te_stmt = te_stmt.where(te_visible)
             time_entries = list((await db.execute(te_stmt)).scalars().all())
 
             # Batch-load issue keys for time entries
