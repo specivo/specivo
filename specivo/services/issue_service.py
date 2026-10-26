@@ -28,6 +28,7 @@ from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.services.computed_metadata_service import load_project_settings, strip_computed
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
+from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
 from specivo.services.watcher_service import WatcherService
@@ -412,6 +413,7 @@ class IssueService:
         original_occurrence_at: datetime | None = None,
         skip_search_index: bool = False,
         check_privacy_permission: bool = True,
+        limit_text_length: bool = True,
     ) -> Issue:
         """Create an issue with an atomic per-project sequence number.
 
@@ -435,7 +437,13 @@ class IssueService:
         such as the import pipeline set it and run one batch backfill at the end
         instead of embedding every row as it is written; the FTS vector is
         maintained by a database trigger and is unaffected either way.
+
+        ``limit_text_length=False`` lets the import pipeline keep a description
+        longer than ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
         """
+        if limit_text_length:
+            check_markdown_length(data.description, "description")
+
         # Resolve optional fields to defaults before writing anything
         status_id = data.status_id
         if status_id is None:
@@ -808,6 +816,9 @@ class IssueService:
         field-level diffs (full text for description) and attributes the change
         to ``user`` / ``api_key_id``.
         """
+        check_markdown_length(data.description, "description")
+        check_markdown_length(notes, "notes")
+
         if data.lock_version != issue.lock_version:
             raise ConflictError(
                 message=_("Issue was modified by another request. Reload and retry."),

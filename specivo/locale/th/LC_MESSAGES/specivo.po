@@ -5921,3 +5921,12 @@ msgstr "งานใหม่เป็นส่วนตัว"
 #: specivo/templates/themes/default/pages/issues/form.html:84
 msgid "Only its author, its assignee and administrators can see a private issue."
 msgstr "เฉพาะผู้สร้าง ผู้รับผิดชอบ และผู้ดูแลระบบเท่านั้นที่เห็นงานส่วนตัวได้"
+
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "ข้อความยาวเกินไป ({length} ตัวอักษร) จำกัดไว้ที่ {limit} ตัวอักษร"
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "ข้อความนี้ซับซ้อนเกินกว่าจะจัดรูปแบบได้ จึงแสดงเป็นข้อความธรรมดา"

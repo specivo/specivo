@@ -5921,3 +5921,12 @@ msgstr "新问题为私有"
 #: specivo/templates/themes/default/pages/issues/form.html:84
 msgid "Only its author, its assignee and administrators can see a private issue."
 msgstr "只有作者、负责人和管理员可以看到私有问题。"
+
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "文本过长（{length} 个字符），上限为 {limit} 个字符。"
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "此文本过于复杂，无法格式化，因此以纯文本显示。"

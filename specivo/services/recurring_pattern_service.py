@@ -72,6 +72,7 @@ from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
+from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.recurrence import (
     RecurrenceSpec,
@@ -124,6 +125,7 @@ class RecurringPatternService:
           the pattern's stored value, so every path that stores one checks it
           here or in :meth:`update`.
         """
+        check_markdown_length(data.template_description, "template_description")
         await self._metadata_schema_service.validate_metadata(
             session, project.id, data.template_tracker_id, data.template_metadata
         )
@@ -248,6 +250,7 @@ class RecurringPatternService:
         safe: the second writer sees a clear conflict instead of clobbering the
         first writer's change.
         """
+        check_markdown_length(data.template_description, "template_description")
         if data.lock_version != pattern.lock_version:
             raise ConflictError(
                 message=_(

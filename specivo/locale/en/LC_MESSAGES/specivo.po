@@ -5941,3 +5941,12 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/form.html:84
 msgid "Only its author, its assignee and administrators can see a private issue."
 msgstr ""
+
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr ""
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr ""

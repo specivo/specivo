@@ -146,6 +146,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
             # The source's own privacy flag is history, not a new choice: it
             # is kept as it was, whatever the tracker's default says.
             check_privacy_permission=False,
+            limit_text_length=False,
         )
     except AppError as exc:
         ctx.warn("Issue could not be created; skipped", issue=ir.source_ref, reason=str(exc))

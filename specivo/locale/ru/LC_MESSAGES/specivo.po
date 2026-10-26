@@ -5967,3 +5967,12 @@ msgstr "Новые задачи приватные"
 #: specivo/templates/themes/default/pages/issues/form.html:84
 msgid "Only its author, its assignee and administrators can see a private issue."
 msgstr "Приватную задачу видят только её автор, исполнитель и администраторы."
+
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "Текст слишком длинный (символов: {length}); допустимо не более {limit}."
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "Этот текст слишком сложен для форматирования, поэтому он показан как обычный текст."

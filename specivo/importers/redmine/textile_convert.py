@@ -60,7 +60,7 @@ _BC_RE = re.compile(r"^bc\.\.?\s?(.*?)(?=\n\n|\Z)", re.DOTALL | re.MULTILINE)
 
 # [[Page]] and [[Page|Text]] — identical in both systems, so protected rather
 # than rewritten.
-_WIKI_LINK_RE = re.compile(r"\[\[[^\]\n]+\]\]")
+_WIKI_LINK_RE = re.compile(r"\[\[[^\[\]\n]+\]\]")
 
 # Redmine's issue reference. Protected because a line starting with # is an
 # ordered list in Textile. Rewritten to a Specivo display key later in the

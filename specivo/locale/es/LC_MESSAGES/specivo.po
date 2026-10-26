@@ -5944,3 +5944,12 @@ msgstr "Las nuevas incidencias son privadas"
 #: specivo/templates/themes/default/pages/issues/form.html:84
 msgid "Only its author, its assignee and administrators can see a private issue."
 msgstr "Solo su autor, su responsable y los administradores pueden ver una incidencia privada."
+
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "El texto es demasiado largo ({length} caracteres); el límite es {limit}."
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "Este texto es demasiado complejo para darle formato, así que se muestra como texto sin formato."

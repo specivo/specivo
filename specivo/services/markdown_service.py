@@ -12,15 +12,22 @@ Pipeline:
     raw markdown
       -> wiki link substitution    [[Page]]    -> [Page](/projects/X/wiki/page/)
       -> issue ref auto-link       PROJ-123    -> [PROJ-123](/issue/PROJ-123/)
+      -> render_hazard(...)        over the size, nesting or cost budget:
+                                   the raw text, escaped, with a notice instead
       -> markdown.markdown(...)    with fenced_code, tables, toc, codehilite
            + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
              -> attachment download URL (parsed tree, so code is never touched)
       -> nh3.clean(...)            HTML sanitizer with our allowlist
       -> markupsafe.Markup
+
+``markdown.markdown`` also runs under a cooperative deadline, and a render
+that overruns it or exhausts the recursion limit falls back to plain text too
+(see ``specivo.services.markdown_budget``).
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from urllib.parse import unquote
 from xml.etree.ElementTree import Element
@@ -31,7 +38,12 @@ import nh3
 from markdown.extensions import Extension  # type: ignore[import-untyped]
 from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
 
+from specivo.core.i18n import gettext as _
+from specivo.services.markdown_budget import RenderDeadline, RenderDeadlineError, render_hazard
+from specivo.services.wiki_utils import WIKI_LINK_RE as _WIKI_LINK_RE
 from specivo.services.wiki_utils import slugify as _wiki_slugify
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Sanitizer configuration — must match what was historically inline in
@@ -103,7 +115,6 @@ _MD_EXTENSION_CONFIGS = {
 }
 
 # Compiled once at import time
-_WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
 # A URL scheme (``https:``, ``mailto:``) at the start of a link target.
 _URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 # Issue reference: PROJ-123, but not inside markdown links or wiki links
@@ -132,20 +143,49 @@ def _sanitize_html(html_str: str) -> str:
     )
 
 
+def _render_markdown(source: str, original: str, extensions: list) -> markupsafe.Markup:
+    """Render *source* to sanitized HTML, or *original* as plain text if that is unsafe.
+
+    *source* is the text after wiki-link and issue-ref substitution, which is
+    what Python-Markdown parses; *original* is what the author wrote, shown
+    as-is in the fallback.
+    """
+    hazard = render_hazard(source, len(original))
+    if hazard is None:
+        try:
+            html = _md.markdown(
+                source,
+                extensions=[*extensions, RenderDeadline()],
+                extension_configs=_MD_EXTENSION_CONFIGS,
+            )
+        except RenderDeadlineError:
+            hazard = "deadline"
+        except RecursionError:
+            hazard = "recursion"
+        else:
+            return markupsafe.Markup(_sanitize_html(html))
+    logger.warning("Markdown shown as plain text (%s, %d characters)", hazard, len(original))
+    return _plain_text_fallback(original)
+
+
+def _plain_text_fallback(text: str) -> markupsafe.Markup:
+    """Show *text* escaped and preformatted, below a notice saying why."""
+    notice = _("This text is too complex to format, so it is shown as plain text.")
+    return markupsafe.Markup(
+        '<div class="sp-markdown-fallback"><p class="sp-markdown-fallback-notice">{}</p><pre>{}</pre></div>'
+    ).format(notice, text)
+
+
 def _replace_wiki_link(project_key: str):
     def _inner(m: re.Match[str]) -> str:
         target = m.group(1).strip()
         display = m.group(2)
         if display:
             display = display.strip()
-            display = (
-                display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-            )
+            display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
         else:
             display = target
-            display = (
-                display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-            )
+            display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
         slug = _wiki_slugify(target)
         url = f"/projects/{project_key}/wiki/{slug}/"
         return f"[{display}]({url})"
@@ -253,12 +293,7 @@ def render_wiki_markdown(
     extensions: list = list(_MD_EXTENSIONS)
     if attachment_map:
         extensions.append(_AttachmentRefExtension(attachment_map))
-    rendered = _md.markdown(
-        processed,
-        extensions=extensions,
-        extension_configs=_MD_EXTENSION_CONFIGS,
-    )
-    return markupsafe.Markup(_sanitize_html(rendered))
+    return _render_markdown(processed, text, extensions)
 
 
 def render_plain_markdown(text: str) -> markupsafe.Markup:
@@ -268,9 +303,4 @@ def render_plain_markdown(text: str) -> markupsafe.Markup:
     Same extensions and sanitization as ``render_wiki_markdown``; only the
     pre-processing differs.
     """
-    html = _md.markdown(
-        text or "",
-        extensions=_MD_EXTENSIONS,
-        extension_configs=_MD_EXTENSION_CONFIGS,
-    )
-    return markupsafe.Markup(_sanitize_html(html))
+    return _render_markdown(text or "", text or "", list(_MD_EXTENSIONS))

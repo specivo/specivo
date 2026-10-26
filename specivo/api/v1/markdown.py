@@ -21,6 +21,7 @@ from specivo.models.user import User
 from specivo.schemas.markdown import MarkdownPreviewRequest, MarkdownPreviewResponse
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
+from specivo.services.markdown_budget import MAX_MARKDOWN_CHARS
 from specivo.services.markdown_service import render_wiki_markdown
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
@@ -30,9 +31,6 @@ _issue_svc = IssueService()
 _project_svc = ProjectService()
 
 router = APIRouter(tags=["markdown"])
-
-# 256 KiB body cap. Larger payloads are rejected with 413.
-_MAX_TEXT_BYTES = 256 * 1024
 
 
 @router.post(
@@ -58,15 +56,17 @@ async def preview_markdown(
     take part; an unknown or hidden container resolves nothing rather than
     erroring, so the endpoint cannot be used to probe for issues.
     """
-    if len(data.text.encode("utf-8")) > _MAX_TEXT_BYTES:
+    # The same limit the services apply when the text is saved, so anything
+    # that can be stored can be previewed. Larger payloads are rejected with 413.
+    if len(data.text) > MAX_MARKDOWN_CHARS:
         raise AppError(
             code="payload_too_large",
             message=(
-                f"Markdown text exceeds the {_MAX_TEXT_BYTES} byte cap. "
+                f"Markdown text exceeds the {MAX_MARKDOWN_CHARS} character limit. "
                 "Split the content into smaller chunks."
             ),
             status_code=413,
-            details={"max_bytes": _MAX_TEXT_BYTES},
+            details={"max_length": MAX_MARKDOWN_CHARS},
         )
 
     known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, data.text)
