@@ -3,6 +3,9 @@ export function tagFilter(initial) {
             endpoint: initial.endpoint || '/api/v1/tags/search/',
             tags: initial.tags || [],
             baseParams: initial.baseParams || {},
+            /* Input placeholders, translated in the template. */
+            placeholder: initial.placeholder || 'Filter by tag...',
+            placeholderMore: initial.placeholderMore || 'Add tag...',
 
             query: '',
             results: [],

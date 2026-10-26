@@ -14,10 +14,15 @@ export function adminUsers(initial) {
             minutesAgo: '%(count)s min ago',
             hoursAgo: '%(count)s hours ago',
             yesterday: 'Yesterday',
-            daysAgo: '%(count)s days ago'
+            daysAgo: '%(count)s days ago',
+            roleAdmin: 'Administrator',
+            roleService: 'Service account',
+            roleMember: 'Member'
         }, initial.i18n || {});
+        var statusLabels = initial.statusLabels || {};
 
         return {
+            i18n: i18n,
             users: initial.users || [],
             roles: initial.roles || [],
 
@@ -27,6 +32,11 @@ export function adminUsers(initial) {
 
             capitalize(s) {
                 return s.charAt(0).toUpperCase() + s.slice(1);
+            },
+
+            /* Translated label for a stored account status; capitalised raw value as a fallback. */
+            statusLabel(s) {
+                return statusLabels[s] || this.capitalize(s || '');
             },
 
             generatePassword: function () {
@@ -157,7 +167,7 @@ export function adminUsers(initial) {
                 if (diff < 86400) return i18n.hoursAgo.replace('%(count)s', Math.floor(diff / 3600));
                 if (diff < 172800) return i18n.yesterday;
                 if (diff < 604800) return i18n.daysAgo.replace('%(count)s', Math.floor(diff / 86400));
-                return d.toLocaleDateString();
+                return spFormatDate(d);
             }
         };
     }

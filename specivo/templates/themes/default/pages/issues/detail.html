@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar %}
+{% from "pages/_markdown_editor_i18n.html" import markdown_editor_i18n %}
 
 {% block title %}{{ issue.display_key }} - {{ issue.subject }} - {{ brand_name }}{% endblock %}
 
@@ -92,11 +93,7 @@
             {# EasyMDE-wrapped editor — see markdownEditor in frontend/js/components/markdown-editor.js. The inner #}
             {# component exposes its current value via x-modelable, bound to the    #}
             {# outer descriptionEditor's `draft` state.                             #}
-            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue", i18n: {{ {
-              "placeholder": _("Write your content here (Markdown)..."),
-              "rendering": _("Rendering..."),
-              "previewUnavailable": _("Preview unavailable.")
-            } | tojson }} })'
+            <div x-data='markdownEditor({ initial: draft, previewUrl: "/api/v1/markdown/preview/", context: "issue", i18n: {{ markdown_editor_i18n() }} })'
                  x-modelable="value"
                  x-model="draft"
                  data-preview-url="/api/v1/markdown/preview/"
@@ -118,8 +115,12 @@
     {% if metadata_schemas_data is defined and metadata_schemas_data and (issue_metadata or metadata_schemas_data) %}
     <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
       "tagsPlaceholder": _("Type and press Enter..."),
+      "addMore": _("Add more..."),
       "yes": _("Yes"),
-      "no": _("No")
+      "no": _("No"),
+      "countFields": _("%(filled)s/%(total)s fields"),
+      "saving": _("Saving..."),
+      "saveMetadata": _("Save Metadata")
     } | tojson }} })'>
       {# Toggle header (always visible) #}
       <button class="sp-metadata-toggle" :class="{ open: expanded }" @click="expanded = !expanded" type="button">
@@ -131,7 +132,7 @@
             <span class="sp-mt-schema-badge" x-text="name"></span>
           </template>
         </div>
-        <span class="sp-mt-count" x-text="filledCount + '/' + totalCount + ' fields'"></span>
+        <span class="sp-mt-count" x-text="fieldsLabel"></span>
       </button>
 
       {# Summary chips (visible when collapsed). Array values render as separate
@@ -194,7 +195,7 @@
                   <div class="sp-meta-toggle-track" :class="{ on: metadata[field.key] }" @click="metadata[field.key] = !metadata[field.key]; dirty = true">
                     <div class="sp-meta-toggle-thumb"></div>
                   </div>
-                  <span class="sp-meta-toggle-label" x-text="metadata[field.key] ? 'Yes' : 'No'"></span>
+                  <span class="sp-meta-toggle-label" x-text="metadata[field.key] ? i18n.yes : i18n.no"></span>
                 </div>
               </template>
 
@@ -210,7 +211,7 @@
                         </span>
                       </span>
                     </template>
-                    <input type="text" :placeholder="(metadata[field.key] || []).length === 0 ? 'Type and press Enter...' : 'Add more...'" @keydown.enter.prevent="addTag(field.key, $event)" @keydown.comma.prevent="addTag(field.key, $event)" @keydown.backspace="removeLastTag(field.key, $event)">
+                    <input type="text" :placeholder="(metadata[field.key] || []).length === 0 ? i18n.tagsPlaceholder : i18n.addMore" @keydown.enter.prevent="addTag(field.key, $event)" @keydown.comma.prevent="addTag(field.key, $event)" @keydown.backspace="removeLastTag(field.key, $event)">
                   </div>
                   <div class="form-hint">{% trans %}Press Enter or comma to add{% endtrans %}</div>
                 </div>
@@ -249,7 +250,7 @@
           <button class="sp-btn sp-btn-ghost sp-btn-sm" type="button" @click="revert()">{% trans %}Discard{% endtrans %}</button>
           <button class="sp-btn sp-btn-primary sp-btn-sm" type="button" :disabled="saving" @click="save()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            <span x-text="saving ? 'Saving...' : 'Save Metadata'"></span>
+            <span x-text="saving ? i18n.saving : i18n.saveMetadata"></span>
           </button>
         </div>
       </div>
@@ -317,11 +318,13 @@
         <div x-data='timeLogForm({ projectKey: "{{ project.key }}", issueId: {{ issue.id }}, i18n: {{ {
           "minimum": _("Enter at least 1 minute"),
           "logFailed": _("Failed to log time"),
-          "connectFailed": _("Unable to connect.")
+          "connectFailed": _("Unable to connect."),
+          "cancel": _("Cancel"),
+          "logTime": _("Log time")
         } | tojson }} })'>
           {# Log time toggle button #}
           <div style="display:flex;justify-content:flex-end;margin-top:var(--sp-space-md);">
-            <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : 'Log time'"></button>
+            <button class="sp-btn sp-btn-sm sp-btn-primary" @click="showForm = !showForm" x-text="showForm ? i18n.cancel : i18n.logTime"></button>
           </div>
 
           {# Inline log time form #}

@@ -4,6 +4,9 @@ export function tagField(initial) {
             saveUrl: initial.saveUrl || '',
             tags: initial.tags || [],
             canEdit: initial.canEdit !== false,
+            /* Input placeholders, translated in the template. */
+            placeholder: initial.placeholder || 'Add tags...',
+            placeholderMore: initial.placeholderMore || 'Add more...',
 
             query: '',
             results: [],

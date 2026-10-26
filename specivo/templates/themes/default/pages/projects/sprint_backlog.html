@@ -88,9 +88,9 @@
       <span class="sprint-meta-label">{% trans %}Duration{% endtrans %}</span>
       <span class="sprint-meta-value">
         {% if active_sprint.start_date and active_sprint.end_date %}
-          {{ active_sprint.start_date.strftime('%b %-d') }} &ndash; {{ active_sprint.end_date.strftime('%b %-d, %Y') }}
+          {{ active_sprint.start_date | localdate('MMMd') }} &ndash; {{ active_sprint.end_date | localdate }}
         {% elif active_sprint.start_date %}
-          {{ active_sprint.start_date.strftime('%b %-d, %Y') }} &ndash; ?
+          {{ active_sprint.start_date | localdate }} &ndash; ?
         {% else %}
           {% trans %}No dates set{% endtrans %}
         {% endif %}
@@ -147,9 +147,9 @@
     <div class="sprint-planned-actions">
       <span class="sprint-planned-dates">
         {% if sprint.start_date and sprint.end_date %}
-          {{ sprint.start_date.strftime('%b %-d') }} &ndash; {{ sprint.end_date.strftime('%b %-d') }}
+          {{ sprint.start_date | localdate('MMMd') }} &ndash; {{ sprint.end_date | localdate('MMMd') }}
         {% elif sprint.start_date %}
-          {{ sprint.start_date.strftime('%b %-d') }} &ndash; ?
+          {{ sprint.start_date | localdate('MMMd') }} &ndash; ?
         {% else %}
           {% trans %}No dates set{% endtrans %}
         {% endif %}

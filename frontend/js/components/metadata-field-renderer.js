@@ -1,9 +1,13 @@
 export function metadataFieldRenderer(initial) {
         var i18n = Object.assign({
-            tagsPlaceholder: 'Type and press Enter...'
+            tagsPlaceholder: 'Type and press Enter...',
+            addMore: 'Add more...',
+            yes: 'Yes',
+            no: 'No'
         }, initial.i18n || {});
 
         return {
+            i18n: i18n,
             schemas: initial.schemas || [],
             trackerId: initial.trackerId || null,
             existingValues: initial.existingValues || {},

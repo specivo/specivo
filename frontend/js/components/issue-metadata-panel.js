@@ -1,8 +1,12 @@
 export function issueMetadataPanel(initial) {
         var i18n = Object.assign({
             tagsPlaceholder: 'Type and press Enter...',
+            addMore: 'Add more...',
             yes: 'Yes',
-            no: 'No'
+            no: 'No',
+            countFields: '%(filled)s/%(total)s fields',
+            saving: 'Saving...',
+            saveMetadata: 'Save Metadata'
         }, initial.i18n || {});
 
         function resolveFieldsFromSchemas(schemas, metadataObj) {
@@ -55,6 +59,7 @@ export function issueMetadataPanel(initial) {
         var resolved = resolveFieldsFromSchemas(initial.schemas || [], metadataObj);
 
         return {
+            i18n: i18n,
             expanded: false,
             dirty: false,
             saving: false,
@@ -76,6 +81,11 @@ export function issueMetadataPanel(initial) {
                     else if (v !== '' && v !== null && v !== undefined) { count++; }
                 }
                 return count;
+            },
+            get fieldsLabel() {
+                return i18n.countFields
+                    .replace('%(filled)s', this.filledCount)
+                    .replace('%(total)s', this.totalCount);
             },
 
             metadataSearchUrl(slug, value, isArray) {

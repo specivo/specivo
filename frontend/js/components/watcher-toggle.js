@@ -1,5 +1,11 @@
 export function watcherToggle(initial) {
+        var i18n = Object.assign({
+            watch: '+ Watch',
+            unwatch: 'Unwatch'
+        }, initial.i18n || {});
+
         return {
+            i18n: i18n,
             watching: initial.watching || false,
             issueKey: initial.issueKey || '',
             async toggle() {

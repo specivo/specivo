@@ -24,7 +24,7 @@
       {% endif %}
       {% if sprint.start_date and sprint.end_date %}
       <span class="sp-sprint-hero-dates">
-        {{ sprint.start_date.strftime('%b %-d') }} &mdash; {{ sprint.end_date.strftime('%b %-d, %Y') }}
+        {{ sprint.start_date | localdate('MMMd') }} &mdash; {{ sprint.end_date | localdate }}
         {% if duration_days %}&middot; {% trans count=duration_days %}%(count)s day{% pluralize %}%(count)s days{% endtrans %}{% endif %}
       </span>
       {% elif sprint.start_date or sprint.end_date %}

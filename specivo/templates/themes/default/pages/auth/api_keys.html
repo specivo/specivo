@@ -12,7 +12,15 @@
 <div x-data="apiKeyManager"
      data-msg-create-failed="{{ _('Failed to create key') }}"
      data-msg-connect-failed="{{ _('Unable to connect. Please try again.') }}"
-     data-msg-confirm-delete="{{ _('Are you sure you want to permanently delete this API key?') }}">
+     data-msg-confirm-delete="{{ _('Are you sure you want to permanently delete this API key?') }}"
+     data-msg-copied="{{ _('Copied!') }}"
+     data-msg-copy="{{ _('Copy') }}"
+     data-msg-creating="{{ _('Creating...') }}"
+     data-msg-create="{{ _('Create key') }}"
+     data-msg-active="{{ _('Active') }}"
+     data-msg-inactive="{{ _('Inactive') }}"
+     data-msg-deactivate="{{ _('Deactivate') }}"
+     data-msg-activate="{{ _('Activate') }}">
 
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}API Keys{% endtrans %}</h1>
@@ -38,7 +46,7 @@
             font-size: var(--sp-font-size-sm);
             word-break: break-all;
           " x-text="newKey"></code>
-          <button class="sp-btn-sm" @click="copyKey()" x-text="copied ? 'Copied!' : 'Copy'"></button>
+          <button class="sp-btn-sm" @click="copyKey()" x-text="copied ? msgCopied : msgCopy"></button>
         </div>
       </div>
       <button class="sp-btn-sm" @click="dismissNewKey()" style="align-self: start;">{% trans %}Dismiss{% endtrans %}</button>
@@ -62,7 +70,7 @@
       </div>
       <div x-show="error" class="flash flash-error" style="margin-bottom: var(--sp-space-md);" x-text="error"></div>
       <div style="display: flex; gap: var(--sp-space-sm);">
-        <button class="sp-btn sp-btn-primary" type="submit" :disabled="loading" x-text="loading ? 'Creating...' : 'Create key'"></button>
+        <button class="sp-btn sp-btn-primary" type="submit" :disabled="loading" x-text="loading ? msgCreating : msgCreate"></button>
         <button class="sp-btn sp-btn-ghost" type="button" @click="showCreate = false; error = '';">{% trans %}Cancel{% endtrans %}</button>
       </div>
     </form>
@@ -101,14 +109,14 @@
               <span
                 class="badge-status"
                 :class="key.is_active ? 'in-progress' : 'closed'"
-                x-text="key.is_active ? 'Active' : 'Inactive'"
+                x-text="key.is_active ? msgActive : msgInactive"
               ></span>
             </td>
             <td style="display: flex; gap: var(--sp-space-xs);">
               <button
                 class="sp-btn-sm"
                 @click="toggleKey(key.id, key.is_active)"
-                x-text="key.is_active ? 'Deactivate' : 'Activate'"
+                x-text="key.is_active ? msgDeactivate : msgActivate"
               ></button>
               <button
                 class="sp-btn-sm danger"

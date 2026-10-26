@@ -46,7 +46,7 @@ class TestTimeagoSmart:
 
     def test_older_previous_year(self):
         t = datetime(2025, 11, 3, 12, 0, tzinfo=UTC)
-        assert _timeago(t, now=NOW) == "Nov 03, 2025"
+        assert _timeago(t, now=NOW) == "Nov 3, 2025"
 
     def test_none_returns_empty(self):
         assert _timeago(None, now=NOW) == ""

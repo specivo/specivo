@@ -3,7 +3,11 @@ export function markdownEditor(initial) {
         var i18n = Object.assign({
             placeholder: 'Write your content here (Markdown)...',
             rendering: 'Rendering...',
-            previewUnavailable: 'Preview unavailable.'
+            previewUnavailable: 'Preview unavailable.',
+            /* Tooltips for the toolbar buttons, keyed by EasyMDE button name. */
+            toolbar: {},
+            statusLines: 'lines',
+            statusWords: 'words'
         }, initial.i18n || {});
 
         return {
@@ -163,6 +167,7 @@ export function markdownEditor(initial) {
                 var wrapper = ta.nextElementSibling;
                 if (wrapper && wrapper.classList && wrapper.classList.contains('EasyMDEContainer')) {
                     wrapper.classList.add('sp-md-editor');
+                    this._localizeChrome(wrapper);
                 }
 
                 /* When the editor lives inside a hidden ancestor (x-show="editing"),
@@ -206,6 +211,28 @@ export function markdownEditor(initial) {
                     } catch (_e) { /* already torn down */ }
                     this.editor = null;
                 }
+            },
+
+            /* EasyMDE has no localisation for its toolbar tooltips or status-bar
+             * labels. Relabel the built-in buttons in place (their actions stay
+             * EasyMDE's own) and keep the shortcut suffix it appended, e.g.
+             * "Bold (Ctrl-B)". The status labels come from CSS ::before content,
+             * which reads data-sp-label instead (see sprint-detail.css). */
+            _localizeChrome(wrapper) {
+                var buttons = this.editor.toolbarElements || {};
+                Object.keys(i18n.toolbar).forEach(function (name) {
+                    var el = buttons[name];
+                    if (!el) return;
+                    var label = i18n.toolbar[name];
+                    var shortcut = (el.title || '').match(/ \([^)]*\)$/);
+                    el.title = label + (shortcut ? shortcut[0] : '');
+                    el.setAttribute('aria-label', label);
+                });
+                var labels = {lines: i18n.statusLines, words: i18n.statusWords};
+                Object.keys(labels).forEach(function (cls) {
+                    var el = wrapper.querySelector('.editor-statusbar .' + cls);
+                    if (el) el.setAttribute('data-sp-label', labels[cls]);
+                });
             },
 
             /* Replace the editor contents (used by parent when resetting drafts). */

@@ -370,3 +370,177 @@ async def test_recurring_pages_receive_thai_strings(admin_client: AsyncClient, d
 
     html = await _get(admin_client, f"/projects/{project.key}/recurring-patterns/{pattern['id']}/")
     _assert_x_data_carries(html, "recurringPatternDetail", ["Occurrence skipped.", "Failed to skip occurrence."])
+
+
+# ---------------------------------------------------------------------------
+# Strings formerly written into template expressions
+#
+# Labels such as "Copied!", "Saving..." or "Never" were literals inside
+# x-text / :placeholder expressions (or {% trans %} output spliced into a JS
+# string, which breaks on an apostrophe). They now reach the component the
+# same way as the strings above.
+# ---------------------------------------------------------------------------
+
+
+async def test_html_lang_is_the_viewer_language(admin_client: AsyncClient, db_session: AsyncSession):
+    """``<html lang>`` carries the locale, which the frontend's date formatting reads."""
+    await _speak_thai(admin_client, db_session)
+    html = await _get(admin_client, "/my/api-keys/")
+    assert '<html lang="th">' in html
+
+
+async def test_api_key_page_labels_are_thai(admin_client: AsyncClient, db_session: AsyncSession):
+    await _speak_thai(admin_client, db_session)
+    html = await _get(admin_client, "/my/api-keys/")
+
+    _assert_data_msgs(
+        html,
+        "apiKeyManager",
+        {
+            "data-msg-copied": "Copied!",
+            "data-msg-creating": "Creating...",
+            "data-msg-active": "Active",
+            "data-msg-inactive": "Inactive",
+            "data-msg-deactivate": "Deactivate",
+            "data-msg-activate": "Activate",
+        },
+    )
+
+
+async def test_admin_user_labels_are_thai(admin_client: AsyncClient, db_session: AsyncSession):
+    other = UserFactory.build(login=f"{_PREFIX}-labels")
+    db_session.add(other)
+    await db_session.commit()
+    await db_session.refresh(other)
+    await _speak_thai(admin_client, db_session)
+
+    html = await _get(admin_client, "/admin/users/")
+    _assert_x_data_carries(
+        html, "adminUsers", ["Administrator", "Service account", "Member", "Pending verification", "Deactivated"]
+    )
+
+    html = await _get(admin_client, f"/admin/users/{other.id}/")
+    _assert_x_data_carries(
+        html,
+        "adminUserDetail",
+        ["Copied!", "Creating...", "Last login", "Must be replaced at next sign-in", "Revoked", "Locked"],
+    )
+
+
+async def test_admin_project_version_and_settings_labels_are_thai(admin_client: AsyncClient, db_session: AsyncSession):
+    await _speak_thai(admin_client, db_session)
+
+    html = await _get(admin_client, "/admin/projects/")
+    _assert_x_data_carries(html, "adminProjects", ["Archived", "Edit Project", "Create Project"])
+
+    html = await _get(admin_client, "/admin/versions/")
+    _assert_x_data_carries(html, "adminVersions", ["%(count)s versions", "%(count)s selected", "%(count)s open"])
+
+    html = await _get(admin_client, "/admin/settings/")
+    _assert_x_data_carries(html, "adminSettings", ["Saving..."])
+
+    html = await _get(admin_client, "/admin/email/")
+    _assert_data_msgs(html, "testEmailForm", {"data-msg-sending": "Sending...", "data-msg-send": "Send Test"})
+
+
+async def test_issue_page_labels_are_thai(admin_client: AsyncClient, db_session: AsyncSession):
+    project = await _make_project(db_session, admin_client, "JSILBL")
+    tracker = await _make_tracker(db_session, "labels")
+    issue = await _issue_svc.create(
+        db_session,
+        project,
+        IssueCreate(project_key=project.key, tracker_id=tracker.id, subject="Slow dashboard"),
+        admin_client.state.user,
+    )
+    await db_session.commit()
+    await db_session.refresh(issue)
+    await _speak_thai(admin_client, db_session)
+
+    html = await _get(admin_client, f"/issue/{issue.display_key}/")
+    _assert_x_data_carries(html, "watcherToggle", ["+ Watch", "Unwatch"])
+    _assert_x_data_carries(html, "timeLogForm", ["Cancel", "Log time"])
+    # EasyMDE's own toolbar tooltips and status-bar labels are English only.
+    _assert_x_data_carries(html, "markdownEditor", ["Bold", "Numbered list", "Toggle preview", "lines", "words"])
+    _assert_x_data_carries(html, "tagField", ["Add more..."])
+
+    html = await _get(admin_client, f"/partials/issues/{issue.display_key}/attachments/")
+    _assert_data_msgs(html, "issueAttachments", {"data-msg-uploaded-by": "Uploaded by %(name)s, %(date)s"})
+
+    html = await _get(admin_client, f"/projects/{project.key}/issues/new/")
+    _assert_x_data_carries(html, "tagField", ["Add tags...", "Add more..."])
+
+
+async def test_project_settings_labels_are_thai(admin_client: AsyncClient, db_session: AsyncSession):
+    project = await _make_project(db_session, admin_client, "JSISLB")
+    await _speak_thai(admin_client, db_session)
+    html = await _get(admin_client, f"/projects/{project.key}/settings/")
+
+    _assert_x_data_carries(
+        html,
+        "projectVersions",
+        ["Create versions to organize your issues into releases and milestones.", "Edit version", "%(count)s closed"],
+    )
+    _assert_x_data_carries(html, "projectTagsSettings", ["New tag", "Create tag", "Save changes"])
+    _assert_x_data_carries(
+        html, "projectMetadataSettings", ["New Custom Schema", "from %(preset)s", "%(count)s issues"]
+    )
+    _assert_x_data_carries(html, "recurringPatterns", ["Flexible", "Disabled", "Enable"])
+
+
+async def test_search_and_wiki_tag_placeholders_are_thai(admin_client: AsyncClient, db_session: AsyncSession):
+    project = await _make_project(db_session, admin_client, "JSITAG")
+    page, _content = await _wiki_svc.create_page(
+        db_session, project.id, "Onboarding", "First steps.", admin_client.state.user
+    )
+    await db_session.commit()
+    await _speak_thai(admin_client, db_session)
+
+    html = await _get(admin_client, "/search/")
+    _assert_x_data_carries(html, "tagFilter", ["Filter by tag...", "Add tag..."])
+
+    html = await _get(admin_client, f"/projects/{project.key}/wiki/{page.slug}/")
+    _assert_x_data_carries(html, "tagField", ["Add tags...", "Add more..."])
+    _assert_data_msgs(html, "wikiAttachments", {"data-msg-uploaded-by": "Uploaded by %(name)s, %(date)s"})
+
+
+async def test_translation_with_an_apostrophe_keeps_the_expression_intact(
+    admin_client: AsyncClient, db_session: AsyncSession
+):
+    """French "n'a encore" used to end the JS string spliced into x-text and break the page."""
+    project = await _make_project(db_session, admin_client, "JSIAPO")
+    user: User = admin_client.state.user
+    user.language = "fr"
+    db_session.add(user)
+    await db_session.commit()
+
+    html = await _get(admin_client, f"/projects/{project.key}/recurring-patterns/")
+    x_data = _component(html, "recurringPatterns")["x-data"] or ""
+    assert x_data.rstrip().endswith(")")
+    activate("fr")
+    try:
+        french = gettext("No recurring patterns have been created for this project yet.")
+    finally:
+        deactivate()
+    assert "'" in french
+    assert str(htmlsafe_json_dumps(french))[1:-1] in x_data
+
+
+# ---------------------------------------------------------------------------
+# Server-rendered dates
+# ---------------------------------------------------------------------------
+
+
+async def test_sprint_dates_render_in_thai(admin_client: AsyncClient, db_session: AsyncSession):
+    project = await _make_project(db_session, admin_client, "JSIDAT")
+    resp = await admin_client.post(
+        f"/api/v1/projects/{project.key}/sprints/",
+        json={"name": "Sprint 1", "start_date": "2026-04-01", "end_date": "2026-04-14"},
+    )
+    assert resp.status_code == 201, resp.text
+    sprint = resp.json()
+    await _speak_thai(admin_client, db_session)
+
+    html = await _get(admin_client, f"/projects/{project.key}/sprints/{sprint['id']}/")
+    assert "1 เม.ย." in html
+    assert "14 เม.ย. 2026" in html
+    assert "Apr 1" not in html

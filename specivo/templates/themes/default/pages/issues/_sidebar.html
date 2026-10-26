@@ -304,9 +304,12 @@
           {{ w.display_name or w.login }}
         </span>
         {% endfor %}
-        <div x-data='watcherToggle({ watching: {{ "true" if is_watching else "false" }}, issueKey: "{{ issue.display_key }}" })'>
+        <div x-data='watcherToggle({ watching: {{ "true" if is_watching else "false" }}, issueKey: "{{ issue.display_key }}", i18n: {{ {
+          "watch": _("+ Watch"),
+          "unwatch": _("Unwatch")
+        } | tojson }} })'>
           <span class="sp-watcher-chip" style="cursor:pointer;" @click="toggle()">
-            <span x-text="watching ? 'Unwatch' : '+ Watch'"></span>
+            <span x-text="watching ? i18n.unwatch : i18n.watch"></span>
           </span>
         </div>
       </div>
