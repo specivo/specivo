@@ -25,6 +25,9 @@ from specivo.services import markdown_budget, markdown_service
 from specivo.services.markdown_budget import (
     MAX_MARKDOWN_CHARS,
     MAX_NESTING_DEPTH,
+    MAX_SPEED_FACTOR,
+    REFERENCE_RENDER_SECONDS,
+    RENDER_BUDGET_US,
     RenderDeadline,
     RenderDeadlineError,
     _backtick_scan_chars,
@@ -32,8 +35,12 @@ from specivo.services.markdown_budget import (
     check_markdown_length,
     end_request_budget,
     estimate_render_cost,
+    field_deadline,
     render_allowance,
     render_hazard,
+    request_budget_seconds,
+    reset_speed_factor,
+    speed_factor,
     start_request_budget,
 )
 from specivo.services.markdown_service import (
@@ -159,6 +166,8 @@ def clocks(monkeypatch):
     cpu, wall = FakeClock(), FakeClock()
     monkeypatch.setattr(markdown_budget, "_cpu_clock", cpu)
     monkeypatch.setattr(markdown_budget, "_wall_clock", wall)
+    # Limits as on the calibration machine, whatever this host measures.
+    monkeypatch.setattr(get_settings(), "markdown_render_speed_factor", 1.0)
     return cpu, wall
 
 
@@ -249,7 +258,7 @@ def test_request_budget_caps_a_fields_allowance(clocks, monkeypatch):
 
 
 def test_no_request_budget_outside_a_request():
-    assert render_allowance() == get_settings().markdown_render_deadline_seconds
+    assert render_allowance() == field_deadline()
 
 
 async def test_middleware_gives_each_request_a_fresh_budget(renders_cost):
@@ -270,7 +279,7 @@ async def test_middleware_gives_each_request_a_fresh_budget(renders_cost):
     assert seen[0] == seen[3] == "<p>first</p>"
     assert seen[1] == seen[4] == "<p>second</p>"
     assert FALLBACK in seen[2] and FALLBACK in seen[5]
-    assert render_allowance() == get_settings().markdown_render_deadline_seconds
+    assert render_allowance() == field_deadline()
 
 
 # ---------------------------------------------------------------------------
@@ -422,3 +431,99 @@ def test_wiki_link_parsing_is_linear(unit):
 def test_wiki_link_regex_still_matches_links():
     found = WIKI_LINK_RE.findall("see [[Page One]], [[Page|label]] and [[A|b|c]]")
     assert found == [("Page One", ""), ("Page", "label"), ("A", "b|c")]
+
+
+# ---------------------------------------------------------------------------
+# Host speed
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def measured(monkeypatch):
+    """Measure the speed factor afresh, from a reference time the test chooses."""
+    monkeypatch.setattr(get_settings(), "markdown_render_speed_factor", None)
+    calls = {"count": 0, "seconds": REFERENCE_RENDER_SECONDS}
+
+    def measure() -> float:
+        calls["count"] += 1
+        return calls["seconds"]
+
+    monkeypatch.setattr(markdown_budget, "measure_render_seconds", measure)
+    reset_speed_factor()
+    yield calls
+    reset_speed_factor()
+
+
+@pytest.mark.parametrize(
+    ("ratio", "factor"),
+    [(0.25, 1.0), (1.0, 1.0), (7.0, 7.0), (100.0, MAX_SPEED_FACTOR)],
+    ids=["faster", "same", "slower", "far-slower"],
+)
+def test_speed_factor_is_measured_and_clamped(measured, ratio, factor):
+    measured["seconds"] = REFERENCE_RENDER_SECONDS * ratio
+    assert speed_factor() == pytest.approx(factor)
+    # Never tighter than the settings; both limits scale together.
+    assert field_deadline() == pytest.approx(2.0 * factor)
+    assert request_budget_seconds() == pytest.approx(5.0 * factor)
+
+
+def test_speed_factor_is_measured_once(measured):
+    measured["seconds"] = REFERENCE_RENDER_SECONDS * 3
+    for _ in range(5):
+        speed_factor()
+        render("Some *text*.")
+    assert measured["count"] == 1
+
+
+def test_speed_factor_override_skips_measuring(measured, monkeypatch):
+    monkeypatch.setattr(get_settings(), "markdown_render_speed_factor", 3.0)
+    assert speed_factor() == 3.0
+    assert field_deadline() == pytest.approx(6.0)
+    assert request_budget_seconds() == pytest.approx(15.0)
+    assert measured["count"] == 0
+
+
+def test_real_measurement_is_in_range(monkeypatch):
+    monkeypatch.setattr(get_settings(), "markdown_render_speed_factor", None)
+    reset_speed_factor()
+    try:
+        assert 1.0 <= speed_factor() <= MAX_SPEED_FACTOR
+    finally:
+        reset_speed_factor()
+
+
+@pytest.mark.parametrize("factor", [1.0, 7.0, MAX_SPEED_FACTOR])
+def test_whatever_the_pre_scan_admits_fits_the_field_deadline(monkeypatch, factor):
+    monkeypatch.setattr(get_settings(), "markdown_render_speed_factor", factor)
+    assert field_deadline() >= 2 * (RENDER_BUDGET_US / 1_000_000) * factor
+
+
+@pytest.mark.parametrize("factor", [1.0, MAX_SPEED_FACTOR])
+@pytest.mark.parametrize(
+    "name", ["unclosed-link-target", "duplicate-setext-headings", "nested-list-markers", "issue-refs"]
+)
+def test_pre_scan_rejects_pathological_input_at_any_speed(monkeypatch, markdown_never_called, factor, name):
+    monkeypatch.setattr(get_settings(), "markdown_render_speed_factor", factor)
+    assert FALLBACK in render(PATHOLOGICAL[name])
+
+
+def test_large_page_renders_on_a_host_ten_times_slower(clocks, monkeypatch):
+    """A 250 KB page that needs 0.4 s here needs 4 s on a host ten times slower; it still renders."""
+    cpu, _wall = clocks
+    monkeypatch.setattr(get_settings(), "markdown_render_speed_factor", 10.0)
+    real_markdown = markdown_service._md.markdown
+
+    def slow_markdown(*args, **kwargs):
+        cpu.now += 0.4 * 10
+        return real_markdown(*args, **kwargs)
+
+    monkeypatch.setattr(markdown_service._md, "markdown", slow_markdown)
+    token = start_request_budget()
+    try:
+        html = render(large_page(250 * 1024))
+        # A second large field in the same request still fits the scaled budget.
+        second = render(large_page(100 * 1024))
+    finally:
+        end_request_budget(token)
+    assert FALLBACK not in html
+    assert FALLBACK not in second
