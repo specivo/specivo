@@ -19,6 +19,13 @@ _broker = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 # (which would force SECRET_KEY etc. to be set just to load the worker).
 _RECURRING_BEAT_INTERVAL_SECONDS = int(os.environ.get("RECURRING_TASKS_BEAT_INTERVAL_SECONDS", "3600"))
 
+# Queue for the tasks that run the embedding model. Each worker process that
+# embeds loads its own copy of the model (several hundred MB), so these tasks go
+# to a queue of their own, consumed by the single-process ``celery-embeddings``
+# service, while ``celery-worker`` keeps the default queue. Set
+# EMBEDDING_QUEUE=celery to run them in the general worker instead.
+EMBEDDING_QUEUE = os.environ.get("EMBEDDING_QUEUE", "embeddings")
+
 celery_app = Celery("specivo")
 celery_app.config_from_object(
     {
@@ -28,6 +35,10 @@ celery_app.config_from_object(
         "result_serializer": "json",
         "accept_content": ["json"],
         "timezone": "UTC",
+        "task_routes": {
+            "specivo.tasks.embeddings.embed_search_sources": {"queue": EMBEDDING_QUEUE},
+            "specivo.tasks.embeddings.backfill_model_embeddings": {"queue": EMBEDDING_QUEUE},
+        },
         "beat_schedule": {
             "cleanup-expired-tokens": {
                 "task": "specivo.tasks.cleanup.cleanup_expired_tokens",
