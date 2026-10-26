@@ -226,6 +226,11 @@ rendered server-side:
 - **Sanitization:** rendered HTML goes through `nh3.clean()` with an explicit allowlist before it
   is wrapped in `Markup`. The content is user-authored, so rendering and sanitizing are one step —
   never mark Markdown-derived HTML safe without it (`specivo/services/markdown_service.py`).
+- **Bounded cost:** Python-Markdown is not linear on every input (unclosed `[` or `<`, repeated
+  headings, deep nesting), so `specivo/services/markdown_budget.py` guards every render. A linear
+  pre-scan estimates the cost and a cooperative deadline backs it up; text over either limit is
+  shown as plain text with a notice, never dropped. Stored Markdown fields are capped at 256 Ki
+  characters (`MAX_MARKDOWN_CHARS`), checked on write and by the preview endpoint.
 - **Jinja2 filter:** `{{ content.text | markdown }}` — returns sanitized `Markup`
 - **CSS:** `.wiki-content`, `.editor-preview`, `.prose` classes style rendered HTML
 - **Editing:** the `markdownEditor` component (`frontend/js/components/markdown-editor.js`) wraps

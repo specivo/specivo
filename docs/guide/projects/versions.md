@@ -19,6 +19,10 @@ the **roadmap** fill in as the work gets done.
 | **Sharing** | The scope the version is shared with (for example, sub-projects) |
 | **Wiki page** | An optional linked [wiki page](../wiki/index.md) — handy for release notes |
 
+Sharing decides which projects a version is offered in. It never shows a version to someone who
+can't open the project that owns it: a shared version of a private project you don't belong to stays
+hidden from you.
+
 The optional **wiki page** link is a good place to keep release notes: write the page once, link it
 from the version, and everyone reaching the roadmap can find the notes.
 

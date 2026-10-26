@@ -43,6 +43,24 @@ things:
 - **The key has the `mcp` scope.** A key without the `mcp` scope can't use the MCP server at all. Create a
   new key with the `mcp` scope under **Your profile → API keys**. See [API keys](../ai-agents/api-keys.md).
 
+## I can't see time entries
+
+Reading time needs the **View time entries** permission in the project, separately from **Log time**.
+Out of the box, Reporters and people with no membership don't have it. A role can also be limited to
+**Own time entries**, which shows only the hours you logged yourself. Ask a project manager or an
+administrator to check your role. See [Time tracking](../projects/time-tracking.md#who-can-do-what).
+
+## A script gets "CSRF validation failed"
+
+A request made with the sign-in **cookie** has to send the `X-CSRF-Token` header on anything that
+changes data, including change-password and logout. The value is the `csrf_token` cookie. Scripts and
+agents should use an [API key](../ai-agents/api-keys.md) instead, which needs no token.
+
+## Text is shown without formatting
+
+A short notice appears above it when a description, comment or page is too large or too complex to
+format. Nothing was lost. See [Size and complexity limits](markdown.md#size-and-complexity-limits).
+
 ## A file upload was rejected
 
 Specivo has no built-in file-type restriction, so a rejected upload is almost always a **size limit**. The

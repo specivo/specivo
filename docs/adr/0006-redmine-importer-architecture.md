@@ -63,10 +63,13 @@ Two rules keep that boundary real rather than aspirational:
   `IRStatus.category` in `extract.py`, not in a loader that would otherwise
   need to know Redmine's vocabulary to interpret it.
 
-Adding RT or Jira later means writing a new adapter package and a
-`ContentConverter` for that system's markup (`specivo/importers/core/
-converter.py`). Nothing in `core` or `load` should have to change, because
-nothing in either package imports anything Redmine-specific.
+Adding RT or Jira later means writing a new adapter (a `BaseSourceAdapter`
+subclass) and, if the markup is not Markdown, a `ContentConverter` for it
+(`specivo/importers/core/converter.py`). An adapter does not have to live in
+this repository: a plugin returns it from `get_import_sources()`, and it is
+run with `python -m specivo.cli.import_data --source NAME`. Nothing in `core`
+or `load` should have to change, because nothing in either package imports
+anything Redmine-specific.
 
 Extraction methods are async iterators, streamed and keyset-paginated on the
 source's primary key (`specivo/importers/redmine/db.py:stream`), rather than

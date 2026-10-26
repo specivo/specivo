@@ -125,7 +125,7 @@ You can link by title (`[[Release Process]]`) or by slug (`[[release-process]]`)
 
 A description, a comment, a wiki page, or a version or recurring-issue description can hold up to
 **262,144 characters** (256 Ki). Saving longer text is refused with a message giving the limit; split
-the content across several pages or comments instead. The editor preview takes the same amount.
+the content across several pages or comments instead. The editor preview takes the same amount. Text already stored above the limit, such as imported content, is kept and shown as plain text.
 
 Text that would take too long to format is shown **as plain text** instead, below a short notice, with
 nothing removed. Ordinary documents never hit this, including ones with thousands of links. It is
