@@ -41,14 +41,15 @@ _PREVIEW_URL = "/api/v1/markdown/preview/"
 _FALLBACK = 'class="sp-markdown-fallback"'
 _wiki_svc = WikiService()
 
-# A cross-section of the catalogue for the slower full-page tests. Unclosed
-# ``<!--`` is left out: saving it is slow in PostgreSQL's full-text parser (the
-# search trigger), not in rendering, and the preview test covers its render.
+# A cross-section of the catalogue for the slower full-page tests. Saving
+# unclosed ``<!--`` also exercises the search triggers, which read it in
+# linear time since migration 0040.
 _PAGE_CASES = [
     "unclosed-link-target",
     "bare-brackets",
     "wiki-link-openers",
     "unclosed-tags",
+    "unclosed-comments",
     "duplicate-setext-headings",
     "nested-list-markers",
     "issue-refs",
