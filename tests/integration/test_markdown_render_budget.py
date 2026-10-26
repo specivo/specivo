@@ -41,14 +41,15 @@ _PREVIEW_URL = "/api/v1/markdown/preview/"
 _FALLBACK = 'class="sp-markdown-fallback"'
 _wiki_svc = WikiService()
 
-# A cross-section of the catalogue for the slower full-page tests. Unclosed
-# ``<!--`` is left out: saving it is slow in PostgreSQL's full-text parser (the
-# search trigger), not in rendering, and the preview test covers its render.
+# A cross-section of the catalogue for the slower full-page tests. Saving
+# unclosed ``<!--`` also exercises the search triggers, which read it in
+# linear time since migration 0040.
 _PAGE_CASES = [
     "unclosed-link-target",
     "bare-brackets",
     "wiki-link-openers",
     "unclosed-tags",
+    "unclosed-comments",
     "duplicate-setext-headings",
     "nested-list-markers",
     "issue-refs",
@@ -178,6 +179,35 @@ async def test_description_history_shows_pathological_text(
     html, elapsed = await _timed_get(admin_client, f"/issue/{world.project.key}-1/versions/{journal.id}/", world.token)
     assert html.count(_FALLBACK) >= 2
     assert elapsed < CATASTROPHE_SECONDS
+
+
+async def test_issue_page_with_fifty_comments_renders_every_field(
+    admin_client: AsyncClient, db_session: AsyncSession, world: World
+) -> None:
+    """The per-request render budget leaves room for a long, ordinary discussion."""
+    world.issue.description = large_page(20 * 1024)
+    world.admin.preferences = {**(world.admin.preferences or {}), "activity_per_page": 100}
+    comment = (
+        "Looked into this: see [the log](https://example.com/log/{i}) and `config.yaml`.\n\n"
+        "- **Cause**: the cache expires early\n- *Fix*: extend the TTL\n\n"
+        "```python\ncache.set(key, value, ttl=3600)\n```\n\n> Confirmed on staging {i}."
+    )
+    for i in range(50):
+        db_session.add(
+            Journal(
+                issue_id=world.issue.id,
+                project_id=world.project.id,
+                user_id=world.admin.id,
+                sequence=i + 1,
+                notes=comment.format(i=i),
+            )
+        )
+    await db_session.commit()
+
+    html, _elapsed = await _timed_get(admin_client, f"/issue/{world.project.key}-1/", world.token)
+    assert _FALLBACK not in html
+    assert html.count("Confirmed on staging") == 50
+    assert '<a href="https://example.com/log/49"' in html
 
 
 async def test_large_wiki_page_renders_normally(

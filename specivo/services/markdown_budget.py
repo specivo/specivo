@@ -16,13 +16,18 @@ Two layers keep a render bounded:
    the text as plain text instead of rendering it.
 2. :class:`RenderDeadline` — a backstop for anything the estimate misses: a
    cooperative limit on the CPU time one render may use
-   (``MARKDOWN_RENDER_DEADLINE_SECONDS``). It checks the clock each time
+   (``MARKDOWN_RENDER_DEADLINE_SECONDS``), plus a wall-clock ceiling of
+   :data:`WALL_CLOCK_FACTOR` times that. It checks the clocks each time
    Python-Markdown tries an inline pattern or a block processor and aborts
    the render by raising :class:`RenderDeadlineError`. Nothing is interrupted
    from another thread; the Markdown instance is discarded with the
-   exception. It counts the rendering thread's CPU time, not wall time, so a
-   busy or overcommitted host never turns a normal page into plain text; and
-   its default is far above what any document the pre-scan admits needs.
+   exception. Counting CPU time means a busy host does not turn a normal page
+   into plain text, and the default is far above what any document the
+   pre-scan admits needs.
+3. A per-request budget (``MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS``) shared
+   by every field rendered for one request, so a page of many fields cannot
+   multiply the per-field limit. Once it is spent, the remaining fields are
+   shown as plain text.
 
 The unit costs below were measured with Python-Markdown 3.11.2 on a developer
 laptop. They only need to be right to within a small factor: the budget leaves
@@ -36,6 +41,8 @@ import re
 import time
 from collections import Counter
 from collections.abc import Callable
+from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from typing import Any
 
 from markdown import Markdown  # type: ignore[import-untyped]
@@ -313,26 +320,35 @@ def _heading_key(line: str) -> str:
     return _NON_WORD_RE.sub("", line.strip(" \t#").lower())
 
 
+# Clocks, looked up at call time so tests can substitute them.
+_cpu_clock: Callable[[], float] = time.thread_time
+_wall_clock: Callable[[], float] = time.monotonic
+
+# A render may take this many times its CPU allowance in wall-clock time, so
+# a thread starved of the CPU cannot hold a request indefinitely.
+WALL_CLOCK_FACTOR = 4.0
+
+
 class RenderDeadline(Extension):
-    """Abort a render that uses more CPU time than its deadline allows.
+    """Abort a render that uses too much CPU time, or takes too long in all.
 
     Wraps every inline pattern's ``handleMatch`` and every block processor's
-    ``run`` so they check the clock first and raise
-    :class:`RenderDeadlineError` once the deadline has passed. Each check is
-    one ``time.thread_time()`` call, and the work between two checks is at most
-    one scan of the text. Register it last, so it sees every pattern and
-    processor the other extensions add.
+    ``run`` so they check the clocks first and raise
+    :class:`RenderDeadlineError` once either limit has passed. Each check
+    reads two clocks, and the work between two checks is at most one scan of
+    the text. Register it last, so it sees every pattern and processor the
+    other extensions add.
 
-    The limit is CPU time of the calling thread, which is the thread that
-    renders: ``markdown.markdown`` runs synchronously. *seconds* defaults to
-    the ``markdown_render_deadline_seconds`` setting.
+    *cpu_seconds* limits the CPU time of the calling thread, which is the
+    thread that renders (``markdown.markdown`` runs synchronously); it is not
+    inflated when other processes compete for the CPU. The wall-clock limit is
+    :data:`WALL_CLOCK_FACTOR` times that, for a thread that gets almost no CPU.
     """
 
-    def __init__(self, seconds: float | None = None) -> None:
+    def __init__(self, cpu_seconds: float) -> None:
         super().__init__()
-        if seconds is None:
-            seconds = get_settings().markdown_render_deadline_seconds
-        self.deadline = time.thread_time() + seconds
+        self.cpu_deadline = _cpu_clock() + cpu_seconds
+        self.wall_deadline = _wall_clock() + cpu_seconds * WALL_CLOCK_FACTOR
 
     def extendMarkdown(self, md: Markdown) -> None:  # noqa: N802 - Python-Markdown API
         for pattern in md.inlinePatterns:
@@ -341,11 +357,63 @@ class RenderDeadline(Extension):
             processor.run = self._checked(processor.run)
 
     def _checked(self, method: Callable[..., Any]) -> Callable[..., Any]:
-        deadline = self.deadline
+        cpu_deadline = self.cpu_deadline
+        wall_deadline = self.wall_deadline
 
         def checked(*args: Any, **kwargs: Any) -> Any:
-            if time.thread_time() > deadline:
+            if _cpu_clock() > cpu_deadline or _wall_clock() > wall_deadline:
                 raise RenderDeadlineError
             return method(*args, **kwargs)
 
         return checked
+
+
+# ---------------------------------------------------------------------------
+# Per-request budget
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RenderBudget:
+    """CPU seconds left for rendering Markdown while handling one request."""
+
+    remaining: float
+
+
+_request_budget: ContextVar[RenderBudget | None] = ContextVar("markdown_render_budget", default=None)
+
+
+def start_request_budget(seconds: float | None = None) -> Token[RenderBudget | None]:
+    """Give the current request a fresh render budget; pass the token to :func:`end_request_budget`.
+
+    *seconds* defaults to the ``markdown_render_request_budget_seconds``
+    setting. Set by ``MarkdownRenderBudgetMiddleware`` for every HTTP request,
+    so the description, every comment and every history entry on a page
+    share one budget.
+    """
+    if seconds is None:
+        seconds = get_settings().markdown_render_request_budget_seconds
+    return _request_budget.set(RenderBudget(seconds))
+
+
+def end_request_budget(token: Token[RenderBudget | None]) -> None:
+    """Drop the budget set by :func:`start_request_budget`."""
+    _request_budget.reset(token)
+
+
+def render_allowance() -> float:
+    """CPU seconds the next render may use: the per-field deadline, capped by the request budget.
+
+    Zero or less means the request's budget is spent. Outside a request (a
+    background task, a script) only the per-field deadline applies.
+    """
+    allowance = get_settings().markdown_render_deadline_seconds
+    budget = _request_budget.get()
+    return allowance if budget is None else min(allowance, budget.remaining)
+
+
+def charge_render(cpu_seconds: float) -> None:
+    """Deduct CPU time a render used from the current request's budget, if any."""
+    budget = _request_budget.get()
+    if budget is not None:
+        budget.remaining -= cpu_seconds
