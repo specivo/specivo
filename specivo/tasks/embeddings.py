@@ -94,7 +94,9 @@ def _log_embedding_model_status(sender: object = None, **_kwargs) -> None:  # ty
     try:
         run_async(_log_model_status_async())
     except Exception as exc:  # noqa: BLE001 - a status line must not stop the worker
-        logger.info("Could not check the embedding model at worker start: %s", exc)
+        from specivo.services.search_index_service import describe_error
+
+        logger.info("Could not check the embedding model at worker start: %s", describe_error(exc))
 
 
 async def _log_model_status_async() -> None:
@@ -107,6 +109,13 @@ async def _log_model_status_async() -> None:
         logger.info("Semantic indexing is off: no default embedding model is registered")
     elif service.is_model_usable(model):
         logger.info("Semantic indexing is on: embedding with %s", model.name)
+    elif model.provider != "local":
+        logger.warning(
+            "Semantic indexing is off: embedding model %s uses provider %r, which is not supported "
+            "(only the bundled local model is); keyword search is unaffected",
+            model.name,
+            model.provider,
+        )
     else:
         logger.info(
             "Semantic indexing is off: the files for embedding model %s are not in data/models; "
@@ -123,11 +132,16 @@ def backfill_model_embeddings(self, model_id: int, reembed: bool = False) -> Non
         model_id: ID of the EmbeddingModel to backfill.
         reembed: Recompute embeddings that already exist too.
     """
+    from specivo.services.search_index_service import describe_error
+
     try:
         run_async(_backfill_async(model_id, reembed))
     except Exception as exc:
-        logger.warning("Failed to backfill model %d: %s", model_id, exc)
-        raise self.retry(exc=exc)
+        # As in embed_search_sources: a database error's message quotes chunk content.
+        reason = describe_error(exc)
+        logger.warning("Failed to backfill model %d: %s", model_id, reason)
+        logger.debug("Backfill failure for model %d", model_id, exc_info=True)
+        raise self.retry(exc=RuntimeError(reason)) from None
 
 
 async def _backfill_async(model_id: int, reembed: bool = False) -> None:

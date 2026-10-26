@@ -31,6 +31,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - The search backfill reported success without a model and skipped some attachments and stale comments; it now reports what it embedded and has `--reembed` and `--require-model`
 - The release bundle's `configure.py` wrote its files outside the bundle, and the model download pointed to a release asset that does not exist
 - Semantic and hybrid search compared the query with every stored embedding, and could miss visible matches ranked behind ones the reader cannot see; they now use an HNSW vector index
+- The admin API could register hosted embedding providers that cannot run, and a second default model, breaking indexing and search; only the bundled local model is supported now, the database allows one default, and a leftover hosted model turns semantic search off instead of failing
 
 ### Security
 - Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
@@ -40,7 +41,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - A very deep search offset could make the database rank millions of rows
 
 ### Internal
-- Migrations 0033–0038: role and tracker visibility columns, issue-key search terms, a wider `users.password_hash`, *View time entries* for the Agent role, search chunks for existing comments, and an HNSW index on `chunk_embeddings` (built concurrently). **Run a search reindex after upgrading** (Administration → Settings) so keys in older content are found
+- Migrations 0033–0039: role and tracker visibility columns, issue-key search terms, a wider `users.password_hash`, *View time entries* for the Agent role, search chunks for existing comments, an HNSW index on `chunk_embeddings` (built concurrently), and at most one default embedding model. **Run a search reindex after upgrading** (Administration → Settings) so keys in older content are found
 - Plugins load in the web app, the import CLI and the Celery worker through one shared bootstrap
 - Python-Markdown upgraded to 3.11.2
 

@@ -68,7 +68,7 @@ docker compose up -d
 
 ## Upgrading to 0.9.0
 
-Version 0.9.0 adds six migrations (0033 to 0038), which the entrypoint applies on startup like any
+Version 0.9.0 adds seven migrations (0033 to 0039), which the entrypoint applies on startup like any
 other. Most of it needs no action, but a few things are worth doing or checking afterwards.
 
 ### Rebuild the search index
@@ -136,6 +136,15 @@ longer compare the query with every chunk (see [Vector index](semantic-search.md
 - It needs pgvector 0.8 or later to be used, which the bundled `pgvector/pgvector:pg18` image has. On
   an external database, check with `SELECT extversion FROM pg_extension WHERE extname = 'vector'`.
 - If the build is interrupted, the next start drops the half-built index and builds it again.
+
+### Only the bundled embedding model
+
+The administrator API can no longer register embedding models: only the bundled local model,
+`multilingual-e5-small`, is supported, and hosted (bring-your-own-key) providers are not. Migration
+0039 keeps a single default model; if an older release left more than one, it keeps the local model
+as the default. If the default is a model with another provider, semantic search stays off and the
+logs say so once; see [Changing the model](semantic-search.md#changing-the-model) to put the local
+model back.
 
 ### Check time tracking permissions
 

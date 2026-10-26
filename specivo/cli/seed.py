@@ -391,12 +391,24 @@ async def seed_embedding_model(session: AsyncSession) -> None:
     """Insert the default local embedding model if it does not already exist.
 
     Idempotent: does nothing when a model with the same name is already present,
-    and never overwrites admin-modified values.
+    and never overwrites admin-modified values. The local model becomes the
+    default only when no model is: the database allows a single default, and a
+    row left by an older release may hold it.
     """
     result = await session.execute(select(EmbeddingModel).where(EmbeddingModel.name == "multilingual-e5-small"))
     existing = result.scalar_one_or_none()
+    default_result = await session.execute(
+        select(EmbeddingModel.id).where(EmbeddingModel.is_default.is_(True)).limit(1)
+    )
+    has_default = default_result.scalar_one_or_none() is not None
+
     if existing is not None:
-        logger.info("Embedding model 'multilingual-e5-small' already exists, skipping")
+        if not has_default:
+            existing.is_default = True
+            await session.flush()
+            logger.info("Made embedding model 'multilingual-e5-small' the default (no default was set)")
+        else:
+            logger.info("Embedding model 'multilingual-e5-small' already exists, skipping")
         return
 
     model = EmbeddingModel(
@@ -404,7 +416,7 @@ async def seed_embedding_model(session: AsyncSession) -> None:
         provider="local",
         model_name="multilingual-e5-small",
         dimensions=384,
-        is_default=True,
+        is_default=not has_default,
     )
     session.add(model)
     await session.flush()

@@ -204,26 +204,6 @@ async def authed_client(
 
 
 @pytest.mark.asyncio
-async def test_create_embedding_model(admin_client: AsyncClient):
-    """Admin can create a new embedding model."""
-    resp = await admin_client.post(
-        ADMIN_MODELS_URL,
-        json={
-            "name": "test-openai",
-            "provider": "openai",
-            "model_name": "text-embedding-3-small",
-            "dimensions": 1536,
-            "is_default": False,
-        },
-    )
-    assert resp.status_code == 201, resp.text
-    data = resp.json()
-    assert data["name"] == "test-openai"
-    assert data["provider"] == "openai"
-    assert data["dimensions"] == 1536
-
-
-@pytest.mark.asyncio
 async def test_list_embedding_models(admin_client: AsyncClient, db_session: AsyncSession):
     """Admin can list embedding models."""
     await _create_mock_model(db_session)

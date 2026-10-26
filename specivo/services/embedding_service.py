@@ -1,7 +1,7 @@
 """Embedding generation and management service.
 
 Handles:
-- Generating embeddings via provider APIs (or mock for tests)
+- Generating embeddings with the bundled local model (or mock for tests)
 - Embedding the chunks that have none yet (the Celery task, the import, the backfill)
 - Backfilling embeddings for all existing chunks, or re-embedding them all
 
@@ -68,15 +68,38 @@ async def resolve_attachment_project_id(
     return None
 
 
+# Only the bundled local model is supported ("mock" is a deterministic stand-in
+# for the tests). A row naming any other provider, such as a hosted one left by
+# an older release, is treated like a local model whose files are missing: no
+# embeddings, and search falls back to keyword matching.
+#
+# (model id, provider) pairs already warned about in this process.
+_warned_unsupported: set[tuple[int | None, str]] = set()
+
+
 def is_provider_usable(provider: str, model_name: str) -> bool:
     """Whether a model with this provider can embed in this process right now.
 
     A local model needs its ONNX and tokenizer files; the mock provider (tests)
-    always works; the hosted providers are not implemented.
+    always works; any other provider is not supported.
     """
     if provider == "local":
         return get_local_embedder(model_name).is_available()
     return provider == "mock"
+
+
+def warn_unsupported_provider(model: EmbeddingModel) -> None:
+    """Log, once per process and model, that *model* names a provider that cannot run."""
+    key = (model.id, model.provider)
+    if key in _warned_unsupported:
+        return
+    _warned_unsupported.add(key)
+    logger.warning(
+        "Embedding model %s uses provider %r, which is not supported; semantic search is off "
+        "and search falls back to keyword matching. Only the bundled local model is supported",
+        model.name,
+        model.provider,
+    )
 
 
 class EmbeddingService:
@@ -104,7 +127,8 @@ class EmbeddingService:
             intent: "passage" for content being indexed, "query" for search queries.
 
         Returns:
-            A list of floats representing the embedding vector.
+            The embedding vector, or None when the model cannot run here (its
+            files are missing or its provider is not supported).
         """
         prefixed_text = self._apply_prefix(text, model, intent)
 
@@ -121,8 +145,8 @@ class EmbeddingService:
         if model.provider == "mock":
             return self._mock_embedding(prefixed_text, model.dimensions)
 
-        # Future: implement real provider calls (openai, cohere, ollama)
-        raise NotImplementedError(f"Provider {model.provider!r} not yet implemented")
+        warn_unsupported_provider(model)
+        return None
 
     def _apply_prefix(self, text: str, model: EmbeddingModel, intent: str) -> str:
         """Prepend the appropriate prefix based on model config and intent.
@@ -348,7 +372,10 @@ class EmbeddingService:
             logger.error("Embedding model %d not found for backfill", model_id)
             return 0
         if not self.is_model_usable(model):
-            logger.warning("Embedding model %s cannot run here (missing model files); nothing embedded", model.name)
+            logger.warning(
+                "Embedding model %s cannot run here (missing model files or unsupported provider); nothing embedded",
+                model.name,
+            )
             return 0
 
         count = 0

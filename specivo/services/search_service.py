@@ -38,6 +38,7 @@ from specivo.core.constants import (
 )
 from specivo.models.project import PROJECT_STATUS_ACTIVE
 from specivo.models.role import RoleBuiltin
+from specivo.models.search import EmbeddingModel
 from specivo.models.user import User
 from specivo.schemas.search import (
     SOURCE_TYPE_TO_DISPLAY,
@@ -218,6 +219,30 @@ class _ParsedQuery:
             "query": self.text,
             "identifier_query": " & ".join(f"'{ident.lower()}'" for ident in self.identifiers),
         }
+
+
+# Models whose query embedding already failed in this process, so the warning is logged once.
+_failed_embedding_models: set[int] = set()
+
+
+def _warn_embedding_failure(model: EmbeddingModel, exc: BaseException) -> None:
+    """Log once per model that embedding a query failed; semantic results are skipped.
+
+    Only the error's class is logged (see ``describe_error``), never its message.
+    """
+    from specivo.services.search_index_service import describe_error
+
+    if model.id in _failed_embedding_models:
+        logger.debug("Query embedding failed again for model %s", model.name, exc_info=True)
+        return
+    _failed_embedding_models.add(model.id)
+    logger.warning(
+        "Embedding a search query with model %s failed (%s); semantic search is off and search "
+        "falls back to keyword matching",
+        model.name,
+        describe_error(exc),
+    )
+    logger.debug("Query embedding failure for model %s", model.name, exc_info=True)
 
 
 def _page_window(pinned: int, offset: int, limit: int) -> tuple[slice, int, int]:
@@ -1402,7 +1427,11 @@ class SearchService:
         if model is None:
             return pinned[pinned_slice], len(pinned)
 
-        query_vector = await emb_service.generate_embedding(query, model, intent="query")
+        try:
+            query_vector = await emb_service.generate_embedding(query, model, intent="query")
+        except Exception as exc:  # noqa: BLE001 - a broken model turns semantic search off, never a 500
+            _warn_embedding_failure(model, exc)
+            query_vector = None
         if query_vector is None:
             return pinned[pinned_slice], len(pinned)
         # Format vector as PostgreSQL literal: '[0.1,0.2,...]'
