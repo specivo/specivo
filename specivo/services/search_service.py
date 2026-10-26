@@ -23,6 +23,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import (
+    MAX_PAGE_LIMIT,
+    MAX_SEARCH_OFFSET,
     RRF_K,
     SEARCH_FTS_HEADLINE_OPTIONS,
     SEARCH_HYBRID_PREFETCH_LIMIT,
@@ -131,6 +133,9 @@ _IDENTIFIER_RE = re.compile(IDENTIFIER_PATTERN)
 MAX_QUERY_IDENTIFIERS = 10
 
 _PG_INT_MAX = 2**31 - 1
+
+# Most rows one keyword-search part ranks: the deepest offset plus one page.
+_MAX_PART_ROWS = MAX_SEARCH_OFFSET + MAX_PAGE_LIMIT
 
 
 def extract_identifiers(query: str) -> list[str]:
@@ -1028,8 +1033,10 @@ class SearchService:
         params["limit"] = ranked_limit
         params["offset"] = ranked_offset
         # Each part must supply every row up to the end of the page, not just
-        # one page's worth, or later pages come back short.
-        params["part_limit"] = ranked_offset + ranked_limit
+        # one page's worth, or later pages come back short. Capped whatever the
+        # caller passes, so no request makes a part rank more than the deepest
+        # page search serves; a page past the cap comes back empty.
+        params["part_limit"] = min(ranked_offset + ranked_limit, _MAX_PART_ROWS)
 
         result = await session.execute(text(full_sql), params)
 
