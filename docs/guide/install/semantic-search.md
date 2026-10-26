@@ -316,27 +316,23 @@ button for it in the web UI.
 
 ## Changing the model
 
-**Switching to a different model is not supported.** There is no setting for it and no screen for
-it, and the one model that runs today is `multilingual-e5-small`.
+**Only the bundled local model, `multilingual-e5-small`, is supported.** Hosted embedding providers
+and bring-your-own-key (BYOK) setups are not available, and switching to a different model is not
+supported either. There is no setting for it and no screen for it.
 
-The pieces that look like they allow it do not add up to a safe procedure:
-
-- Models are rows in the `embedding_models` table, and the search uses the one marked as default.
-  An administrator-only REST endpoint can register another row, but registering one does not make it
-  the only default, and nothing else in the product manages that table.
-- Only the `local` provider runs. The names of hosted providers, and the key field, exist in the
-  data model, but no code calls them. Choosing one makes indexing and searching fail.
-- A local model is read from `<model name>.onnx` plus a shared `tokenizer.json` in the one `models`
-  folder, so two local models would overwrite each other's tokenizer.
-- Vectors from different models cannot be compared. After changing the default model every stored
-  embedding would have to be rebuilt, and the [vector index](#vector-index) only covers the 384
-  numbers of `multilingual-e5-small`; other sizes are compared one by one.
-
-Embeddings are stored with whatever size the model produces, so there is no database migration to
-resize anything. The practical consequence is for the future: moving to another model will be a full
-rebuild of the index, and this page will describe it when it is supported.
-
-Bring-your-own-key hosted embeddings are not available either, whatever older notes say.
+- Models are rows in the `embedding_models` table, and search uses the one marked as default. The
+  seed command registers the local model (it runs each time the `api` container starts). The
+  administrator REST API under `/api/v1/admin/embedding-models/` can list models, delete one and
+  start a [backfill](#index-existing-content), but it cannot register a model.
+- The database allows at most one default model. Upgrading to 0.9.0 (migration 0039) clears the
+  extra defaults if an older release left more than one, keeping the local model.
+- If the default row names any other provider, for example one registered by an older release,
+  Specivo treats it like a model whose files are missing: it logs one warning, embeds nothing, and
+  hybrid search returns keyword results. Delete that row and restart the `api` container so the seed
+  registers the local model again, then run the backfill.
+- Vectors from different models cannot be compared, and the [vector index](#vector-index) only
+  covers the 384 numbers of `multilingual-e5-small`. Moving to another model will need a full
+  rebuild of the index, and this page will describe it if that becomes supported.
 
 ## Troubleshooting
 

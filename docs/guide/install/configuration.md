@@ -136,7 +136,9 @@ It saves into `SPECIVO_DATA_DIR/models` and checks each file against its publish
 
 There is no setting that turns it on: when the model files are in `SPECIVO_DATA_DIR/models`, it is
 on. Without them, keyword search and everything else work normally and hybrid search behaves like
-keyword search. Hosted ("bring your own key") providers and other models are not supported.
+keyword search. Only this bundled local model is supported: there are no hosted embedding providers,
+no bring-your-own-key (BYOK) option and no way to switch to another model (see
+[Changing the model](semantic-search.md#changing-the-model)).
 
 | Variable | Purpose / default |
 |---|---|
