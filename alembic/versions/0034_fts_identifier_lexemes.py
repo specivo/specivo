@@ -2,7 +2,7 @@
 
 Create Date: 2026-10-26
 Revision ID: 0034
-Revises: 0032
+Revises: 0033
 
 PostgreSQL's default text-search parser, shared by every built-in regconfig,
 reads ``ACME-42`` as the word ``acme`` followed by the *signed integer*
@@ -36,7 +36,7 @@ wait for it.
 from alembic import op
 
 revision = "0034"
-down_revision = "0032"
+down_revision = "0033"
 
 
 # Mirrors ``specivo.services.search_service.IDENTIFIER_PATTERN``. The bounds
