@@ -2,7 +2,7 @@
 
 Create Date: 2026-10-26
 Revision ID: 0035
-Revises: 0032
+Revises: 0034
 
 ``users.password_hash`` now holds either a native bcrypt hash or a hash
 imported from another system under an ``<algorithm>$`` prefix, verified by a
@@ -16,7 +16,7 @@ nothing.
 from alembic import op
 
 revision = "0035"
-down_revision = "0032"
+down_revision = "0034"
 
 
 def upgrade() -> None:
