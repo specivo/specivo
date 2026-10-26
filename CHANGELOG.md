@@ -36,19 +36,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - The remaining untranslated interface text, and dates now follow the interface language
 - Keyword search returned short pages after the first one
 - Comments saved in the same moment could appear out of order
-- Large wiki pages could show as plain text on a busy server; the render time limit now counts CPU time and is set with `MARKDOWN_RENDER_DEADLINE_SECONDS`
+- Large wiki pages could show as plain text on a busy server; Markdown render limits now count CPU time, per field and per request (`MARKDOWN_RENDER_DEADLINE_SECONDS`, `MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS`)
 
 ### Security
 - Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
 - Attachments of deleted wiki pages stayed searchable
 - Crafted Markdown could keep a worker busy for minutes on every view, and deeply nested lists caused errors
+- Text with many unclosed `<!--` took minutes to index and to show in search results, and long search queries could fail
 - Time entries could be read, logged and edited without the matching permissions, and timers started in any project
 - Shared versions of private projects were not filtered by access
 - A very deep search offset could make the database rank millions of rows
 - Indexing errors could write content to the logs
 
 ### Internal
-- Migrations 0033–0039: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently) and a single default embedding model. **Run a search reindex after upgrading** (Administration → Settings)
+- Migrations 0033–0040: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently), a single default embedding model and linear-time indexing of unclosed HTML comments. **Run a search reindex after upgrading** (Administration → Settings)
 - Plugins load in the web app, the import CLI and the Celery workers through one shared bootstrap
 - Python-Markdown upgraded to 3.11.2
 

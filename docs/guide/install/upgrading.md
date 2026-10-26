@@ -68,7 +68,7 @@ docker compose up -d
 
 ## Upgrading to 0.9.0
 
-Version 0.9.0 adds seven migrations (0033 to 0039), which the entrypoint applies on startup like any
+Version 0.9.0 adds eight migrations (0033 to 0040), which the entrypoint applies on startup like any
 other. Most of it needs no action, but a few things are worth doing or checking afterwards.
 
 ### Rebuild the search index
