@@ -758,7 +758,7 @@ async def test_split_from_terminates_old_and_starts_new(
         creation_lead_time_days=30,
         template_subject="New series subject",
     )
-    new_pattern = await service.split_from(db_session, pattern, boundary, new_data)
+    new_pattern = await service.split_from(db_session, pattern, boundary, new_data, author)
     await db_session.commit()
 
     # Old series terminated just before the boundary.
@@ -805,6 +805,7 @@ async def test_plain_update_leaves_open_instance_unchanged(
         db_session,
         pattern,
         RecurringPatternUpdate(template_subject="Renamed template", lock_version=pattern.lock_version),
+        author,
     )
     await db_session.commit()
 

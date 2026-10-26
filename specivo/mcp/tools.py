@@ -2041,7 +2041,7 @@ async def _update_recurring_pattern(
         data = RecurringPatternUpdate(**updates)
     except ValueError as exc:
         return f"Error: {exc}"
-    pattern = await _recurring_pattern_svc.update(session, pattern, data)
+    pattern = await _recurring_pattern_svc.update(session, pattern, data, user)
     await session.flush()
     await _log_tool(
         session,

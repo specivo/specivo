@@ -106,8 +106,13 @@ class RecurringPatternService:
         project: Project,
         data: RecurringPatternCreate,
         author: User,
+        *,
+        actor: User | None = None,
     ) -> RecurringPattern:
         """Create a recurring pattern after validating its rule and metadata.
+
+        *actor* is who is acting, when that is not *author* (``split_from``
+        keeps the original series' author); privacy is checked against them.
 
         - ``template_metadata`` is validated against the project/tracker schemas.
         - The recurrence rule is validated for coherence (engine ValueError ->
@@ -116,13 +121,14 @@ class RecurringPatternService:
         - ``is_private`` None takes the template tracker's
           ``private_by_default``; overriding it needs ``set_issues_private``
           (``IssueService.resolve_is_private``). Generated issues then carry
-          the pattern's stored value.
+          the pattern's stored value, so every path that stores one checks it
+          here or in :meth:`update`.
         """
         await self._metadata_schema_service.validate_metadata(
             session, project.id, data.template_tracker_id, data.template_metadata
         )
         is_private = await self._issue_service.resolve_is_private(
-            session, project, data.template_tracker_id, data.is_private, author
+            session, project, data.template_tracker_id, data.is_private, actor or author
         )
         dtstart = self._anchor_dtstart(data.dtstart, data.timezone)
         self._validate_rule(
@@ -216,8 +222,16 @@ class RecurringPatternService:
         session: AsyncSession,
         pattern: RecurringPattern,
         data: RecurringPatternUpdate,
+        actor: User,
     ) -> RecurringPattern:
         """Apply a partial update to the pattern's template / rule.
+
+        Privacy: when the update changes ``is_private`` or the template
+        tracker, the resulting value is resolved against the new tracker's
+        ``private_by_default`` for *actor* (``IssueService.resolve_is_private``).
+        A value that differs from that default needs ``set_issues_private``,
+        so switching tracker cannot dodge a private default either. Generated
+        issues trust the stored value.
 
         IMPORTANT — "edit affects future only": a plain update mutates the
         template and recurrence rule, but it does NOT rewrite issues that have
@@ -279,6 +293,8 @@ class RecurringPatternService:
             rrule_raw=updates.get("rrule_raw", pattern.rrule_raw),
         )
 
+        await self._resolve_update_privacy(session, pattern, updates, actor)
+
         # Filter the rotation roster to project members if it changed.
         if "assignee_rotation" in updates:
             updates["assignee_rotation"] = await self._filter_rotation(
@@ -290,6 +306,25 @@ class RecurringPatternService:
         session.add(pattern)
         await session.flush()
         return pattern
+
+    async def _resolve_update_privacy(
+        self, session: AsyncSession, pattern: RecurringPattern, updates: dict[str, Any], actor: User
+    ) -> None:
+        """Replace ``updates["is_private"]`` with the checked value, when privacy is affected."""
+        requested = updates.pop("is_private", None)
+        tracker_id = updates.get("template_tracker_id", pattern.template_tracker_id)
+        tracker_changed = tracker_id != pattern.template_tracker_id
+        if not tracker_changed and (requested is None or requested == pattern.is_private):
+            return
+        project = await self._resolve_project(session, pattern.project_id)
+        # A tracker change keeps the current privacy unless a new one is given.
+        updates["is_private"] = await self._issue_service.resolve_is_private(
+            session,
+            project,
+            tracker_id,
+            pattern.is_private if requested is None else requested,
+            actor,
+        )
 
     async def delete(self, session: AsyncSession, pattern: RecurringPattern) -> None:
         """Delete a pattern.
@@ -733,8 +768,12 @@ class RecurringPatternService:
         pattern: RecurringPattern,
         occurrence_at: datetime,
         new_data: RecurringPatternCreate,
+        actor: User,
     ) -> RecurringPattern:
         """Split a series at *occurrence_at* ("this-and-future").
+
+        The new series keeps the original author; its privacy is checked
+        against *actor*, who is making the split.
 
         Terminates the old series just before the boundary by setting
         ``pattern.until`` to one second before ``occurrence_at``, then creates a
@@ -754,7 +793,7 @@ class RecurringPatternService:
 
         project = await self._resolve_project(session, pattern.project_id)
         author = await self._resolve_author(session, pattern.author_id)
-        return await self.create(session, project, new_data, author)
+        return await self.create(session, project, new_data, author, actor=actor)
 
     # ------------------------------------------------------------------
     # Internal helpers

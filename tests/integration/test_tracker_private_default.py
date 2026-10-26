@@ -16,11 +16,12 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.exceptions import PermissionDeniedError
 from specivo.models.issue import Issue
 from specivo.models.lookups import Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.role import Role
-from specivo.schemas.recurring_pattern import RecurringPatternCreate
+from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
 from specivo.services.permission_service import clear_role_cache
 from specivo.services.recurring_pattern_service import RecurringPatternService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
@@ -175,8 +176,6 @@ async def test_recurring_pattern_and_its_issues_follow_the_tracker(db_session: A
 
 
 async def test_recurring_pattern_override_needs_set_issues_private(db_session: AsyncSession, world: dict) -> None:
-    from specivo.core.exceptions import PermissionDeniedError
-
     service = RecurringPatternService()
     with pytest.raises(PermissionDeniedError):
         await service.create(db_session, world["project"], _pattern(world, is_private=False), world["reporter"])
@@ -185,6 +184,113 @@ async def test_recurring_pattern_override_needs_set_issues_private(db_session: A
     created = await service.materialize(db_session, pattern, datetime(2026, 1, 2, 12, 0, tzinfo=UTC))
     assert created
     assert not any(issue.is_private for issue in created)
+
+
+async def _plain_pattern(db_session: AsyncSession, world: dict, *, private: bool = False):
+    """A pattern on the ordinary tracker, created by the lead (who may set privacy)."""
+    service = RecurringPatternService()
+    data = _pattern(world, template_tracker_id=world["plain"].id, is_private=private)
+    pattern = await service.create(db_session, world["project"], data, world["lead"])
+    await db_session.flush()
+    return service, pattern
+
+
+def _update(pattern, **fields) -> RecurringPatternUpdate:
+    return RecurringPatternUpdate(lock_version=pattern.lock_version, **fields)
+
+
+@pytest.mark.parametrize("who, allowed", [("reporter", False), ("lead", True)])
+async def test_pattern_update_setting_private_needs_permission(
+    db_session: AsyncSession, world: dict, who: str, allowed: bool
+) -> None:
+    service, pattern = await _plain_pattern(db_session, world)
+    if allowed:
+        await service.update(db_session, pattern, _update(pattern, is_private=True), world[who])
+        assert pattern.is_private is True
+    else:
+        with pytest.raises(PermissionDeniedError):
+            await service.update(db_session, pattern, _update(pattern, is_private=True), world[who])
+        assert pattern.is_private is False
+
+
+@pytest.mark.parametrize("who, allowed", [("reporter", False), ("lead", True)])
+async def test_pattern_update_clearing_a_private_default_needs_permission(
+    db_session: AsyncSession, world: dict, who: str, allowed: bool
+) -> None:
+    service = RecurringPatternService()
+    pattern = await service.create(db_session, world["project"], _pattern(world), world["reporter"])
+    assert pattern.is_private is True
+    if allowed:
+        await service.update(db_session, pattern, _update(pattern, is_private=False), world[who])
+        assert pattern.is_private is False
+    else:
+        with pytest.raises(PermissionDeniedError):
+            await service.update(db_session, pattern, _update(pattern, is_private=False), world[who])
+        assert pattern.is_private is True
+
+
+@pytest.mark.parametrize("who, allowed", [("reporter", False), ("lead", True)])
+async def test_pattern_tracker_switch_cannot_dodge_the_private_default(
+    db_session: AsyncSession, world: dict, who: str, allowed: bool
+) -> None:
+    """Moving a public pattern onto a private-by-default tracker keeps it public only with the permission."""
+    service, pattern = await _plain_pattern(db_session, world)
+    switch = _update(pattern, template_tracker_id=world["secret"].id)
+    if allowed:
+        await service.update(db_session, pattern, switch, world[who])
+        assert (pattern.template_tracker_id, pattern.is_private) == (world["secret"].id, False)
+    else:
+        with pytest.raises(PermissionDeniedError):
+            await service.update(db_session, pattern, switch, world[who])
+        assert pattern.template_tracker_id == world["plain"].id
+
+    # Taking the tracker's default is always allowed, and generation then trusts it.
+    if not allowed:
+        await service.update(
+            db_session, pattern, _update(pattern, template_tracker_id=world["secret"].id, is_private=True), world[who]
+        )
+        assert pattern.is_private is True
+
+
+async def test_pattern_update_without_privacy_changes_needs_no_permission(
+    db_session: AsyncSession, world: dict
+) -> None:
+    """A lead-made exception survives a reporter's unrelated edit."""
+    service, pattern = await _plain_pattern(db_session, world, private=True)
+    await service.update(db_session, pattern, _update(pattern, template_subject="Renamed"), world["reporter"])
+    await service.update(db_session, pattern, _update(pattern, is_private=True), world["reporter"])
+    assert (pattern.template_subject, pattern.is_private) == ("Renamed", True)
+
+
+async def test_pattern_rest_update_and_split_check_the_caller(
+    client: AsyncClient, db_session: AsyncSession, world: dict
+) -> None:
+    _, pattern = await _plain_pattern(db_session, world)
+    await db_session.commit()
+    reporter = await _login(client, "privdef_reporter")
+    base = f"/api/v1/projects/PRVD/recurring-patterns/{pattern.id}/"
+
+    resp = await client.patch(base, json={"is_private": True, "lock_version": pattern.lock_version}, headers=reporter)
+    assert resp.status_code == 403
+    resp = await client.patch(
+        base, json={"template_tracker_id": world["secret"].id, "lock_version": pattern.lock_version}, headers=reporter
+    )
+    assert resp.status_code == 403
+
+    # A split creates a new pattern authored by the original author (the lead);
+    # its privacy is still checked against the reporter making the split.
+    new_pattern = _pattern(world, template_tracker_id=world["plain"].id, is_private=True).model_dump(mode="json")
+    resp = await client.post(
+        f"{base}split/",
+        json={"occurrence_at": "2026-01-03T09:00:00+00:00", "new_pattern": new_pattern},
+        headers=reporter,
+    )
+    assert resp.status_code == 403
+
+    lead = await _login(client, "privdef_lead")
+    resp = await client.patch(base, json={"is_private": True, "lock_version": pattern.lock_version}, headers=lead)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["is_private"] is True
 
 
 # ---------------------------------------------------------------------------
