@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-19 10:23+0200\n"
+"POT-Creation-Date: 2026-10-26 16:17+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -151,52 +151,52 @@ msgstr "Новый пароль должен отличаться от теку�
 msgid "Password must be at least %(count)d characters"
 msgstr "Пароль должен содержать не менее %(count)d символов"
 
-#: specivo/services/issue_service.py:94
+#: specivo/services/issue_service.py:95
 msgid "No issue statuses found; run seed data first"
 msgstr "Статусы задач не найдены; сначала загрузите начальные данные"
 
-#: specivo/services/issue_service.py:115
+#: specivo/services/issue_service.py:116
 msgid "No issue priorities found; run seed data first"
 msgstr "Приоритеты задач не найдены; сначала загрузите начальные данные"
 
-#: specivo/services/issue_service.py:135
+#: specivo/services/issue_service.py:136
 #, python-format
 msgid "Version %(id)s not found"
 msgstr "Версия %(id)s не найдена"
 
-#: specivo/services/issue_service.py:141
+#: specivo/services/issue_service.py:142
 msgid "Version does not belong to this project"
 msgstr "Версия не относится к этому проекту"
 
-#: specivo/services/issue_service.py:147
+#: specivo/services/issue_service.py:148
 #, python-format
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "Нельзя назначать задачи версии со статусом «%(status)s»"
 
-#: specivo/services/issue_service.py:160
+#: specivo/services/issue_service.py:161
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "Спринт %(id)s не найден"
 
-#: specivo/services/issue_service.py:166
+#: specivo/services/issue_service.py:167
 msgid "Sprint does not belong to this project"
 msgstr "Спринт не относится к этому проекту"
 
-#: specivo/services/issue_service.py:172
+#: specivo/services/issue_service.py:173
 msgid "Cannot assign issues to a completed sprint"
 msgstr "Нельзя назначать задачи завершённому спринту"
 
-#: specivo/services/issue_service.py:742
+#: specivo/services/issue_service.py:769
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 "Задача была изменена другим запросом. Обновите страницу и повторите "
 "попытку."
 
-#: specivo/services/issue_service.py:891
+#: specivo/services/issue_service.py:918
 msgid "Issue is already in this project."
 msgstr "Задача уже находится в этом проекте."
 
-#: specivo/services/issue_service.py:900
+#: specivo/services/issue_service.py:927
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -204,12 +204,12 @@ msgstr ""
 "Нельзя переместить задачу, входящую в иерархию. Сначала отвяжите её от "
 "родительской задачи и переместите или отвяжите её подзадачи."
 
-#: specivo/services/issue_service.py:951
+#: specivo/services/issue_service.py:978
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Перемещено из {old} в {new}."
 
-#: specivo/services/issue_service.py:1032
+#: specivo/services/issue_service.py:1059
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -218,11 +218,20 @@ msgstr ""
 "Неизвестный фильтр статуса «{value}». Используйте 'open', 'closed', "
 "'all', ID статуса или одно из значений: {known}"
 
-#: specivo/services/journal_service.py:300
+#: specivo/services/journal_service.py:302
 msgid "Cannot reply to a journal on a different issue"
 msgstr "Нельзя ответить на запись журнала из другой задачи"
 
-#: specivo/services/recurring_pattern_service.py:233
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "Текст слишком длинный (символов: {length}); допустимо не более {limit}."
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "Этот текст слишком сложен для форматирования, поэтому он показан как обычный текст."
+
+#: specivo/services/recurring_pattern_service.py:236
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31
 msgid "This pattern was changed by someone else. Reload and try again."
 msgstr ""
@@ -604,7 +613,7 @@ msgstr "Переиндексация..."
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
 #: specivo/templates/themes/default/pages/issues/detail.html:109
 #: specivo/templates/themes/default/pages/issues/detail.html:363
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 #: specivo/templates/themes/default/pages/projects/settings.html:65
 #: specivo/templates/themes/default/pages/projects/settings.html:88
 #: specivo/templates/themes/default/pages/projects/settings.html:252
@@ -802,7 +811,7 @@ msgstr "Статус"
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
 #: specivo/templates/themes/default/pages/issues/detail.html:485
-#: specivo/templates/themes/default/pages/issues/form.html:331
+#: specivo/templates/themes/default/pages/issues/form.html:332
 msgid "Type"
 msgstr "Тип"
 
@@ -1105,7 +1114,7 @@ msgstr "Комментарии"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:13
 #: specivo/templates/themes/default/pages/issues/detail.html:271
-#: specivo/templates/themes/default/pages/issues/form.html:352
+#: specivo/templates/themes/default/pages/issues/form.html:354
 #: specivo/templates/themes/default/pages/search.html:50
 #: specivo/templates/themes/default/pages/wiki/show.html:103
 msgid "Attachments"
@@ -1309,7 +1318,7 @@ msgstr "Ни один проект пока не подключён к анон�
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:130
 #: specivo/templates/themes/default/pages/issues/detail.html:108
 #: specivo/templates/themes/default/pages/issues/detail.html:454
-#: specivo/templates/themes/default/pages/issues/form.html:379
+#: specivo/templates/themes/default/pages/issues/form.html:381
 #: specivo/templates/themes/default/pages/projects/detail.html:194
 #: specivo/templates/themes/default/pages/projects/list.html:97
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:116
@@ -1600,7 +1609,7 @@ msgstr "Искать по имени или логину..."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
 #: specivo/templates/themes/default/pages/issues/detail.html:501
-#: specivo/templates/themes/default/pages/issues/form.html:342
+#: specivo/templates/themes/default/pages/issues/form.html:343
 #: specivo/templates/themes/default/pages/projects/settings.html:147
 msgid "Add"
 msgstr "Добавить"
@@ -1636,8 +1645,8 @@ msgid "Nobody is in this group yet."
 msgstr "В этой группе пока никого нет."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/issues/form.html:312
-#: specivo/templates/themes/default/pages/issues/form.html:363
+#: specivo/templates/themes/default/pages/issues/form.html:313
+#: specivo/templates/themes/default/pages/issues/form.html:365
 #: specivo/templates/themes/default/pages/projects/settings.html:223
 #: specivo/templates/themes/default/pages/projects/settings.html:601
 msgid "Remove"
@@ -3275,7 +3284,7 @@ msgstr "Срок выполнения"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:55
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:318
 #: specivo/templates/themes/default/pages/issues/detail.html:269
-#: specivo/templates/themes/default/pages/issues/form.html:307
+#: specivo/templates/themes/default/pages/issues/form.html:308
 msgid "Relations"
 msgstr "Связи"
 
@@ -3705,7 +3714,7 @@ msgid "Add relation"
 msgstr "Добавить связь"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:462
-#: specivo/templates/themes/default/pages/issues/form.html:318
+#: specivo/templates/themes/default/pages/issues/form.html:319
 msgid "Related Issue"
 msgstr "Связанная задача"
 
@@ -3719,37 +3728,37 @@ msgstr "Поиск..."
 
 #: specivo/templates/themes/default/pages/issues/detail.html:488
 #: specivo/templates/themes/default/pages/issues/form.html:47
-#: specivo/templates/themes/default/pages/issues/form.html:333
+#: specivo/templates/themes/default/pages/issues/form.html:334
 msgid "Relates to"
 msgstr "Связана с"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:489
 #: specivo/templates/themes/default/pages/issues/form.html:48
-#: specivo/templates/themes/default/pages/issues/form.html:334
+#: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Blocks"
 msgstr "Блокирует"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:490
 #: specivo/templates/themes/default/pages/issues/form.html:49
-#: specivo/templates/themes/default/pages/issues/form.html:335
+#: specivo/templates/themes/default/pages/issues/form.html:336
 msgid "Blocked by"
 msgstr "Блокируется"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:491
 #: specivo/templates/themes/default/pages/issues/form.html:50
-#: specivo/templates/themes/default/pages/issues/form.html:336
+#: specivo/templates/themes/default/pages/issues/form.html:337
 msgid "Duplicates"
 msgstr "Дублирует"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:492
 #: specivo/templates/themes/default/pages/issues/form.html:52
-#: specivo/templates/themes/default/pages/issues/form.html:338
+#: specivo/templates/themes/default/pages/issues/form.html:339
 msgid "Precedes"
 msgstr "Предшествует"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:493
 #: specivo/templates/themes/default/pages/issues/form.html:53
-#: specivo/templates/themes/default/pages/issues/form.html:339
+#: specivo/templates/themes/default/pages/issues/form.html:340
 msgid "Follows"
 msgstr "Следует за"
 
@@ -3780,7 +3789,7 @@ msgid "New Issue"
 msgstr "Новая задача"
 
 #: specivo/templates/themes/default/pages/issues/form.html:51
-#: specivo/templates/themes/default/pages/issues/form.html:337
+#: specivo/templates/themes/default/pages/issues/form.html:338
 msgid "Duplicated by"
 msgstr "Дублируется"
 
@@ -3811,31 +3820,31 @@ msgstr "-- Нет --"
 msgid "Press Enter or comma to add. Backspace to remove last."
 msgstr "Нажмите Enter или запятую для добавления. Backspace — удалить последний."
 
-#: specivo/templates/themes/default/pages/issues/form.html:320
+#: specivo/templates/themes/default/pages/issues/form.html:321
 msgid "Search issues..."
 msgstr "Искать задачи..."
 
-#: specivo/templates/themes/default/pages/issues/form.html:345
+#: specivo/templates/themes/default/pages/issues/form.html:346
 msgid "+ Add Relation"
 msgstr "+ Добавить связь"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "Click to upload"
 msgstr "Нажмите для загрузки"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "or drag and drop"
 msgstr "или перетащите файл"
 
-#: specivo/templates/themes/default/pages/issues/form.html:356
+#: specivo/templates/themes/default/pages/issues/form.html:358
 msgid "PNG, JPG, PDF, or any file up to 10 MB"
 msgstr "PNG, JPG, PDF или любой файл до 10 МБ"
 
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 msgid "Create Issue"
 msgstr "Создать задачу"
 
-#: specivo/templates/themes/default/pages/issues/form.html:376
+#: specivo/templates/themes/default/pages/issues/form.html:378
 msgid "+ Create and Continue"
 msgstr "+ Создать и продолжить"
 

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-19 10:23+0200\n"
+"POT-Creation-Date: 2026-10-26 16:17+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <EMAIL@ADDRESS>\n"
 "Language: es\n"
@@ -152,56 +152,56 @@ msgstr "La nueva contraseña debe ser distinta de la actual"
 msgid "Password must be at least %(count)d characters"
 msgstr "La contraseña debe tener al menos %(count)d caracteres"
 
-#: specivo/services/issue_service.py:94
+#: specivo/services/issue_service.py:95
 msgid "No issue statuses found; run seed data first"
 msgstr ""
 "No se encontraron estados de incidencia; ejecuta primero los datos "
 "iniciales"
 
-#: specivo/services/issue_service.py:115
+#: specivo/services/issue_service.py:116
 msgid "No issue priorities found; run seed data first"
 msgstr ""
 "No se encontraron prioridades de incidencia; ejecuta primero los datos "
 "iniciales"
 
-#: specivo/services/issue_service.py:135
+#: specivo/services/issue_service.py:136
 #, python-format
 msgid "Version %(id)s not found"
 msgstr "Versión %(id)s no encontrada"
 
-#: specivo/services/issue_service.py:141
+#: specivo/services/issue_service.py:142
 msgid "Version does not belong to this project"
 msgstr "La versión no pertenece a este proyecto"
 
-#: specivo/services/issue_service.py:147
+#: specivo/services/issue_service.py:148
 #, python-format
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "No se pueden asignar incidencias a una versión %(status)s"
 
-#: specivo/services/issue_service.py:160
+#: specivo/services/issue_service.py:161
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "Sprint %(id)s no encontrado"
 
-#: specivo/services/issue_service.py:166
+#: specivo/services/issue_service.py:167
 msgid "Sprint does not belong to this project"
 msgstr "El sprint no pertenece a este proyecto"
 
-#: specivo/services/issue_service.py:172
+#: specivo/services/issue_service.py:173
 msgid "Cannot assign issues to a completed sprint"
 msgstr "No se pueden asignar incidencias a un sprint completado"
 
-#: specivo/services/issue_service.py:742
+#: specivo/services/issue_service.py:769
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 "La incidencia fue modificada por otra solicitud. Recarga e inténtalo de "
 "nuevo."
 
-#: specivo/services/issue_service.py:891
+#: specivo/services/issue_service.py:918
 msgid "Issue is already in this project."
 msgstr "La incidencia ya está en este proyecto."
 
-#: specivo/services/issue_service.py:900
+#: specivo/services/issue_service.py:927
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -210,12 +210,12 @@ msgstr ""
 "Sepárala de su incidencia padre y mueve o separa primero sus incidencias "
 "hijas."
 
-#: specivo/services/issue_service.py:951
+#: specivo/services/issue_service.py:978
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Movida de {old} a {new}."
 
-#: specivo/services/issue_service.py:1032
+#: specivo/services/issue_service.py:1059
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -224,11 +224,20 @@ msgstr ""
 "Filtro de estado desconocido '{value}'. Usa 'open', 'closed', 'all', un "
 "id de estado o uno de: {known}"
 
-#: specivo/services/journal_service.py:300
+#: specivo/services/journal_service.py:302
 msgid "Cannot reply to a journal on a different issue"
 msgstr "No se puede responder a un registro de otra incidencia"
 
-#: specivo/services/recurring_pattern_service.py:233
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "El texto es demasiado largo ({length} caracteres); el límite es {limit}."
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "Este texto es demasiado complejo para darle formato, así que se muestra como texto sin formato."
+
+#: specivo/services/recurring_pattern_service.py:236
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31
 msgid "This pattern was changed by someone else. Reload and try again."
 msgstr ""
@@ -610,7 +619,7 @@ msgstr "Reindexando..."
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
 #: specivo/templates/themes/default/pages/issues/detail.html:109
 #: specivo/templates/themes/default/pages/issues/detail.html:363
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 #: specivo/templates/themes/default/pages/projects/settings.html:65
 #: specivo/templates/themes/default/pages/projects/settings.html:88
 #: specivo/templates/themes/default/pages/projects/settings.html:252
@@ -808,7 +817,7 @@ msgstr "Estado"
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
 #: specivo/templates/themes/default/pages/issues/detail.html:485
-#: specivo/templates/themes/default/pages/issues/form.html:331
+#: specivo/templates/themes/default/pages/issues/form.html:332
 msgid "Type"
 msgstr "Tipo"
 
@@ -1111,7 +1120,7 @@ msgstr "Comentarios"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:13
 #: specivo/templates/themes/default/pages/issues/detail.html:271
-#: specivo/templates/themes/default/pages/issues/form.html:352
+#: specivo/templates/themes/default/pages/issues/form.html:354
 #: specivo/templates/themes/default/pages/search.html:50
 #: specivo/templates/themes/default/pages/wiki/show.html:103
 msgid "Attachments"
@@ -1313,7 +1322,7 @@ msgstr "Aún no hay ningún proyecto habilitado para la lectura anónima."
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:130
 #: specivo/templates/themes/default/pages/issues/detail.html:108
 #: specivo/templates/themes/default/pages/issues/detail.html:454
-#: specivo/templates/themes/default/pages/issues/form.html:379
+#: specivo/templates/themes/default/pages/issues/form.html:381
 #: specivo/templates/themes/default/pages/projects/detail.html:194
 #: specivo/templates/themes/default/pages/projects/list.html:97
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:116
@@ -1602,7 +1611,7 @@ msgstr "Buscar por nombre o usuario..."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
 #: specivo/templates/themes/default/pages/issues/detail.html:501
-#: specivo/templates/themes/default/pages/issues/form.html:342
+#: specivo/templates/themes/default/pages/issues/form.html:343
 #: specivo/templates/themes/default/pages/projects/settings.html:147
 msgid "Add"
 msgstr "Añadir"
@@ -1638,8 +1647,8 @@ msgid "Nobody is in this group yet."
 msgstr "Aún no hay nadie en este grupo."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/issues/form.html:312
-#: specivo/templates/themes/default/pages/issues/form.html:363
+#: specivo/templates/themes/default/pages/issues/form.html:313
+#: specivo/templates/themes/default/pages/issues/form.html:365
 #: specivo/templates/themes/default/pages/projects/settings.html:223
 #: specivo/templates/themes/default/pages/projects/settings.html:601
 msgid "Remove"
@@ -3279,7 +3288,7 @@ msgstr "Fecha de vencimiento"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:55
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:318
 #: specivo/templates/themes/default/pages/issues/detail.html:269
-#: specivo/templates/themes/default/pages/issues/form.html:307
+#: specivo/templates/themes/default/pages/issues/form.html:308
 msgid "Relations"
 msgstr "Relaciones"
 
@@ -3709,7 +3718,7 @@ msgid "Add relation"
 msgstr "Añadir relación"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:462
-#: specivo/templates/themes/default/pages/issues/form.html:318
+#: specivo/templates/themes/default/pages/issues/form.html:319
 msgid "Related Issue"
 msgstr "Incidencia relacionada"
 
@@ -3723,37 +3732,37 @@ msgstr "Buscando..."
 
 #: specivo/templates/themes/default/pages/issues/detail.html:488
 #: specivo/templates/themes/default/pages/issues/form.html:47
-#: specivo/templates/themes/default/pages/issues/form.html:333
+#: specivo/templates/themes/default/pages/issues/form.html:334
 msgid "Relates to"
 msgstr "Se relaciona con"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:489
 #: specivo/templates/themes/default/pages/issues/form.html:48
-#: specivo/templates/themes/default/pages/issues/form.html:334
+#: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Blocks"
 msgstr "Bloquea"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:490
 #: specivo/templates/themes/default/pages/issues/form.html:49
-#: specivo/templates/themes/default/pages/issues/form.html:335
+#: specivo/templates/themes/default/pages/issues/form.html:336
 msgid "Blocked by"
 msgstr "Bloqueada por"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:491
 #: specivo/templates/themes/default/pages/issues/form.html:50
-#: specivo/templates/themes/default/pages/issues/form.html:336
+#: specivo/templates/themes/default/pages/issues/form.html:337
 msgid "Duplicates"
 msgstr "Duplica"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:492
 #: specivo/templates/themes/default/pages/issues/form.html:52
-#: specivo/templates/themes/default/pages/issues/form.html:338
+#: specivo/templates/themes/default/pages/issues/form.html:339
 msgid "Precedes"
 msgstr "Precede a"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:493
 #: specivo/templates/themes/default/pages/issues/form.html:53
-#: specivo/templates/themes/default/pages/issues/form.html:339
+#: specivo/templates/themes/default/pages/issues/form.html:340
 msgid "Follows"
 msgstr "Sigue a"
 
@@ -3784,7 +3793,7 @@ msgid "New Issue"
 msgstr "Nueva incidencia"
 
 #: specivo/templates/themes/default/pages/issues/form.html:51
-#: specivo/templates/themes/default/pages/issues/form.html:337
+#: specivo/templates/themes/default/pages/issues/form.html:338
 msgid "Duplicated by"
 msgstr "Duplicada por"
 
@@ -3813,31 +3822,31 @@ msgstr "-- Ninguno --"
 msgid "Press Enter or comma to add. Backspace to remove last."
 msgstr "Pulsa Intro o coma para añadir. Retroceso para eliminar el último."
 
-#: specivo/templates/themes/default/pages/issues/form.html:320
+#: specivo/templates/themes/default/pages/issues/form.html:321
 msgid "Search issues..."
 msgstr "Buscar incidencias..."
 
-#: specivo/templates/themes/default/pages/issues/form.html:345
+#: specivo/templates/themes/default/pages/issues/form.html:346
 msgid "+ Add Relation"
 msgstr "+ Añadir relación"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "Click to upload"
 msgstr "Haz clic para subir"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "or drag and drop"
 msgstr "o arrastra y suelta"
 
-#: specivo/templates/themes/default/pages/issues/form.html:356
+#: specivo/templates/themes/default/pages/issues/form.html:358
 msgid "PNG, JPG, PDF, or any file up to 10 MB"
 msgstr "PNG, JPG, PDF o cualquier archivo de hasta 10 MB"
 
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 msgid "Create Issue"
 msgstr "Crear incidencia"
 
-#: specivo/templates/themes/default/pages/issues/form.html:376
+#: specivo/templates/themes/default/pages/issues/form.html:378
 msgid "+ Create and Continue"
 msgstr "+ Crear y continuar"
 

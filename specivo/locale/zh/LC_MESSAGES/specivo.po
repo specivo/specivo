@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-19 10:23+0200\n"
+"POT-Creation-Date: 2026-10-26 16:17+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -146,72 +146,81 @@ msgstr "新密码不能与当前密码相同"
 msgid "Password must be at least %(count)d characters"
 msgstr "密码长度至少为 %(count)d 个字符"
 
-#: specivo/services/issue_service.py:94
+#: specivo/services/issue_service.py:95
 msgid "No issue statuses found; run seed data first"
 msgstr "未找到工作项状态，请先运行种子数据"
 
-#: specivo/services/issue_service.py:115
+#: specivo/services/issue_service.py:116
 msgid "No issue priorities found; run seed data first"
 msgstr "未找到工作项优先级，请先运行种子数据"
 
-#: specivo/services/issue_service.py:135
+#: specivo/services/issue_service.py:136
 #, python-format
 msgid "Version %(id)s not found"
 msgstr "未找到版本 %(id)s"
 
-#: specivo/services/issue_service.py:141
+#: specivo/services/issue_service.py:142
 msgid "Version does not belong to this project"
 msgstr "该版本不属于此项目"
 
-#: specivo/services/issue_service.py:147
+#: specivo/services/issue_service.py:148
 #, python-format
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "无法将工作项分配到状态为 %(status)s 的版本"
 
-#: specivo/services/issue_service.py:160
+#: specivo/services/issue_service.py:161
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "未找到冲刺 %(id)s"
 
-#: specivo/services/issue_service.py:166
+#: specivo/services/issue_service.py:167
 msgid "Sprint does not belong to this project"
 msgstr "该冲刺不属于此项目"
 
-#: specivo/services/issue_service.py:172
+#: specivo/services/issue_service.py:173
 msgid "Cannot assign issues to a completed sprint"
 msgstr "无法将工作项分配到已完成的冲刺"
 
-#: specivo/services/issue_service.py:742
+#: specivo/services/issue_service.py:769
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "该工作项已被其他请求修改，请重新加载后再试。"
 
-#: specivo/services/issue_service.py:891
+#: specivo/services/issue_service.py:918
 msgid "Issue is already in this project."
 msgstr "工作项已在此项目中。"
 
-#: specivo/services/issue_service.py:900
+#: specivo/services/issue_service.py:927
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr "无法移动处于层级结构中的工作项。请先将其与父工作项解除关联，并移动其子工作项或解除它们的关联。"
 
-#: specivo/services/issue_service.py:951
+#: specivo/services/issue_service.py:978
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "已从 {old} 移动到 {new}。"
 
-#: specivo/services/issue_service.py:1032
+#: specivo/services/issue_service.py:1059
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
 "id, or one of: {known}"
 msgstr "未知的状态筛选条件“{value}”。请使用 'open'、'closed'、'all'、状态 ID，或以下之一：{known}"
 
-#: specivo/services/journal_service.py:300
+#: specivo/services/journal_service.py:302
 msgid "Cannot reply to a journal on a different issue"
 msgstr "无法回复其他工作项的日志记录"
 
-#: specivo/services/recurring_pattern_service.py:233
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "文本过长（{length} 个字符），上限为 {limit} 个字符。"
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "此文本过于复杂，无法格式化，因此以纯文本显示。"
+
+#: specivo/services/recurring_pattern_service.py:236
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31
 msgid "This pattern was changed by someone else. Reload and try again."
 msgstr "此重复模板已被他人修改。请重新加载后重试。"
@@ -591,7 +600,7 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
 #: specivo/templates/themes/default/pages/issues/detail.html:109
 #: specivo/templates/themes/default/pages/issues/detail.html:363
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 #: specivo/templates/themes/default/pages/projects/settings.html:65
 #: specivo/templates/themes/default/pages/projects/settings.html:88
 #: specivo/templates/themes/default/pages/projects/settings.html:252
@@ -782,7 +791,7 @@ msgstr "状态"
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
 #: specivo/templates/themes/default/pages/issues/detail.html:485
-#: specivo/templates/themes/default/pages/issues/form.html:331
+#: specivo/templates/themes/default/pages/issues/form.html:332
 msgid "Type"
 msgstr "类型"
 
@@ -1085,7 +1094,7 @@ msgstr "评论"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:13
 #: specivo/templates/themes/default/pages/issues/detail.html:271
-#: specivo/templates/themes/default/pages/issues/form.html:352
+#: specivo/templates/themes/default/pages/issues/form.html:354
 #: specivo/templates/themes/default/pages/search.html:50
 #: specivo/templates/themes/default/pages/wiki/show.html:103
 msgid "Attachments"
@@ -1272,7 +1281,7 @@ msgstr "尚无项目选择加入匿名阅读。"
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:130
 #: specivo/templates/themes/default/pages/issues/detail.html:108
 #: specivo/templates/themes/default/pages/issues/detail.html:454
-#: specivo/templates/themes/default/pages/issues/form.html:379
+#: specivo/templates/themes/default/pages/issues/form.html:381
 #: specivo/templates/themes/default/pages/projects/detail.html:194
 #: specivo/templates/themes/default/pages/projects/list.html:97
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:116
@@ -1555,7 +1564,7 @@ msgstr "按名称或登录名搜索……"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
 #: specivo/templates/themes/default/pages/issues/detail.html:501
-#: specivo/templates/themes/default/pages/issues/form.html:342
+#: specivo/templates/themes/default/pages/issues/form.html:343
 #: specivo/templates/themes/default/pages/projects/settings.html:147
 msgid "Add"
 msgstr "添加"
@@ -1591,8 +1600,8 @@ msgid "Nobody is in this group yet."
 msgstr "此用户组中还没有任何人。"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/issues/form.html:312
-#: specivo/templates/themes/default/pages/issues/form.html:363
+#: specivo/templates/themes/default/pages/issues/form.html:313
+#: specivo/templates/themes/default/pages/issues/form.html:365
 #: specivo/templates/themes/default/pages/projects/settings.html:223
 #: specivo/templates/themes/default/pages/projects/settings.html:601
 msgid "Remove"
@@ -3174,7 +3183,7 @@ msgstr "截止日期"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:55
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:318
 #: specivo/templates/themes/default/pages/issues/detail.html:269
-#: specivo/templates/themes/default/pages/issues/form.html:307
+#: specivo/templates/themes/default/pages/issues/form.html:308
 msgid "Relations"
 msgstr "关联"
 
@@ -3600,7 +3609,7 @@ msgid "Add relation"
 msgstr "添加关联"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:462
-#: specivo/templates/themes/default/pages/issues/form.html:318
+#: specivo/templates/themes/default/pages/issues/form.html:319
 msgid "Related Issue"
 msgstr "关联工作项"
 
@@ -3614,37 +3623,37 @@ msgstr "正在搜索……"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:488
 #: specivo/templates/themes/default/pages/issues/form.html:47
-#: specivo/templates/themes/default/pages/issues/form.html:333
+#: specivo/templates/themes/default/pages/issues/form.html:334
 msgid "Relates to"
 msgstr "关联到"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:489
 #: specivo/templates/themes/default/pages/issues/form.html:48
-#: specivo/templates/themes/default/pages/issues/form.html:334
+#: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Blocks"
 msgstr "阻塞"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:490
 #: specivo/templates/themes/default/pages/issues/form.html:49
-#: specivo/templates/themes/default/pages/issues/form.html:335
+#: specivo/templates/themes/default/pages/issues/form.html:336
 msgid "Blocked by"
 msgstr "被阻塞于"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:491
 #: specivo/templates/themes/default/pages/issues/form.html:50
-#: specivo/templates/themes/default/pages/issues/form.html:336
+#: specivo/templates/themes/default/pages/issues/form.html:337
 msgid "Duplicates"
 msgstr "重复于"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:492
 #: specivo/templates/themes/default/pages/issues/form.html:52
-#: specivo/templates/themes/default/pages/issues/form.html:338
+#: specivo/templates/themes/default/pages/issues/form.html:339
 msgid "Precedes"
 msgstr "先于"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:493
 #: specivo/templates/themes/default/pages/issues/form.html:53
-#: specivo/templates/themes/default/pages/issues/form.html:339
+#: specivo/templates/themes/default/pages/issues/form.html:340
 msgid "Follows"
 msgstr "后继于"
 
@@ -3675,7 +3684,7 @@ msgid "New Issue"
 msgstr "新建工作项"
 
 #: specivo/templates/themes/default/pages/issues/form.html:51
-#: specivo/templates/themes/default/pages/issues/form.html:337
+#: specivo/templates/themes/default/pages/issues/form.html:338
 msgid "Duplicated by"
 msgstr "被重复于"
 
@@ -3704,31 +3713,31 @@ msgstr "-- 无 --"
 msgid "Press Enter or comma to add. Backspace to remove last."
 msgstr "按 Enter 或逗号添加，按退格键删除最后一项。"
 
-#: specivo/templates/themes/default/pages/issues/form.html:320
+#: specivo/templates/themes/default/pages/issues/form.html:321
 msgid "Search issues..."
 msgstr "搜索工作项……"
 
-#: specivo/templates/themes/default/pages/issues/form.html:345
+#: specivo/templates/themes/default/pages/issues/form.html:346
 msgid "+ Add Relation"
 msgstr "+ 添加关联"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "Click to upload"
 msgstr "点击上传"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "or drag and drop"
 msgstr "或拖放文件"
 
-#: specivo/templates/themes/default/pages/issues/form.html:356
+#: specivo/templates/themes/default/pages/issues/form.html:358
 msgid "PNG, JPG, PDF, or any file up to 10 MB"
 msgstr "PNG、JPG、PDF 或任意文件，最大 10 MB"
 
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 msgid "Create Issue"
 msgstr "创建工作项"
 
-#: specivo/templates/themes/default/pages/issues/form.html:376
+#: specivo/templates/themes/default/pages/issues/form.html:378
 msgid "+ Create and Continue"
 msgstr "+ 创建并继续"
 

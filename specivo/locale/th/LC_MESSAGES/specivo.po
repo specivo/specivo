@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-19 10:23+0200\n"
+"POT-Creation-Date: 2026-10-26 16:17+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -148,50 +148,50 @@ msgstr "รหัสผ่านใหม่ต้องไม่ซ้ำกั
 msgid "Password must be at least %(count)d characters"
 msgstr "รหัสผ่านต้องมีอย่างน้อย %(count)d ตัวอักษร"
 
-#: specivo/services/issue_service.py:94
+#: specivo/services/issue_service.py:95
 msgid "No issue statuses found; run seed data first"
 msgstr "ไม่พบสถานะของงาน กรุณารัน seed data ก่อน"
 
-#: specivo/services/issue_service.py:115
+#: specivo/services/issue_service.py:116
 msgid "No issue priorities found; run seed data first"
 msgstr "ไม่พบระดับความสำคัญของงาน กรุณารัน seed data ก่อน"
 
-#: specivo/services/issue_service.py:135
+#: specivo/services/issue_service.py:136
 #, python-format
 msgid "Version %(id)s not found"
 msgstr "ไม่พบเวอร์ชัน %(id)s"
 
-#: specivo/services/issue_service.py:141
+#: specivo/services/issue_service.py:142
 msgid "Version does not belong to this project"
 msgstr "เวอร์ชันนี้ไม่ได้อยู่ในโปรเจกต์นี้"
 
-#: specivo/services/issue_service.py:147
+#: specivo/services/issue_service.py:148
 #, python-format
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "ไม่สามารถมอบหมายงานให้เวอร์ชันที่ %(status)s ได้"
 
-#: specivo/services/issue_service.py:160
+#: specivo/services/issue_service.py:161
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "ไม่พบสปรินต์ %(id)s"
 
-#: specivo/services/issue_service.py:166
+#: specivo/services/issue_service.py:167
 msgid "Sprint does not belong to this project"
 msgstr "สปรินต์นี้ไม่ได้อยู่ในโปรเจกต์นี้"
 
-#: specivo/services/issue_service.py:172
+#: specivo/services/issue_service.py:173
 msgid "Cannot assign issues to a completed sprint"
 msgstr "ไม่สามารถมอบหมายงานให้สปรินต์ที่เสร็จสิ้นแล้วได้"
 
-#: specivo/services/issue_service.py:742
+#: specivo/services/issue_service.py:769
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "งานถูกแก้ไขโดยคำขออื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง"
 
-#: specivo/services/issue_service.py:891
+#: specivo/services/issue_service.py:918
 msgid "Issue is already in this project."
 msgstr "งานนี้อยู่ในโปรเจกต์นี้อยู่แล้ว"
 
-#: specivo/services/issue_service.py:900
+#: specivo/services/issue_service.py:927
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -199,12 +199,12 @@ msgstr ""
 "ไม่สามารถย้ายงานที่อยู่ในลำดับชั้นได้ กรุณาแยกงานนี้ออกจากงานหลัก "
 "และย้ายหรือแยกงานย่อยของงานนี้ออกก่อน"
 
-#: specivo/services/issue_service.py:951
+#: specivo/services/issue_service.py:978
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "ย้ายจาก {old} ไปยัง {new}"
 
-#: specivo/services/issue_service.py:1032
+#: specivo/services/issue_service.py:1059
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -213,11 +213,20 @@ msgstr ""
 "ไม่รู้จักตัวกรองสถานะ '{value}' ใช้ 'open', 'closed', 'all', ID ของสถานะ "
 "หรือค่าใดค่าหนึ่งต่อไปนี้: {known}"
 
-#: specivo/services/journal_service.py:300
+#: specivo/services/journal_service.py:302
 msgid "Cannot reply to a journal on a different issue"
 msgstr "ไม่สามารถตอบกลับความคิดเห็นในงานอื่นได้"
 
-#: specivo/services/recurring_pattern_service.py:233
+#: specivo/services/markdown_budget.py:103
+#, python-brace-format
+msgid "Text is too long ({length} characters); the limit is {limit}."
+msgstr "ข้อความยาวเกินไป ({length} ตัวอักษร) จำกัดไว้ที่ {limit} ตัวอักษร"
+
+#: specivo/services/markdown_service.py:173
+msgid "This text is too complex to format, so it is shown as plain text."
+msgstr "ข้อความนี้ซับซ้อนเกินกว่าจะจัดรูปแบบได้ จึงแสดงเป็นข้อความธรรมดา"
+
+#: specivo/services/recurring_pattern_service.py:236
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31
 msgid "This pattern was changed by someone else. Reload and try again."
 msgstr "รูปแบบที่เกิดซ้ำนี้ถูกแก้ไขโดยผู้อื่น โปรดโหลดใหม่แล้วลองอีกครั้ง"
@@ -597,7 +606,7 @@ msgstr "กำลังสร้างดัชนีใหม่..."
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
 #: specivo/templates/themes/default/pages/issues/detail.html:109
 #: specivo/templates/themes/default/pages/issues/detail.html:363
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 #: specivo/templates/themes/default/pages/projects/settings.html:65
 #: specivo/templates/themes/default/pages/projects/settings.html:88
 #: specivo/templates/themes/default/pages/projects/settings.html:252
@@ -791,7 +800,7 @@ msgstr "สถานะ"
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
 #: specivo/templates/themes/default/pages/issues/detail.html:485
-#: specivo/templates/themes/default/pages/issues/form.html:331
+#: specivo/templates/themes/default/pages/issues/form.html:332
 msgid "Type"
 msgstr "ประเภท"
 
@@ -1094,7 +1103,7 @@ msgstr "ความคิดเห็น"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:13
 #: specivo/templates/themes/default/pages/issues/detail.html:271
-#: specivo/templates/themes/default/pages/issues/form.html:352
+#: specivo/templates/themes/default/pages/issues/form.html:354
 #: specivo/templates/themes/default/pages/search.html:50
 #: specivo/templates/themes/default/pages/wiki/show.html:103
 msgid "Attachments"
@@ -1288,7 +1297,7 @@ msgstr "ยังไม่มีโปรเจกต์ใดเลือกเ
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:130
 #: specivo/templates/themes/default/pages/issues/detail.html:108
 #: specivo/templates/themes/default/pages/issues/detail.html:454
-#: specivo/templates/themes/default/pages/issues/form.html:379
+#: specivo/templates/themes/default/pages/issues/form.html:381
 #: specivo/templates/themes/default/pages/projects/detail.html:194
 #: specivo/templates/themes/default/pages/projects/list.html:97
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:116
@@ -1573,7 +1582,7 @@ msgstr "ค้นหาด้วยชื่อหรือชื่อเข้
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
 #: specivo/templates/themes/default/pages/issues/detail.html:501
-#: specivo/templates/themes/default/pages/issues/form.html:342
+#: specivo/templates/themes/default/pages/issues/form.html:343
 #: specivo/templates/themes/default/pages/projects/settings.html:147
 msgid "Add"
 msgstr "เพิ่ม"
@@ -1609,8 +1618,8 @@ msgid "Nobody is in this group yet."
 msgstr "ยังไม่มีใครอยู่ในกลุ่มนี้"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/issues/form.html:312
-#: specivo/templates/themes/default/pages/issues/form.html:363
+#: specivo/templates/themes/default/pages/issues/form.html:313
+#: specivo/templates/themes/default/pages/issues/form.html:365
 #: specivo/templates/themes/default/pages/projects/settings.html:223
 #: specivo/templates/themes/default/pages/projects/settings.html:601
 msgid "Remove"
@@ -3231,7 +3240,7 @@ msgstr "วันครบกำหนด"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:55
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:318
 #: specivo/templates/themes/default/pages/issues/detail.html:269
-#: specivo/templates/themes/default/pages/issues/form.html:307
+#: specivo/templates/themes/default/pages/issues/form.html:308
 msgid "Relations"
 msgstr "ความสัมพันธ์"
 
@@ -3661,7 +3670,7 @@ msgid "Add relation"
 msgstr "เพิ่มความสัมพันธ์"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:462
-#: specivo/templates/themes/default/pages/issues/form.html:318
+#: specivo/templates/themes/default/pages/issues/form.html:319
 msgid "Related Issue"
 msgstr "งานที่เกี่ยวข้อง"
 
@@ -3675,37 +3684,37 @@ msgstr "กำลังค้นหา..."
 
 #: specivo/templates/themes/default/pages/issues/detail.html:488
 #: specivo/templates/themes/default/pages/issues/form.html:47
-#: specivo/templates/themes/default/pages/issues/form.html:333
+#: specivo/templates/themes/default/pages/issues/form.html:334
 msgid "Relates to"
 msgstr "เกี่ยวข้องกับ"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:489
 #: specivo/templates/themes/default/pages/issues/form.html:48
-#: specivo/templates/themes/default/pages/issues/form.html:334
+#: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Blocks"
 msgstr "ขัดขวาง"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:490
 #: specivo/templates/themes/default/pages/issues/form.html:49
-#: specivo/templates/themes/default/pages/issues/form.html:335
+#: specivo/templates/themes/default/pages/issues/form.html:336
 msgid "Blocked by"
 msgstr "ถูกขัดขวางโดย"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:491
 #: specivo/templates/themes/default/pages/issues/form.html:50
-#: specivo/templates/themes/default/pages/issues/form.html:336
+#: specivo/templates/themes/default/pages/issues/form.html:337
 msgid "Duplicates"
 msgstr "ซ้ำกับ"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:492
 #: specivo/templates/themes/default/pages/issues/form.html:52
-#: specivo/templates/themes/default/pages/issues/form.html:338
+#: specivo/templates/themes/default/pages/issues/form.html:339
 msgid "Precedes"
 msgstr "นำหน้า"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:493
 #: specivo/templates/themes/default/pages/issues/form.html:53
-#: specivo/templates/themes/default/pages/issues/form.html:339
+#: specivo/templates/themes/default/pages/issues/form.html:340
 msgid "Follows"
 msgstr "ตามหลัง"
 
@@ -3736,7 +3745,7 @@ msgid "New Issue"
 msgstr "งานใหม่"
 
 #: specivo/templates/themes/default/pages/issues/form.html:51
-#: specivo/templates/themes/default/pages/issues/form.html:337
+#: specivo/templates/themes/default/pages/issues/form.html:338
 msgid "Duplicated by"
 msgstr "ถูกทำซ้ำโดย"
 
@@ -3765,31 +3774,31 @@ msgstr "-- ไม่มี --"
 msgid "Press Enter or comma to add. Backspace to remove last."
 msgstr "กด Enter หรือจุลภาคเพื่อเพิ่ม กด Backspace เพื่อลบรายการล่าสุด"
 
-#: specivo/templates/themes/default/pages/issues/form.html:320
+#: specivo/templates/themes/default/pages/issues/form.html:321
 msgid "Search issues..."
 msgstr "ค้นหางาน..."
 
-#: specivo/templates/themes/default/pages/issues/form.html:345
+#: specivo/templates/themes/default/pages/issues/form.html:346
 msgid "+ Add Relation"
 msgstr "+ เพิ่มความสัมพันธ์"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "Click to upload"
 msgstr "คลิกเพื่ออัปโหลด"
 
-#: specivo/templates/themes/default/pages/issues/form.html:355
+#: specivo/templates/themes/default/pages/issues/form.html:357
 msgid "or drag and drop"
 msgstr "หรือลากแล้ววาง"
 
-#: specivo/templates/themes/default/pages/issues/form.html:356
+#: specivo/templates/themes/default/pages/issues/form.html:358
 msgid "PNG, JPG, PDF, or any file up to 10 MB"
 msgstr "PNG, JPG, PDF หรือไฟล์ใด ๆ ขนาดไม่เกิน 10 MB"
 
-#: specivo/templates/themes/default/pages/issues/form.html:373
+#: specivo/templates/themes/default/pages/issues/form.html:375
 msgid "Create Issue"
 msgstr "สร้างงาน"
 
-#: specivo/templates/themes/default/pages/issues/form.html:376
+#: specivo/templates/themes/default/pages/issues/form.html:378
 msgid "+ Create and Continue"
 msgstr "+ สร้างและดำเนินการต่อ"
 
