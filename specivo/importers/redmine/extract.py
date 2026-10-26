@@ -48,6 +48,12 @@ from specivo.importers.core.ir import (
     PrincipalKind,
     ValueKind,
 )
+from specivo.models.role import (
+    TIME_ENTRIES_VISIBILITY_OWN,
+    TIME_ENTRIES_VISIBILITY_VALUES,
+    USERS_VISIBILITY_MEMBERS,
+    USERS_VISIBILITY_VALUES,
+)
 
 # Order matters: ``trackers.fields_bits`` sets bit i when CORE_FIELDS[i] is
 # disabled. Copied from Redmine's Tracker::CORE_FIELDS, where the comment
@@ -184,8 +190,7 @@ def display_name(row: dict[str, Any]) -> str:
 def extract_tracker(row: dict[str, Any]) -> IRTracker:
     """Build an :class:`IRTracker` from a ``trackers`` row.
 
-    ``private_by_default`` is dropped: Specivo has no per-tracker default for
-    issue privacy.
+    ``private_by_default`` maps straight onto Specivo's column of the same name.
     """
     return IRTracker(
         source_ref=str(row["id"]),
@@ -195,6 +200,7 @@ def extract_tracker(row: dict[str, Any]) -> IRTracker:
         default_status_ref=str(row["default_status_id"]) if row.get("default_status_id") else None,
         disabled_core_fields=decode_disabled_core_fields(row.get("fields_bits")),
         position=row.get("position") or 0,
+        private_by_default=bool(row.get("private_by_default")),
     )
 
 
@@ -242,8 +248,10 @@ def extract_role(row: dict[str, Any]) -> IRRole:
     with no permissions and listed in the import report for an administrator to
     fill in.
 
-    ``users_visibility`` and ``time_entries_visibility`` are dropped for the same
-    reason: Specivo has no equivalent yet.
+    ``users_visibility`` and ``time_entries_visibility`` carry over: both
+    systems use the same values (``all`` / ``members_of_visible_projects`` and
+    ``all`` / ``own``). A value Specivo does not know becomes the narrower
+    setting rather than the wider one.
 
     ``builtin`` carries over directly — both systems use 0 for an ordinary role,
     1 for the non-member role and 2 for the anonymous one.
@@ -253,7 +261,21 @@ def extract_role(row: dict[str, Any]) -> IRRole:
         name=(row.get("name") or "").strip(),
         builtin=row.get("builtin") or 0,
         permissions=[],
+        users_visibility=_visibility(
+            row.get("users_visibility"), USERS_VISIBILITY_VALUES, narrowest=USERS_VISIBILITY_MEMBERS
+        ),
+        time_entries_visibility=_visibility(
+            row.get("time_entries_visibility"), TIME_ENTRIES_VISIBILITY_VALUES, narrowest=TIME_ENTRIES_VISIBILITY_OWN
+        ),
     )
+
+
+def _visibility(value: Any, known: tuple[str, ...], *, narrowest: str) -> str | None:
+    """Return *value* when Specivo knows it, None when absent, else *narrowest*."""
+    if value is None or value == "":
+        return None
+    value = str(value).strip()
+    return value if value in known else narrowest
 
 
 # --------------------------------------------------------------------------

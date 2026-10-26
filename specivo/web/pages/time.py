@@ -51,7 +51,8 @@ async def time_entries_list(
 
     entries, total = await _time_svc.list_for_project(
         db,
-        project.id,
+        project,
+        user,
         user_id=safe_int(user_id),
         from_date=from_date,
         to_date=to_date,

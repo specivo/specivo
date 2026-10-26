@@ -424,7 +424,7 @@ async def get_issue(
         ]
 
     if "watchers" in include_set:
-        watcher_users = await _watcher_service.list_watchers(db, issue)
+        watcher_users = await _watcher_service.list_watchers(db, issue, viewer=current_user)
         watchers_out = [
             WatcherOut(
                 id=u.id,
@@ -815,7 +815,7 @@ async def list_watchers(
 ) -> list[WatcherOut]:
     """List users watching an issue."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
-    watcher_users = await _watcher_service.list_watchers(db, issue)
+    watcher_users = await _watcher_service.list_watchers(db, issue, viewer=current_user)
     return [
         WatcherOut(
             id=u.id,

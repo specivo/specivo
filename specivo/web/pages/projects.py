@@ -15,12 +15,12 @@ from specivo.core.constants import DEFAULT_PROJECT_COLORS
 from specivo.core.database import get_db
 from specivo.models.issue import Issue
 from specivo.models.project import Project
-from specivo.models.time_entry import TimeEntry
 from specivo.services.computed_metadata_service import computed_values
 from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission
 from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
+from specivo.services.time_entry_service import TimeEntryService
 from specivo.services.version_service import VersionService
 from specivo.web.deps import (
     get_current_user_optional,
@@ -38,6 +38,7 @@ _svc = ProjectService()
 _version_svc = VersionService()
 _issue_svc = IssueService()
 _tag_svc = TagService()
+_time_svc = TimeEntryService()
 
 # Status code -> label mapping
 _STATUS_LABELS = {1: "active", 5: "closed", 9: "archived"}
@@ -557,11 +558,8 @@ async def version_detail(
     estimated_hours = Decimal(0)
 
     if issue_ids:
-        # Sum time entries for these issues
-        time_result = await db.execute(
-            select(func.coalesce(func.sum(TimeEntry.hours), 0)).where(TimeEntry.issue_id.in_(issue_ids))
-        )
-        time_logged = Decimal(str(time_result.scalar_one()))
+        # Sum the time entries on these issues that the user may read
+        time_logged = await _time_svc.sum_hours_for_issues(db, issue_ids, project, user)
 
         # Sum estimated hours from issues
         est_result = await db.execute(

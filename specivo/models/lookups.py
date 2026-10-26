@@ -79,6 +79,9 @@ class Tracker(Base):
     Each tracker can have a default status applied when issues of that type
     are first created.  ``disabled_core_fields`` replaces the legacy bitmask
     with an explicit JSONB list of field names to hide in the UI.
+
+    ``private_by_default`` makes new issues of this type private unless the
+    creator, holding ``set_issues_private``, says otherwise.
     """
 
     __tablename__ = "trackers"
@@ -103,6 +106,9 @@ class Tracker(Base):
     # Replaces the legacy numeric bitmask with a human-readable JSONB list.
     # Example: ["due_date", "estimated_hours"]
     disabled_core_fields: Mapped[list] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
+
+    # New issues of this type start private; see IssueService.resolve_is_private
+    private_by_default: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
 
     def __repr__(self) -> str:
         return f"<Tracker id={self.id} name={self.name!r}>"

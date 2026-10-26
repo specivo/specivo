@@ -446,7 +446,11 @@ async def test_delete_others_entry_as_regular_user(
     project: Project,
     activity: TimeEntryActivity,
 ) -> None:
-    """Regular user cannot delete others' entries -> 403."""
+    """A regular user outside the (private) project cannot even see the entry -> 404.
+
+    The 403 for another user's entry in a reachable project is covered in
+    test_time_entry_visibility.py.
+    """
     entry = TimeEntryFactory.build(
         project_id=project.id,
         user_id=admin_user.id,
@@ -461,7 +465,7 @@ async def test_delete_others_entry_as_regular_user(
         f"/api/v1/time-entries/{entry.id}/",
         headers={"Authorization": f"Bearer {regular_token}"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio

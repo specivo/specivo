@@ -113,9 +113,16 @@ class RecurringPatternService:
         - The recurrence rule is validated for coherence (engine ValueError ->
           ValidationError).
         - ``assignee_rotation.user_ids`` is filtered to actual project members.
+        - ``is_private`` None takes the template tracker's
+          ``private_by_default``; overriding it needs ``set_issues_private``
+          (``IssueService.resolve_is_private``). Generated issues then carry
+          the pattern's stored value.
         """
         await self._metadata_schema_service.validate_metadata(
             session, project.id, data.template_tracker_id, data.template_metadata
+        )
+        is_private = await self._issue_service.resolve_is_private(
+            session, project, data.template_tracker_id, data.is_private, author
         )
         dtstart = self._anchor_dtstart(data.dtstart, data.timezone)
         self._validate_rule(
@@ -153,7 +160,7 @@ class RecurringPatternService:
             template_description=data.template_description,
             template_estimated_hours=data.template_estimated_hours,
             template_metadata=data.template_metadata,
-            is_private=data.is_private,
+            is_private=is_private,
             freq=data.freq,
             rrule_interval=data.rrule_interval,
             byday=data.byday,
@@ -599,6 +606,8 @@ class RecurringPatternService:
             author,
             recurring_pattern_id=pattern.id,
             original_occurrence_at=occurrence,
+            # The pattern's privacy was resolved, and authorised, when it was saved.
+            check_privacy_permission=False,
         )
 
         # Record provenance in the activity log: "Created from recurring pattern".

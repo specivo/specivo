@@ -218,6 +218,21 @@ class TestIssues:
         assert any("left unassigned" in w.message for w in ctx.summary.warnings)
 
 
+class TestPrivacy:
+    async def test_source_privacy_wins_over_a_private_by_default_tracker(self, db_session, loaded):
+        """An imported issue keeps the privacy it had in the source, both ways."""
+        lookups = _lookups()
+        lookups.trackers = [IRTracker(source_ref="1", name="Bug", default_status_ref="1", private_by_default=True)]
+        issues = [_issue("100", is_private=False), _issue("101", subject="Secret", is_private=True)]
+        ctx = await loaded(_adapter(lookups=lookups, issues=issues))
+        await load_issues(ctx)
+
+        public = await db_session.get(Issue, await ctx.id_map.get(db_session, EntityType.ISSUE, "100"))
+        private = await db_session.get(Issue, await ctx.id_map.get(db_session, EntityType.ISSUE, "101"))
+        assert public.is_private is False
+        assert private.is_private is True
+
+
 class TestHierarchy:
     async def test_child_is_attached_to_its_parent(self, db_session, loaded):
         issues = [_issue("100"), _issue("101", parent_ref="100", subject="Subtask")]

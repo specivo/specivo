@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
-from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
+from specivo.core.exceptions import AppError, ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.i18n import gettext as _
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
@@ -95,6 +95,47 @@ class IssueService:
                 status_code=422,
             )
         return status.id
+
+    async def resolve_is_private(
+        self,
+        session: AsyncSession,
+        project: Project,
+        tracker_id: int | None,
+        requested: bool | None,
+        user: User,
+        *,
+        check_permission_for_override: bool = True,
+    ) -> bool:
+        """Return whether a new issue of *tracker_id* in *project* is private.
+
+        ``requested`` None takes the tracker's ``private_by_default``. An
+        explicit value that differs from it is an override, which needs
+        ``set_issues_private`` (admins hold every permission); without it
+        ``PermissionDeniedError`` is raised. Callers replaying a decision taken
+        earlier — the recurring-pattern generator, the importer — pass
+        ``check_permission_for_override=False``.
+
+        The one place every creation path (REST API and so the web form, MCP,
+        recurring patterns, the importer) resolves issue privacy.
+        """
+        default = False
+        if tracker_id is not None:
+            tracker = await session.get(Tracker, tracker_id)
+            if tracker is None:
+                raise NotFoundError(f"Tracker {tracker_id} not found")
+            default = tracker.private_by_default
+        if requested is None or requested == default:
+            return default
+        if check_permission_for_override:
+            from specivo.services.permission_service import Permission, check_permission
+
+            if not await check_permission(user, project.id, Permission.SET_ISSUES_PRIVATE, session):
+                raise PermissionDeniedError(
+                    _("You do not have permission to set issue privacy")
+                    if requested
+                    else _("Issues of this tracker are private by default; you do not have permission to change that")
+                )
+        return requested
 
     async def _resolve_default_priority(self, session: AsyncSession) -> int:
         """Return the is_default=True priority, or the first active one."""
@@ -354,8 +395,13 @@ class IssueService:
         recurring_pattern_id: int | None = None,
         original_occurrence_at: datetime | None = None,
         skip_search_index: bool = False,
+        check_privacy_permission: bool = True,
     ) -> Issue:
         """Create an issue with an atomic per-project sequence number.
+
+        ``data.is_private`` None takes the tracker's ``private_by_default``;
+        see ``resolve_is_private``, which ``check_privacy_permission`` is passed
+        on to.
 
         Sequence assignment uses UPDATE … RETURNING so the increment and
         read are a single atomic database operation — no race condition
@@ -382,6 +428,15 @@ class IssueService:
         priority_id = data.priority_id
         if priority_id is None:
             priority_id = await self._resolve_default_priority(session)
+
+        is_private = await self.resolve_is_private(
+            session,
+            project,
+            data.tracker_id,
+            data.is_private,
+            author,
+            check_permission_for_override=check_privacy_permission,
+        )
 
         # Validate fixed_version_id if provided
         if data.fixed_version_id is not None:
@@ -446,7 +501,7 @@ class IssueService:
             due_date=data.due_date,
             estimated_hours=data.estimated_hours,
             done_ratio=data.done_ratio,
-            is_private=data.is_private,
+            is_private=is_private,
             # Recurrence provenance — set only by the recurring-pattern generator.
             recurring_pattern_id=recurring_pattern_id,
             original_occurrence_at=original_occurrence_at,
@@ -1212,27 +1267,6 @@ class IssueService:
 
         return issues, total_count
 
-    async def list_time_entries(
-        self,
-        session: AsyncSession,
-        issue_id: int,
-    ) -> list[Any]:
-        """Load the full time-entry list for an issue, including user + activity."""
-        from specivo.models.time_entry import TimeEntry
-
-        return list(
-            (
-                await session.execute(
-                    select(TimeEntry)
-                    .where(TimeEntry.issue_id == issue_id)
-                    .options(selectinload(TimeEntry.user), selectinload(TimeEntry.activity))
-                    .order_by(TimeEntry.spent_on.desc(), TimeEntry.id.desc())
-                )
-            )
-            .scalars()
-            .all()
-        )
-
     async def list_attachments(
         self,
         session: AsyncSession,
@@ -1253,37 +1287,6 @@ class IssueService:
             .scalars()
             .all()
         )
-
-    async def get_detail_tab_context(
-        self,
-        session: AsyncSession,
-        issue_id: int,
-    ) -> dict[str, Any]:
-        """Load tab-related data for the issue detail page.
-
-        Returns time entries list and attachments list. Counts and time_logged
-        sum are derived in Python from the loaded lists to avoid redundant
-        COUNT/SUM queries. Activities for the log-time dropdown come from the
-        process-local lookup cache (specivo.core.lookup_cache) — callers pass
-        them via the template context separately.
-
-        NOTE: Kept for backward compatibility. New code should call
-        list_time_entries() / list_attachments() separately so tab content can
-        be lazy-loaded via htmx partials.
-        """
-        time_entries = await self.list_time_entries(session, issue_id)
-        attachments = await self.list_attachments(session, issue_id)
-
-        # Derive counts and sum in Python from already-loaded lists
-        time_logged = sum((te.hours or 0) for te in time_entries)
-
-        return {
-            "time_entry_count": len(time_entries),
-            "attachment_count": len(attachments),
-            "time_logged": time_logged,
-            "time_entries": time_entries,
-            "attachments": attachments,
-        }
 
     async def autocomplete(
         self,

@@ -19,6 +19,11 @@ what the schema allows:
   permission vocabulary is its own, so an unmatched role arrives empty and is
   listed for an administrator to fill in — an empty role grants nothing, which
   is the safe direction to be wrong in.
+
+Role user and time entry visibility, and a tracker's private-by-default flag,
+carry over on the rows the import creates. A row Specivo already had is never
+rewritten, so when the source was narrower than that existing row the import
+warns: it would otherwise widen who sees users, logged time or new issues.
 """
 
 from __future__ import annotations
@@ -32,7 +37,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.importers.core.ir import EntityType, IRActivity, IRPriority, IRRole, IRStatus, IRTracker
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
-from specivo.models.role import Role
+from specivo.models.role import (
+    TIME_ENTRIES_VISIBILITY_ALL,
+    TIME_ENTRIES_VISIBILITY_OWN,
+    USERS_VISIBILITY_ALL,
+    USERS_VISIBILITY_MEMBERS,
+    Role,
+)
 from specivo.models.time_entry import TimeEntryActivity
 
 logger = logging.getLogger(__name__)
@@ -117,6 +128,12 @@ async def _load_trackers(ctx: PhaseContext, trackers: list[IRTracker]) -> None:
 
         existing = await _find_by_name(ctx.session, Tracker, ir.name)
         if existing is not None and ctx.options.merge_duplicate_statuses:
+            if ir.private_by_default and not existing.private_by_default:
+                ctx.warn(
+                    "Source tracker makes new issues private by default but was merged into a tracker"
+                    " that does not; set it on the tracker if that is still wanted",
+                    tracker=ir.name,
+                )
             await _map(ctx, EntityType.TRACKER, ir.source_ref, "trackers", existing.id)
             continue
 
@@ -134,6 +151,7 @@ async def _load_trackers(ctx: PhaseContext, trackers: list[IRTracker]) -> None:
             position=ir.position or 1,
             description=ir.description,
             disabled_core_fields=list(ir.disabled_core_fields),
+            private_by_default=ir.private_by_default,
         )
         await _create(ctx, row, EntityType.TRACKER, ir.source_ref, "trackers")
 
@@ -219,12 +237,39 @@ async def _load_roles(ctx: PhaseContext, roles: list[IRRole]) -> None:
             existing = await _find_by_name(ctx.session, Role, ir.name)
 
         if existing is not None:
+            _warn_if_reused_role_is_wider(ctx, ir, existing)
             await _map(ctx, EntityType.ROLE, ir.source_ref, "roles", existing.id)
             continue
 
-        row = Role(name=ir.name, builtin=ir.builtin, permissions=[], assignable=True)
+        row = Role(
+            name=ir.name,
+            builtin=ir.builtin,
+            permissions=[],
+            assignable=True,
+            users_visibility=ir.users_visibility or USERS_VISIBILITY_ALL,
+            time_entries_visibility=ir.time_entries_visibility or TIME_ENTRIES_VISIBILITY_ALL,
+        )
         await _create(ctx, row, EntityType.ROLE, ir.source_ref, "roles")
         ctx.summary.add_note(NOTE_ROLES_NEED_PERMISSIONS, ir.name)
+
+
+def _warn_if_reused_role_is_wider(ctx: PhaseContext, ir: IRRole, existing: Role) -> None:
+    """Warn when *existing*, reused for *ir*, lets its holders see more than the source role did."""
+    if ir.users_visibility == USERS_VISIBILITY_MEMBERS and existing.users_visibility != USERS_VISIBILITY_MEMBERS:
+        ctx.warn(
+            "Source role sees only members of visible projects, but the existing role it was matched to"
+            " sees all users; restrict the role if that is still wanted",
+            role=existing.name,
+        )
+    if (
+        ir.time_entries_visibility == TIME_ENTRIES_VISIBILITY_OWN
+        and existing.time_entries_visibility != TIME_ENTRIES_VISIBILITY_OWN
+    ):
+        ctx.warn(
+            "Source role sees only its own time entries, but the existing role it was matched to"
+            " sees all of them; restrict the role if that is still wanted",
+            role=existing.name,
+        )
 
 
 async def _create(ctx: PhaseContext, row: Any, entity_type: EntityType, source_ref: str, table: str) -> None:
