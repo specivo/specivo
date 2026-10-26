@@ -45,6 +45,31 @@ account, give it the Agent role on the projects it should touch, and issue it an
     A person can be a Manager in one project and a Reporter in another. Membership and role are set on
     each project, not globally.
 
+### What a role can see
+
+Besides its permissions, each role has two visibility settings, edited by an administrator under
+**Administration → Roles**:
+
+| Setting | Values | Default |
+|---|---|---|
+| **Users visibility** | **All active users**, or **Members of visible projects** — the person themselves plus everyone who is a member (directly or through a group) of a project they can open | All active users |
+| **Time entries visibility** | **All time entries** in the project, or **Own time entries** only | All time entries |
+
+*Users visibility* limits the people a member can find in user pickers (for example when adding
+a project member or typing a name) and in an issue's watcher list. *Time entries visibility*
+limits the project's Time area, an issue's time tab and its logged total, a version's logged total,
+billable-time reports and the dashboard's agent activity. Restricting time is the usual setup for
+contractors on a billable project: they log and see their own hours and nobody else's.
+
+Time entries visibility only matters for roles that have the **View time entries** permission;
+a person whose roles in a project lack it sees no time there at all, not even their own.
+
+When someone holds several roles, the **widest** setting wins, as in Redmine: one role with
+*View time entries* and *All time entries* on a project is enough to see every entry there, whatever
+their other roles say.
+For users, any role on any of their projects with *All active users* is enough; a person without
+any project role follows the built-in **Non member** role. Administrators always see everything.
+
 ## Project status
 
 A project is in one of three states:

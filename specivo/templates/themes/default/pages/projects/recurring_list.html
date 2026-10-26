@@ -44,7 +44,7 @@
       <div class="sp-empty-state">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 11-2.12-9.36L23 10"/></svg>
         <h3>{% trans %}No recurring tasks yet{% endtrans %}</h3>
-        <p x-text="canManage ? '{{ _('Create a pattern to generate issues automatically on a schedule.') }}' : '{{ _('No recurring patterns have been created for this project yet.') }}'"></p>
+        <p x-text="canManage ? labels.emptyCanManage : labels.emptyReadOnly"></p>
         <a class="sp-btn sp-btn-primary" href="/projects/{{ project.key }}/recurring-patterns/new/" x-show="canManage">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
           {% trans %}Create first pattern{% endtrans %}
@@ -74,13 +74,13 @@
                 <span class="date-val" x-text="scheduleLabel(p)"></span>
               </td>
               <td>
-                <span class="date-val" x-text="p.anchor_mode"></span>
+                <span class="date-val" x-text="anchorLabel(p)"></span>
               </td>
               <td>
-                <span class="badge-version" :class="p.enabled ? 'open' : 'closed'" x-text="p.enabled ? 'Enabled' : 'Disabled'"></span>
+                <span class="badge-version" :class="p.enabled ? 'open' : 'closed'" x-text="p.enabled ? labels.enabled : labels.disabled"></span>
               </td>
               <td class="td-actions sp-td-actions-right" x-show="canManage">
-                <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'" :aria-label="p.enabled ? '{{ _('Disable') }}' : '{{ _('Enable') }}'">
+                <button type="button" class="action-link" @click="toggleEnabled(p)" :title="p.enabled ? labels.disable : labels.enable" :aria-label="p.enabled ? labels.disable : labels.enable">
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 2v10M18.4 6.6a9 9 0 11-12.77.04"/></svg>
                 </button>
                 <a class="action-link" :href="'/projects/' + projectKey + '/recurring-patterns/' + p.id + '/edit/'" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">

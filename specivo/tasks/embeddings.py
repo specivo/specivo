@@ -1,146 +1,156 @@
 """Celery tasks for async embedding generation.
 
 Tasks:
-- generate_embeddings: Chunk content and generate embeddings for a single entity.
-- backfill_model_embeddings: Generate embeddings for all existing chunks using a new model.
+- embed_search_sources: Embed the chunks of the given sources that have no embedding yet.
+  Queued after every commit that writes chunks (see ``search_index_service``).
+- backfill_model_embeddings: Embed every chunk that has no embedding for a model, or re-embed them all.
+
+Both run on the ``EMBEDDING_QUEUE`` queue (see ``specivo.tasks``), so only the
+worker that consumes it loads the model.
 """
 
 from __future__ import annotations
 
 import logging
 
+from celery.signals import worker_ready  # type: ignore[import-untyped]
+
 from specivo.core.constants import CELERY_MAX_RETRIES, CELERY_RETRY_DELAY_EMBEDDING
-from specivo.schemas.search import SearchSourceType
-from specivo.tasks import celery_app
+from specivo.tasks import EMBEDDING_QUEUE, celery_app
 from specivo.tasks._async import run_async, task_session
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task(bind=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMBEDDING)
-def generate_embeddings(self, source_type: str, entity_id: int, project_id: int) -> None:  # type: ignore[no-untyped-def]
-    """Chunk content and generate embeddings for a source entity.
+@celery_app.task(
+    bind=True, ignore_result=True, max_retries=CELERY_MAX_RETRIES, default_retry_delay=CELERY_RETRY_DELAY_EMBEDDING
+)
+def embed_search_sources(self, sources: list[list]) -> None:  # type: ignore[no-untyped-def]
+    """Embed the chunks of *sources* that have no embedding for the default model.
 
-    Called on issue/wiki/journal create/update.
+    Idempotent: a source deleted or already embedded since the task was queued
+    is skipped, so a duplicate or late task costs one query per source. Does
+    nothing when no embedding model can run in this worker.
 
     Args:
-        source_type: One of :class:`SearchSourceType` string values
-            (``"issue"``, ``"wiki_page"``, ``"journal"``, ``"attachment"``).
-            Passed as a plain string because Celery serializes task args
-            to JSON via the broker.
-        entity_id: ID of the source entity.
-        project_id: ID of the project the entity belongs to.
+        sources: ``[source_type, entity_id]`` pairs, with source_type one of the
+            :class:`~specivo.schemas.search.SearchSourceType` values. Lists
+            rather than tuples because Celery serializes task args to JSON.
     """
+    from specivo.services.search_index_service import describe_error
+
     try:
-        run_async(_generate_embeddings_async(source_type, entity_id, project_id))
+        run_async(_embed_sources_async([(str(t), int(i)) for t, i in sources]))
     except Exception as exc:
-        logger.warning("Failed to generate embeddings for %s:%d: %s", source_type, entity_id, exc)
-        raise self.retry(exc=exc)
+        # The message of a database error quotes its parameters, i.e. content:
+        # keep it out of the warning and of the retry Celery records.
+        reason = describe_error(exc)
+        logger.warning("Embedding task failed for %d search source(s): %s", len(sources), reason)
+        logger.debug("Embedding task failure", exc_info=True)
+        raise self.retry(exc=RuntimeError(reason)) from None
 
 
-async def _generate_embeddings_async(source_type: str, entity_id: int, project_id: int) -> None:
-    """Async implementation of embedding generation."""
-    from specivo.services.chunking_service import ChunkingService
+async def _embed_sources_async(sources: list[tuple[str, int]]) -> None:
+    """Embed each source in its own transaction, so one failure loses only that source."""
     from specivo.services.embedding_service import EmbeddingService
+    from specivo.services.search_index_service import describe_error
 
-    chunking = ChunkingService()
-    embedding = EmbeddingService()
+    service = EmbeddingService()
 
     async with task_session() as session:
-        chunks: list[str] = []
+        model = await service.get_default_model(session)
+        if model is None or not service.is_model_usable(model):
+            logger.debug("No usable embedding model; skipping %d search source(s)", len(sources))
+            return
+        model_id = model.id
 
-        if source_type == SearchSourceType.ISSUE:
-            from sqlalchemy import select
+        for source_type, entity_id in sources:
+            try:
+                count = await service.embed_pending(session, [(source_type, entity_id)], model_id=model_id)
+                await session.commit()
+            except Exception as exc:  # noqa: BLE001 - one bad source must not block the rest
+                await session.rollback()
+                logger.warning("Embedding failed for %s %d: %s", source_type, entity_id, describe_error(exc))
+                logger.debug("Embedding failure for %s %d", source_type, entity_id, exc_info=True)
+                continue
+            if count:
+                logger.info("Embedded %d chunk(s) for %s %d", count, source_type, entity_id)
 
-            from specivo.models.issue import Issue
 
-            issue_result = await session.execute(select(Issue).where(Issue.id == entity_id))
-            issue = issue_result.scalar_one_or_none()
-            if issue:
-                chunks = chunking.chunk_issue(issue.subject, issue.description)
+def _consumes_embedding_queue(consumer: object) -> bool:
+    """Whether the starting worker listens on the embedding queue (True when unknown)."""
+    try:
+        queues = consumer.task_consumer.queues  # type: ignore[attr-defined]
+        return any(queue.name == EMBEDDING_QUEUE for queue in queues)
+    except Exception:  # noqa: BLE001 - only decides whether to log a status line
+        return True
 
-        elif source_type == SearchSourceType.WIKI_PAGE:
-            from sqlalchemy import select
 
-            from specivo.models.wiki import WikiContent, WikiPage
+@worker_ready.connect
+def _log_embedding_model_status(sender: object = None, **_kwargs) -> None:  # type: ignore[no-untyped-def]
+    """Say once, at start of the worker that embeds, whether semantic indexing can run there."""
+    if sender is not None and not _consumes_embedding_queue(sender):
+        return
+    try:
+        run_async(_log_model_status_async())
+    except Exception as exc:  # noqa: BLE001 - a status line must not stop the worker
+        from specivo.services.search_index_service import describe_error
 
-            page_result = await session.execute(select(WikiPage).where(WikiPage.id == entity_id))
-            page = page_result.scalar_one_or_none()
-            if page:
-                # Get latest content version
-                content_result = await session.execute(
-                    select(WikiContent)
-                    .where(WikiContent.page_id == page.id)
-                    .order_by(WikiContent.version.desc())
-                    .limit(1)
-                )
-                content = content_result.scalar_one_or_none()
-                if content:
-                    chunks = chunking.chunk_wiki_page(page.title, content.text)
+        logger.info("Could not check the embedding model at worker start: %s", describe_error(exc))
 
-        elif source_type == SearchSourceType.JOURNAL:
-            from sqlalchemy import select
 
-            from specivo.models.journal import Journal
+async def _log_model_status_async() -> None:
+    from specivo.services.embedding_service import EmbeddingService
 
-            journal_result = await session.execute(select(Journal).where(Journal.id == entity_id))
-            journal = journal_result.scalar_one_or_none()
-            if journal and journal.notes:
-                chunks = chunking.chunk_journal(journal.notes)
-
-        elif source_type == SearchSourceType.ATTACHMENT:
-            from sqlalchemy import select
-
-            from specivo.models.attachment import Attachment
-
-            att_result = await session.execute(select(Attachment).where(Attachment.id == entity_id))
-            att = att_result.scalar_one_or_none()
-            if att:
-                # Extract metadata content fields if available
-                meta: dict | None = getattr(att, "metadata", None)
-                extracted_text: str | None = None
-                ai_description: str | None = None
-                if meta:
-                    extracted_text = meta.get("extracted_text")
-                    ai_description = meta.get("ai_description")
-
-                description = att.description
-                if ai_description:
-                    description = f"{description}\n\n{ai_description}" if description else ai_description
-
-                chunks = chunking.chunk_attachment(
-                    att.filename,
-                    description,
-                    extracted_text=extracted_text,
-                )
-
-        if chunks:
-            await embedding.embed_source(session, source_type, entity_id, project_id, chunks)
-            await session.commit()
-            logger.info("Generated embeddings for %s:%d (%d chunks)", source_type, entity_id, len(chunks))
+    service = EmbeddingService()
+    async with task_session() as session:
+        model = await service.get_default_model(session)
+    if model is None:
+        logger.info("Semantic indexing is off: no default embedding model is registered")
+    elif service.is_model_usable(model):
+        logger.info("Semantic indexing is on: embedding with %s", model.name)
+    elif model.provider != "local":
+        logger.warning(
+            "Semantic indexing is off: embedding model %s uses provider %r, which is not supported "
+            "(only the bundled local model is); keyword search is unaffected",
+            model.name,
+            model.provider,
+        )
+    else:
+        logger.info(
+            "Semantic indexing is off: the files for embedding model %s are not in data/models; "
+            "keyword search is unaffected",
+            model.name,
+        )
 
 
 @celery_app.task(bind=True, max_retries=1, default_retry_delay=60)
-def backfill_model_embeddings(self, model_id: int) -> None:  # type: ignore[no-untyped-def]
-    """Generate embeddings for all existing chunks using a new model.
+def backfill_model_embeddings(self, model_id: int, reembed: bool = False) -> None:  # type: ignore[no-untyped-def]
+    """Embed the chunks that have no embedding for a model, or all chunks with *reembed*.
 
     Args:
         model_id: ID of the EmbeddingModel to backfill.
+        reembed: Recompute embeddings that already exist too.
     """
+    from specivo.services.search_index_service import describe_error
+
     try:
-        run_async(_backfill_async(model_id))
+        run_async(_backfill_async(model_id, reembed))
     except Exception as exc:
-        logger.warning("Failed to backfill model %d: %s", model_id, exc)
-        raise self.retry(exc=exc)
+        # As in embed_search_sources: a database error's message quotes chunk content.
+        reason = describe_error(exc)
+        logger.warning("Failed to backfill model %d: %s", model_id, reason)
+        logger.debug("Backfill failure for model %d", model_id, exc_info=True)
+        raise self.retry(exc=RuntimeError(reason)) from None
 
 
-async def _backfill_async(model_id: int) -> None:
+async def _backfill_async(model_id: int, reembed: bool = False) -> None:
     """Async implementation of model backfill."""
     from specivo.services.embedding_service import EmbeddingService
 
     embedding = EmbeddingService()
 
     async with task_session() as session:
-        count = await embedding.backfill_model(session, model_id)
+        count = await embedding.backfill_model(session, model_id, reembed=reembed)
         await session.commit()
         logger.info("Backfill complete: %d embeddings for model %d", count, model_id)

@@ -45,6 +45,10 @@ class PluginConfig(Protocol):
 
     def get_locale_dirs(self) -> list[tuple[Path, str]]: ...
 
+    def get_password_hashers(self) -> list: ...
+
+    def get_import_sources(self) -> list: ...
+
     def on_startup(self, app: Any) -> None: ...
 
 
@@ -97,6 +101,28 @@ class BasePluginConfig(ABC):
 
     def get_locale_dirs(self) -> list[tuple[Path, str]]:
         """Return ``(locale_directory, domain)`` tuples for translation catalogs."""
+        return []
+
+    def get_password_hashers(self) -> list:
+        """Return legacy password hashers to register (``PasswordHasher`` objects).
+
+        Usually ``WrappedLegacyHasher`` subclasses from
+        ``specivo.services.password_hashers``. Registering one does not enable
+        it: its ``algorithm`` must also be listed in
+        ``LEGACY_PASSWORD_ALGORITHMS``.
+        """
+        return []
+
+    def get_import_sources(self) -> list:
+        """Return import source adapter classes to register.
+
+        Usually ``BaseSourceAdapter`` subclasses from
+        ``specivo.importers.core.source``. Each is registered under its
+        ``source_system`` and becomes available as
+        ``python -m specivo.cli.import_data --source NAME``. A name another
+        source already uses, or the reserved ``redmine``, stops the process at
+        start.
+        """
         return []
 
     def on_startup(self, app: Any) -> None:

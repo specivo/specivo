@@ -3,7 +3,9 @@
 Who may do what in a project is decided here and nowhere else.
 ``get_user_roles`` resolves the roles a user holds in a project, and every
 access decision derives from it: ``check_permission``, issue visibility in
-``IssueService`` and, mirrored in SQL, the search visibility CTE.
+``IssueService``, time entry visibility in ``TimeEntryService`` and, mirrored
+in SQL, the search visibility CTE. User visibility (``visible_users_clause``)
+is the one cross-project rule, and it reads the same membership roles.
 
 Role resolution
 ---------------
@@ -22,6 +24,17 @@ The *anonymous role* is transient. It is built from
 ``projects.anonymous_permissions`` capped at ``ANONYMOUS_PERMISSION_CEILING``,
 and exists only while the instance switch is on, the project is public and
 active, and the capped list is not empty. No ``roles`` row stands for it.
+Its user and time entry visibility are the narrowest values, so holding it on
+top of the Non member role never widens what a signed-in user sees.
+
+Visibility settings
+-------------------
+Each role carries ``issues_visibility``, ``users_visibility`` and
+``time_entries_visibility``. When a user holds several roles the most
+permissive value wins, as in Redmine (``best_time_entries_visibility``,
+``visible_users_clause``, ``IssueService._best_visibility``). For time entries
+only the roles granting ``view_time_entries`` count: without one, a user reads
+no time entries in the project, not even their own.
 
 ``check_permission`` additionally denies the anonymous user anything outside
 the ceiling before it looks at a single role.
@@ -37,19 +50,26 @@ and the instance switch are never cached: a change applies to the next call.
 from __future__ import annotations
 
 import logging
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import or_, select
+from sqlalchemy import exists, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import PROJECT_STATUS_ACTIVE, Project
-from specivo.models.role import Role, RoleBuiltin
+from specivo.models.role import (
+    TIME_ENTRIES_VISIBILITY_ALL,
+    TIME_ENTRIES_VISIBILITY_OWN,
+    USERS_VISIBILITY_ALL,
+    USERS_VISIBILITY_MEMBERS,
+    Role,
+    RoleBuiltin,
+)
 from specivo.models.user import User
 from specivo.models.user_group import UserGroupMember
 
@@ -187,6 +207,8 @@ class ResolvedRole:
     name: str
     permissions: frozenset[str]
     issues_visibility: str
+    users_visibility: str = USERS_VISIBILITY_ALL
+    time_entries_visibility: str = TIME_ENTRIES_VISIBILITY_ALL
     builtin: int = RoleBuiltin.CUSTOM
     transient: bool = False
 
@@ -197,6 +219,8 @@ class ResolvedRole:
             name=role.name,
             permissions=frozenset(role.permissions or ()),
             issues_visibility=role.issues_visibility,
+            users_visibility=role.users_visibility,
+            time_entries_visibility=role.time_entries_visibility,
             builtin=role.builtin,
         )
 
@@ -295,6 +319,9 @@ async def anonymous_role(session: AsyncSession, project: Project) -> ResolvedRol
         name=ANONYMOUS_ROLE_NAME,
         permissions=permissions,
         issues_visibility="default",
+        # The narrowest values: on top of the Non member role they never widen anything.
+        users_visibility=USERS_VISIBILITY_MEMBERS,
+        time_entries_visibility=TIME_ENTRIES_VISIBILITY_OWN,
         transient=True,
     )
 
@@ -323,6 +350,109 @@ async def get_user_roles(session: AsyncSession, user: User, project: Project) ->
     if anonymous is not None:
         roles.append(anonymous)
     return roles
+
+
+# ---------------------------------------------------------------------------
+# Visibility of time entries and users
+# ---------------------------------------------------------------------------
+
+
+def best_time_entries_visibility(visibilities: Iterable[str]) -> str | None:
+    """Return the most permissive of the roles' ``time_entries_visibility`` values.
+
+    *visibilities* must come only from the roles that grant
+    ``view_time_entries``, as in Redmine: a role without the permission
+    contributes nothing, whatever its setting. None when no such role exists
+    (the user reads no entries at all), ``"own"`` when every one is
+    ``"own"``, otherwise ``"all"``.
+    """
+    seen = set(visibilities)
+    if not seen:
+        return None
+    if seen <= {TIME_ENTRIES_VISIBILITY_OWN}:
+        return TIME_ENTRIES_VISIBILITY_OWN
+    return TIME_ENTRIES_VISIBILITY_ALL
+
+
+async def time_entries_visibility(session: AsyncSession, user: User, project: Project) -> str | None:
+    """Return the time entries *user* may read in *project*: ``"all"``, ``"own"`` or None for none.
+
+    Admins see all. Everyone else follows the roles from ``get_user_roles``
+    that grant ``view_time_entries``; the anonymous user never holds it
+    (``ANONYMOUS_PERMISSION_CEILING``).
+    """
+    if user.is_admin:
+        return TIME_ENTRIES_VISIBILITY_ALL
+    if user.is_anonymous:
+        return None
+    roles = await get_user_roles(session, user, project)
+    return best_time_entries_visibility(
+        role.time_entries_visibility for role in roles if role.grants(Permission.VIEW_TIME_ENTRIES)
+    )
+
+
+async def sees_all_users(session: AsyncSession, user: User) -> bool:
+    """Return whether *user* may list every user rather than the members of reachable projects.
+
+    Follows Redmine: when the user's memberships (their own and their groups')
+    carry roles, any of those roles with ``users_visibility = 'all'`` is
+    enough; a user without any membership role falls back to the Non member
+    role. The anonymous user never sees all users. Admins always do.
+    """
+    if user.is_admin:
+        return True
+    if user.is_anonymous:
+        return False
+
+    membership_roles = (
+        select(Role.users_visibility)
+        .select_from(Member)
+        .join(MemberRole, MemberRole.member_id == Member.id)
+        .join(Role, Role.id == MemberRole.role_id)
+        .where(member_principal_clause(user.id))
+    )
+    visibilities = set((await session.execute(membership_roles.distinct())).scalars().all())
+    if visibilities:
+        return USERS_VISIBILITY_ALL in visibilities
+
+    non_member = await get_non_member_role(session)
+    # No Non member row means an unmigrated database; keep the permissive default.
+    return non_member is None or non_member.users_visibility == USERS_VISIBILITY_ALL
+
+
+async def visible_users_clause(session: AsyncSession, viewer: User) -> ColumnElement[bool] | None:
+    """Return a predicate over ``users`` selecting the users *viewer* may list, or None for no limit.
+
+    The one definition behind every user listing a non-admin can reach (user
+    autocomplete, watcher lists). None when ``sees_all_users``; otherwise the
+    viewer themselves plus every user holding a membership — directly or
+    through a user group — on a project the viewer can reach
+    (``ProjectService.accessible_projects_clause``).
+
+    It only narrows: callers keep their own filters (active users,
+    ``real_users_clause``).
+    """
+    if await sees_all_users(session, viewer):
+        return None
+
+    from specivo.services.project_service import ProjectService
+
+    accessible = await ProjectService().accessible_projects_clause(session, viewer)
+    reachable = select(Project.id)
+    if accessible is not None:
+        reachable = reachable.where(accessible)
+
+    direct = select(Member.user_id.label("user_id")).where(
+        Member.user_id.is_not(None), Member.project_id.in_(reachable)
+    )
+    via_group = (
+        select(UserGroupMember.user_id.label("user_id"))
+        .join(Member, Member.group_id == UserGroupMember.group_id)
+        .where(Member.project_id.in_(reachable))
+    )
+    member_ids = union(direct, via_group).subquery()
+    is_member = exists(select(member_ids.c.user_id).where(member_ids.c.user_id == User.id))
+    return or_(User.id == viewer.id, is_member)
 
 
 # ---------------------------------------------------------------------------

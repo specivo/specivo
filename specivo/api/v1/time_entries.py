@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
+from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.core.utils import utcnow
 from specivo.models.user import User
@@ -22,6 +23,7 @@ from specivo.schemas.time_entry import (
     TimerStartRequest,
     TimerStopRequest,
 )
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.time_entry_service import TimeEntryService
 
@@ -98,12 +100,17 @@ async def list_activities(
 async def create_time_entry(
     project_key: str,
     data: TimeEntryCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryOut:
-    """Create a time entry in the given project."""
+    """Create a time entry in the given project.
+
+    Requires ``log_time`` there (403), and an ``issue_id`` must name an issue
+    of that project the caller can see.
+    """
     project = await _project_service.get_by_key(db, project_key.upper())
-    await _project_service.require_project_access(db, project, current_user)
+    await _service.require_can_log(db, current_user, project, data.issue_id, request=request)
     entry = await _service.create(db, project.id, data, current_user)
     entry = await _service.get_by_id(db, entry.id)
     return _entry_out(entry)
@@ -115,6 +122,7 @@ async def create_time_entry(
 )
 async def list_time_entries(
     project_key: str,
+    request: Request,
     user_id: int | None = Query(default=None),
     from_date: date | None = Query(default=None),
     to_date: date | None = Query(default=None),
@@ -123,12 +131,20 @@ async def list_time_entries(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryListResponse:
-    """List time entries for a project with optional filters."""
+    """List the project's time entries the caller may read, with optional filters.
+
+    Requires ``view_time_entries`` (403 without it). When every role granting
+    it has ``time_entries_visibility = 'own'``, the list holds only the
+    caller's own entries.
+    """
     project = await _project_service.get_by_key(db, project_key.upper())
     await _project_service.require_project_access(db, project, current_user)
+    if not await check_permission(current_user, project.id, Permission.VIEW_TIME_ENTRIES, db, request=request):
+        raise PermissionDeniedError("You do not have permission to view time entries in this project")
     entries, total = await _service.list_for_project(
         db,
-        project.id,
+        project,
+        current_user,
         user_id=user_id,
         from_date=from_date,
         to_date=to_date,
@@ -157,8 +173,8 @@ async def get_time_entry(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryOut:
-    """Get a single time entry by ID."""
-    entry = await _service.get_by_id(db, entry_id)
+    """Get a single time entry by ID; 404 unless the caller may read it."""
+    entry = await _service.get_visible(db, entry_id, current_user)
     return _entry_out(entry)
 
 
@@ -172,8 +188,11 @@ async def update_time_entry(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryOut:
-    """Update a time entry (owner or admin)."""
-    entry = await _service.get_by_id(db, entry_id)
+    """Update a time entry: any with ``manage_time_entries``, else only one's own with ``log_time``.
+
+    404 for an entry the caller cannot read, 403 for one they can read but not edit.
+    """
+    entry = await _service.get_visible(db, entry_id, current_user)
     entry = await _service.update(db, entry, data, current_user)
     entry = await _service.get_by_id(db, entry.id)
     return _entry_out(entry)
@@ -188,8 +207,11 @@ async def delete_time_entry(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete a time entry (owner or admin)."""
-    entry = await _service.get_by_id(db, entry_id)
+    """Delete a time entry: any with ``manage_time_entries``, else only one's own with ``log_time``.
+
+    404 for an entry the caller cannot read, 403 for one they can read but not delete.
+    """
+    entry = await _service.get_visible(db, entry_id, current_user)
     await _service.delete(db, entry, current_user)
 
 
@@ -220,16 +242,22 @@ async def get_timer(
 )
 async def start_timer(
     data: TimerStartRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimerOut:
-    """Start a timer. Auto-stops existing timer if any."""
+    """Start a timer. Auto-stops existing timer if any.
+
+    Requires ``log_time`` in the project (404 for a project or issue the
+    caller cannot see, 403 without the permission).
+    """
     timer = await _service.start_timer(
         db,
         current_user,
         project_id=data.project_id,
         issue_id=data.issue_id,
         comments=data.comments,
+        request=request,
     )
     return _timer_out(timer)
 
@@ -241,11 +269,16 @@ async def start_timer(
 )
 async def stop_timer(
     data: TimerStopRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> TimeEntryOut:
-    """Stop the current timer and create a time entry."""
-    entry = await _service.stop_timer(db, current_user, data.activity_id)
+    """Stop the current timer and create a time entry.
+
+    Permissions are checked again: a timer the caller may no longer log is
+    discarded and the request refused (404 or 403).
+    """
+    entry = await _service.stop_timer(db, current_user, data.activity_id, request=request)
     entry = await _service.get_by_id(db, entry.id)
     await db.commit()  # commit before response to avoid reload race condition
     return _entry_out(entry)

@@ -267,6 +267,15 @@ async def specivo_create_issue(
             )
         ),
     ] = None,
+    is_private: Annotated[
+        bool | None,
+        Field(
+            description=(
+                "Omit to use the tracker's private-by-default setting. "
+                "Overriding it needs the set_issues_private permission."
+            )
+        ),
+    ] = None,
 ) -> str:
     """Create a new issue in a project.
 
@@ -287,6 +296,7 @@ async def specivo_create_issue(
             fixed_version_id,
             sprint_id,
             metadata,
+            is_private,
         )
 
 
@@ -383,8 +393,10 @@ async def specivo_search(
 
     Defaults to hybrid search, which fuses full-text (tsvector) and semantic
     (pgvector) results via reciprocal-rank fusion — best general-purpose recall.
-    Use mode='keyword' for exact-text/identifier queries or mode='semantic'
-    for conceptual lookups.
+    Use mode='keyword' for exact-text queries or mode='semantic' for conceptual
+    lookups. Issue references such as ACME-42 work in every mode: the issue
+    itself is listed first (also under a reference it had before a move), and
+    issues, comments and wiki pages mentioning it follow.
 
     Returns results with type, title, subtitle, and snippet.
     Use project_key to narrow results to a single project.

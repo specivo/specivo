@@ -27,15 +27,27 @@ from specivo.importers.load.project_loader import (
     load_projects,
     restore_version_statuses,
 )
+from specivo.importers.load.public_access_loader import load_public_access
 from specivo.importers.load.reference_rewrite import rewrite_issue_references
 from specivo.importers.load.search_index import backfill_search_index, rebuild_wiki_link_graph
 from specivo.importers.load.time_entry_loader import load_time_entries
-from specivo.importers.load.user_loader import ensure_import_account, load_groups, load_users
+from specivo.importers.load.user_loader import (
+    check_credential_import,
+    ensure_import_account,
+    load_groups,
+    load_users,
+)
 from specivo.importers.load.wiki_loader import load_wiki_pages, load_wiki_redirects, load_wiki_watchers
 
 
 async def _bootstrap(ctx: PhaseContext) -> None:
-    """Create the account that owns anything with no resolvable author."""
+    """Check the run can do what it was asked, then create the import account.
+
+    The account owns anything with no resolvable author. The check comes first
+    so a run that cannot import the passwords it was asked to stops before it
+    writes anything.
+    """
+    check_credential_import(ctx)
     await ensure_import_account(ctx)
 
 
@@ -46,6 +58,16 @@ async def _users_and_groups(ctx: PhaseContext) -> None:
     """
     await load_users(ctx)
     await load_groups(ctx)
+
+
+async def _memberships(ctx: PhaseContext) -> None:
+    """Import project memberships, then what non-members and anonymous visitors could read.
+
+    Access for people without a membership needs the projects to exist, and
+    belongs with the access people with one were given.
+    """
+    await load_memberships(ctx)
+    await load_public_access(ctx)
 
 
 async def _after_issues(ctx: PhaseContext) -> None:
@@ -75,7 +97,7 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.USERS: _users_and_groups,
             ImportPhase.PROJECTS: load_projects,
             ImportPhase.PROJECT_LOOKUPS: load_project_lookups,
-            ImportPhase.MEMBERSHIPS: load_memberships,
+            ImportPhase.MEMBERSHIPS: _memberships,
             ImportPhase.CUSTOM_FIELD_SCHEMAS: load_custom_field_schemas,
             ImportPhase.ISSUES: load_issues,
             ImportPhase.WATCHERS: load_watchers,

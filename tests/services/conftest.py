@@ -68,8 +68,10 @@ class FakeAdapter:
         dropped: dict[str, list[str]] | None = None,
         source_format: str = "textile",
         source_system: str = "redmine",
+        credential_algorithms: tuple[str, ...] = (),
     ) -> None:
         self.source_system = source_system
+        self.credential_algorithms = credential_algorithms
         self.source_instance = "tracker.example.org"
         self.lookups = lookups or IRLookups()
         self.users = users or []
@@ -91,6 +93,12 @@ class FakeAdapter:
         self.source_files_dir = files_dir
         self._dropped = dropped or {}
         self.source_format = source_format
+
+    def content_converter(self):
+        """Redmine's converter, which the loader tests were written against."""
+        from specivo.importers.redmine.textile_convert import RedmineTextileConverter
+
+        return RedmineTextileConverter()
 
     async def connect(self) -> None:
         return None

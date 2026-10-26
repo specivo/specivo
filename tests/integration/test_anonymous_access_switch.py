@@ -311,13 +311,14 @@ async def test_generic_settings_endpoint_cannot_bypass_the_switch_endpoint(
 
 
 async def test_the_importer_never_touches_the_switch() -> None:
+    """The importer may read the switch, to refuse opting projects in while it is on, but never write it."""
     importer_root = Path(specivo.importers.__file__).parent
     names = (ANONYMOUS_ACCESS_SETTING_KEY, "ANONYMOUS_ACCESS_SETTING_KEY", "set_anonymous_access_enabled")
 
     offenders = [
         str(path.relative_to(importer_root))
         for path in importer_root.rglob("*.py")
-        if any(name in path.read_text(encoding="utf-8") for name in names)
+        if any(name in path.read_text(encoding="utf-8").replace("is_anonymous_access_enabled", "") for name in names)
     ]
 
     assert offenders == []

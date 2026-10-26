@@ -34,7 +34,8 @@ Press <kbd>⌘K</kbd> (<kbd>Ctrl+K</kbd> on Windows/Linux) anywhere in Specivo t
 ![Search](../assets/img/search.webp)
 
 Specivo uses **hybrid search** — it combines exact **keyword** matching with **semantic** (meaning-based)
-matching, so it finds the right work even when the wording differs. Search "auth flow" and it can still
+matching, so it finds the right work even when the wording differs. (The semantic half needs an
+embedding model that your administrator has installed; see below.) Search "auth flow" and it can still
 surface an issue you wrote about the "login sequence". It searches across:
 
 - issues (subjects and descriptions)
@@ -42,7 +43,18 @@ surface an issue you wrote about the "login sequence". It searches across:
 - comments
 - attachment descriptions
 
+!!! tip "Search by issue key"
+    Type an issue key such as `ACME-42` (in any case) to put that issue at the top of the results, in
+    any search mode. A key the issue had before it was [moved](updating.md#move-an-issue-to-another-project) to another project, or
+    under a project's old key after a rename, finds it too. Below it you get the issues, comments,
+    and wiki pages that mention the key. Keys from other trackers that appear in your text, like
+    `DO-8795`, are found the same way. You can add other words too: `ACME-42 login` finds what
+    mentions both.
+
 !!! note "Semantic results not showing up?"
-    Semantic search relies on an index the operator builds on the server. Until that's in place, keyword
-    search still works — you just won't get the meaning-based matches. See
+    Semantic search relies on an embedding model and an index that the operator sets up on the server.
+    Until that's in place, keyword search still works — you just won't get the meaning-based matches.
+    Keyword search finds what you save straight away; meaning-based matches follow a few seconds
+    later, once the server has processed the change. Operators: see
+    [Semantic search and embeddings](../install/semantic-search.md). See
     [Troubleshooting](../reference/troubleshooting.md) if results look thin.

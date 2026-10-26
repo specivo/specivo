@@ -1,267 +1,311 @@
-"""Backfill search index: chunk all issues and wiki pages, then generate embeddings.
+"""Rebuild the search index: chunk every issue, wiki page, comment and attachment, then embed the chunks.
 
-Each batch of entities is committed independently so progress survives
-crashes. Safe to re-run — existing sources are updated in place
-(old chunks/embeddings are replaced).
+Chunks are what keyword search reads, and they need no model. Embeddings are
+what semantic search reads, and they need the embedding model files in
+``data/models``. Without them the command still writes every chunk, says so,
+and exits 0; ``--require-model`` makes that an error instead.
+
+Each source is brought in line with the database as it is now:
+
+* issues and wiki pages get their chunks rewritten when the text changed;
+* every attachment is indexed (its filename alone is enough), whatever it is
+  attached to: an issue, a comment or a wiki page;
+* comments follow the current ``SEARCH_INDEX_COMMENTS``,
+  ``SEARCH_MIN_COMMENT_LENGTH`` and ``SEARCH_EXCLUDE_BOT_COMMENTS`` settings, so
+  chunks of comments those settings now exclude are removed;
+* sources whose item no longer exists, or a trashed wiki page, are removed.
+
+Chunks whose text is unchanged keep their embeddings, so the command is cheap
+to re-run. ``--reembed`` recomputes the embedding of every chunk, for example
+after replacing the model files. Work is committed in small batches, so an
+interrupted run loses little.
+
+Exit status: 0 on success (with or without a model), 1 when some sources could
+not be indexed or the run failed, 2 when ``--require-model`` is given and no
+model can run.
 
 Usage:
-    python -m specivo.cli.backfill_embeddings
-    # or via Makefile:
-    make backfill-embeddings
+    python -m specivo.cli.backfill_embeddings [--reembed] [--require-model]
+    # or, from the directory that holds docker-compose.yml:
+    make backfill-embeddings ARGS=--reembed
 """
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
 import sys
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import Select, delete, func, select, union
+from sqlalchemy.engine import Connection
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import Session
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
-logger = logging.getLogger(__name__)
+from specivo.models.attachment import Attachment
+from specivo.models.issue import Issue
+from specivo.models.journal import Journal
+from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
+from specivo.models.wiki import WikiPage
+from specivo.schemas.search import SearchSourceType
+from specivo.services.search_index_service import describe_error
 
-# How many entities to process per committed batch.
-BATCH_SIZE = 5
+logger = logging.getLogger("specivo.cli.backfill_embeddings")
+
+#: Sources per committed batch. Embedding is the slow part, so keep it small.
+BATCH_SIZE = 20
+
+EXIT_OK = 0
+EXIT_ERRORS = 1
+EXIT_NO_MODEL = 2
+
+_SOURCE_TYPES = (
+    SearchSourceType.ISSUE.value,
+    SearchSourceType.WIKI_PAGE.value,
+    SearchSourceType.JOURNAL.value,
+    SearchSourceType.ATTACHMENT.value,
+)
+_LABELS = {
+    SearchSourceType.ISSUE.value: "issues",
+    SearchSourceType.WIKI_PAGE.value: "wiki pages",
+    SearchSourceType.JOURNAL.value: "comments",
+    SearchSourceType.ATTACHMENT.value: "attachments",
+}
 
 
-async def _backfill() -> None:
-    from specivo.models.attachment import Attachment
-    from specivo.models.issue import Issue
-    from specivo.models.journal import Journal
-    from specivo.models.search import EmbeddingModel
-    from specivo.models.wiki import Wiki, WikiContent, WikiPage
-    from specivo.schemas.search import SearchSourceType
-    from specivo.services.chunking_service import ChunkingService
+@dataclass
+class BackfillReport:
+    """What a backfill run did."""
+
+    model_name: str | None = None
+    model_usable: bool = False
+    reembed: bool = False
+    sources_chunked: int = 0
+    chunks: int = 0
+    sources_removed: int = 0
+    chunks_embedded: int = 0
+    failures: int = 0
+    chunks_total: int = 0
+    chunks_with_embedding: int = 0
+
+    @property
+    def exit_code(self) -> int:
+        return EXIT_ERRORS if self.failures else EXIT_OK
+
+
+def _candidate_ids(source_type: str) -> Select[Any]:
+    """Entity ids to visit for *source_type*: every item that could be indexed, plus every indexed one."""
+    if source_type == SearchSourceType.ISSUE.value:
+        entities = select(Issue.id.label("id"))
+    elif source_type == SearchSourceType.WIKI_PAGE.value:
+        entities = select(WikiPage.id.label("id"))
+    elif source_type == SearchSourceType.JOURNAL.value:
+        entities = select(Journal.id.label("id")).where(Journal.notes.isnot(None), Journal.notes != "")
+    else:
+        entities = select(Attachment.id.label("id"))
+    indexed = select(SearchSource.entity_id.label("id")).where(SearchSource.source_type == source_type)
+    ids = union(entities, indexed).subquery()
+    return select(ids.c.id)
+
+
+def _sync_source(conn: Connection, source_type: str, entity_id: int) -> tuple[int, bool]:
+    """Bring one source in line with the database; return ``(chunk count, removed)``."""
+    from specivo.services.search_index_service import load_source_chunks, write_source_chunks
+
+    with conn.begin_nested():
+        loaded = load_source_chunks(conn, source_type, entity_id)
+        if loaded is None or not loaded[1]:
+            result = conn.execute(
+                delete(SearchSource).where(SearchSource.source_type == source_type, SearchSource.entity_id == entity_id)
+            )
+            return 0, bool(result.rowcount)
+        project_id, chunks = loaded
+        write_source_chunks(conn, source_type, entity_id, project_id, chunks)
+        return len(chunks), False
+
+
+def _sync_in_session(session: Session, source_type: str, entity_id: int) -> tuple[int, bool]:
+    return _sync_source(session.connection(), source_type, entity_id)
+
+
+async def _default_model(session: AsyncSession) -> EmbeddingModel | None:
     from specivo.services.embedding_service import EmbeddingService
 
-    chunker = ChunkingService()
-    embedder = EmbeddingService()
+    return await EmbeddingService().get_default_model(session)
 
-    # Import factory late to allow env/config setup
+
+async def _coverage(session: AsyncSession, model_id: int | None) -> tuple[int, int]:
+    total = (await session.execute(select(func.count()).select_from(SearchChunk))).scalar_one()
+    if model_id is None:
+        return total, 0
+    embedded = (
+        await session.execute(
+            select(func.count()).select_from(ChunkEmbedding).where(ChunkEmbedding.model_id == model_id)
+        )
+    ).scalar_one()
+    return total, embedded
+
+
+async def run_backfill(
+    factory: async_sessionmaker[AsyncSession],
+    *,
+    reembed: bool = False,
+    log: Callable[[str], None] = logger.info,
+) -> BackfillReport:
+    """Rebuild every source's chunks and embed them when the default model can run."""
+    from specivo.services.embedding_service import EmbeddingService
+
+    embedder = EmbeddingService()
+    report = BackfillReport(reembed=reembed)
+
+    async with factory() as session:
+        model = await _default_model(session)
+        model_id = model.id if model is not None else None
+        report.model_name = model.name if model is not None else None
+        report.model_usable = model is not None and embedder.is_model_usable(model)
+        totals = {
+            source_type: (
+                await session.execute(select(func.count()).select_from(_candidate_ids(source_type).subquery()))
+            ).scalar_one()
+            for source_type in _SOURCE_TYPES
+        }
+    log(", ".join(f"{totals[t]} {_LABELS[t]}" for t in _SOURCE_TYPES) + " to check")
+
+    start = time.monotonic()
+    for source_type in _SOURCE_TYPES:
+        done = 0
+        last_id = 0
+        while True:
+            async with factory() as session:
+                ids_query = _candidate_ids(source_type).subquery()
+                batch = list(
+                    (
+                        await session.execute(
+                            select(ids_query.c.id)
+                            .where(ids_query.c.id > last_id)
+                            .order_by(ids_query.c.id)
+                            .limit(BATCH_SIZE)
+                        )
+                    ).scalars()
+                )
+                if not batch:
+                    break
+                last_id = batch[-1]
+
+                for entity_id in batch:
+                    done += 1
+                    try:
+                        chunk_count, removed = await session.run_sync(_sync_in_session, source_type, entity_id)
+                    except Exception as exc:  # noqa: BLE001 - one bad source must not stop the run
+                        report.failures += 1
+                        logger.warning("  Could not index %s %d: %s", source_type, entity_id, describe_error(exc))
+                        logger.debug("Index failure for %s %d", source_type, entity_id, exc_info=True)
+                        continue
+                    if removed:
+                        report.sources_removed += 1
+                    if not chunk_count:
+                        continue
+                    report.sources_chunked += 1
+                    report.chunks += chunk_count
+                    if not report.model_usable:
+                        continue
+                    try:
+                        # A Core savepoint, like the chunk sync: only Core rows are
+                        # written here, so the session holds no state to unwind.
+                        conn = await session.connection()
+                        async with conn.begin_nested():
+                            report.chunks_embedded += await embedder.embed_pending(
+                                session, [(source_type, entity_id)], model_id=model_id, reembed=reembed
+                            )
+                    except Exception as exc:  # noqa: BLE001 - keep the chunks, report the failure
+                        report.failures += 1
+                        logger.warning("  Could not embed %s %d: %s", source_type, entity_id, describe_error(exc))
+                        logger.debug("Embed failure for %s %d", source_type, entity_id, exc_info=True)
+                await session.commit()
+            if done % (BATCH_SIZE * 5) < BATCH_SIZE or done >= totals[source_type]:
+                log(f"  {_LABELS[source_type]}: {done}/{totals[source_type]} ({time.monotonic() - start:.1f}s)")
+
+    async with factory() as session:
+        report.chunks_total, report.chunks_with_embedding = await _coverage(session, model_id)
+    return report
+
+
+def summarize(report: BackfillReport, log: Callable[[str], None] = logger.info) -> None:
+    """Print what the run did, and say plainly when semantic search stays off."""
+    log(
+        f"Chunked {report.sources_chunked} sources into {report.chunks} chunks; "
+        f"removed {report.sources_removed} stale sources."
+    )
+    if report.model_usable:
+        verb = "Re-embedded" if report.reembed else "Embedded"
+        log(
+            f"{verb} {report.chunks_embedded} chunks with {report.model_name}; "
+            f"{report.chunks_with_embedding} of {report.chunks_total} chunks now have an embedding."
+        )
+    else:
+        reason = (
+            "no default embedding model is registered"
+            if report.model_name is None
+            else f"the files for {report.model_name} are not in data/models"
+        )
+        logger.warning(
+            "WARNING: %s. Only keyword-search chunks were written; 0 chunks were embedded and semantic "
+            "search stays off. Download the model (python -m specivo.cli.download_model) and run this "
+            "command again.",
+            reason[0].upper() + reason[1:],
+        )
+    if report.failures:
+        logger.error("%d sources could not be indexed; see the warnings above.", report.failures)
+
+
+async def _main_async(reembed: bool, require_model: bool) -> int:
     from specivo.core.database import get_session_factory
+    from specivo.services.embedding_service import EmbeddingService
 
     factory = get_session_factory()
-
-    # Verify embedding model exists
-    async with factory() as session:
-        model = (
-            await session.execute(select(EmbeddingModel).where(EmbeddingModel.is_default.is_(True)))
-        ).scalar_one_or_none()
-        if model is None:
-            logger.error("No default embedding model found. Run 'make seed' first.")
-            sys.exit(1)
-
-        logger.info("Embedding model: %s (provider=%s, dims=%d)", model.name, model.provider, model.dimensions)
-        # Count entities
-        issue_count = (await session.execute(select(func.count()).select_from(Issue))).scalar_one()
-        wiki_count = (await session.execute(select(func.count()).select_from(WikiPage))).scalar_one()
-        comment_count = (
-            await session.execute(
-                select(func.count()).select_from(Journal).where(Journal.notes.isnot(None), Journal.notes != "")
+    if require_model:
+        async with factory() as session:
+            model = await _default_model(session)
+        if model is None or not EmbeddingService().is_model_usable(model):
+            logger.error(
+                "No embedding model can run (%s); nothing was done because --require-model was given.",
+                "none is registered" if model is None else f"the files for {model.name} are missing",
             )
-        ).scalar_one()
-        attachment_count = (
-            await session.execute(
-                select(func.count())
-                .select_from(Attachment)
-                .where(Attachment.description.isnot(None), Attachment.description != "")
-            )
-        ).scalar_one()
+            return EXIT_NO_MODEL
 
-    total = issue_count + wiki_count + comment_count + attachment_count
-    logger.info(
-        "Found %d issues, %d wiki pages, %d comments, %d attachments to index",
-        issue_count,
-        wiki_count,
-        comment_count,
-        attachment_count,
+    report = await run_backfill(factory, reembed=reembed)
+    summarize(report)
+    return report.exit_code
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        prog="python -m specivo.cli.backfill_embeddings",
+        description="Rebuild search chunks for all content and embed them with the default model.",
     )
-    if total == 0:
-        logger.info("Nothing to backfill.")
-        return
-
-    start = time.time()
-    total_chunks = 0
-    processed = 0
-
-    def _log_progress() -> None:
-        elapsed = time.time() - start
-        logger.info(
-            "  [%d/%d] %.0f%% — %d chunks (%.1fs)",
-            processed,
-            total,
-            processed / total * 100,
-            total_chunks,
-            elapsed,
-        )
-
-    # --- Issues ---
-    for offset in range(0, issue_count, BATCH_SIZE):
-        async with factory() as session:
-            issues = (
-                (await session.execute(select(Issue).order_by(Issue.id).offset(offset).limit(BATCH_SIZE)))
-                .scalars()
-                .all()
-            )
-
-            for issue in issues:
-                processed += 1
-                chunks = chunker.chunk_issue(issue.subject, issue.description)
-                if chunks:
-                    try:
-                        async with session.begin_nested():
-                            await embedder.embed_source(
-                                session, SearchSourceType.ISSUE, issue.id, issue.project_id, chunks
-                            )
-                            total_chunks += len(chunks)
-                    except Exception as e:
-                        logger.warning("  Skip issue %d: %s", issue.id, e)
-
-            await session.commit()
-        if processed % 20 == 0 or offset + BATCH_SIZE >= issue_count:
-            _log_progress()
-
-    # --- Wiki pages ---
-    for offset in range(0, wiki_count, BATCH_SIZE):
-        async with factory() as session:
-            pages = (
-                (await session.execute(select(WikiPage).order_by(WikiPage.id).offset(offset).limit(BATCH_SIZE)))
-                .scalars()
-                .all()
-            )
-
-            for page in pages:
-                processed += 1
-                content = (
-                    await session.execute(
-                        select(WikiContent)
-                        .where(WikiContent.page_id == page.id)
-                        .order_by(WikiContent.version.desc())
-                        .limit(1)
-                    )
-                ).scalar_one_or_none()
-                if content and content.text:
-                    chunks = chunker.chunk_wiki_page(page.title, content.text)
-                    if chunks:
-                        wiki_project_id = (
-                            await session.execute(select(Wiki.project_id).where(Wiki.id == page.wiki_id))
-                        ).scalar_one_or_none() or 0
-                        try:
-                            async with session.begin_nested():
-                                await embedder.embed_source(
-                                    session,
-                                    SearchSourceType.WIKI_PAGE,
-                                    page.id,
-                                    wiki_project_id,
-                                    chunks,
-                                )
-                                total_chunks += len(chunks)
-                        except Exception as e:
-                            logger.warning("  Skip wiki page %d: %s", page.id, e)
-
-            await session.commit()
-        if processed % 20 == 0 or offset + BATCH_SIZE >= wiki_count:
-            _log_progress()
-
-    # --- Comments (journals with notes) ---
-    for offset in range(0, comment_count, BATCH_SIZE):
-        async with factory() as session:
-            journals = (
-                (
-                    await session.execute(
-                        select(Journal)
-                        .where(Journal.notes.isnot(None), Journal.notes != "")
-                        .order_by(Journal.id)
-                        .offset(offset)
-                        .limit(BATCH_SIZE)
-                    )
-                )
-                .scalars()
-                .all()
-            )
-
-            for journal in journals:
-                processed += 1
-                chunks = chunker.chunk_journal(journal.notes)
-                if chunks:
-                    try:
-                        async with session.begin_nested():
-                            await embedder.embed_source(
-                                session,
-                                SearchSourceType.JOURNAL,
-                                journal.id,
-                                journal.project_id,
-                                chunks,
-                            )
-                            total_chunks += len(chunks)
-                    except Exception as e:
-                        logger.warning("  Skip journal %d: %s", journal.id, e)
-
-            await session.commit()
-        if processed % 50 == 0 or offset + BATCH_SIZE >= comment_count:
-            _log_progress()
-
-    # --- Attachments with descriptions ---
-    for offset in range(0, attachment_count, BATCH_SIZE):
-        async with factory() as session:
-            attachments = (
-                (
-                    await session.execute(
-                        select(Attachment)
-                        .where(Attachment.description.isnot(None), Attachment.description != "")
-                        .order_by(Attachment.id)
-                        .offset(offset)
-                        .limit(BATCH_SIZE)
-                    )
-                )
-                .scalars()
-                .all()
-            )
-
-            for att in attachments:
-                processed += 1
-                if att.container_type == "Project":
-                    project_id = att.container_id
-                elif att.container_type == "Issue":
-                    pid_result = await session.execute(select(Issue.project_id).where(Issue.id == att.container_id))
-                    project_id = pid_result.scalar_one_or_none()
-                    if not project_id:
-                        logger.warning("  Skip attachment %d: issue %d not found", att.id, att.container_id)
-                        continue
-                else:
-                    continue
-
-                meta = getattr(att, "metadata", None)
-                extracted_text = meta.get("extracted_text") if meta else None
-                ai_description = meta.get("ai_description") if meta else None
-                description = att.description
-                if ai_description:
-                    description = f"{description}\n\n{ai_description}" if description else ai_description
-
-                chunks = chunker.chunk_attachment(att.filename, description, extracted_text=extracted_text)
-                if chunks:
-                    try:
-                        async with session.begin_nested():
-                            await embedder.embed_source(
-                                session, SearchSourceType.ATTACHMENT, att.id, project_id, chunks
-                            )
-                            total_chunks += len(chunks)
-                    except Exception as e:
-                        logger.warning("  Skip attachment %d: %s", att.id, e)
-
-            await session.commit()
-        if processed % 50 == 0 or offset + BATCH_SIZE >= attachment_count:
-            _log_progress()
-
-    elapsed = time.time() - start
-    logger.info("Re-indexed %d entities → %d chunks+embeddings (%.1fs)", processed, total_chunks, elapsed)
-
-
-def main() -> None:
-    asyncio.run(_backfill())
+    parser.add_argument(
+        "--reembed",
+        action="store_true",
+        help="Recompute the embedding of every chunk, not only of chunks that have none.",
+    )
+    parser.add_argument(
+        "--require-model",
+        action="store_true",
+        help="Exit with status 2, without doing anything, when no embedding model can run.",
+    )
+    args = parser.parse_args(argv)
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    try:
+        return asyncio.run(_main_async(args.reembed, args.require_model))
+    except Exception as exc:  # pragma: no cover - CLI surface
+        logger.error("Backfill failed: %s", describe_error(exc))
+        logger.debug("Backfill failure", exc_info=True)
+        return EXIT_ERRORS
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

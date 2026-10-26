@@ -1,9 +1,11 @@
 """Embedding generation and management service.
 
 Handles:
-- Generating embeddings via provider APIs (or mock for tests)
-- Creating/updating SearchSource + SearchChunk + ChunkEmbedding records
-- Backfilling embeddings for all existing chunks with a new model
+- Generating embeddings with the bundled local model (or mock for tests)
+- Embedding the chunks that have none yet (the Celery task, the import, the backfill)
+- Backfilling embeddings for all existing chunks, or re-embedding them all
+
+Chunks themselves are written by :mod:`specivo.services.search_index_service`.
 """
 
 from __future__ import annotations
@@ -12,19 +14,17 @@ import hashlib
 import logging
 import math
 
-from sqlalchemy import delete, exists, select
+from sqlalchemy import ColumnElement, exists, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
 from specivo.schemas.search import SearchSourceType
-from specivo.services.chunking_service import ChunkingService
 from specivo.services.local_embedder import get_local_embedder
 from specivo.services.prefix_registry import get_effective_prefix
 
 logger = logging.getLogger(__name__)
-
-_chunking = ChunkingService()
 
 
 async def resolve_attachment_project_id(
@@ -68,8 +68,46 @@ async def resolve_attachment_project_id(
     return None
 
 
+# Only the bundled local model is supported ("mock" is a deterministic stand-in
+# for the tests). A row naming any other provider, such as a hosted one left by
+# an older release, is treated like a local model whose files are missing: no
+# embeddings, and search falls back to keyword matching.
+#
+# (model id, provider) pairs already warned about in this process.
+_warned_unsupported: set[tuple[int | None, str]] = set()
+
+
+def is_provider_usable(provider: str, model_name: str) -> bool:
+    """Whether a model with this provider can embed in this process right now.
+
+    A local model needs its ONNX and tokenizer files; the mock provider (tests)
+    always works; any other provider is not supported.
+    """
+    if provider == "local":
+        return get_local_embedder(model_name).is_available()
+    return provider == "mock"
+
+
+def warn_unsupported_provider(model: EmbeddingModel) -> None:
+    """Log, once per process and model, that *model* names a provider that cannot run."""
+    key = (model.id, model.provider)
+    if key in _warned_unsupported:
+        return
+    _warned_unsupported.add(key)
+    logger.warning(
+        "Embedding model %s uses provider %r, which is not supported; semantic search is off "
+        "and search falls back to keyword matching. Only the bundled local model is supported",
+        model.name,
+        model.provider,
+    )
+
+
 class EmbeddingService:
     """Manages embedding generation and storage."""
+
+    def is_model_usable(self, model: EmbeddingModel) -> bool:
+        """Whether *model* can embed in this process (see :func:`is_provider_usable`)."""
+        return is_provider_usable(model.provider, model.model_name)
 
     async def generate_embedding(
         self,
@@ -89,7 +127,8 @@ class EmbeddingService:
             intent: "passage" for content being indexed, "query" for search queries.
 
         Returns:
-            A list of floats representing the embedding vector.
+            The embedding vector, or None when the model cannot run here (its
+            files are missing or its provider is not supported).
         """
         prefixed_text = self._apply_prefix(text, model, intent)
 
@@ -106,8 +145,8 @@ class EmbeddingService:
         if model.provider == "mock":
             return self._mock_embedding(prefixed_text, model.dimensions)
 
-        # Future: implement real provider calls (openai, cohere, ollama)
-        raise NotImplementedError(f"Provider {model.provider!r} not yet implemented")
+        warn_unsupported_provider(model)
+        return None
 
     def _apply_prefix(self, text: str, model: EmbeddingModel, intent: str) -> str:
         """Prepend the appropriate prefix based on model config and intent.
@@ -154,28 +193,6 @@ class EmbeddingService:
         result = await session.execute(select(EmbeddingModel).where(EmbeddingModel.is_default.is_(True)).limit(1))
         return result.scalar_one_or_none()
 
-    async def ensure_hnsw_index(self, session: AsyncSession, model: EmbeddingModel) -> None:
-        """Create a partial HNSW index for a specific embedding model.
-
-        Uses ``CREATE INDEX IF NOT EXISTS`` so it is safe to call multiple times.
-        The semantic search WHERE clause filters by ``model_id``, allowing
-        PostgreSQL to select the partial index automatically.
-        """
-        from sqlalchemy import text
-
-        index_name = f"idx_hnsw_model_{model.id}"
-        dims = model.dimensions
-        await session.execute(
-            text(
-                f"CREATE INDEX IF NOT EXISTS {index_name} "
-                f"ON chunk_embeddings USING hnsw ((embedding::vector({dims})) vector_cosine_ops) "
-                f"WITH (m = 24, ef_construction = 128) "
-                f"WHERE model_id = :model_id"
-            ),
-            {"model_id": model.id},
-        )
-        logger.info("Ensured HNSW index %s for model %s (dims=%d)", index_name, model.name, dims)
-
     async def _should_skip_comment(
         self,
         session: AsyncSession,
@@ -215,27 +232,6 @@ class EmbeddingService:
 
         return False
 
-    async def remove_source(
-        self,
-        session: AsyncSession,
-        source_type: SearchSourceType | str,
-        entity_id: int,
-    ) -> None:
-        """Remove a SearchSource and all associated chunks/embeddings.
-
-        Chunks and embeddings cascade-delete via FK constraints.
-        """
-        result = await session.execute(
-            select(SearchSource).where(
-                SearchSource.source_type == source_type,
-                SearchSource.entity_id == entity_id,
-            )
-        )
-        source = result.scalar_one_or_none()
-        if source is not None:
-            await session.delete(source)
-            await session.flush()
-
     async def embed_source(
         self,
         session: AsyncSession,
@@ -245,22 +241,26 @@ class EmbeddingService:
         chunks: list[str],
         model_id: int | None = None,
     ) -> SearchSource | None:
-        """Create/update SearchSource + SearchChunks + ChunkEmbeddings.
+        """Write a source's chunks, then embed the ones without an embedding, inline.
+
+        Chunks are written whether or not a model can run, so the content is
+        keyword-searchable either way. Unchanged chunks keep their embeddings.
+        Used by the backfill command; the request path never embeds.
 
         Args:
             session: Async DB session.
             source_type: One of :class:`SearchSourceType` (``ISSUE``,
-                ``WIKI_PAGE``, ``JOURNAL``, ``ATTACHMENT``). Plain strings
-                with matching values are also accepted for legacy callers
-                and tests that inject unknown types.
+                ``WIKI_PAGE``, ``JOURNAL``, ``ATTACHMENT``).
             entity_id: ID of the source entity.
             project_id: Project ID for scoping.
-            chunks: List of text chunks to embed.
-            model_id: Specific model ID, or None to use default.
+            chunks: List of text chunks.
+            model_id: Specific model ID, or None to use the default.
 
         Returns:
-            The SearchSource, or None if no model is available or indexing is skipped.
+            The SearchSource, or None if there are no chunks or indexing is skipped.
         """
+        from specivo.services.search_index_service import write_source_chunks
+
         if not chunks:
             return None
 
@@ -269,205 +269,142 @@ class EmbeddingService:
             if await self._should_skip_comment(session, entity_id):
                 return None
 
-        # Resolve model
+        source_type = str(source_type)
+        await session.run_sync(
+            lambda s: write_source_chunks(s.connection(), source_type, entity_id, project_id, chunks)
+        )
+        await self.embed_pending(session, [(source_type, entity_id)], model_id=model_id)
+
+        result = await session.execute(
+            select(SearchSource).where(SearchSource.source_type == source_type, SearchSource.entity_id == entity_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def index_source(self, session: AsyncSession, source_type: SearchSourceType | str, entity_id: int) -> int:
+        """Rebuild a source's chunks from the database and embed them inline when a model can run.
+
+        Applies the comment settings. Used by bulk callers that run without a
+        worker, such as the import pipeline. Returns the number of embeddings written.
+        """
+        from specivo.services.search_index_service import sync_source_isolated
+
+        source_type = str(source_type)
+        await session.run_sync(lambda s: sync_source_isolated(s.connection(), source_type, entity_id))
+        return await self.embed_pending(session, [(source_type, entity_id)])
+
+    async def embed_pending(
+        self,
+        session: AsyncSession,
+        sources: list[tuple[str, int]],
+        model_id: int | None = None,
+        *,
+        reembed: bool = False,
+    ) -> int:
+        """Embed the chunks of *sources* that have no embedding for the model yet.
+
+        Idempotent: chunks already embedded, and sources that no longer exist,
+        are skipped. With *reembed*, every chunk of the sources is embedded
+        again and its stored embedding replaced. Does nothing when the model
+        cannot run here. Returns the number of embeddings written.
+        """
         if model_id is not None:
-            model_result = await session.execute(select(EmbeddingModel).where(EmbeddingModel.id == model_id))
-            model = model_result.scalar_one_or_none()
+            model = (
+                await session.execute(select(EmbeddingModel).where(EmbeddingModel.id == model_id))
+            ).scalar_one_or_none()
         else:
             model = await self.get_default_model(session)
+        if model is None or not self.is_model_usable(model) or not sources:
+            return 0
 
-        if model is None:
-            logger.warning("No embedding model available for source_type=%s entity_id=%d", source_type, entity_id)
-            return None
-
-        # Upsert SearchSource
-        source_result = await session.execute(
-            select(SearchSource).where(
-                SearchSource.source_type == source_type,
-                SearchSource.entity_id == entity_id,
+        count = 0
+        for source_type, entity_id in sources:
+            stmt = (
+                select(SearchChunk.id, SearchChunk.content)
+                .join(SearchSource, SearchSource.id == SearchChunk.source_id)
+                .where(SearchSource.source_type == source_type, SearchSource.entity_id == entity_id)
+                .order_by(SearchChunk.chunk_index)
             )
-        )
-        source = source_result.scalar_one_or_none()
+            if not reembed:
+                stmt = stmt.where(_lacks_embedding(model.id))
+            for chunk_id, content in (await session.execute(stmt)).all():
+                if await self._store_embedding(session, model, chunk_id, content, replace=reembed):
+                    count += 1
+        return count
 
-        if source is None:
-            source = SearchSource(
-                source_type=source_type,
-                entity_id=entity_id,
-                project_id=project_id,
+    async def _store_embedding(
+        self, session: AsyncSession, model: EmbeddingModel, chunk_id: int, content: str, *, replace: bool
+    ) -> bool:
+        """Embed one chunk and store the vector; True when a vector was written."""
+        vector = await self.generate_embedding(content, model)
+        if vector is None:
+            return False
+        stmt = pg_insert(ChunkEmbedding).values(chunk_id=chunk_id, model_id=model.id, embedding=vector)
+        if replace:
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["chunk_id", "model_id"], set_={"embedding": stmt.excluded.embedding}
             )
-            session.add(source)
-            await session.flush()
         else:
-            # Delete old chunks (cascade deletes embeddings too)
-            await session.execute(delete(SearchChunk).where(SearchChunk.source_id == source.id))
-            await session.flush()
+            stmt = stmt.on_conflict_do_nothing(index_elements=["chunk_id", "model_id"])
+        await session.execute(stmt)
+        return True
 
-        # Create all chunks in a single batch
-        chunk_objects = []
-        for idx, chunk_text in enumerate(chunks):
-            chunk = SearchChunk(
-                source_id=source.id,
-                chunk_index=idx,
-                content=chunk_text,
-                metadata_json={
-                    "source_type": source_type,
-                    "entity_id": entity_id,
-                    "project_id": project_id,
-                },
-            )
-            session.add(chunk)
-            chunk_objects.append((chunk, chunk_text))
+    async def backfill_model(
+        self, session: AsyncSession, model_id: int, batch_size: int = 1000, *, reembed: bool = False
+    ) -> int:
+        """Embed every chunk that has no embedding for *model_id*, or all of them with *reembed*.
 
-        # Single flush to get all chunk IDs
-        await session.flush()
-
-        # Create all embeddings in a single batch
-        for chunk, chunk_text in chunk_objects:
-            vector = await self.generate_embedding(chunk_text, model)
-            if vector is None:
-                continue
-            embedding = ChunkEmbedding(
-                chunk_id=chunk.id,
-                model_id=model.id,
-                embedding=vector,
-            )
-            session.add(embedding)
-
-        await session.flush()
-        return source
-
-    async def _resolve_attachment_project_id(
-        self,
-        session: AsyncSession,
-        container_type: str,
-        container_id: int,
-    ) -> int | None:
-        """Resolve the project_id for an attachment's container.
-
-        Delegates to the module-level function for reuse.
-        """
-        return await resolve_attachment_project_id(session, container_type, container_id)
-
-    async def embed_attachment(
-        self,
-        session: AsyncSession,
-        attachment: object,
-    ) -> SearchSource | None:
-        """Index an attachment for search (filename + description + metadata content).
-
-        When the attachment has JSONB metadata with ``extracted_text`` or
-        ``ai_description``, those are included in the search index:
-        - ``ai_description`` is concatenated with the description for chunk 0
-        - ``extracted_text`` is split into additional chunks (1..N)
-
-        Args:
-            session: Async DB session.
-            attachment: An ``Attachment`` model instance.
-
-        Returns:
-            The SearchSource, or None if project cannot be resolved or no model.
-        """
-        # Resolve project from the container
-        project_id = await self._resolve_attachment_project_id(
-            session,
-            attachment.container_type,  # type: ignore[attr-defined]
-            attachment.container_id,  # type: ignore[attr-defined]
-        )
-        if project_id is None:
-            logger.warning(
-                "Cannot resolve project for attachment %d (%s/%d)",
-                attachment.id,  # type: ignore[attr-defined]
-                attachment.container_type,  # type: ignore[attr-defined]
-                attachment.container_id,  # type: ignore[attr-defined]
-            )
-            return None
-
-        # Extract metadata content fields if available
-        meta: dict | None = getattr(attachment, "metadata", None)
-        extracted_text: str | None = None
-        ai_description: str | None = None
-
-        if meta:
-            extracted_text = meta.get("extracted_text")
-            ai_description = meta.get("ai_description")
-
-        # Build description: original + AI description (if any)
-        description = attachment.description  # type: ignore[attr-defined]
-        if ai_description:
-            description = f"{description}\n\n{ai_description}" if description else ai_description
-
-        chunks = _chunking.chunk_attachment(
-            attachment.filename,  # type: ignore[attr-defined]
-            description,
-            extracted_text=extracted_text,
-        )
-
-        return await self.embed_source(
-            session,
-            SearchSourceType.ATTACHMENT,
-            attachment.id,  # type: ignore[attr-defined]
-            project_id,
-            chunks,
-        )
-
-    async def backfill_model(self, session: AsyncSession, model_id: int, batch_size: int = 1000) -> int:
-        """Generate embeddings for all existing chunks using a new model.
-
-        Processes chunks in batches to avoid loading all into memory at once (OOM).
+        Re-embedding replaces each stored vector in place, so semantic search
+        keeps working while it runs. Processes chunks in id order and in batches
+        to keep memory flat. Does nothing when the model cannot run here.
 
         Args:
             session: Async DB session.
             model_id: The model to generate embeddings for.
             batch_size: Number of chunks to process per batch.
+            reembed: Recompute existing embeddings too.
 
         Returns:
-            Number of embeddings created.
+            Number of embeddings written.
         """
         model_result = await session.execute(select(EmbeddingModel).where(EmbeddingModel.id == model_id))
         model = model_result.scalar_one_or_none()
         if model is None:
             logger.error("Embedding model %d not found for backfill", model_id)
             return 0
+        if not self.is_model_usable(model):
+            logger.warning(
+                "Embedding model %s cannot run here (missing model files or unsupported provider); nothing embedded",
+                model.name,
+            )
+            return 0
 
-        # Batched iteration: process chunks in pages to avoid OOM
         count = 0
         last_id = 0
-
         while True:
-            batch_result = await session.execute(
-                select(SearchChunk)
-                .where(
-                    SearchChunk.id > last_id,
-                    ~exists(
-                        select(ChunkEmbedding.id).where(
-                            ChunkEmbedding.chunk_id == SearchChunk.id,
-                            ChunkEmbedding.model_id == model_id,
-                        )
-                    ),
-                )
-                .order_by(SearchChunk.id)
-                .limit(batch_size)
-            )
-            batch = batch_result.scalars().all()
-
+            stmt = select(SearchChunk.id, SearchChunk.content).where(SearchChunk.id > last_id)
+            if not reembed:
+                stmt = stmt.where(_lacks_embedding(model.id))
+            batch = (await session.execute(stmt.order_by(SearchChunk.id).limit(batch_size))).all()
             if not batch:
                 break
-
-            for chunk in batch:
-                vector = await self.generate_embedding(chunk.content, model)
-                if vector is None:
-                    last_id = chunk.id
-                    continue
-                embedding = ChunkEmbedding(
-                    chunk_id=chunk.id,
-                    model_id=model.id,
-                    embedding=vector,
-                )
-                session.add(embedding)
-                count += 1
-                last_id = chunk.id
-
+            for chunk_id, content in batch:
+                if await self._store_embedding(session, model, chunk_id, content, replace=reembed):
+                    count += 1
+                last_id = chunk_id
             await session.flush()
 
-        logger.info("Backfilled %d embeddings for model %s (id=%d)", count, model.name, model.id)
+        logger.info(
+            "%s %d embeddings for model %s (id=%d)",
+            "Re-embedded" if reembed else "Backfilled",
+            count,
+            model.name,
+            model.id,
+        )
         return count
+
+
+def _lacks_embedding(model_id: int) -> ColumnElement[bool]:
+    """WHERE clause: the chunk has no embedding for *model_id*."""
+    return ~exists(
+        select(ChunkEmbedding.id).where(ChunkEmbedding.chunk_id == SearchChunk.id, ChunkEmbedding.model_id == model_id)
+    )

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.config import get_settings
-from specivo.core.constants import SEARCH_SNIPPET_MAX_CHARS
+from specivo.core.constants import MCP_SEARCH_MAX_LIMIT, SEARCH_SNIPPET_MAX_CHARS
 from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
@@ -313,6 +313,7 @@ async def _create_issue(
     fixed_version_id: int | None = None,
     sprint_id: int | None = None,
     metadata: dict | None = None,
+    is_private: bool | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "add_issues")
@@ -327,6 +328,7 @@ async def _create_issue(
         fixed_version_id=fixed_version_id,
         sprint_id=sprint_id,
         metadata=metadata or {},
+        is_private=is_private,
     )
     issue = await _issue_svc.create(session, project, data, user)
     await session.flush()
@@ -468,6 +470,8 @@ async def _search(
 ) -> str:
     if mode not in SEARCH_MODES:
         raise ValidationError(f"Invalid mode '{mode}'. Must be one of: {', '.join(SEARCH_MODES)}")
+    # The tool has no offset; its limit is the only depth a caller controls.
+    limit = max(1, min(limit, MCP_SEARCH_MAX_LIMIT))
 
     project_id: int | None = None
     if project_key:
@@ -1681,11 +1685,12 @@ async def _log_time(
     spent_on: date | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
-    await _require_permission(session, user, project.id, "log_time")
+    await _time_entry_svc.require_can_log(session, user, project)
     issue_id: int | None = None
     if issue_ref:
         issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
         issue_id = issue.id
+        await _time_entry_svc.require_can_log(session, user, project, issue_id)
 
     data = TimeEntryCreate(
         issue_id=issue_id,
@@ -2039,7 +2044,7 @@ async def _update_recurring_pattern(
         data = RecurringPatternUpdate(**updates)
     except ValueError as exc:
         return f"Error: {exc}"
-    pattern = await _recurring_pattern_svc.update(session, pattern, data)
+    pattern = await _recurring_pattern_svc.update(session, pattern, data, user)
     await session.flush()
     await _log_tool(
         session,

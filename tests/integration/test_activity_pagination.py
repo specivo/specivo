@@ -420,3 +420,35 @@ async def test_activity_partial_no_activity_page_lands_on_last_page(
         "Activity partial must default to the newest page when no "
         "activity_page query parameter is supplied."
     )
+
+
+@pytest.mark.integration
+async def test_activity_order_is_stable_when_timestamps_tie(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _lookups: dict,
+    _project: Project,
+    _issue: object,
+) -> None:
+    """Journals sharing a created_at must still come back in insertion order.
+
+    Entries written in one transaction get the same server-side now(), so
+    created_at alone leaves their order to the planner and paging can put the
+    newest entry on any page. The id tie-breaker keeps the feed deterministic.
+    Updating the older rows moves their tuples to the end of the heap, so a
+    sort without the tie-breaker returns them out of order.
+    """
+    user = admin_client.state.user
+    journals = [await _journal_svc.add_comment(db_session, _issue, user, f"tied-comment-{i:02d}") for i in range(30)]
+    await db_session.commit()
+    created = {j.created_at for j in journals}
+    assert len(created) == 1, "precondition: all entries share one timestamp"
+
+    for j in journals[:15]:
+        j.notes = f"{j.notes} (edited)"
+    await db_session.commit()
+
+    listed = await _journal_svc.list_for_issue(db_session, _issue.id, include_private=True)
+    tied_ids = [j.id for j in listed if j.created_at in created]
+    assert tied_ids == sorted(tied_ids)
+    assert tied_ids[-1] == journals[-1].id

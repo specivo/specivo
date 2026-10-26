@@ -1,6 +1,6 @@
 [project]
 name = "specivo"
-version = "0.8.0"
+version = "0.9.0"
 description = "Your team's knowledge, finally findable. Self-hosted project tracking, wiki, and search that understands what you wrote."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -25,7 +25,7 @@ dependencies = [
     "pgvector>=0.4.2",
     "jinja2>=3.1.6",
     "babel>=2.16",
-    "markdown>=3.10.2",
+    "markdown>=3.11.2",
     "pygments>=2.20.0",
     "pillow>=12.2.0",
     "nh3>=0.3.4",

@@ -20,7 +20,30 @@ MAX_PAGE_LIMIT = 200
 RRF_K = 60
 SEARCH_SNIPPET_MAX_CHARS = 200
 SEARCH_HYBRID_PREFETCH_LIMIT = 100
+# Deepest result offset search accepts. Each keyword-search part ranks every
+# row up to the end of the requested page, so an unbounded offset would let a
+# client make the database rank and sort arbitrarily many rows per request.
+MAX_SEARCH_OFFSET = 1000
+# Results the MCP search tool returns at most.
+MCP_SEARCH_MAX_LIMIT = 50
 SEARCH_FTS_HEADLINE_OPTIONS = "MaxWords=35, MinWords=15, StartSel=<mark>, StopSel=</mark>"
+# Delay before a queued embedding task runs, so a burst of edits to one source
+# is embedded once, from its latest text.
+SEARCH_EMBED_DEBOUNCE_SECONDS = 5
+# Vector size covered by the HNSW index on chunk_embeddings (migration 0038):
+# the local multilingual-e5-small model. Embeddings of another size are
+# searched exactly, without the index.
+SEMANTIC_INDEX_DIMENSIONS = 384
+# Semantic search reads candidates from the index in widening rounds (times
+# this factor) until enough of them are visible to the user. Past this many
+# candidates it ranks every embedding exactly instead, so a user who can see
+# only a sliver of the instance never loses a match that ranks behind hidden ones.
+SEMANTIC_CANDIDATE_GROWTH = 4
+SEMANTIC_MAX_INDEX_CANDIDATES = 10_000
+# pgvector release that added iterative index scans (hnsw.iterative_scan), which
+# let an index scan return more rows than hnsw.ef_search. Older releases are
+# searched exactly.
+PGVECTOR_ITERATIVE_SCAN_VERSION = (0, 8)
 
 # Hierarchy
 MAX_HIERARCHY_DEPTH = 10  # Issue nesting (parent/child issues)

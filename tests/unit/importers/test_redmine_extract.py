@@ -188,6 +188,10 @@ class TestExtractTracker:
     def test_blank_description_becomes_none(self):
         assert extract_tracker(self._row(description="")).description is None
 
+    def test_private_by_default_carries_over(self):
+        assert extract_tracker(self._row()).private_by_default is False
+        assert extract_tracker(self._row(private_by_default=True)).private_by_default is True
+
 
 class TestExtractStatus:
     def test_maps_and_categorises(self):
@@ -237,6 +241,31 @@ class TestExtractRole:
     def test_ordinary_role_has_builtin_zero(self):
         assert extract_role({"id": 3, "name": "Developer", "builtin": 0}).builtin == 0
 
+    def test_visibility_settings_carry_over(self):
+        role = extract_role(
+            {
+                "id": 4,
+                "name": "Contractor",
+                "builtin": 0,
+                "users_visibility": "members_of_visible_projects",
+                "time_entries_visibility": "own",
+            }
+        )
+        assert role.users_visibility == "members_of_visible_projects"
+        assert role.time_entries_visibility == "own"
+
+    def test_missing_visibility_settings_keep_specivo_defaults(self):
+        role = extract_role({"id": 4, "name": "Contractor", "builtin": 0})
+        assert role.users_visibility is None
+        assert role.time_entries_visibility is None
+
+    def test_unknown_visibility_values_become_the_narrower_setting(self):
+        role = extract_role(
+            {"id": 4, "name": "Contractor", "builtin": 0, "users_visibility": "x", "time_entries_visibility": "y"}
+        )
+        assert role.users_visibility == "members_of_visible_projects"
+        assert role.time_entries_visibility == "own"
+
 
 class TestExtractUser:
     def _row(self, **overrides):
@@ -283,10 +312,38 @@ class TestExtractUser:
     def test_locked_account_stays_locked(self):
         assert extract_user(self._row(status=3)).status == "locked"
 
-    def test_no_credential_is_carried(self):
-        """Redmine hashes with SHA1 and Specivo with bcrypt; nothing is portable."""
-        user = extract_user(self._row())
-        assert not hasattr(user, "password_hash")
+    _SALT = "0123456789abcdef0123456789abcdef"
+    _HASH = "3f786850e387550fdab836ed7e6dc881de23001b"
+
+    def test_a_local_account_carries_its_raw_credential(self):
+        """The adapter hands over Redmine's columns as they are; no crypto here."""
+        user = extract_user(self._row(salt=self._SALT, hashed_password=self._HASH))
+        assert user.credential is not None
+        assert user.credential.algorithm == "redmine_sha1"
+        assert user.credential.fields == {"salt": self._SALT, "hashed_password": self._HASH}
+        assert user.external_auth is False
+
+    def test_an_ldap_account_carries_no_credential(self):
+        """Redmine never checks the local hash of an account bound to an auth source."""
+        user = extract_user(self._row(salt=self._SALT, hashed_password=self._HASH, auth_source_id=3))
+        assert user.credential is None
+        assert user.external_auth is True
+
+    def test_a_blank_hash_or_salt_carries_no_credential(self):
+        assert extract_user(self._row(salt=self._SALT, hashed_password="")).credential is None
+        assert extract_user(self._row(salt="  ", hashed_password=self._HASH)).credential is None
+        assert extract_user(self._row()).credential is None
+
+    def test_the_source_password_flags_carry_over(self):
+        user = extract_user(self._row(must_change_passwd=True, passwd_changed_on=datetime(2025, 6, 1, 12, 0)))
+        assert user.must_change_password is True
+        assert user.password_changed_at == datetime(2025, 6, 1, 12, 0, tzinfo=UTC)
+
+    def test_the_credential_never_shows_in_a_repr(self):
+        """A stray log line or traceback must not leak the salt or the digest."""
+        user = extract_user(self._row(salt=self._SALT, hashed_password=self._HASH))
+        assert self._SALT not in repr(user)
+        assert self._HASH not in repr(user)
 
 
 class TestExtractGroup:

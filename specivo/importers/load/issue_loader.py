@@ -58,12 +58,10 @@ def converter_for(ctx: PhaseContext) -> tuple[ContentConverter, ConversionContex
     """Return the markup converter for this run, building it once."""
     converter = ctx.state.get(CONVERTER_STATE_KEY)
     if converter is None:
-        from specivo.importers.redmine.textile_convert import RedmineTextileConverter
-
-        converter = RedmineTextileConverter()
+        converter = ctx.adapter.content_converter()
         ctx.state[CONVERTER_STATE_KEY] = converter
         ctx.state[CONVERSION_CONTEXT_STATE_KEY] = ConversionContext(
-            source_format=getattr(ctx.adapter, "source_format", "textile")
+            source_format=getattr(ctx.adapter, "source_format", "markdown")
         )
     return converter, ctx.state[CONVERSION_CONTEXT_STATE_KEY]
 
@@ -142,7 +140,10 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
                 metadata=metadata,
             ),
             author,
-            skip_search_index=True,
+            # The source's own privacy flag is history, not a new choice: it
+            # is kept as it was, whatever the tracker's default says.
+            check_privacy_permission=False,
+            limit_text_length=False,
         )
     except AppError as exc:
         ctx.warn("Issue could not be created; skipped", issue=ir.source_ref, reason=str(exc))

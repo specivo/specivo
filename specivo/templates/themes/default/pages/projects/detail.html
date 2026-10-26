@@ -47,8 +47,8 @@
   {% if not anonymous %}
   <a href="/projects/{{ project.key }}/roadmap/">{% trans %}Roadmap{% endtrans %}</a>
   {% endif %}
-  {% if modules.get('time_tracking', false) %}
-  <a href="/projects/{{ project.key }}/time/">{% trans %}Time{% endtrans %}</a>
+  {% if modules.get('time_tracking', false) and can_view_time_entries %}
+  <a href="/projects/{{ project.key }}/time-entries/">{% trans %}Time{% endtrans %}</a>
   {% endif %}
   {% if user.is_admin %}
   <a href="/projects/{{ project.key }}/settings/">{% trans %}Settings{% endtrans %}</a>

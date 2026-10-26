@@ -29,7 +29,8 @@ when you clone the repo:
 | api | `specivo/specivo` | The application. Listens on port **8000** inside the network, behind nginx. |
 | db | `pgvector/pgvector:pg18` | **PostgreSQL 18** with pgvector for full-text and semantic search. |
 | redis | `redis:7-alpine` | Cache and Celery broker. |
-| celery-worker / celery-beat | `specivo/specivo` | Background jobs (search indexing, scheduled tasks). |
+| celery-worker / celery-beat | `specivo/specivo` | Background jobs and scheduled tasks. |
+| celery-embeddings | `specivo/specivo` | Embeds content for semantic search, in one process so the model is loaded once. |
 
 You reach Specivo at `http://your-specivo-host:9933`. Nothing else is exposed by default.
 
@@ -64,9 +65,9 @@ path above.
 ## Semantic search is optional
 
 Keyword search and the rest of Specivo work out of the box. Semantic ("by meaning") search needs an
-embedding model. You can use the bundled on-device model (runs on CPU, no external calls) or bring
-your own provider key (BYOK). Either way it is opt-in — see
-[Configuration](configuration.md#semantic-search-model) for how to enable it.
+embedding model. Specivo runs a small one on your own CPU, with no external calls, but the model
+files are not in the image: you download them once. See
+[Semantic search and embeddings](semantic-search.md) for what it does and how to enable it.
 
 ## Next steps
 

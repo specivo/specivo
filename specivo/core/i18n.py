@@ -5,6 +5,7 @@ Provides:
 - ``gettext()`` / ``ngettext()`` for immediate translation.
 - ``gettext_lazy()`` / ``LazyString`` for deferred translation (module-level constants).
 - Translation catalog loading and caching with multi-package merging.
+- ``format_date()`` / ``format_datetime()`` for dates in the active locale.
 
 Usage::
 
@@ -22,6 +23,7 @@ from __future__ import annotations
 import gettext as gettext_module
 import logging
 from contextvars import ContextVar
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -120,6 +122,45 @@ def ngettext(singular: str, plural: str, n: int) -> str:
         return trans.ngettext(singular, plural, n)
     except Exception:
         return singular if n == 1 else plural
+
+
+# ---------------------------------------------------------------------------
+# Locale-aware date formatting (Babel / CLDR)
+# ---------------------------------------------------------------------------
+
+
+def format_date(value: date | datetime, skeleton: str = "yMMMd", locale: str | None = None) -> str:
+    """Format *value* with a CLDR skeleton in *locale* (default: the active locale).
+
+    A skeleton names the fields to show, not their order, so each language
+    gets its own order, month names and punctuation: ``"MMMd"`` is
+    ``"Mar 28"`` in English and ``"28 มี.ค."`` in Thai. An aware datetime is
+    rendered in its own timezone; convert it to the viewer's first.
+    """
+    from babel.dates import format_skeleton
+
+    try:
+        return format_skeleton(skeleton, value, locale=locale or get_locale())
+    except Exception:
+        return format_skeleton(skeleton, value, locale="en")
+
+
+def format_datetime(value: datetime, locale: str | None = None) -> str:
+    """Format *value* as a medium date plus a 24-hour time in *locale*.
+
+    ``"Mar 28, 2026, 09:05"`` in English, ``"28 มี.ค. 2026 09:05 น."`` in Thai.
+    """
+    from babel.dates import get_datetime_format
+
+    loc = locale or get_locale()
+    try:
+        pattern = str(get_datetime_format("medium", locale=loc))
+    except Exception:
+        loc = "en"
+        pattern = str(get_datetime_format("medium", locale=loc))
+    date_part = format_date(value, "yMMMd", loc)
+    time_part = format_date(value, "Hm", loc)
+    return pattern.replace("'", "").replace("{1}", date_part).replace("{0}", time_part)
 
 
 # ---------------------------------------------------------------------------

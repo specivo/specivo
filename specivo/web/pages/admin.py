@@ -1,4 +1,4 @@
-"""Web admin pages: dashboard, workflows, settings, email, agent groups, kill switch, metadata presets."""
+"""Web admin pages: dashboard, workflows, roles, trackers, settings, email, agent groups, kill switch, presets."""
 
 from __future__ import annotations
 
@@ -398,6 +398,98 @@ async def admin_workflows(
             "roles": list(roles),
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# Roles and trackers: visibility settings
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/roles/", response_class=HTMLResponse)
+async def admin_roles(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the roles page: each role's user and time entry visibility."""
+    from specivo.models.role import Role
+
+    roles = (await db.execute(select(Role).order_by(Role.builtin, Role.position, Role.id))).scalars().all()
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/roles.html",
+        context={"user": user, "active_page": "admin", "roles": list(roles)},
+    )
+
+
+@router.post("/admin/roles/{role_id}/", response_model=None)
+async def admin_role_update(
+    role_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    users_visibility: str = Form(""),
+    time_entries_visibility: str = Form(""),
+) -> Response:
+    """Save a role's ``users_visibility`` and ``time_entries_visibility``.
+
+    Unknown values are ignored (left unchanged), like the settings form.
+    Builtin roles are editable here too: only their ``builtin`` is protected.
+    """
+    from fastapi import HTTPException
+
+    from specivo.models.role import TIME_ENTRIES_VISIBILITY_VALUES, USERS_VISIBILITY_VALUES, Role
+
+    role = await db.get(Role, role_id)
+    if role is None:
+        raise HTTPException(status_code=404, detail="Role not found")
+    if users_visibility in USERS_VISIBILITY_VALUES:
+        role.users_visibility = users_visibility
+    if time_entries_visibility in TIME_ENTRIES_VISIBILITY_VALUES:
+        role.time_entries_visibility = time_entries_visibility
+    await db.commit()
+    return RedirectResponse("/admin/roles/", status_code=303)
+
+
+@router.get("/admin/trackers/", response_class=HTMLResponse)
+async def admin_trackers(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Render the trackers page: each tracker's private-by-default flag."""
+    from specivo.models.lookups import Tracker
+
+    trackers = (await db.execute(select(Tracker).order_by(Tracker.position, Tracker.id))).scalars().all()
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/trackers.html",
+        context={"user": user, "active_page": "admin", "trackers": list(trackers)},
+    )
+
+
+@router.post("/admin/trackers/{tracker_id}/", response_model=None)
+async def admin_tracker_update(
+    tracker_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    private_by_default: str = Form(""),
+) -> Response:
+    """Save a tracker's ``private_by_default``; an unticked checkbox sends nothing, meaning off."""
+    from fastapi import HTTPException
+
+    from specivo.core.lookup_cache import invalidate_lookups
+    from specivo.models.lookups import Tracker
+
+    tracker = await db.get(Tracker, tracker_id)
+    if tracker is None:
+        raise HTTPException(status_code=404, detail="Tracker not found")
+    tracker.private_by_default = private_by_default == "1"
+    await db.commit()
+    # The issue form reads trackers from the process-local lookup cache.
+    invalidate_lookups()
+    return RedirectResponse("/admin/trackers/", status_code=303)
 
 
 # ---------------------------------------------------------------------------

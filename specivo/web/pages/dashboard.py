@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.database import get_db
+from specivo.core.i18n import format_date
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssueStatus
@@ -24,6 +25,7 @@ from specivo.models.wiki import Wiki, WikiContent, WikiPage
 from specivo.services.issue_service import IssueService
 from specivo.services.notification_service import NotificationService
 from specivo.services.project_service import ProjectService
+from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_current_user_optional, get_templates
 
 router = APIRouter(tags=["web-dashboard"], include_in_schema=False)
@@ -31,6 +33,7 @@ router = APIRouter(tags=["web-dashboard"], include_in_schema=False)
 _project_svc = ProjectService()
 _issue_svc = IssueService()
 _notif_svc = NotificationService()
+_time_svc = TimeEntryService()
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -92,11 +95,7 @@ async def dashboard(
     # Batch-load project names for the issues
     issue_project_ids = list({i.project_id for i in my_issues})
     if issue_project_ids:
-        proj_rows = (
-            await db.execute(
-                select(Project.id, Project.name).where(Project.id.in_(issue_project_ids))
-            )
-        ).all()
+        proj_rows = (await db.execute(select(Project.id, Project.name).where(Project.id.in_(issue_project_ids)))).all()
         proj_names = {r.id: r.name for r in proj_rows}
         for issue in my_issues:
             issue.project_name = proj_names.get(issue.project_id, "")  # type: ignore[attr-defined]
@@ -109,9 +108,7 @@ async def dashboard(
     today = datetime.date.today()
     if visible_pids:
         # Fetch versions with issue progress counts, scoped to visible projects
-        done_sub = (
-            select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
-        )
+        done_sub = select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
         ver_stmt = (
             select(
                 Version,
@@ -141,7 +138,7 @@ async def dashboard(
             v_dict: dict = {
                 "name": version.name,
                 "status": version.status,
-                "due_date": version.effective_date.strftime("%b %-d") if version.effective_date else None,
+                "due_date": format_date(version.effective_date, "MMMd") if version.effective_date else None,
                 "progress": progress,
                 "open_count": total - closed,
                 "closed_count": closed,
@@ -163,9 +160,7 @@ async def dashboard(
     # ------------------------------------------------------------------
     active_sprints: list[dict] = []
     if visible_pids:
-        done_sub = (
-            select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
-        )
+        done_sub = select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])).scalar_subquery()
         sprint_stmt = (
             select(
                 Sprint,
@@ -197,8 +192,8 @@ async def dashboard(
                     "name": sprint.name,
                     "project_key": project_key,
                     "project_name": project_name,
-                    "start_date": sprint.start_date.strftime("%b %-d") if sprint.start_date else None,
-                    "end_date": sprint.end_date.strftime("%b %-d") if sprint.end_date else None,
+                    "start_date": format_date(sprint.start_date, "MMMd") if sprint.start_date else None,
+                    "end_date": format_date(sprint.end_date, "MMMd") if sprint.end_date else None,
                     "days_total": days_total,
                     "days_remaining": days_remaining,
                     "total": total,
@@ -211,9 +206,7 @@ async def dashboard(
     # Project stats (open issue counts per project)
     # ------------------------------------------------------------------
     all_project_ids = list(visible_pids)
-    project_stats = (
-        await _project_svc.load_project_stats(db, all_project_ids) if all_project_ids else {}
-    )
+    project_stats = await _project_svc.load_project_stats(db, all_project_ids) if all_project_ids else {}
 
     # ------------------------------------------------------------------
     # Recent wiki pages (3 most recently updated, scoped to visible projects)
@@ -318,7 +311,7 @@ async def dashboard(
                     Journal.user_id.in_(sa_user_ids),
                     Journal.project_id.in_(visible_pids),
                 )
-                .order_by(Journal.created_at.desc())
+                .order_by(Journal.created_at.desc(), Journal.id.desc())
                 .limit(20)
             )
             journals = list((await db.execute(journal_stmt)).scalars().all())
@@ -404,6 +397,9 @@ async def dashboard(
                 .order_by(TimeEntry.created_at.desc())
                 .limit(10)
             )
+            te_visible = await _time_svc.visible_entries_clause_any(db, user)
+            if te_visible is not None:
+                te_stmt = te_stmt.where(te_visible)
             time_entries = list((await db.execute(te_stmt)).scalars().all())
 
             # Batch-load issue keys for time entries
@@ -411,9 +407,7 @@ async def dashboard(
             if te_issue_ids:
                 te_ik_rows = (
                     await db.execute(
-                        select(Issue.id, Issue.project_key, Issue.sequence_number).where(
-                            Issue.id.in_(te_issue_ids)
-                        )
+                        select(Issue.id, Issue.project_key, Issue.sequence_number).where(Issue.id.in_(te_issue_ids))
                     )
                 ).all()
                 for r in te_ik_rows:

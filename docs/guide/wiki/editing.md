@@ -58,7 +58,9 @@ and it keeps its original filename, size, and type, plus an optional **descripti
 are **searchable**, so a well-described attachment turns up in search later.
 
 The maximum upload size is set by whoever runs your Specivo server; there's no built-in restriction on
-file type. Attachments also work on issues and comments — see [Attachments](../issues/attachments.md).
+file type. To show or link a file in the page text, write its filename, as `![diagram](diagram.png)` or
+`[the spec](spec.pdf)` — see [Link to an attachment by filename](../issues/attachments.md#link-to-an-attachment-by-filename).
+Attachments also work on issues and comments — see [Attachments](../issues/attachments.md).
 
 ## What's next
 

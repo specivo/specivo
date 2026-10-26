@@ -55,7 +55,8 @@ class RecurringPatternCreate(BaseModel):
     template_description: str | None = None
     template_estimated_hours: Decimal | None = Field(default=None, ge=0)
     template_metadata: dict = Field(default_factory=dict)
-    is_private: bool = False
+    # None takes the template tracker's private_by_default.
+    is_private: bool | None = None
 
     # --- Recurrence rule (RFC 5545 subset) ---
     freq: _FREQ

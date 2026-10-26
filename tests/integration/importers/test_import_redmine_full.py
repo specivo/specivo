@@ -78,10 +78,15 @@ class TestFullImport:
         return summary
 
     async def test_the_run_reports_no_failures(self, db_session, imported):
-        """The only warning the seeded fixture produces is the importer
-        explaining itself: hours rounded to two decimal places."""
-        messages = [warning.message for warning in imported.warnings]
-        unexpected = [m for m in messages if "rounded" not in m]
+        """The seeded fixture produces only the importer explaining itself:
+        hours rounded to two decimal places, and Redmine's Non member role
+        (members of visible projects only) being matched to Specivo's, which
+        sees all users and is left as it is."""
+        narrower = [
+            w for w in imported.warnings if w.message.startswith("Source role sees only members of visible projects")
+        ]
+        assert [w.context.get("role") for w in narrower] == ["Non member"]
+        unexpected = [w.message for w in imported.warnings if "rounded" not in w.message and w not in narrower]
         assert unexpected == []
 
     async def test_projects_including_the_subproject(self, db_session, imported):

@@ -35,7 +35,9 @@
        due_date: {{ (issue.due_date.isoformat() if issue and issue.due_date else "") | tojson }},
        estimated_hours: {{ (issue.estimated_hours | string if issue and issue.estimated_hours else "") | tojson }},
        done_ratio: {{ issue.done_ratio if issue else 0 }},
-       is_private: {{ "true" if issue and issue.is_private else "false" }},
+       is_private: {{ "true" if (issue.is_private if issue else (trackers[0].private_by_default if trackers else false)) else "false" }},
+       canSetPrivate: {{ "true" if can_set_private else "false" }},
+       trackerPrivateDefaults: { {% for t in trackers %}"{{ t.id }}": {{ "true" if t.private_by_default else "false" }}{{ "," if not loop.last }}{% endfor %} },
        version_id: {{ issue.version_id if issue and issue.version_id else "null" }},
        mode: {{ mode | tojson }},
        projectKey: {{ project.key | tojson }},
@@ -65,12 +67,23 @@
     {# Tracker #}
     <div class="form-group">
       <label class="modal-label" for="tracker">{% trans %}Tracker{% endtrans %}</label>
-      <select id="tracker" class="modal-input" x-model.number="tracker_id">
+      <select id="tracker" class="modal-input" x-model.number="tracker_id" @change="applyTrackerPrivacyDefault()">
         {% for t in trackers %}
         <option value="{{ t.id }}">{{ t.name }}</option>
         {% endfor %}
       </select>
     </div>
+
+    {# Private: only for users allowed to override the tracker's default #}
+    {% if can_set_private %}
+    <div class="form-group">
+      <label class="checkbox-row" for="is_private">
+        <input type="checkbox" id="is_private" x-model="is_private" class="sp-checkbox-accent-pointer">
+        {% trans %}Private{% endtrans %}
+      </label>
+      <div class="form-hint">{% trans %}Only its author, its assignee and administrators can see a private issue.{% endtrans %}</div>
+    </div>
+    {% endif %}
 
     {# Description #}
     <div class="form-group">
@@ -144,7 +157,10 @@
     {# Metadata fields -- dynamically rendered from project schemas #}
     {% if metadata_schemas_data %}
     <div x-data='metadataFieldRenderer({ schemas: {{ metadata_schemas_data | tojson }}, trackerId: tracker_id, existingValues: {{ (issue_metadata if issue_metadata is defined else {}) | tojson }}, i18n: {{ {
-      "tagsPlaceholder": _("Type and press Enter...")
+      "tagsPlaceholder": _("Type and press Enter..."),
+      "addMore": _("Add more..."),
+      "yes": _("Yes"),
+      "no": _("No")
     } | tojson }} })' x-effect="resolveFields()">
       <template x-if="currentFields.length > 0">
         <div>
@@ -194,7 +210,7 @@
                       <div class="sp-meta-toggle-track" :class="{ on: metadata[field.key] }" @click="metadata[field.key] = !metadata[field.key]">
                         <div class="sp-meta-toggle-thumb"></div>
                       </div>
-                      <span class="sp-meta-toggle-label" x-text="metadata[field.key] ? 'Yes' : 'No'"></span>
+                      <span class="sp-meta-toggle-label" x-text="metadata[field.key] ? i18n.yes : i18n.no"></span>
                     </div>
                   </template>
 
@@ -210,7 +226,7 @@
                             </span>
                           </span>
                         </template>
-                        <input type="text" :placeholder="(metadata[field.key] || []).length === 0 ? field.placeholder : 'Add more...'" @keydown.enter.prevent="addTag(field.key, $event)" @keydown.comma.prevent="addTag(field.key, $event)" @keydown.backspace="removeLastTag(field.key, $event)">
+                        <input type="text" :placeholder="(metadata[field.key] || []).length === 0 ? field.placeholder : i18n.addMore" @keydown.enter.prevent="addTag(field.key, $event)" @keydown.comma.prevent="addTag(field.key, $event)" @keydown.backspace="removeLastTag(field.key, $event)">
                       </div>
                       <div class="form-hint">{% trans %}Press Enter or comma to add. Backspace to remove last.{% endtrans %}</div>
                     </div>
@@ -254,7 +270,7 @@
     <div class="form-group">
       <label class="modal-label">{% trans %}Tags{% endtrans %}</label>
       <div class="sp-tag-field"
-           x-data='tagField({ endpoint: "/api/v1/projects/{{ project.key }}/tags/search/", saveUrl: "", tags: pendingTags, canEdit: true })'>
+           x-data='tagField({ endpoint: "/api/v1/projects/{{ project.key }}/tags/search/", saveUrl: "", tags: pendingTags, canEdit: true, placeholder: {{ _("Add tags...") | tojson }}, placeholderMore: {{ _("Add more...") | tojson }} })'>
         <div class="sp-meta-tags" @click="$refs.formTagInput.focus()">
           <template x-for="(tag, i) in tags" :key="i">
             <span class="sp-meta-tag">
@@ -275,7 +291,7 @@
                  @keydown.comma.prevent="commitTyped()"
                  @keydown.escape.prevent="cancel()"
                  @keydown.backspace="removeLast()"
-                 :placeholder="tags.length === 0 ? '{{ _('Add tags...') }}' : '{{ _('Add more...') }}'">
+                 :placeholder="tags.length === 0 ? placeholder : placeholderMore">
         </div>
         <div class="sp-ac-menu" x-show="open" x-cloak @mousedown.prevent>
           <template x-if="!loading && results.length === 0 && query.trim()">

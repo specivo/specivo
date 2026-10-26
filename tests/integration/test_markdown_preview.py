@@ -76,9 +76,7 @@ _PARITY_INPUTS: list[tuple[str, str]] = [
 
 
 @pytest.mark.parametrize(("label", "text"), _PARITY_INPUTS, ids=[p[0] for p in _PARITY_INPUTS])
-async def test_preview_matches_jinja_filter(
-    auth_client: AsyncClient, label: str, text: str
-) -> None:
+async def test_preview_matches_jinja_filter(auth_client: AsyncClient, label: str, text: str) -> None:
     """Endpoint output must equal what the shared renderer produces directly.
 
     This is the load-bearing test: if a future change forks the two paths,
@@ -141,9 +139,7 @@ async def test_empty_text_returns_empty_html(auth_client: AsyncClient) -> None:
 
 async def test_nonexistent_issue_ref_not_autolinked(auth_client: AsyncClient) -> None:
     """A KEY-123 token with no matching issue must NOT be auto-linked."""
-    resp = await auth_client.post(
-        _PREVIEW_URL, json={"text": "See PROJ-99", "context": "issue"}
-    )
+    resp = await auth_client.post(_PREVIEW_URL, json={"text": "See PROJ-99", "context": "issue"})
     assert resp.status_code == 200, resp.text
     html = resp.json()["html"]
     assert "/issue/PROJ-99/" not in html  # not linked
@@ -170,25 +166,21 @@ async def test_anonymous_request_is_rejected(client: AsyncClient) -> None:
 
 
 async def test_oversize_body_is_rejected(auth_client: AsyncClient) -> None:
-    # 256 KiB + 1 byte of plain ASCII -> 256 KiB + 1 bytes UTF-8
+    # One character over the 256 Ki character limit
     too_big = "a" * (256 * 1024 + 1)
-    resp = await auth_client.post(
-        _PREVIEW_URL, json={"text": too_big, "context": "issue"}
-    )
+    resp = await auth_client.post(_PREVIEW_URL, json={"text": too_big, "context": "issue"})
     assert resp.status_code == 413, resp.text
     body = resp.json()
     assert "errors" in body
     err = body["errors"][0]
     assert err["code"] == "payload_too_large"
-    assert err["details"]["max_bytes"] == 256 * 1024
+    assert err["details"]["max_length"] == 256 * 1024
 
 
 async def test_size_limit_boundary_accepts_max_size(auth_client: AsyncClient) -> None:
-    """Exactly 256 KiB must still be accepted — only > 256 KiB is rejected."""
+    """Exactly 256 Ki characters must still be accepted — only more is rejected."""
     at_limit = "a" * (256 * 1024)
-    resp = await auth_client.post(
-        _PREVIEW_URL, json={"text": at_limit, "context": "issue"}
-    )
+    resp = await auth_client.post(_PREVIEW_URL, json={"text": at_limit, "context": "issue"})
     assert resp.status_code == 200, resp.text
 
 
@@ -198,9 +190,7 @@ async def test_size_limit_boundary_accepts_max_size(auth_client: AsyncClient) ->
 
 
 async def test_invalid_context_value_returns_422(auth_client: AsyncClient) -> None:
-    resp = await auth_client.post(
-        _PREVIEW_URL, json={"text": "x", "context": "garbage"}
-    )
+    resp = await auth_client.post(_PREVIEW_URL, json={"text": "x", "context": "garbage"})
     assert resp.status_code == 422, resp.text
     body = resp.json()
     assert "errors" in body

@@ -51,9 +51,9 @@ class TestResume:
         first = await build_import(merge_duplicate_statuses=True, stop_after_phase=ImportPhase.USERS).run()
         second = await build_import(merge_duplicate_statuses=True, resume_run_id=first.run_id).run()
 
-        assert await _count(db_session, Project) == 3
+        assert await _count(db_session, Project) == 4
         assert await _count(db_session, Issue) == 5
-        assert second.created[EntityType.PROJECT] == 3
+        assert second.created[EntityType.PROJECT] == 4
 
     async def test_resuming_does_not_redo_finished_phases(self, db_session, build_import):
         first = await build_import(merge_duplicate_statuses=True, stop_after_phase=ImportPhase.USERS).run()
@@ -84,8 +84,8 @@ class TestResume:
         await build_import(merge_duplicate_statuses=True, stop_after_phase=ImportPhase.PROJECTS).run()
         summary = await build_import(merge_duplicate_statuses=True).run()
 
-        assert await _count(db_session, Project) == 3
-        assert summary.skipped[EntityType.PROJECT] == 3
+        assert await _count(db_session, Project) == 4
+        assert summary.skipped[EntityType.PROJECT] == 4
 
     async def test_the_service_account_is_not_recreated(self, db_session, build_import):
         first = await build_import(merge_duplicate_statuses=True, stop_after_phase=ImportPhase.USERS).run()

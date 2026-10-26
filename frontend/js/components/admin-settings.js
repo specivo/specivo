@@ -3,10 +3,13 @@ export function adminSettings(initial, labels) {
         // second argument; the English defaults only cover a caller that omits them.
         var i18n = Object.assign({
             updated: 'Setting updated.',
-            saveFailed: 'Failed to save.'
+            saveFailed: 'Failed to save.',
+            saving: 'Saving...',
+            save: 'Save'
         }, labels || {});
 
         return {
+            i18n: i18n,
             items: initial || {},
 
             get itemKeys() {

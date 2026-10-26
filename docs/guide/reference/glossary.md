@@ -23,6 +23,7 @@ Every term Specivo uses, defined in one line. Heavier terms link to their full p
 | **metadata** | Typed key/value fields on an issue beyond its core fields, defined by a metadata schema. See [Issue metadata](../metadata/index.md). |
 | **metadata schema** | A JSON-Schema-based definition of which metadata fields apply to a project or tracker. See [Metadata schemas](../metadata/schemas.md). |
 | **priority** | How urgent an issue is: Low, Normal (default), High, Urgent, or Immediate. |
+| **private by default** | A tracker setting under **Administration → Trackers**: new issues of that tracker start private. See [Private by default](../issues/creating.md#private-by-default). |
 | **project** | A container for a body of work — issues, wiki, versions, sprints, and members. See [Projects](../projects/index.md). |
 | **project key** | The short uppercase prefix that brands every issue in a project, like `ACME` (giving `ACME-1`). |
 | **relation** | A typed link between two issues — relates, blocks, duplicates, precedes, or copied. See [Relations](../issues/relations.md). |
@@ -32,7 +33,9 @@ Every term Specivo uses, defined in one line. Heavier terms link to their full p
 | **sprint** | A time-boxed iteration with a goal, a start and end date, and its own board. See [Sprints](../projects/sprints.md). |
 | **status** | Where an issue sits in its lifecycle — New, In Progress, Resolved, Feedback, Closed, Rejected. See [Statuses & workflow](../issues/statuses-workflow.md). |
 | **subtask** | An issue nested under a parent issue (up to 16 levels deep). See [Subtasks](../issues/subtasks.md). |
+| **time entries visibility** | A role setting under **Administration → Roles**: see **all** time entries in a project, or only your **own**. See [Time tracking](../projects/time-tracking.md#who-can-do-what). |
 | **tracker** | The *type* of an issue: Bug, Feature, Task, or Support. See [Issues](../issues/index.md). |
+| **users visibility** | A role setting under **Administration → Roles**: find **all active users**, or only the members of projects you can open. See [What a role can see](../projects/index.md#what-a-role-can-see). |
 | **version** | A milestone or release that groups issues toward a target date. See [Versions & roadmap](../projects/versions.md). |
 | **watcher** | A user who follows an issue to receive notifications about changes to it. |
 | **wiki** | A project's Markdown knowledge base, with version history, nesting, and cross-links. See [Wiki](../wiki/index.md). |

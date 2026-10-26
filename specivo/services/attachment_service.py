@@ -7,14 +7,15 @@ import uuid
 from pathlib import Path
 
 from fastapi import Request, UploadFile
-from sqlalchemy import select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.config import get_settings
 from specivo.core.exceptions import NotFoundError
 from specivo.models.attachment import Attachment
-from specivo.models.search import SearchSource
+from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
@@ -100,7 +101,6 @@ class AttachmentService:
         description: str | None = None,
         content_type: str | None = None,
         *,
-        skip_search_index: bool = False,
         copy_file: bool = True,
     ) -> Attachment:
         """Attach a file that already exists on disk.
@@ -114,8 +114,6 @@ class AttachmentService:
           predates that policy, and dropping it would lose data the operator
           asked to migrate.
         * The size limit is not applied, for the same reason.
-        * ``skip_search_index`` lets a bulk caller index everything once at the
-          end rather than per file.
         * ``copy_file=False`` does everything except write the copy. A dry-run
           import rolls its transaction back, but a file already written would
           stay written, so the copy is the one step it has to leave out. The
@@ -174,14 +172,6 @@ class AttachmentService:
             except OSError:
                 pass
             raise
-
-        if not skip_search_index:
-            try:
-                from specivo.services.embedding_service import EmbeddingService
-
-                await EmbeddingService().embed_attachment(session, attachment)
-            except Exception:
-                logger.debug("Embedding generation skipped for attachment %d", attachment.id)
 
         logger.debug(
             "Imported attachment %d (%s, %d bytes) onto %s/%d",
@@ -278,14 +268,6 @@ class AttachmentService:
             author.id,
         )
 
-        # Index for search (inline, non-blocking on failure)
-        try:
-            from specivo.services.embedding_service import EmbeddingService
-
-            await EmbeddingService().embed_attachment(session, attachment)
-        except Exception:
-            logger.debug("Embedding generation skipped for attachment %d", attachment.id)
-
         # Audit log
         try:
             project_id = await self._resolve_project_id(session, container_type, container_id)
@@ -335,27 +317,15 @@ class AttachmentService:
         user: User | None = None,
         request: Request | None = None,
     ) -> None:
-        """Delete the DB record, search index, and the file on disk."""
+        """Delete the DB record and the file on disk.
+
+        The search index entry goes with the row (see ``search_index_service``).
+        """
         file_path = self._file_path(attachment.disk_filename)
         att_id = attachment.id
         att_filename = attachment.filename
         att_container_type = attachment.container_type
         att_container_id = attachment.container_id
-
-        # Remove search index (before deleting the attachment row)
-        try:
-            result = await session.execute(
-                select(SearchSource).where(
-                    SearchSource.source_type == "attachment",
-                    SearchSource.entity_id == att_id,
-                )
-            )
-            source = result.scalar_one_or_none()
-            if source is not None:
-                await session.delete(source)
-                await session.flush()
-        except Exception:
-            logger.debug("Search index cleanup skipped for attachment %d", att_id)
 
         await session.delete(attachment)
         await session.flush()
@@ -483,39 +453,202 @@ class AttachmentService:
         )
         return list(issue_att.scalars().all()) + list(wiki_att.scalars().all())
 
-    async def build_project_attachment_map(
+    @staticmethod
+    def download_url(attachment_id: int) -> str:
+        """Return the download URL of an attachment."""
+        return f"/api/v1/attachments/{attachment_id}/download/"
+
+    async def visible_attachments_stmt(
         self,
         session: AsyncSession,
-        project_id: int,
-    ) -> dict[str, str]:
-        """Build filename → download URL map for all attachments in a project.
+        project: Project,
+        reader: User,
+    ) -> Select[tuple[int, str, str, int]] | None:
+        """Select the issue and wiki-page attachments of *project* that *reader* may open.
 
-        Used by the wiki markdown renderer to resolve inline image references.
-        If multiple attachments share a filename, the most recent one wins.
+        Rows are ``(id, filename, container_type, container_id)``, oldest
+        first, so a caller folding them into a filename map lets the newest
+        visible file win. Callers may narrow the statement further (for
+        example to a single container) before executing it.
+
+        - Wiki-page attachments take part only when *reader* holds
+          ``view_wiki`` in the project.
+        - Issue attachments take part only for issues *reader* may see,
+          judged by ``IssueService.project_visible_issues_clause`` — the
+          predicate behind the project issue list.
+        - Admins see everything; the anonymous user sees nothing, matching
+          the API, which drops attachments from every anonymous response.
+
+        Returns None when *reader* may open no attachment in the project.
         """
         from specivo.models.issue import Issue
         from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.issue_service import IssueService
+        from specivo.services.permission_service import Permission, check_permission
 
-        # Issue attachments
-        issue_result = await session.execute(
-            select(Attachment.id, Attachment.filename)
-            .join(Issue, (Attachment.container_type == "Issue") & (Attachment.container_id == Issue.id))
-            .where(Issue.project_id == project_id)
-            .order_by(Attachment.created_at.asc())
-        )
-        # WikiPage attachments
-        wiki_result = await session.execute(
-            select(Attachment.id, Attachment.filename)
-            .join(WikiPage, (Attachment.container_type == "WikiPage") & (Attachment.container_id == WikiPage.id))
-            .join(Wiki, WikiPage.wiki_id == Wiki.id)
-            .where(Wiki.project_id == project_id)
-            .order_by(Attachment.created_at.asc())
+        if reader.is_anonymous:
+            return None
+
+        branches: list[ColumnElement[bool]] = []
+
+        issue_visibility = await IssueService().project_visible_issues_clause(session, reader, project)
+        issue_branch = and_(Attachment.container_type == "Issue", Issue.project_id == project.id)
+        if issue_visibility is not None:
+            issue_branch = and_(issue_branch, issue_visibility)
+        branches.append(issue_branch)
+
+        if await check_permission(reader, project.id, Permission.VIEW_WIKI, session):
+            branches.append(and_(Attachment.container_type == "WikiPage", Wiki.project_id == project.id))
+
+        return (
+            select(Attachment.id, Attachment.filename, Attachment.container_type, Attachment.container_id)
+            .outerjoin(Issue, and_(Attachment.container_type == "Issue", Attachment.container_id == Issue.id))
+            .outerjoin(
+                WikiPage,
+                and_(Attachment.container_type == "WikiPage", Attachment.container_id == WikiPage.id),
+            )
+            .outerjoin(Wiki, WikiPage.wiki_id == Wiki.id)
+            .where(or_(*branches))
+            .order_by(Attachment.created_at.asc(), Attachment.id.asc())
         )
 
+    async def build_project_attachment_map(
+        self,
+        session: AsyncSession,
+        project: Project,
+        reader: User,
+    ) -> dict[str, str]:
+        """Build a filename → download URL map of the attachments *reader* may open in *project*.
+
+        Used by the wiki markdown renderer to resolve inline image references.
+        Only attachments from ``visible_attachments_stmt`` take part, so a
+        filename never resolves to a file the reader could not download. If
+        several visible attachments share a filename, the most recent wins.
+        """
+        stmt = await self.visible_attachments_stmt(session, project, reader)
+        if stmt is None:
+            return {}
         att_map: dict[str, str] = {}
-        for att_id, filename in list(issue_result.all()) + list(wiki_result.all()):
-            att_map[filename] = f"/api/v1/attachments/{att_id}/download/"
+        for att_id, filename, _container_type, _container_id in (await session.execute(stmt)).all():
+            att_map[filename] = self.download_url(att_id)
         return att_map
+
+    async def build_issue_attachment_map(
+        self,
+        session: AsyncSession,
+        issue_id: int,
+        reader: User,
+    ) -> dict[str, str]:
+        """Build a filename → download URL map of one issue's attachments *reader* may open.
+
+        Used to resolve bare-filename images and links in the issue's
+        description and comments. Only files attached to the issue itself or
+        to one of its comments take part — never files of another issue — and
+        only when *reader* may see the issue (``can_view_container``). Files
+        on a private note take part for admins only, as everywhere else. If
+        several share a filename, the most recent wins.
+        """
+        from specivo.models.journal import Journal
+
+        if reader.is_anonymous or not await self.can_view_container(session, reader, "Issue", issue_id):
+            return {}
+
+        journal_ids = select(Journal.id).where(Journal.issue_id == issue_id)
+        if not reader.is_admin:
+            journal_ids = journal_ids.where(Journal.is_private.is_(False))
+
+        rows = await session.execute(
+            select(Attachment.id, Attachment.filename)
+            .where(
+                or_(
+                    and_(Attachment.container_type == "Issue", Attachment.container_id == issue_id),
+                    and_(Attachment.container_type == "Journal", Attachment.container_id.in_(journal_ids)),
+                )
+            )
+            .order_by(Attachment.created_at.asc(), Attachment.id.asc())
+        )
+        return {filename: self.download_url(att_id) for att_id, filename in rows.all()}
+
+    async def can_view_container(
+        self,
+        session: AsyncSession,
+        user: User,
+        container_type: str,
+        container_id: int,
+    ) -> bool:
+        """Return whether *user* may open attachments of the given container.
+
+        The per-container form of ``visible_attachments_stmt``:
+
+        - ``Issue``: the issue is visible to *user*
+          (``IssueService.project_visible_issues_clause``).
+        - ``Journal``: an issue comment whose issue is visible and which is
+          not a private note (private notes are shown to admins only).
+          Comments on wiki pages carry no attachments outside admin access,
+          as before.
+        - ``WikiPage``: *user* holds ``view_wiki`` in the page's project.
+
+        Admins may open everything, the anonymous user nothing. A missing
+        container or an unknown type answers False.
+        """
+        from specivo.models.issue import Issue
+        from specivo.models.journal import Journal
+        from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.issue_service import IssueService
+        from specivo.services.permission_service import Permission, check_permission
+
+        if user.is_admin:
+            return True
+        if user.is_anonymous:
+            return False
+
+        if container_type == "WikiPage":
+            project_id = (
+                await session.execute(
+                    select(Wiki.project_id)
+                    .join(WikiPage, WikiPage.wiki_id == Wiki.id)
+                    .where(WikiPage.id == container_id)
+                )
+            ).scalar_one_or_none()
+            if project_id is None:
+                return False
+            return await check_permission(user, project_id, Permission.VIEW_WIKI, session)
+
+        if container_type == "Journal":
+            row = (
+                await session.execute(select(Journal.issue_id, Journal.is_private).where(Journal.id == container_id))
+            ).one_or_none()
+            if row is None or row.issue_id is None or row.is_private:
+                return False
+            issue_id = row.issue_id
+        elif container_type == "Issue":
+            issue_id = container_id
+        else:
+            return False
+
+        project_id = (await session.execute(select(Issue.project_id).where(Issue.id == issue_id))).scalar_one_or_none()
+        if project_id is None:
+            return False
+        project = await session.get(Project, project_id)
+        if project is None:
+            return False
+        visibility = await IssueService().project_visible_issues_clause(session, user, project)
+        stmt = select(Issue.id).where(Issue.id == issue_id)
+        if visibility is not None:
+            stmt = stmt.where(visibility)
+        return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def get_visible(self, session: AsyncSession, attachment_id: int, user: User) -> Attachment:
+        """Fetch an attachment *user* may open, eagerly loading author.
+
+        Raises ``NotFoundError`` — the same error as for a missing id — when
+        the attachment does not exist or its container is hidden from *user*,
+        so ids of hidden files cannot be probed.
+        """
+        attachment = await self.get_by_id(session, attachment_id)
+        if not await self.can_view_container(session, user, attachment.container_type, attachment.container_id):
+            raise NotFoundError(f"Attachment {attachment_id} not found")
+        return attachment
 
     async def update_description(
         self,
@@ -525,7 +658,7 @@ class AttachmentService:
         user: User,
         request: Request | None = None,
     ) -> Attachment:
-        """Update an attachment's description and re-index for search.
+        """Update an attachment's description; the session events re-index it.
 
         Args:
             session: Async DB session.
@@ -540,14 +673,6 @@ class AttachmentService:
         old_description = attachment.description
         attachment.description = new_description
         await session.flush()
-
-        # Re-index for search (inline, non-blocking on failure)
-        try:
-            from specivo.services.embedding_service import EmbeddingService
-
-            await EmbeddingService().embed_attachment(session, attachment)
-        except Exception:
-            logger.debug("Re-index skipped for attachment %d description update", attachment.id)
 
         # Audit log
         try:

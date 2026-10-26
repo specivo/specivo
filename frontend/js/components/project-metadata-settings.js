@@ -8,10 +8,20 @@ export function projectMetadataSettings(initial) {
             schemaRequired: 'Schema definition is required.',
             schemaNotObject: 'Root type must be "object".',
             invalidJson: 'Invalid JSON: %(error)s',
-            deleteBlocked: 'Cannot delete: %(count)s issue(s) use this schema.'
+            deleteBlocked: 'Cannot delete: %(count)s issue(s) use this schema.',
+            fromPreset: 'from %(preset)s',
+            countIssues: '%(count)s issues',
+            editSchema: 'Edit Schema',
+            newSchema: 'New Custom Schema',
+            saveChanges: 'Save Changes',
+            createSchema: 'Create Schema'
         }, initial.i18n || {});
 
         return {
+            i18n: i18n,
+
+            presetLabel(schema) { return i18n.fromPreset.replace('%(preset)s', schema.preset_slug); },
+            usageLabel(schema) { return i18n.countIssues.replace('%(count)s', schema.usage_count); },
             presets: initial.presets || [],
             enabledSlugs: initial.enabledSlugs || [],
             schemas: initial.schemas || [],

@@ -74,7 +74,10 @@ DATABASE_URL=postgresql+asyncpg://user:pass@db.example.com:5432/specivo
 REDIS_URL=redis://cache.example.com:6379/0
 ```
 
-Your PostgreSQL must have the **pgvector** extension available, since search relies on it. Once you
+Your PostgreSQL must have the **pgvector** extension available, since search relies on it. Use
+pgvector **0.8 or later**: semantic search only uses its vector index with 0.8's iterative index
+scans, and compares every embedding on older releases (the bundled `pgvector/pgvector:pg18` image
+ships 0.8). Once you
 point the URLs elsewhere, you can remove the `db` and `redis` services from `docker-compose.yml` —
 they are declared as optional dependencies, so the app starts without them.
 
@@ -104,19 +107,50 @@ SMTP_USER=notifications@example.com
 SMTP_PASSWORD=...      # put the password in .env.local
 ```
 
+## Imported passwords
+
+These settings matter only if you import accounts from another system and let
+them keep their passwords. See [Migrating from Redmine](migrating-from-redmine.md#keeping-peoples-passwords)
+and [Writing a password hasher plugin](password-hasher-plugins.md).
+
+| Variable | Purpose / default |
+|---|---|
+| `LEGACY_PASSWORD_ALGORITHMS` | Imported password formats allowed to sign in, e.g. `["redmine_sha1"]`. Default `[]`: none. |
+| `LEGACY_PASSWORD_HASHES_EXPIRE_AT` | After this moment no imported password works and those people use password recovery, e.g. `2027-03-31T00:00:00Z`. Default unset. |
+| `PASSWORD_HASHERS` | Extra hasher classes by dotted path, e.g. `["acme_hashers.AcmeTrackerMd5"]`. |
+| `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers and [import sources](import-source-plugins.md). |
+
 ## Semantic search model
 
-Hybrid search combines keyword matching with semantic ("by meaning") matching. The semantic side
-needs an embedding model, which you enable in one of two ways:
+Hybrid and semantic search match by meaning, which needs an embedding model. Specivo runs one on
+your own CPU, `multilingual-e5-small` (about 487 MB, 384-dimensional vectors, about 100 languages).
+It is not part of the Docker image and is not downloaded automatically. You fetch it once, with the
+stack running:
 
-- **Bundled on-device model.** Download once and it runs on CPU with no external calls:
+```bash
+docker compose exec api python -m specivo.cli.download_model   # or: make download-model
+```
 
-  ```bash
-  make download-model      # ~393 MB, stored under SPECIVO_DATA_DIR
-  ```
+It saves into `SPECIVO_DATA_DIR/models` and checks each file against its published checksum. See
+[Semantic search and embeddings](semantic-search.md#turn-it-on).
 
-- **Bring your own key (BYOK).** Use an external embedding provider instead of the local model.
+There is no setting that turns it on: when the model files are in `SPECIVO_DATA_DIR/models`, it is
+on. Without them, keyword search and everything else work normally and hybrid search behaves like
+keyword search. Only this bundled local model is supported: there are no hosted embedding providers,
+no bring-your-own-key (BYOK) option and no way to switch to another model (see
+[Changing the model](semantic-search.md#changing-the-model)).
 
-Keyword search and everything else work without either. If you skip this, search still functions —
-it just matches on words rather than meaning. For an offline host, pre-fetch the model as described
-in [Air-gapped install](air-gapped.md).
+| Variable | Purpose / default |
+|---|---|
+| `EMBEDDING_ONNX_THREADS` | CPU threads the model may use. Default `2`; `0` uses every core. |
+| `EMBEDDING_WORKER_CONCURRENCY` | Processes in the `celery-embeddings` container. Default `1`; each one loads its own copy of the model. |
+| `EMBEDDING_QUEUE` | Celery queue for embedding jobs. Default `embeddings`, read by `celery-embeddings`; `celery` runs them in `celery-worker` instead. |
+| `SEARCH_INDEX_COMMENTS` | Index comments for search. Default `true`. |
+| `SEARCH_MIN_COMMENT_LENGTH` | Comments shorter than this many characters are not indexed. Default `20`. |
+| `SEARCH_EXCLUDE_BOT_COMMENTS` | Skip comments made through an API key or by a service account. Default `true`. |
+| `SEARCH_HNSW_EF_SEARCH` | Size of pgvector's candidate list for each vector index scan (`hnsw.ef_search`, 10 to 1000). Higher finds the true nearest matches more reliably and is a little slower. Default `100`. |
+| `SEARCH_SEMANTIC_OVERFETCH` | Nearest chunks read from the vector index per wanted result, before results the reader may not see are removed (1 to 50). Default `4`. See [Vector index](semantic-search.md#vector-index). |
+
+See [Semantic search and embeddings](semantic-search.md) for what it is used for, how existing
+content is indexed, how to check it works, and troubleshooting. For an offline host, see
+[Air-gapped install](air-gapped.md#semantic-search-offline).

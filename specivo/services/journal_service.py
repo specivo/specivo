@@ -16,6 +16,7 @@ from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.user import User
+from specivo.services.markdown_budget import check_markdown_length
 
 logger = logging.getLogger(__name__)
 
@@ -291,6 +292,7 @@ class JournalService:
             and itself not be a reply.
         Returns the created ``Journal``.
         """
+        check_markdown_length(notes, "notes")
         if reply_to_id is not None:
             result = await session.execute(select(Journal).where(Journal.id == reply_to_id))
             parent_journal = result.scalar_one_or_none()
@@ -448,6 +450,10 @@ class JournalService:
     ) -> list[Journal]:
         """List journals for an issue, ordered by created_at ascending.
 
+        Ties on ``created_at`` (entries written in one transaction share the
+        same server-side timestamp) are broken by id, so the order — and the
+        activity pages sliced from it — is deterministic.
+
         Eagerly loads ``user`` and ``details`` relationships.
         """
         stmt = (
@@ -461,7 +467,7 @@ class JournalService:
                 # details is a collection — keep as selectinload (one extra query).
                 selectinload(Journal.details),
             )
-            .order_by(Journal.created_at.asc())
+            .order_by(Journal.created_at.asc(), Journal.id.asc())
         )
 
         if not include_private:

@@ -51,7 +51,7 @@ Step-by-step self-hosting guide: [Self-host Specivo with Docker](https://specivo
 
 **Custom metadata schemas** — define structured fields per project or issue type. Preset schemas for common workflows. More flexible than static custom fields.
 
-**AI is optional.** Works fine without it. Enable semantic search when you want it, using the bundled model (multilingual-e5-small, runs on CPU, 100 languages) or your own API key (BYOK).
+**AI is optional.** Works fine without it. Enable semantic search when you want it, with the multilingual-e5-small model (runs on your CPU, about 100 languages, downloaded once with `make download-model`).
 
 **i18n** — ships with English, Russian, Chinese, French, Spanish and Thai. Per-user language and workspace default. Extensible via `.po` files.
 
@@ -76,7 +76,7 @@ make frontend-build   # one-off frontend build (needed for tests that load bundl
 make test-db-up       # test database
 make test             # run tests
 make lint             # ruff + mypy
-make download-model   # embedding model (~393 MB)
+make download-model   # embedding model (~487 MB), with the stack running
 ```
 
 ## Documentation

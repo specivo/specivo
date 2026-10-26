@@ -8,10 +8,24 @@ export function adminUserDetail(initial) {
             minutesAgo: '%(count)s min ago',
             hoursAgo: '%(count)s hours ago',
             yesterday: 'Yesterday',
-            daysAgo: '%(count)s days ago'
+            daysAgo: '%(count)s days ago',
+            roleAdmin: 'Administrator',
+            roleMember: 'Member',
+            lastApiCall: 'Last API call',
+            lastLogin: 'Last login',
+            passwordTemporary: 'Must be replaced at next sign-in',
+            passwordOwn: 'Chosen by the account owner',
+            copied: 'Copied!',
+            copy: 'Copy',
+            creating: 'Creating...',
+            createKey: 'Create Key',
+            keyActive: 'Active',
+            keyRevoked: 'Revoked'
         }, initial.i18n || {});
+        var statusLabels = initial.statusLabels || {};
 
         return {
+            i18n: i18n,
             targetUser: initial.targetUser || {},
             apiKeys: initial.apiKeys || [],
 
@@ -21,6 +35,11 @@ export function adminUserDetail(initial) {
 
             capitalize(s) {
                 return s.charAt(0).toUpperCase() + s.slice(1);
+            },
+
+            /* Translated label for a stored account status; capitalised raw value as a fallback. */
+            statusLabel(s) {
+                return statusLabels[s] || this.capitalize(s || '');
             },
 
             // Create key state
@@ -97,9 +116,7 @@ export function adminUserDetail(initial) {
             },
 
             formatDate(iso) {
-                if (!iso) return '-';
-                var d = new Date(iso);
-                return d.toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'});
+                return spFormatDate(iso) || '-';
             },
 
             timeAgo(iso) {
@@ -112,7 +129,7 @@ export function adminUserDetail(initial) {
                 if (diff < 86400) return i18n.hoursAgo.replace('%(count)s', Math.floor(diff / 3600));
                 if (diff < 172800) return i18n.yesterday;
                 if (diff < 604800) return i18n.daysAgo.replace('%(count)s', Math.floor(diff / 86400));
-                return d.toLocaleDateString();
+                return spFormatDate(d);
             }
         };
     }

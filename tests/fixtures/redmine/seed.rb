@@ -59,6 +59,24 @@ registered = make_user('fixture_new', 'Registered', 'Account', User::STATUS_REGI
 # A non-Latin display name, to catch encoding assumptions.
 thai = make_user('fixture_thai', 'ผู้ใช้', 'ทดสอบ', User::STATUS_ACTIVE)
 
+# Asked by Redmine to change its password at next sign-in, which an import that
+# keeps passwords has to carry over.
+registered.update!(must_change_passwd: true)
+
+# An account that signs in through a directory. Redmine never checks its local
+# hash, so the importer must not carry one. The host is never contacted.
+directory = AuthSourceLdap.create!(
+  name: 'Fixture Directory',
+  host: 'ldap.example.invalid',
+  port: 389,
+  base_dn: 'dc=example,dc=invalid',
+  attr_login: 'uid'
+)
+ldap_user = User.new(login: 'fixture_ldap', firstname: 'Directory', lastname: 'Account', language: 'en')
+ldap_user.auth_source = directory
+ldap_user.mail = 'fixture_ldap@example.invalid'
+ldap_user.save!
+
 group = Group.create!(lastname: 'Platform Team')
 group.users << developer
 group.users << thai
@@ -145,6 +163,24 @@ developer_role = Role.find_by_name('Developer')
 Member.create!(project: parent, user: admin, roles: [manager_role])
 Member.create!(project: parent, principal: group, roles: [developer_role])
 Member.create!(project: child, user: developer, roles: [developer_role])
+
+# ---------------------------------------------------------------------------
+# Access for people without a membership. The builtin Non member and
+# Anonymous roles apply instance-wide; a membership held by the builtin
+# GroupAnonymous / GroupNonMember principal overrides them on one project.
+# login_required is left unset, Redmine's default; the importer tests set it.
+# ---------------------------------------------------------------------------
+
+# Anonymous visitors may read issues in the subproject but not its wiki.
+issues_reader = Role.create!(name: 'Issue Reader', permissions: %i[view_issues view_gantt], assignable: true)
+Member.create!(project: child, principal: GroupAnonymous.load_instance, roles: [issues_reader])
+# Signed-in non-members get a reporter's rights on the parent, which Specivo
+# has no per-project equivalent for.
+Member.create!(project: parent, principal: GroupNonMember.load_instance, roles: [Role.find_by_name('Reporter')])
+
+# A private project: never readable without a membership, whatever the roles say.
+internal = Project.create!(name: 'Acme Internal', identifier: 'acme-internal', is_public: false)
+internal.enabled_module_names = %w[issue_tracking wiki]
 
 # ---------------------------------------------------------------------------
 # Issues, including a parent with two children and non-Latin content.

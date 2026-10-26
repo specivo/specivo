@@ -4,18 +4,15 @@ from __future__ import annotations
 
 import html
 import logging
-import re
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.wiki import WikiContent, WikiPage, WikiPageLink
-from specivo.services.wiki_utils import slugify
+from specivo.services.wiki_utils import WIKI_LINK_RE, slugify
 
 logger = logging.getLogger(__name__)
 
-# Regex to find [[Target]] or [[Target|display text]] links
-_WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
 
 # Safety cap to prevent pathological content from creating unbounded link rows
 _MAX_LINKS_PER_PAGE = 500
@@ -37,7 +34,7 @@ class WikiLinkService:
         seen: set[str] = set()
         results: list[tuple[str, str | None]] = []
 
-        for match in _WIKI_LINK_RE.finditer(text):
+        for match in WIKI_LINK_RE.finditer(text):
             raw_target = match.group(1).strip()
             display_text = match.group(2)
             if display_text is not None:

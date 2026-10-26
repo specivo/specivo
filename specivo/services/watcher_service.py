@@ -74,8 +74,12 @@ class WatcherService:
         )
         return result.scalar_one_or_none() is not None
 
-    async def list_watchers(self, session: AsyncSession, issue: Issue) -> list[User]:
+    async def list_watchers(self, session: AsyncSession, issue: Issue, viewer: User | None = None) -> list[User]:
         """Return the list of users watching the issue, ordered by user id.
+
+        Pass *viewer* when the list is shown to someone: it is then limited to
+        the users *viewer* may list (``permission_service.visible_users_clause``).
+        Without it the list is complete, for notification delivery.
 
         Uses a single JOIN to fetch User rows directly — avoids the two-query
         pattern (watchers + selectinload user).
@@ -86,6 +90,12 @@ class WatcherService:
             .where(Watcher.issue_id == issue.id)
             .order_by(User.id)
         )
+        if viewer is not None:
+            from specivo.services.permission_service import visible_users_clause
+
+            visible = await visible_users_clause(session, viewer)
+            if visible is not None:
+                stmt = stmt.where(visible)
         result = await session.execute(stmt)
         return list(result.scalars().all())
 

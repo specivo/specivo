@@ -14,6 +14,9 @@ from sqlalchemy.orm import selectinload
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError, ValidationError
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
+from specivo.schemas.search import SearchSourceType
+from specivo.services.markdown_budget import check_markdown_length
+from specivo.services.search_index_service import sync_sources
 from specivo.services.wiki_utils import slugify as _slugify
 
 logger = logging.getLogger(__name__)
@@ -57,16 +60,18 @@ class WikiService:
         parent_slug: str | None = None,
         comments: str | None = None,
         *,
-        skip_search_index: bool = False,
         skip_link_rebuild: bool = False,
+        limit_text_length: bool = True,
     ) -> tuple[WikiPage, WikiContent]:
         """Create a wiki page with initial content (version 1).
 
-        ``skip_search_index`` suppresses the inline embedding call and
-        ``skip_link_rebuild`` the link-graph task dispatch. Bulk callers such as
-        the import pipeline set both and do that work once at the end of the
-        run, rather than per page.
+        ``skip_link_rebuild`` suppresses the link-graph task dispatch. Bulk
+        callers such as the import pipeline set it and rebuild the graph once
+        at the end of the run, rather than per page. ``limit_text_length=False`` lets it keep a
+        page longer than ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
         """
+        if limit_text_length:
+            check_markdown_length(text, "text")
         wiki = await self.get_or_create_wiki(session, project_id)
         slug = _slugify(title)
 
@@ -117,20 +122,6 @@ class WikiService:
         )
         session.add(content)
         await session.flush()
-
-        # Generate search embeddings (inline, non-blocking on failure)
-        if not skip_search_index:
-            try:
-                from specivo.schemas.search import SearchSourceType
-                from specivo.services.chunking_service import ChunkingService
-                from specivo.services.embedding_service import EmbeddingService
-
-                chunks = ChunkingService().chunk_wiki_page(title, text)
-                await EmbeddingService().embed_source(
-                    session, SearchSourceType.WIKI_PAGE, page.id, project_id, chunks
-                )
-            except Exception:
-                logger.debug("Embedding generation skipped for wiki page %s", slug)
 
         # Rebuild wiki link graph (async, non-blocking on failure)
         if not skip_link_rebuild:
@@ -186,6 +177,7 @@ class WikiService:
         comment: str | None = None,
     ) -> tuple[WikiPage, WikiContent]:
         """Update page content, creating a new version."""
+        check_markdown_length(text, "text")
         page = await self._get_page_by_id(session, page_id)
         if page is None:
             raise NotFoundError("Wiki page not found")
@@ -303,16 +295,9 @@ class WikiService:
 
         await session.flush()
 
-        # Remove search index for all deleted pages
-        try:
-            from specivo.schemas.search import SearchSourceType
-            from specivo.services.embedding_service import EmbeddingService
-
-            embed_svc = EmbeddingService()
-            for pid in deleted_ids:
-                await embed_svc.remove_source(session, SearchSourceType.WIKI_PAGE, pid)
-        except Exception:
-            logger.debug("Search index cleanup skipped for wiki page delete %d", page.id)
+        # Descendants were soft-deleted by a bulk UPDATE the session events
+        # cannot see, so drop their search chunks explicitly.
+        await sync_sources(session, [(SearchSourceType.WIKI_PAGE, pid) for pid in deleted_ids])
 
         # Audit log
         try:
@@ -410,29 +395,6 @@ class WikiService:
             )
         except Exception:
             logger.debug("Audit logging skipped for wiki page restore %d", page.id)
-
-        # Re-index restored pages for search
-        try:
-            from specivo.schemas.search import SearchSourceType
-            from specivo.services.chunking_service import ChunkingService
-            from specivo.services.embedding_service import EmbeddingService
-
-            wiki = await self._get_wiki_by_id(session, page.wiki_id)
-            project_id = wiki.project_id if wiki else None
-            if project_id:
-                embed_svc = EmbeddingService()
-                chunk_svc = ChunkingService()
-                for pid in restored_ids:
-                    restored_page = await self._get_page_by_id(session, pid)
-                    if restored_page:
-                        content = await self._get_latest_content(session, pid)
-                        if content:
-                            chunks = chunk_svc.chunk_wiki_page(restored_page.title, content.text)
-                            await embed_svc.embed_source(
-                                session, SearchSourceType.WIKI_PAGE, pid, project_id, chunks
-                            )
-        except Exception:
-            logger.debug("Search re-indexing skipped for wiki page restore %d", page.id)
 
         return restored_ids
 

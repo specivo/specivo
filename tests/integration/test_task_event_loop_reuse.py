@@ -239,7 +239,7 @@ class TestWikiLinkTaskLoopReuse:
 
 
 # ---------------------------------------------------------------------------
-# embeddings — generate_embeddings called twice (ISSUE + ATTACHMENT)
+# embeddings — embed_search_sources called twice (ISSUE + ATTACHMENT)
 # ---------------------------------------------------------------------------
 
 
@@ -301,16 +301,19 @@ class TestEmbeddingTaskLoopReuse:
         await session.refresh(issue)
         return issue
 
-    async def test_generate_embeddings_twice_issue_then_attachment(
-        self, real_db_session: AsyncSession, mock_model: EmbeddingModel
+    async def test_embed_search_sources_twice_issue_then_attachment(
+        self, real_db_session: AsyncSession, mock_model: EmbeddingModel, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Calling generate_embeddings twice (ISSUE then ATTACHMENT), each in
+        """Calling embed_search_sources twice (ISSUE then ATTACHMENT), each in
         its own new loop, succeeds and persists embeddings for both.
 
         Pre-fix the second call raised "Event loop is closed" because the
         singleton pool's connection belonged to the first call's closed loop.
         """
-        from specivo.tasks.embeddings import generate_embeddings
+        from specivo.tasks.embeddings import embed_search_sources
+
+        # The commits below would queue the task on the broker; run it here instead.
+        monkeypatch.setattr(embed_search_sources, "apply_async", lambda *_a, **_kw: None)
 
         project = await _make_project(real_db_session, "TLR2")
         author = await _make_user(real_db_session, "tlr_embed_author")
@@ -336,8 +339,8 @@ class TestEmbeddingTaskLoopReuse:
         # singleton pool), then ATTACHMENT (ANOTHER new loop). Reusing the
         # loop-1 pooled connection is what crashes on the unfixed code.
         _run_in_worker_thread(
-            lambda: generate_embeddings.run(SearchSourceType.ISSUE.value, issue.id, project.id),
-            lambda: generate_embeddings.run(SearchSourceType.ATTACHMENT.value, attachment.id, project.id),
+            lambda: embed_search_sources.run([[SearchSourceType.ISSUE.value, issue.id]]),
+            lambda: embed_search_sources.run([[SearchSourceType.ATTACHMENT.value, attachment.id]]),
         )
 
         # Both source entities got embeddings persisted.

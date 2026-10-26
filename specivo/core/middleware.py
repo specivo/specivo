@@ -52,10 +52,32 @@ _SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
 _CSRF_COOKIE = "csrf_token"
 _CSRF_HEADER = b"x-csrf-token"
 _CSRF_MUTATING_METHODS = frozenset({b"POST", b"PATCH", b"PUT", b"DELETE"})
-# Path suffixes exempt from CSRF validation (matched after stripping stealth prefix).
-# Each entry is checked with path.startswith(prefix + suffix).
-_CSRF_EXEMPT_SUFFIXES = (
-    "/api/v1/auth/",
+# Exact paths exempt from CSRF validation, listed without the stealth prefix
+# (it is prepended at startup) and matched with or without the trailing slash.
+#
+# An exemption is a property of one endpoint, never of a path prefix: each entry
+# below is safe for a reason of its own, and a route added under /api/v1/auth/
+# later is protected until somebody decides otherwise and adds it here. The
+# contract test in tests/integration/test_csrf_auth_routes.py fails when an
+# entry stops matching a route.
+_CSRF_EXEMPT_PATHS = (
+    # Pre-auth: the credentials in the body are the proof. A browser can still
+    # carry a stale access_token cookie from an earlier session.
+    "/api/v1/auth/login/",
+    # Authenticated by the refresh token itself, not by the access cookie, and
+    # it must work once the access token has expired. A forged call can only
+    # rotate the victim's own tokens; the response is unreadable cross-origin.
+    "/api/v1/auth/refresh/",
+    # Pre-auth: acts on the email address in the body, uses no session.
+    "/api/v1/auth/forgot-password/",
+    # Pre-auth: the single-use token from the reset email is the proof.
+    "/api/v1/auth/reset-password/",
+)
+# Mount points whose whole subtree is exempt. Only for sub-apps that never
+# accept cookie authentication.
+_CSRF_EXEMPT_MOUNTS = (
+    # The MCP sub-app authenticates with Bearer API keys only and refuses any
+    # request without one (401), so it is not reachable with a session cookie.
     "/mcp/",
 )
 
@@ -72,7 +94,12 @@ class CSRFMiddleware:
 
     Exempt from validation:
     - Requests with an ``X-API-Key`` header (API key auth, not cookie-based)
-    - Paths in ``_CSRF_EXEMPT_PREFIXES`` (login, password reset, MCP)
+    - The exact paths in ``_CSRF_EXEMPT_PATHS`` (login, token refresh,
+      password-reset request and confirm)
+    - Everything under the mount points in ``_CSRF_EXEMPT_MOUNTS`` (MCP)
+
+    Every other mutating route needs the token when the request carries the
+    ``access_token`` cookie, including any route added under ``/api/v1/auth/``.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -86,7 +113,14 @@ class CSRFMiddleware:
             hashlib.sha256,
         ).digest()
         sp = settings.stealth_prefix.rstrip("/")
-        self._exempt_prefixes = tuple(sp + s for s in _CSRF_EXEMPT_SUFFIXES)
+        self._exempt_paths = frozenset(sp + p for p in _CSRF_EXEMPT_PATHS)
+        self._exempt_mounts = tuple(sp + m for m in _CSRF_EXEMPT_MOUNTS)
+
+    def _is_exempt_path(self, path: str) -> bool:
+        """Return True if *path* is one of the exempt endpoints or mounts."""
+        if path.rstrip("/") + "/" in self._exempt_paths:
+            return True
+        return any(path.startswith(m) for m in self._exempt_mounts)
 
     def _generate_token(self) -> str:
         nonce = secrets.token_hex(16)
@@ -106,8 +140,8 @@ class CSRFMiddleware:
         # Non-cookie auth (API key or Bearer token) is not CSRF-vulnerable
         if b"x-api-key" in headers or b"authorization" in headers:
             return False
-        # Exempt paths (auth endpoints, MCP)
-        if any(path.startswith(p) for p in self._exempt_prefixes):
+        # Exempt endpoints (pre-auth auth routes) and mounts (MCP)
+        if self._is_exempt_path(path):
             return False
         # No auth cookies present — let the auth layer handle the 401
         cookie_header = headers.get(b"cookie", b"").decode()
@@ -176,9 +210,7 @@ class CSRFMiddleware:
         await self.app(scope, receive, send_with_csrf_cookie)
 
     @staticmethod
-    async def _extract_form_token(
-        receive: Receive, headers: dict[bytes, bytes]
-    ) -> tuple[str, Receive]:
+    async def _extract_form_token(receive: Receive, headers: dict[bytes, bytes]) -> tuple[str, Receive]:
         """Try to extract csrf_token from a form body (URL-encoded or multipart).
 
         Returns the token (or empty string) and a new receive callable

@@ -571,6 +571,7 @@ async def test_system_shared_version_visible_to_other_project(
     from specivo.schemas.version import VersionCreate
     from specivo.services.version_service import VersionService
 
+    admin = await _make_admin(db_session, login="admin_ver_sharing")
     proj_a = await _make_project(db_session, key="SHA", identifier="sharing-a")
     proj_b = await _make_project(db_session, key="SHB", identifier="sharing-b")
 
@@ -586,7 +587,7 @@ async def test_system_shared_version_visible_to_other_project(
     await db_session.refresh(version)
 
     # Verify it's visible from project B
-    visible = await svc.visible_versions(db_session, proj_b)
+    visible = await svc.visible_versions(db_session, proj_b, admin)
     visible_ids = [v.id for v in visible]
     assert version.id in visible_ids, f"system-shared version {version.id} should be visible from proj_b"
 
@@ -601,6 +602,7 @@ async def test_none_sharing_not_visible_to_other_project(
     from specivo.schemas.version import VersionCreate
     from specivo.services.version_service import VersionService
 
+    admin = await _make_admin(db_session, login="admin_ver_sharing")
     proj_a = await _make_project(db_session, key="NSA", identifier="none-sharing-a")
     proj_b = await _make_project(db_session, key="NSB", identifier="none-sharing-b")
 
@@ -613,7 +615,7 @@ async def test_none_sharing_not_visible_to_other_project(
     await db_session.commit()
     await db_session.refresh(version)
 
-    visible = await svc.visible_versions(db_session, proj_b)
+    visible = await svc.visible_versions(db_session, proj_b, admin)
     visible_ids = [v.id for v in visible]
     assert version.id not in visible_ids, f"none-shared version {version.id} should NOT be visible from proj_b"
 
@@ -628,6 +630,7 @@ async def test_descendants_sharing_visible_to_subproject(
     from specivo.schemas.version import VersionCreate
     from specivo.services.version_service import VersionService
 
+    admin = await _make_admin(db_session, login="admin_ver_sharing")
     # Parent project
     parent = ProjectFactory.build(key="DSP", identifier="desc-parent", path="desc_parent")
     db_session.add(parent)
@@ -655,7 +658,7 @@ async def test_descendants_sharing_visible_to_subproject(
     await db_session.refresh(version)
 
     # Child project should see the parent's version
-    visible = await svc.visible_versions(db_session, child)
+    visible = await svc.visible_versions(db_session, child, admin)
     visible_ids = [v.id for v in visible]
     assert version.id in visible_ids, f"descendants-shared version {version.id} should be visible from child project"
 

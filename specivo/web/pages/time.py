@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_current_user_optional, get_templates
@@ -48,10 +49,13 @@ async def time_entries_list(
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
     await _project_svc.require_project_access(db, project, user)
+    if not await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db, request=request):
+        raise HTTPException(status_code=403, detail="Permission denied")
 
     entries, total = await _time_svc.list_for_project(
         db,
-        project.id,
+        project,
+        user,
         user_id=safe_int(user_id),
         from_date=from_date,
         to_date=to_date,
@@ -68,6 +72,10 @@ async def time_entries_list(
     # Get project members for user dropdown
     members = await _project_svc.list_members(db, project)
 
+    # Controls are shown only to users the API would accept (TimeEntryService.can_edit).
+    can_log_time = await check_permission(user, project.id, Permission.LOG_TIME, db)
+    can_manage_time_entries = await check_permission(user, project.id, Permission.MANAGE_TIME_ENTRIES, db)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -82,6 +90,8 @@ async def time_entries_list(
             "total_hours": total_hours,
             "activities": activities,
             "members": members,
+            "can_log_time": can_log_time,
+            "can_manage_time_entries": can_manage_time_entries,
             "offset": offset,
             "limit": limit,
             "filters": {
@@ -110,6 +120,8 @@ async def time_entry_form(
     except NotFoundError:
         raise HTTPException(status_code=404, detail="Project not found")
     await _project_svc.require_project_access(db, project, user)
+    if not await check_permission(user, project.id, Permission.LOG_TIME, db, request=request):
+        raise HTTPException(status_code=403, detail="Permission denied")
 
     activities = await _time_svc.list_activities(db)
 

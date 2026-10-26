@@ -146,3 +146,52 @@ class TestSeedEmbeddingModel:
 
         # flush may or may not be called — but add must not be called
         session.add.assert_not_called()
+
+
+def _session_returning(existing: MagicMock | None, default_id: int | None) -> MagicMock:
+    """AsyncSession mock: the first query finds *existing*, the second the current default's id."""
+    session = MagicMock()
+    by_name, default = MagicMock(), MagicMock()
+    by_name.scalar_one_or_none.return_value = existing
+    default.scalar_one_or_none.return_value = default_id
+    session.execute = AsyncMock(side_effect=[by_name, default])
+    session.add = MagicMock()
+    session.flush = AsyncMock()
+    return session
+
+
+class TestSeedSingleDefault:
+    """The database allows one default model, so the seed must not add a second."""
+
+    @pytest.mark.asyncio
+    async def test_new_model_is_not_default_when_another_row_is(self):
+        from specivo.cli.seed import seed_embedding_model
+
+        session = _session_returning(None, default_id=7)
+        await seed_embedding_model(session)
+
+        added_model = session.add.call_args[0][0]
+        assert added_model.is_default is False
+
+    @pytest.mark.asyncio
+    async def test_existing_model_becomes_default_when_none_is(self):
+        from specivo.cli.seed import seed_embedding_model
+
+        existing = _make_existing_model(is_default=False)
+        session = _session_returning(existing, default_id=None)
+        await seed_embedding_model(session)
+
+        session.add.assert_not_called()
+        assert existing.is_default is True
+        session.flush.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_existing_non_default_model_left_alone_when_another_is_default(self):
+        from specivo.cli.seed import seed_embedding_model
+
+        existing = _make_existing_model(is_default=False)
+        session = _session_returning(existing, default_id=7)
+        await seed_embedding_model(session)
+
+        assert existing.is_default is False
+        session.flush.assert_not_awaited()

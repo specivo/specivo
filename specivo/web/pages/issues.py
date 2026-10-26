@@ -14,6 +14,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
+from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
@@ -22,6 +23,7 @@ from specivo.services.reaction_service import ReactionService
 from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
+from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
     get_current_user_optional,
@@ -38,7 +40,9 @@ router = APIRouter(tags=["web-issues"], include_in_schema=False)
 # Short-URL router: /issue/{issue_ref}/ (canonical)
 short_router = APIRouter(tags=["web-issues-short"], include_in_schema=False)
 
+_attachment_svc = AttachmentService()
 _issue_svc = IssueService()
+_time_svc = TimeEntryService()
 _journal_svc = JournalService()
 _project_svc = ProjectService()
 _reaction_svc = ReactionService()
@@ -287,6 +291,7 @@ async def issue_create_form(
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
     can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
+    can_set_private = await check_permission(user, project.id, Permission.SET_ISSUES_PRIVATE, db)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -300,6 +305,7 @@ async def issue_create_form(
             "issue": None,
             "mode": "create",
             "can_manage_relations": can_manage_relations,
+            "can_set_private": can_set_private,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,
@@ -344,6 +350,10 @@ async def issue_detail(
     can_manage_relations = not anonymous and await check_permission(
         user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db
     )
+    # The time tab lists entries only with view_time_entries, and offers the
+    # log-time form only with log_time, as the time entries API requires.
+    can_view_time_entries = not anonymous and await check_permission(user, project.id, Permission.VIEW_TIME_ENTRIES, db)
+    can_log_time = not anonymous and await check_permission(user, project.id, Permission.LOG_TIME, db)
 
     # NOTE: these awaits are sequential on purpose. They are logically
     # independent and we explored wrapping them in asyncio.gather() on
@@ -396,14 +406,14 @@ async def issue_detail(
         # Attachments are lazy-loaded via htmx when the Attachments tab is opened
         # (see /partials/issues/{key}/attachments/). Time entries stay eager because
         # the sidebar displays the time_logged sum derived from the list.
-        time_entries = await _issue_svc.list_time_entries(db, issue.id)
+        time_entries = await _time_svc.list_for_issue(db, issue.id, project, user) if can_view_time_entries else []
         time_logged = sum((te.hours or 0) for te in time_entries)
         tab_ctx = {
             "time_entries": time_entries,
             "time_entry_count": len(time_entries),
             "time_logged": time_logged,
         }
-        watchers = await watcher_svc.list_watchers(db, issue)
+        watchers = await watcher_svc.list_watchers(db, issue, viewer=user)
         issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
     # Paginate activity feed
@@ -468,6 +478,10 @@ async def issue_detail(
         known_issue_refs = await _issue_svc.resolve_known_issue_refs(
             db, issue.description, *[j.notes for j in all_journals]
         )
+
+    # Bare filenames in the description and comments resolve against this
+    # issue's own attachments that the reader may open (none for anonymous).
+    attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
     # Build lookup maps for human-readable activity details.
     # Collect all sprint/version IDs referenced in journal details so we can
@@ -572,6 +586,8 @@ async def issue_detail(
             "current_sprint": current_sprint,
             "relations": relations,
             "can_manage_relations": can_manage_relations,
+            "can_view_time_entries": can_view_time_entries,
+            "can_log_time": can_log_time,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
             # Computed metadata is derived from the project's configuration,
@@ -579,6 +595,7 @@ async def issue_detail(
             "issue_metadata": {} if anonymous else merge_computed(issue.issue_metadata, project.settings),
             "move_targets": move_targets,
             "known_issue_refs": known_issue_refs,
+            "attachment_map": attachment_map,
             "watchers": watchers,
             "is_watching": is_watching,
             "last_activity_at": last_activity_at,
@@ -621,6 +638,7 @@ async def issue_edit_form(
     metadata_schemas = await schema_svc.list_for_project(db, project.id)
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
     can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
+    can_set_private = await check_permission(user, project.id, Permission.SET_ISSUES_PRIVATE, db)
 
     issue_tags = _tags_to_dicts(await _tag_svc.tags_for_issue(db, issue.id))
 
@@ -636,6 +654,7 @@ async def issue_edit_form(
             "issue": issue,
             "mode": "edit",
             "can_manage_relations": can_manage_relations,
+            "can_set_private": can_set_private,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,
@@ -708,7 +727,7 @@ async def issue_description_diff(
             .join(Journal, JournalDetail.journal_id == Journal.id)
             .join(UserModel, Journal.user_id == UserModel.id)
             .where(JournalDetail.prop_key == "description", Journal.issue_id == issue.id)
-            .order_by(Journal.created_at.desc())
+            .order_by(Journal.created_at.desc(), Journal.id.desc())
         )
     ).all()
 
@@ -771,6 +790,7 @@ async def issue_description_diff(
     prev_num = selected_num - 1 if selected_num != "?" and selected_num > 1 else None
 
     known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, old_text, new_text)
+    attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -789,6 +809,7 @@ async def issue_description_diff(
             "versions": versions,
             "diff_lines": diff_lines,
             "known_issue_refs": known_issue_refs,
+            "attachment_map": attachment_map,
         },
     )
 

@@ -601,3 +601,94 @@ class TestMcpAdminBypass:
             name="v2.0-admin-bypass",
         )
         assert "v2.0-admin-bypass" in result
+
+
+# ---------------------------------------------------------------------------
+# Tests: specivo_log_time
+# ---------------------------------------------------------------------------
+
+
+class TestMcpLogTime:
+    """``_log_time`` follows the REST rules: 404 for what the user cannot see,
+    ``log_time`` for the project, and the issue must belong to it.
+    """
+
+    async def _role(self, db_session: AsyncSession, name: str, permissions: list[str]) -> Role:
+        role = Role(name=name, permissions=permissions, issues_visibility="default", builtin=0)
+        db_session.add(role)
+        await db_session.flush()
+        return role
+
+    async def test_log_time_with_log_time_permission(
+        self, db_session: AsyncSession, limited_user: User, public_project: Project, existing_issue, seed: dict
+    ):
+        from specivo.mcp.tools import _log_time
+
+        role = await self._role(db_session, "McpLogOnly", ["view_issues", "log_time"])
+        await _add_member(db_session, public_project, limited_user, role)
+
+        result = await _log_time(
+            session=db_session,
+            user=limited_user,
+            project_key=public_project.key,
+            hours=Decimal("1.25"),
+            activity_id=seed["activity"].id,
+            issue_ref=existing_issue.display_key,
+        )
+        assert "Logged 1.25h" in result
+
+    async def test_log_time_on_a_private_project_without_membership_is_not_found(
+        self, db_session: AsyncSession, non_member_user: User, private_project: Project, seed: dict
+    ):
+        from specivo.core.exceptions import NotFoundError
+        from specivo.mcp.tools import _log_time
+
+        with pytest.raises(NotFoundError):
+            await _log_time(
+                session=db_session,
+                user=non_member_user,
+                project_key=private_project.key,
+                hours=Decimal("1"),
+                activity_id=seed["activity"].id,
+            )
+
+    async def test_log_time_as_non_member_of_a_public_project_follows_the_non_member_role(
+        self, db_session: AsyncSession, non_member_user: User, public_project: Project, seed: dict
+    ):
+        """The seeded Non member role does not grant log_time."""
+        from specivo.mcp.tools import _log_time
+
+        with pytest.raises(PermissionDeniedError, match="log_time"):
+            await _log_time(
+                session=db_session,
+                user=non_member_user,
+                project_key=public_project.key,
+                hours=Decimal("1"),
+                activity_id=seed["activity"].id,
+            )
+
+    async def test_log_time_rejects_an_issue_of_another_project(
+        self,
+        db_session: AsyncSession,
+        limited_user: User,
+        public_project: Project,
+        private_project: Project,
+        existing_issue,
+        seed: dict,
+    ):
+        from specivo.core.exceptions import ValidationError
+        from specivo.mcp.tools import _log_time
+
+        role = await self._role(db_session, "McpLogOther", ["view_issues", "log_time"])
+        await _add_member(db_session, public_project, limited_user, role)
+        await _add_member(db_session, private_project, limited_user, role)
+
+        with pytest.raises(ValidationError):
+            await _log_time(
+                session=db_session,
+                user=limited_user,
+                project_key=private_project.key,
+                hours=Decimal("1"),
+                activity_id=seed["activity"].id,
+                issue_ref=existing_issue.display_key,
+            )

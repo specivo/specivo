@@ -2,18 +2,24 @@
 
 Loads plugins from a list of dotted module paths, sorts by tier,
 and delegates lifecycle hooks (services, features, routers, etc.).
+
+:func:`bootstrap` is the one place a process loads its plugins and builds the
+registries they feed that are not tied to the web app (the password hasher
+registry and the import source registry). ``create_app()``, the import CLI, the admin CLI and the Celery
+worker all call it, so a plugin is seen the same way by every process.
 """
 
 from __future__ import annotations
 
 import importlib
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from specivo.core.features import FeatureRegistry
 from specivo.core.services import ServiceRegistry
 
 if TYPE_CHECKING:
+    from specivo.core.config import Settings
     from specivo.core.plugin import PluginConfig
 
 logger = logging.getLogger(__name__)
@@ -90,3 +96,68 @@ class PluginManager:
             features = plugin.get_features()
             for feature in features:
                 self._feature_registry.register(feature, plugin.name)
+
+    def collect_password_hashers(self) -> list[tuple[str, list[Any]]]:
+        """Return ``(plugin_name, hashers)`` from each plugin's ``get_password_hashers()``."""
+        return [(plugin.name, list(plugin.get_password_hashers())) for plugin in self._plugins]
+
+    def collect_import_sources(self) -> list[tuple[str, list[Any]]]:
+        """Return ``(plugin_name, adapter_classes)`` from each plugin's ``get_import_sources()``."""
+        return [(plugin.name, list(plugin.get_import_sources())) for plugin in self._plugins]
+
+
+def _register_core_services(pm: PluginManager) -> None:
+    """Register core services first, so that plugins can override them."""
+    from specivo.services.api_key_service import ApiKeyService
+    from specivo.services.journal_service import JournalService
+    from specivo.services.notification_service import NotificationService
+    from specivo.services.workflow_service import WorkflowService
+
+    pm.service_registry.register("journal", JournalService)
+    pm.service_registry.register("api_key", ApiKeyService)
+    pm.service_registry.register("workflow", WorkflowService)
+    pm.service_registry.register("notification", NotificationService)
+
+
+def bootstrap(settings: Settings | None = None) -> PluginManager:
+    """Load the configured plugins and build the process-wide registries.
+
+    Loads ``INSTALLED_PLUGINS``, registers their services and features, and
+    builds and installs the password hasher registry from the built-in
+    hashers, every plugin's ``get_password_hashers()`` and the
+    ``PASSWORD_HASHERS`` setting, and the import source registry from the
+    built-in adapters and every plugin's ``get_import_sources()``. Returns the plugin manager; anything specific
+    to the web app (routers, static files, templates) is left to the caller.
+
+    Raises ``ImportError`` for a plugin that cannot be imported and
+    ``PasswordHasherError`` for a hasher with an invalid, reserved or
+    duplicate id, so a misconfigured process fails at start rather than at the
+    first sign-in. Likewise ``SourceRegistrationError`` for an import source.
+    """
+    from specivo.core.config import get_settings
+    from specivo.importers.core.source import build_source_registry, install_source_registry
+    from specivo.services.password_hashers import build_password_hasher_registry, install_password_hasher_registry
+
+    settings = settings or get_settings()
+    pm = PluginManager()
+    _register_core_services(pm)
+    if settings.installed_plugins:
+        pm.load_plugins(settings.installed_plugins)
+    pm.register_services()
+    pm.register_features()
+
+    registry = build_password_hasher_registry(
+        plugin_hashers=pm.collect_password_hashers(),
+        setting_paths=settings.password_hashers,
+    )
+    install_password_hasher_registry(registry)
+    install_source_registry(build_source_registry(pm.collect_import_sources()))
+
+    unknown = sorted(set(settings.legacy_password_algorithms) - set(registry.legacy()))
+    if unknown:
+        logger.warning(
+            "LEGACY_PASSWORD_ALGORITHMS lists %s, which no hasher provides; registered: %s",
+            ", ".join(unknown),
+            ", ".join(sorted(registry.legacy())) or "none",
+        )
+    return pm

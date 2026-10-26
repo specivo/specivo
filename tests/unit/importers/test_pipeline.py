@@ -29,6 +29,7 @@ class FakeSession:
         self.commits = 0
         self.rollbacks = 0
         self.closed = False
+        self.info: dict = {}
 
     async def commit(self) -> None:
         self.commits += 1
@@ -243,6 +244,22 @@ class TestTransactions:
         assert len(factory.sessions) == 2
         assert [s.commits for s in factory.sessions] == [1, 1]
         assert [s.rollbacks for s in factory.sessions] == [0, 0]
+
+    async def test_phase_sessions_defer_search_indexing(self):
+        """Rows are indexed once by the search backfill phase, not as they are written."""
+        from specivo.services.search_index_service import DEFER_KEY
+
+        for dry_run in (False, True):
+            adapter, factory = FakeAdapter(), FakeSessionFactory()
+            pipeline = _pipeline(factory, adapter, dry_run=dry_run)
+
+            async def noop(ctx):
+                return None
+
+            pipeline.register(ImportPhase.USERS, noop)
+            await pipeline.run()
+
+            assert all(s.info.get(DEFER_KEY) for s in factory.sessions), dry_run
 
     async def test_failing_phase_rolls_back_only_its_own_session(self):
         """An earlier phase stays committed so --resume can continue from it."""

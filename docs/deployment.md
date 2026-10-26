@@ -62,7 +62,7 @@ cd specivo-*
 docker load < specivo-image.tar
 
 # Run the setup wizard
-python3 configure.py
+python3 scripts/configure.py
 
 # Start
 docker compose up -d
@@ -72,9 +72,12 @@ The bundle includes:
 - Pre-built Docker image (`specivo-image.tar`)
 - Docker Compose configuration
 - Nginx reverse proxy config
-- Setup wizard (`configure.py`)
+- Setup wizard (`scripts/configure.py`)
 - Container entrypoint script
-- Installation guide
+- Host-side model download script (`scripts/download-model.sh`), for air-gapped setups
+- `Makefile` (`make help`; the `download-model`, `backfill-embeddings`, `reindex-fts` and
+  `import-data` targets work against the bundle's compose file)
+- Installation guide (`docs/INSTALL.md`)
 
 ## Architecture
 
@@ -92,7 +95,8 @@ The bundle includes:
 |---------|-------|---------|
 | **nginx** | nginx:1-alpine | Reverse proxy, static files, TLS termination |
 | **api** | specivo/specivo | FastAPI application server |
-| **celery-worker** | specivo/specivo | Async task processing (emails, embeddings, webhooks) |
+| **celery-worker** | specivo/specivo | Async task processing (emails, webhooks, search reindex) |
+| **celery-embeddings** | specivo/specivo | Embedding jobs for semantic search, on the `embeddings` queue; one process, so one copy of the model in memory |
 | **celery-beat** | specivo/specivo | Scheduled task runner |
 | **db** | pgvector/pgvector:pg18 | PostgreSQL with pgvector (optional — use external) |
 | **redis** | redis:7-alpine | Cache, task broker, pub/sub (optional — use external) |
@@ -119,6 +123,30 @@ All configuration is via environment variables. Set in `.env` (committed) or `.e
 | `SMTP_PORT` | No | `587` | Email server port |
 | `SMTP_FROM` | No | `noreply@specivo.dev` | Sender address |
 | `KILL_TOKEN` | No | — | Emergency kill switch token |
+| `EMBEDDING_ONNX_THREADS` | No | `2` | CPU threads for the embedding model (`0` = all cores) |
+| `EMBEDDING_WORKER_CONCURRENCY` | No | `1` | Processes in `celery-embeddings`; each loads its own copy of the model |
+| `EMBEDDING_QUEUE` | No | `embeddings` | Celery queue for embedding jobs; `celery` runs them in `celery-worker` instead |
+| `SEARCH_INDEX_COMMENTS` | No | `true` | Index comments for search |
+| `SEARCH_MIN_COMMENT_LENGTH` | No | `20` | Comments shorter than this are not indexed |
+| `SEARCH_EXCLUDE_BOT_COMMENTS` | No | `true` | Skip comments made by API keys or service accounts |
+| `INSTALLED_PLUGINS` | No | `[]` | Plugins by dotted path (JSON array). A plugin can add password hashers and import sources |
+| `PASSWORD_HASHERS` | No | `[]` | Extra password hasher classes by dotted path (JSON array) |
+| `LEGACY_PASSWORD_ALGORITHMS` | No | `[]` | Imported password formats allowed to sign in, e.g. `["redmine_sha1"]` |
+| `LEGACY_PASSWORD_HASHES_EXPIRE_AT` | No | — | After this time no imported password works, e.g. `2027-03-31T00:00:00Z` |
+
+The last three are explained in the user guide under
+[Configuration](https://specivo.io/docs/specivo/install/configuration/#imported-passwords).
+
+### Semantic search
+
+Semantic and hybrid search need the `multilingual-e5-small` embedding model, which is not in the
+image or the release bundle. Download it into `$SPECIVO_DATA_DIR/models/` with
+`docker compose exec api python -m specivo.cli.download_model` (or `make download-model`; pinned
+revision, SHA-256 checked), then run
+`docker compose exec api python -m specivo.cli.backfill_embeddings` (or `make backfill-embeddings`)
+to index existing content. The `celery-embeddings` service embeds new content as it is saved. See
+[Semantic search and embeddings](https://specivo.io/docs/specivo/install/semantic-search/) for
+what is indexed when, offline setup, and troubleshooting.
 
 ### Using External Database
 
@@ -344,6 +372,12 @@ docker load < specivo-image.tar
 docker compose up -d
 ```
 
+### Release-specific steps
+
+Some releases need a step after the containers start, such as rebuilding the search index.
+The user guide lists them per release under
+[Upgrading](https://specivo.io/docs/specivo/install/upgrading/).
+
 ### Pin Version
 
 ```env
@@ -358,6 +392,20 @@ make create-admin login=admin email=admin@example.com password=secret
 
 # Reset password
 make reset-password login=admin password=newpassword
+```
+
+Accounts imported with their old passwords can be inspected and retired with the same command
+(see [Migrating from Redmine](https://specivo.io/docs/specivo/install/migrating-from-redmine/)):
+
+```bash
+# Registered password hashers, whether each is enabled, and how many accounts use it
+docker compose exec api python -m specivo.cli.admin password-hashers
+
+# Accounts that still hold an imported password hash
+docker compose exec api python -m specivo.cli.admin legacy-passwords
+
+# Make them use password recovery from now on
+docker compose exec api python -m specivo.cli.admin legacy-passwords expire --yes
 ```
 
 ## Troubleshooting

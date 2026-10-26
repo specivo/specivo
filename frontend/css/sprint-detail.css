@@ -382,6 +382,11 @@
   font-size: var(--sp-font-size-xs);
   color: var(--sp-text-muted);
 }
+/* EasyMDE hardcodes English "lines: " / "words: " here; markdownEditor puts
+   the translated label in data-sp-label. */
+.sp-md-editor.EasyMDEContainer .editor-statusbar [data-sp-label]::before {
+  content: attr(data-sp-label) ": ";
+}
 @media (max-width: 600px) {
   .sp-md-editor.EasyMDEContainer .editor-toolbar {
     /* Compact spacing keeps the bar usable when scrolling horizontally. */

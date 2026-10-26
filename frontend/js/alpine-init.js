@@ -45,7 +45,6 @@ import { resolveThread } from './components/resolve-thread';
 import { watcherToggle } from './components/watcher-toggle';
 import { timeLogForm } from './components/time-log-form';
 import { relationForm } from './components/relation-form';
-import { attachmentForm } from './components/attachment-form';
 import { journalReactions } from './components/journal-reactions';
 import { wikiAttachments, issueAttachments } from './components/attachments';
 import { testEmailForm } from './components/test-email-form';
@@ -103,7 +102,6 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('watcherToggle', watcherToggle);
   Alpine.data('timeLogForm', timeLogForm);
   Alpine.data('relationForm', relationForm);
-  Alpine.data('attachmentForm', attachmentForm);
   Alpine.data('journalReactions', journalReactions);
   Alpine.data('wikiAttachments', wikiAttachments);
   Alpine.data('issueAttachments', issueAttachments);

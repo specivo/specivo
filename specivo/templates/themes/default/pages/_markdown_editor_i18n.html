@@ -1,0 +1,28 @@
+{# Translated strings for the markdownEditor Alpine component, shared by the
+   issue description and wiki editors. EasyMDE ships its toolbar tooltips and
+   status-bar labels in English only, so the component relabels them with
+   these. Renders a JSON object for the component's `i18n` key, so it must be
+   used inside a single-quoted x-data attribute. #}
+{% macro markdown_editor_i18n() -%}
+{{ {
+  "placeholder": _("Write your content here (Markdown)..."),
+  "rendering": _("Rendering..."),
+  "previewUnavailable": _("Preview unavailable."),
+  "toolbar": {
+    "bold": _("Bold"),
+    "italic": _("Italic"),
+    "code": _("Code"),
+    "heading-1": _("Heading 1"),
+    "heading-2": _("Heading 2"),
+    "heading-3": _("Heading 3"),
+    "unordered-list": _("Bulleted list"),
+    "ordered-list": _("Numbered list"),
+    "quote": _("Quote"),
+    "horizontal-rule": _("Horizontal line"),
+    "link": _("Insert link"),
+    "preview": _("Toggle preview")
+  },
+  "statusLines": _("lines"),
+  "statusWords": _("words")
+} | tojson }}
+{%- endmacro %}

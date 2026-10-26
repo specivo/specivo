@@ -276,7 +276,6 @@ async def build_world(db: AsyncSession, viewer: str, switch: bool) -> World:
             f"Armillary Handbook {spec.key}",
             f"Armillary wiki body for {spec.key}",
             admin,
-            skip_search_index=True,
             skip_link_rebuild=True,
         )
         public_comment = await _indexed_comment(

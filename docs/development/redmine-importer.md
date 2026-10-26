@@ -17,7 +17,8 @@ and "where"; the ADR is the "why".
 specivo/importers/
   core/
     ir.py            intermediate representation dataclasses, EntityType vocabulary
-    source.py         SourceAdapter protocol + adapter registry
+    source.py         SourceAdapter protocol, BaseSourceAdapter, the source registry and its rules
+    cli_args.py        key=value / comma-list parsers shared by the command and adapters
     converter.py      ContentConverter protocol, ConversionContext, PassthroughConverter
     pipeline.py        ImportPhase (19 phases), ImportPipeline, ImportOptions, ImportSummary, PhaseContext
     id_map.py          ImportIdMap over the import_id_map table
@@ -40,7 +41,7 @@ specivo/importers/
     adapter.py             RedmineSourceAdapter — the only module that knows Redmine's schema
     textile_convert.py      Textile -> Markdown, and link rewriting for instances already on Markdown
     files.py                attachment path resolution + path-traversal defence
-specivo/cli/import_redmine.py        the command
+specivo/cli/import_data.py           the command (--source NAME; Redmine's options live on its adapter)
 specivo/models/import_id_map.py       the id-map ORM model
 alembic/versions/0027_add_import_id_map.py
 docker-compose.redmine.yml + tests/fixtures/redmine/seed.rb    the Redmine 7.0.1 test fixture
@@ -85,19 +86,26 @@ always loaded together with every revision it has.
 
 ### Adding a second source
 
-1. Implement `SourceAdapter` (`specivo/importers/core/source.py`) — one
-   `extract_*` async iterator per IR stream, plus `connect`, `close`, and
-   `resolve_attachment_path`. Extraction methods should page on the source's
-   own primary key rather than materialize a whole table; see `redmine/db.py`'s
-   `stream()` for the pattern.
-2. Implement `ContentConverter` (`specivo/importers/core/converter.py`) for the
-   source's markup. `RedmineTextileConverter` is table stakes for what one
-   looks like: never raise, and fall back to preserving the original text
-   verbatim (wrapped so it still renders) rather than losing content on
-   anything unconvertible.
-3. Register the adapter in `SourceAdapterRegistry` (`core/source.py`) under a
-   `source_system` name.
-4. Nothing in `core/` or `load/` should need to change. If it does, that is a
+A new source does not need to live in this repo. The operator-facing guide,
+`docs/guide/install/import-source-plugins.md`, walks through a complete
+plugin; `tests/fixtures/acme_import.py` is that plugin, tested. In short:
+
+1. Subclass `BaseSourceAdapter` (`specivo/importers/core/source.py`). Every
+   `extract_*` stream is empty by default, so override only what the source
+   has. Set `source_system`; it names the source on the command line and scopes
+   the id map, so it must be unique and stable.
+2. Implement `add_arguments(parser)` and `from_args(args)` for the source's own
+   command-line options. The generic run options (`--dry-run`, `--resume`,
+   `--project`, `--source-instance`, ...) belong to `specivo/cli/import_data.py`.
+3. If the source's markup is not Markdown, override `content_converter()` to
+   return a `ContentConverter` (`specivo/importers/core/converter.py`).
+   `RedmineTextileConverter` is the reference: never raise, and fall back to
+   preserving the original text rather than losing content.
+4. Return the class from a plugin's `get_import_sources()`. `bootstrap()`
+   (`specivo/core/plugin_manager.py`) builds the registry from the built-in
+   adapters and every plugin's, and refuses an invalid, duplicate or reserved
+   (`redmine`) name at start.
+5. Nothing in `core/` or `load/` should need to change. If it does, that is a
    sign a loader learned something Redmine-specific it should not have.
 
 ## The phase pipeline

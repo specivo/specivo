@@ -9,6 +9,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.constants import MAX_SEARCH_OFFSET
 from specivo.core.database import get_db
 from specivo.core.rate_limit import enforce_rate_limit
 from specivo.core.security import (
@@ -60,6 +61,9 @@ async def search_page(
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
     """Render the search page with results."""
+    # Deep paging is clamped rather than refused, as for anonymous visitors
+    # below: a hand-edited URL gets the last page search serves, not an error.
+    offset = min(offset, MAX_SEARCH_OFFSET)
     if reader is None:
         return refuse_anonymous_web(request)
     user = cast("User", reader)

@@ -3,7 +3,7 @@
        migrate migrate-gen migrate-merge seed \
        test-db-up test-db-down test-db-reset test-ci \
        test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
-       install sync lock download-model \
+       install sync lock help download-model backfill-embeddings reindex-fts import-redmine import-data \
        build bundle frontend-build frontend-watch
 
 # Load environment from .env and .env.local (if they exist).
@@ -17,6 +17,7 @@ export
 # =============================================================================
 #
 # Quick start (first time):
+#   make help              # List the documented targets
 #   make configure         # Interactive setup wizard
 #   make up                # Start all services
 #   open http://localhost:9933/
@@ -38,45 +39,62 @@ UV = uv
 RUN = uv run
 SPECIVO_PORT ?= 9933
 
+# Compose command for the targets that run inside the api container
+# (download-model, backfill-embeddings, reindex-fts, import-*). A source checkout
+# has docker-compose.dev.yml and talks to the dev stack; a release bundle has
+# only docker-compose.yml and talks to the production stack. PROD=1 uses the
+# production stack in a checkout too.
+ifeq ($(PROD)$(wildcard docker-compose.dev.yml),docker-compose.dev.yml)
+APP_COMPOSE = docker compose -f docker-compose.yml -f docker-compose.dev.yml
+else
+APP_COMPOSE = docker compose
+endif
+
+help:  ## List the documented targets
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "  %-24s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
+	@echo ""
+	@echo "Targets that run in the api container use: $(APP_COMPOSE)"
+	@echo "(the dev stack in a checkout; pass PROD=1 for the production stack)."
+
 # -----------------------------------------------------------------------------
 # Setup & Lifecycle
 # -----------------------------------------------------------------------------
 
-configure:
+configure:  ## Interactive setup wizard (writes .env and .env.local)
 	python3 scripts/configure.py
 
-up:
+up:  ## Start all services (production compose file)
 	docker compose up -d
 
-down:
+down:  ## Stop all services
 	docker compose down
 
-logs:
+logs:  ## Follow the logs of all services
 	docker compose logs -f
 
-status:
+status:  ## Show the state of all services
 	docker compose ps
 
 # Development mode (build from source, hot-reload, direct port 8000).
 # The overlay's `frontend` service rebuilds the esbuild bundles into
 # ./specivo/static/dist on every change; api waits for its first build.
-dev-up:
+dev-up:  ## Build from source and start the dev stack with hot-reload (checkout only)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml build api
 	GIT_COMMIT=$$(git rev-parse --short HEAD) docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
 # Include the dev overlay so its extra services (the frontend watcher) stop too.
-dev-down:
+dev-down:  ## Stop the dev stack (checkout only)
 	docker compose -f docker-compose.yml -f docker-compose.dev.yml down
 
 # -----------------------------------------------------------------------------
 # Admin Management
 # -----------------------------------------------------------------------------
 
-create-admin:
+create-admin:  ## Create an admin (login=... email=... password=...)
 	@test -n "$(login)" || (echo "Usage: make create-admin login=admin email=admin@localhost password=secret" && exit 1)
 	docker compose exec api python -m specivo.cli.admin create --login $(login) --email $(email) --password $(password)
 
-reset-password:
+reset-password:  ## Reset a user's password (login=... password=...)
 	@test -n "$(login)" || (echo "Usage: make reset-password login=admin password=newpass" && exit 1)
 	docker compose exec api python -m specivo.cli.admin reset-password --login $(login) --password $(password)
 
@@ -256,6 +274,7 @@ bundle:
 	cp -r nginx/* _bundle/nginx/; \
 	cp scripts/configure.py _bundle/scripts/; \
 	cp scripts/entrypoint.sh _bundle/scripts/; \
+	cp scripts/download-model.sh _bundle/scripts/; \
 	cp docs/INSTALL.md _bundle/docs/ 2>/dev/null || true; \
 	echo "$$VERSION" > _bundle/VERSION; \
 	tar czf specivo-$$VERSION-bundle.tar.gz -C _bundle .; \
@@ -266,17 +285,23 @@ bundle:
 # Embedding model
 # ---------------------------------------------------------------------------
 
-download-model:  ## Download embedding model (~393 MB) for hybrid search
-	bash scripts/download-model.sh
+# These run inside the running api container (see APP_COMPOSE above), so they
+# work from a release bundle as well as from a checkout.
 
-backfill-embeddings:  ## Re-embed all existing issues and wiki pages
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.backfill_embeddings
+download-model:  ## Download the embedding model (~487 MB, checksum-verified) into the data dir (ARGS=--force)
+	$(APP_COMPOSE) exec api python -m specivo.cli.download_model $(ARGS)
+
+backfill-embeddings:  ## Rebuild search chunks and embed them (ARGS='--reembed --require-model')
+	$(APP_COMPOSE) exec api python -m specivo.cli.backfill_embeddings $(ARGS)
 
 reindex-fts:  ## Rebuild FTS vectors (optionally PROJECT=KEY) after a language change
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.reindex_fts $(if $(PROJECT),--project $(PROJECT),)
+	$(APP_COMPOSE) exec api python -m specivo.cli.reindex_fts $(if $(PROJECT),--project $(PROJECT),)
 
 import-redmine:  ## Import a Redmine instance (ARGS='--source-db-url ... --dry-run'; see --help)
-	docker compose -f docker-compose.yml -f docker-compose.dev.yml exec api python -m specivo.cli.import_redmine $(ARGS)
+	$(APP_COMPOSE) exec api python -m specivo.cli.import_data --source redmine $(ARGS)
+
+import-data:  ## Import from any registered source (SOURCE=name ARGS='...'; SOURCE=name ARGS=--help for its options)
+	$(APP_COMPOSE) exec api python -m specivo.cli.import_data $(if $(SOURCE),--source $(SOURCE),--list-sources) $(ARGS)
 
 # --- Redmine test fixture (importer development only) ----------------------
 # PROFILE=pg (default) or PROFILE=mysql — the importer supports both databases
@@ -285,14 +310,14 @@ REDMINE_PROFILE ?= $(if $(PROFILE),$(PROFILE),pg)
 REDMINE_APP := $(if $(filter mysql,$(REDMINE_PROFILE)),redmine-my,redmine-pg)
 REDMINE_COMPOSE := docker compose -f docker-compose.redmine.yml --profile $(REDMINE_PROFILE)
 
-redmine-fixture-up:  ## Start the Redmine 7.0.1 fixture (PROFILE=pg|mysql)
+redmine-fixture-up:  ## Start the Redmine 7.0.1 fixture (PROFILE=pg|mysql; checkout only)
 	@mkdir -p .redmine-fixture/files-pg .redmine-fixture/files-mysql
 	$(REDMINE_COMPOSE) up -d --wait
 
-redmine-fixture-seed:  ## Fill the fixture with importer test content (PROFILE=pg|mysql)
+redmine-fixture-seed:  ## Fill the fixture with importer test content (PROFILE=pg|mysql; checkout only)
 	$(REDMINE_COMPOSE) exec $(REDMINE_APP) bundle exec rails runner /seed/seed.rb
 
-redmine-fixture-down:  ## Stop the fixture and discard its data (PROFILE=pg|mysql)
+redmine-fixture-down:  ## Stop the fixture and discard its data (PROFILE=pg|mysql; checkout only)
 	$(REDMINE_COMPOSE) down -v
 
-redmine-fixture-reset: redmine-fixture-down redmine-fixture-up redmine-fixture-seed  ## Recreate and reseed the fixture
+redmine-fixture-reset: redmine-fixture-down redmine-fixture-up redmine-fixture-seed  ## Recreate and reseed the fixture (checkout only)

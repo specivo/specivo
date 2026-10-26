@@ -125,7 +125,15 @@ var _RECURRING_LABELS = {
     patternDeleted: 'Pattern deleted.',
     deleteFailed: 'Failed to delete pattern.',
     occurrenceSkipped: 'Occurrence skipped.',
-    skipFailed: 'Failed to skip occurrence.'
+    skipFailed: 'Failed to skip occurrence.',
+    anchorFixed: 'Fixed',
+    anchorFlexible: 'Flexible',
+    enabled: 'Enabled',
+    disabled: 'Disabled',
+    enable: 'Enable',
+    disable: 'Disable',
+    emptyCanManage: 'Create a pattern to generate issues automatically on a schedule.',
+    emptyReadOnly: 'No recurring patterns have been created for this project yet.'
 };
 
 function _recurringLabels(initial) {
@@ -400,6 +408,10 @@ export function recurringPatterns(initial) {
             },
 
             scheduleLabel: function (p) { return _scheduleLabel(p, this.labels); },
+
+            anchorLabel: function (p) {
+                return p.anchor_mode === 'flexible' ? this.labels.anchorFlexible : this.labels.anchorFixed;
+            },
 
             toggleEnabled: async function (p) {
                 if (!this.canManage) return;

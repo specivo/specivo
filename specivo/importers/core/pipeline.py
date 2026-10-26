@@ -77,9 +77,9 @@ PHASE_ORDER: tuple[ImportPhase, ...] = tuple(ImportPhase)
 class ImportOptions:
     """Operator-supplied settings for one import run.
 
-    Most fields come straight from CLI flags. The mapping overrides exist
-    because a few source concepts cannot be translated automatically and the
-    operator needs the final say.
+    Most fields come straight from the generic flags of the import command.
+    Options only one source understands (Redmine's status and custom-field
+    maps, say) belong to that source's adapter, not here.
     """
 
     source_instance: str
@@ -91,10 +91,11 @@ class ImportOptions:
     strict: bool = False
     dispatch_celery: bool = False
     project_key_map: dict[str, str] = field(default_factory=dict)
-    status_category_map: dict[str, str] = field(default_factory=dict)
-    cf_key_map: dict[str, str] = field(default_factory=dict)
     flatten_excess_depth: bool = False
     merge_duplicate_statuses: bool = False
+    # Carry source passwords over (opt-in). Takes effect only for algorithms
+    # also listed in LEGACY_PASSWORD_ALGORITHMS, and never for administrators.
+    import_passwords: bool = False
 
 
 @dataclass(slots=True)
@@ -362,12 +363,20 @@ class ImportPipeline:
 
         With a shared session (dry run) the caller owns the rollback. Otherwise
         the phase gets its own session and commits on success.
+
+        Either way the session does not index content as it is written: the
+        search backfill phase indexes everything once, after the references in
+        imported text have been rewritten.
         """
+        from specivo.services.search_index_service import defer_search_index
+
         if shared is not None:
+            defer_search_index(shared)
             yield shared
             return
 
         async with self._session_factory() as session:
+            defer_search_index(session)
             try:
                 yield session
                 await session.commit()

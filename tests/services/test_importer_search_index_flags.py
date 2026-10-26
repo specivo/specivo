@@ -1,23 +1,26 @@
-"""Regression tests for the bulk-import search-indexing flags.
+"""Regression tests for the bulk-import search-indexing switches.
 
-``IssueService.create`` and ``WikiService.create_page`` embed content inline and
-(for wiki) dispatch a link-graph task. The import pipeline turns both off and
-does that work once at the end of a run. These tests pin both halves of the
-contract: the flags suppress the work, and leaving them out changes nothing for
-every existing caller.
+Content is indexed by session events as it is written. The import pipeline
+marks its sessions with ``defer_search_index`` and indexes everything once at
+the end; ``WikiService.create_page`` also takes ``skip_link_rebuild`` so the
+link graph is rebuilt once too. These tests pin both halves of the contract:
+the switches suppress the work, and leaving them out changes nothing for
+every other caller.
 """
 
 from __future__ import annotations
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.project import Project
+from specivo.models.search import SearchSource
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate
-from specivo.services.embedding_service import EmbeddingService
 from specivo.services.issue_service import IssueService
+from specivo.services.search_index_service import defer_search_index
 from specivo.services.wiki_service import WikiService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
@@ -26,17 +29,9 @@ from tests.factories.user import AdminUserFactory
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.service]
 
 
-@pytest.fixture
-def embed_calls(monkeypatch) -> list[tuple]:
-    """Record every ``EmbeddingService.embed_source`` call instead of running it."""
-    calls: list[tuple] = []
-
-    async def _record(self, session, source_type, entity_id, project_id, chunks, model_id=None):
-        calls.append((source_type, entity_id, project_id))
-        return None
-
-    monkeypatch.setattr(EmbeddingService, "embed_source", _record)
-    return calls
+async def _source_count(db: AsyncSession, source_type: str, entity_id: int) -> int:
+    stmt = select(func.count()).where(SearchSource.source_type == source_type, SearchSource.entity_id == entity_id)
+    return (await db.execute(stmt)).scalar_one()
 
 
 @pytest.fixture
@@ -98,30 +93,31 @@ async def author(db_session: AsyncSession) -> User:
     return row
 
 
-class TestIssueSkipSearchIndex:
-    async def test_indexes_by_default(self, db_session, project, tracker, priority, author, embed_calls):
-        await IssueService().create(
+class TestIssueDeferredIndex:
+    async def test_indexes_by_default(self, db_session, project, tracker, priority, author):
+        issue = await IssueService().create(
             db_session,
             project,
             IssueCreate(project_key=project.key, tracker_id=tracker.id, subject="Indexed by default"),
             author,
         )
-        assert len(embed_calls) == 1
+        assert await _source_count(db_session, "issue", issue.id) == 1
 
-    async def test_skips_when_flag_is_set(self, db_session, project, tracker, priority, author, embed_calls):
-        await IssueService().create(
+    async def test_skips_when_session_is_deferred(self, db_session, project, tracker, priority, author):
+        defer_search_index(db_session)
+        issue = await IssueService().create(
             db_session,
             project,
             IssueCreate(project_key=project.key, tracker_id=tracker.id, subject="Not indexed"),
             author,
-            skip_search_index=True,
         )
-        assert embed_calls == []
+        assert await _source_count(db_session, "issue", issue.id) == 0
 
-    async def test_issue_is_still_created_when_indexing_is_skipped(
-        self, db_session, project, tracker, priority, author, embed_calls
+    async def test_issue_is_still_created_when_indexing_is_deferred(
+        self, db_session, project, tracker, priority, author
     ):
-        """Skipping the index must not change what the row looks like."""
+        """Deferring the index must not change what the row looks like."""
+        defer_search_index(db_session)
         issue = await IssueService().create(
             db_session,
             project,
@@ -132,7 +128,6 @@ class TestIssueSkipSearchIndex:
                 description="Body text",
             ),
             author,
-            skip_search_index=True,
         )
         assert issue.id is not None
         assert issue.display_key == f"{project.key}-{issue.sequence_number}"
@@ -140,43 +135,36 @@ class TestIssueSkipSearchIndex:
 
 
 class TestWikiSkipFlags:
-    async def test_indexes_and_dispatches_by_default(
-        self, db_session, project, author, embed_calls, link_rebuild_calls
-    ):
-        await WikiService().create_page(db_session, project.id, "Default Page", "Body", author)
-        assert len(embed_calls) == 1
+    async def test_indexes_and_dispatches_by_default(self, db_session, project, author, link_rebuild_calls):
+        page, _ = await WikiService().create_page(db_session, project.id, "Default Page", "Body", author)
+        assert await _source_count(db_session, "wiki_page", page.id) == 1
         assert len(link_rebuild_calls) == 1
 
-    async def test_skip_search_index_leaves_link_rebuild_alone(
-        self, db_session, project, author, embed_calls, link_rebuild_calls
-    ):
-        """The two flags are independent; setting one must not imply the other."""
-        await WikiService().create_page(db_session, project.id, "No Embedding", "Body", author, skip_search_index=True)
-        assert embed_calls == []
+    async def test_deferred_index_leaves_link_rebuild_alone(self, db_session, project, author, link_rebuild_calls):
+        """The two switches are independent; setting one must not imply the other."""
+        defer_search_index(db_session)
+        page, _ = await WikiService().create_page(db_session, project.id, "No Index", "Body", author)
+        assert await _source_count(db_session, "wiki_page", page.id) == 0
         assert len(link_rebuild_calls) == 1
 
-    async def test_skip_link_rebuild_leaves_indexing_alone(
-        self, db_session, project, author, embed_calls, link_rebuild_calls
-    ):
-        await WikiService().create_page(
+    async def test_skip_link_rebuild_leaves_indexing_alone(self, db_session, project, author, link_rebuild_calls):
+        page, _ = await WikiService().create_page(
             db_session, project.id, "No Link Rebuild", "Body", author, skip_link_rebuild=True
         )
-        assert len(embed_calls) == 1
+        assert await _source_count(db_session, "wiki_page", page.id) == 1
         assert link_rebuild_calls == []
 
-    async def test_both_flags_suppress_all_side_work(
-        self, db_session, project, author, embed_calls, link_rebuild_calls
-    ):
+    async def test_both_switches_suppress_all_side_work(self, db_session, project, author, link_rebuild_calls):
+        defer_search_index(db_session)
         page, content = await WikiService().create_page(
             db_session,
             project.id,
             "Imported Page",
             "Body",
             author,
-            skip_search_index=True,
             skip_link_rebuild=True,
         )
-        assert embed_calls == []
+        assert await _source_count(db_session, "wiki_page", page.id) == 0
         assert link_rebuild_calls == []
         assert page.id is not None
         assert content.version == 1

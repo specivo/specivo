@@ -13,6 +13,8 @@ export function issueForm(initial) {
             est_minutes: initial.estimated_hours ? Math.round((parseFloat(initial.estimated_hours) % 1) * 60) : '',
             done_ratio: initial.done_ratio || 0,
             is_private: initial.is_private || false,
+            canSetPrivate: initial.canSetPrivate || false,
+            trackerPrivateDefaults: initial.trackerPrivateDefaults || {},
             version_id: initial.version_id || '',
             mode: initial.mode || 'create',
             projectKey: initial.projectKey || '',
@@ -28,6 +30,13 @@ export function issueForm(initial) {
 
             get canSubmit() {
                 return !this.submitting && this.subject.trim() !== '';
+            },
+
+            // A new issue starts with the chosen tracker's private-by-default
+            // setting; editing an issue never changes its privacy behind the user's back.
+            applyTrackerPrivacyDefault() {
+                if (this.mode !== 'create') return;
+                this.is_private = this.trackerPrivateDefaults[String(this.tracker_id)] === true;
             },
 
             fileSizeKB(f) {
@@ -106,7 +115,9 @@ export function issueForm(initial) {
                     due_date: this.due_date || null,
                     estimated_hours: (this.est_hours || this.est_minutes) ? Math.round(((parseInt(this.est_hours) || 0) + (parseInt(this.est_minutes) || 0) / 60) * 100) / 100 : null,
                     done_ratio: this.done_ratio,
-                    is_private: this.is_private,
+                    // Without set_issues_private the server applies the tracker's
+                    // default on create and keeps the current value on edit.
+                    is_private: this.canSetPrivate ? this.is_private : null,
                     version_id: this.version_id ? parseInt(this.version_id) : null
                 };
                 if (metadataVal !== null) {

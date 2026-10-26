@@ -106,3 +106,8 @@ __all__ = [
     "WorkflowFieldRule",
     "WorkflowTransition",
 ]
+
+# Registers the session events that keep search chunks in step with content.
+# Imported here, after every model, so that any process that loads the models
+# (api, worker, CLI, tests) indexes the same way.
+import specivo.services.search_index_service  # noqa: E402, F401

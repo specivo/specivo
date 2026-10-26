@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Roles{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Roles{% endtrans %}</span>
+</div>
+
+<h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: var(--sp-space-md);">{% trans %}Roles{% endtrans %}</h1>
+<p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-xl); max-width: 720px;">
+  {% trans %}What each role can see beyond its permissions. A user who holds several roles gets the widest setting among them.{% endtrans %}
+</p>
+
+<div class="card" style="padding: var(--sp-space-lg); overflow-x: auto;">
+  <table class="issue-table">
+    <thead>
+      <tr>
+        <th>{% trans %}Role{% endtrans %}</th>
+        <th>{% trans %}Users visibility{% endtrans %}</th>
+        <th>{% trans %}Time entries visibility{% endtrans %}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in roles %}
+      <tr>
+        <td>
+          {{ r.name }}
+          {% if r.builtin %}<span style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">({% trans %}Built-in{% endtrans %})</span>{% endif %}
+        </td>
+        <td>
+          <select form="role-form-{{ r.id }}" id="users_visibility_{{ r.id }}" name="users_visibility" class="form-input" aria-label="{{ _('Users visibility') }}">
+            <option value="all" {{ 'selected' if r.users_visibility == 'all' else '' }}>{% trans %}All active users{% endtrans %}</option>
+            <option value="members_of_visible_projects" {{ 'selected' if r.users_visibility == 'members_of_visible_projects' else '' }}>{% trans %}Members of visible projects{% endtrans %}</option>
+          </select>
+        </td>
+        <td>
+          <select form="role-form-{{ r.id }}" id="time_entries_visibility_{{ r.id }}" name="time_entries_visibility" class="form-input" aria-label="{{ _('Time entries visibility') }}">
+            <option value="all" {{ 'selected' if r.time_entries_visibility == 'all' else '' }}>{% trans %}All time entries{% endtrans %}</option>
+            <option value="own" {{ 'selected' if r.time_entries_visibility == 'own' else '' }}>{% trans %}Own time entries{% endtrans %}</option>
+          </select>
+        </td>
+        <td>
+          <form id="role-form-{{ r.id }}" method="post" action="/admin/roles/{{ r.id }}/">
+            <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

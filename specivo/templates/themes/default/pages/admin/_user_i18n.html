@@ -1,0 +1,12 @@
+{# Translated labels for a user's account status, shared by the adminUsers
+   and adminUserDetail Alpine components. Renders a JSON object keyed by the
+   stored status value, so it must be used inside a single-quoted x-data
+   attribute. #}
+{% macro user_status_labels() -%}
+{{ {
+  "active": _("Active"),
+  "locked": _("Locked"),
+  "pending_verification": _("Pending verification"),
+  "deactivated": _("Deactivated")
+} | tojson }}
+{%- endmacro %}

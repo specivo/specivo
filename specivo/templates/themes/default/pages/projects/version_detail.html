@@ -22,7 +22,7 @@
       {% if version.effective_date %}
       <div class="version-meta-item">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></svg>
-        {% trans %}Due{% endtrans %} <strong class="{{ due_class }}">{{ version.effective_date.strftime('%b %d, %Y') }}</strong>
+        {% trans %}Due{% endtrans %} <strong class="{{ due_class }}">{{ version.effective_date | localdate }}</strong>
         {% if days_diff is not none %}
         <span style="color:var(--sp-text-muted)">
           {% if days_diff > 0 %}({% trans count=days_diff %}%(count)s day left{% pluralize %}%(count)s days left{% endtrans %})
@@ -158,10 +158,12 @@
         <span class="vd-info-label">{% trans %}Closed issues{% endtrans %}</span>
         <span class="vd-info-value" style="color:var(--sp-success)">{{ closed_count }}</span>
       </div>
+      {% if can_view_time_entries %}
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Time logged{% endtrans %}</span>
         <span class="vd-info-value"><span class="mono">{{ "%.1f"|format(time_logged) }}h</span></span>
       </div>
+      {% endif %}
       <div class="vd-info-row">
         <span class="vd-info-label">{% trans %}Estimated{% endtrans %}</span>
         <span class="vd-info-value"><span class="mono">{{ "%.1f"|format(estimated_hours) }}h</span></span>

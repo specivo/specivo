@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.constants import MAX_SEARCH_OFFSET
 from specivo.core.database import get_db
 from specivo.core.exceptions import AnonymousAccessDeniedError, ValidationError
 from specivo.core.rate_limit import enforce_rate_limit
@@ -98,7 +99,7 @@ async def search(
     project_keys: str | None = Query(None, description="Comma-separated project keys for multi-project search"),
     scope: str = Query("all", pattern="^(all|issues|wiki|comments|attachments)$", description="Search scope"),
     mode: str = Query("keyword", pattern="^(keyword|semantic|hybrid)$", description="Search mode"),
-    offset: int = Query(0, ge=0, description="Pagination offset"),
+    offset: int = Query(0, ge=0, le=MAX_SEARCH_OFFSET, description="Pagination offset"),
     limit: int = Query(25, ge=1, le=100, description="Pagination limit"),
     # Metadata filters
     tracker_id: int | None = Query(None, description="Filter by tracker ID"),

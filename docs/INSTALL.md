@@ -28,7 +28,7 @@ tar xzf specivo-*-bundle.tar.gz
 docker load < specivo-image.tar
 
 # 3. Configure
-python3 configure.py
+python3 scripts/configure.py
 
 # 4. Start
 docker compose up -d
@@ -88,55 +88,45 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ## Hybrid search (embedding model)
 
-Specivo supports hybrid search (keyword + semantic) using a local embedding model.
-No API keys required — the model runs locally inside the Celery worker container.
+Specivo supports hybrid search (keyword + semantic) using a local embedding model,
+`multilingual-e5-small`. No API keys are required; the model runs on the CPU. It is not included
+in the image or in this bundle, so you download it once (about 487 MB). Without it, search falls
+back to keyword matching and everything else works normally.
+
+The files live in `specivo-data/models/` (your `SPECIVO_DATA_DIR`): `multilingual-e5-small.onnx`
+and `tokenizer.json`.
 
 ### Online setup
 
-```bash
-make download-model
-```
-
-This downloads `multilingual-e5-small` (~393 MB) to `data/models/`.
-After downloading, restart the application and backfill existing data:
+With the stack running, download the model from inside the `api` container. It fetches a pinned
+revision and checks each file's SHA-256:
 
 ```bash
-make dev-up           # or: docker compose up -d
-make backfill-embeddings
+docker compose exec api python -m specivo.cli.download_model    # or: make download-model
 ```
 
-Hybrid search is now active. New issues and wiki pages are embedded automatically.
+No restart is needed. Then index the content you already have:
+
+```bash
+docker compose exec api python -m specivo.cli.backfill_embeddings    # or: make backfill-embeddings
+```
+
+It reports how many items it chunked and how many chunks it embedded. If the model files are
+missing it still writes the keyword-search chunks and says that semantic search stays off. After
+that, new and edited content is indexed as it is saved; the `celery-embeddings` container adds the
+embeddings a few seconds later, using one copy of the model in memory.
 
 ### Air-gapped / offline setup
 
-If you cannot download from the internet:
-
-1. On a machine with internet, download the model files:
-   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/onnx/model.onnx` → rename to `multilingual-e5-small.onnx`
-   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/tokenizer.json`
-   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/tokenizer_config.json`
-   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/special_tokens_map.json`
-   - `https://huggingface.co/intfloat/multilingual-e5-small/resolve/main/sentencepiece.bpe.model`
-
-   Or download `specivo-models.tar.gz` from the GitHub releases page.
-
-2. Copy the files to `specivo-data/models/` on the target machine:
-   ```bash
-   mkdir -p specivo-data/models
-   cp multilingual-e5-small.onnx tokenizer.json tokenizer_config.json \
-      special_tokens_map.json sentencepiece.bpe.model specivo-data/models/
-   ```
-
-3. Restart and backfill:
-   ```bash
-   docker compose up -d
-   make backfill-embeddings
-   ```
+On a machine with internet, run `bash scripts/download-model.sh ./models` (from this bundle; needs
+`curl` and `sha256sum` or `shasum`). Copy the `models` folder to `specivo-data/models/` on the
+target machine and run the backfill command.
 
 ### Without the embedding model
 
-Search still works — it falls back to keyword-only mode (PostgreSQL full-text search).
-Hybrid and semantic modes require the embedding model.
+Search still works — semantic and hybrid modes give keyword results (PostgreSQL full-text search).
+
+Full details: https://specivo.io/docs/specivo/install/semantic-search/
 
 ## Next steps
 

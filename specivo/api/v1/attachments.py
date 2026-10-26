@@ -20,54 +20,14 @@ _service = AttachmentService()
 _ALLOWED_CONTAINER_TYPES: frozenset[str] = frozenset({"Issue", "WikiPage", "Journal"})
 
 
-async def _resolve_container_project_id(db: AsyncSession, container_type: str, container_id: int) -> int | None:
-    """Return the project_id for the given container entity, or None if not found."""
-    from sqlalchemy import select
-
-    if container_type == "Issue":
-        from specivo.models.issue import Issue
-
-        result = await db.execute(select(Issue.project_id).where(Issue.id == container_id))
-        return result.scalar_one_or_none()
-    elif container_type == "WikiPage":
-        from specivo.models.wiki import Wiki, WikiPage
-
-        result = await db.execute(
-            select(Wiki.project_id).join(WikiPage, WikiPage.wiki_id == Wiki.id).where(WikiPage.id == container_id)
-        )
-        return result.scalar_one_or_none()
-    elif container_type == "Journal":
-        from specivo.models.issue import Issue
-        from specivo.models.journal import Journal
-
-        result = await db.execute(
-            select(Issue.project_id)
-            .join(Journal, Journal.issue_id == Issue.id)
-            .where(Journal.id == container_id, Journal.issue_id.isnot(None))
-        )
-        return result.scalar_one_or_none()
-    return None
-
-
 async def _check_container_access(db: AsyncSession, user: User, container_type: str, container_id: int) -> None:
-    """Verify that the user can access the container entity. Raises 403 or 404."""
-    if user.is_admin:
-        return
+    """Verify that the user may open attachments of the container entity. Raises 404 otherwise.
 
-    project_id = await _resolve_container_project_id(db, container_type, container_id)
-    if project_id is None:
+    A hidden container answers exactly like a missing one, so private issues
+    and wikis the user cannot read are not disclosed.
+    """
+    if not await _service.can_view_container(db, user, container_type, container_id):
         raise NotFoundError(f"{container_type} {container_id} not found")
-
-    from sqlalchemy import select
-
-    from specivo.models.project import Project
-    from specivo.services.project_service import ProjectService
-
-    project_result = await db.execute(select(Project).where(Project.id == project_id))
-    project = project_result.scalar_one_or_none()
-    if project is None:
-        raise NotFoundError(f"{container_type} {container_id} not found")
-    await ProjectService().require_project_access(db, project, user)
 
 
 def _attachment_out(attachment, author_name: str | None = None) -> AttachmentOut:
@@ -146,8 +106,7 @@ async def get_attachment(
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentOut:
     """Get attachment metadata by ID."""
-    attachment = await _service.get_by_id(db, attachment_id)
-    await _check_container_access(db, current_user, attachment.container_type, attachment.container_id)
+    attachment = await _service.get_visible(db, attachment_id, current_user)
     return _attachment_out(attachment)
 
 
@@ -158,8 +117,7 @@ async def download_attachment(
     db: AsyncSession = Depends(get_db),
 ) -> FileResponse:
     """Download an attachment file as a streaming response."""
-    attachment = await _service.get_by_id(db, attachment_id)
-    await _check_container_access(db, current_user, attachment.container_type, attachment.container_id)
+    attachment = await _service.get_visible(db, attachment_id, current_user)
 
     file_path, content_type = await _service.download(attachment_id, db)
 
@@ -183,7 +141,7 @@ async def delete_attachment(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete an attachment (author or admin only)."""
-    attachment = await _service.get_by_id(db, attachment_id)
+    attachment = await _service.get_visible(db, attachment_id, current_user)
 
     if not current_user.is_admin and attachment.author_id != current_user.id:
         raise PermissionDeniedError("You can only delete your own attachments (or be an admin)")
@@ -205,8 +163,7 @@ async def update_attachment(
     When ``metadata`` is provided, it is validated via ``AttachmentMetadata``
     Pydantic model and stored as JSONB.
     """
-    attachment = await _service.get_by_id(db, attachment_id)
-    await _check_container_access(db, current_user, attachment.container_type, attachment.container_id)
+    attachment = await _service.get_visible(db, attachment_id, current_user)
 
     if not current_user.is_admin and attachment.author_id != current_user.id:
         raise PermissionDeniedError("You can only update your own attachments (or be an admin)")
@@ -228,15 +185,9 @@ async def update_attachment(
             request=request,
         )
     else:
-        # If only metadata changed, still need to flush and re-index
+        # Only metadata changed: flushing re-indexes it (see search_index_service)
         if payload.metadata is not None:
             await db.flush()
-            try:
-                from specivo.services.embedding_service import EmbeddingService
-
-                await EmbeddingService().embed_attachment(db, attachment)
-            except Exception:
-                pass
             await db.refresh(attachment)
 
     return _attachment_out(attachment, author_name=author_name)

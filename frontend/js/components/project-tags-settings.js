@@ -1,10 +1,17 @@
 export function projectTagsSettings(initial) {
         var i18n = Object.assign({
             saveFailed: 'Failed to save tag.',
-            connectFailed: 'Unable to connect.'
+            connectFailed: 'Unable to connect.',
+            emptyCanManage: 'Create tags to label issues and wiki pages across this project.',
+            emptyReadOnly: 'No tags have been created for this project yet.',
+            editTag: 'Edit tag',
+            newTag: 'New tag',
+            saveChanges: 'Save changes',
+            createTag: 'Create tag'
         }, initial.i18n || {});
 
         return {
+            i18n: i18n,
             tags: initial.tags || [],
             projectKey: initial.projectKey || '',
             canManage: initial.canManage !== false,

@@ -9,7 +9,9 @@ This module is the only writer of that column, and adds the rules the database
 cannot express:
 
 - only instance administrators change the list; ``manage_project`` is not
-  enough;
+  enough. The one exception is an import, which may fill an empty list on a
+  public project from the source's settings
+  (``apply_imported_anonymous_permissions``) and never turns the switch on;
 - every change is written to the security audit log with the old and the new
   value;
 - making a project private clears the list in the same transaction.
@@ -73,6 +75,7 @@ class AnonymousPermissionsChangeReason(StrEnum):
 
     ADMIN_UPDATE = "admin_update"
     PROJECT_MADE_PRIVATE = "project_made_private"
+    IMPORT = "import"
 
 
 def normalize_anonymous_permissions(permissions: Iterable[str]) -> list[str]:
@@ -138,6 +141,73 @@ async def set_anonymous_permissions(
         request=request,
     )
     return project
+
+
+class ImportedAnonymousPermissionsResult(StrEnum):
+    """What ``apply_imported_anonymous_permissions`` did."""
+
+    APPLIED = "applied"
+    # Nothing written: the instance switch is on, so an opt-in would expose
+    # the project at once without the switch's confirmation.
+    SWITCH_ON = "switch_on"
+    # Nothing written: the project is not public.
+    NOT_PUBLIC = "not_public"
+    # Nothing written: the project already has anonymous permissions.
+    ALREADY_SET = "already_set"
+    # Nothing written: there was nothing to grant.
+    NOTHING_TO_GRANT = "nothing_to_grant"
+
+
+async def apply_imported_anonymous_permissions(
+    session: AsyncSession,
+    project: Project,
+    permissions: Iterable[str],
+    actor: User,
+) -> ImportedAnonymousPermissionsResult:
+    """Set *project*'s anonymous permissions from an import, if that exposes nothing yet.
+
+    Used by importers on behalf of the operator running them, so it does not
+    require *actor* to be an administrator. It is narrower than
+    ``set_anonymous_permissions`` instead, and writes only when all of these
+    hold, checked under ``ANONYMOUS_ACCESS_LOCK_KEY`` in the caller's
+    transaction:
+
+    - the instance switch is off. Turning it on takes the same lock and must
+      confirm exactly the projects opted in at that moment, so an opt-in
+      written here is always on that list. With the switch already on, an
+      opt-in would make the project readable without that confirmation;
+    - the project is public;
+    - its list is empty, so whatever an administrator already set is left
+      alone.
+
+    It never touches the switch itself. A write is audited with reason
+    ``import`` and *actor* as the user. The result says what happened.
+    """
+    new = normalize_anonymous_permissions(permissions)
+    if not new:
+        return ImportedAnonymousPermissionsResult.NOTHING_TO_GRANT
+
+    await lock_anonymous_access(session)
+    if await is_anonymous_access_enabled(session):
+        return ImportedAnonymousPermissionsResult.SWITCH_ON
+    await session.refresh(project, attribute_names=["is_public", "anonymous_permissions"])
+    if not project.is_public:
+        return ImportedAnonymousPermissionsResult.NOT_PUBLIC
+    if project.anonymous_permissions:
+        return ImportedAnonymousPermissionsResult.ALREADY_SET
+
+    project.anonymous_permissions = new
+    await session.flush()
+    await _audit.log_project_anonymous_permissions_change(
+        session=session,
+        user_id=actor.id,
+        project_id=project.id,
+        project_key=project.key,
+        old=[],
+        new=new,
+        reason=AnonymousPermissionsChangeReason.IMPORT,
+    )
+    return ImportedAnonymousPermissionsResult.APPLIED
 
 
 async def clear_anonymous_permissions_for_private(

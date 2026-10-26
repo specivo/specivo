@@ -4,6 +4,8 @@
 **Revised:** 2026-09-08 — recorded the three middleware added since (CSRF, token refresh, SQL
 debug), the `Permission` enum, and project membership becoming principal-shaped; corrected the
 xdist distribution mode in §16.
+**Revised:** 2026-10-26 — recorded role visibility settings and the time tracking permissions,
+the password hasher and import source plugin hooks, and that the plugin contract lists them.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -239,6 +241,8 @@ The catalogue is the `Permission` `StrEnum` in that module; each member's value 
 
 `get_user_roles(session, user, project)` is the one role resolution behind permission checks, issue visibility and (mirrored in SQL) search visibility: a membership's roles; otherwise, on a public project, the seeded read-only Non member role (`roles.builtin = 1`) plus the project's transient anonymous role when the instance switch is on; for the anonymous user, only that transient role, capped at `view_issues` / `view_wiki` inside `check_permission`. Resolved roles are cached in `session.info`, so the cache lives exactly as long as a request's session. There are no hardcoded `is_public` access branches. `member_principal_clause(user_id)` is the single definition of "this `members` row grants this user access" — see §4 on principals. Any membership read that feeds an access decision uses that clause; a row looked up in order to be *edited* (add, update or remove one user's roles) must stay user-only, or the edit lands on a group and reaches everyone in it.
 
+Each role also carries `users_visibility` and `time_entries_visibility` beside `issues_visibility`, and the widest value across a user's roles wins. For time entries only roles that grant `view_time_entries` count: a user with none reads no entries in the project, their own included. Time access is decided in `TimeEntryService`, not inline in endpoints: `visible_entries_clause` / `visible_entries_clause_any` scope every reader (list, single entry, issue and version totals, billing, the dashboard feed), `require_can_log` guards every entry written on a user's behalf (timers included), and `can_edit` covers edits and deletes. `create` checks nothing itself, because the importer writes entries for their original authors.
+
 ### 7. Authentication and Authorization
 
 Implemented in `specivo.core.security`:
@@ -263,7 +267,7 @@ Implemented in `specivo.core.security`:
 All middleware uses **raw ASGI** (not `BaseHTTPMiddleware`) to avoid event loop issues with asyncpg in tests. Stack order (outermost first, as registered in `create_app()`):
 
 1. `RequestIDMiddleware` -- generates/propagates `X-Request-ID`, adds security headers (CSP, X-Frame-Options, X-Content-Type-Options, etc.).
-2. `CSRFMiddleware` -- double-submit cookie CSRF protection: sets a signed, non-HttpOnly `csrf_token` cookie on GET responses and requires a matching `X-CSRF-Token` header on POST/PATCH/PUT/DELETE. Exempt: requests carrying an `X-API-Key` header (not cookie-based), and the login, password-reset and MCP prefixes.
+2. `CSRFMiddleware` -- double-submit cookie CSRF protection: sets a signed, non-HttpOnly `csrf_token` cookie on GET responses and requires a matching `X-CSRF-Token` header on POST/PATCH/PUT/DELETE. Exempt: requests carrying an `X-API-Key` or `Authorization` header (not cookie-based); the exact auth endpoints `login/`, `refresh/`, `forgot-password/` and `reset-password/` (listed one by one in `_CSRF_EXEMPT_PATHS`, never as an `/api/v1/auth/` prefix, so a new auth route is protected by default); and the MCP mount, which accepts Bearer API keys only.
 3. `AuditBatchMiddleware` -- initializes `scope["state"]["audit_events"]` list; flushes collected audit events in a single batch INSERT after the response (only when enterprise plugin provides `security_audit_log` feature).
 4. `SQLDebugMiddleware` -- per-request SQL profiler adding `X-SQL-Query-Count` and friends. Registered only when `settings.debug`; the middleware itself does not check the flag.
 5. `RateLimitHeaderMiddleware` -- copies `X-RateLimit-*` headers from `request.state` onto the ASGI response (survives endpoints that return custom `JSONResponse`).
@@ -309,10 +313,12 @@ class PluginConfig(Protocol):
     def get_static_dirs(self) -> list[tuple[Path, str]]: ...
     def get_static_assets(self) -> dict[str, list[str]]: ...
     def get_locale_dirs(self) -> list[tuple[Path, str]]: ...
+    def get_password_hashers(self) -> list: ...
+    def get_import_sources(self) -> list: ...
     def on_startup(self, app: Any) -> None: ...
 ```
 
-`BasePluginConfig(ABC)` provides no-op defaults for all hooks. Plugins are specified as dotted paths in `settings.installed_plugins` and loaded via `importlib.import_module`.
+`BasePluginConfig(ABC)` provides no-op defaults for all hooks. Plugins are specified as dotted paths in `settings.installed_plugins` and loaded via `importlib.import_module`. `get_password_hashers` returns legacy password hashers (`WrappedLegacyHasher` subclasses from `specivo.services.password_hashers`); registering one does not enable it, since only algorithms listed in `LEGACY_PASSWORD_ALGORITHMS` ever verify a sign-in. `get_import_sources` returns `BaseSourceAdapter` subclasses, each registered under its `source_system` and run with `python -m specivo.cli.import_data --source NAME`; `bootstrap()` refuses an invalid, duplicate or reserved (`redmine`) name at startup.
 
 **Feature registry** (`specivo.core.features`): plugins register feature flags (e.g., `"security_audit_log"`). Application code checks `has_feature("feature_name")` before enabling optional behavior. Templates access it via Jinja2 global `{% if has_feature("feature_name") %}`.
 

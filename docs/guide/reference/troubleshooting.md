@@ -20,12 +20,22 @@ you. Repeated failed attempts may temporarily lock you out; wait a moment and tr
 
 Specivo has two search modes. **Keyword search** works out of the box and matches text in issues, comments,
 wiki pages, and attachment descriptions. **Semantic search** (finding results by meaning) needs an on-device
-embedding model that the operator downloads and an index that is built afterward.
+embedding model that the operator downloads, and an index that is built afterward.
 
-If semantic results are empty, the model probably hasn't been fetched and the existing content hasn't been
-indexed yet. Keyword search still works in the meantime. To enable semantic search, the operator runs the
-model download (`make download-model`) and a backfill to index existing content. See
-[Finding issues](../issues/finding.md).
+If semantic results are empty, the model files are probably missing from the server's data directory, or
+the existing content hasn't been indexed yet. Keyword search still works in the meantime. The operator
+downloads the model (`docker compose exec api python -m specivo.cli.download_model`, or
+`make download-model`) and runs the indexing command
+(`docker compose exec api python -m specivo.cli.backfill_embeddings`). After that, new and edited
+content is indexed as it is saved: keyword search sees it at once, and semantic search a few seconds
+later, provided the `celery-embeddings` container is running. The steps, a way to check each one, and
+fixes are in
+[Semantic search and embeddings](../install/semantic-search.md). See also [Finding issues](../issues/finding.md).
+
+If searching for an issue key like `ACME-42` finds the issue itself but not older issues or wiki pages
+that mention it, the search index predates key matching. An administrator can rebuild it with
+**Reindex now** under **Administration → Settings**, or `make reindex-fts` from the command line. The
+reindex runs in the background in small batches. Content you edit is updated as you save it.
 
 ## An AI agent gets a permission error
 
@@ -37,6 +47,24 @@ things:
   add them with an appropriate role — typically **Agent** or **Developer**.
 - **The key has the `mcp` scope.** A key without the `mcp` scope can't use the MCP server at all. Create a
   new key with the `mcp` scope under **Your profile → API keys**. See [API keys](../ai-agents/api-keys.md).
+
+## I can't see time entries
+
+Reading time needs the **View time entries** permission in the project, separately from **Log time**.
+Out of the box, Reporters and people with no membership don't have it. A role can also be limited to
+**Own time entries**, which shows only the hours you logged yourself. Ask a project manager or an
+administrator to check your role. See [Time tracking](../projects/time-tracking.md#who-can-do-what).
+
+## A script gets "CSRF validation failed"
+
+A request made with the sign-in **cookie** has to send the `X-CSRF-Token` header on anything that
+changes data, including change-password and logout. The value is the `csrf_token` cookie. Scripts and
+agents should use an [API key](../ai-agents/api-keys.md) instead, which needs no token.
+
+## Text is shown without formatting
+
+A short notice appears above it when a description, comment or page is too large or too complex to
+format. Nothing was lost. See [Size and complexity limits](markdown.md#size-and-complexity-limits).
 
 ## A file upload was rejected
 

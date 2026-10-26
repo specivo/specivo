@@ -3,7 +3,11 @@ export function markdownEditor(initial) {
         var i18n = Object.assign({
             placeholder: 'Write your content here (Markdown)...',
             rendering: 'Rendering...',
-            previewUnavailable: 'Preview unavailable.'
+            previewUnavailable: 'Preview unavailable.',
+            /* Tooltips for the toolbar buttons, keyed by EasyMDE button name. */
+            toolbar: {},
+            statusLines: 'lines',
+            statusWords: 'words'
         }, initial.i18n || {});
 
         return {
@@ -11,6 +15,10 @@ export function markdownEditor(initial) {
             editor: null,
             previewUrl: initial.previewUrl || '/api/v1/markdown/preview/',
             context: initial.context || 'wiki',
+            /* Where the text will be stored, so the preview resolves bare
+             * attachment filenames like the saved page: {issue_id} for an
+             * issue, {project_key} for a wiki page. Empty resolves nothing. */
+            previewParams: initial.previewParams || {},
             onPasteDrop: initial.onPasteDrop || '',
             _previewTimer: null,
             _lastPreviewText: null,
@@ -163,6 +171,7 @@ export function markdownEditor(initial) {
                 var wrapper = ta.nextElementSibling;
                 if (wrapper && wrapper.classList && wrapper.classList.contains('EasyMDEContainer')) {
                     wrapper.classList.add('sp-md-editor');
+                    this._localizeChrome(wrapper);
                 }
 
                 /* When the editor lives inside a hidden ancestor (x-show="editing"),
@@ -208,6 +217,28 @@ export function markdownEditor(initial) {
                 }
             },
 
+            /* EasyMDE has no localisation for its toolbar tooltips or status-bar
+             * labels. Relabel the built-in buttons in place (their actions stay
+             * EasyMDE's own) and keep the shortcut suffix it appended, e.g.
+             * "Bold (Ctrl-B)". The status labels come from CSS ::before content,
+             * which reads data-sp-label instead (see sprint-detail.css). */
+            _localizeChrome(wrapper) {
+                var buttons = this.editor.toolbarElements || {};
+                Object.keys(i18n.toolbar).forEach(function (name) {
+                    var el = buttons[name];
+                    if (!el) return;
+                    var label = i18n.toolbar[name];
+                    var shortcut = (el.title || '').match(/ \([^)]*\)$/);
+                    el.title = label + (shortcut ? shortcut[0] : '');
+                    el.setAttribute('aria-label', label);
+                });
+                var labels = {lines: i18n.statusLines, words: i18n.statusWords};
+                Object.keys(labels).forEach(function (cls) {
+                    var el = wrapper.querySelector('.editor-statusbar .' + cls);
+                    if (el) el.setAttribute('data-sp-label', labels[cls]);
+                });
+            },
+
             /* Replace the editor contents (used by parent when resetting drafts). */
             setValue(text) {
                 this.value = text || '';
@@ -246,7 +277,7 @@ export function markdownEditor(initial) {
                     var res = await spFetch(this.previewUrl, {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify({text: plainText, context: this.context})
+                        body: JSON.stringify(Object.assign({}, this.previewParams, {text: plainText, context: this.context}))
                     });
                     if (res.ok) {
                         var data = await res.json();

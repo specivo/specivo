@@ -202,6 +202,13 @@ users = Table(
     Column("type", String),
     Column("must_change_passwd", Boolean),
     Column("passwd_changed_on", DateTime),
+    # Local credential: hashed_password = sha1_hex(salt + sha1_hex(password)).
+    # Read only to be handed to the redmine_sha1 hasher; never logged.
+    Column("hashed_password", String),
+    Column("salt", String),
+    # Set for accounts that authenticate against LDAP or another external
+    # source, whose local hash means nothing.
+    Column("auth_source_id", Integer),
 )
 
 # Redmine moved addresses off users in 3.2; the default row is the account's

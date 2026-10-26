@@ -12,8 +12,10 @@ from specivo.core.exceptions import NotFoundError
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
 from specivo.models.project import Project
+from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.schemas.version import RoadmapEntry, VersionCreate, VersionOut, VersionUpdate
+from specivo.services.markdown_budget import check_markdown_length
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ class VersionService:
         data: VersionCreate,
     ) -> Version:
         """Create a new version for *project*."""
+        check_markdown_length(data.description, "description")
         version = Version(
             project_id=project.id,
             name=data.name,
@@ -108,6 +111,7 @@ class VersionService:
         data: VersionUpdate,
     ) -> Version:
         """Apply a partial update to *version*."""
+        check_markdown_length(data.description, "description")
         if data.name is not None:
             version.name = data.name
         if data.description is not None:
@@ -219,8 +223,9 @@ class VersionService:
     ) -> list[RoadmapEntry]:
         """Return roadmap data for *project*: versions with open/closed issue counts.
 
-        Only versions belonging to the project are included (visibility across
-        projects via sharing is a separate query — see visible_versions).
+        Only versions belonging to the project are included. Version sharing
+        is not shown on the roadmap; ``visible_versions`` is the reader-aware
+        query for it.
 
         Each entry carries:
         - ``open_count``  — issues whose status is NOT closed
@@ -298,8 +303,9 @@ class VersionService:
         self,
         session: AsyncSession,
         project: Project,
+        reader: User,
     ) -> list[Version]:
-        """Return all versions visible to *project*, respecting sharing levels.
+        """Return the versions *reader* may see from *project*, respecting sharing levels.
 
         Sharing semantics
         -----------------
@@ -308,31 +314,29 @@ class VersionService:
         hierarchy   — all projects in the ancestor–descendant chain (path @> or <@)
         tree        — the whole project tree (root + all descendants)
         system      — every project
+
+        Sharing decides which projects a version reaches; it never lets a
+        reader see a version whose owning project they cannot open. Versions of
+        such a project (private without membership, or anything not readable
+        anonymously) are left out, using the same predicate as the project
+        list. Admins get no predicate and see every shared version.
         """
-        # Collect candidate version IDs by sharing type:
-        # We do this in Python using ltree path comparisons via raw SQL.
+        from specivo.services.project_service import ProjectService
 
         own_path = project.path
 
-        # Fetch all versions, then filter by sharing rule.
-        # For large installations a single JOIN query would be better, but
-        # this is clear and correct for the current scale.
-
-        all_versions_result = await session.execute(select(Version))
-        all_versions = all_versions_result.scalars().all()
-
-        if not all_versions:
-            return []
-
-        # Build project_id → path map for projects referenced by these versions
-        project_ids = {v.project_id for v in all_versions}
-        proj_stmt = select(Project.id, Project.path).where(Project.id.in_(project_ids))
-        proj_rows = (await session.execute(proj_stmt)).all()
-        path_map = {row.id: row.path for row in proj_rows}
+        # Fetch candidate versions with their owning project's path, then
+        # filter by sharing rule. For large installations the sharing rules
+        # could move into SQL too, but this is clear and correct for the
+        # current scale.
+        stmt = select(Version, Project.path).join(Project, Project.id == Version.project_id)
+        accessible = await ProjectService().accessible_projects_clause(session, reader)
+        if accessible is not None:
+            stmt = stmt.where(accessible)
+        rows = (await session.execute(stmt)).all()
 
         visible: list[Version] = []
-        for version in all_versions:
-            v_path = path_map.get(version.project_id, "")
+        for version, v_path in rows:
             sharing = version.sharing
 
             if sharing == "system":

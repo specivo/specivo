@@ -3,6 +3,54 @@
 All notable changes to Specivo are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.9.0] - YYYY-MM-DD
+
+### Added
+- **Imported users keep their passwords** — with `--import-passwords`, Redmine password hashes come across and are upgraded to bcrypt on first sign-in. Off by default; admins and LDAP accounts still reset
+- **Password hasher plugins** — support another system's hashes through a plugin or `PASSWORD_HASHERS`, enabled per algorithm with `LEGACY_PASSWORD_ALGORITHMS`
+- **Import source plugins** — plugins can add migration sources; `python -m specivo.cli.import_data --source NAME` runs any of them
+- **Redmine anonymous and non-member access is imported** onto per-project public access, without turning the instance switch on
+- **Role visibility settings** — a role can see all users or only members of its projects, and all time entries or only its own. Trackers can make new issues private by default. New admin pages for roles and trackers
+- **Search by issue key** — `ACME-42` finds the issue and its mentions in every search mode, including old keys of moved issues
+- **Link to any attachment by filename** — `[spec](spec.pdf)` and `![chart](chart.png)` work in issues, comments, the preview and the wiki
+- **Model download command** — `python -m specivo.cli.download_model` fetches the semantic search model at a pinned revision and checks its SHA-256
+
+### Changed
+- **Time tracking permissions are enforced** — *View time entries*, *Log time* and *Edit/delete any time entries* apply everywhere. With the default roles, Reporter and Non member no longer see time entries; Agent is granted *View time entries* by the upgrade
+- **Content is indexed when it is saved** — keyword search finds new and edited content at once; embeddings follow from the worker
+- **New `celery-embeddings` service** runs embedding jobs in one process, so the model is loaded once. Custom compose files need it, or `EMBEDDING_QUEUE=celery`
+- Only the bundled local embedding model is supported; the endpoint for registering other models is removed
+- Change password, sign out and session revocation need a CSRF token when called with a session cookie
+- Markdown fields are limited to 262,144 characters; text too complex to render quickly is shown as plain text
+- Relative times stay relative for the first 24 hours instead of switching to "Yesterday" at midnight
+- `specivo.cli.import_redmine` is replaced by `specivo.cli.import_data --source redmine`
+- `make` targets for the model download, backfill, reindex and import work from the release bundle
+
+### Fixed
+- New comments were not found by any search, and edits were not re-indexed
+- Semantic search could miss visible matches ranked behind hidden ones, and scanned every embedding; it now uses a vector index
+- Deleted wiki pages still matched keyword search
+- The search backfill reported success without a model and skipped some attachments; it now reports what it embedded
+- The release bundle's `configure.py` wrote outside the bundle, and the model download pointed to a missing release asset
+- A misconfigured embedding model broke indexing and search; semantic search now turns off instead
+- The remaining untranslated interface text, and dates now follow the interface language
+- Keyword search returned short pages after the first one
+- Comments saved in the same moment could appear out of order
+
+### Security
+- Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
+- Attachments of deleted wiki pages stayed searchable
+- Crafted Markdown could keep a worker busy for minutes on every view, and deeply nested lists caused errors
+- Time entries could be read, logged and edited without the matching permissions, and timers started in any project
+- Shared versions of private projects were not filtered by access
+- A very deep search offset could make the database rank millions of rows
+- Indexing errors could write content to the logs
+
+### Internal
+- Migrations 0033–0039: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently) and a single default embedding model. **Run a search reindex after upgrading** (Administration → Settings)
+- Plugins load in the web app, the import CLI and the Celery workers through one shared bootstrap
+- Python-Markdown upgraded to 3.11.2
+
 ## [0.8.0] - 2026-09-29
 
 ### Added

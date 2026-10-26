@@ -11,22 +11,39 @@ Pipeline:
 
     raw markdown
       -> wiki link substitution    [[Page]]    -> [Page](/projects/X/wiki/page/)
-      -> attachment image rewrite  ![a](b.png) -> ![a](/path/to/b.png)
       -> issue ref auto-link       PROJ-123    -> [PROJ-123](/issue/PROJ-123/)
+      -> render_hazard(...)        over the size, nesting or cost budget:
+                                   the raw text, escaped, with a notice instead
       -> markdown.markdown(...)    with fenced_code, tables, toc, codehilite
+           + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
+             -> attachment download URL (parsed tree, so code is never touched)
       -> nh3.clean(...)            HTML sanitizer with our allowlist
       -> markupsafe.Markup
+
+``markdown.markdown`` also runs under a cooperative deadline, and a render
+that overruns it or exhausts the recursion limit falls back to plain text too
+(see ``specivo.services.markdown_budget``).
 """
 
 from __future__ import annotations
 
+import logging
 import re
+from urllib.parse import unquote
+from xml.etree.ElementTree import Element
 
 import markdown as _md
 import markupsafe
 import nh3
+from markdown.extensions import Extension  # type: ignore[import-untyped]
+from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
 
+from specivo.core.i18n import gettext as _
+from specivo.services.markdown_budget import RenderDeadline, RenderDeadlineError, render_hazard
+from specivo.services.wiki_utils import WIKI_LINK_RE as _WIKI_LINK_RE
 from specivo.services.wiki_utils import slugify as _wiki_slugify
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Sanitizer configuration — must match what was historically inline in
@@ -98,8 +115,8 @@ _MD_EXTENSION_CONFIGS = {
 }
 
 # Compiled once at import time
-_WIKI_LINK_RE = re.compile(r"\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]")
-_IMG_SRC_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+# A URL scheme (``https:``, ``mailto:``) at the start of a link target.
+_URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 # Issue reference: PROJ-123, but not inside markdown links or wiki links
 _ISSUE_REF_RE = re.compile(r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b")
 
@@ -126,25 +143,104 @@ def _sanitize_html(html_str: str) -> str:
     )
 
 
+def _render_markdown(source: str, original: str, extensions: list) -> markupsafe.Markup:
+    """Render *source* to sanitized HTML, or *original* as plain text if that is unsafe.
+
+    *source* is the text after wiki-link and issue-ref substitution, which is
+    what Python-Markdown parses; *original* is what the author wrote, shown
+    as-is in the fallback.
+    """
+    hazard = render_hazard(source, len(original))
+    if hazard is None:
+        try:
+            html = _md.markdown(
+                source,
+                extensions=[*extensions, RenderDeadline()],
+                extension_configs=_MD_EXTENSION_CONFIGS,
+            )
+        except RenderDeadlineError:
+            hazard = "deadline"
+        except RecursionError:
+            hazard = "recursion"
+        else:
+            return markupsafe.Markup(_sanitize_html(html))
+    logger.warning("Markdown shown as plain text (%s, %d characters)", hazard, len(original))
+    return _plain_text_fallback(original)
+
+
+def _plain_text_fallback(text: str) -> markupsafe.Markup:
+    """Show *text* escaped and preformatted, below a notice saying why."""
+    notice = _("This text is too complex to format, so it is shown as plain text.")
+    return markupsafe.Markup(
+        '<div class="sp-markdown-fallback"><p class="sp-markdown-fallback-notice">{}</p><pre>{}</pre></div>'
+    ).format(notice, text)
+
+
 def _replace_wiki_link(project_key: str):
     def _inner(m: re.Match[str]) -> str:
         target = m.group(1).strip()
         display = m.group(2)
         if display:
             display = display.strip()
-            display = (
-                display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-            )
+            display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
         else:
             display = target
-            display = (
-                display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-            )
+            display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
         slug = _wiki_slugify(target)
         url = f"/projects/{project_key}/wiki/{slug}/"
         return f"[{display}]({url})"
 
     return _inner
+
+
+def _attachment_filename(target: str) -> str | None:
+    """Return the attachment filename a link or image *target* names, or None.
+
+    The target is URL-decoded first, so ``my%20spec.pdf`` names
+    ``my spec.pdf``. Only a bare filename qualifies: anything with a ``/`` or
+    ``\\`` (a path or URL), a scheme (``https:``, ``mailto:``) or starting
+    with ``#`` or ``?`` is left to the browser.
+    """
+    name = unquote(target).strip()
+    if not name or name[0] in "#?" or "/" in name or "\\" in name or _URL_SCHEME_RE.match(name):
+        return None
+    return name
+
+
+class _AttachmentRefTreeprocessor(Treeprocessor):
+    """Point bare-filename ``<img src>`` and ``<a href>`` at their attachment's download URL.
+
+    Runs on the parsed tree, after inline patterns, so Markdown itself has
+    already handled ``<my spec.pdf>`` targets, titles and escapes, and code
+    spans and blocks (text, or stashed HTML) are never rewritten. Matching is
+    exact and case-sensitive; unknown names stay as written.
+    """
+
+    def __init__(self, md: _md.Markdown, attachment_map: dict) -> None:
+        super().__init__(md)
+        self.attachment_map = attachment_map
+
+    def run(self, root: Element) -> None:
+        for element in root.iter():
+            attribute = {"img": "src", "a": "href"}.get(element.tag)
+            if attribute is None:
+                continue
+            target = element.get(attribute)
+            if not target:
+                continue
+            filename = _attachment_filename(target)
+            if filename is not None and filename in self.attachment_map:
+                element.set(attribute, self.attachment_map[filename])
+
+
+class _AttachmentRefExtension(Extension):
+    def __init__(self, attachment_map: dict) -> None:
+        super().__init__()
+        self.attachment_map = attachment_map
+
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below "inline" (20), so links and images exist when it runs.
+        md.treeprocessors.register(_AttachmentRefTreeprocessor(md, self.attachment_map), "attachment_refs", 5)
 
 
 def render_wiki_markdown(
@@ -164,8 +260,10 @@ def render_wiki_markdown(
     target as-it-would-render and any project mismatch surfaces immediately.
 
     ``attachment_map``: optional dict mapping filenames to attachment download
-    URLs. When provided, bare-filename image references like
-    ``![alt](chart.png)`` are rewritten to the attachment URL.
+    URLs. When provided, bare-filename image and link targets like
+    ``![alt](chart.png)`` or ``[the spec](spec.pdf)`` are rewritten to the
+    attachment URL. Callers build it from the attachments the reader may
+    open, so a hidden file never resolves.
 
     ``known_issue_refs``: optional set of ``KEY-123`` references that actually
     exist (or previously existed, via a move alias). When provided, ONLY those
@@ -179,17 +277,6 @@ def render_wiki_markdown(
 
     processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
 
-    # Rewrite bare-filename image references to attachment URLs
-    if attachment_map:
-
-        def _resolve_image(m: re.Match[str]) -> str:
-            alt, src = m.group(1), m.group(2)
-            if src in attachment_map:
-                return f"![{alt}]({attachment_map[src]})"
-            return m.group(0)
-
-        processed = _IMG_SRC_RE.sub(_resolve_image, processed)
-
     # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
     # When known_issue_refs is provided, only link references that resolve to a
     # real (or previously-existing) issue; leave the rest as plain text.
@@ -201,12 +288,12 @@ def render_wiki_markdown(
 
     processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
 
-    rendered = _md.markdown(
-        processed,
-        extensions=_MD_EXTENSIONS,
-        extension_configs=_MD_EXTENSION_CONFIGS,
-    )
-    return markupsafe.Markup(_sanitize_html(rendered))
+    # Bare-filename image and link targets are resolved to attachment URLs on
+    # the parsed tree, not by rewriting the source.
+    extensions: list = list(_MD_EXTENSIONS)
+    if attachment_map:
+        extensions.append(_AttachmentRefExtension(attachment_map))
+    return _render_markdown(processed, text, extensions)
 
 
 def render_plain_markdown(text: str) -> markupsafe.Markup:
@@ -216,9 +303,4 @@ def render_plain_markdown(text: str) -> markupsafe.Markup:
     Same extensions and sanitization as ``render_wiki_markdown``; only the
     pre-processing differs.
     """
-    html = _md.markdown(
-        text or "",
-        extensions=_MD_EXTENSIONS,
-        extension_configs=_MD_EXTENSION_CONFIGS,
-    )
-    return markupsafe.Markup(_sanitize_html(html))
+    return _render_markdown(text or "", text or "", list(_MD_EXTENSIONS))
