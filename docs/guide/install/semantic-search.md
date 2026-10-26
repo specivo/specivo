@@ -107,9 +107,11 @@ takes.
 ### CPU and memory
 
 - The model is loaded into memory the first time it is used by a process, and it stays there. Budget
-  at least the size of the model file for each process that embeds: the `api` container, and the
-  `celery-worker` while it runs a model backfill. Measure on your host; a small team fits the
-  2 CPU / 2 to 4 GB guidance in the [overview](index.md).
+  at least the size of the model file for each process that embeds: the `api` container, which
+  embeds search queries, and each `celery-worker` process that embeds content. The worker starts one
+  process per CPU core unless you pass `--concurrency`, and each one that picks up an embedding job
+  loads its own copy. Measure on your host; a small team fits the 2 CPU / 2 to 4 GB guidance in the
+  [overview](index.md).
 - Inference uses **2 CPU threads** by default. Set `EMBEDDING_ONNX_THREADS` in `.env` to change that:
   a higher number makes indexing faster and uses more CPU, and `0` lets the model use every core.
   Restart the stack afterwards.
@@ -152,37 +154,49 @@ described in [Air-gapped install](air-gapped.md#semantic-search-offline).
 
 ## How content is indexed
 
-New content is embedded **inside the request that creates it**, by the `api` process. It does not go
-through the Celery worker, so the worker does not have to be running for this. Failures are not
-reported to the person who saved: the content is saved and simply is not indexed.
+Indexing happens in two steps, and only the second needs the model.
 
-Here is exactly what is indexed automatically:
+1. **Chunks, at once.** When an issue, wiki page, comment or attachment is created, edited or
+   deleted, its chunks are written, replaced or removed in the same database transaction as the
+   change. Keyword search reads them straight away. This needs no model and no worker, and it is
+   cheap enough not to slow saving down.
+2. **Embeddings, a few seconds later.** After the change is saved, Specivo queues a job for the
+   `celery-worker`, which embeds the new chunks. Semantic and hybrid search find the content once
+   that job has run, usually within seconds. Quick edits in a row are usually embedded once, from
+   the latest text.
 
-| Event | Indexed automatically |
-|---|---|
-| An issue is created | Yes |
-| An issue is moved to another project | Yes |
-| An issue's subject or description is edited | **No** |
-| A wiki page is created, or restored from the trash | Yes |
-| A wiki page is edited | **No** |
-| A comment is added | **No** |
-| An attachment is uploaded, or its description edited | Yes |
-| A wiki page is deleted | Its index entries are removed |
-| An import runs | Imported issues and wiki pages are indexed in the import's last phase. Imported comments are **not** |
+This covers every way content changes: the web UI, the REST API, agents over MCP, recurring issues,
+moving an issue to another project (its chunks, comments and attachments move with it) and commit
+messages that reference an issue. An import indexes everything it brought in at the end of the run.
 
-!!! warning "Edits and comments wait for the next backfill"
-    In this release, edited issues and wiki pages keep the embedding of their *previous* text, and
-    comments are not indexed at all, until the backfill below is run again. Because comments are
-    searched through the same index, a new comment is not found by **any** search mode, keyword
-    included, until then. If your team leans on search, run the backfill on a schedule, for example
-    nightly from cron.
+| Event | Keyword search | Semantic search |
+|---|---|---|
+| An issue, wiki page, comment or attachment is created or edited | Immediately | Once the worker has embedded it |
+| One is deleted, or a wiki page is moved to the trash | Gone immediately | Gone immediately |
+| A wiki page is restored from the trash | Immediately | Once the worker has embedded it |
+| A comment is made private | Hidden from people who cannot see private notes immediately | Same |
+
+Things to know:
+
+- **The worker must be running for semantic indexing.** Without it, keyword search still finds
+  everything, but new and edited content waits for the worker (or the backfill below) before
+  semantic search finds it. The queued jobs are kept in Redis and run when the worker comes back.
+- **Without the model files nothing is queued.** Chunks are still written, so keyword search is
+  complete. When you add the files later, run the backfill once to embed what was written in the
+  meantime. The worker logs at startup whether semantic indexing is on.
+- If Redis cannot be reached when a change is saved, the change is still saved and keyword-searchable;
+  the `api` logs a warning, and the backfill embeds the content later.
+- Indexing problems are logged at warning level, with the kind of content and its id. They never make
+  the save itself fail.
+- The comment settings above are applied as comments are written and edited. Changing them later
+  affects comments written or edited afterwards.
 
 ## Index existing content
 
 The backfill goes through every issue, wiki page, comment and attachment description, rebuilds
-their chunks and embeds them. It is safe to run again whenever you like, and it replaces what was
-there, so it also refreshes edited content. Run it after you add the model, after an import, and
-whenever the warning above applies.
+their chunks and embeds the ones that have no embedding yet. It is safe to run again whenever you
+like: chunks whose text has not changed keep their embeddings. Run it after you add the model files.
+Day to day there is no need to run it, because new and edited content is indexed as it is saved.
 
 ```bash
 docker compose exec api python -m specivo.cli.backfill_embeddings
@@ -196,9 +210,9 @@ stopping it with Ctrl+C loses very little, and you can start it again. The time 
 the number of chunks and your CPU. Run a large first backfill when the server is quiet, and raise
 `EMBEDDING_ONNX_THREADS` for the duration if you have cores to spare.
 
-!!! note "Run it after the model files are in place"
-    If the model files are missing, the backfill still finishes and reports its chunks, but writes no
-    embeddings. Add the files and run it again.
+!!! note "It works without the model too"
+    If the model files are missing, the backfill still writes every chunk, which is all keyword
+    search needs, and writes no embeddings. Add the files and run it again for semantic search.
 
 An administrator can also start a *fill-the-gaps* backfill for one registered model with
 `POST /api/v1/admin/embedding-models/{id}/backfill/`. It runs in the Celery worker (so the worker
@@ -215,19 +229,22 @@ it does not fix stale content. There is no button for it in the web UI.
 
     You should see `multilingual-e5-small.onnx` and `tokenizer.json`.
 
-2. **Does the log agree?** When the model is missing, the `api` logs a warning each time it needs an
-   embedding. When it loads, it logs the line below once per process:
+2. **Does the log agree?** The worker says at startup whether semantic indexing is on, and each
+   process logs the line below when it first loads the model. When the model is missing, the `api`
+   logs a warning each time it needs to embed a search query.
 
     ```bash
-    docker compose logs api | grep -iE "embedding model|ONNX model"
+    docker compose logs celery-worker api | grep -iE "semantic indexing|embedding model|ONNX model"
     ```
 
     ```
+    Semantic indexing is on: embedding with multilingual-e5-small
     Loaded ONNX model multilingual-e5-small from /app/data/models/multilingual-e5-small.onnx (threads=2)
     Local embedding model 'multilingual-e5-small' is not available (missing ONNX/tokenizer files)
     ```
 
-3. **Is anything indexed?** Compare chunks with embeddings. They should be close to equal.
+3. **Is anything indexed?** Compare chunks with embeddings. Once the worker has caught up they should
+   be close to equal.
 
     ```bash
     docker compose exec db psql -U specivo specivo -c \
@@ -235,8 +252,9 @@ it does not fix stale content. There is no button for it in the web UI.
               (SELECT count(*) FROM chunk_embeddings) AS embeddings;"
     ```
 
-    (Use your `POSTGRES_USER` and `POSTGRES_DB` if you changed them.) Many chunks and zero embeddings means the chunks were built while the model files were missing.
-    Add the files and run the backfill again.
+    (Use your `POSTGRES_USER` and `POSTGRES_DB` if you changed them.) Many chunks and zero
+    embeddings means the chunks were built while the model files were missing, or the worker is not
+    running. Check the worker, add the files, and run the backfill again.
 
 4. **Does a meaning-based search work?** Search for a paraphrase of something you know is in an
    issue, using an [API key](../ai-agents/api-keys.md):
@@ -277,12 +295,15 @@ Bring-your-own-key hosted embeddings are not available either, whatever older no
 Work down the list in [Check that it works](#check-that-it-works): the files in
 `/app/data/models`, the log line, and the chunks and embeddings counts. The usual causes are no
 model files, files in the wrong folder (it must be the `models` folder *inside* the folder mounted
-as `/app/data`, and `SPECIVO_DATA_DIR` in `.env` must point at the same place for both containers), or
-a backfill that has not run since the files were added.
+as `/app/data`, and `SPECIVO_DATA_DIR` in `.env` must point at the same place for both containers), a
+stopped `celery-worker`, or a backfill that has not run since the files were added.
 
 **A result I know exists is missing, or looks out of date.**
-The text may have been edited, or the comment written, since the last backfill. See
-[How content is indexed](#how-content-is-indexed).
+In keyword mode, check that you can open the item: search only shows what you are allowed to see,
+and comments shorter than `SEARCH_MIN_COMMENT_LENGTH` or written by a bot are not indexed. In
+semantic mode, the worker may not have embedded the latest text yet; check that it is running and
+look for warnings in its log. Content from before 0.9.0 that was never backfilled may lack
+embeddings; run the backfill. See [How content is indexed](#how-content-is-indexed).
 
 **`make download-model` fails.**
 The script first checks that it can reach `huggingface.co` and stops if not. Behind a proxy or
@@ -292,10 +313,10 @@ re-running the script picks up where the completed files end. The five files are
 would rather fetch them yourself.
 
 **Indexing is slow.**
-Indexing is one chunk at a time on the CPU. Raise `EMBEDDING_ONNX_THREADS` while you backfill, and
-give the `api` container more cores. Because new issues and wiki pages are embedded inside the
-request that creates them, creating many at once (a bulk import through the API, say) is slower than
-usual.
+Embedding is one chunk at a time on the CPU. Raise `EMBEDDING_ONNX_THREADS` while you backfill, and
+give the `api` and `celery-worker` containers more cores. Saving is not slowed down: content is
+embedded by the worker after it is saved, so a burst of changes only means semantic search catches up
+a little later.
 
 **Searching is slow on a large instance.**
 Semantic search compares your query with the stored embeddings of the projects you can see. Specivo
@@ -303,7 +324,8 @@ does not currently create a vector index for them, so the cost grows with the nu
 Thousands of chunks are fine. Very large instances should expect slower semantic and hybrid queries,
 and can fall back to keyword mode.
 
-**The `api` container uses a lot of memory.**
-The model is loaded into the process the first time it embeds something and stays loaded. This is
-expected: the model file alone is about 370 MB. If memory is tight, give the container more, or leave
-the model files out and use keyword search.
+**The `api` or `celery-worker` container uses a lot of memory.**
+The model is loaded into each process the first time it embeds something and stays loaded. This is
+expected: the model file alone is about 370 MB. If memory is tight, give the containers more, start
+the worker with fewer processes (`celery -A specivo.tasks worker --concurrency=2`), or leave the
+model files out and use keyword search.

@@ -68,7 +68,7 @@ docker compose up -d
 
 ## Upgrading to 0.9.0
 
-Version 0.9.0 adds four migrations (0033 to 0036), which the entrypoint applies on startup like any
+Version 0.9.0 adds five migrations (0033 to 0037), which the entrypoint applies on startup like any
 other. Most of it needs no action, but a few things are worth doing or checking afterwards.
 
 ### Rebuild the search index
@@ -87,6 +87,30 @@ rebuild. Until you run it, an issue is still found by its own key. Rebuild it on
 The reindex runs in small batches, so Specivo stays usable while it works. Text edited after the
 upgrade is indexed as you save it. The notice next to the button reads "Search language changed",
 which is the same flag the language setting uses; it clears when the reindex finishes.
+
+### Comments become searchable, and indexing follows every change
+
+Before 0.9.0 a comment could not be found by any search until someone ran the embedding backfill,
+and edited issues and wiki pages kept their old text in semantic search. Now every change is
+indexed as it is saved: keyword search sees it at once, and the `celery-worker` adds the embeddings
+for semantic search a few seconds later. See
+[How content is indexed](semantic-search.md#how-content-is-indexed).
+
+- Migration 0037 makes existing comments searchable by keyword. It follows your
+  `SEARCH_INDEX_COMMENTS`, `SEARCH_MIN_COMMENT_LENGTH` and `SEARCH_EXCLUDE_BOT_COMMENTS` settings.
+  Nothing to do.
+- Make sure the `celery-worker` container is running; the standard Compose file starts it. Semantic
+  indexing now happens there instead of in the `api`, and it mounts the same data directory, so the
+  model files need no moving.
+- If you use semantic search, run the backfill once after upgrading so the comments and the edits
+  made before the upgrade get embeddings too. It also indexes attachments brought in by an earlier
+  import. Without the model files it writes keyword chunks only, which is harmless:
+
+  ```bash
+  docker compose exec api python -m specivo.cli.backfill_embeddings
+  ```
+
+  A scheduled backfill, if you set one up, is no longer needed.
 
 ### Check time tracking permissions
 

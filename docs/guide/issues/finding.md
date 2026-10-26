@@ -54,7 +54,7 @@ surface an issue you wrote about the "login sequence". It searches across:
 !!! note "Semantic results not showing up?"
     Semantic search relies on an embedding model and an index that the operator sets up on the server.
     Until that's in place, keyword search still works — you just won't get the meaning-based matches.
-    New comments, and issues and wiki pages edited after the last indexing run, may be missing or
-    out of date in search until the operator re-runs it. Operators: see
+    Keyword search finds what you save straight away; meaning-based matches follow a few seconds
+    later, once the server has processed the change. Operators: see
     [Semantic search and embeddings](../install/semantic-search.md). See
     [Troubleshooting](../reference/troubleshooting.md) if results look thin.
