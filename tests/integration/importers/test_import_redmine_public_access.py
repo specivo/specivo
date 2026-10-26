@@ -191,7 +191,7 @@ class TestSwitchAlreadyOn:
 
         assert all(perms == [] for perms in (await _anonymous_permissions(db_session)).values())
         assert sorted(summary.notes[NOTE_ANONYMOUS_PROJECTS]) == [
-            "ACMEAPP: view_issues, view_wiki (not applied: switch already on)",
-            "ACMEMOBILE: view_issues (not applied: switch already on)",
+            "ACMEAPP: view_issues, view_wiki (not applied: switch on, opt in by hand)",
+            "ACMEMOBILE: view_issues (not applied: switch on, opt in by hand)",
         ]
-        assert any("already on" in w.message for w in summary.warnings)
+        assert any("Anonymous access is on" in w.message for w in summary.warnings)

@@ -143,34 +143,58 @@ async def set_anonymous_permissions(
     return project
 
 
+class ImportedAnonymousPermissionsResult(StrEnum):
+    """What ``apply_imported_anonymous_permissions`` did."""
+
+    APPLIED = "applied"
+    # Nothing written: the instance switch is on, so an opt-in would expose
+    # the project at once without the switch's confirmation.
+    SWITCH_ON = "switch_on"
+    # Nothing written: the project is not public.
+    NOT_PUBLIC = "not_public"
+    # Nothing written: the project already has anonymous permissions.
+    ALREADY_SET = "already_set"
+    # Nothing written: there was nothing to grant.
+    NOTHING_TO_GRANT = "nothing_to_grant"
+
+
 async def apply_imported_anonymous_permissions(
     session: AsyncSession,
     project: Project,
     permissions: Iterable[str],
     actor: User,
-) -> bool:
-    """Set *project*'s anonymous permissions from an import. Returns whether anything changed.
+) -> ImportedAnonymousPermissionsResult:
+    """Set *project*'s anonymous permissions from an import, if that exposes nothing yet.
 
     Used by importers on behalf of the operator running them, so it does not
     require *actor* to be an administrator. It is narrower than
-    ``set_anonymous_permissions`` instead:
+    ``set_anonymous_permissions`` instead, and writes only when all of these
+    hold, checked under ``ANONYMOUS_ACCESS_LOCK_KEY`` in the caller's
+    transaction:
 
-    - it only fills an empty list, so whatever an administrator already set
-      is left alone;
-    - it only applies to a public project, and returns False otherwise;
-    - it never touches the instance switch, so nothing becomes readable
-      until an administrator turns that on after reviewing the projects.
+    - the instance switch is off. Turning it on takes the same lock and must
+      confirm exactly the projects opted in at that moment, so an opt-in
+      written here is always on that list. With the switch already on, an
+      opt-in would make the project readable without that confirmation;
+    - the project is public;
+    - its list is empty, so whatever an administrator already set is left
+      alone.
 
-    The change is audited with reason ``import`` and *actor* as the user.
+    It never touches the switch itself. A write is audited with reason
+    ``import`` and *actor* as the user. The result says what happened.
     """
     new = normalize_anonymous_permissions(permissions)
     if not new:
-        return False
+        return ImportedAnonymousPermissionsResult.NOTHING_TO_GRANT
 
     await lock_anonymous_access(session)
+    if await is_anonymous_access_enabled(session):
+        return ImportedAnonymousPermissionsResult.SWITCH_ON
     await session.refresh(project, attribute_names=["is_public", "anonymous_permissions"])
-    if not project.is_public or project.anonymous_permissions:
-        return False
+    if not project.is_public:
+        return ImportedAnonymousPermissionsResult.NOT_PUBLIC
+    if project.anonymous_permissions:
+        return ImportedAnonymousPermissionsResult.ALREADY_SET
 
     project.anonymous_permissions = new
     await session.flush()
@@ -183,7 +207,7 @@ async def apply_imported_anonymous_permissions(
         new=new,
         reason=AnonymousPermissionsChangeReason.IMPORT,
     )
-    return True
+    return ImportedAnonymousPermissionsResult.APPLIED
 
 
 async def clear_anonymous_permissions_for_private(

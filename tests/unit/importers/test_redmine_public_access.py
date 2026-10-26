@@ -103,8 +103,11 @@ class TestAnonymousAccess:
         access = _build(projects=[_project(1, "alpha", is_public=False)])
         assert access.anonymous_permissions == {}
 
-    def test_archived_project_gets_nothing(self):
-        access = _build(projects=[_project(1, "alpha", status=9)])
+    @pytest.mark.parametrize("status", [9, 10, 0, 2, 42, None])
+    def test_only_active_and_closed_projects_can_be_readable(self, status):
+        """Archived (9), scheduled for deletion (10) and any status Redmine may
+        add later grant nothing: the statuses are an allowlist, failing closed."""
+        access = _build(projects=[_project(1, "alpha", status=status)])
         assert access.anonymous_permissions == {}
 
     def test_closed_project_keeps_its_access(self):

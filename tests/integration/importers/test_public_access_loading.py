@@ -21,6 +21,7 @@ from specivo.importers.core.progress import NullProgressReporter
 from specivo.importers.load.lookup_loader import NOTE_ROLES_NEED_PERMISSIONS, load_lookups
 from specivo.importers.load.public_access_loader import (
     NOTE_ANONYMOUS_PROJECTS,
+    NOTE_ANONYMOUS_SWITCH,
     NOTE_NON_MEMBER_DIFFERENCES,
     NOTE_PERMISSIONS_NOT_CARRIED,
     load_public_access,
@@ -29,9 +30,16 @@ from specivo.models.project import Project
 from specivo.models.role import Role, RoleBuiltin
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.setting import Setting
-from specivo.services.anonymous_access_service import ANONYMOUS_ACCESS_SETTING_KEY, is_anonymous_access_enabled
+from specivo.models.user import User
+from specivo.services.anonymous_access_service import (
+    ANONYMOUS_ACCESS_SETTING_KEY,
+    ImportedAnonymousPermissionsResult,
+    apply_imported_anonymous_permissions,
+    is_anonymous_access_enabled,
+)
 from specivo.services.security_audit_service import AuditEvent
 from tests.factories.project import ProjectFactory
+from tests.factories.user import UserFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -139,6 +147,63 @@ async def _run(db_session, projects, access, run_id=None) -> PhaseContext:
     return ctx
 
 
+async def _import_audit_rows(db_session, projects: dict[str, Project]) -> list[SecurityAuditLog]:
+    stmt = select(SecurityAuditLog).where(
+        SecurityAuditLog.event_type == AuditEvent.PROJECT_ANONYMOUS_PERMISSIONS_CHANGED,
+        SecurityAuditLog.project_id.in_([p.id for p in projects.values()]),
+    )
+    return list((await db_session.execute(stmt)).scalars().all())
+
+
+class TestApplyImportedAnonymousPermissions:
+    """The service the loader calls, which alone decides whether an opt-in is written."""
+
+    async def test_refuses_while_the_switch_is_on(self, db_session, imported_projects):
+        db_session.add(Setting(key=ANONYMOUS_ACCESS_SETTING_KEY, value="true"))
+        await db_session.flush()
+        actor = await _actor(db_session)
+
+        result = await apply_imported_anonymous_permissions(db_session, imported_projects["1"], ["view_issues"], actor)
+
+        assert result is ImportedAnonymousPermissionsResult.SWITCH_ON
+        assert imported_projects["1"].anonymous_permissions == []
+        assert await _import_audit_rows(db_session, imported_projects) == []
+
+    async def test_applies_while_the_switch_is_off(self, db_session, imported_projects):
+        actor = await _actor(db_session)
+
+        result = await apply_imported_anonymous_permissions(db_session, imported_projects["1"], ["view_issues"], actor)
+
+        assert result is ImportedAnonymousPermissionsResult.APPLIED
+        assert imported_projects["1"].anonymous_permissions == ["view_issues"]
+
+    async def test_reports_why_nothing_was_written(self, db_session, imported_projects):
+        actor = await _actor(db_session)
+        private, public = imported_projects["3"], imported_projects["2"]
+        await apply_imported_anonymous_permissions(db_session, public, ["view_issues"], actor)
+
+        assert (
+            await apply_imported_anonymous_permissions(db_session, private, ["view_issues"], actor)
+            is ImportedAnonymousPermissionsResult.NOT_PUBLIC
+        )
+        assert (
+            await apply_imported_anonymous_permissions(db_session, public, ["view_wiki"], actor)
+            is ImportedAnonymousPermissionsResult.ALREADY_SET
+        )
+        assert (
+            await apply_imported_anonymous_permissions(db_session, imported_projects["1"], [], actor)
+            is ImportedAnonymousPermissionsResult.NOTHING_TO_GRANT
+        )
+        assert public.anonymous_permissions == ["view_issues"]
+
+
+async def _actor(db_session) -> User:
+    user = UserFactory.build()
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
 class TestPublicAccess:
     async def test_public_projects_are_opted_in_and_the_switch_stays_off(self, db_session, imported_projects):
         ctx = await _run(db_session, imported_projects, _access())
@@ -204,9 +269,38 @@ class TestPublicAccess:
 
         assert all(p.anonymous_permissions == [] for p in imported_projects.values())
         assert (
-            "IRPUB: view_issues, view_wiki (not applied: switch already on)"
+            "IRPUB: view_issues, view_wiki (not applied: switch on, opt in by hand)"
             in ctx.summary.notes[NOTE_ANONYMOUS_PROJECTS]
         )
+
+    async def test_the_switch_turned_on_after_the_loader_looked_still_blocks_the_opt_in(
+        self, db_session, imported_projects, monkeypatch
+    ):
+        """The loader's own read of the switch is only for the report.
+
+        Simulates the switch being turned on between that read and the opt-in:
+        the loader is made to see it off while the database has it on. The
+        service re-checks under the switch's lock and writes nothing.
+        """
+        import specivo.importers.load.public_access_loader as loader
+
+        async def _looks_off(_session) -> bool:
+            return False
+
+        monkeypatch.setattr(loader, "is_anonymous_access_enabled", _looks_off)
+        db_session.add(Setting(key=ANONYMOUS_ACCESS_SETTING_KEY, value="true"))
+        await db_session.flush()
+
+        ctx = await _run(db_session, imported_projects, _access())
+
+        assert all(p.anonymous_permissions == [] for p in imported_projects.values())
+        assert ctx.summary.created[EntityType.ANONYMOUS_ACCESS] == 0
+        assert await _import_audit_rows(db_session, imported_projects) == []
+        assert (
+            "IRPUBTWO: view_issues (not applied: switch on, opt in by hand)"
+            in ctx.summary.notes[NOTE_ANONYMOUS_PROJECTS]
+        )
+        assert ctx.summary.notes[NOTE_ANONYMOUS_SWITCH][0].startswith("Anonymous access is on")
 
     async def test_non_member_differences_are_reported(self, db_session, imported_projects):
         ctx = await _run(db_session, imported_projects, _access(non_member_permissions=["view_wiki"]))

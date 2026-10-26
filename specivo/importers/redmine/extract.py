@@ -304,9 +304,12 @@ READ_PERMISSION_MAP: dict[str, tuple[str, str]] = {
     "view_wiki_pages": ("view_wiki", "wiki"),
 }
 
-# Redmine project status for an archived project. An archived project grants
-# nothing to anyone, members included.
-_REDMINE_ARCHIVED = 9
+# Redmine project statuses under which anonymous visitors can read a project:
+# STATUS_ACTIVE (1) and STATUS_CLOSED (5), where Redmine still allows read
+# actions. Archived (9) grants nothing to anyone, members included, and
+# scheduled for deletion (10) or any status Redmine adds later grants nothing
+# here either: an allowlist fails closed.
+_REDMINE_READABLE_STATUSES = frozenset({1, 5})
 
 _PERMISSION_LINE_RE = re.compile(r"^\s*-\s*:?([A-Za-z0-9_]+)\s*$", re.MULTILINE)
 
@@ -382,8 +385,8 @@ def build_public_access(
     role ids a ``GroupAnonymous`` or ``GroupNonMember`` membership holds on
     that project.
 
-    Anonymous access follows Redmine's own resolution: on a public, unarchived
-    project an anonymous visitor holds the roles of the project's
+    Anonymous access follows Redmine's own resolution: on a public project that
+    is active or closed an anonymous visitor holds the roles of the project's
     ``GroupAnonymous`` membership if it has one, and the builtin Anonymous role
     otherwise. Of those roles' permissions only ``view_issues`` and
     ``view_wiki_pages`` carry over, each only when its module is enabled. None
@@ -436,7 +439,7 @@ def build_public_access(
         project_id = int(project["id"])
         identifier = (project.get("identifier") or "").strip().lower() or str(project_id)
         is_public = bool(project.get("is_public"))
-        archived = (project.get("status") or 1) == _REDMINE_ARCHIVED
+        readable = project.get("status") in _REDMINE_READABLE_STATUSES
 
         non_member_roles = overrides.get((project_id, TYPE_GROUP_NON_MEMBER))
         if non_member_roles:
@@ -457,7 +460,7 @@ def build_public_access(
         else:
             source = anonymous_default
 
-        if not (allowed and is_public) or archived:
+        if not (allowed and is_public and readable):
             continue
         granted = readable_permissions(source, modules.get(project_id, []))
         if granted:

@@ -13,9 +13,11 @@ the part that keeps an import from publishing a tracker by itself:
 
 * **The instance switch is never touched.** Projects are opted in, and the
   report lists them, so an administrator sees exactly what turning the switch
-  on would expose. If the switch is *already* on, opting a project in would
-  expose it at once, so nothing is applied and the projects are listed for the
-  administrator to opt in by hand.
+  on would expose. While the switch is on, opting a project in would expose
+  it at once, so nothing is applied and the projects are listed for the
+  administrator to opt in by hand. That check is made by the service under
+  the lock the switch itself takes, so the switch being turned on during an
+  import cannot slip an opt-in past its confirmation list.
 * **An opt-in is applied once per project.** A re-run finds it recorded in the
   id map and leaves the project as it is, so an administrator who narrowed or
   cleared it after the first run is not overruled.
@@ -39,6 +41,7 @@ from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.project import Project
 from specivo.models.role import Role, RoleBuiltin
 from specivo.services.anonymous_access_service import (
+    ImportedAnonymousPermissionsResult,
     apply_imported_anonymous_permissions,
     is_anonymous_access_enabled,
 )
@@ -65,8 +68,8 @@ async def load_public_access(ctx: PhaseContext) -> None:
         ctx.summary.add_note(NOTE_PERMISSIONS_NOT_CARRIED, line)
 
     ctx.summary.add_note(NOTE_ANONYMOUS_SOURCE, access.anonymous_source_setting)
-    switch_on = await is_anonymous_access_enabled(ctx.session)
 
+    refused_by_switch = False
     for project_ref in ctx.project_refs:
         permissions = access.anonymous_permissions.get(project_ref)
         if not permissions:
@@ -75,13 +78,16 @@ async def load_public_access(ctx: PhaseContext) -> None:
         project = await ctx.session.get(Project, project_id) if project_id is not None else None
         if project is None:
             continue
-        await _opt_in(ctx, project, project_ref, permissions, switch_on)
+        result = await _opt_in(ctx, project, project_ref, permissions)
+        refused_by_switch |= result is ImportedAnonymousPermissionsResult.SWITCH_ON
 
-    if switch_on:
+    # Read for the report only. Whether a project may be opted in is decided
+    # by apply_imported_anonymous_permissions, under the lock the switch takes.
+    if refused_by_switch or await is_anonymous_access_enabled(ctx.session):
         ctx.summary.add_note(
             NOTE_ANONYMOUS_SWITCH,
-            "Anonymous access was already on, so no project was opted in by the import;"
-            " opt the projects above in by hand once they have been reviewed",
+            "Anonymous access is on, so the import opted in no project while it was;"
+            " opt the projects marked above in by hand once they have been reviewed",
         )
     else:
         ctx.summary.add_note(
@@ -92,9 +98,12 @@ async def load_public_access(ctx: PhaseContext) -> None:
 
 
 async def _opt_in(
-    ctx: PhaseContext, project: Project, project_ref: str, permissions: list[str], switch_on: bool
-) -> None:
-    """Apply one project's anonymous permissions, or explain why not."""
+    ctx: PhaseContext, project: Project, project_ref: str, permissions: list[str]
+) -> ImportedAnonymousPermissionsResult | None:
+    """Apply one project's anonymous permissions, or explain why not.
+
+    Returns the service's result, or None when an earlier run already did it.
+    """
     granted = ", ".join(permissions)
 
     if await ctx.id_map.get(ctx.session, EntityType.ANONYMOUS_ACCESS, project_ref) is not None:
@@ -103,34 +112,34 @@ async def _opt_in(
         ctx.summary.add_note(
             NOTE_ANONYMOUS_PROJECTS, f"{project.key}: {granted} (applied by an earlier run; now: {current})"
         )
-        return
+        return None
 
-    if switch_on:
+    actor = await ensure_import_account(ctx)
+    result = await apply_imported_anonymous_permissions(ctx.session, project, permissions, actor)
+
+    if result is ImportedAnonymousPermissionsResult.APPLIED:
+        await ctx.id_map.put(ctx.session, EntityType.ANONYMOUS_ACCESS, project_ref, "projects", project.id)
+        ctx.summary.record_created(EntityType.ANONYMOUS_ACCESS)
+        ctx.summary.add_note(NOTE_ANONYMOUS_PROJECTS, f"{project.key}: {granted}")
+        ctx.tick()
+    elif result is ImportedAnonymousPermissionsResult.SWITCH_ON:
         ctx.warn(
-            "Anonymous access is already on in this instance, so the project was not opted in;"
+            "Anonymous access is on in this instance, so the project was not opted in;"
             " opting it in now would make it readable without an account immediately",
             project=project.key,
             permissions=granted,
         )
-        ctx.summary.add_note(NOTE_ANONYMOUS_PROJECTS, f"{project.key}: {granted} (not applied: switch already on)")
-        return
-
-    if project.anonymous_permissions:
+        ctx.summary.add_note(
+            NOTE_ANONYMOUS_PROJECTS, f"{project.key}: {granted} (not applied: switch on, opt in by hand)"
+        )
+    elif result is ImportedAnonymousPermissionsResult.ALREADY_SET:
         ctx.summary.add_note(
             NOTE_ANONYMOUS_PROJECTS,
             f"{project.key}: {granted} (not applied: already set to {', '.join(project.anonymous_permissions)})",
         )
-        return
-
-    actor = await ensure_import_account(ctx)
-    if not await apply_imported_anonymous_permissions(ctx.session, project, permissions, actor):
+    elif result is ImportedAnonymousPermissionsResult.NOT_PUBLIC:
         ctx.warn("Project is not public, so it was not opted in to anonymous reading", project=project.key)
-        return
-
-    await ctx.id_map.put(ctx.session, EntityType.ANONYMOUS_ACCESS, project_ref, "projects", project.id)
-    ctx.summary.record_created(EntityType.ANONYMOUS_ACCESS)
-    ctx.summary.add_note(NOTE_ANONYMOUS_PROJECTS, f"{project.key}: {granted}")
-    ctx.tick()
+    return result
 
 
 async def _report_non_member_role(ctx: PhaseContext, access: IRPublicAccess) -> None:
