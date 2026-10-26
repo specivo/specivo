@@ -9,7 +9,9 @@ This module is the only writer of that column, and adds the rules the database
 cannot express:
 
 - only instance administrators change the list; ``manage_project`` is not
-  enough;
+  enough. The one exception is an import, which may fill an empty list on a
+  public project from the source's settings
+  (``apply_imported_anonymous_permissions``) and never turns the switch on;
 - every change is written to the security audit log with the old and the new
   value;
 - making a project private clears the list in the same transaction.
@@ -73,6 +75,7 @@ class AnonymousPermissionsChangeReason(StrEnum):
 
     ADMIN_UPDATE = "admin_update"
     PROJECT_MADE_PRIVATE = "project_made_private"
+    IMPORT = "import"
 
 
 def normalize_anonymous_permissions(permissions: Iterable[str]) -> list[str]:
@@ -138,6 +141,49 @@ async def set_anonymous_permissions(
         request=request,
     )
     return project
+
+
+async def apply_imported_anonymous_permissions(
+    session: AsyncSession,
+    project: Project,
+    permissions: Iterable[str],
+    actor: User,
+) -> bool:
+    """Set *project*'s anonymous permissions from an import. Returns whether anything changed.
+
+    Used by importers on behalf of the operator running them, so it does not
+    require *actor* to be an administrator. It is narrower than
+    ``set_anonymous_permissions`` instead:
+
+    - it only fills an empty list, so whatever an administrator already set
+      is left alone;
+    - it only applies to a public project, and returns False otherwise;
+    - it never touches the instance switch, so nothing becomes readable
+      until an administrator turns that on after reviewing the projects.
+
+    The change is audited with reason ``import`` and *actor* as the user.
+    """
+    new = normalize_anonymous_permissions(permissions)
+    if not new:
+        return False
+
+    await lock_anonymous_access(session)
+    await session.refresh(project, attribute_names=["is_public", "anonymous_permissions"])
+    if not project.is_public or project.anonymous_permissions:
+        return False
+
+    project.anonymous_permissions = new
+    await session.flush()
+    await _audit.log_project_anonymous_permissions_change(
+        session=session,
+        user_id=actor.id,
+        project_id=project.id,
+        project_key=project.key,
+        old=[],
+        new=new,
+        reason=AnonymousPermissionsChangeReason.IMPORT,
+    )
+    return True
 
 
 async def clear_anonymous_permissions_for_private(

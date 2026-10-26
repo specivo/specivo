@@ -644,8 +644,8 @@ class SecurityAuditService:
     ) -> SecurityAuditLog:
         """Log a change to what anonymous visitors may read in a project. Core feature.
 
-        *reason* says what caused it: an administrator editing the list, or
-        the project being made private. *user_id* is None only when the change
+        *reason* says what caused it: an administrator editing the list, the
+        project being made private, or an import carrying the setting over. *user_id* is None only when the change
         was made outside a request by nobody in particular.
         """
         info = self._extract_request_info(request)

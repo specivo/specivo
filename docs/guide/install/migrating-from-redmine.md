@@ -125,6 +125,12 @@ guessing:
   them would quietly widen or narrow access. Roles are matched by name against
   the ones you already have, and any that are new arrive with no permissions
   for an administrator to fill in.
+- **Write access for people without a membership.** Redmine's *Non member*
+  role is mapped onto Specivo's built-in *Non member* role, which is read-only
+  and is not changed by the import. Anything Redmine's role allowed beyond
+  reading issues (adding issues and notes, for instance) is not carried over,
+  and the report lists every such permission, along with any per-project
+  *Non member* override, which Specivo has no equivalent for.
 - **Per-project priorities and activities**, which Specivo keeps global.
 - **Who logged a time entry**, as distinct from whose time it is. Redmine
   tracks both; Specivo keeps only whose time it is, so an entry a manager
@@ -159,6 +165,38 @@ before you look at real numbers:
   value for it** is imported as optional instead. Keeping it required would
   make the imported data invalid against its own schema on arrival.
 
+## Anonymous access
+
+Redmine can let people read public projects without signing in. Specivo can
+too, but per project and behind an instance-wide switch that is off by default.
+The import carries Redmine's setting over **without ever turning that switch
+on**, so nothing becomes readable without an account until you decide it
+should:
+
+- Anonymous access is carried over only if Redmine's **Authentication
+  required** setting (`login_required`) is explicitly off. Redmine does not
+  store a setting it still has at its default, so when it is absent the import
+  treats the source as requiring sign-in and carries nothing over. Guessing the
+  other way would publish your tracker.
+- Each **public**, non-archived project is then opted in to what Redmine's
+  *Anonymous* role, or a per-project *Anonymous* override on that project,
+  allowed: reading issues, reading the wiki, or both, and only where the
+  matching module is enabled. Private projects never are. Anonymous
+  permissions beyond those two are listed in the report.
+- Every opt-in is written to the security audit log.
+- A second run does not opt a project in again, so a project you have since
+  closed to anonymous visitors stays closed.
+- If anonymous access is **already on** in this Specivo, the import opts
+  nothing in, because that would make the projects readable at once. It lists
+  them instead, for you to opt in by hand.
+
+The report has a section listing the projects that become readable without an
+account once the switch is on, with what each one allows. To turn it on,
+review that list, then use **Administration → Settings → Anonymous access**.
+Turning it on asks you to confirm exactly those projects. A project's own
+opt-in is under its **Settings**, and only instance administrators can change
+it.
+
 ## After the import
 
 - Give the imported accounts a way in: set a password for each from
@@ -166,6 +204,9 @@ before you look at real numbers:
   password recovery. A password you set is replaced at first sign-in, so
   neither route leaves an account whose password somebody else knows.
 - Give any newly created roles their permissions.
+- If the report lists projects that become readable without an account,
+  review them and turn anonymous access on yourself when you are ready (see
+  [Anonymous access](#anonymous-access)). The import never does.
 - Check the imported groups under **Administration → Groups**, and any that were
   suffixed on a name collision in particular — a suffixed group is a second one
   next to the group that already held the name, which may not be what you want.

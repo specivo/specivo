@@ -60,6 +60,10 @@ class EntityType(StrEnum):
     WIKI_VERSION = "wiki_version"
     TIME_ENTRY = "time_entry"
     MEMBERSHIP = "membership"
+    # A project's anonymous permissions set from the source. Recorded once per
+    # project, so a re-run never reapplies what an administrator has since
+    # changed.
+    ANONYMOUS_ACCESS = "anonymous_access"
 
 
 class ValueKind(StrEnum):
@@ -174,6 +178,37 @@ class IRLookups:
     priorities: list[IRPriority] = field(default_factory=list)
     activities: list[IRActivity] = field(default_factory=list)
     roles: list[IRRole] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class IRPublicAccess:
+    """What the source lets people without a membership read.
+
+    Already translated into Specivo's model by the adapter: a per-project
+    list of anonymous permissions rather than an instance-wide role.
+
+    ``anonymous_allowed`` is whether the source served anonymous visitors at
+    all, and ``anonymous_source_setting`` describes the setting that decided
+    it, for the report. ``anonymous_permissions`` maps a project ref to what an
+    anonymous visitor could read there, limited to ``view_issues`` /
+    ``view_wiki``; it is empty unless anonymous access was allowed, and holds
+    public projects only.
+
+    ``non_member_permissions`` is what the source grants a signed-in
+    non-member on a public project, in Specivo's names, restricted to the
+    permissions Specivo has an equivalent for; ``non_member_source_name`` names
+    that role for the report.
+
+    ``not_carried_over`` lists, one human-readable line each, the source
+    permissions that have no place in Specivo's model.
+    """
+
+    anonymous_allowed: bool = False
+    anonymous_source_setting: str = ""
+    anonymous_permissions: dict[str, list[str]] = field(default_factory=dict)
+    non_member_source_name: str = "Non member"
+    non_member_permissions: list[str] = field(default_factory=list)
+    not_carried_over: list[str] = field(default_factory=list)
 
 
 # --------------------------------------------------------------------------
