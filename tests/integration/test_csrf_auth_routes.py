@@ -18,7 +18,6 @@ from __future__ import annotations
 import re
 
 import pytest
-from fastapi.routing import APIRoute
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,6 +25,7 @@ from specivo.core.middleware import _CSRF_EXEMPT_PATHS, CSRFMiddleware
 from specivo.models.user import User
 from specivo.services.auth_utils import verify_password
 from specivo.testing.conftest_base import _test_app
+from specivo.testing.routes import iter_api_routes
 from tests.factories.user import TEST_PASSWORD, UserFactory
 
 pytestmark = [pytest.mark.integration]
@@ -39,8 +39,8 @@ def _mutating_auth_routes() -> set[tuple[str, str]]:
     """Return ``(method, path)`` for every mutating route under /api/v1/auth/."""
     return {
         (method, route.path)
-        for route in _test_app.routes
-        if isinstance(route, APIRoute) and route.path.startswith(_AUTH_PREFIX)
+        for route in iter_api_routes(_test_app)
+        if route.path.startswith(_AUTH_PREFIX)
         for method in route.methods & _MUTATING
     }
 

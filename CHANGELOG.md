@@ -21,6 +21,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - **New `celery-embeddings` service** runs embedding jobs in one process, so the model is loaded once. Custom compose files need it, or `EMBEDDING_QUEUE=celery`
 - Only the bundled local embedding model is supported; the endpoint for registering other models is removed
 - Change password, sign out and session revocation need a CSRF token when called with a session cookie
+- MCP: an unexpected server error in a tool call is reported as "Internal error while executing tool" instead of the raw exception text, request bodies are capped at 4 MiB (HTTP 413), and `serverInfo.version` reports the Specivo version
 - Markdown fields are limited to 262,144 characters; text too complex to render quickly is shown as plain text
 - Relative times stay relative for the first 24 hours instead of switching to "Yesterday" at midnight
 - `specivo.cli.import_redmine` is replaced by `specivo.cli.import_data --source redmine`
@@ -48,11 +49,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/).
 - A very deep search offset could make the database rank millions of rows
 - Indexing errors could write content to the logs
 - The app containers ran as root; they now run as UID 10001, and a one-shot `init-data` service hands existing data files to that user. Custom compose files need it (see Upgrading)
+- An MCP session could be resumed with a different API key, or after its key was revoked, by anyone who knew the session id; MCP tool errors could expose internal exception text
 
 ### Internal
 - Migrations 0033–0040: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently), a single default embedding model and linear-time indexing of unclosed HTML comments. **Run a search reindex after upgrading** (Administration → Settings)
 - Plugins load in the web app, the import CLI and the Celery workers through one shared bootstrap
-- Python-Markdown upgraded to 3.11.2
+- All dependencies upgraded to their latest versions, including the MCP SDK 2.x, Pillow 13 and PyJWT 2.15 (clears all open security advisories)
 
 ## [0.8.0] - 2026-09-29
 

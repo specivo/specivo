@@ -90,6 +90,8 @@ async def _rewrite_issues(session: AsyncSession, mapping: dict[str, str]) -> int
 
     changed = 0
     for issue_id, description in rows:
+        if description is None:
+            continue
         updated = rewrite_text(description, mapping)
         if updated == description:
             continue
@@ -113,6 +115,8 @@ async def _rewrite_journals(session: AsyncSession, mapping: dict[str, str]) -> i
 
     changed = 0
     for journal_id, notes in rows:
+        if notes is None:
+            continue
         updated = rewrite_text(notes, mapping)
         if updated == notes:
             continue

@@ -1,4 +1,4 @@
-"""FastMCP server -- exposes Specivo tools over MCP protocol.
+"""MCP server -- exposes Specivo tools over MCP protocol.
 
 Authentication happens in two layers (see ``mcp.auth``):
 
@@ -14,12 +14,15 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from importlib.metadata import version as _pkg_version
 from typing import Annotated, Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import Field
 
 from specivo.core.database import get_session_factory
+from specivo.core.exceptions import AppError
 from specivo.mcp.auth import authenticate_mcp_tool
 from specivo.mcp.docs import generate_setup_guide
 from specivo.mcp.tools import (
@@ -82,8 +85,9 @@ from specivo.services.agent_session_service import AgentSessionService
 
 logger = logging.getLogger(__name__)
 
-mcp = FastMCP(
+mcp = MCPServer(
     "specivo",
+    version=_pkg_version("specivo"),
     instructions=(
         "Specivo -- self-hosted platform for project tracking, knowledge base, and AI-safe automation. "
         "Call specivo_setup_guide() to get the full agent configuration guide, "
@@ -104,6 +108,13 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
     key revocation, expiry, or user deactivation takes effect immediately.
 
     The session is committed on clean exit and rolled back on error.
+
+    Any failure is re-raised as ``ToolError`` (see ``_to_tool_error``) so
+    the client receives ``Error executing tool <name>: <message>`` as an
+    ``isError`` result. The SDK only forwards the message of a
+    ``ToolError``; other exceptions would reach the client as a bare
+    "Error executing tool", hiding actionable errors such as
+    "Wiki page 'x' not found".
     """
     factory = get_session_factory()
     # Roles are cached in session.info, so each tool call's new session starts clean.
@@ -117,9 +128,28 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
                 logger.debug("AgentSession tracking failed", exc_info=True)
             yield session, user
             await session.commit()
-        except Exception:
+        except Exception as exc:
             await session.rollback()
-            raise
+            raise _to_tool_error(exc) from exc
+
+
+_INTERNAL_TOOL_ERROR = "Internal error while executing tool"
+
+
+def _to_tool_error(exc: Exception) -> ToolError:
+    """Map a tool failure to the ``ToolError`` the client sees.
+
+    Only expected, user-facing errors (``AppError`` subclasses and
+    ``ValueError`` raised by argument checks) forward their message.
+    Anything else is logged server-side and reported generically, so SQL,
+    file paths or other internal state never reach the MCP client.
+    """
+    if isinstance(exc, ToolError):
+        return exc
+    if isinstance(exc, AppError | ValueError):
+        return ToolError(str(exc))
+    logger.exception("MCP tool failed with an unexpected error")
+    return ToolError(_INTERNAL_TOOL_ERROR)
 
 
 # ---------------------------------------------------------------------------
