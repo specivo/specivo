@@ -65,16 +65,19 @@ jobs:
       - name: Create offline deployment bundle
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          mkdir bundle
+          # Same layout as `make bundle`: the Makefile and configure.py expect
+          # the helper scripts under scripts/.
+          mkdir -p bundle/scripts bundle/docs
           cp specivo-image.tar bundle/
           cp docker-compose.yml bundle/
           cp .env.example bundle/
           cp .env.local.example bundle/
           cp Makefile bundle/
           cp -r nginx bundle/
-          cp scripts/configure.py bundle/
-          cp scripts/entrypoint.sh bundle/
-          cp docs/INSTALL.md bundle/
+          cp scripts/configure.py bundle/scripts/
+          cp scripts/entrypoint.sh bundle/scripts/
+          cp scripts/download-model.sh bundle/scripts/
+          cp docs/INSTALL.md bundle/docs/
           echo "$VERSION" > bundle/VERSION
           tar czf specivo-${VERSION}-bundle.tar.gz -C bundle .
           rm -rf bundle specivo-image.tar
@@ -97,7 +100,7 @@ jobs:
             2. Transfer to your server
             3. Extract: `tar xzf specivo-*.tar.gz`
             4. Load image: `docker load < specivo-image.tar`
-            5. Configure: `python3 configure.py`
+            5. Configure: `python3 scripts/configure.py`
             6. Start: `docker compose up -d`
 
             See [Deployment Guide](https://github.com/specivo/specivo/blob/main/docs/deployment.md) for details.

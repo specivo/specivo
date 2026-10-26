@@ -1,90 +1,83 @@
 #!/usr/bin/env bash
-# Download the bundled multilingual-e5-small embedding model.
+# Download the multilingual-e5-small embedding model on the host.
 #
 # Usage:
-#   make download-model              # interactive, shows progress
-#   bash scripts/download-model.sh   # same, default to data/models/
-#   bash scripts/download-model.sh /custom/path
+#   bash scripts/download-model.sh                  # into ${SPECIVO_DATA_DIR:-./specivo-data}/models
+#   bash scripts/download-model.sh /custom/path     # into another directory
 #
-# Model: intfloat/multilingual-e5-small (MIT License)
-# Size: ~393 MB total (ONNX fp32 + tokenizer)
-# Languages: 100 | Dimensions: 384 | Parameters: 118M
+# On a running install the simpler route is the container command, which needs
+# nothing on the host:
+#   docker compose exec api python -m specivo.cli.download_model   (or: make download-model)
 #
-# Air-gap: If you cannot download, get the model files from the GitHub
-# releases page (specivo-models.tar.gz) and extract to the model dir.
+# This script is for preparing the files on a connected machine for an
+# air-gapped host: run it there, then copy the directory to
+# <SPECIVO_DATA_DIR>/models/ on the target.
+#
+# Model: intfloat/multilingual-e5-small (MIT License), pinned to the revision
+# below. Each file is checked against its SHA-256; keep these values in step
+# with specivo/cli/download_model.py.
+# Size: about 487 MB (ONNX fp32 model + tokenizer). Needs curl and sha256sum or shasum.
 
 set -euo pipefail
 
-MODEL_DIR="${1:-${SPECIVO_DATA_DIR:-specivo-data}/models}"
-HF_BASE="https://huggingface.co/intfloat/multilingual-e5-small/resolve/main"
+MODEL_DIR="${1:-${SPECIVO_DATA_DIR:-./specivo-data}/models}"
+BASE_URL="${SPECIVO_MODEL_BASE_URL:-https://huggingface.co}"
+REVISION="fd1525a9fd15316a2d503bf26ab031a61d056e98"
+REPO_URL="${BASE_URL%/}/intfloat/multilingual-e5-small/resolve/${REVISION}"
 
-BOLD='\033[1m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+# remote path | local file name | sha256
+FILES=(
+    "onnx/model.onnx|multilingual-e5-small.onnx|ca456c06b3a9505ddfd9131408916dd79290368331e7d76bb621f1cba6bc8665"
+    "tokenizer.json|tokenizer.json|0b44a9d7b51c3c62626640cda0e2c2f70fdacdc25bbbd68038369d14ebdf4c39"
+)
 
-echo ""
-echo -e "${BOLD}Specivo Embedding Model Setup${NC}"
-echo -e "Model: multilingual-e5-small (MIT License)"
-echo -e "Size:  ~393 MB total"
-echo ""
+if command -v sha256sum >/dev/null 2>&1; then
+    sha256() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+    sha256() { shasum -a 256 "$1" | cut -d' ' -f1; }
+else
+    echo "Error: neither sha256sum nor shasum is installed." >&2
+    exit 1
+fi
 
-# Check connectivity
-if ! curl -sI --connect-timeout 5 "https://huggingface.co" >/dev/null 2>&1; then
-    echo -e "${RED}Error: Cannot reach huggingface.co${NC}"
-    echo ""
-    echo "For air-gapped environments:"
-    echo "  1. Download from GitHub releases: specivo-models.tar.gz"
-    echo "  2. Extract to: ${MODEL_DIR}/"
-    echo ""
-    echo "Required files:"
-    echo "  - multilingual-e5-small.onnx  (~370 MB)"
-    echo "  - tokenizer.json              (~1 MB)"
-    echo "  - tokenizer_config.json"
-    echo "  - special_tokens_map.json"
-    echo "  - sentencepiece.bpe.model"
+echo "Embedding model multilingual-e5-small @ ${REVISION:0:12} (about 487 MB) into ${MODEL_DIR}/"
+
+if ! curl -sI --connect-timeout 10 "$BASE_URL" >/dev/null 2>&1; then
+    echo "Error: cannot reach ${BASE_URL}." >&2
+    echo "Run this script on a machine with internet access and copy ${MODEL_DIR}/ across," >&2
+    echo "or fetch these files by hand and check their SHA-256:" >&2
+    for entry in "${FILES[@]}"; do
+        IFS='|' read -r remote name sum <<<"$entry"
+        echo "  ${name}  from ${REPO_URL}/${remote}" >&2
+        echo "    sha256 ${sum}" >&2
+    done
     exit 1
 fi
 
 mkdir -p "$MODEL_DIR"
 
-download() {
-    local url="$1"
-    local dest="$2"
-    local name
-    name="$(basename "$dest")"
-
-    if [ -f "$dest" ]; then
-        echo -e "  ${GREEN}✓${NC} ${name} (already downloaded)"
-        return
+for entry in "${FILES[@]}"; do
+    IFS='|' read -r remote name sum <<<"$entry"
+    dest="${MODEL_DIR}/${name}"
+    if [ -f "$dest" ] && [ "$(sha256 "$dest")" = "$sum" ]; then
+        echo "  ok    ${name} (already present, checksum matches)"
+        continue
     fi
-    echo -e "  ${YELLOW}↓${NC} Downloading ${name}..."
-    if curl -L --progress-bar "$url" -o "${dest}.tmp"; then
-        mv "${dest}.tmp" "$dest"
-        echo -e "  ${GREEN}✓${NC} ${name}"
-    else
-        rm -f "${dest}.tmp"
-        echo -e "  ${RED}✗${NC} Failed to download ${name}"
-        return 1
+    echo "  get   ${name}"
+    if ! curl -fL --progress-bar "${REPO_URL}/${remote}" -o "${dest}.part"; then
+        rm -f "${dest}.part"
+        echo "Error: failed to download ${name}." >&2
+        exit 1
     fi
-}
+    actual="$(sha256 "${dest}.part")"
+    if [ "$actual" != "$sum" ]; then
+        rm -f "${dest}.part"
+        echo "Error: checksum mismatch for ${name} (expected ${sum}, got ${actual}); the file was discarded." >&2
+        exit 1
+    fi
+    mv "${dest}.part" "$dest"
+    echo "  ok    ${name} (checksum verified)"
+done
 
-echo "Downloading to ${MODEL_DIR}/..."
-echo ""
-download "$HF_BASE/onnx/model.onnx"         "$MODEL_DIR/multilingual-e5-small.onnx"
-download "$HF_BASE/tokenizer.json"           "$MODEL_DIR/tokenizer.json"
-download "$HF_BASE/tokenizer_config.json"    "$MODEL_DIR/tokenizer_config.json"
-download "$HF_BASE/special_tokens_map.json"  "$MODEL_DIR/special_tokens_map.json"
-download "$HF_BASE/sentencepiece.bpe.model"  "$MODEL_DIR/sentencepiece.bpe.model"
-
-echo ""
-echo -e "${GREEN}${BOLD}Done!${NC} Embedding model ready."
-echo ""
-echo "Model files:"
-ls -lh "$MODEL_DIR/" 2>/dev/null | grep -v "^total"
-echo ""
-echo "Next steps:"
-echo "  1. Restart the application:  make dev-up"
-echo "  2. Backfill existing data:   make backfill-embeddings"
-echo ""
+echo "Model ready. Next, index existing content:"
+echo "  docker compose exec api python -m specivo.cli.backfill_embeddings   (or: make backfill-embeddings)"
