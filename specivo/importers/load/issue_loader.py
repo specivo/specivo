@@ -58,12 +58,10 @@ def converter_for(ctx: PhaseContext) -> tuple[ContentConverter, ConversionContex
     """Return the markup converter for this run, building it once."""
     converter = ctx.state.get(CONVERTER_STATE_KEY)
     if converter is None:
-        from specivo.importers.redmine.textile_convert import RedmineTextileConverter
-
-        converter = RedmineTextileConverter()
+        converter = ctx.adapter.content_converter()
         ctx.state[CONVERTER_STATE_KEY] = converter
         ctx.state[CONVERSION_CONTEXT_STATE_KEY] = ConversionContext(
-            source_format=getattr(ctx.adapter, "source_format", "textile")
+            source_format=getattr(ctx.adapter, "source_format", "markdown")
         )
     return converter, ctx.state[CONVERSION_CONTEXT_STATE_KEY]
 

@@ -1,0 +1,16 @@
+{
+  "users": [
+    {"id": 1, "login": "dlee", "name": "Dana Lee", "email": "dana@example.com",
+     "salt": "NaCl", "digest": "ce48c13da732f51a1bf9c4fac876c638"},
+    {"id": 2, "login": "spark", "name": "Sam Park", "email": "sam@example.com"}
+  ],
+  "projects": [
+    {"key": "web", "name": "Website"}
+  ],
+  "issues": [
+    {"id": 101, "project": "web", "title": "Broken link on the pricing page",
+     "body": "The **Contact sales** button points at a 404.", "author": 1, "closed": false},
+    {"id": 102, "project": "web", "title": "Add a dark theme", "author": 2, "closed": false},
+    {"id": 103, "project": "web", "title": "Update the footer year", "author": 1, "closed": true}
+  ]
+}
