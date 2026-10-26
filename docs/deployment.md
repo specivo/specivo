@@ -119,6 +119,13 @@ All configuration is via environment variables. Set in `.env` (committed) or `.e
 | `SMTP_PORT` | No | `587` | Email server port |
 | `SMTP_FROM` | No | `noreply@specivo.dev` | Sender address |
 | `KILL_TOKEN` | No | — | Emergency kill switch token |
+| `INSTALLED_PLUGINS` | No | `[]` | Plugins by dotted path (JSON array). A plugin can add password hashers and import sources |
+| `PASSWORD_HASHERS` | No | `[]` | Extra password hasher classes by dotted path (JSON array) |
+| `LEGACY_PASSWORD_ALGORITHMS` | No | `[]` | Imported password formats allowed to sign in, e.g. `["redmine_sha1"]` |
+| `LEGACY_PASSWORD_HASHES_EXPIRE_AT` | No | — | After this time no imported password works, e.g. `2027-03-31T00:00:00Z` |
+
+The last three are explained in the user guide under
+[Configuration](https://specivo.io/docs/specivo/install/configuration/#imported-passwords).
 
 ### Using External Database
 
@@ -344,6 +351,12 @@ docker load < specivo-image.tar
 docker compose up -d
 ```
 
+### Release-specific steps
+
+Some releases need a step after the containers start, such as rebuilding the search index.
+The user guide lists them per release under
+[Upgrading](https://specivo.io/docs/specivo/install/upgrading/).
+
 ### Pin Version
 
 ```env
@@ -358,6 +371,20 @@ make create-admin login=admin email=admin@example.com password=secret
 
 # Reset password
 make reset-password login=admin password=newpassword
+```
+
+Accounts imported with their old passwords can be inspected and retired with the same command
+(see [Migrating from Redmine](https://specivo.io/docs/specivo/install/migrating-from-redmine/)):
+
+```bash
+# Registered password hashers, whether each is enabled, and how many accounts use it
+docker compose exec api python -m specivo.cli.admin password-hashers
+
+# Accounts that still hold an imported password hash
+docker compose exec api python -m specivo.cli.admin legacy-passwords
+
+# Make them use password recovery from now on
+docker compose exec api python -m specivo.cli.admin legacy-passwords expire --yes
 ```
 
 ## Troubleshooting
