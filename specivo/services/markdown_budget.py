@@ -14,11 +14,15 @@ Two layers keep a render bounded:
    most, plus the rescans that unclosed openers and duplicate headings
    trigger, and checks the nesting depth. Over the budget, the caller shows
    the text as plain text instead of rendering it.
-2. :class:`RenderDeadline` — a cooperative time limit inside the render, for
-   anything the estimate misses. It checks the clock each time Python-Markdown
-   tries an inline pattern or a block processor and aborts the render by
-   raising :class:`RenderDeadlineError`. Nothing is interrupted from another
-   thread; the Markdown instance is discarded with the exception.
+2. :class:`RenderDeadline` — a backstop for anything the estimate misses: a
+   cooperative limit on the CPU time one render may use
+   (``MARKDOWN_RENDER_DEADLINE_SECONDS``). It checks the clock each time
+   Python-Markdown tries an inline pattern or a block processor and aborts
+   the render by raising :class:`RenderDeadlineError`. Nothing is interrupted
+   from another thread; the Markdown instance is discarded with the
+   exception. It counts the rendering thread's CPU time, not wall time, so a
+   busy or overcommitted host never turns a normal page into plain text; and
+   its default is far above what any document the pre-scan admits needs.
 
 The unit costs below were measured with Python-Markdown 3.11.2 on a developer
 laptop. They only need to be right to within a small factor: the budget leaves
@@ -37,6 +41,7 @@ from typing import Any
 from markdown import Markdown  # type: ignore[import-untyped]
 from markdown.extensions import Extension  # type: ignore[import-untyped]
 
+from specivo.core.config import get_settings
 from specivo.core.exceptions import ValidationError
 from specivo.core.i18n import gettext as _
 
@@ -53,9 +58,6 @@ RENDER_BUDGET_US = 750_000
 # recursion limit somewhere between 250 and 500 levels; real documents stay
 # well below 20.
 MAX_NESTING_DEPTH = 50
-
-# Wall-clock limit (seconds) for one render, enforced cooperatively.
-RENDER_DEADLINE_SECONDS = 2.0
 
 # Microseconds per occurrence.
 _US_PER_BRACKET = 40.0  # ``[``: link, image, wiki link or issue reference
@@ -312,19 +314,25 @@ def _heading_key(line: str) -> str:
 
 
 class RenderDeadline(Extension):
-    """Abort a render that runs past a wall-clock deadline.
+    """Abort a render that uses more CPU time than its deadline allows.
 
     Wraps every inline pattern's ``handleMatch`` and every block processor's
     ``run`` so they check the clock first and raise
     :class:`RenderDeadlineError` once the deadline has passed. Each check is
-    one ``time.monotonic()`` call, and the work between two checks is at most
+    one ``time.thread_time()`` call, and the work between two checks is at most
     one scan of the text. Register it last, so it sees every pattern and
     processor the other extensions add.
+
+    The limit is CPU time of the calling thread, which is the thread that
+    renders: ``markdown.markdown`` runs synchronously. *seconds* defaults to
+    the ``markdown_render_deadline_seconds`` setting.
     """
 
     def __init__(self, seconds: float | None = None) -> None:
         super().__init__()
-        self.deadline = time.monotonic() + (RENDER_DEADLINE_SECONDS if seconds is None else seconds)
+        if seconds is None:
+            seconds = get_settings().markdown_render_deadline_seconds
+        self.deadline = time.thread_time() + seconds
 
     def extendMarkdown(self, md: Markdown) -> None:  # noqa: N802 - Python-Markdown API
         for pattern in md.inlinePatterns:
@@ -336,7 +344,7 @@ class RenderDeadline(Extension):
         deadline = self.deadline
 
         def checked(*args: Any, **kwargs: Any) -> Any:
-            if time.monotonic() > deadline:
+            if time.thread_time() > deadline:
                 raise RenderDeadlineError
             return method(*args, **kwargs)
 

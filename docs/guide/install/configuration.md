@@ -48,6 +48,7 @@ docker compose up -d
 | `CAPTCHA_ENABLED` | Captcha on the registration form. |
 | `CORS_ORIGINS` | Allowed browser origins, e.g. `["https://specivo.example.com"]`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |
+| `MARKDOWN_RENDER_DEADLINE_SECONDS` | CPU seconds one Markdown render (a description, comment or wiki page) may use before the text is shown as plain text instead. A backstop: text that would render slowly is caught before rendering. Counts CPU time, so a busy host does not trigger it. Default `5`; the largest realistic pages need under half a second. Raise it on very slow hardware if real pages appear as plain text. See [Size and complexity limits](../reference/markdown.md#size-and-complexity-limits). |
 
 ## Secrets (`.env.local`)
 

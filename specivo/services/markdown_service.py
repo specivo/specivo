@@ -243,6 +243,27 @@ class _AttachmentRefExtension(Extension):
         md.treeprocessors.register(_AttachmentRefTreeprocessor(md, self.attachment_map), "attachment_refs", 5)
 
 
+def substitute_links(text: str, project_key: str = "", known_issue_refs: set[str] | None = None) -> str:
+    """Rewrite ``[[Page]]`` wiki links and ``KEY-123`` refs in *text* as Markdown links.
+
+    The first step of :func:`render_wiki_markdown`, and the text the render
+    budget is checked against: what Python-Markdown will actually parse.
+    """
+    processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
+
+    # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
+    # When known_issue_refs is provided, only link references that resolve to a
+    # real (or previously-existing) issue; leave the rest as plain text.
+    def _link_issue_ref(m: re.Match[str]) -> str:
+        ref = m.group(1)
+        if known_issue_refs is None or ref in known_issue_refs:
+            return f"[{ref}](/issue/{ref}/)"
+        return ref
+
+    processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
+    return processed
+
+
 def render_wiki_markdown(
     text: str,
     project_key: str = "",
@@ -275,18 +296,7 @@ def render_wiki_markdown(
     if not text:
         return markupsafe.Markup("")
 
-    processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
-
-    # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
-    # When known_issue_refs is provided, only link references that resolve to a
-    # real (or previously-existing) issue; leave the rest as plain text.
-    def _link_issue_ref(m: re.Match[str]) -> str:
-        ref = m.group(1)
-        if known_issue_refs is None or ref in known_issue_refs:
-            return f"[{ref}](/issue/{ref}/)"
-        return ref
-
-    processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
+    processed = substitute_links(text, project_key, known_issue_refs)
 
     # Bare-filename image and link targets are resolved to attachment URLs on
     # the parsed tree, not by rewriting the source.

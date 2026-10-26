@@ -197,6 +197,13 @@ class Settings(BaseSettings):
     search_hnsw_ef_search: int = Field(default=100, ge=10, le=1000)
     search_semantic_overfetch: int = Field(default=4, ge=1, le=50)
 
+    # CPU seconds one Markdown render may use before it is abandoned and the
+    # text shown as plain text (a backstop: the pre-scan in markdown_budget
+    # rejects costly text before rendering). The slowest realistic page
+    # measured (250 KB) needs about 0.4 s on a current laptop; 5 s allows a
+    # 5x margin on a core 2.5x slower.
+    markdown_render_deadline_seconds: float = Field(default=5.0, gt=0)
+
     # Timeouts
     smtp_timeout: int = 30
     webhook_timeout: int = 30
