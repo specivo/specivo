@@ -40,420 +40,374 @@ Each release also has a blog post with the details.
 ## [0.9.0] - 2026-10-26
 
 ### Added
-- **Imported users keep their passwords** — with `--import-passwords`, Redmine password hashes come across and are upgraded to bcrypt on first sign-in. Off by default; admins and LDAP accounts still reset
-- **Password hasher plugins** — support another system's hashes through a plugin or `PASSWORD_HASHERS`, enabled per algorithm with `LEGACY_PASSWORD_ALGORITHMS`
-- **Import source plugins** — plugins can add migration sources; `python -m specivo.cli.import_data --source NAME` runs any of them
-- **Redmine anonymous and non-member access is imported** onto per-project public access, without turning the instance switch on
-- **Role visibility settings** — a role can see all users or only members of its projects, and all time entries or only its own. Trackers can make new issues private by default. New admin pages for roles and trackers
-- **Search by issue key** — `ACME-42` finds the issue and its mentions in every search mode, including old keys of moved issues
-- **Link to any attachment by filename** — `[spec](spec.pdf)` and `![chart](chart.png)` work in issues, comments, the preview and the wiki
-- **Model download command** — `python -m specivo.cli.download_model` fetches the semantic search model at a pinned revision and checks its SHA-256
+- Added `--import-passwords` to bring Redmine password hashes across and upgrade them to bcrypt on first sign-in; off by default, admins and LDAP accounts still reset
+- Added password hasher plugins and `PASSWORD_HASHERS`, enabled per algorithm with `LEGACY_PASSWORD_ALGORITHMS`
+- Added import source plugins; `python -m specivo.cli.import_data --source NAME` runs any of them
+- Added import of Redmine anonymous and non-member access onto per-project public access, without turning on the instance switch
+- Added role settings for seeing all users or only project members, and all time entries or only one's own
+- Added a tracker option to make new issues private by default, and admin pages for roles and trackers
+- Added search by issue key: `ACME-42` finds the issue and its mentions in every search mode, including old keys of moved issues
+- Added links to any attachment by filename, such as `[spec](spec.pdf)` and `![chart](chart.png)`, in issues, comments, the preview and the wiki
+- Added `python -m specivo.cli.download_model` to fetch the semantic search model at a pinned revision and check its SHA-256
 
 ### Changed
-- **Time tracking permissions are enforced** — *View time entries*, *Log time* and *Edit/delete any time entries* apply everywhere. With the default roles, Reporter and Non member no longer see time entries; Agent is granted *View time entries* by the upgrade
-- **Content is indexed when it is saved** — keyword search finds new and edited content at once; embeddings follow from the worker
-- **New `celery-embeddings` service** runs embedding jobs in one process, so the model is loaded once. Custom compose files need it, or `EMBEDDING_QUEUE=celery`
-- Only the bundled local embedding model is supported; the endpoint for registering other models is removed
-- Change password, sign out and session revocation need a CSRF token when called with a session cookie
-- MCP: an unexpected server error in a tool call is reported as "Internal error while executing tool" instead of the raw exception text, request bodies are capped at 4 MiB (HTTP 413), and `serverInfo.version` reports the Specivo version
-- Markdown fields are limited to 262,144 characters; text too complex to render quickly is shown as plain text
-- Relative times stay relative for the first 24 hours instead of switching to "Yesterday" at midnight
-- `specivo.cli.import_redmine` is replaced by `specivo.cli.import_data --source redmine`
-- `make` targets for the model download, backfill, reindex and import work from the release bundle
+- Changed time tracking permissions to apply everywhere; with default roles, Reporter and Non member no longer see time entries, and Agent gets *View time entries*
+- Changed content to be indexed on save, so keyword search finds new and edited content at once; embeddings follow from the worker
+- Changed embedding jobs to run in a new `celery-embeddings` service that loads the model once; custom compose files need it, or `EMBEDDING_QUEUE=celery`
+- Removed support for embedding models other than the bundled local one, and the endpoint for registering them
+- Changed change password, sign out and session revocation to require a CSRF token when called with a session cookie
+- Changed MCP to report unexpected tool errors as "Internal error while executing tool", cap request bodies at 4 MiB (HTTP 413) and report the Specivo version
+- Changed Markdown fields to a 262,144-character limit; text too complex to render quickly is shown as plain text
+- Changed relative times to stay relative for 24 hours instead of switching to "Yesterday" at midnight
+- Removed `specivo.cli.import_redmine`; use `specivo.cli.import_data --source redmine` instead
+- Changed the `make` targets for model download, backfill, reindex and import to work from the release bundle
 
 ### Fixed
-- New comments were not found by any search, and edits were not re-indexed
-- Semantic search could miss visible matches ranked behind hidden ones, and scanned every embedding; it now uses a vector index
-- Deleted wiki pages still matched keyword search
-- The search backfill reported success without a model and skipped some attachments; it now reports what it embedded
-- The release bundle's `configure.py` wrote outside the bundle, and the model download pointed to a missing release asset
-- A misconfigured embedding model broke indexing and search; semantic search now turns off instead
-- The remaining untranslated interface text, and dates now follow the interface language
-- Keyword search returned short pages after the first one
-- Comments saved in the same moment could appear out of order
-- Large wiki pages could show as plain text on a busy server; Markdown render limits now count CPU time, per field and per request, and scale with the measured speed of the host (`MARKDOWN_RENDER_DEADLINE_SECONDS`, `MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS`, `MARKDOWN_RENDER_SPEED_FACTOR`)
+- Fixed new comments not being found by search and edits not being re-indexed
+- Fixed semantic search missing visible matches ranked behind hidden ones and scanning every embedding; it now uses a vector index
+- Fixed deleted wiki pages still matching keyword search
+- Fixed the search backfill reporting success without a model and skipping some attachments
+- Fixed the release bundle's `configure.py` writing outside the bundle and the model download pointing to a missing release asset
+- Fixed a misconfigured embedding model breaking indexing and search; semantic search now turns off instead
+- Fixed remaining untranslated interface text, and dates not following the interface language
+- Fixed keyword search returning short pages after the first one
+- Fixed comments saved in the same moment appearing out of order
+- Fixed large wiki pages showing as plain text on a busy server; render limits now use CPU time, tuned by `MARKDOWN_RENDER_DEADLINE_SECONDS`, `MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS` and `MARKDOWN_RENDER_SPEED_FACTOR`
 
 ### Security
-- Attachments of issues a reader cannot open could be downloaded by id and shown on wiki pages
-- Attachments of deleted wiki pages stayed searchable
-- Crafted Markdown could keep a worker busy for minutes on every view, and deeply nested lists caused errors
-- Text with many unclosed `<!--` took minutes to index and to show in search results, and long search queries could fail
-- Time entries could be read, logged and edited without the matching permissions, and timers started in any project
-- Shared versions of private projects were not filtered by access
-- A very deep search offset could make the database rank millions of rows
-- Indexing errors could write content to the logs
-- The app containers ran as root; they now run as UID 10001, which owns only its own subdirectories of the data directory. A one-shot `init-data` service prepares them without following symlinks or hard links. Custom compose files need it (see Upgrading)
-- An MCP session could be resumed with a different API key, or after its key was revoked, by anyone who knew the session id; MCP tool errors could expose internal exception text
+- Fixed attachments of issues a reader cannot open being downloadable by id and shown on wiki pages
+- Fixed attachments of deleted wiki pages staying searchable
+- Fixed crafted Markdown keeping a worker busy for minutes per view, and deeply nested lists causing errors
+- Fixed text with many unclosed `<!--` taking minutes to index and show in search, and long search queries failing
+- Fixed time entries being readable, loggable and editable without the matching permissions, and timers starting in any project
+- Fixed shared versions of private projects not being filtered by access
+- Fixed a very deep search offset making the database rank millions of rows
+- Fixed indexing errors writing content to the logs
+- Fixed app containers running as root; they now run as UID 10001, and custom compose files need the new one-shot `init-data` service
+- Fixed MCP sessions being resumable with a different or revoked API key, and MCP tool errors exposing internal exception text
 
 ### Internal
-- Migrations 0033–0040: role and tracker visibility, issue-key search terms, a wider `users.password_hash`, *View time entries* for Agent, search chunks for existing comments, an HNSW vector index (built concurrently), a single default embedding model and linear-time indexing of unclosed HTML comments. **Run a search reindex after upgrading** (Administration → Settings)
-- Plugins load in the web app, the import CLI and the Celery workers through one shared bootstrap
-- All dependencies upgraded to their latest versions, including the MCP SDK 2.x, Pillow 13 and PyJWT 2.15 (clears all open security advisories)
-- Trivy scans in CI: a release gate on the image (fixable HIGH/CRITICAL vulnerabilities block the push to Docker Hub), and report-only repository and published-image scans in GitHub code scanning
+- Added migrations 0033–0040: role and tracker visibility, issue-key search terms, comment search chunks and an HNSW vector index. Run a search reindex after upgrading (Administration → Settings)
+- Upgraded all dependencies, including the MCP SDK 2.x, Pillow 13 and PyJWT 2.15, and added a Trivy image scan that blocks releases with fixable HIGH/CRITICAL vulnerabilities
 
 ## [0.8.0] - 2026-09-29
 
 ### Added
-- **User groups can hold project roles** — an administrator creates groups under Admin → Groups, adds people to them, and adds a group to a project the same way a single user is added. Everyone in the group gets the group's roles on that project, and access follows membership: adding someone to the group later gives them that access, and removing them takes it away. A person's own roles and those of every group they belong to are combined. The project members tab lists group rows beside user ones, and a group row expands to show who it covers and which of them reach the project only through the group. Deleting a group states beforehand how many people lose access and on how many projects, and says that anyone who also holds the role directly or through another group keeps it
-- **Public projects can be opened to visitors without an account** — read-only, and off unless an administrator turns it on in two places. Each project is opted in separately (admin-only card in project settings, public projects only, issues and/or wiki), and an instance-wide switch under Admin → Settings must also be on. Turning the switch on asks the administrator to confirm the exact list of projects that become readable; if that list changed in the meantime the confirmation is refused and shown again. A visitor can then open the project list, a project's overview, its issue list and issues, its wiki, and search, in the browser and through the JSON API. Everything else still requires signing in, and MCP stays API-key only. Visitors see people by display name only, never private issues, private notes or attachments, and nothing about a project that is private, archived or not opted in: every refusal looks the same, so the responses cannot be used to find out which projects exist. A bad, expired or revoked token or API key is refused outright rather than served the public view. Anonymous reads run in a read-only transaction, are rate limited per IP and are never cached. Every change to either setting is written to the security audit log
-- **Change your own password** — signed-in users can now change their password from their preferences; until now only the emailed reset existed. The current password is checked first. Your other sessions are signed out, but the one you are using stays signed in. Wrong attempts are rate limited and audited, and do not count towards locking the account, so someone holding a stolen session cannot lock the real owner out
-- **Require a password change on next sign-in** — an administrator creating an account or resetting a password can require the person to choose their own. Until they do, the account can reach nothing but the change-password page. API keys are unaffected, so an agent's key keeps working, and the flag cannot be set on a service account, which has no password to change
-- **The Redmine importer now brings groups across as groups** — a Redmine group becomes a Specivo group with the same people, and a role the group held on a project stays a single grant held by the group, instead of the individual per-person grants 0.7.0 created. When a group's name is already taken, or two Redmine groups differ only in letter case, the new group gets a suffix and the report lists it; an existing group is never reused, because that would give its members access nobody decided to grant
+- Added user groups that hold project roles, managed under Admin → Groups; members get the group's roles and lose them when removed
+- Added read-only access to public projects for visitors without an account, off by default and enabled per project plus an instance-wide switch
+- Added visitor access to the project list, overview, issues, wiki and search in the browser and JSON API; MCP stays API-key only
+- Added changing your own password from preferences; other sessions are signed out and wrong attempts are rate limited without locking the account
+- Added an admin option to require a password change on next sign-in; API keys keep working and service accounts are exempt
+- Added import of Redmine groups as Specivo groups holding their project roles, instead of per-person grants; name clashes get a suffix
 
 ### Changed
-- **Access is now decided by roles alone, for members and non-members alike.** A read-only built-in **Non member** role (view issues) is added and applies to signed-in users who are not members of a public project. Things to check after upgrading:
-  - Members whose roles lack *View issues* lose access to issues everywhere, including search, autocomplete and MCP. None of the seeded roles are affected, only custom ones.
-  - Signed-in non-members of a public project now pass *View issues* checks everywhere the issue list already let them in (sprints, versions, recurring patterns, reactions, MCP issue tools).
-  - Signed-in non-members no longer see a public project's wiki pages in search.
-  - Private notes no longer appear in comment search for anyone but administrators.
-  - Opening a project's wiki no longer creates its Home page unless the reader can manage the wiki.
-  - Adding or removing an issue relation needs *Manage issue relations* over REST and in the web pages, as it already did over MCP. Reporter, Non member and any custom role without it lose the ability, and the relation controls are hidden from them (see Security).
-  - The MCP `specivo_remove_relation` tool only removes a relation attached to the issue passed as `issue_ref`; a relation ID belonging to another issue is answered as not found.
-- Project cards and the overview count **people** with access, direct or through a group. The admin projects table shows separate People and Groups columns
+- Changed access to be decided by roles alone, with a new read-only built-in Non member role for signed-in non-members of public projects
+- Changed custom roles without *View issues* to lose access to issues everywhere, including search, autocomplete and MCP
+- Changed signed-in non-members of public projects to pass *View issues* checks for sprints, versions, recurring patterns, reactions and MCP issue tools
+- Changed search to hide a public project's wiki pages from signed-in non-members, and private notes from everyone but administrators
+- Changed opening a project's wiki to create its Home page only for readers who can manage the wiki
+- Changed adding or removing issue relations to require *Manage issue relations* in REST and the web; Reporter, Non member and custom roles without it lose it
+- Changed MCP `specivo_remove_relation` to remove only relations attached to the issue passed as `issue_ref`
+- Changed project cards and the overview to count people with direct or group access; the admin projects table shows People and Groups
 
 ### Fixed
-- Messages, confirmations, toasts, placeholders and relative times in 27 interactive components were always shown in English, even when the rest of the page was translated. They now follow the interface language
-- Groups administration, the members tab, tags, issue moves, search indexing, password changes and computed fields were untranslated in every locale. Spanish, French, Russian, Thai and Chinese are complete again
+- Fixed messages, toasts, placeholders and relative times in 27 interactive components always showing in English
+- Fixed untranslated groups administration, members tab, tags, issue moves, search indexing, password changes and computed fields in every locale
 
 ### Security
-- **Issue autocomplete no longer reveals issues you cannot open** — any project member could find the key and subject of every issue in the project through autocomplete, including other people's private issues, and a role limited to its own issues was ignored. Autocomplete now applies the same visibility rules as the issue list
-- **Search respects role permissions** — a member whose custom role left out *View issues* was refused an issue by the API but still got its subject and description snippet from search, and a role granting nothing at all returned every wiki page in the project. Search now checks the same permissions as the rest of the application, and also finds results in projects a user reaches through a group. Only custom roles were affected, since every seeded role carries both permissions
-- **Private subprojects are no longer listed on their parent's page** — any signed-in user who could open a project saw the name and key of every child project on its overview, including private ones they could not open. The overview now shows only the children the reader can open, as the project list already did. Administrators still see all of them
-- **Adding or removing a relation requires *Manage issue relations*** — the REST API let anyone who could read two issues link them, with no permission check at all, including a signed-in non-member of a public project. Deleting was just as loose the other way: a member of one project could delete a relation from one of its issues to a private issue elsewhere, and a "relation removed" entry was then written into that hidden issue's history in their name. Both now need *Manage issue relations*, as the MCP tools already did: adding one on the issue it starts from, removing one on either side, together with visibility of both issues. A relation to an issue the caller cannot see answers exactly like one that does not exist. The issue page and issue forms offer the relation controls only to readers who hold the permission. The seeded Manager, Developer and Agent roles carry it. A custom role that has *Edit issues* but not *Manage issue relations* can no longer add or remove relations
+- Fixed issue autocomplete revealing keys and subjects of issues the user cannot open, including private issues
+- Fixed search returning issue snippets and wiki pages to custom roles without the needed permissions
+- Fixed private subprojects being listed on their parent project's overview
+- Fixed the REST API letting anyone who could read two issues add or remove a relation without *Manage issue relations*
 
 ### Internal
-- Migrations 0028–0032: `user_groups` / `user_group_members`, and `members` rows held by either a user or a group (exactly one, enforced by a CHECK); `users.must_change_password`; a single reserved, inert `$anonymous` users row (`users.is_anonymous`), which nothing can authenticate as and which cannot be added to a project or group; `projects.anonymous_permissions`; and the built-in Non member role. **The upgrade stops with an explanation if an existing account already uses the login `$anonymous`.**
-- The esbuild frontend bundles are no longer committed. They are built in a Node stage of the Docker image, by a watcher service in the dev compose stack, and by `make frontend-build` for one-off builds. The app logs a warning at startup when the bundle manifests are missing
-- Role resolution has a single definition (`get_user_roles`) shared by permission checks, issue visibility, autocomplete, relations and the search visibility SQL, replacing the hardcoded public-project branches. Membership edits take a `Principal` (user or group) value object
-- The anonymous surface is declared in allowlists (`get_reader` for the API, `get_web_reader` for pages) that contract tests pin against the routing table in both directions, so a route cannot become public by accident
-- ADRs 0001–0005 brought back in line with the code
+- Added migrations 0028–0032: user groups, group memberships, `users.must_change_password`, a reserved `$anonymous` user, `projects.anonymous_permissions` and the Non member role. The upgrade stops if a login `$anonymous` exists
+- Changed frontend bundles to be built in the Docker image or by `make frontend-build` instead of being committed
 
 ## [0.7.0] - 2026-09-08
 
 ### Added
-- **Migrate an existing Redmine instance into Specivo** — a new `import_redmine` command brings across projects and their hierarchy, users and memberships, issues with their full history, relations, watchers and custom fields, wiki pages with every revision and the redirects left behind by renames, attachments, and logged time. It reads Redmine's database directly and copies its attachment files rather than going through the REST API, which cannot see private notes, deleted users or complete history and is far slower. Nothing is written to the source: a read-only database user and a read-only mount of the files directory are enough. MySQL and PostgreSQL instances are both supported
-- **`--dry-run` exercises the whole import and rolls it back**, so the report can be trusted before anything is written. That report is the point of running it: it lists the issue-key prefix derived for each project (Redmine identifies an issue as `#123` and has no per-project prefix to take one from), the statuses whose category had to be inferred from their name, and everything that has no Specivo equivalent. Both can be corrected with `--project-key-map` and `--status-category-map` before the real run
-- **An interrupted import continues instead of starting again** — each phase commits as it finishes and every imported record is remembered, so `--resume` picks up where the run stopped and a second run of a finished import creates nothing. The mapping is keyed on the source rather than on the run, so an operator who lost the run id is not stuck
-- Where the two systems disagree the import says so and carries on rather than failing or guessing. Passwords cannot come across, since the two hashing schemes share nothing, so imported accounts arrive unusable and every login is listed for a reset. Redmine groups become individual role grants on each member, because Specivo has no group that can hold project roles; the resulting access matches the source exactly, but the grouping itself is not imported. Modules Specivo does not have, custom fields on anything but issues, and role permissions are reported and dropped. The full list is in the user guide under Migrating from Redmine
+- Added `import_redmine` to migrate projects, users, memberships, issues with full history, relations, watchers, custom fields, wiki revisions, attachments and time from Redmine
+- Added reading Redmine's MySQL or PostgreSQL database and attachment files directly; a read-only database user and files mount are enough
+- Added `--dry-run`, which runs the whole import and rolls it back, reporting derived project keys, inferred status categories and unsupported data
+- Added `--project-key-map` and `--status-category-map` to correct derived project keys and status categories before the real run
+- Added `--resume` to continue an interrupted import; a second run of a finished import creates nothing
+- Added reporting of what cannot be imported: passwords, with logins listed for reset, groups, which become per-member role grants, and unsupported modules, fields and permissions
 
 ### Internal
-- New `import_id_map` table (migration 0027) recording which source record became which Specivo row. It lives in the database rather than a state file so that a mapping and the row it describes commit together, which is what makes an interrupted import safe to re-run
-- `IssueService.create` and `WikiService.create_page` accept keyword-only flags to skip inline search indexing and the wiki link-graph dispatch. Both default to the existing behaviour; the importer sets them and does that work once at the end of a run instead of per row, and full-text vectors are unaffected either way since they are maintained by database triggers
-- `AttachmentService.upload_from_path` attaches a file that already exists on disk, computing its size and hash from the bytes actually copied rather than trusting the source's own record
-- A disposable Redmine 7.0.1 fixture (`docker-compose.redmine.yml`, both database profiles) seeded through Redmine's own models, with end-to-end tests that import it. They are marked `redmine` and skip when the fixture is not running, so a normal test run is unaffected
-- Architecture decision record 0006 covers the importer's design and how a second migration source would be added
+- Added migration 0027: an `import_id_map` table recording which source record became which Specivo row
+- Added a disposable Redmine 7.0.1 fixture (`docker-compose.redmine.yml`) with end-to-end import tests marked `redmine`
 
 ## [0.6.0] - 2026-08-27
 
 ### Added
-- **Issue tags come back with the issue itself over MCP** — `show_issue` and `list_issues` previously returned everything about an issue except its tags, so an agent reconciling tags across a list of issues had to follow up with one `tag(op="get")` call per issue. On a project of any size that turned a single listing into dozens of round-trips and was slow enough to risk timeouts. `show_issue` now prints a `Tags:` line and each `list_issues` row carries its tags inline; both are backed by one batched lookup, so a page of issues costs a single extra query rather than one per issue. Issues without tags read exactly as before, and the existing per-project permission checks are unchanged
+- Added issue tags to MCP `show_issue` and `list_issues` output, fetched in one batched query, so agents no longer need a tag call per issue
 
 ## [0.5.0] - 2026-08-03
 
 ### Fixed
-- **Project computed metadata can be read back and edited instead of being write-only** — a project's derived-metadata configuration could be set through the REST API but never read: `GET /api/v1/projects/{key}/` returned the same response for a configured and an unconfigured project, so the only ways to check were querying the database or inferring the value from an issue's metadata. Projects that had been configured correctly looked unconfigured. The single-project response now includes `computed_metadata` for users who may manage the project — absent for everyone else, and an empty map when the project genuinely has none, so the two states are finally distinguishable. Project listings omit the field by design
+- Fixed project computed metadata being write-only; `GET /api/v1/projects/{key}/` now returns `computed_metadata` to users who may manage the project
 
 ### Added
-- Projects can be created with computed metadata in a single call — `POST /api/v1/projects/` accepts `computed_metadata`, so a new project no longer ships unconfigured pending a follow-up request
-- **Computed Fields editor on the project settings page** — the Metadata tab gains a row editor for a project's derived metadata, available to users who may manage the project. Previously the value could only be set with a PATCH request under an admin token, which was easy to forget and invisible when forgotten
+- Added `computed_metadata` to `POST /api/v1/projects/` so a project can be created with computed metadata in one call
+- Added a Computed Fields editor on the project settings Metadata tab for users who may manage the project
 
 ## [0.4.2] - 2026-07-26
 
 ### Fixed
-- **MCP clients could no longer connect after restarting the server** — the first client to reconnect opened a long-lived event stream, and the server kept its session-creation lock for the whole of that stream, so every other client's connection attempt waited behind it with no error and no log entry. Agents already connected kept working, which made the server look healthy while everything else hung. Sessions are now registered without holding that lock for the life of the request. Present since session persistence was introduced in 0.1.9 and not specific to any one version — whether an instance wedged depended on which client reconnected first
+- Fixed MCP clients hanging on connect after a server restart while another client held a long-lived event stream; present since 0.1.9
 
 ## [0.4.1] - 2026-07-25
 
 ### Fixed
-- **Filtering issues by status name works instead of quietly returning everything** — the issue list accepted `open`, `closed`, `all` and numeric status ids, but a status name such as `In Progress` was dropped and the unfiltered list came back as if the filter had applied. Status names are now matched case-insensitively across the web UI, REST API and MCP, and a value that matches no status is rejected with an error listing the available names rather than silently widening the results
+- Fixed filtering issues by status name returning the unfiltered list; names now match case-insensitively and unknown values return an error
 
 ### Security
-- Dependency updates — bumped Pillow to 12.3.0, the MCP SDK to 1.28.1, pydantic-settings to 2.14.2 and esbuild to 0.25, resolving all outstanding dependency advisories
+- Fixed outstanding dependency advisories by updating Pillow to 12.3.0, the MCP SDK to 1.28.1, pydantic-settings to 2.14.2 and esbuild to 0.25
 
 ### Internal
-- Test suite runs each module on a single parallel worker, so fixtures that insert rows with fixed unique keys can no longer collide across workers and abort a run with a database deadlock
-- Features registered on the global registry during a test are undone afterwards; a leaked feature used to open a tier gate for every later test in the same worker, failing assertions in unrelated modules
+- Fixed test runs aborting on database deadlocks between workers and leaking registered features between tests
 
 ## [0.4.0] - 2026-06-24
 
 ### Added
-- **Move issues between projects** — reassign an issue to another project from the issue sidebar (also via the REST API and a new MCP tool). The issue keeps its history, comments, relations, attachments, watchers, time entries and metadata, and takes a new per-project number; the old `KEY-123` reference still resolves. Project-scoped fields (target version, sprint, category, tags) are cleared for the new project. Moving an issue that is part of a parent/sub-task hierarchy is not allowed — detach it first
-- **Project-derived (computed) metadata** — a metadata field whose value is a fixed function of the project (e.g. an area/cabinet that groups projects). Configured once per project, it is auto-filled on every issue across the web UI, REST API and MCP, is never stored on the issue and cannot be edited, and recomputes automatically when an issue is moved
-- MCP `create_issue` accepts a `metadata` map so custom metadata can be set in a single call
+- Added moving issues between projects from the sidebar, REST API and MCP; old keys still resolve and sub-task hierarchies must be detached first
+- Added project-derived computed metadata, configured per project, filled in read-only on every issue and recomputed when an issue moves
+- Added a `metadata` map to MCP `create_issue`
 
 ### Changed
-- **Issue references auto-link only when the issue exists** — a `KEY-123` reference in an issue description, comment or wiki page links only when it points to a real issue (or one that existed before a move); look-alike tokens that don't match an issue are left as plain text instead of becoming dead links
+- Changed `KEY-123` references to auto-link only when the issue exists; look-alike tokens stay plain text
 
 ### Fixed
-- Wiki pages whose title has no Latin letters or digits (e.g. a Thai-only title) now get a usable, unique address instead of an empty slug
+- Fixed wiki pages whose title has no Latin letters or digits, such as Thai titles, getting an empty slug
 
 ### Security
-- Bounded the issue-reference resolution that runs when rendering issue and wiki content, so text containing a very large number of reference-like tokens can no longer amplify a single page view into an oversized database lookup
+- Fixed text with very many issue-reference tokens turning a page view into an oversized database lookup
 
 ## [0.3.0] - 2026-06-20
 
 ### Added
-- **Tags** — per-project labels (with optional hex color) for issues and wiki pages; managed in Project Settings → Tags; any member can apply tags or create them on the fly; project Managers curate the vocabulary (rename, recolor, delete)
-- **Tag filter in search** — tag chips are clickable links to a tag-filtered search; search page supports multi-select tag filtering with AND logic, cross-project autocomplete, and case-insensitive matching; MCP/API support for listing, applying, and curating tags
-- Per-project full-text-search analyzer language configurable in Project Settings, with a one-click reindex trigger
+- Added per-project tags with optional colors for issues and wiki pages, managed in Project Settings → Tags
+- Added tag filters in search with multi-select AND matching and autocomplete, plus MCP and API support for tags
+- Added a per-project full-text search language setting in Project Settings, with a one-click reindex
 
 ### Fixed
-- MCP sessions remain initialized across an API restart (session state rehydrated from Redis)
-- Celery task DB sessions use NullPool to prevent connection leaks in async worker context
+- Fixed MCP sessions losing their initialization across an API restart
+- Fixed Celery task database sessions leaking connections
 
 ## [0.2.1] - 2026-06-18
 
 ### Fixed
-- Recurring task generation and token cleanup no longer error when a Redis lock is contended or lost mid-run
+- Fixed recurring task generation and token cleanup erroring when a Redis lock was contended or lost
 
 ## [0.2.0] - 2026-06-18
 
 ### Added
-- **Recurring tasks** — define repeating issues with RRULE patterns: occurrence-expansion engine, generation service with edit-scope handling, a Celery beat generator, REST API with permission wiring, MCP tools with audit events, and a dedicated localized create/edit page with management list
-- **Recurring template macros** — the issue subject and description support per-occurrence date macros (`{{year}}`, `{{quarter}}`, `{{month}}`, `{{month_num}}`, `{{day}}`, `{{weekday}}`) so generated issues are distinct; month and weekday names are localized to the workspace language, and the macros work for patterns created via the web UI, REST API, and MCP
-- **Recurring provenance** — each generated issue records a "Created from recurring pattern" entry in its activity log that links back to the pattern
-- **Filter issues by metadata** — array metadata values on an issue render as clickable tag-links that open a metadata-filtered issue search across every project you can access; the search page shows the applied metadata filter in a collapsible panel
-- Remaining project, sprint and wiki UI strings marked and translated
+- Added recurring tasks with RRULE patterns, a Celery beat generator, REST API, MCP tools and a create/edit page
+- Added date macros such as `{{year}}`, `{{month}}` and `{{weekday}}` in recurring issue subjects and descriptions, localized to the workspace language
+- Added a "Created from recurring pattern" activity entry linking each generated issue to its pattern
+- Added filtering issues by metadata: array values link to a metadata-filtered search across all accessible projects
+- Added translations for the remaining project, sprint and wiki interface text
 
 ### Changed
-- **Admin settings** — the workspace default language and timezone now save together from a single button via one endpoint, instead of two separate forms
-- Metadata preset identifiers are unique case-insensitively — slugs are normalized (lowercase/dashes) and backed by a database-level unique index
+- Changed the workspace default language and timezone to save together from one button
+- Changed metadata preset identifiers to be normalized and unique regardless of case
 
 ### Fixed
-- Metadata presets — the "Create preset" action no longer silently fails; the name and identifier are validated with inline errors, and the modal title and Create/Save labels are now translated
-- Recurring patterns — fixes across the new feature: form saving (timezone anchoring), the enable/disable toggle, the Skip action, the detail-page layout, and the list Name column
+- Fixed the "Create preset" action failing silently; name and identifier now show inline errors
+- Fixed recurring pattern form saving, the enable toggle, the Skip action, the detail layout and the list Name column
 
 ### Security
-- Dependency updates — bumped cryptography, idna, Mako, pillow, Pygments, PyJWT, pytest, python-multipart, starlette and urllib3 to their patched releases, resolving all outstanding dependency advisories
+- Fixed outstanding dependency advisories by updating cryptography, idna, Mako, Pillow, Pygments, PyJWT, pytest, python-multipart, starlette and urllib3
 
 ## [0.1.10] - 2026-06-14
 
 ### Added
-- **Multi-language UI** — Russian, Chinese, French, Spanish and Thai, with a workspace default language and a per-user override
-- **Markdown editor** (EasyMDE) for issue descriptions and wiki pages, plus a markdown preview endpoint
-- Edit issue title and description together from a single button
-- MCP — metadata schema management tools; filter `list_issues` by metadata key=value
+- Added Russian, Chinese, French, Spanish and Thai interface languages, with a workspace default and a per-user override
+- Added a Markdown editor (EasyMDE) for issue descriptions and wiki pages, and a Markdown preview endpoint
+- Added editing an issue's title and description together from one button
+- Added MCP tools for metadata schemas, and filtering `list_issues` by metadata key=value
 
 ### Fixed
-- Sidebar fills the full content height on long pages
-- Workflow admin — transition checkboxes now persist; styled tracker/role selects
-- Issue creation commits before responding, fixing an intermittent 404 on an immediate follow-up request
-- Metadata schema CRUD endpoints wired up and secured
-- `specivo_metadata` rejects lossy numeric inputs
-- Markdown editor stability — CodeMirror/EasyMDE refresh and toolbar fixes
-- Content-hashed CSS/JS filenames to bust stale browser caches
-- Issue activity feed opens on the latest page
-- Celery tasks registered correctly with monthly partitioning
-- Project settings modal and add-member autocomplete clipping
+- Fixed the sidebar not filling long pages, and clipping in the project settings modal and add-member autocomplete
+- Fixed workflow admin transition checkboxes not saving
+- Fixed an intermittent 404 right after creating an issue
+- Fixed metadata schema endpoints not being wired up and secured
+- Fixed `specivo_metadata` accepting lossy numeric inputs
+- Fixed Markdown editor refresh and toolbar issues
+- Fixed stale browser caches by content-hashing CSS and JS filenames
+- Fixed the issue activity feed not opening on the latest page
+- Fixed Celery task registration with monthly partitioning
 
 ## [0.1.9] - 2026-04-19
 
 ### Added
-- **Dashboard v2** — project stats, recent releases, wiki activity, paginated issues with sprints and agent activity feed
-- **Sprint detail page** — sprint metrics, rich issue list layout
-- **Autocomplete selects** — version and sprint sidebar selects with search, closed versions and completed sprints remain selectable
-- **MCP session persistence** — sessions stored in Redis with sliding TTL so clients survive API restarts
-- **MCP tools** — `specivo_list_comments`, comment count on `show_issue`, `get` op for `specivo_metadata`, search defaults to hybrid mode with configurable `mode` param
-- **Admin MCP config** — Codex CLI option added to MCP configuration card
-- **Project key length** — raised from 12 to 128 characters
+- Added a dashboard with project stats, recent releases, wiki activity, paginated issues with sprints and an agent activity feed
+- Added a sprint detail page with metrics and an issue list
+- Added searchable version and sprint selects in the sidebar that still offer closed versions and completed sprints
+- Added MCP session persistence in Redis with a sliding TTL, so clients survive API restarts
+- Added MCP `specivo_list_comments`, comment counts in `show_issue`, a `get` op for `specivo_metadata` and a search `mode` defaulting to hybrid
+- Added a Codex CLI option to the admin MCP configuration card
+- Added support for project keys up to 128 characters, up from 12
 
 ### Fixed
-- Activity log shows sprint and version names instead of raw IDs
-- Metadata changes render as per-key diffs in activity log
-- CSRF HMAC secret derived from `settings.secret_key` instead of separate value
-- Silent JWT refresh on API endpoints (was only on page routes)
-- Styled 404 page for routes unmatched by the router
-- Codex MCP config uses native streamable HTTP
+- Fixed the activity log showing raw sprint and version IDs, and whole metadata instead of per-key diffs
+- Fixed JWT refresh not happening silently on API endpoints
+- Fixed unmatched routes not showing the styled 404 page
+- Fixed the Codex MCP config not using native streamable HTTP
 
 ### Security
-- CSRF secret derivation hardened — tied to application secret key
+- Fixed the CSRF HMAC secret being a separate value; it is now derived from `settings.secret_key`
 
 ## [0.1.8] - 2026-04-12
 
 ### Added
-- **Sprint management** — backlog page, sprint board (kanban), sprint edit with lifecycle controls (start/complete), velocity chart and burndown, sprint analytics page, sprint history table
-- **Custom metadata schemas** — define structured fields per project or issue type, preset library with builtin/custom presets, dynamic metadata on issue forms and detail page, admin interface for schema lifecycle
-- **Kanban board view** — issues list page with board/list toggle, segmented status progress bar, per-column card limits, drag-friendly layout
-- **Version management UI** — version detail page with linked issues and progress, version selector in issue sidebar, full CRUD in project settings
-- **Wiki soft-delete** — trash with restore, auto-purge, search index cleanup on delete
-- **Issue relations** — add/list/remove relations (9 types), autocomplete for related issue input, structured display on detail page
-- **MCP tool expansion** — 38 tools total: wiki section ops (read/replace/append), wiki delete, wiki metadata, issue relations, sprint CRUD, version management, metadata ops, attachment upload, `whoami` for agent self-identification
-- **MCP self-documentation** — `specivo_setup_guide()` returns full agent configuration, enriched tool descriptions
-- **Short issue URLs** — `/issue/KEY-123/` redirects instead of `/projects/KEY/issues/KEY-123/`
-- **Wiki enhancements** — paste-to-embed images, drag-drop file upload, `[[wikilinks]]` in issue descriptions and comments, auto-linked issue references (KEY-123)
-- **Sprint sidebar link** — "Current Sprint" appears when an active sprint exists
-- **Project parent selector** — set parent project in project settings General tab
-- **Member role management** — change member roles from project settings page
-- **Separate `manage_sprints` permission** — independent from `manage_versions`
+- Added sprints: backlog page, sprint board, start and complete controls, velocity and burndown charts, sprint analytics and history
+- Added custom metadata schemas per project or issue type, with a preset library, metadata on issue forms and an admin interface
+- Added a kanban board view of the issue list with a status progress bar and per-column card limits
+- Added version management: a version detail page with linked issues and progress, a sidebar version selector and CRUD in project settings
+- Added wiki soft-delete with trash, restore and auto-purge
+- Added issue relations of 9 types, with autocomplete and display on the issue page
+- Added MCP tools for wiki sections, wiki delete, relations, sprints, versions, metadata, attachment upload and `whoami`, 38 tools in total
+- Added `specivo_setup_guide()` returning the full agent configuration, and richer MCP tool descriptions
+- Added short issue URLs: `/issue/KEY-123/` redirects to the full issue address
+- Added wiki image paste, drag-and-drop upload, `[[wikilinks]]` in issues and comments, and auto-linked `KEY-123` references
+- Added a "Current Sprint" sidebar link when a sprint is active
+- Added a parent project selector and member role management to project settings
+- Added a separate `manage_sprints` permission, independent of `manage_versions`
 
 ### Changed
-- Issue detail SQL queries reduced from 39 to ~15
-- Project access control: membership-based visibility with public/private project support
-- All API endpoints enforce project access checks
-- Project key max length increased from 10 to 12 characters
-- Timestamps display in user's timezone instead of UTC
-- Sidebar icons differentiated (were duplicate 4-square grid)
-- Sidebar is now `position: fixed` — stays viewport-height on long pages
-- Wide tables in wiki and issues scroll horizontally instead of being clipped
-- FTS underscore tokenization fixed — `wiki_page` and `wiki page` both searchable
-- Status categories (backlog/active/done/closed) replace boolean `is_closed` for roadmap progress
-- Search results use enum-based result types instead of hardcoded strings
+- Changed project visibility to be membership-based with public and private projects, enforced by all API endpoints
+- Changed the project key limit from 10 to 12 characters
+- Changed timestamps to display in the user's timezone instead of UTC
+- Changed roadmap progress to use status categories (backlog, active, done, closed) instead of `is_closed`
+- Changed full-text search to tokenize underscores, so `wiki_page` and `wiki page` both match
+- Changed the sidebar to fixed positioning with distinct icons, and wide tables to scroll horizontally
+- Changed the issue page to run about 15 SQL queries instead of 39
 
 ### Fixed
-- Sidebar spacer stretched to ~10000px on wiki pages with long content
-- Wide code blocks in descriptions pushed sidebar off-screen
-- Kanban columns stretched full page width and pushed page horizontally
-- Large inline images broke page layout — overflow container width
-- Wiki inline images not rendered (bare filename src not resolved to attachment URL)
-- Project list showed wrong open/closed counts (missing "done" category)
-- Project list avatar initials hard to read on dark backgrounds
-- Member autocomplete popup style broken in project settings
-- Description diff missing — no initial version stored on issue creation
-- Race condition: project not visible after creation page reload
-- MCP `update_issue` silently ignored `done_ratio` parameter
-- Search result wiki links missing trailing slash (caused proxy redirect)
-- Markdown tables had no cell padding in descriptions and comments
-- SQL wildcard injection in autocomplete endpoint (% and _ not escaped)
-- API error pages returned raw JSON instead of styled error templates
+- Fixed the sidebar and kanban layout breaking on long pages, wide code blocks and large images
+- Fixed wiki inline images with bare filenames not rendering
+- Fixed wrong open/closed counts and hard-to-read avatar initials in the project list
+- Fixed the member autocomplete popup style in project settings
+- Fixed missing description diffs by storing the initial version on issue creation
+- Fixed a new project not being visible after reloading the creation page
+- Fixed MCP `update_issue` ignoring `done_ratio`
+- Fixed wiki search result links missing a trailing slash
+- Fixed Markdown tables having no cell padding
+- Fixed SQL wildcards `%` and `_` not being escaped in autocomplete
+- Fixed API errors showing raw JSON instead of styled error pages
+- Fixed wiki chunking splitting fenced code blocks
 
 ### Security
-- **CSRF protection** — double-submit cookie pattern across all forms, fetch, and htmx requests
-- XSS fix in search snippets — HTML-escaped content with preserved `<mark>` highlight tags
-- Content-Disposition header fix for attachment downloads (RFC 5987 compliance)
-- Authorization check added to sprint edit page
-- Wiki restore cascade fix for soft-delete `deleted_by_id` tracking
-- Notification text rendering uses escaped `title` instead of `text | safe`
-- Audit logging for password reset operations
-- SHA-256 content hash stored for attachments
-- Project-wide attachment filenames with auto-rename on collision
+- Fixed forms, fetch and htmx requests lacking CSRF protection; a double-submit cookie now covers them
+- Fixed XSS in search snippets
+- Fixed attachment download Content-Disposition headers to follow RFC 5987
+- Fixed the sprint edit page missing an authorization check
+- Fixed wiki restore cascading with soft-delete `deleted_by_id` tracking
+- Fixed notification text being rendered with `text | safe` instead of the escaped `title`
+- Fixed password resets not being audit logged
+- Fixed attachments having no SHA-256 content hash or project-wide unique filenames; collisions are now auto-renamed
 
 ### Performance
-- Composite indexes on query-heavy tables
-- Permission checks cached per-request
-- Project lookup with alias fallback uses single LEFT JOIN
-- Wiki chunking no longer splits inside fenced code blocks
-
-### Tests
-- 1449 integration tests + 266 E2E tests passing
-- E2E test infrastructure: ConsoleErrorTracker, page objects, page-centric organization
-- Visual regression snapshots across 4 viewports (mobile, tablet, narrow, desktop)
+- Added composite indexes on query-heavy tables and per-request caching of permission checks
+- Changed project lookup with alias fallback to a single LEFT JOIN
 
 ## [0.1.7] - 2026-04-05
 
 ### Added
-- **MCP HTTP transport** — Streamable HTTP + SSE endpoints replace stdio, enabling remote AI agent connectivity
-- **MCP tool expansion** — 7 new tools: create_wiki, list_lookups, list_members, log_time, list/create/update versions (18 tools total)
-- **MCP permission enforcement** — every tool call checks project-scoped permissions via `check_permission`
-- **MCP audit logging** — granular event types per tool (ISSUE_CREATED, WIKI_UPDATED, etc.) with `source: "mcp"` tag
-- **Admin user detail page** — API key management (create/list/revoke), service account support
-- **Configurable password policy** — `PASSWORD_MIN_LENGTH` setting (default 8, minimum 6)
+- Added Streamable HTTP and SSE transports for MCP in place of stdio, for remote agents
+- Added 7 MCP tools: create_wiki, list_lookups, list_members, log_time and list/create/update versions, 18 in total
+- Added project-scoped permission checks on every MCP tool call
+- Added MCP audit events per tool, tagged `source: "mcp"`
+- Added an admin user detail page with API key management and service accounts
+- Added `PASSWORD_MIN_LENGTH` (default 8, minimum 6)
 
 ### Changed
-- MCP transport-level auth is now format-only (no DB hit); real auth happens per-tool call for instant key revocation
-- API key authentication uses single JOIN query instead of two sequential queries
-- Permission checks cached per-request to avoid repeated 3-table JOINs
-- Project lookup with alias fallback uses single LEFT JOIN query instead of two queries
-- Git commit hash shown in debug footer
+- Changed MCP transport auth to check key format only, with real auth per tool call so key revocation takes effect at once
+- Changed API key auth, permission checks and project alias lookup to use fewer queries
+- Changed the debug footer to show the git commit hash
 
 ### Fixed
-- IDOR in MCP `_update_version` — version ownership now verified against claimed project
-- Service account creation sends no password field (was sending empty string → 422)
-- Form error display shows field names and supports multiline errors
-- `is_admin=False` enforced on user creation (admin promotion only via CLI)
-- Search service handles missing embedding model gracefully (was TypeError on None vector)
-- 23 test failures from seed data collisions resolved (select-or-insert pattern)
+- Fixed an IDOR in MCP version updates; version ownership is now checked against the project
+- Fixed service account creation failing with 422
+- Fixed form errors missing field names and multiline messages
+- Fixed user creation accepting `is_admin`; admins can only be promoted via the CLI
+- Fixed search failing with a TypeError when the embedding model is missing
 
 ### Security
-- Per-request role cache cleared at request boundaries to prevent cross-request permission leakage
-- Unique constraint on `member_roles(member_id, role_id)` prevents duplicate role assignments
+- Fixed the per-request role cache not being cleared between requests, which could leak permissions
+- Fixed duplicate role assignments with a unique constraint on `member_roles(member_id, role_id)`
 
 ### Performance
-- Composite B-tree indexes on `security_audit_logs(event_type, created_at)` and `(user_id, created_at)`
-- Index on `refresh_tokens.expires_at` for background token cleanup
-- Eliminated double DB round-trip on every MCP tool call (transport + tool auth)
-- 1153 tests passing (up from ~1100)
+- Added indexes on `security_audit_logs` and `refresh_tokens.expires_at`
+- Removed a duplicate database round-trip on every MCP tool call
 
 ## [0.1.6] - 2026-04-05
 
 ### Added
-- **Issue detail redesign** — threaded comments with inline replies, emoji reactions, resolve/unresolve, description versioning with diff view, editable estimated hours, sidebar with watchers and relations
-- **Wiki improvements** — auto-created Home page, TOC sidebar with scrollspy, `[[Page Name]]` wikilinks, page hierarchy with tree picker, inline rename
-- **Search overhaul** — hybrid search (FTS + vector) as default mode, per-type filter tabs with counts, highlighted snippets, comments and attachments search, global search input in header
-- **Local embedding model** — multilingual-e5-small support via ONNX runtime, interactive download script (`make download-model`), backfill CLI for issues, wiki, comments, and attachments
-- **Admin panel** — dashboard with stats, user management (create, password reset, lock/unlock), project management (create, edit, archive/unarchive), settings editor, email configuration with test delivery, workflow viewer
-- **Profile and preferences** — editable display name, avatar color picker and photo upload, language and timezone selects with full IANA timezone list
-- **Authentication** — silent JWT refresh for web pages, Remember Me, password reset via email token, login/logout audit logging
-- **Project creation** — modal with auto-generated identifier and key, color picker, parent project selector, module checkboxes
-- **Notifications** — extensible channel architecture with email delivery via Celery, WebSocket support
-- **PWA support** — installable progressive web app with dynamic branding from DB settings
-- **Mobile responsive** layout with hamburger menu
-- **Audit logging** — login success/failure, search queries, project rename events
-- **Project key rename** — atomic re-keying of all issues with alias table for old key resolution (admin only)
-- **E2E test suite** — Playwright infrastructure with tests for issue detail, relations, comments, search
-- **SQL debug profiler** with query count and timing in footer (debug mode)
-- **Persistent file logging** with sensitive data masking
-- Update script (`scripts/update.sh`) for instance deployments
+- Added a redesigned issue page with threaded comments, reactions, resolve, description versions with diffs, estimated hours, watchers and relations
+- Added wiki Home pages, a table of contents, `[[Page Name]]` wikilinks, page hierarchy with a tree picker and inline rename
+- Added hybrid search as the default, filter tabs with counts, highlighted snippets, comment and attachment search, and a header search box
+- Added the local multilingual-e5-small embedding model via ONNX, `make download-model` and a backfill CLI for embeddings
+- Added an admin panel with stats, user and project management, settings, email configuration with test delivery and a workflow viewer
+- Added profile settings for display name, avatar color or photo, language and timezone
+- Added silent JWT refresh, Remember Me and password reset by email
+- Added a project creation modal with generated identifier and key, color, parent project and modules
+- Added notifications with email delivery through Celery and WebSocket support
+- Added an installable PWA with branding from settings, and a mobile layout with a hamburger menu
+- Added audit logging for logins, logouts, search queries and project renames
+- Added admin-only project key renames that re-key all issues and keep old keys resolving
+- Added a debug-mode SQL profiler in the footer, and persistent file logging with sensitive data masking
+- Added `scripts/update.sh` for updating instances
 
 ### Changed
-- PostgreSQL and Redis containers start by default (removed profiles requirement)
-- Dev overlay port configurable via `SPECIVO_DEV_PORT` env var (default 8000)
-- Trailing slashes on all route paths for consistency
-- `require_user` and `require_admin` FastAPI dependencies replace duplicated auth boilerplate
-- Service layer extractions — project stats, wiki page tree, issue detail tabs moved from routes to services
-- Admin API uses shared `require_admin_api` dependency across all endpoints
-- Activity feed default 25 per page with configurable page size
-- CSS classes use `sp-` prefix consistently to avoid Bootstrap collisions
+- Changed PostgreSQL and Redis containers to start by default without profiles
+- Changed the dev overlay port to be set by `SPECIVO_DEV_PORT` (default 8000)
+- Changed all route paths to end with a trailing slash
+- Changed the activity feed to show 25 entries per page by default, with a configurable page size
 
 ### Fixed
-- Zero-config quick start — added defaults for `SECRET_KEY`, `DATABASE_URL`, `REDIS_URL` in compose
-- `CORS_ORIGINS` env var format (JSON array)
-- CSP compliance — all inline scripts moved to specivo.js, Alpine.js directives replace onclick handlers
-- CSRF protection on wiki restore, HTML sanitization, wiki link escaping
-- Concurrent insert race conditions across services
-- Private issue filtering in autocomplete and search
-- Hybrid search computes per-type counts from merged RRF results
-- Comment search uses correct source type
-- Nginx dynamic upstream resolver for container restarts
+- Fixed quick start by adding compose defaults for `SECRET_KEY`, `DATABASE_URL` and `REDIS_URL`
+- Fixed the `CORS_ORIGINS` format to a JSON array
+- Fixed CSP violations by moving inline scripts into specivo.js and Alpine directives
+- Fixed missing CSRF protection on wiki restore, HTML sanitization and wiki link escaping
+- Fixed concurrent insert races across services
+- Fixed private issues showing in autocomplete and search
+- Fixed hybrid search type counts and the comment search source type
+- Fixed nginx losing upstreams after container restarts
 
 ### Security
-- Restrict OpenAPI/docs/redoc to admin-only in production
-- Rate limiting on auth endpoints and emoji reactions
-- Permission checks on relation delete, resolve/unresolve, description restore
-- Private note reply guard — non-admin replies to private notes are rejected
+- Fixed OpenAPI docs and ReDoc being public in production; they are now admin-only
+- Fixed missing rate limits on auth endpoints and emoji reactions
+- Fixed missing permission checks on relation delete, resolve/unresolve and description restore
+- Fixed non-admins being able to reply to private notes
 
 ## [0.1.5] - 2026-03-29
 
 ### Fixed
-- Alpine base image upgraded for zlib CVEs
-- Removed pip from Alpine image (CVE-2025-8869, CVE-2026-1703)
-- Upgraded cryptography 46.0.5 → 46.0.6 (CVE-2026-34073)
-- Static assets used absolute `http://` URLs behind reverse proxies, causing mixed-content blocking on HTTPS
+- Fixed zlib CVEs by upgrading the Alpine base image, and CVE-2025-8869 and CVE-2026-1703 by removing pip from it
+- Fixed CVE-2026-34073 by upgrading cryptography to 46.0.6
+- Fixed static assets using absolute `http://` URLs behind reverse proxies, causing mixed-content blocking on HTTPS
 
 ### Changed
-- Switched to Alpine base image for smaller container size
-- Added `workflow_call` trigger to CI for reusable workflows
+- Changed the container to an Alpine base image for a smaller size
+- Changed CI to accept a `workflow_call` trigger for reuse
 
 ## [0.1.0] - 2026-03-29
 
-First public release of Specivo Community Edition.
-
 ### Added
-- Project tracking with issues, nested-set hierarchy, workflow engine, and time tracking
-- Wiki with versioning, page hierarchy, and link graph visualization
-- Hybrid search: full-text (tsvector) + semantic (pgvector) + RRF fusion
-- Searchable file attachments with multi-chunk indexing
-- MCP server (11 tools) for AI agent integration
-- Bundled multilingual-e5-small embedding model (MIT, 100 languages)
-- Universal embedding prefix system — auto-detect for e5/OpenAI/Cohere
-- Internationalization with Babel + gettext + Jinja2 i18n
-- Frontend plugin architecture with feature-gated pro/enterprise UI
-- Navy+Gold theme with self-hosted fonts (DM Sans, Source Serif, JetBrains Mono)
-- Vendored assets — Bootstrap 5.3.6, Alpine.js, htmx
-- Versioned static filenames for cache busting (no build step)
-- Configurable Docker instance names for multi-instance deployments
-- Docker deployment with offline bundle support
-- CI/CD via GitHub Actions
-- 722 tests (unit + integration)
+- Added Specivo Community Edition, the first public release
+- Added project tracking with issues, nested hierarchy, a workflow engine and time tracking
+- Added a wiki with versioning, page hierarchy and a link graph
+- Added hybrid search combining full-text and pgvector semantic search with RRF fusion, including searchable attachments
+- Added an MCP server with 11 tools for AI agents
+- Added the bundled multilingual-e5-small embedding model (MIT, 100 languages), with automatic prefixes for e5, OpenAI and Cohere models
+- Added internationalization with Babel and gettext
+- Added a frontend plugin architecture for feature-gated pro and enterprise UI
+- Added the Navy and Gold theme with self-hosted fonts and vendored Bootstrap, Alpine.js and htmx
+- Added versioned static filenames for cache busting
+- Added Docker deployment with configurable instance names and an offline bundle
 
 ### Security
-- Fixed 12 findings from security audit — SQL injection, SSRF, XSS, access control
+- Fixed 12 security audit findings covering SQL injection, SSRF, XSS and access control
