@@ -45,6 +45,11 @@ services:
       DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://specivo:specivo@db:5432/specivo}"
       REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
       SECRET_KEY: "${SECRET_KEY:-dev-insecure-key-change-me-in-production-please}"
+      # Proxies whose X-Forwarded-For is believed: by default Docker's private
+      # ranges, so the bundled nginx (the only way in, the api publishes no
+      # port) passes on the real client address. Set it in .env to add a CDN
+      # or load balancer in front, or to [] if you publish the api port.
+      TRUSTED_PROXIES: '${TRUSTED_PROXIES:-["172.16.0.0/12","10.0.0.0/8"]}'
     volumes:
       - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
     depends_on:
