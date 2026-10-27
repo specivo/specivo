@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.admin import require_admin_api
+from specivo.api.v1.admin import refuse_api_key, require_admin_api, require_admin_session_api
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError
 from specivo.core.utils import utcnow
@@ -103,8 +103,15 @@ async def create_user(
     admin: Annotated[User, Depends(require_admin_api)],
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-    """Create a new user (admin only)."""
+    """Create a new user (admin only).
+
+    With a ``password``, this needs a signed-in session: an API key may create
+    accounts but not ones it knows the password of.
+    """
     from specivo.core.config import get_settings
+
+    if data.password:
+        refuse_api_key(request)
 
     settings = get_settings()
     if data.password and len(data.password) < settings.password_min_length:
@@ -169,7 +176,7 @@ async def reset_password(
     user_id: int,
     body: ResetPasswordRequest,
     request: Request,
-    admin: Annotated[User, Depends(require_admin_api)],
+    admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Reset a user's password (admin only)."""
@@ -276,7 +283,7 @@ async def lock_user(
 async def unlock_user(
     user_id: int,
     request: Request,
-    admin: Annotated[User, Depends(require_admin_api)],
+    admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     """Unlock a user account (admin only). Cannot unlock yourself."""
@@ -363,7 +370,7 @@ async def deactivate_user(
 async def reactivate_user(
     user_id: int,
     request: Request,
-    admin: Annotated[User, Depends(require_admin_api)],
+    admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = Depends(get_db),
 ) -> UserReactivatedOut:
     """Let a deactivated account sign in again.
@@ -426,7 +433,7 @@ async def create_user_api_key(
     user_id: int,
     body: ApiKeyCreate,
     request: Request,
-    admin: Annotated[User, Depends(require_admin_api)],
+    admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> ApiKeyCreated:
     """Create an API key for the specified user. The raw key is returned ONCE."""

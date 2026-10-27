@@ -25,25 +25,10 @@ from specivo.schemas.sso import EXTRA_AUTH_PARAM_KEYS, AuthSettingsUpdate
 from specivo.services.sso.auth_settings import update_auth_settings
 from specivo.services.sso.provider_service import ProviderService, backchannel_logout_uri, redirect_uri
 from specivo.web.deps import get_templates
-from specivo.web.pages.admin import require_admin
+from specivo.web.pages.admin import require_admin, require_admin_session
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 _service = ProviderService()
-
-
-async def require_admin_session(
-    request: Request,
-    user: Annotated[User, Depends(require_admin)],
-) -> User:
-    """An admin signed in with a session; an admin API key sent as a Bearer header is refused.
-
-    The web layer also accepts ``Authorization: Bearer spv_...``, and a
-    request without a session cookie is not CSRF-checked, so without this a
-    leaked admin key could change the sign-in settings through the form.
-    """
-    if getattr(request.state, "api_key_id", None) is not None:
-        raise HTTPException(status_code=403, detail="A signed-in session is required")
-    return user
 
 
 async def _user_groups(db: AsyncSession) -> list[dict[str, object]]:

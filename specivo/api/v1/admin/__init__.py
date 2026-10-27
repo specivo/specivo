@@ -16,16 +16,10 @@ def require_admin_api(current_user: User = Depends(get_current_user)) -> User:  
     return current_user
 
 
-def require_admin_session_api(
-    request: Request,
-    current_user: User = Depends(require_admin_api),  # noqa: B008
-) -> User:
-    """Dependency: an admin signed in with a session (JWT), never with an API key.
+def refuse_api_key(request: Request) -> None:
+    """Raise 403 ``api_key_not_allowed`` when this request authenticated with an API key.
 
-    For changes that hand out sign-in power (SSO providers, their group
-    mappings, the sign-in settings): a leaked admin key must not be enough
-    to register a rogue identity provider that maps its users to admins.
-    ``get_current_user`` sets ``request.state.api_key_id`` for API-key auth.
+    ``get_current_user`` sets ``request.state.api_key_id`` for API-key auth only.
     """
     if getattr(request.state, "api_key_id", None) is not None:
         raise AppError(
@@ -33,4 +27,23 @@ def require_admin_session_api(
             message="This change needs a signed-in session; API keys cannot make it",
             status_code=403,
         )
+
+
+def require_admin_session_api(
+    request: Request,
+    current_user: User = Depends(require_admin_api),  # noqa: B008
+) -> User:
+    """Dependency: an admin signed in with a session (JWT), never with an API key.
+
+    For every admin action that hands out a way to sign in or to act as
+    someone: the SSO configuration (providers, group mappings, sign-in
+    settings), setting a password (reset, or a new user created with one),
+    unlocking or reactivating an account, and minting or re-enabling API keys
+    or credentials for other users. A leaked admin key must not be able to
+    turn itself into a session (reset another admin's password, then sign
+    in) or register a rogue identity provider that maps its users to admins.
+    Taking access away (lock, deactivate, revoke) stays key-accessible, so
+    incident automation keeps working.
+    """
+    refuse_api_key(request)
     return current_user

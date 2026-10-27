@@ -397,7 +397,9 @@ An administrator's API key can read the single sign-on configuration through the
 (`/api/v1/admin/sso/...`), but cannot change it. Creating, editing or deleting a provider or its
 group mappings, and saving the authentication settings, need an administrator signed in to Specivo;
 an API key gets 403 `api_key_not_allowed`. A leaked key therefore cannot add an identity provider
-that maps its own users to administrators.
+that maps its own users to administrators. The same goes for every admin action that hands out a
+way to sign in, such as resetting a password; see
+[What an administrator's key cannot do](../../ai-agents/api-keys.md#what-an-administrators-key-cannot-do).
 
 ## Authentication settings
 
