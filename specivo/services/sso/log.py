@@ -56,3 +56,9 @@ def log_startup_warnings(settings: Settings) -> None:
             "sso.startup.insecure_http SSO_ALLOW_INSECURE_HTTP is on: identity providers may use plain "
             "http:// URLs. Use this only with a disposable test identity provider, never in production."
         )
+    if settings.sso_force_local_login:
+        logger.warning(
+            "sso.startup.force_local_login SSO_FORCE_LOCAL_LOGIN is on: the password form is always shown, "
+            "the login page never redirects to an identity provider, and every user may sign in with a "
+            "password. Turn it off once single sign-on works again."
+        )

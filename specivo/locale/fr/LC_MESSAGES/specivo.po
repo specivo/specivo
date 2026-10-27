@@ -6988,3 +6988,24 @@ msgstr ""
 #: specivo/web/pages/sso.py:71
 msgid "Single sign-on failed. Please try again."
 msgstr "L'authentification unique a échoué. Veuillez réessayer."
+
+#: specivo/templates/themes/default/pages/auth/login.html:98
+msgid "Administrators can sign in with a local account."
+msgstr "Les administrateurs peuvent se connecter avec un compte local."
+
+#: specivo/templates/themes/default/pages/auth/login.html:105
+#, python-format
+msgid "Sign in with %(name)s"
+msgstr "Se connecter avec %(name)s"
+
+#: specivo/templates/themes/default/pages/auth/login.html:112
+msgid "or"
+msgstr "ou"
+
+#: specivo/templates/themes/default/pages/auth/login.html:115
+msgid "Only administrators can sign in with a password. Everyone else signs in with single sign-on."
+msgstr "Seuls les administrateurs peuvent se connecter avec un mot de passe. Les autres utilisent l'authentification unique."
+
+#: specivo/templates/themes/default/pages/auth/login.html:160
+msgid "Sign in with a local account"
+msgstr "Se connecter avec un compte local"

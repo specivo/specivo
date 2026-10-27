@@ -94,8 +94,25 @@
     {% if sso_error_message %}
     <div class="login-error show" role="alert">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-      <span>{{ sso_error_message }}</span>
+      <span>{{ sso_error_message }}{% if sso_idp_unreachable and not show_local_form %}
+        <a class="sp-login-error-link" href="{{ local_login_url }}">{% trans %}Administrators can sign in with a local account.{% endtrans %}</a>{% endif %}</span>
     </div>
+    {% endif %}
+
+    {% if sso_buttons %}
+    <div class="sp-sso-providers">
+      {% for button in sso_buttons %}
+      <a class="sp-sso-provider-btn" href="{{ button.url }}">{% trans name=button.display_name %}Sign in with {{ name }}{% endtrans %}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if show_local_form %}
+    {% if sso_buttons %}
+    <div class="sp-login-divider"><span>{% trans %}or{% endtrans %}</span></div>
+    {% endif %}
+    {% if local_login_admins_only %}
+    <p class="sp-login-hint">{% trans %}Only administrators can sign in with a password. Everyone else signs in with single sign-on.{% endtrans %}</p>
     {% endif %}
     <div class="login-error" :class="{ 'show': error }">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
@@ -139,6 +156,9 @@
         x-text="buttonText"
       >{% trans %}Sign in{% endtrans %}</button>
     </form>
+    {% else %}
+    <p class="sp-login-local-link"><a href="{{ local_login_url }}">{% trans %}Sign in with a local account{% endtrans %}</a></p>
+    {% endif %}
   </div>
 
   <div class="login-footer">

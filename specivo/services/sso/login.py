@@ -75,6 +75,15 @@ class SsoLoginService:
             await db.execute(select(SsoProvider).where(SsoProvider.slug == slug, SsoProvider.enabled.is_(True)))
         ).scalar_one_or_none()
 
+    async def list_enabled_providers(self, db: AsyncSession) -> list[SsoProvider]:
+        """The enabled providers in login-button order (``position``, then name)."""
+        rows = await db.execute(
+            select(SsoProvider)
+            .where(SsoProvider.enabled.is_(True))
+            .order_by(SsoProvider.position, SsoProvider.display_name, SsoProvider.id)
+        )
+        return list(rows.scalars().all())
+
     async def start(self, provider: SsoProvider, *, next_path: str | None) -> AuthorizationRequest:
         """Begin a login transaction at ``provider``; ``next_path`` is sanitised by the flow."""
         metadata = await get_provider_metadata(provider)

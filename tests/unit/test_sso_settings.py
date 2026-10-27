@@ -1,4 +1,4 @@
-"""Instance-wide SSO settings: bounds, and the startup warning for insecure HTTP."""
+"""Instance-wide SSO settings: bounds, and the startup warnings for insecure HTTP and forced local login."""
 
 from __future__ import annotations
 
@@ -47,6 +47,14 @@ def test_insecure_http_logs_startup_warning(caplog: pytest.LogCaptureFixture):
     records = [r for r in caplog.records if r.name == "specivo.sso" and r.levelno == logging.WARNING]
     assert len(records) == 1
     assert "SSO_ALLOW_INSECURE_HTTP" in records[0].getMessage()
+
+
+def test_force_local_login_logs_startup_warning(caplog: pytest.LogCaptureFixture):
+    caplog.set_level(logging.WARNING, logger="specivo.sso")
+    log_startup_warnings(_settings(sso_force_local_login=True))
+    records = [r for r in caplog.records if r.name == "specivo.sso" and r.levelno == logging.WARNING]
+    assert len(records) == 1
+    assert "SSO_FORCE_LOCAL_LOGIN" in records[0].getMessage()
 
 
 def test_no_warning_by_default(caplog: pytest.LogCaptureFixture):

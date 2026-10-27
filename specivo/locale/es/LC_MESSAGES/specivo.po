@@ -6995,3 +6995,24 @@ msgstr ""
 #: specivo/web/pages/sso.py:71
 msgid "Single sign-on failed. Please try again."
 msgstr "El inicio de sesión único falló. Inténtalo de nuevo."
+
+#: specivo/templates/themes/default/pages/auth/login.html:98
+msgid "Administrators can sign in with a local account."
+msgstr "Los administradores pueden iniciar sesión con una cuenta local."
+
+#: specivo/templates/themes/default/pages/auth/login.html:105
+#, python-format
+msgid "Sign in with %(name)s"
+msgstr "Iniciar sesión con %(name)s"
+
+#: specivo/templates/themes/default/pages/auth/login.html:112
+msgid "or"
+msgstr "o"
+
+#: specivo/templates/themes/default/pages/auth/login.html:115
+msgid "Only administrators can sign in with a password. Everyone else signs in with single sign-on."
+msgstr "Solo los administradores pueden iniciar sesión con contraseña. Los demás usan el inicio de sesión único."
+
+#: specivo/templates/themes/default/pages/auth/login.html:160
+msgid "Sign in with a local account"
+msgstr "Iniciar sesión con una cuenta local"

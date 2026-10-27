@@ -183,13 +183,29 @@ class AuthService:
         # 1. Look up by login or email (case-insensitive)
         user = await self._find_user(session, normalized)
 
+        # With ``sso.local_login_admins_only`` (and no SSO_FORCE_LOCAL_LOGIN),
+        # a password signs in administrators only: everybody else uses single
+        # sign-on. Lazy import: the SSO package imports this module.
+        from specivo.services.sso.auth_settings import get_login_policy
+
+        admins_only = (await get_login_policy(session)).local_login_admins_only
+        refused_by_policy = admins_only and user is not None and not user.is_anonymous and not user.is_admin
+
         # --- Constant-time guard: prevent user enumeration ---
         # We always try to verify a password even when the user is not found,
         # then raise the same generic error.
         # The anonymous user is not an account anybody can sign in to. It has no
         # password either, but it is refused here explicitly, and exactly like an
         # unknown login, rather than relying on that.
-        if user is None or user.is_anonymous:
+        # A non-admin refused by ``local_login_admins_only`` gets the same
+        # answer at the same cost, before any status check, so the setting
+        # reveals neither that the account exists nor its state, and does not
+        # count towards its lockout.
+        if user is None or user.is_anonymous or refused_by_policy:
+            if refused_by_policy and user is not None:
+                from specivo.services.sso.log import logger as sso_logger
+
+                sso_logger.info("sso.local_login.refused_non_admin user_id=%s", user.id)
             # Burn one bcrypt at the configured cost, as a real check would, so
             # timing doesn't reveal existence.
             burn_password_check(password)
