@@ -60,11 +60,11 @@ from specivo.models.auth import RefreshToken
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.services.auth_service import ID_TOKEN_PURPOSE
 from specivo.services.session_service import SessionService
+from specivo.services.sso import events
 from specivo.services.sso.discovery import get_provider_metadata
 from specivo.services.sso.errors import SsoError, SsoTokenInvalidError, SsoUnavailableError, TokenRejection
 from specivo.services.sso.id_token import MAX_TOKEN_AGE_SECONDS, LogoutTokenClaims, verify_logout_token
 from specivo.services.sso.log import logger
-from specivo.services.sso.provisioning import subject_hash
 
 __all__ = [
     "BACKCHANNEL_JTI_TTL_SECONDS",
@@ -90,6 +90,7 @@ class SsoLogoutSession:
     provider: SsoProvider
     subject: str
     id_token_encrypted: str | None = field(repr=False)
+    user_id: int | None = None
 
 
 def post_logout_redirect_uri(settings: Settings | None = None) -> str:
@@ -136,7 +137,9 @@ async def find_sso_logout_session(
     if found is None:
         return None
     subject, provider = found
-    return SsoLogoutSession(provider=provider, subject=subject, id_token_encrypted=row.id_token_encrypted)
+    return SsoLogoutSession(
+        provider=provider, subject=subject, id_token_encrypted=row.id_token_encrypted, user_id=row.user_id
+    )
 
 
 async def end_session_url(target: SsoLogoutSession, *, settings: Settings | None = None) -> str | None:
@@ -149,11 +152,12 @@ async def end_session_url(target: SsoLogoutSession, *, settings: Settings | None
     settings = settings or get_settings()
     provider = target.provider
     url = await _build_url(target, settings) if provider.enabled and provider.rp_logout_enabled else None
-    logger.info(
-        "sso.logout provider=%s sub=%s idp_redirect=%s",
-        provider.slug,
-        subject_hash(target.subject),
-        "true" if url else "false",
+    events.logout(
+        provider_slug=provider.slug,
+        issuer=provider.issuer,
+        user_id=target.user_id,
+        subject=target.subject,
+        idp_redirect=url is not None,
     )
     return url
 
@@ -288,12 +292,8 @@ async def backchannel_logout(
         raise
 
     by: Literal["sid", "sub"] = "sid" if claims.sid is not None else "sub"
-    logger.info(
-        "sso.backchannel_logout provider=%s sub=%s by=%s revoked=%d",
-        provider.slug,
-        subject_hash(claims.subject) if claims.subject is not None else "-",
-        by,
-        revoked,
+    events.backchannel_logout(
+        provider_slug=provider.slug, issuer=provider.issuer, subject=claims.subject, by=by, revoked=revoked
     )
     return BackchannelLogoutResult(by=by, revoked=revoked, jti_key=key)
 

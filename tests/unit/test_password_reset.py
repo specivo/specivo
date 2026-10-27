@@ -249,7 +249,7 @@ class TestResetPasswordWithToken:
         with patch("specivo.services.auth_service.hash_password", return_value="$2b$12$newhash"):
             await AuthService().reset_password_with_token(session, token="raw", new_password="NewP@ss123")
 
-        self.revoke.assert_awaited_once_with(session, user.id, reason="password_reset")
+        self.revoke.assert_awaited_once_with(session, user.id, reason="password_reset", actor_id=user.id)
 
     async def test_resets_password_with_valid_token(self):
         """reset_password_with_token updates the user's password hash."""

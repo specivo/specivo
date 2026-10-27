@@ -342,7 +342,13 @@ async def _link_signed_in_user(
     identity.email_at_last_login = _email_from(claims, provider)
     db.add(identity)
     await db.flush()
-    events.account_linked(provider_slug=provider.slug, user_id=user.id, subject=id_token.subject, method="user_link")
+    events.account_linked(
+        provider_slug=provider.slug,
+        user_id=user.id,
+        subject=id_token.subject,
+        method="user_link",
+        issuer=provider.issuer,
+    )
     return ResolvedAccount(user=user, identity=identity, outcome="linked")
 
 
@@ -440,7 +446,9 @@ async def _provision(
             continue
         if savepoint.is_active:
             await savepoint.commit()
-        events.user_provisioned(provider_slug=provider.slug, user_id=user.id, subject=id_token.subject)
+        events.user_provisioned(
+            provider_slug=provider.slug, user_id=user.id, subject=id_token.subject, issuer=provider.issuer
+        )
         return user
     raise AssertionError("unreachable")  # pragma: no cover
 
@@ -534,7 +542,11 @@ async def resolve_user(
         db.add(identity)
         await db.flush()
         events.account_linked(
-            provider_slug=provider.slug, user_id=target.id, subject=id_token.subject, method="auto_email"
+            provider_slug=provider.slug,
+            user_id=target.id,
+            subject=id_token.subject,
+            method="auto_email",
+            issuer=provider.issuer,
         )
         await _refresh_profile(db, target, provider, claims, sub_hash)
         _record_login(target, identity, email, now)

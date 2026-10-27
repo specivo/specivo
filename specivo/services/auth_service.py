@@ -500,7 +500,8 @@ class AuthService:
         ):
             session_ids.append(access.session_id)
         if session_ids:
-            await _sessions.revoke(session, session_ids, reason=reason)
+            actor = refresh_owner if refresh_owner is not None else (access.user_id if access is not None else None)
+            await _sessions.revoke(session, session_ids, reason=reason, actor_id=actor)
         if access_token_raw:
             await blocklist_access_token(access_token_raw)
 
@@ -522,7 +523,7 @@ class AuthService:
         user_id: int,
     ) -> int:
         """Revoke every session of *user_id*. Returns the number of refresh rows deleted."""
-        return await _sessions.revoke_user_sessions(session, user_id, reason="logout_all")
+        return await _sessions.revoke_user_sessions(session, user_id, reason="logout_all", actor_id=user_id)
 
     async def logout_other_sessions(
         self,
@@ -556,7 +557,7 @@ class AuthService:
         # Only the live token the caller authenticated with is spared.
         spare = caller.session_id if keep is None and caller is not None and not caller.expired else None
         return await _sessions.revoke_user_sessions(
-            session, user_id, reason=reason, keep_session_id=keep, spare_access_of=spare
+            session, user_id, reason=reason, keep_session_id=keep, spare_access_of=spare, actor_id=user_id
         )
 
     async def list_sessions(
@@ -598,7 +599,7 @@ class AuthService:
         session_id = await session.scalar(stmt)
         if session_id is None:
             raise NotFoundError(message=_("Session not found"))
-        await _sessions.revoke(session, [session_id], reason="revoke_session")
+        await _sessions.revoke(session, [session_id], reason="revoke_session", actor_id=user_id)
 
     # ------------------------------------------------------------------
     # Password reset
@@ -735,7 +736,7 @@ class AuthService:
 
         # A reset is the compromise-recovery path: every session that existed
         # before it ends now, access tokens included.
-        await _sessions.revoke_user_sessions(session, user.id, reason="password_reset")
+        await _sessions.revoke_user_sessions(session, user.id, reason="password_reset", actor_id=user.id)
 
         await session.flush()
         return user.id

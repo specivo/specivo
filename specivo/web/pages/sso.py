@@ -47,6 +47,7 @@ from specivo.core.rate_limit import enforce_rate_limit, rate_limit
 from specivo.core.utils import utcnow
 from specivo.models.sso import SsoProvider
 from specivo.models.user import User
+from specivo.services.security_audit_service import SecurityAuditService
 from specivo.services.sso.errors import SsoError, SsoTokenInvalidError
 from specivo.services.sso.flow import TX_COOKIE_NAME, TX_TTL_SECONDS, tx_cookie_path
 from specivo.services.sso.log import logger
@@ -171,9 +172,9 @@ async def _provider_or_404(db: AsyncSession, slug: str) -> SsoProvider:
 async def _audit_failure(db: AsyncSession, request: Request, provider: SsoProvider, exc: SsoError) -> None:
     logger.warning("sso.login.failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
     try:
-        from specivo.services.security_audit_service import SecurityAuditService
-
-        await SecurityAuditService().log_login_failure(session=db, request=request, reason=exc.code)
+        await SecurityAuditService().log_sso_login_failure(
+            db, provider_slug=provider.slug, issuer=provider.issuer, reason=exc.code, request=request
+        )
     except Exception:
         logger.exception("sso.audit.failed provider=%s", provider.slug)
 
@@ -288,13 +289,13 @@ async def sso_callback(
         return response
 
     try:
-        from specivo.services.security_audit_service import SecurityAuditService
-
-        await SecurityAuditService().log_login_success(
-            session=db,
+        await SecurityAuditService().log_sso_login_success(
+            db,
             user_id=result.user_id,
+            provider_slug=provider.slug,
+            issuer=provider.issuer,
+            sub_hash=result.sub_hash,
             request=request,
-            details={"method": "sso", "provider": provider.slug},
         )
     except Exception:
         logger.exception("sso.audit.failed provider=%s", provider.slug)
