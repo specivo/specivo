@@ -6711,6 +6711,18 @@ msgstr "您的个人资料已关联此身份提供商的账户。"
 msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
 msgstr "这是您唯一的登录方式。请先设置密码或关联其他账户，再断开此账户。"
 
+#: specivo/web/pages/sso.py
+msgid "Your email domain is not allowed to sign in here. Contact your administrator."
+msgstr "您的电子邮件域不允许在此登录。请联系管理员。"
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider account is not in a group that may sign in here. Contact your administrator."
+msgstr "您的身份提供商账户不属于任何允许在此登录的组。请联系管理员。"
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider sent too many groups to read. Ask your administrator to send only the groups assigned to the application, or app roles."
+msgstr "您的身份提供商发送的组过多，无法读取。请让管理员仅发送分配给该应用程序的组，或使用应用角色。"
+
 #: specivo/web/pages/connected_accounts.py
 #, python-format
 msgid "Your %(provider)s account is now connected."

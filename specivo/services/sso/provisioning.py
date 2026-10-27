@@ -30,12 +30,18 @@ unverified and admin-locked accounts are ``sso_account_disabled`` until a
 timed admin lock runs out. A brute-force lockout protects the password only
 and does not block SSO.
 
-On a login (rules 1, 3 and 4) ``last_login_at`` is updated on the user and
-the identity, and the profile fields follow the token: display name, email
-(only a trusted, verified one; skipped, and logged, when another user has
-it) and language (``locale``
-mapped to a supported language). A link (rule 2) changes no profile field.
-Group and admin-flag mapping is applied elsewhere.
+On a login (rules 1, 3 and 4) the provider's access policy
+(:func:`specivo.services.sso.mapping.enforce_access`: email domain, required
+groups, group overage) is checked first, after the status checks and
+**before** an account is signed in, linked or created, so a refused user is
+never provisioned or linked; a refused existing identity loses its sessions.
+Then ``last_login_at`` is updated on the user and the identity, the profile
+fields follow the token: display name, email (only a trusted, verified one;
+skipped, and logged, when another user has it) and language (``locale``
+mapped to a supported language), and the admin flag and SSO-managed group
+memberships follow the groups claim
+(:func:`specivo.services.sso.mapping.apply_mapping`). A link (rule 2) changes
+no profile field and maps nothing.
 """
 
 from __future__ import annotations
@@ -56,6 +62,7 @@ from specivo.core.utils import utcnow
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user import User
 from specivo.services.sso import events
+from specivo.services.sso.claims import read_groups
 from specivo.services.sso.errors import (
     SsoAccountDisabledError,
     SsoAccountNotProvisionedError,
@@ -68,6 +75,7 @@ from specivo.services.sso.events import subject_hash
 from specivo.services.sso.flow import Intent
 from specivo.services.sso.id_token import IdTokenClaims
 from specivo.services.sso.log import logger
+from specivo.services.sso.mapping import apply_mapping, enforce_access
 
 __all__ = [
     "Outcome",
@@ -463,10 +471,13 @@ async def resolve_user(
     ``link_user_id`` come from the login transaction. Raises an ``SsoError``
     (``sso_account_not_provisioned``, ``sso_account_disabled``,
     ``sso_identity_in_use``, ``sso_provider_already_linked``,
-    ``sso_email_missing``, ``sso_email_conflict``) on refusal.
+    ``sso_email_missing``, ``sso_email_conflict``, and the policy codes
+    ``sso_domain_not_allowed``, ``sso_not_in_required_group``,
+    ``sso_groups_overage``) on refusal.
     """
     sub_hash = subject_hash(id_token.subject)
     now = utcnow()
+    email = _email_from(claims, provider)
 
     # 1. The identity, by (iss, sub) only.
     row = (
@@ -491,9 +502,21 @@ async def resolve_user(
             _check_status(user, provider, sub_hash, now)
             return ResolvedAccount(user=user, identity=identity, outcome="linked")
         _check_status(user, provider, sub_hash, now)
+        groups = read_groups(claims, provider)
+        await enforce_access(
+            db,
+            provider=provider,
+            claims=claims,
+            groups=groups,
+            email=email,
+            subject=id_token.subject,
+            user=user,
+            identity=identity,
+        )
         await _refresh_profile(db, user, provider, claims, sub_hash)
-        _record_login(user, identity, _email_from(claims, provider), now)
+        _record_login(user, identity, email, now)
         await db.flush()
+        await apply_mapping(db, provider=provider, user=user, groups=groups, subject=id_token.subject)
         return ResolvedAccount(user=user, identity=identity, outcome="login")
 
     # 2. A signed-in user connecting this identity.
@@ -508,10 +531,15 @@ async def resolve_user(
             now=now,
         )
 
+    groups = read_groups(claims, provider)
+
     # 3. Link by verified email, under every precondition.
     target = await _auto_link_target(db, provider=provider, claims=claims, sub_hash=sub_hash)
     if target is not None:
         _check_status(target, provider, sub_hash, now)
+        await enforce_access(
+            db, provider=provider, claims=claims, groups=groups, email=email, subject=id_token.subject, user=target
+        )
         identity = _new_identity(target, provider, id_token, "auto_email")
         db.add(identity)
         await db.flush()
@@ -519,18 +547,21 @@ async def resolve_user(
             provider_slug=provider.slug, user_id=target.id, subject=id_token.subject, method="auto_email"
         )
         await _refresh_profile(db, target, provider, claims, sub_hash)
-        _record_login(target, identity, _email_from(claims, provider), now)
+        _record_login(target, identity, email, now)
         await db.flush()
+        await apply_mapping(db, provider=provider, user=target, groups=groups, subject=id_token.subject)
         return ResolvedAccount(user=target, identity=identity, outcome="auto_linked")
 
     # 4. Just-in-time provisioning.
     if provider.allow_jit_provisioning:
+        await enforce_access(db, provider=provider, claims=claims, groups=groups, email=email, subject=id_token.subject)
         user = await _provision(db, provider=provider, id_token=id_token, claims=claims, sub_hash=sub_hash, now=now)
         identity = _new_identity(user, provider, id_token, "jit")
         db.add(identity)
         await db.flush()
         _record_login(user, identity, user.email, now)
         await db.flush()
+        await apply_mapping(db, provider=provider, user=user, groups=groups, subject=id_token.subject)
         return ResolvedAccount(user=user, identity=identity, outcome="provisioned")
 
     # 5. Nothing else may create or pick an account.

@@ -196,3 +196,36 @@ class SsoProviderAlreadyLinkedError(SsoError):
     default_code = "sso_provider_already_linked"
     default_message = "An account at this identity provider is already connected"
     default_status = 409
+
+
+class SsoAccessPolicyError(SsoError):
+    """The provider's access policy refused the login (domain, required groups, group overage).
+
+    A refusal of this kind revokes the identity's remaining sessions: the user
+    lost access at the identity provider.
+    """
+
+    default_code = "sso_access_denied"
+    default_message = "Access through this identity provider is not allowed"
+    default_status = 403
+
+
+class SsoDomainNotAllowedError(SsoAccessPolicyError):
+    """The email domain (or Google ``hd``) is not in the provider's ``allowed_email_domains``."""
+
+    default_code = "sso_domain_not_allowed"
+    default_message = "Your email domain is not allowed to sign in here"
+
+
+class SsoNotInRequiredGroupError(SsoAccessPolicyError):
+    """The user is in none of the provider's ``required_groups`` (or the groups claim is missing)."""
+
+    default_code = "sso_not_in_required_group"
+    default_message = "You are not in a group that may sign in here"
+
+
+class SsoGroupsOverageError(SsoAccessPolicyError):
+    """Entra ID sent a group overage marker instead of the groups, and groups decide access."""
+
+    default_code = "sso_groups_overage"
+    default_message = "The identity provider sent too many groups to read"

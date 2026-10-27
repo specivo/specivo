@@ -6719,6 +6719,18 @@ msgstr ""
 msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
 msgstr ""
 
+#: specivo/web/pages/sso.py
+msgid "Your email domain is not allowed to sign in here. Contact your administrator."
+msgstr ""
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider account is not in a group that may sign in here. Contact your administrator."
+msgstr ""
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider sent too many groups to read. Ask your administrator to send only the groups assigned to the application, or app roles."
+msgstr ""
+
 #: specivo/web/pages/connected_accounts.py
 #, python-format
 msgid "Your %(provider)s account is now connected."
