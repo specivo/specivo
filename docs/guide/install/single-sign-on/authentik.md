@@ -5,9 +5,8 @@ description: Connect Specivo to authentik — create an OAuth2/OpenID provider a
 # authentik
 
 This page connects Specivo to authentik. Read [Single sign-on](index.md) first for the concepts and
-what each Specivo setting does. The steps were checked against authentik 2026.8 with the blueprint
-Specivo's compatibility tests use: sign-in, accounts created on first sign-in, group mapping,
-sign-out at authentik and back-channel logout all work.
+what each Specivo setting does. The steps were checked against authentik 2026.8: sign-in, accounts created on first sign-in,
+group mapping, sign-out at authentik and back-channel logout all work.
 
 Sample values: Specivo at `https://specivo.example.com` (`APP_URL`), authentik at
 `https://authentik.example.com`, application slug `specivo`, provider slug `authentik`.

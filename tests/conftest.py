@@ -63,10 +63,6 @@ def _fixture_is_running(host: str, port: int, timeout: float = 0.5) -> bool:
 # demand. Its discovery document is fetched once at collection time, and only
 # when an ``sso_idp`` test was collected.
 _SSO_TEST_ISSUER = os.environ.get("SSO_TEST_ISSUER", "http://localhost:8033/realms/specivo-test")
-# authentik is opt-in (make sso-idp-up-authentik): its tests, marked
-# ``sso_authentik`` as well, run only when this is set and serving. They do not
-# need Keycloak, and the Keycloak tests do not need authentik.
-_SSO_TEST_AUTHENTIK_ISSUER = os.environ.get("SSO_TEST_AUTHENTIK_ISSUER", "")
 
 
 def _issuer_is_up(issuer: str, timeout: float = 1.0) -> bool:
@@ -100,23 +96,10 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         "(start it with: make redmine-fixture-up && make redmine-fixture-seed)"
     )
 
-    has_sso_idp = any(
-        item.get_closest_marker("sso_idp") and not item.get_closest_marker("sso_authentik") for item in items
-    ) and _issuer_is_up(_SSO_TEST_ISSUER)
+    has_sso_idp = any(item.get_closest_marker("sso_idp") for item in items) and _issuer_is_up(_SSO_TEST_ISSUER)
     skip_sso_idp = pytest.mark.skip(
         reason=f"SSO test IdP is not serving {_SSO_TEST_ISSUER} (start it with: make sso-idp-up)"
     )
-    has_authentik = (
-        bool(_SSO_TEST_AUTHENTIK_ISSUER)
-        and any(item.get_closest_marker("sso_authentik") for item in items)
-        and _issuer_is_up(_SSO_TEST_AUTHENTIK_ISSUER)
-    )
-    skip_authentik = pytest.mark.skip(
-        reason="authentik is opt-in and not serving: make sso-idp-up-authentik, then set SSO_TEST_AUTHENTIK_ISSUER"
-        if not _SSO_TEST_AUTHENTIK_ISSUER
-        else f"authentik is not serving {_SSO_TEST_AUTHENTIK_ISSUER} (start it with: make sso-idp-up-authentik)"
-    )
-
     for item in items:
         if not has_pro and item.get_closest_marker("pro"):
             item.add_marker(skip_pro)
@@ -124,10 +107,7 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip_ent)
         if not has_redmine_fixture and item.get_closest_marker("redmine"):
             item.add_marker(skip_redmine)
-        if item.get_closest_marker("sso_authentik"):
-            if not has_authentik:
-                item.add_marker(skip_authentik)
-        elif not has_sso_idp and item.get_closest_marker("sso_idp"):
+        if not has_sso_idp and item.get_closest_marker("sso_idp"):
             item.add_marker(skip_sso_idp)
 
 
