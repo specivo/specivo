@@ -55,6 +55,11 @@ _ALLOWED_FTS_LANGUAGES: frozenset[str] = frozenset(
 )
 
 
+# Upper bound for ``sso_clock_skew_seconds``: more leeway than this would let
+# tokens outlive their expiry by a meaningful margin.
+SSO_MAX_CLOCK_SKEW_SECONDS = 300
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),  # .env.local overrides .env (secrets)
@@ -218,6 +223,19 @@ class Settings(BaseSettings):
     smtp_timeout: int = 30
     webhook_timeout: int = 30
 
+    # SSO (OpenID Connect). Providers are configured in the database; these
+    # are the instance-wide limits every provider shares.
+    # Break-glass: always show the local login form, whatever the
+    # "hide local login" / "auto-redirect" settings say.
+    sso_force_local_login: bool = False
+    # Allow http:// issuers and endpoints. Only for a disposable test IdP.
+    sso_allow_insecure_http: bool = False
+    # Timeout for each request to an identity provider.
+    sso_http_timeout_seconds: float = Field(default=5.0, gt=0)
+    # Leeway for exp / iat / nbf when validating ID and logout tokens.
+    # Values above the cap are lowered to it.
+    sso_clock_skew_seconds: int = Field(default=60, ge=0)
+
     @field_validator("search_fts_language")
     @classmethod
     def validate_fts_language(cls, v: str) -> str:
@@ -238,6 +256,11 @@ class Settings(BaseSettings):
         if v < 6:
             raise ValueError("password_min_length must be at least 6")
         return v
+
+    @field_validator("sso_clock_skew_seconds")
+    @classmethod
+    def cap_sso_clock_skew(cls, v: int) -> int:
+        return min(v, SSO_MAX_CLOCK_SKEW_SECONDS)
 
     @field_validator("legacy_password_hashes_expire_at")
     @classmethod
