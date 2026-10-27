@@ -136,7 +136,15 @@ make test-e2e          # Headless, chromium
 make test-e2e-headed   # Visible browser + 300ms slowmo
 make test-e2e-debug    # Playwright Inspector (PWDEBUG=1)
 make playwright-install # Install chromium browser
+make test-e2e-sso      # Start the disposable Keycloak, run the SSO browser tests (sso_idp)
 ```
+
+The SSO browser tests (`tests/e2e/test_sso_login.py`, markers `e2e` + `sso_idp`) are skipped
+unless the disposable Keycloak is up. They browse `http://localhost:9944` instead of
+`127.0.0.1`, because that is the redirect URI the test realm registers; the E2E server always
+runs with `APP_URL=http://localhost:<port>` and `SSO_ALLOW_INSECURE_HTTP=true` for them, and
+listens on `E2E_SERVER_BIND` (0.0.0.0 on Linux in `make test-e2e-sso`) so Keycloak's container
+can reach the back-channel logout endpoint.
 
 ## File locations
 

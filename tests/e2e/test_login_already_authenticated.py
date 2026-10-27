@@ -44,7 +44,7 @@ def test_login_page_logout_button_works(signout_page: Page) -> None:
     """Clicking 'Sign out' logs out and shows login form."""
     signout_page.goto("/login/")
     signout_page.locator("form[action='/logout/'] button[type='submit']").click()
-    signout_page.wait_for_url("**/login/")
+    signout_page.wait_for_url("**/login/?logged_out=1")
     # After logout, should see the login form, not the already-signed-in widget
     expect(signout_page.locator("#login-field")).to_be_visible()
 

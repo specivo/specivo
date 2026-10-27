@@ -15,7 +15,7 @@ import httpx
 import pytest
 from playwright.sync_api import BrowserContext, Page, expect
 
-from specivo.testing.e2e_base import E2E_SERVER_HOST
+from specivo.testing.e2e_base import E2E_SERVER_HOST, kill_port_listeners
 
 pytestmark = [pytest.mark.e2e]
 
@@ -30,7 +30,7 @@ _ACCESS_TOKEN_MINUTES = 1
 @pytest.fixture(scope="module")
 def refresh_server(e2e_seed_data):
     """Start a uvicorn server with a 5-second access token lifetime."""
-    subprocess.run(f"lsof -ti:{_REFRESH_TEST_PORT} | xargs kill -9", shell=True, capture_output=True)
+    kill_port_listeners(_REFRESH_TEST_PORT)
     time.sleep(0.5)
 
     env = {

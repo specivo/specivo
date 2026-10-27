@@ -6,7 +6,8 @@
 #
 #   make sso-idp-up              # Keycloak only (default)
 #   make sso-idp-up-authentik    # Keycloak + authentik (opt-in compatibility smoke)
-#   make test-sso-idp            # pytest -m sso_idp
+#   make test-sso-idp            # pytest -m 'sso_idp and not e2e'
+#   make test-e2e-sso            # sso-idp-up + the Playwright SSO tests
 #   make sso-idp-down            # stop everything, discard volumes
 #
 # Keycloak:  issuer http://localhost:8033/realms/specivo-test
