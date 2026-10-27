@@ -607,9 +607,10 @@ async def test_unknown_identity_is_not_provisioned(
     [
         {"status": "deactivated"},
         {"status": "locked", "locked_until": None},
+        {"status": "locked", "locked_until": datetime.now(UTC) + timedelta(hours=2)},
         {"status": "pending_verification"},
     ],
-    ids=["deactivated", "admin_locked", "pending_verification"],
+    ids=["deactivated", "admin_locked_permanently", "admin_locked_until_later", "pending_verification"],
 )
 async def test_inactive_account_is_disabled(
     client: AsyncClient,
@@ -650,11 +651,12 @@ async def test_password_lockout_does_not_block_sso(
     sso_login: SsoLoginDriver,
     mock_idp: MockIdP,
 ) -> None:
+    """A brute-force lockout sets only ``locked_until`` and protects the password."""
     await _member(
         db_session,
         sso_provider,
         mock_idp,
-        status="locked",
+        status="active",
         locked_until=datetime.now(UTC) + timedelta(minutes=15),
         failed_login_count=5,
     )
@@ -662,6 +664,30 @@ async def test_password_lockout_does_not_block_sso(
     assert response.status_code == 302
     assert response.headers["location"] == "/"
     assert await _sso_rows(db_session) == 1
+
+
+async def test_expired_admin_lock_does_not_block_sso(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_provider: SsoProvider,
+    sso_login: SsoLoginDriver,
+    mock_idp: MockIdP,
+) -> None:
+    """A timed admin lock that has run out ends, as it does for a password login."""
+    user = await _member(
+        db_session,
+        sso_provider,
+        mock_idp,
+        status="locked",
+        locked_until=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    response = await sso_login(client)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/"
+    assert await _sso_rows(db_session) == 1
+    await db_session.refresh(user)
+    assert user.status == "active"
+    assert user.locked_until is None
 
 
 # ---------------------------------------------------------------------------

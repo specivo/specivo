@@ -10,9 +10,10 @@ Rules applied today:
 2. none found: refuse with ``sso_account_not_provisioned``;
 3. the account must be able to sign in: service accounts and the anonymous
    user never can (also when an identity row exists), a deactivated,
-   unverified or admin-locked account cannot (``sso_account_disabled``). A
-   brute-force lock (``locked_until`` set) protects the password only and
-   does not block SSO;
+   unverified or admin-locked (``status="locked"``) account cannot
+   (``sso_account_disabled``) until a timed admin lock has run out. A
+   brute-force lockout (``locked_until`` set, status still ``active``)
+   protects the password only and does not block SSO;
 4. on success ``last_login_at`` is updated on the user and the identity, and
    the identity's ``email_at_last_login`` is refreshed.
 """
@@ -22,6 +23,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -62,17 +64,25 @@ def _email_from(claims: Mapping[str, Any], provider: SsoProvider) -> str | None:
     return None
 
 
-def _refusal_reason(user: User) -> str | None:
-    """Why ``user`` may not sign in through SSO, or ``None`` if they may."""
+def _refusal_reason(user: User, now: datetime) -> str | None:
+    """Why ``user`` may not sign in through SSO, or ``None`` if they may.
+
+    Two kinds of lock exist. A brute-force lockout sets only ``locked_until``
+    and leaves ``status="active"``: it protects the password, so SSO is
+    allowed. An admin lock sets ``status="locked"``, permanently
+    (``locked_until`` NULL) or until a time: refused until that time has
+    passed, after which the account is active again (as for password login).
+    """
     if user.is_service_account:
         return "service_account"
     if user.is_anonymous:
         return "anonymous"
     if user.status == "active":
         return None
-    if user.status == "locked" and user.locked_until is not None:
-        # A brute-force lock protects the password, not the IdP sign-in.
-        return None
+    if user.status == "locked":
+        if user.locked_until is not None and user.locked_until <= now:
+            return None
+        return "admin_locked"
     return f"status_{user.status}"
 
 
@@ -115,14 +125,18 @@ async def resolve_user(
         logger.warning("sso.account.refused provider=%s sub=%s reason=other_provider", provider.slug, sub_hash)
         raise SsoAccountNotProvisionedError("identity_of_other_provider")
 
-    reason = _refusal_reason(user)
+    now = utcnow()
+    reason = _refusal_reason(user, now)
     if reason is not None:
         logger.warning(
             "sso.account.refused provider=%s sub=%s user_id=%s reason=%s", provider.slug, sub_hash, user.id, reason
         )
         raise SsoAccountDisabledError(reason)
 
-    now = utcnow()
+    if user.status == "locked":
+        # An admin lock whose time has passed: end it, as password login does.
+        user.status = "active"
+        user.locked_until = None
     user.last_login_at = now
     identity.last_login_at = now
     email = _email_from(claims, provider)
