@@ -6324,3 +6324,13 @@ msgstr ""
 "Este enlace de restablecimiento de contraseña ha caducado. Solicita uno "
 "nuevo."
 
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:28
+msgid "Sign out?"
+msgstr "¿Cerrar sesión?"
+
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:31
+#, python-format
+msgid ""
+"You are signed in as %(name)s. Signing out ends this session on this "
+"browser."
+msgstr "Has iniciado sesión como %(name)s. Al cerrar sesión se termina esta sesión en este navegador."

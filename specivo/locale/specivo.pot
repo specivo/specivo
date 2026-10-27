@@ -6095,3 +6095,13 @@ msgstr ""
 msgid "This password reset link has expired. Please request a new one."
 msgstr ""
 
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:28
+msgid "Sign out?"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:31
+#, python-format
+msgid ""
+"You are signed in as %(name)s. Signing out ends this session on this "
+"browser."
+msgstr ""
