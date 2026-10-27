@@ -1,0 +1,128 @@
+# Disposable OpenID Connect identity providers for the SSO tests.
+#
+# Test fixture, not part of running Specivo. Every credential in this file and
+# in the seeds under tests/fixtures/sso/ is a fixed, public test value; nothing
+# here protects anything. All state lives in RAM and is gone after a down.
+#
+#   make sso-idp-up              # Keycloak only (default)
+#   make sso-idp-up-authentik    # Keycloak + authentik (opt-in compatibility smoke)
+#   make test-sso-idp            # pytest -m sso_idp
+#   make sso-idp-down            # stop everything, discard volumes
+#
+# Keycloak:  issuer http://localhost:8033/realms/specivo-test
+#            admin console http://localhost:8033/admin/ (admin / admin-test-only)
+# authentik: issuer http://localhost:8034/application/o/specivo-test/
+#            admin UI http://localhost:8034/if/admin/ (akadmin / admin-test-only)
+#
+# Specivo must run with SSO_ALLOW_INSECURE_HTTP=true to accept these http
+# issuers. That is a test-only setting.
+
+name: specivo-sso-test
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.5
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-test-only
+      # A fixed front-end URL keeps the issuer identical whichever host name a
+      # client used to reach the container.
+      KC_HOSTNAME: http://localhost:${SSO_KEYCLOAK_PORT:-8033}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_LOG_LEVEL: warn,org.keycloak.exportimport:info
+    ports:
+      - "${SSO_KEYCLOAK_PORT:-8033}:8080"
+    # Back-channel logout calls the E2E server on the host (port 9944).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    tmpfs:
+      # The H2 dev database; the image runs as uid 1000.
+      - /opt/keycloak/data:uid=1000,gid=0,mode=0770
+    volumes:
+      - ./tests/fixtures/sso/keycloak/specivo-test-realm.json:/opt/keycloak/data/import/specivo-test-realm.json:ro
+    healthcheck:
+      # The image has no curl/wget. The management port (9000) is not published.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+
+  authentik-db:
+    profiles: ["authentik"]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik-test-only
+      POSTGRES_DB: authentik
+    # No host port: only authentik talks to it.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  authentik-server:
+    profiles: ["authentik"]
+    image: ghcr.io/goauthentik/server:2026.8.3
+    command: server
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: authentik-test-only-secret-key-not-used-anywhere-else
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentik-test-only
+      AUTHENTIK_BOOTSTRAP_PASSWORD: admin-test-only
+      AUTHENTIK_BOOTSTRAP_TOKEN: authentik-test-only-bootstrap-token
+      AUTHENTIK_BOOTSTRAP_EMAIL: akadmin@example.com
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"
+      AUTHENTIK_LOG_LEVEL: warning
+    ports:
+      - "${SSO_AUTHENTIK_PORT:-8034}:9000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./tests/fixtures/sso/authentik:/blueprints/custom/specivo:ro
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s
+
+  authentik-worker:
+    profiles: ["authentik"]
+    image: ghcr.io/goauthentik/server:2026.8.3
+    command: worker
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+    environment: *authentik-env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # The worker applies blueprints.
+      - ./tests/fixtures/sso/authentik:/blueprints/custom/specivo:ro
+    tmpfs:
+      - /media
+      - /certs
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 60s

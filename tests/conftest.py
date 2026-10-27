@@ -17,6 +17,7 @@ in their respective repos.
 
 import os
 import socket
+import urllib.request
 
 import pytest
 
@@ -56,11 +57,28 @@ def _fixture_is_running(host: str, port: int, timeout: float = 0.5) -> bool:
         return False
 
 
+# The disposable OIDC IdP (docker-compose.sso-test.yml) is also started on
+# demand. Its discovery document is fetched once at collection time, and only
+# when an ``sso_idp`` test was collected.
+_SSO_TEST_ISSUER = os.environ.get("SSO_TEST_ISSUER", "http://localhost:8033/realms/specivo-test")
+
+
+def _issuer_is_up(issuer: str, timeout: float = 1.0) -> bool:
+    """Whether the issuer serves its OpenID discovery document."""
+    url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:  # noqa: S310 - fixed http(s) test URL
+            return bool(response.status == 200)
+    except (OSError, ValueError):
+        return False
+
+
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip tests whose dependencies are absent.
 
     ``pro`` and ``enterprise`` need their plugins; ``redmine`` needs the
-    importer's Redmine fixture, which is started on demand.
+    importer's Redmine fixture and ``sso_idp`` the disposable IdP, both of
+    which are started on demand.
     """
     has_pro = "specivo_pro" in _INSTALLED_PLUGINS
     has_enterprise = "specivo_enterprise" in _INSTALLED_PLUGINS
@@ -76,6 +94,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         "(start it with: make redmine-fixture-up && make redmine-fixture-seed)"
     )
 
+    has_sso_idp = any(item.get_closest_marker("sso_idp") for item in items) and _issuer_is_up(_SSO_TEST_ISSUER)
+    skip_sso_idp = pytest.mark.skip(
+        reason=f"SSO test IdP is not serving {_SSO_TEST_ISSUER} (start it with: make sso-idp-up)"
+    )
+
     for item in items:
         if not has_pro and item.get_closest_marker("pro"):
             item.add_marker(skip_pro)
@@ -83,6 +106,8 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip_ent)
         if not has_redmine_fixture and item.get_closest_marker("redmine"):
             item.add_marker(skip_redmine)
+        if not has_sso_idp and item.get_closest_marker("sso_idp"):
+            item.add_marker(skip_sso_idp)
 
 
 @pytest.fixture(autouse=True)

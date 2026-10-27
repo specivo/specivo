@@ -1,0 +1,258 @@
+{
+  "realm": "specivo-test",
+  "displayName": "Specivo SSO test realm (test-only, fixed public credentials)",
+  "enabled": true,
+  "sslRequired": "none",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "bruteForceProtected": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "en",
+    "th"
+  ],
+  "defaultLocale": "en",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "groups": [
+    {
+      "name": "specivo-users",
+      "path": "/specivo-users"
+    },
+    {
+      "name": "specivo-admins",
+      "path": "/specivo-admins"
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "specivo",
+      "name": "Specivo (test, confidential)",
+      "description": "Test-only client. The secret is a fixed public test value.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "specivo-test-client-secret-not-a-real-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://localhost:9944/auth/oidc/keycloak/callback/",
+        "http://testserver/auth/oidc/keycloak/callback/"
+      ],
+      "webOrigins": [
+        "http://localhost:9944",
+        "http://testserver"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:9944/login/?logged_out=1",
+        "backchannel.logout.url": "http://host.docker.internal:9944/auth/oidc/keycloak/backchannel-logout/",
+        "backchannel.logout.session.required": "true",
+        "backchannel.logout.revoke.offline.tokens": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "claim.name": "groups",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "specivo-public",
+      "name": "Specivo (test, public PKCE)",
+      "description": "Test-only public client; authorization code with PKCE only.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": false,
+      "redirectUris": [
+        "http://localhost:9944/auth/oidc/keycloak/callback/",
+        "http://testserver/auth/oidc/keycloak/callback/",
+        "http://localhost:9944/auth/oidc/keycloak-public/callback/",
+        "http://testserver/auth/oidc/keycloak-public/callback/"
+      ],
+      "webOrigins": [
+        "http://localhost:9944",
+        "http://testserver"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:9944/login/?logged_out=1"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "full.path": "false",
+            "claim.name": "groups",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "sso-member",
+      "enabled": true,
+      "email": "sso-member@example.com",
+      "emailVerified": true,
+      "firstName": "SSO",
+      "lastName": "Member User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sso-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/specivo-users"
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "sso-admin",
+      "enabled": true,
+      "email": "sso-admin@example.com",
+      "emailVerified": true,
+      "firstName": "SSO",
+      "lastName": "Admin User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sso-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/specivo-users",
+        "/specivo-admins"
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "sso-outsider",
+      "enabled": true,
+      "email": "sso-outsider@example.com",
+      "emailVerified": true,
+      "firstName": "SSO",
+      "lastName": "Outsider User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sso-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [],
+      "requiredActions": []
+    },
+    {
+      "username": "sso-unverified",
+      "enabled": true,
+      "email": "sso-unverified@example.com",
+      "emailVerified": false,
+      "firstName": "SSO",
+      "lastName": "Unverified User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sso-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/specivo-users"
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "sso-collide",
+      "enabled": true,
+      "email": "collide@example.com",
+      "emailVerified": true,
+      "firstName": "SSO",
+      "lastName": "Collide User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sso-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/specivo-users"
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "sso-thai",
+      "enabled": true,
+      "email": "sso-thai@example.com",
+      "emailVerified": true,
+      "firstName": "SSO",
+      "lastName": "Thai User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "sso-test-password",
+          "temporary": false
+        }
+      ],
+      "groups": [
+        "/specivo-users"
+      ],
+      "requiredActions": [],
+      "attributes": {
+        "locale": [
+          "th"
+        ],
+        "zoneinfo": [
+          "Asia/Bangkok"
+        ]
+      }
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}], \"unmanagedAttributePolicy\": \"ENABLED\"}"
+          ]
+        }
+      }
+    ]
+  }
+}
