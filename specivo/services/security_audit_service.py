@@ -1,8 +1,22 @@
-"""Centralized security audit logging service."""
+"""Centralized security audit logging service.
+
+Async code writes events with :meth:`SecurityAuditService.log_event`. Code
+that cannot await (the SSO event functions, the session revocation primitive)
+calls :func:`record_event`, which appends the event to the audit buffer of
+the current request: :class:`specivo.core.middleware.AuditBatchMiddleware`
+binds that buffer (:func:`bind_audit_context`) and flushes it after the
+response. Outside a request, :func:`audit_scope` binds a buffer and writes it
+through a DB session. Both paths are skipped unless the enterprise
+``security_audit_log`` feature is registered.
+"""
 
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
+from contextvars import ContextVar, Token
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from typing import Any
@@ -77,6 +91,146 @@ class AuditEvent(StrEnum):
     PASSWORD_HASH_UPGRADED = "password_hash_upgraded"
     PROJECT_ANONYMOUS_PERMISSIONS_CHANGED = "project_anonymous_permissions_changed"
     ANONYMOUS_ACCESS_SWITCH_CHANGED = "anonymous_access_switch_changed"
+    # Single sign-on. Details hold the provider slug, the issuer, the hashed
+    # subject (``sub_hash``), ids and counts; never tokens, codes or secrets.
+    SSO_LOGIN_SUCCESS = "sso_login_success"
+    SSO_LOGIN_FAILURE = "sso_login_failure"
+    SSO_USER_PROVISIONED = "sso_user_provisioned"
+    SSO_ACCOUNT_LINKED = "sso_account_linked"
+    SSO_ACCOUNT_UNLINKED = "sso_account_unlinked"
+    SSO_ROLES_SYNCED = "sso_roles_synced"
+    SSO_GROUPS_OVERAGE = "sso_groups_overage"
+    SSO_LOGOUT = "sso_logout"
+    SSO_BACKCHANNEL_LOGOUT = "sso_backchannel_logout"
+    SSO_PROVIDER_CREATED = "sso_provider_created"
+    SSO_PROVIDER_UPDATED = "sso_provider_updated"
+    SSO_PROVIDER_DELETED = "sso_provider_deleted"
+    SSO_PROVIDER_SECRET_CHANGED = "sso_provider_secret_changed"
+    USER_DEPROVISIONED = "user_deprovisioned"
+    SESSIONS_REVOKED = "sessions_revoked"
+
+
+#: Width of ``security_audit_logs.request_id``; a longer client-sent id is cut.
+_REQUEST_ID_MAX = 36
+_VALID_EVENTS = frozenset(e.value for e in AuditEvent)
+
+
+@dataclass(slots=True)
+class _AuditContext:
+    """The audit buffer of one request (or one :func:`audit_scope`) and who made the request."""
+
+    events: list[dict[str, Any]]
+    ip_address: str | None = None
+    user_agent: str | None = None
+    # The ASGI scope state: the request id is set there by an inner middleware,
+    # so it is read when an event is recorded, not when the context is bound.
+    state: Mapping[str, Any] = field(default_factory=dict)
+
+    @property
+    def request_id(self) -> str | None:
+        value = self.state.get("request_id")
+        return str(value)[:_REQUEST_ID_MAX] if value else None
+
+
+_audit_context: ContextVar[_AuditContext | None] = ContextVar("security_audit_context", default=None)
+
+
+def bind_audit_context(
+    events: list[dict[str, Any]],
+    *,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    state: Mapping[str, Any] | None = None,
+) -> Token[_AuditContext | None]:
+    """Make ``events`` the buffer :func:`record_event` appends to in this context.
+
+    Returns the token for :func:`reset_audit_context`.
+    """
+    return _audit_context.set(
+        _AuditContext(
+            events=events,
+            ip_address=ip_address,
+            user_agent=user_agent[:512] if user_agent else None,
+            state=state if state is not None else {},
+        )
+    )
+
+
+def reset_audit_context(token: Token[_AuditContext | None]) -> None:
+    """Undo :func:`bind_audit_context`."""
+    _audit_context.reset(token)
+
+
+def current_request_id() -> str | None:
+    """The id of the request being handled, when an audit context is bound."""
+    context = _audit_context.get()
+    return context.request_id if context is not None else None
+
+
+def record_event(
+    event_type: AuditEvent,
+    *,
+    user_id: int | None = None,
+    details: dict[str, Any] | None = None,
+    resource_type: str | None = None,
+    resource_id: int | None = None,
+) -> bool:
+    """Append an event to the bound audit buffer; ``True`` when it was buffered.
+
+    Synchronous, for code that cannot await. Nothing is buffered when the
+    ``security_audit_log`` feature is not registered or no buffer is bound
+    (the caller's log line is then the only trail). Raises ``ValueError`` for
+    a value that is not an :class:`AuditEvent`.
+    """
+    if str(event_type) not in _VALID_EVENTS:
+        raise ValueError(f"Unknown audit event type: {event_type!r}. Use AuditEvent enum.")
+    if not SecurityAuditService._audit_enabled():
+        return False
+    context = _audit_context.get()
+    if context is None:
+        return False
+    context.events.append(
+        {
+            "event_type": str(event_type),
+            "user_id": user_id,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "project_id": None,
+            "permission": None,
+            "ip_address": context.ip_address,
+            "request_id": context.request_id,
+            "user_agent": context.user_agent,
+            "details": details or {},
+        }
+    )
+    return True
+
+
+@asynccontextmanager
+async def audit_scope(session: AsyncSession) -> AsyncIterator[None]:
+    """Collect :func:`record_event` calls outside an HTTP request and write them on success.
+
+    For CLI commands and background jobs. Inside a request the request's
+    buffer is already bound and is used as is. The write goes through a
+    savepoint and never raises: a failing audit write is logged, the caller's
+    work stands.
+    """
+    if _audit_context.get() is not None:
+        yield
+        return
+    events: list[dict[str, Any]] = []
+    token = bind_audit_context(events)
+    try:
+        yield
+    finally:
+        reset_audit_context(token)
+    if not events or not SecurityAuditService._audit_enabled():
+        return
+    try:
+        async with session.begin_nested():
+            session.add_all(SecurityAuditLog(**event) for event in events)
+    except Exception:
+        logger.warning("Security audit write failed for %d event(s)", len(events), exc_info=True)
 
 
 class MemberAction(StrEnum):
@@ -149,8 +303,7 @@ class SecurityAuditService:
         When the enterprise plugin is not loaded (``security_audit_log`` feature
         is not registered), all writes are silently skipped.
         """
-        _valid = {e.value for e in AuditEvent}
-        if str(event_type) not in _valid:
+        if str(event_type) not in _VALID_EVENTS:
             raise ValueError(f"Unknown audit event type: {event_type!r}. Use AuditEvent enum.")
 
         event_data = {
@@ -344,6 +497,70 @@ class SecurityAuditService:
         )
         session.add(log)
         await session.flush()
+        return log
+
+    async def log_sso_login_success(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: int,
+        provider_slug: str,
+        issuer: str,
+        sub_hash: str,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a single sign-on login. Core feature, always persisted (like :meth:`log_login_success`).
+
+        ``sub_hash`` is the hashed subject, never the raw ``sub``.
+        """
+        return await self._log_sso_login(
+            session,
+            AuditEvent.SSO_LOGIN_SUCCESS,
+            user_id=user_id,
+            details={"method": "sso", "provider": provider_slug, "iss": issuer, "sub_hash": sub_hash},
+            request=request,
+        )
+
+    async def log_sso_login_failure(
+        self,
+        session: AsyncSession,
+        *,
+        provider_slug: str,
+        issuer: str,
+        reason: str,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a refused single sign-on login; ``reason`` is the ``sso_*`` error code. Core feature."""
+        return await self._log_sso_login(
+            session,
+            AuditEvent.SSO_LOGIN_FAILURE,
+            user_id=None,
+            details={"method": "sso", "provider": provider_slug, "iss": issuer, "reason": reason},
+            request=request,
+        )
+
+    async def _log_sso_login(
+        self,
+        session: AsyncSession,
+        event: AuditEvent,
+        *,
+        user_id: int | None,
+        details: dict[str, Any],
+        request: Request | None,
+    ) -> SecurityAuditLog:
+        info = self._extract_request_info(request)
+        request_id = current_request_id() or info["request_id"]
+        log = SecurityAuditLog(
+            event_type=event,
+            user_id=user_id,
+            ip_address=info["ip_address"],
+            request_id=request_id[:_REQUEST_ID_MAX] if request_id else None,
+            user_agent=info["user_agent"][:512] if info["user_agent"] else None,
+            details=details,
+        )
+        # A savepoint: a failed audit insert must not poison the login's transaction.
+        async with session.begin_nested():
+            session.add(log)
         return log
 
     async def log_member_change(

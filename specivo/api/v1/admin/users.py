@@ -203,7 +203,7 @@ async def reset_password(
     user.must_change_password = forced_change
     # A reset is compromise recovery: every session of the account ends now,
     # access tokens included.
-    await SessionService().revoke_user_sessions(db, user.id, reason="admin_password_reset")
+    await SessionService().revoke_user_sessions(db, user.id, reason="admin_password_reset", actor_id=admin.id)
     await db.flush()
 
     try:
