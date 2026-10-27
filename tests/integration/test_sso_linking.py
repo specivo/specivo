@@ -372,6 +372,28 @@ async def test_profile_ignores_an_unknown_linked_slug(
     assert "pwned" not in page.text
 
 
+async def test_profile_unlinked_message_does_not_disclose_a_disabled_provider(
+    client: AsyncClient, db_session: AsyncSession, sso_provider: SsoProvider, mock_idp: MockIdP
+) -> None:
+    """``?sso_unlinked=<slug>`` must not turn the profile into a lookup of hidden provider names."""
+    hidden = build_sso_provider(
+        mock_idp,
+        slug="lnk-hidden",
+        display_name="Secret Partner IdP",
+        issuer="https://hidden.example.com",
+        enabled=False,
+    )
+    db_session.add(hidden)
+    await db_session.flush()
+    browser, _ = await _browser(client, db_session, login="lnkhidden", email="lnk-hidden@example.com")
+
+    page = await browser.get("/my/profile/?sso_unlinked=lnk-hidden")
+
+    assert page.status_code == 200
+    assert "Secret Partner IdP" not in page.text
+    assert "was disconnected" not in page.text
+
+
 async def test_profile_message_is_translated(
     client: AsyncClient, db_session: AsyncSession, sso_provider: SsoProvider
 ) -> None:

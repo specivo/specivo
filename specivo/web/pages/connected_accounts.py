@@ -55,7 +55,8 @@ async def profile_connected_accounts(
     """Template context of the profile's "Connected accounts" section.
 
     The query parameters only ever select a fixed, translated message; a
-    provider name is shown only for a slug that names a real provider.
+    provider name is shown only for a slug that names a provider the user is
+    linked to (``linked``) or an enabled provider (``unlinked``).
     """
     if user.is_service_account:
         return {"sso_enabled": False}
@@ -68,7 +69,12 @@ async def profile_connected_accounts(
         if name is not None:
             message = _("Your %(provider)s account is now connected.") % {"provider": name}
     elif unlinked:
-        name = await db.scalar(select(SsoProvider.display_name).where(SsoProvider.slug == unlinked))
+        # Only an enabled provider's name, which the login page shows anyway:
+        # the query string is attacker-chosen and must not reveal the names
+        # of disabled providers. Unlinking from a disabled one shows no message.
+        name = await db.scalar(
+            select(SsoProvider.display_name).where(SsoProvider.slug == unlinked, SsoProvider.enabled.is_(True))
+        )
         if name is not None:
             message = _("Your %(provider)s account was disconnected.") % {"provider": name}
 
