@@ -634,6 +634,10 @@ class AuthService:
         # Mark token as used
         record.used_at = utcnow()
 
+        # A reset is the compromise-recovery path: every session that existed
+        # before it ends now, access tokens included.
+        await _sessions.revoke_user_sessions(session, user.id, reason="password_reset")
+
         await session.flush()
         return user.id
 
