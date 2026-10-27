@@ -61,10 +61,11 @@ _service = SsoLoginService()
 
 _start_rate_limit = rate_limit("sso_login_start", max_requests=20, window_seconds=60)
 _callback_rate_limit = rate_limit("sso_callback", max_requests=20, window_seconds=60)
-# Back-channel logout is metered per provider, not per sender: the IdP is one
-# sender for all its users, and a busy or spoofing sender must not use up
-# another provider's budget. Checked once the provider is known to exist, so
-# requests for made-up slugs create no buckets.
+# Back-channel logout is metered per (provider, sender address). The request
+# is unauthenticated until the logout token is verified, so there is no bucket
+# shared by every sender: junk from one address cannot use up the budget of
+# the IdP's own address, nor of another provider. Checked once the provider is
+# known to exist, so requests for made-up slugs create no buckets.
 _BACKCHANNEL_RATE_LIMIT = ("sso_backchannel_logout", 60, 60)
 
 #: Largest back-channel logout request body read; a logout token is a few KB.
@@ -378,7 +379,8 @@ async def sso_backchannel_logout(
     provider = await _service.get_enabled_provider(db, slug)
     if provider is None or not provider.backchannel_logout_enabled:
         return _backchannel_answer(404, {"error": "not_found"})
-    await enforce_rate_limit(request, response, *_BACKCHANNEL_RATE_LIMIT, identifier=f"provider:{provider.id}")
+    sender = get_client_ip(request) or "unknown"
+    await enforce_rate_limit(request, response, *_BACKCHANNEL_RATE_LIMIT, identifier=f"provider:{provider.id}:{sender}")
 
     try:
         logout_token = await _read_logout_token(request)

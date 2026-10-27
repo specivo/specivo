@@ -117,7 +117,7 @@ async def test_audit_context_gets_the_client_behind_a_trusted_proxy(behind_proxy
 
 
 # ---------------------------------------------------------------------------
-# Back-channel logout: one bucket per provider
+# Back-channel logout: one bucket per provider and sender
 # ---------------------------------------------------------------------------
 
 
@@ -137,23 +137,51 @@ def _url(provider: SsoProvider) -> str:
     return f"/auth/oidc/{provider.slug}/backchannel-logout/"
 
 
-async def test_backchannel_bucket_is_per_provider_not_per_sender(
+ATTACKER = {"X-Forwarded-For": "198.51.100.66"}
+IDP = {"X-Forwarded-For": "203.0.113.200"}
+
+
+async def _flood(client: AsyncClient, provider: SsoProvider) -> None:
+    """One sender spends its whole budget on ``provider`` with junk."""
+    for _ in range(60):
+        assert (await client.post(_url(provider), data={}, headers=ATTACKER)).status_code == 400
+    assert (await client.post(_url(provider), data={}, headers=ATTACKER)).status_code == 429
+
+
+async def test_flood_from_one_sender_does_not_block_the_idp(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_login: SsoLoginDriver,
+    two_backchannel_providers: tuple[SsoProvider, SsoProvider],
+    mock_idp: MockIdP,
+    behind_proxy: None,
+) -> None:
+    provider, _ = two_backchannel_providers
+    user = UserFactory.build()
+    db_session.add(user)
+    await db_session.flush()
+    await link_identity(db_session, user, provider, subject=mock_idp.default_sub)
+    login = await sso_login(client, claims={"sid": "idp-session-a"})
+    assert login.status_code == 302, login.text
+    client.cookies.clear()
+
+    await _flood(client, provider)
+
+    # The IdP, sending from its own address, still gets its valid token through.
+    resp = await client.post(
+        _url(provider), data={"logout_token": mock_idp.mint_logout_token(sid="idp-session-a")}, headers=IDP
+    )
+    assert resp.status_code == 200, resp.text
+
+
+async def test_flood_on_one_provider_does_not_block_another(
     client: AsyncClient, two_backchannel_providers: tuple[SsoProvider, SsoProvider], behind_proxy: None
 ) -> None:
     first, second = two_backchannel_providers
 
-    # One sender spends the first provider's whole budget.
-    for _ in range(60):
-        resp = await client.post(_url(first), data={}, headers={"X-Forwarded-For": "203.0.113.1"})
-        assert resp.status_code == 400
+    await _flood(client, first)
 
-    # The second provider is untouched, even from the same sender.
-    resp = await client.post(_url(second), data={}, headers={"X-Forwarded-For": "203.0.113.1"})
-    assert resp.status_code == 400
-
-    # The first provider's bucket is spent whoever sends next.
-    resp = await client.post(_url(first), data={}, headers={"X-Forwarded-For": "203.0.113.2"})
-    assert resp.status_code == 429
+    assert (await client.post(_url(second), data={}, headers=ATTACKER)).status_code == 400
 
 
 async def test_unknown_provider_does_not_spend_a_bucket(
