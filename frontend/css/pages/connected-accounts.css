@@ -1,0 +1,22 @@
+/* "Connected accounts": SSO identities on the profile and the admin user page. */
+
+.sp-connected { padding: var(--sp-space-xl); margin-top: var(--sp-space-xl); max-width: 800px; }
+.sp-connected-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs); }
+.sp-connected-intro { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-lg); line-height: 1.5; max-width: 68ch; }
+
+.sp-connected-notice { padding: var(--sp-space-sm) var(--sp-space-md); border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-md); }
+.sp-connected-notice-ok { background: var(--sp-success-subtle); color: var(--sp-success); }
+.sp-connected-notice-error { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+
+.sp-connected-list { list-style: none; margin: 0 0 var(--sp-space-lg); padding: 0; }
+.sp-connected-row { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-space-md); padding: var(--sp-space-md) 0; border-bottom: 1px solid var(--sp-border); }
+.sp-connected-row:first-child { border-top: 1px solid var(--sp-border); }
+.sp-connected-info { min-width: 0; }
+.sp-connected-name { display: flex; align-items: center; gap: var(--sp-space-sm); font-weight: 600; font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); }
+.sp-connected-meta { display: flex; flex-wrap: wrap; gap: 2px var(--sp-space-md); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: 2px; overflow-wrap: anywhere; }
+.sp-connected-empty { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-lg); }
+.sp-connected-actions { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); }
+
+@media (max-width: 640px) {
+  .sp-connected-row { flex-direction: column; align-items: flex-start; }
+}

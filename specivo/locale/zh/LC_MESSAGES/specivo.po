@@ -6686,3 +6686,74 @@ msgstr "单点登录暂时不可用。请稍后重试。"
 #: specivo/web/pages/sso.py:71
 msgid "Single sign-on failed. Please try again."
 msgstr "单点登录失败。请重试。"
+
+#: specivo/web/pages/sso.py
+msgid "The identity provider did not send an email address. Contact your administrator."
+msgstr "身份提供商未发送电子邮件地址。请联系管理员。"
+
+#: specivo/web/pages/sso.py
+msgid "An account with this email address already exists. Sign in with your password and connect the account from your profile."
+msgstr "已存在使用此电子邮件地址的账户。请使用密码登录，然后在个人资料中关联该账户。"
+
+#: specivo/web/pages/sso.py
+msgid "This identity provider account is already connected to another account."
+msgstr "此身份提供商账户已关联到另一个账户。"
+
+#: specivo/web/pages/sso.py
+msgid "An account at this identity provider is already connected to your profile."
+msgstr "您的个人资料已关联此身份提供商的账户。"
+
+#: specivo/web/pages/sso.py
+msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
+msgstr "这是您唯一的登录方式。请先设置密码或关联其他账户，再断开此账户。"
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account is now connected."
+msgstr "您的 %(provider)s 账户已关联。"
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account was disconnected."
+msgstr "您的 %(provider)s 账户已断开关联。"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected accounts"
+msgstr "已关联的账户"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Sign in with an account at your organisation's identity provider. Connect it here once, while signed in."
+msgstr "使用贵组织身份提供商的账户登录。在登录状态下于此处关联一次即可。"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected"
+msgstr "关联时间"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Last sign-in"
+msgstr "上次登录"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Disconnect"
+msgstr "断开关联"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "No accounts are connected yet."
+msgstr "尚未关联任何账户。"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+#, python-format
+msgid "Connect %(name)s"
+msgstr "关联 %(name)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Identity provider accounts this user can sign in with. Disconnecting one ends the sessions started with it."
+msgstr "此用户可用于登录的身份提供商账户。断开关联会结束通过该账户开始的会话。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Linked by"
+msgstr "关联方式"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "No accounts are connected."
+msgstr "没有已关联的账户。"

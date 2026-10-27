@@ -173,13 +173,25 @@ async def reset_password_form(
 async def profile_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    sso_linked: str = Query(""),  # noqa: B008
+    sso_unlinked: str = Query(""),  # noqa: B008
+    sso_error: str = Query(""),  # noqa: B008
 ) -> Response:
-    """Render the user profile page."""
+    """Render the user profile page, with its "Connected accounts" section.
+
+    ``?sso_linked=``, ``?sso_unlinked=`` and ``?sso_error=`` are where the
+    connect and disconnect flows land; each selects a fixed, translated
+    message and is never reflected.
+    """
+    from specivo.web.pages.connected_accounts import profile_connected_accounts
+
+    connected = await profile_connected_accounts(db, user, linked=sso_linked, unlinked=sso_unlinked, error=sso_error)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/auth/profile.html",
-        context={"user": user, "active_page": "profile"},
+        context={"user": user, "active_page": "profile", **connected},
     )
 
 

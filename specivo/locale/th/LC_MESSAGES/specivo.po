@@ -6820,3 +6820,74 @@ msgstr ""
 #: specivo/web/pages/sso.py:71
 msgid "Single sign-on failed. Please try again."
 msgstr "การลงชื่อเข้าใช้ครั้งเดียว (SSO) ล้มเหลว กรุณาลองอีกครั้ง"
+
+#: specivo/web/pages/sso.py
+msgid "The identity provider did not send an email address. Contact your administrator."
+msgstr "ผู้ให้บริการยืนยันตัวตนไม่ได้ส่งที่อยู่อีเมลมา กรุณาติดต่อผู้ดูแลระบบ"
+
+#: specivo/web/pages/sso.py
+msgid "An account with this email address already exists. Sign in with your password and connect the account from your profile."
+msgstr "มีบัญชีที่ใช้ที่อยู่อีเมลนี้อยู่แล้ว กรุณาลงชื่อเข้าใช้ด้วยรหัสผ่าน แล้วเชื่อมต่อบัญชีจากหน้าโปรไฟล์ของคุณ"
+
+#: specivo/web/pages/sso.py
+msgid "This identity provider account is already connected to another account."
+msgstr "บัญชีผู้ให้บริการยืนยันตัวตนนี้เชื่อมต่อกับบัญชีอื่นอยู่แล้ว"
+
+#: specivo/web/pages/sso.py
+msgid "An account at this identity provider is already connected to your profile."
+msgstr "มีบัญชีของผู้ให้บริการยืนยันตัวตนนี้เชื่อมต่อกับโปรไฟล์ของคุณอยู่แล้ว"
+
+#: specivo/web/pages/sso.py
+msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
+msgstr "นี่เป็นวิธีเดียวที่คุณใช้ลงชื่อเข้าใช้ได้ กรุณาตั้งรหัสผ่านหรือเชื่อมต่อบัญชีอื่นก่อนยกเลิกการเชื่อมต่อ"
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account is now connected."
+msgstr "เชื่อมต่อบัญชี %(provider)s ของคุณแล้ว"
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account was disconnected."
+msgstr "ยกเลิกการเชื่อมต่อบัญชี %(provider)s ของคุณแล้ว"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected accounts"
+msgstr "บัญชีที่เชื่อมต่อ"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Sign in with an account at your organisation's identity provider. Connect it here once, while signed in."
+msgstr "ลงชื่อเข้าใช้ด้วยบัญชีของผู้ให้บริการยืนยันตัวตนขององค์กรคุณ เชื่อมต่อที่นี่เพียงครั้งเดียวขณะที่ลงชื่อเข้าใช้อยู่"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected"
+msgstr "เชื่อมต่อเมื่อ"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Last sign-in"
+msgstr "ลงชื่อเข้าใช้ล่าสุด"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Disconnect"
+msgstr "ยกเลิกการเชื่อมต่อ"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "No accounts are connected yet."
+msgstr "ยังไม่มีบัญชีที่เชื่อมต่อ"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+#, python-format
+msgid "Connect %(name)s"
+msgstr "เชื่อมต่อ %(name)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Identity provider accounts this user can sign in with. Disconnecting one ends the sessions started with it."
+msgstr "บัญชีผู้ให้บริการยืนยันตัวตนที่ผู้ใช้นี้ใช้ลงชื่อเข้าใช้ได้ การยกเลิกการเชื่อมต่อจะสิ้นสุดเซสชันที่เริ่มด้วยบัญชีนั้น"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Linked by"
+msgstr "เชื่อมต่อโดย"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "No accounts are connected."
+msgstr "ไม่มีบัญชีที่เชื่อมต่อ"

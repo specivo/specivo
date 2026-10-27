@@ -129,7 +129,7 @@ async def admin_user_detail(
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
-    """Render the admin user detail page with API key management."""
+    """Render the admin user detail page: account, connected SSO accounts, API keys."""
     from fastapi import HTTPException
 
     result = await db.execute(select(UserModel).where(UserModel.id == user_id))
@@ -165,6 +165,10 @@ async def admin_user_detail(
         "avatar_color": target_user.preferences.get("avatar_color", "#c49a3c"),
     }
 
+    from specivo.services.sso.identity_service import IdentityService
+
+    identities = [] if target_user.is_service_account else await IdentityService().list_for_user(db, target_user.id)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -174,6 +178,7 @@ async def admin_user_detail(
             "active_page": "admin",
             "target_user": target_data,
             "api_keys": keys_data,
+            "identities": identities,
         },
     )
 

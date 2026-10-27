@@ -1,4 +1,4 @@
-"""SSO (OpenID Connect) browser routes: start a login, receive the callback.
+"""SSO (OpenID Connect) browser routes: start a login or a link, receive the callback.
 
 ``GET /auth/oidc/{slug}/login/?next=`` redirects to the IdP and sets the
 ``spv_sso_tx`` binding cookie. ``GET /auth/oidc/{slug}/callback/`` finishes
@@ -6,10 +6,16 @@ the login, sets the usual auth cookies and redirects to ``next``. Both are
 GET-only, so the CSRF middleware has nothing to exempt: the transaction's
 state, bound to the browser by the cookie, is the CSRF defence of the flow.
 
-Every refusal redirects to ``/login/?sso_error=<code>``; the login page turns
-the code into a translated message (:func:`sso_error_message`) and never
-shows anything the IdP sent. Unknown or disabled providers are 404. The
-protocol work lives in :class:`specivo.services.sso.login.SsoLoginService`.
+``POST /auth/oidc/{slug}/link/`` (signed in, CSRF-protected by the
+middleware, 5 per minute per user) starts the same flow with
+``intent=link``. Its callback connects the identity to the signed-in user,
+starts no session, and returns to ``/my/profile/?sso_linked=<slug>``.
+
+A refused login redirects to ``/login/?sso_error=<code>``, a refused link
+to ``/my/profile/?sso_error=<code>``; both pages turn the code into a
+translated message (:func:`sso_error_message`) and never show anything the
+IdP sent. Unknown or disabled providers are 404. The protocol work lives in
+:class:`specivo.services.sso.login.SsoLoginService`.
 """
 
 from __future__ import annotations
@@ -17,7 +23,7 @@ from __future__ import annotations
 from typing import Annotated
 from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,19 +31,22 @@ from specivo.core.auth_cookies import set_auth_cookies
 from specivo.core.config import Settings, get_settings
 from specivo.core.database import get_db
 from specivo.core.i18n import gettext as _
-from specivo.core.rate_limit import rate_limit
+from specivo.core.rate_limit import enforce_rate_limit, rate_limit
 from specivo.core.utils import utcnow
 from specivo.models.sso import SsoProvider
+from specivo.models.user import User
 from specivo.services.sso.errors import SsoError
 from specivo.services.sso.flow import TX_COOKIE_NAME, TX_TTL_SECONDS, tx_cookie_path
 from specivo.services.sso.log import logger
-from specivo.services.sso.login import SsoLoginService
+from specivo.services.sso.login import LINK_RETURN_PATH, SsoLinkResult, SsoLoginService
+from specivo.web.deps import get_current_user_optional, require_user
 
 router = APIRouter(prefix="/auth/oidc", tags=["web-sso"], include_in_schema=False)
 _service = SsoLoginService()
 
 _start_rate_limit = rate_limit("sso_login_start", max_requests=20, window_seconds=60)
 _callback_rate_limit = rate_limit("sso_callback", max_requests=20, window_seconds=60)
+_LINK_RATE_LIMIT = ("sso_link_start", 5, 60)
 
 # Callback parameters that must appear at most once (a repeated one is refused).
 _SINGLE_VALUED = ("state", "code", "error", "iss")
@@ -67,6 +76,16 @@ def sso_error_message(code: str | None) -> str | None:
         ),
         "sso_account_disabled": _("This account is disabled. Contact your administrator."),
         "sso_unavailable": _("Single sign-on is temporarily unavailable. Please try again later."),
+        "sso_email_missing": _("The identity provider did not send an email address. Contact your administrator."),
+        "sso_email_conflict": _(
+            "An account with this email address already exists. "
+            "Sign in with your password and connect the account from your profile."
+        ),
+        "sso_identity_in_use": _("This identity provider account is already connected to another account."),
+        "sso_provider_already_linked": _("An account at this identity provider is already connected to your profile."),
+        "sso_last_sign_in_method": _(
+            "This is your only way to sign in. Set a password or connect another account before disconnecting it."
+        ),
     }
     return messages.get(code) or _("Single sign-on failed. Please try again.")
 
@@ -85,11 +104,25 @@ def _clear_tx_cookie(response: RedirectResponse, settings: Settings) -> None:
     )
 
 
-def _refuse(code: str, settings: Settings) -> RedirectResponse:
+def _refuse(code: str, settings: Settings, *, intent: str = "login", status_code: int = 302) -> RedirectResponse:
+    """Redirect a refusal to the login page, or to the profile for a link."""
     query = urlencode({"sso_error": _PUBLIC_CODES.get(code, code)})
-    response = RedirectResponse(f"{_prefix(settings)}/login/?{query}", status_code=302)
+    page = LINK_RETURN_PATH if intent == "link" else "/login/"
+    response = RedirectResponse(f"{_prefix(settings)}{page}?{query}", status_code=status_code)
     _clear_tx_cookie(response, settings)
     return response
+
+
+def _set_tx_cookie(response: RedirectResponse, binding_token: str, settings: Settings) -> None:
+    response.set_cookie(
+        TX_COOKIE_NAME,
+        binding_token,
+        max_age=TX_TTL_SECONDS,
+        path=tx_cookie_path(settings),
+        secure=not settings.debug,
+        httponly=True,
+        samesite="lax",
+    )
 
 
 async def _provider_or_404(db: AsyncSession, slug: str) -> SsoProvider:
@@ -127,15 +160,45 @@ async def sso_login_start(
         return _refuse(exc.code, settings)
 
     response = RedirectResponse(authorization.url, status_code=302)
-    response.set_cookie(
-        TX_COOKIE_NAME,
-        authorization.binding_token,
-        max_age=TX_TTL_SECONDS,
-        path=tx_cookie_path(settings),
-        secure=not settings.debug,
-        httponly=True,
-        samesite="lax",
-    )
+    _set_tx_cookie(response, authorization.binding_token, settings)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+async def _link_user(
+    request: Request,
+    response: Response,
+    user: Annotated[User, Depends(require_user)],
+) -> User:
+    """The signed-in user, after the per-user link rate limit."""
+    request.state.rate_limit_user_id = user.id
+    await enforce_rate_limit(request, response, *_LINK_RATE_LIMIT)
+    return user
+
+
+@router.post("/{slug}/link/", response_model=None)
+async def sso_link_start(
+    slug: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    user: Annotated[User, Depends(_link_user)],
+) -> RedirectResponse:
+    """Connect an identity at this provider to the signed-in user: 303 to the IdP."""
+    settings = get_settings()
+    provider = await _provider_or_404(db, slug)
+    try:
+        authorization = await _service.start_link(db, provider, user_id=user.id)
+    except SsoError as exc:
+        logger.warning(
+            "sso.link.start_failed provider=%s user_id=%s code=%s reason=%s",
+            provider.slug,
+            user.id,
+            exc.code,
+            exc.reason,
+        )
+        return _refuse(exc.code, settings, intent="link", status_code=303)
+
+    response = RedirectResponse(authorization.url, status_code=303)
+    _set_tx_cookie(response, authorization.binding_token, settings)
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -156,6 +219,13 @@ async def sso_callback(
         logger.warning("sso.callback.rejected provider=%s reason=repeated_parameter", provider.slug)
         return _refuse("sso_state_invalid", settings)
 
+    async def current_user_id() -> int | None:
+        try:
+            user = await get_current_user_optional(request, db)
+        except HTTPException:
+            return None
+        return user.id if isinstance(user, User) else None
+
     try:
         result = await _service.finish(
             db,
@@ -164,10 +234,22 @@ async def sso_callback(
             binding_token=request.cookies.get(TX_COOKIE_NAME),
             device_info=request.headers.get("User-Agent"),
             ip=request.client.host if request.client else None,
+            current_user_id=current_user_id,
         )
     except SsoError as exc:
+        if exc.intent == "link":
+            logger.warning("sso.link.failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
+            return _refuse(exc.code, settings, intent="link")
         await _audit_failure(db, request, provider, exc)
         return _refuse(exc.code, settings)
+
+    if isinstance(result, SsoLinkResult):
+        await db.commit()
+        target = f"{_prefix(settings)}{LINK_RETURN_PATH}?{urlencode({'sso_linked': result.provider_slug})}"
+        response = RedirectResponse(target, status_code=302)
+        _clear_tx_cookie(response, settings)
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     try:
         from specivo.services.security_audit_service import SecurityAuditService

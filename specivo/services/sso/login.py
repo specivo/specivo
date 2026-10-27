@@ -20,13 +20,20 @@ stopping at the first failure:
 6. resolve the account (:func:`specivo.services.sso.provisioning.resolve_user`);
 7. start a new Specivo session (:meth:`AuthService.create_sso_session`).
 
+A **link** transaction (``intent="link"``, started by a signed-in user from
+their profile with :meth:`SsoLoginService.start_link`) must be finished by
+the browser still signed in as that user; step 6 then links the identity and
+step 7 is skipped: the user's existing sessions stay, no new one starts.
+
 No session row exists unless every step passed. The IdP's access token is
-used for userinfo only and never stored.
+used for userinfo only and never stored. An ``SsoError`` raised after the
+transaction was consumed carries its ``intent``, so the route knows where to
+report it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -34,22 +41,27 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.models.sso import SsoProvider
+from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.services.auth_service import AuthService
 from specivo.services.sso.discovery import get_provider_metadata
 from specivo.services.sso.errors import (
+    SsoError,
     SsoIdpRefusedError,
+    SsoProviderAlreadyLinkedError,
     SsoStateInvalidError,
     SsoTokenInvalidError,
     TokenRejection,
 )
-from specivo.services.sso.flow import AuthorizationRequest, begin, complete
+from specivo.services.sso.flow import AuthorizationRequest, LoginTransaction, begin, complete
 from specivo.services.sso.id_token import verify_id_token
 from specivo.services.sso.log import logger, sanitize_idp_text
 from specivo.services.sso.provisioning import resolve_user, subject_hash
 from specivo.services.sso.tokens import exchange_code, fetch_userinfo
 
-__all__ = ["SsoLoginResult", "SsoLoginService"]
+__all__ = ["LINK_RETURN_PATH", "SsoLinkResult", "SsoLoginResult", "SsoLoginService"]
+
+#: Where a link flow starts from and returns to.
+LINK_RETURN_PATH = "/my/profile/"
 
 # Claims that describe the token rather than the user; userinfo never overrides them.
 _TOKEN_CLAIMS = frozenset({"iss", "sub", "aud", "exp", "iat", "nbf", "nonce", "azp", "auth_time", "sid", "at_hash"})
@@ -66,6 +78,15 @@ class SsoLoginResult:
     absolute_expires_at: datetime
 
 
+@dataclass(frozen=True)
+class SsoLinkResult:
+    """A finished link: the identity is connected to the signed-in user; no new session."""
+
+    user_id: int
+    identity_id: int
+    provider_slug: str
+
+
 class SsoLoginService:
     """Stateless; the provider, Redis and the DB session carry all state."""
 
@@ -80,6 +101,20 @@ class SsoLoginService:
         metadata = await get_provider_metadata(provider)
         return await begin(provider, metadata, intent="login", next_path=next_path)
 
+    async def start_link(self, db: AsyncSession, provider: SsoProvider, *, user_id: int) -> AuthorizationRequest:
+        """Begin a link transaction for the signed-in ``user_id`` at ``provider``.
+
+        Refused up front with ``sso_provider_already_linked`` when the user
+        already has an identity there, so no round trip to the IdP is wasted.
+        """
+        existing = await db.scalar(
+            select(UserIdentity.id).where(UserIdentity.user_id == user_id, UserIdentity.provider_id == provider.id)
+        )
+        if existing is not None:
+            raise SsoProviderAlreadyLinkedError("provider_already_linked")
+        metadata = await get_provider_metadata(provider)
+        return await begin(provider, metadata, intent="link", next_path=LINK_RETURN_PATH, user_id=user_id)
+
     async def finish(
         self,
         db: AsyncSession,
@@ -89,10 +124,34 @@ class SsoLoginService:
         binding_token: str | None,
         device_info: str | None = None,
         ip: str | None = None,
-    ) -> SsoLoginResult:
-        """Run the callback for ``provider`` with the query ``params``; raises an ``SsoError`` on refusal."""
-        tx = await complete(state=params.get("state"), binding_token=binding_token)
+        current_user_id: Callable[[], Awaitable[int | None]] | None = None,
+    ) -> SsoLoginResult | SsoLinkResult:
+        """Run the callback for ``provider`` with the query ``params``; raises an ``SsoError`` on refusal.
 
+        ``current_user_id`` returns the user this browser is signed in as; it
+        is called only for a link transaction, which that user must have
+        started.
+        """
+        tx = await complete(state=params.get("state"), binding_token=binding_token)
+        try:
+            return await self._finish(
+                db, provider, tx, params=params, device_info=device_info, ip=ip, current_user_id=current_user_id
+            )
+        except SsoError as exc:
+            exc.intent = tx.intent
+            raise
+
+    async def _finish(
+        self,
+        db: AsyncSession,
+        provider: SsoProvider,
+        tx: LoginTransaction,
+        *,
+        params: Mapping[str, str],
+        device_info: str | None,
+        ip: str | None,
+        current_user_id: Callable[[], Awaitable[int | None]] | None,
+    ) -> SsoLoginResult | SsoLinkResult:
         if tx.provider_id != provider.id or tx.issuer != provider.issuer:
             logger.warning(
                 "sso.callback.rejected provider=%s reason=provider_mismatch started_at=%s",
@@ -100,6 +159,12 @@ class SsoLoginService:
                 tx.provider_slug,
             )
             raise SsoStateInvalidError("provider_mismatch")
+
+        if tx.intent == "link":
+            signed_in = await current_user_id() if current_user_id is not None else None
+            if tx.user_id is None or signed_in != tx.user_id:
+                logger.warning("sso.callback.rejected provider=%s reason=link_user_mismatch", provider.slug)
+                raise SsoStateInvalidError("link_user_mismatch")
 
         metadata = await get_provider_metadata(provider)
 
@@ -153,6 +218,12 @@ class SsoLoginService:
             intent=tx.intent,
             link_user_id=tx.user_id,
         )
+        if tx.intent == "link":
+            return SsoLinkResult(
+                user_id=account.user.id,
+                identity_id=account.identity.id,
+                provider_slug=provider.slug,
+            )
         session = await AuthService().create_sso_session(
             db,
             user=account.user,
