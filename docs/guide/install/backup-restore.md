@@ -31,6 +31,13 @@ tar czf specivo-data-backup.tar.gz specivo-data
 Store `backup.sql` and `specivo-data-backup.tar.gz` together, off the host, with a timestamp in the
 name so you can tell snapshots apart.
 
+### 3. Keep `SECRET_KEY` with the backup
+
+Keep a copy of `.env.local`, where `SECRET_KEY` lives, with the dump, in a place as protected as the
+dump itself. Specivo encrypts some secrets in the database with a key derived from `SECRET_KEY`: the
+client secrets of [single sign-on](single-sign-on/index.md#the-client-secret) providers, and the ID
+tokens kept on single sign-on sessions. Signed-in sessions and tokens depend on it too.
+
 !!! tip "Quiesce for a fully consistent snapshot"
     For the most consistent backup, take the database dump and the data-directory archive close
     together. For a strict point-in-time snapshot, stop the stack first (`docker compose stop`),
@@ -72,6 +79,18 @@ Sign in and confirm your issues, wiki pages, and attachments are all present.
     database schema must match the running image. If you need to move data to a newer version,
     restore on the original version first, confirm it works, then [upgrade](upgrading.md) — that
     runs the migrations in the right order.
+
+## What depends on `SECRET_KEY`
+
+The database dump includes the single sign-on tables (`sso_providers`, `user_identities` and
+`sso_group_mappings`) and the sessions, so a restore brings the provider list, the connected accounts
+and the group mappings back with it.
+
+If you restore onto an instance with a different `SECRET_KEY`, the stored client secrets cannot be
+read: the provider list shows **Unreadable, re-enter it**, and you open each provider and enter its
+secret again. Nothing else is lost. Secrets that a provider reads from a `SPECIVO_SSO_SECRET_*`
+variable are not in the database and need no re-entering, but the variable must be set on the new
+instance. People who were signed in may have to sign in again.
 
 ## Schedule regular backups
 

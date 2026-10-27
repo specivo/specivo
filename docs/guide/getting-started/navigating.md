@@ -32,6 +32,9 @@ Running across the top of the main area:
   **View all notifications**.
 - **Your account menu** — your avatar and name open a menu with **Profile**, **Preferences**,
   **API Keys** (for the [MCP server](../ai-agents/api-keys.md) and REST API), and **Sign out**.
+  **Preferences** lists your active sessions and how each one signed in. When your administrator has
+  set up [single sign-on](../install/single-sign-on/index.md), **Profile** has a **Connected
+  accounts** section, and an account with no password has nothing to change on the password page.
 
 !!! tip "Running timer"
     If you start a time-tracking timer on an issue, a live timer appears in the header so you can stop and

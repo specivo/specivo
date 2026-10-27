@@ -68,6 +68,72 @@ docker compose up -d
 - Read the release notes for the version you are moving to before you pull.
 - After upgrading, do a quick smoke test: sign in, open an issue, run a search.
 
+## Upgrading to 0.10.0
+
+Version 0.10.0 adds single sign-on and three migrations (0041 to 0043), which the entrypoint applies
+on startup. Nothing has to be configured to keep working as before: single sign-on is off until you
+add a provider, and people who are signed in stay signed in. Check the following.
+
+### The bundled stack gets a `proxy` network
+
+Take the new `docker-compose.yml`. It puts `nginx` and `api` on a new network, `proxy`, with nginx at
+the fixed address `10.213.47.2`, so that Specivo can trust exactly that address when it reads the
+client's address from `X-Forwarded-For` (see
+[Client addresses behind a proxy](configuration.md#client-addresses-behind-a-proxy)).
+
+- If `docker compose up -d` stops with "Pool overlaps", the range is already used on your host. Set
+  `SPECIVO_PROXY_SUBNET` and `SPECIVO_NGINX_IP` in `.env` to a free range and address, then run it
+  again.
+- If you keep your own Compose file, add the network the same way, or set `TRUSTED_PROXIES` to the
+  address of your proxy. With `TRUSTED_PROXIES` empty, the address of the connection is the client:
+  behind a proxy every person then shares one rate-limit bucket and one address in the audit log.
+- If another proxy (Caddy, Traefik, a CDN) sits in front of the bundled nginx, set
+  `TRUSTED_PROXY_HOPS=2`. Only the proxies you list in `TRUSTED_PROXIES` can name the client, and
+  `TRUSTED_PROXY_HOPS` says how many there are in a row.
+- If you replaced `nginx/default.conf` with your own, keep
+  `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`. You can also take over the new
+  `specivo_no_query` access log format from the bundled file: the access log no longer contains
+  query strings, which can carry the code and state of a single sign-on sign-in and one-time tokens
+  from links. Delete or rotate old access logs if you want those gone.
+
+### Signing out changed
+
+- The **Sign out** button is a form that posts to `/logout/`. A bookmark or link to `/logout/` opens
+  a "Sign out?" page and does not sign anyone out.
+- `POST /api/v1/auth/logout/` answers `200` with `{"end_session_url": ...}` instead of `204`. The
+  value is `null` unless the session came from a single sign-on provider that supports signing out at
+  the provider. A script that checks for exactly `204` must accept `200`.
+- Signing out now ends the session on the server and revokes its access token at once. Before, both
+  stayed valid until they expired.
+- A password reset, by email, by an administrator or from the command line, ends every session of
+  the account.
+
+### Administrator API keys do less
+
+An administrator's API key is refused with `403` and the code `api_key_not_allowed` for resetting
+passwords, unlocking or reactivating users, creating people or administrators (service accounts are
+still allowed), creating keys for other users and changing single sign-on settings. Automation that
+did any of this with a key must run as a signed-in administrator instead. See
+[What an administrator's key cannot do](../ai-agents/api-keys.md#what-an-administrators-key-cannot-do).
+
+### Deactivated users
+
+Administrators can deactivate and reactivate users (**Administration → Users**, on the user's page).
+Deactivating ends every session and switches off the user's API keys; reactivating does not switch
+the keys back on.
+
+### If you turn on single sign-on
+
+- Set `APP_URL` first: the redirect and logout addresses are built from it.
+- Client secrets stored in Specivo are encrypted with a key derived from `SECRET_KEY`. If you rotate
+  `SECRET_KEY`, open each provider and enter its client secret again. Back up `.env.local` with the
+  database dump; see [Backup & restore](backup-restore.md#what-depends-on-secret_key).
+- Register the redirect URI, and the back-channel logout URI if you use it, at your identity
+  provider. See [Single sign-on](single-sign-on/index.md).
+- Keep a way back in: [Getting back in](configuration.md#single-sign-on-getting-back-in).
+
+The migrations also remove the unused `github_id` and `google_id` columns of the users table.
+
 ## Upgrading to 0.9.0
 
 Version 0.9.0 adds eight migrations (0033 to 0040), which the entrypoint applies on startup like any
