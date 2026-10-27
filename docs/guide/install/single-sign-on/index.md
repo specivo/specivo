@@ -58,7 +58,8 @@ The steps are the same for every IdP. Only the screens differ.
     | Back-channel logout URI | `{APP_URL}/auth/oidc/{slug}/backchannel-logout/` |
 
     For example `https://specivo.example.com/auth/oidc/keycloak/callback/`. The trailing slash is
-    part of the address.
+    part of the address. If Specivo is served under a path prefix (`STEALTH_PREFIX`), the prefix
+    comes right after `{APP_URL}` in these addresses and in the post-logout address below.
 
 2. At the IdP, create a client (an "application") for Specivo and register the redirect URI
    **exactly as shown**. Do not use wildcards. If the IdP asks for a post-logout redirect

@@ -155,7 +155,7 @@ async def logout(
     the request chooses the destination.
     """
     from specivo.services.auth_service import AuthService
-    from specivo.services.sso.logout import LOGGED_OUT_PATH, end_session_url, find_sso_logout_session
+    from specivo.services.sso.logout import end_session_url, find_sso_logout_session, logged_out_path
 
     refresh_raw = request.cookies.get("refresh_token")
     access_raw = request.cookies.get("access_token")
@@ -165,7 +165,7 @@ async def logout(
     # the redirect, so the revoked session is gone whatever happens next.
     await db.commit()
 
-    target = (await end_session_url(sso_session) if sso_session is not None else None) or LOGGED_OUT_PATH
+    target = (await end_session_url(sso_session) if sso_session is not None else None) or logged_out_path()
     response = RedirectResponse(target, status_code=302)
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
