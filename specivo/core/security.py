@@ -44,6 +44,7 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator, AsyncIterator, Iterable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
 import jwt
 from fastapi import Depends, Request, Response
@@ -177,11 +178,22 @@ async def is_access_token_revoked(jti: str | None, sid: str | None) -> bool:
         return True
 
 
-def access_token_session_id(token: str | None) -> uuid.UUID | None:
-    """Return the ``sid`` of an access JWT this instance signed, else ``None``.
+@dataclass(frozen=True, slots=True)
+class AccessTokenSession:
+    """The session an access JWT names, as read by :func:`access_token_session`."""
 
-    The signature is verified (expiry is not: an expired token still names its
-    session), so a forged token cannot name somebody else's session.
+    session_id: uuid.UUID
+    user_id: int | None
+    expired: bool
+
+
+def access_token_session(token: str | None) -> AccessTokenSession | None:
+    """Return the session (``sid``) of an access JWT this instance signed, else ``None``.
+
+    The signature is verified, so a forged token cannot name a session.
+    Expiry is not enforced but reported: an expired token may be old or
+    leaked, so a caller must not act on its ``sid`` alone (see
+    ``AuthService.end_browser_session``).
     """
     if not token:
         return None
@@ -190,7 +202,15 @@ def access_token_session_id(token: str | None) -> uuid.UUID | None:
             token, get_settings().secret_key, algorithms=[JWT_ALGORITHM], options={"verify_exp": False}
         )
         sid = payload.get("sid")
-        return uuid.UUID(str(sid)) if sid else None
+        if not sid:
+            return None
+        session_id = uuid.UUID(str(sid))
+        exp = payload.get("exp")
+        # Same rule as PyJWT's own check (no leeway): expired once exp <= now.
+        expired = not isinstance(exp, int | float) or exp <= utcnow().timestamp()
+        sub = payload.get("sub")
+        user_id = int(sub) if sub is not None and str(sub).isdigit() else None
+        return AccessTokenSession(session_id=session_id, user_id=user_id, expired=expired)
     except (jwt.InvalidTokenError, ValueError):
         return None
 

@@ -23,7 +23,7 @@ from pathlib import Path
 
 import jwt
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
@@ -303,9 +303,23 @@ class AuthService:
         ``auth_method``, the SSO identity fields, ``absolute_expires_at``), so
         the session keeps its identity. Past ``absolute_expires_at`` the
         session cannot be refreshed at all.
+
+        Rotation cannot outlive a concurrent revocation: the session is locked
+        (``SessionService.lock_sessions``) before the old row is claimed with
+        an atomic ``DELETE ... RETURNING``, so a revocation that got there
+        first leaves nothing to claim and the refresh is refused. A session
+        marked ``revoked_session:{sid}`` in Redis is refused too, failing
+        closed when Redis is unreachable, like access-token checks.
         """
+        from specivo.core.security import is_access_token_revoked
+
         settings = get_settings()
         token_hash = _hash_token(refresh_token_raw)
+        refused = AppError(
+            code="auth_refresh_expired",
+            message=_("Refresh token expired or revoked"),
+            status_code=401,
+        )
 
         # 1. Find the token record
         stmt = select(RefreshToken).where(RefreshToken.token_hash == token_hash)
@@ -313,40 +327,35 @@ class AuthService:
         record = result.scalar_one_or_none()
 
         if record is None:
-            raise AppError(
-                code="auth_refresh_expired",
-                message=_("Refresh token expired or revoked"),
-                status_code=401,
-            )
+            raise refused
 
-        # 2. Check expiry, including the session's absolute cap
+        # 2. Lock the session, then claim the old row (rotation). Zero rows
+        # means a revocation deleted it after we read it.
+        await _sessions.lock_sessions(session, [record.session_id])
+        claimed = await session.scalar(
+            delete(RefreshToken).where(RefreshToken.id == record.id).returning(RefreshToken.id)
+        )
+        await session.flush()
+        if claimed is None:
+            raise refused
+
+        # 3. Check expiry, including the session's absolute cap
         now = utcnow()
         if record.expires_at < now or (record.absolute_expires_at is not None and record.absolute_expires_at <= now):
-            await session.delete(record)
-            await session.flush()
-            raise AppError(
-                code="auth_refresh_expired",
-                message=_("Refresh token expired or revoked"),
-                status_code=401,
-            )
+            raise refused
+
+        # 4. A revoked session never rotates (fail closed if Redis is down).
+        if await is_access_token_revoked(None, str(record.session_id)):
+            raise refused
 
         # Load the associated user
         user_result = await session.execute(select(User).where(User.id == record.user_id))
         user = user_result.scalar_one_or_none()
         if user is None or user.is_anonymous or user.status not in ("active", "locked"):
             # User deleted or deactivated, or the anonymous user — refuse refresh
-            await session.delete(record)
-            await session.flush()
-            raise AppError(
-                code="auth_refresh_expired",
-                message=_("Refresh token expired or revoked"),
-                status_code=401,
-            )
+            raise refused
 
-        # 3. Delete old token (rotation)
-        await session.delete(record)
-
-        # 4 & 5. Issue new tokens
+        # 5. Issue new tokens
         new_refresh_raw = _make_refresh_token()
         await self._store_refresh_token(
             session,
@@ -393,16 +402,26 @@ class AuthService:
         ``sid`` claim existed. Either value may be missing (an expired access
         cookie, a Bearer client without a refresh token); whatever is present
         is revoked.
+
+        The access token's ``sid`` is only acted on when the token is still
+        valid, or when it belongs to the same user as the refresh token
+        presented with it. An expired token proves nothing about who holds it
+        now: an old or leaked one must not let anybody end its owner's session.
         """
-        from specivo.core.security import access_token_session_id, blocklist_access_token
+        from specivo.core.security import access_token_session, blocklist_access_token
 
         session_ids: list[uuid.UUID] = []
-        refresh_sid = await self.current_session_id(session, refresh_token_raw=refresh_token_raw)
-        if refresh_sid is not None:
-            session_ids.append(refresh_sid)
-        access_sid = access_token_session_id(access_token_raw)
-        if access_sid is not None:
-            session_ids.append(access_sid)
+        refresh_owner: int | None = None
+        if refresh_token_raw:
+            found = await _sessions.session_for_refresh_token(session, _hash_token(refresh_token_raw))
+            if found is not None:
+                session_ids.append(found[0])
+                refresh_owner = found[1]
+        access = access_token_session(access_token_raw)
+        if access is not None and (
+            not access.expired or (refresh_owner is not None and access.user_id == refresh_owner)
+        ):
+            session_ids.append(access.session_id)
         if session_ids:
             await _sessions.revoke(session, session_ids, reason=reason)
         if access_token_raw:
@@ -417,7 +436,8 @@ class AuthService:
         """Return the session *refresh_token_raw* belongs to, or ``None``."""
         if not refresh_token_raw:
             return None
-        return await _sessions.session_id_for_refresh_token(session, _hash_token(refresh_token_raw))
+        found = await _sessions.session_for_refresh_token(session, _hash_token(refresh_token_raw))
+        return found[0] if found is not None else None
 
     async def logout_all(
         self,
@@ -452,10 +472,12 @@ class AuthService:
 
         Returns the number of refresh rows deleted.
         """
-        from specivo.core.security import access_token_session_id
+        from specivo.core.security import access_token_session
 
         keep = await self.current_session_id(session, refresh_token_raw=keep_refresh_token_raw)
-        spare = None if keep is not None else access_token_session_id(caller_access_token_raw)
+        caller = access_token_session(caller_access_token_raw)
+        # Only the live token the caller authenticated with is spared.
+        spare = caller.session_id if keep is None and caller is not None and not caller.expired else None
         return await _sessions.revoke_user_sessions(
             session, user_id, reason=reason, keep_session_id=keep, spare_access_of=spare
         )

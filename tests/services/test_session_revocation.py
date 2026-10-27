@@ -336,3 +336,152 @@ class TestBulkRevocation:
             await _authenticate_jwt(logins[2][0], db_session)
         # The password session is not tied to the identity and survives.
         assert (await _authenticate_jwt(logins[3][0], db_session)).id == user.id
+
+
+# ---------------------------------------------------------------------------
+# Sign-out by access token: only a live token, or one matching the refresh row
+# ---------------------------------------------------------------------------
+
+
+def _access_token_for(user: User, session_id: uuid.UUID, *, expired: bool) -> str:
+    settings = get_settings()
+    now = utcnow()
+    exp = now - timedelta(minutes=1) if expired else now + timedelta(minutes=5)
+    return jwt.encode(
+        {
+            "sub": str(user.id),
+            "iat": int((now - timedelta(minutes=20)).timestamp()),
+            "exp": int(exp.timestamp()),
+            "jti": str(uuid.uuid4()),
+            "rem": True,
+            "sid": str(session_id),
+        },
+        settings.secret_key,
+        algorithm=JWT_ALGORITHM,
+    )
+
+
+async def _marker_exists(session_id: uuid.UUID) -> bool:
+    r = await _redis()
+    try:
+        return bool(await r.exists(f"{REVOKED_SESSION_PREFIX}{session_id}"))
+    finally:
+        await r.aclose()
+
+
+class TestSignOutWithExpiredAccessToken:
+    async def test_expired_access_token_alone_revokes_nothing(self, db_session: AsyncSession, user: User) -> None:
+        _access, refresh = await _login(db_session, user)
+        row = await _row(db_session, refresh)
+        assert row is not None
+        leaked = _access_token_for(user, row.session_id, expired=True)
+
+        await _auth.end_browser_session(db_session, refresh_token_raw=None, access_token_raw=leaked)
+
+        assert await _row(db_session, refresh) is not None
+        assert not await _marker_exists(row.session_id)
+
+    async def test_expired_access_token_with_another_users_refresh_token_revokes_nothing_of_theirs(
+        self, db_session: AsyncSession, user: User
+    ) -> None:
+        other = UserFactory.build(login="sessrev_other", email="sessrev_other@example.com")
+        db_session.add(other)
+        await db_session.commit()
+        _access, refresh = await _login(db_session, user)
+        _other_access, other_refresh = await _login(db_session, other)
+        row = await _row(db_session, refresh)
+        assert row is not None
+        leaked = _access_token_for(user, row.session_id, expired=True)
+
+        await _auth.end_browser_session(db_session, refresh_token_raw=other_refresh, access_token_raw=leaked)
+
+        assert await _row(db_session, refresh) is not None
+        assert not await _marker_exists(row.session_id)
+        # The refresh token presented is its holder's to end.
+        assert await _row(db_session, other_refresh) is None
+
+    async def test_expired_access_token_with_own_refresh_token_revokes_its_session(
+        self, db_session: AsyncSession, user: User
+    ) -> None:
+        _a1, r1 = await _login(db_session, user)
+        _a2, r2 = await _login(db_session, user)
+        row2 = await _row(db_session, r2)
+        assert row2 is not None
+        expired = _access_token_for(user, row2.session_id, expired=True)
+
+        await _auth.end_browser_session(db_session, refresh_token_raw=r1, access_token_raw=expired)
+
+        assert await _row(db_session, r1) is None
+        assert await _row(db_session, r2) is None
+
+    async def test_live_access_token_alone_revokes_its_session(self, db_session: AsyncSession, user: User) -> None:
+        access, refresh = await _login(db_session, user)
+
+        await _auth.end_browser_session(db_session, refresh_token_raw=None, access_token_raw=access)
+
+        assert await _row(db_session, refresh) is None
+
+
+# ---------------------------------------------------------------------------
+# Refresh racing a revocation
+# ---------------------------------------------------------------------------
+
+
+class TestRefreshVersusRevoke:
+    async def test_row_revoked_between_read_and_rotation_is_not_resurrected(
+        self, db_session: AsyncSession, user: User
+    ) -> None:
+        """A revoke that wins the race leaves the session with no live row."""
+        _access, refresh = await _login(db_session, user)
+        row = await _row(db_session, refresh)
+        assert row is not None
+        session_id = row.session_id
+        real_lock = SessionService.lock_sessions
+        raced = False
+
+        async def revoke_then_lock(self, db, session_ids):
+            # The first lock taken is refresh's: a concurrent revocation
+            # commits while refresh waits for it.
+            nonlocal raced
+            if not raced:
+                raced = True
+                await SessionService().revoke(db, [session_id], reason="concurrent")
+            await real_lock(self, db, session_ids)
+
+        with (
+            patch.object(SessionService, "lock_sessions", revoke_then_lock),
+            pytest.raises(AppError) as exc_info,
+        ):
+            await _auth.refresh(db_session, refresh)
+
+        assert exc_info.value.code == "auth_refresh_expired"
+        live = await db_session.scalar(
+            select(func.count()).select_from(RefreshToken).where(RefreshToken.session_id == session_id)
+        )
+        assert live == 0
+
+    async def test_refresh_is_refused_while_the_session_is_marked_revoked(
+        self, db_session: AsyncSession, user: User
+    ) -> None:
+        _access, refresh = await _login(db_session, user)
+        row = await _row(db_session, refresh)
+        assert row is not None
+        r = await _redis()
+        try:
+            await r.setex(f"{REVOKED_SESSION_PREFIX}{row.session_id}", 60, "1")
+        finally:
+            await r.aclose()
+
+        with pytest.raises(AppError) as exc_info:
+            await _auth.refresh(db_session, refresh)
+        assert exc_info.value.code == "auth_refresh_expired"
+
+    async def test_refresh_fails_closed_when_redis_is_down(self, db_session: AsyncSession, user: User) -> None:
+        _access, refresh = await _login(db_session, user)
+
+        with (
+            patch("specivo.core.redis.get_redis", side_effect=ConnectionError("Redis down")),
+            pytest.raises(AppError) as exc_info,
+        ):
+            await _auth.refresh(db_session, refresh)
+        assert exc_info.value.code == "auth_refresh_expired"

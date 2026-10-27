@@ -22,12 +22,17 @@ import uuid
 from collections.abc import Iterable
 from typing import cast
 
-from sqlalchemy import ColumnElement, CursorResult, delete, select
+from sqlalchemy import ColumnElement, CursorResult, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.auth import RefreshToken
 
 logger = logging.getLogger("specivo.auth.sessions")
+
+# First key of the two-key advisory locks taken per session (the second is
+# hashtext(session_id)). Two-key locks never collide with the single-bigint
+# advisory locks used elsewhere.
+SESSION_LOCK_NAMESPACE = 0x5E55
 
 
 class SessionService:
@@ -95,9 +100,30 @@ class SessionService:
         """Revoke every session signed in through one external identity (unlink, logout by ``sub``)."""
         return await self._revoke_where(db, RefreshToken.user_identity_id == user_identity_id, reason=reason)
 
-    async def session_id_for_refresh_token(self, db: AsyncSession, token_hash: str) -> uuid.UUID | None:
-        """Return the session a refresh token (by its SHA-256 hash) belongs to."""
-        return await db.scalar(select(RefreshToken.session_id).where(RefreshToken.token_hash == token_hash))
+    async def session_for_refresh_token(self, db: AsyncSession, token_hash: str) -> tuple[uuid.UUID, int] | None:
+        """Return *(session_id, user_id)* of a refresh token (by its SHA-256 hash), or ``None``."""
+        row = (
+            await db.execute(
+                select(RefreshToken.session_id, RefreshToken.user_id).where(RefreshToken.token_hash == token_hash)
+            )
+        ).first()
+        return (row[0], row[1]) if row is not None else None
+
+    async def lock_sessions(self, db: AsyncSession, session_ids: Iterable[uuid.UUID]) -> None:
+        """Take a transaction-scoped advisory lock on each session, in a fixed order.
+
+        Refresh and revocation both lock the session before touching its rows,
+        so they serialise: a revocation that waits for a refresh then deletes
+        the row the refresh inserted (its DELETE starts after the refresh
+        committed), and a refresh that waits for a revocation finds its old row
+        gone and is refused. Without this, a revocation's DELETE could miss a
+        row inserted by a refresh that committed while it was blocked.
+        """
+        for sid in sorted({str(s) for s in session_ids}):
+            await db.execute(
+                text("SELECT pg_advisory_xact_lock(:ns, hashtext(:sid))"),
+                {"ns": SESSION_LOCK_NAMESPACE, "sid": sid},
+            )
 
     # ------------------------------------------------------------------
 
@@ -111,6 +137,12 @@ class SessionService:
         spare_id: uuid.UUID | None = None,
     ) -> int:
         from specivo.core.security import mark_sessions_revoked
+
+        # Lock every session about to be revoked before deleting, so a refresh
+        # in flight either finishes first (and its new row is deleted here) or
+        # waits and is refused (see lock_sessions).
+        found = (await db.execute(select(RefreshToken.session_id).where(where).distinct())).scalars().all()
+        await self.lock_sessions(db, [*found, *(extra_ids or [])])
 
         stmt = delete(RefreshToken).where(where).returning(RefreshToken.session_id, RefreshToken.user_id)
         # execute() is typed as returning Result; a DML statement yields a
