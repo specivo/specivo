@@ -62,7 +62,9 @@ from specivo.core.utils import utcnow
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user import User
 from specivo.services.sso import events
+from specivo.services.sso.claims import email_verified as _email_verified
 from specivo.services.sso.claims import read_groups
+from specivo.services.sso.claims import trusted_verified_email as _trusted_verified_email
 from specivo.services.sso.errors import (
     SsoAccountDisabledError,
     SsoAccountNotProvisionedError,
@@ -142,18 +144,6 @@ def _email_from(claims: Mapping[str, Any], provider: SsoProvider) -> str | None:
     if email is not None and "@" in email and " " not in email:
         return email
     return None
-
-
-def _email_verified(claims: Mapping[str, Any]) -> bool:
-    """``True`` only for the JSON boolean ``true``; the string ``"true"`` does not count."""
-    return claims.get("email_verified") is True
-
-
-def _trusted_verified_email(provider: SsoProvider, claims: Mapping[str, Any]) -> bool:
-    """The token's email may be taken as verified: the admin trusts this IdP's
-    ``email_verified`` and the claim is the boolean ``true``. Only then is an
-    email copied onto an account or marked verified."""
-    return provider.trust_email_verified and _email_verified(claims)
 
 
 def map_locale(value: object, available: list[str] | None = None) -> str | None:

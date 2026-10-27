@@ -6,10 +6,15 @@ on a login (never on a link):
 :func:`enforce_access` runs **before** an account is created, linked or
 signed in, so a refused user is never provisioned or linked:
 
-1. ``allowed_email_domains`` (when set): the Google ``hd`` claim when present,
-   else the email's domain, must be one of them, exactly and
-   case-insensitively (a subdomain is not a match), else
-   ``sso_domain_not_allowed``.
+1. ``allowed_email_domains`` (when set): the domain must be one of them,
+   exactly and case-insensitively (a subdomain is not a match), else
+   ``sso_domain_not_allowed``. The domain is Google's ``hd`` claim when the
+   issuer is exactly ``https://accounts.google.com`` (Google sets it from
+   Workspace membership; any other IdP's ``hd`` is ignored). Otherwise it is
+   the email's domain, and only a trusted, verified email counts
+   (``trust_email_verified`` on and ``email_verified`` the boolean ``true``):
+   on IdPs where users edit their own email, an unverified address in an
+   allowed domain proves nothing.
 2. ``required_groups`` (when set): the user must be in at least one. A
    missing groups claim counts as no groups (``sso_not_in_required_group``);
    an Entra group overage makes the groups unknown (``sso_groups_overage``).
@@ -55,7 +60,7 @@ from specivo.models.user_group import UserGroupMember
 from specivo.services.permission_service import clear_role_cache
 from specivo.services.session_service import SessionService
 from specivo.services.sso import events
-from specivo.services.sso.claims import GroupsResult, Known, Missing, Overage
+from specivo.services.sso.claims import GroupsResult, Known, Missing, Overage, trusted_verified_email
 from specivo.services.sso.errors import (
     SsoAccessPolicyError,
     SsoDomainNotAllowedError,
@@ -63,10 +68,13 @@ from specivo.services.sso.errors import (
     SsoNotInRequiredGroupError,
 )
 
-__all__ = ["POLICY_REVOKE_REASON", "apply_mapping", "check_access", "enforce_access"]
+__all__ = ["GOOGLE_ISSUER", "POLICY_REVOKE_REASON", "apply_mapping", "check_access", "enforce_access"]
 
 #: ``reason`` recorded on the sessions revoked by a policy refusal.
 POLICY_REVOKE_REASON = "sso_access_lost"
+
+#: The only issuer whose ``hd`` (hosted domain) claim is honoured.
+GOOGLE_ISSUER = "https://accounts.google.com"
 
 
 # ---------------------------------------------------------------------------
@@ -78,14 +86,20 @@ def _normalise_domain(value: str) -> str:
     return value.strip().lstrip("@").rstrip(".").lower()
 
 
-def _login_domain(claims: Mapping[str, Any], email: str | None) -> tuple[str | None, str]:
-    """The domain the allowlist checks and where it came from (``hd`` or ``email``)."""
+def _domain_refusal(
+    provider: SsoProvider, claims: Mapping[str, Any], email: str | None, allowed: set[str]
+) -> SsoDomainNotAllowedError | None:
+    """Check the allowlist against Google's ``hd`` or a trusted, verified email domain."""
     hd = claims.get("hd")
-    if isinstance(hd, str) and hd.strip():
-        return _normalise_domain(hd), "hd"
-    if email and "@" in email:
-        return _normalise_domain(email.rsplit("@", 1)[1]), "email"
-    return None, "email"
+    if provider.issuer == GOOGLE_ISSUER and isinstance(hd, str) and hd.strip():
+        return None if _normalise_domain(hd) in allowed else SsoDomainNotAllowedError("hd_domain_not_allowed")
+    if not email or "@" not in email:
+        return SsoDomainNotAllowedError("no_email_domain")
+    if not trusted_verified_email(provider, claims):
+        return SsoDomainNotAllowedError("email_not_verified")
+    if _normalise_domain(email.rsplit("@", 1)[1]) not in allowed:
+        return SsoDomainNotAllowedError("email_domain_not_allowed")
+    return None
 
 
 def check_access(
@@ -94,11 +108,9 @@ def check_access(
     """The refusal ``provider``'s policy gives this login, or ``None`` when it may proceed."""
     allowed = {_normalise_domain(d) for d in provider.allowed_email_domains or () if isinstance(d, str) and d.strip()}
     if allowed:
-        domain, source = _login_domain(claims, email)
-        if domain is None:
-            return SsoDomainNotAllowedError("no_email_domain")
-        if domain not in allowed:
-            return SsoDomainNotAllowedError(f"{source}_domain_not_allowed")
+        refusal = _domain_refusal(provider, claims, email, allowed)
+        if refusal is not None:
+            return refusal
 
     required = {g for g in provider.required_groups or () if isinstance(g, str)}
     if required:

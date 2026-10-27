@@ -6465,6 +6465,10 @@ msgstr "允许的邮箱域名"
 msgid "One per line. Empty allows every domain."
 msgstr "每行一个。留空则允许所有域名。"
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Needs email verification to be trusted (the setting above): only verified addresses are checked. Google Workspace accounts are checked by their hosted domain."
+msgstr "需要信任电子邮件验证（上方的设置）：只检查已验证的地址。Google Workspace 账户按其托管域检查。"
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:232
 msgid "Maximum session length (hours)"
 msgstr "最长会话时长（小时）"

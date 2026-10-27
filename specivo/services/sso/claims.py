@@ -33,12 +33,28 @@ __all__ = [
     "Known",
     "Missing",
     "Overage",
+    "email_verified",
     "groups_claim_path",
     "read_groups",
     "resolve_path",
+    "trusted_verified_email",
 ]
 
 DEFAULT_GROUPS_CLAIM = "groups"
+
+
+def email_verified(claims: Mapping[str, Any]) -> bool:
+    """``True`` only for the JSON boolean ``true``; the string ``"true"`` does not count."""
+    return claims.get("email_verified") is True
+
+
+def trusted_verified_email(provider: SsoProvider, claims: Mapping[str, Any]) -> bool:
+    """The token's email may be taken as verified: the admin trusts this IdP's
+    ``email_verified`` and the claim is the boolean ``true``. Only then is an
+    email copied onto an account, marked verified, or checked against the
+    domain allowlist."""
+    return provider.trust_email_verified and email_verified(claims)
+
 
 _ABSENT = object()
 

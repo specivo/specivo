@@ -151,8 +151,16 @@ async def _only_admin(db: AsyncSession, user: User) -> None:
 # ---------------------------------------------------------------------------
 
 
+GOOGLE_ISSUER = "https://accounts.google.com"
+
+
+def _allow(provider: SsoProvider, *domains: str, trusted: bool = True) -> None:
+    provider.allowed_email_domains = list(domains)
+    provider.trust_email_verified = trusted
+
+
 async def test_allowed_email_domain_signs_in(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
-    sso_provider.allowed_email_domains = ["example.com"]
+    _allow(sso_provider, "example.com")
     user = await _linked(db_session, sso_provider)
 
     account = await _resolve(db_session, sso_provider, email="map-a@EXAMPLE.com")
@@ -163,7 +171,7 @@ async def test_allowed_email_domain_signs_in(db_session: AsyncSession, sso_provi
 async def test_email_domain_outside_the_allowlist_is_refused(
     db_session: AsyncSession, sso_provider: SsoProvider, caplog: pytest.LogCaptureFixture
 ) -> None:
-    sso_provider.allowed_email_domains = ["corp.example.com"]
+    _allow(sso_provider, "corp.example.com")
     await _linked(db_session, sso_provider)
 
     with caplog.at_level(logging.INFO, logger="specivo.sso"), pytest.raises(SsoDomainNotAllowedError) as info:
@@ -174,8 +182,37 @@ async def test_email_domain_outside_the_allowlist_is_refused(
     assert "code=sso_domain_not_allowed" in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("trusted", "email_verified"),
+    [(False, True), (True, None), (True, False), (True, "true")],
+    ids=["provider_not_trusted", "claim_missing", "claim_false", "claim_string_true"],
+)
+async def test_unverified_email_on_an_allowed_domain_is_refused(
+    db_session: AsyncSession, sso_provider: SsoProvider, trusted: bool, email_verified: Any
+) -> None:
+    """An IdP that lets users set their own email must not open the allowlist."""
+    _allow(sso_provider, "example.com", trusted=trusted)
+    await _linked(db_session, sso_provider)
+
+    with pytest.raises(SsoDomainNotAllowedError) as info:
+        await _resolve(db_session, sso_provider, email="map-a@example.com", email_verified=email_verified)
+
+    assert info.value.reason == "email_not_verified"
+
+
+async def test_unverified_email_jit_user_is_not_created(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
+    _allow(sso_provider, "example.com", trusted=False)
+    sso_provider.allow_jit_provisioning = True
+    before = await _user_count(db_session)
+
+    with pytest.raises(SsoDomainNotAllowedError):
+        await _resolve(db_session, sso_provider, email="map-claimed@example.com")
+
+    assert await _user_count(db_session) == before
+
+
 async def test_subdomain_is_not_a_match(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
-    sso_provider.allowed_email_domains = ["example.com"]
+    _allow(sso_provider, "example.com")
     await _linked(db_session, sso_provider)
 
     with pytest.raises(SsoDomainNotAllowedError):
@@ -183,28 +220,69 @@ async def test_subdomain_is_not_a_match(db_session: AsyncSession, sso_provider: 
 
 
 async def test_missing_email_is_refused_by_the_allowlist(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
-    sso_provider.allowed_email_domains = ["example.com"]
+    _allow(sso_provider, "example.com")
     await _linked(db_session, sso_provider)
 
     with pytest.raises(SsoDomainNotAllowedError):
         await _resolve(db_session, sso_provider, email=None)
 
 
-async def test_google_hd_decides_when_present(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
-    sso_provider.allowed_email_domains = ["example.com"]
+async def test_google_hd_decides_for_the_google_issuer(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
+    sso_provider.issuer = GOOGLE_ISSUER
+    _allow(sso_provider, "example.com", trusted=False)
     user = await _linked(db_session, sso_provider)
 
-    account = await _resolve(db_session, sso_provider, email="map-a@alias.example.org", hd="example.com")
+    account = await _resolve(
+        db_session, sso_provider, email="map-a@alias.example.org", email_verified=None, hd="example.com"
+    )
 
     assert account.user.id == user.id
 
 
 async def test_google_hd_mismatch_is_refused(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
-    sso_provider.allowed_email_domains = ["example.com"]
+    sso_provider.issuer = GOOGLE_ISSUER
+    _allow(sso_provider, "example.com")
     await _linked(db_session, sso_provider)
 
     with pytest.raises(SsoDomainNotAllowedError):
         await _resolve(db_session, sso_provider, email="map-a@example.com", hd="other.example.org")
+
+
+async def test_google_without_hd_falls_back_to_the_verified_email(
+    db_session: AsyncSession, sso_provider: SsoProvider
+) -> None:
+    sso_provider.issuer = GOOGLE_ISSUER
+    _allow(sso_provider, "example.com", trusted=False)
+    await _linked(db_session, sso_provider)
+
+    with pytest.raises(SsoDomainNotAllowedError) as info:
+        await _resolve(db_session, sso_provider, email="map-a@example.com")
+
+    assert info.value.reason == "email_not_verified"
+
+
+async def test_hd_from_another_issuer_is_ignored(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
+    """Only Google sets ``hd`` from Workspace membership; elsewhere it is user-controllable."""
+    _allow(sso_provider, "example.com", trusted=False)
+    await _linked(db_session, sso_provider)
+
+    with pytest.raises(SsoDomainNotAllowedError) as info:
+        await _resolve(db_session, sso_provider, email="map-a@outside.example.org", hd="example.com")
+
+    assert info.value.reason == "email_not_verified"
+
+
+async def test_hd_from_another_issuer_falls_back_to_the_verified_email(
+    db_session: AsyncSession, sso_provider: SsoProvider
+) -> None:
+    _allow(sso_provider, "example.com")
+    user = await _linked(db_session, sso_provider)
+
+    account = await _resolve(db_session, sso_provider, email="map-a@example.com", hd="other.example.org")
+    assert account.user.id == user.id
+
+    with pytest.raises(SsoDomainNotAllowedError):
+        await _resolve(db_session, sso_provider, email="map-a@outside.example.org", hd="example.com")
 
 
 async def test_refused_jit_user_is_not_created(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
