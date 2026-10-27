@@ -12,15 +12,14 @@ from specivo.models.base import Base, TimestampMixin
 class User(Base, TimestampMixin):
     """Platform user account.
 
-    Covers human users, service accounts (agents), and OAuth-linked accounts.
+    Covers human users and service accounts (agents). External SSO identities
+    live in ``user_identities`` (``specivo.models.sso.UserIdentity``).
     Password hashing is handled by app/services/auth_utils.py (bcrypt).
 
     Indexes:
     - uq_users_login_ci: case-insensitive unique on LOWER(login)
     - uq_users_email_ci: case-insensitive unique on LOWER(email)
     - ix_users_status: for admin user listing
-    - ix_users_github_id: partial, for OAuth lookup (WHERE github_id IS NOT NULL)
-    - ix_users_google_id: partial, for OAuth lookup (WHERE google_id IS NOT NULL)
     - uq_users_single_anonymous: partial unique, at most one anonymous row
     """
 
@@ -36,17 +35,6 @@ class User(Base, TimestampMixin):
         Index("uq_users_email_ci", func.lower(text("email")), unique=True),
         # Index for admin user listing filtered by status
         Index("ix_users_status", "status"),
-        # Partial indexes for OAuth foreign ID lookups
-        Index(
-            "ix_users_github_id",
-            "github_id",
-            postgresql_where="github_id IS NOT NULL",
-        ),
-        Index(
-            "ix_users_google_id",
-            "google_id",
-            postgresql_where="google_id IS NOT NULL",
-        ),
         # Status must be one of the defined account states
         CheckConstraint(
             "status IN ('active', 'locked', 'pending_verification', 'deactivated')",
@@ -120,10 +108,6 @@ class User(Base, TimestampMixin):
     email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
-    # --- OAuth preparation ---
-    github_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    google_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     # --- User preferences (global defaults, per-project prefs on members table) ---
     preferences: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")

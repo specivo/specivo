@@ -90,8 +90,6 @@ class TestUserFactory:
         assert user.email_verified_at is None
         assert user.last_login_at is None
         assert user.password_changed_at is None
-        assert user.github_id is None
-        assert user.google_id is None
         assert user.avatar_url is None
 
     def test_repr_contains_login_and_status(self):

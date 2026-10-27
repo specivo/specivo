@@ -65,6 +65,11 @@ class UserGroupMember(Base, TimestampMixin):
         # PostgreSQL does not auto-index FK columns.
         Index("ix_user_group_members_group_id", "group_id"),
         Index("ix_user_group_members_user_id", "user_id"),
+        Index(
+            "ix_user_group_members_managed_by_provider_id",
+            "managed_by_provider_id",
+            postgresql_where=text("managed_by_provider_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -77,6 +82,14 @@ class UserGroupMember(Base, TimestampMixin):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+    )
+
+    # Set when SSO group sync added this membership. Sync only adds or removes
+    # memberships it manages, so ones an admin added by hand (NULL) are never
+    # touched. Deleting the provider turns its memberships into manual ones.
+    managed_by_provider_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sso_providers.id", ondelete="SET NULL"),
+        nullable=True,
     )
 
     group: Mapped["UserGroup"] = relationship(
