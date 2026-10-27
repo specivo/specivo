@@ -171,7 +171,7 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
 - `ltree` for hierarchical paths (project tree), with GiST indexes.
 - `pgvector` for embedding-based semantic search.
 - Expression-based unique indexes for case-insensitive uniqueness: `Index("uq_users_login_ci", func.lower(text("login")), unique=True)`.
-- Partial indexes for sparse columns: `Index("ix_users_github_id", "github_id", postgresql_where="github_id IS NOT NULL")`.
+- Partial indexes for sparse columns: `Index("ix_user_group_members_managed_by_provider_id", "managed_by_provider_id", postgresql_where=text("managed_by_provider_id IS NOT NULL"))`.
 - `Numeric(10, 2)` (not Float) for all time/money fields to avoid IEEE 754 rounding.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.

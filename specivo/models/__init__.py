@@ -26,6 +26,7 @@ from specivo.models.search import ChunkEmbedding, EmbeddingModel, ProjectEmbeddi
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.setting import Setting
 from specivo.models.sprint import Sprint
+from specivo.models.sso import SsoGroupMapping, SsoProvider, UserIdentity
 from specivo.models.tag import Tag, TagLink
 from specivo.models.time_entry import ActiveTimer, TimeEntry, TimeEntryActivity
 from specivo.models.user import User
@@ -84,11 +85,14 @@ __all__ = [
     "Role",
     "Setting",
     "Sprint",
+    "SsoGroupMapping",
+    "SsoProvider",
     "Tag",
     "TagLink",
     "User",
     "UserGroup",
     "UserGroupMember",
+    "UserIdentity",
     "Version",
     "Watcher",
     "Webhook",

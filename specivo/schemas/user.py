@@ -72,7 +72,7 @@ class UserOut(BaseModel):
     """Public user response — safe to expose to any authenticated user.
 
     Excludes: password_hash, failed_login_count, locked_until, preferences,
-    github_id, google_id, email (private).
+    email (private).
     """
 
     model_config = ConfigDict(from_attributes=True)
