@@ -13,6 +13,13 @@ survives rotation, and its access tokens carry that id as the ``sid`` claim.
 Logout, logout-all, single-session revocation and the password-change sweep
 use it today; SSO back-channel logout, unlink and deprovisioning use the
 identity helpers below.
+
+Every revocation that ends at least one session is logged on
+``specivo.auth.sessions`` and recorded as the ``SESSIONS_REVOKED`` security
+audit event (persisted when the ``security_audit_log`` feature is
+registered): the reason, the counts and the affected user ids. Its actor is
+``actor_id`` when the caller names one (the user signing out, the admin),
+``None`` for what the system or the IdP starts.
 """
 
 from __future__ import annotations
@@ -26,6 +33,7 @@ from sqlalchemy import ColumnElement, CursorResult, delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.auth import RefreshToken
+from specivo.services.security_audit_service import AuditEvent, record_event
 
 logger = logging.getLogger("specivo.auth.sessions")
 
@@ -44,6 +52,7 @@ class SessionService:
         session_ids: Iterable[uuid.UUID],
         *,
         reason: str,
+        actor_id: int | None = None,
     ) -> int:
         """Revoke *session_ids*: delete their refresh rows and mark them in Redis.
 
@@ -54,7 +63,9 @@ class SessionService:
         ids = list(dict.fromkeys(session_ids))
         if not ids:
             return 0
-        return await self._revoke_where(db, RefreshToken.session_id.in_(ids), reason=reason, extra_ids=ids)
+        return await self._revoke_where(
+            db, RefreshToken.session_id.in_(ids), reason=reason, extra_ids=ids, actor_id=actor_id
+        )
 
     async def revoke_user_sessions(
         self,
@@ -64,6 +75,7 @@ class SessionService:
         reason: str,
         keep_session_id: uuid.UUID | None = None,
         spare_access_of: uuid.UUID | None = None,
+        actor_id: int | None = None,
     ) -> int:
         """Revoke every session of *user_id*, except *keep_session_id* if given.
 
@@ -76,7 +88,7 @@ class SessionService:
         where: ColumnElement[bool] = RefreshToken.user_id == user_id
         if keep_session_id is not None:
             where = where & (RefreshToken.session_id != keep_session_id)
-        return await self._revoke_where(db, where, reason=reason, spare_id=spare_access_of)
+        return await self._revoke_where(db, where, reason=reason, spare_id=spare_access_of, actor_id=actor_id)
 
     async def revoke_by_idp_sid(
         self,
@@ -85,10 +97,11 @@ class SessionService:
         user_identity_id: int,
         idp_sid: str,
         reason: str,
+        actor_id: int | None = None,
     ) -> int:
         """Revoke the sessions one IdP session created (back-channel logout with ``sid``)."""
         where = (RefreshToken.user_identity_id == user_identity_id) & (RefreshToken.idp_sid == idp_sid)
-        return await self._revoke_where(db, where, reason=reason)
+        return await self._revoke_where(db, where, reason=reason, actor_id=actor_id)
 
     async def revoke_by_identity(
         self,
@@ -96,9 +109,12 @@ class SessionService:
         user_identity_id: int,
         *,
         reason: str,
+        actor_id: int | None = None,
     ) -> int:
         """Revoke every session signed in through one external identity (unlink, logout by ``sub``)."""
-        return await self._revoke_where(db, RefreshToken.user_identity_id == user_identity_id, reason=reason)
+        return await self._revoke_where(
+            db, RefreshToken.user_identity_id == user_identity_id, reason=reason, actor_id=actor_id
+        )
 
     async def session_for_refresh_token(self, db: AsyncSession, token_hash: str) -> tuple[uuid.UUID, int] | None:
         """Return *(session_id, user_id)* of a refresh token (by its SHA-256 hash), or ``None``."""
@@ -135,6 +151,7 @@ class SessionService:
         reason: str,
         extra_ids: list[uuid.UUID] | None = None,
         spare_id: uuid.UUID | None = None,
+        actor_id: int | None = None,
     ) -> int:
         from specivo.core.security import mark_sessions_revoked
 
@@ -154,14 +171,16 @@ class SessionService:
         session_ids = list(dict.fromkeys([*(extra_ids or []), *(row[0] for row in rows)]))
         await mark_sessions_revoked([sid for sid in session_ids if sid != spare_id])
 
-        logger.info(
-            "sessions revoked",
-            extra={
-                "event": "sessions_revoked",
-                "reason": reason,
-                "user_ids": sorted({row[1] for row in rows}),
-                "session_count": len(session_ids),
-                "row_count": len(rows),
-            },
-        )
+        details = {
+            "reason": reason,
+            "user_ids": sorted({row[1] for row in rows}),
+            "session_count": len(session_ids),
+            "row_count": len(rows),
+        }
+        logger.info("sessions revoked", extra={"event": AuditEvent.SESSIONS_REVOKED.value, **details})
+        if session_ids:
+            try:
+                record_event(AuditEvent.SESSIONS_REVOKED, user_id=actor_id, details=details)
+            except Exception:
+                logger.warning("Security audit logging failed for a session revocation", exc_info=True)
         return len(rows)

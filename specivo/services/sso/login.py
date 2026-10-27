@@ -76,6 +76,8 @@ class SsoLoginResult:
     user_id: int
     next_path: str
     absolute_expires_at: datetime
+    #: The hashed subject (never the raw ``sub``), for the audit trail.
+    sub_hash: str = ""
 
 
 @dataclass(frozen=True)
@@ -243,16 +245,13 @@ class SsoLoginService:
             device_info=device_info,
             ip=ip,
         )
-        logger.info(
-            "sso.login.success provider=%s user_id=%s sub=%s",
-            provider.slug,
-            account.user.id,
-            subject_hash(id_token.subject),
-        )
+        sub_hash = subject_hash(id_token.subject)
+        logger.info("sso.login.success provider=%s user_id=%s sub=%s", provider.slug, account.user.id, sub_hash)
         return SsoLoginResult(
             access_token=session.access_token,
             refresh_token=session.refresh_token,
             user_id=session.user_id,
             next_path=tx.next_path,
             absolute_expires_at=session.absolute_expires_at,
+            sub_hash=sub_hash,
         )

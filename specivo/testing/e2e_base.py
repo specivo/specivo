@@ -110,6 +110,24 @@ def _flush_redis():
     r.close()
 
 
+def kill_port_listeners(port: int) -> None:
+    """Kill a leftover server LISTENING on *port*, and nothing else.
+
+    A bare ``lsof -ti:<port>`` also lists every process with a connection to
+    the port. Docker Desktop's backend proxies container traffic to
+    ``host.docker.internal:<port>`` (an IdP calling the back-channel logout
+    URL), so killing every listed process took the Docker engine down.
+    """
+    result = subprocess.run(
+        ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
+        capture_output=True,
+        text=True,
+    )
+    for pid in result.stdout.split():
+        if pid.isdigit():
+            subprocess.run(["kill", "-9", pid], capture_output=True)
+
+
 @pytest.fixture(scope="session")
 def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     """Start uvicorn, wait for /health/, yield base URL, stop on teardown."""
@@ -123,8 +141,7 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             pytrace=False,
         )
 
-    # Kill any leftover server on our port
-    subprocess.run(f"lsof -ti:{E2E_SERVER_PORT} | xargs kill -9", shell=True, capture_output=True)
+    kill_port_listeners(E2E_SERVER_PORT)
     time.sleep(0.5)
 
     proc = subprocess.Popen(
