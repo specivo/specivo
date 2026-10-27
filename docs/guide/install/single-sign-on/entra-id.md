@@ -15,7 +15,7 @@ Sample values: Specivo at `https://specivo.example.com` (`APP_URL`), tenant ID
     Entra's `email` claim is not verified, it can be changed by the user or set by another tenant's
     administrator, and Entra sends no `email_verified` claim. Leave **Existing accounts** on
     "Users connect their account themselves" and leave **This provider really verifies email
-    addresses** off. People connect their account from **My profile → Connected accounts**.
+    addresses** off. People connect their account from **Profile → Connected accounts** (in the account menu).
 
 ## 1. Register the application
 
