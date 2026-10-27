@@ -616,6 +616,11 @@ _PATH_PARAM = re.compile(r"\{[^}]+\}")
 # sending system by signature rather than a person.
 _NON_WEB_PREFIXES = ("/api/v1", "/mcp", "/health", "/hooks")
 
+# Single routes with the same property: called server to server, never by a
+# person, and authenticated by a signed token in the body. SSO back-channel
+# logout has its own tests (tests/integration/test_sso_backchannel_logout.py).
+_SIGNED_SERVER_ROUTES = frozenset({("POST", "/auth/oidc/{slug}/backchannel-logout/")})
+
 
 def _mutating_web_routes() -> list[tuple[str, str]]:
     """Every non-GET web route, as ``(method, concrete path)`` pairs."""
@@ -624,6 +629,8 @@ def _mutating_web_routes() -> list[tuple[str, str]]:
         if route.path.startswith(_NON_WEB_PREFIXES):
             continue
         for method in sorted(route.methods - {"GET", "HEAD", "OPTIONS"}):
+            if (method, route.path) in _SIGNED_SERVER_ROUTES:
+                continue
             out.append((method, _PATH_PARAM.sub("1", route.path)))
     return out
 
