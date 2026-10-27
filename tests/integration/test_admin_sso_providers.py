@@ -24,6 +24,7 @@ from specivo.core.config import get_settings
 from specivo.models.auth import RefreshToken
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user_group import UserGroup
+from specivo.services.sso.flow import redirect_uri_for
 from specivo.testing.oidc_mock import MockIdP
 from tests.factories.user import UserFactory
 
@@ -151,6 +152,25 @@ async def test_anonymous_is_unauthorized(client: AsyncClient):
 # ---------------------------------------------------------------------------
 # Create / read
 # ---------------------------------------------------------------------------
+
+
+async def test_uris_to_register_carry_the_stealth_prefix(admin_client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
+    """The admin copies these into the IdP; they must be what the login flow sends."""
+    data = await _create(admin_client)
+    monkeypatch.setenv("STEALTH_PREFIX", "/hidden")
+    get_settings.cache_clear()
+    try:
+        resp = await admin_client.get(f"{URL}{data['id']}/")
+        assert resp.status_code == 200, resp.text
+        app_url = get_settings().app_url.rstrip("/")
+        assert resp.json()["redirect_uri"] == f"{app_url}/hidden/auth/oidc/{data['slug']}/callback/"
+        assert resp.json()["redirect_uri"] == redirect_uri_for(data["slug"])
+        assert resp.json()["backchannel_logout_uri"] == (
+            f"{app_url}/hidden/auth/oidc/{data['slug']}/backchannel-logout/"
+        )
+    finally:
+        monkeypatch.delenv("STEALTH_PREFIX")
+        get_settings.cache_clear()
 
 
 async def test_create_never_returns_secret(admin_client: AsyncClient, db_session: AsyncSession):

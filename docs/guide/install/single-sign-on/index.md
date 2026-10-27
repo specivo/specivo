@@ -66,8 +66,7 @@ The steps are the same for every IdP. Only the screens differ.
     For example `https://specivo.example.com/auth/oidc/keycloak/callback/`. The trailing slash is
     part of the address. If Specivo is served under a path prefix (`STEALTH_PREFIX`), the prefix
     comes right after `{APP_URL}` in these addresses and in the post-logout address below. The
-    **Connection** card does not show the prefix: add it yourself when you register the addresses
-    at the IdP.
+    **Connection** card shows the exact addresses, prefix included: copy them from there.
 
 2. At the IdP, create a client (an "application") for Specivo and register the redirect URI
    **exactly as shown**. Do not use wildcards. If the IdP asks for a post-logout redirect
@@ -375,7 +374,8 @@ Specivo answers a valid logout request with 200 whether or not a session matched
 a missing, invalid or replayed token, 404 when the provider is unknown, disabled or has back-channel
 logout off, and 503 when it cannot check the token right now, so the IdP can retry: Redis or the
 IdP's keys are unreachable, or the token is signed with a key Specivo has not seen and it re-read
-the IdP's keys less than a minute ago (right after a key rotation).
+the IdP's keys less than a minute ago (right after a key rotation). It answers 429 to more than
+60 requests a minute for one provider from one sender address (for IPv6, from one /64 network).
 
 ## Offboarding people
 

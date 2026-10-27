@@ -20,6 +20,7 @@ from specivo.services.sso.errors import SsoStateInvalidError, SsoUnavailableErro
 from specivo.services.sso.flow import (
     ALLOWED_EXTRA_AUTH_PARAMS,
     TX_TTL_SECONDS,
+    backchannel_logout_uri_for,
     begin,
     complete,
     redirect_uri_for,
@@ -68,6 +69,18 @@ def test_redirect_uri_and_cookie_path_respect_the_stealth_prefix() -> None:
     )
     assert redirect_uri_for("corp-idp", settings) == "https://specivo.example.com/hidden/auth/oidc/corp-idp/callback/"
     assert tx_cookie_path(settings) == "/hidden/auth/oidc/"
+
+
+@pytest.mark.parametrize(
+    ("prefix", "expected"),
+    [
+        ("", "https://specivo.example.com/auth/oidc/corp-idp/backchannel-logout/"),
+        ("/hidden/", "https://specivo.example.com/hidden/auth/oidc/corp-idp/backchannel-logout/"),
+    ],
+)
+def test_backchannel_logout_uri_respects_the_stealth_prefix(prefix: str, expected: str) -> None:
+    settings = get_settings().model_copy(update={"app_url": "https://specivo.example.com/", "stealth_prefix": prefix})
+    assert backchannel_logout_uri_for("corp-idp", settings) == expected
 
 
 def test_tx_key_is_the_sha256_of_the_state() -> None:

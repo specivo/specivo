@@ -58,6 +58,7 @@ __all__ = [
     "Intent",
     "LoginTransaction",
     "auth_params_for",
+    "backchannel_logout_uri_for",
     "begin",
     "build_authorize_url",
     "complete",
@@ -96,13 +97,25 @@ def _prefix(settings: Settings) -> str:
     return settings.stealth_prefix.rstrip("/")
 
 
-def redirect_uri_for(slug: str, settings: Settings | None = None) -> str:
-    """The callback URL registered at the IdP: ``APP_URL`` + stealth prefix + slug.
+def _provider_url(slug: str, endpoint: str, settings: Settings | None) -> str:
+    """``APP_URL`` + stealth prefix + ``/auth/oidc/{slug}/{endpoint}/``.
 
-    Built from configuration only, never from the request's ``Host``.
+    Built from configuration only, never from the request's ``Host``. The one
+    source for every address an admin registers at the IdP, so what the admin
+    copies is what the flow sends and what the routes answer on.
     """
     settings = settings or get_settings()
-    return f"{settings.app_url.rstrip('/')}{_prefix(settings)}/auth/oidc/{slug}/callback/"
+    return f"{settings.app_url.rstrip('/')}{_prefix(settings)}/auth/oidc/{slug}/{endpoint}/"
+
+
+def redirect_uri_for(slug: str, settings: Settings | None = None) -> str:
+    """The callback URL registered at the IdP: ``APP_URL`` + stealth prefix + slug."""
+    return _provider_url(slug, "callback", settings)
+
+
+def backchannel_logout_uri_for(slug: str, settings: Settings | None = None) -> str:
+    """The back-channel logout URL registered at the IdP: ``APP_URL`` + stealth prefix + slug."""
+    return _provider_url(slug, "backchannel-logout", settings)
 
 
 def tx_cookie_path(settings: Settings | None = None) -> str:
