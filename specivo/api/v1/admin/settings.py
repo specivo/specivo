@@ -17,13 +17,17 @@ from specivo.services.anonymous_access_service import (
     set_anonymous_access_enabled,
 )
 from specivo.services.settings_service import SettingsService
+from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS
 
 router = APIRouter(tags=["admin"])
 _service = SettingsService()
 
 # Settings with their own endpoint, because changing them needs confirmation
 # or an audit entry the generic key/value PATCH cannot provide.
-_MANAGED_SETTINGS = {ANONYMOUS_ACCESS_SETTING_KEY: "/api/v1/admin/settings/anonymous-access/"}
+_MANAGED_SETTINGS = {
+    ANONYMOUS_ACCESS_SETTING_KEY: "/api/v1/admin/settings/anonymous-access/",
+    **dict.fromkeys(sorted(AUTH_SETTING_KEYS), "/api/v1/admin/settings/authentication/"),
+}
 
 
 @router.get("/admin/settings/")
@@ -45,7 +49,8 @@ async def update_settings(
 
     Keys not in the request body are left unchanged.
     Pass ``null`` as a value to clear a setting. Settings that have their own
-    endpoint (the anonymous access switch) are refused with 422.
+    endpoint (the anonymous access switch, the ``sso.*`` authentication
+    settings) are refused with 422.
     """
     for key in sorted(updates):
         if key in _MANAGED_SETTINGS:

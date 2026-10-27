@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from specivo.core.config import Settings
 
 # A JWS, or the start of one (a truncated token still leaks its header and claims).
 _JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{6,}(?:\.[A-Za-z0-9_-]*){0,2}")
@@ -43,3 +47,12 @@ def sanitize_idp_text(value: object, limit: int = 200) -> str:
     text = value if isinstance(value, str) else repr(value)
     printable = "".join(ch if 32 <= ord(ch) < 127 else "?" for ch in redact(text))
     return redact(printable[:limit])
+
+
+def log_startup_warnings(settings: Settings) -> None:
+    """Log the SSO settings that weaken security, once, when the app starts."""
+    if settings.sso_allow_insecure_http:
+        logger.warning(
+            "sso.startup.insecure_http SSO_ALLOW_INSECURE_HTTP is on: identity providers may use plain "
+            "http:// URLs. Use this only with a disposable test identity provider, never in production."
+        )

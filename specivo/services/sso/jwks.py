@@ -55,6 +55,7 @@ __all__ = [
     "JWKS_MAX_TTL_SECONDS",
     "JWKS_MIN_TTL_SECONDS",
     "JWKS_REFETCH_INTERVAL_SECONDS",
+    "fetch_jwks_uncached",
     "get_jwks",
     "jwks_cache_key",
     "refetch_jwks_for_unknown_kid",
@@ -234,6 +235,12 @@ async def _fetch_and_store(provider_id: int, jwks_uri: str, redis: Redis, settin
     keys, ttl = await _fetch(jwks_uri, settings)
     await cache_set(redis, jwks_cache_key(provider_id), json.dumps({"uri": jwks_uri, "keys": keys}), ttl)
     logger.info("sso.jwks.fetched provider_id=%s keys=%d ttl=%d", provider_id, len(keys), ttl)
+    return keys
+
+
+async def fetch_jwks_uncached(jwks_uri: str, *, settings: Settings | None = None) -> list[dict[str, Any]]:
+    """Fetch and filter the JWKS at ``jwks_uri`` without touching the cache (admin self-test)."""
+    keys, _ttl = await _fetch(jwks_uri, settings or get_settings())
     return keys
 
 
