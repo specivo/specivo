@@ -53,7 +53,7 @@ def test_header_sign_out_lands_on_login(signout_page: Page) -> None:
     signout_page.goto("/")
     signout_page.locator(".header-user").click()
     signout_page.locator(".user-dropdown form[action='/logout/'] button[type='submit']").click()
-    signout_page.wait_for_url("**/login/")
+    signout_page.wait_for_url("**/login/?logged_out=1")
     expect(signout_page.locator("#login-field")).to_be_visible()
 
     # After logout, navigating to dashboard should redirect back to login
@@ -72,5 +72,5 @@ def test_logout_url_asks_before_signing_out(signout_page: Page) -> None:
 
     signout_page.goto("/logout/")
     signout_page.locator("[data-testid='logout-confirm']").click()
-    signout_page.wait_for_url("**/login/")
+    signout_page.wait_for_url("**/login/?logged_out=1")
     expect(signout_page.locator("#login-field")).to_be_visible()
