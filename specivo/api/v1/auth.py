@@ -18,6 +18,7 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.constants import API_KEY_PREFIX
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import rate_limit
@@ -50,6 +51,19 @@ _service = AuthService()
 _ACCESS_COOKIE = "access_token"
 _REFRESH_COOKIE = "refresh_token"
 _REFRESH_COOKIE_PATH = "/"
+
+
+def _request_access_token(request: Request, cookie_value: str | None) -> str | None:
+    """Return the access JWT the request carries: the Bearer header, else the cookie.
+
+    An API key in the header is not an access token and yields the cookie.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        bearer = auth_header[len("Bearer ") :]
+        if bearer and not bearer.startswith(API_KEY_PREFIX):
+            return bearer
+    return cookie_value
 
 
 def _set_auth_cookies(
@@ -261,16 +275,27 @@ async def refresh(
 @router.post(
     "/logout/",
     status_code=status.HTTP_204_NO_CONTENT,
-    summary="Revoke the current refresh token",
+    summary="End the current session",
 )
 async def logout(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: RefreshRequest | None = None,
     refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+    access_token_cookie: Annotated[str | None, Cookie(alias=_ACCESS_COOKIE)] = None,
 ) -> Response:
+    """Revoke the session named by the refresh token and/or the access token.
+
+    The refresh token comes from the body or the cookie, the access token from
+    the ``Authorization: Bearer`` header or the cookie. The session they belong
+    to is revoked: its refresh token can no longer rotate and its access
+    tokens are refused from the next request on. Without either, this only
+    clears the cookies.
+    """
     raw_token = (body.refresh_token if body else None) or refresh_token_cookie
-    if raw_token:
-        await _service.logout(session=db, refresh_token_raw=raw_token)
+    await _service.end_browser_session(
+        db, refresh_token_raw=raw_token, access_token_raw=_request_access_token(request, access_token_cookie)
+    )
 
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
     _clear_auth_cookies(response)
@@ -313,7 +338,10 @@ async def list_sessions(
 ) -> list[SessionOut]:
     """Return active (non-expired) refresh tokens for the current user."""
     sessions = await _service.list_sessions(session=db, user_id=current_user.id)
-    return [SessionOut.model_validate(s) for s in sessions]
+    return [
+        SessionOut.model_validate(token).model_copy(update={"provider_name": provider_name})
+        for token, provider_name in sessions
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -465,6 +493,7 @@ async def change_password(
     current_user: Annotated[User, Depends(get_current_user)],
     _rl: Annotated[None, Depends(_change_password_rate_limit)],
     refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+    access_token_cookie: Annotated[str | None, Cookie(alias=_ACCESS_COOKIE)] = None,
 ) -> ChangePasswordResponse:
     """Change your own password, proving ownership with the current one.
 
@@ -499,11 +528,14 @@ async def change_password(
         raise
 
     # Revoke the user's other sessions, keeping the caller's own refresh
-    # token alive so a browser session survives its own password change.
+    # token alive so a browser session survives its own password change. A
+    # Bearer caller without one loses its refresh token too, but its access
+    # token is not cut off mid-flow.
     revoked = await _service.logout_other_sessions(
         session=db,
         user_id=current_user.id,
         keep_refresh_token_raw=refresh_token_cookie,
+        caller_access_token_raw=_request_access_token(request, access_token_cookie),
     )
 
     try:

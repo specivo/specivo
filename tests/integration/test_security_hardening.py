@@ -128,7 +128,7 @@ class TestJwtClaims:
         assert "is_service_account" not in payload, "JWT must not contain is_service_account claim"
 
     async def test_jwt_contains_only_required_claims(self, client: AsyncClient, db_session: AsyncSession):
-        """JWT payload must contain only: sub, iat, exp, jti."""
+        """JWT payload must contain only: sub, iat, exp, jti, rem, sid."""
         await _create_user(db_session, login="jwt_minimal_user")
         resp = await _login(client, "jwt_minimal_user", TEST_PASSWORD)
         assert resp.status_code == 200
@@ -136,7 +136,7 @@ class TestJwtClaims:
         access_token = resp.json()["access_token"]
         payload = pyjwt.decode(access_token, options={"verify_signature": False})
 
-        allowed_claims = {"sub", "iat", "exp", "jti", "rem"}
+        allowed_claims = {"sub", "iat", "exp", "jti", "rem", "sid"}
         extra_claims = set(payload.keys()) - allowed_claims
         assert not extra_claims, f"JWT contains unexpected claims: {extra_claims}"
 

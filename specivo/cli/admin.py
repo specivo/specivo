@@ -55,6 +55,7 @@ from specivo.services.password_hashers import (
     PasswordHasherRegistry,
     get_password_hasher_registry,
 )
+from specivo.services.session_service import SessionService
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +128,11 @@ async def _reset_password(
     user.password_changed_at = utcnow()
     user.failed_login_count = 0
     user.locked_until = None
+    # An operator reset is compromise recovery: every existing session of the
+    # account ends now, its access tokens included.
+    revoked = await SessionService().revoke_user_sessions(session, user.id, reason="admin_cli_password_reset")
     await session.commit()
-    print(f"Password reset for user '{login}'.")
+    print(f"Password reset for user '{login}'. Sessions revoked: {revoked}.")
 
 
 async def _run_create(args: argparse.Namespace) -> None:
@@ -316,9 +320,16 @@ async def expire_legacy_passwords(session: AsyncSession, algorithm: str | None =
     clause = _legacy_hash_clause()
     if algorithm:
         clause = clause & (_algorithm_of_hash_expr() == algorithm)
-    count = (await session.execute(select(func.count()).where(clause))).scalar_one()
+    user_ids = list((await session.execute(select(User.id).where(clause))).scalars().all())
+    count = len(user_ids)
     if not count:
         return 0
+    # The password is replaced by one nobody knows: every session of these
+    # accounts ends now (a session left behind could not even complete the
+    # forced change, which asks for the current password).
+    sessions = SessionService()
+    for user_id in user_ids:
+        await sessions.revoke_user_sessions(session, user_id, reason="legacy_password_expired")
     # One hash of a discarded random secret serves every row: nobody can
     # produce a password matching it, so sharing it reveals nothing.
     unusable = hash_password(secrets.token_urlsafe(32))
