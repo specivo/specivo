@@ -63,6 +63,7 @@ from specivo.services.sso.discovery import (
     parse_discovery,
 )
 from specivo.services.sso.errors import SsoError
+from specivo.services.sso.flow import backchannel_logout_uri_for, redirect_uri_for
 from specivo.services.sso.jwks import ALLOWED_ALGORITHMS, fetch_jwks_uncached
 from specivo.services.sso.log import logger, sanitize_idp_text
 from specivo.services.sso.tokens import CLIENT_SECRET_PURPOSE
@@ -76,8 +77,6 @@ __all__ = [
     "ProviderService",
     "ProviderUpdateResult",
     "SecretStatus",
-    "backchannel_logout_uri",
-    "redirect_uri",
 ]
 
 _MAX_SECRET_LENGTH = 1024
@@ -139,20 +138,6 @@ class ProviderDeleteResult:
     identities_unlinked: int
     sessions_revoked: int
     memberships_removed: int
-
-
-def _app_url(settings: Settings | None) -> str:
-    return (settings or get_settings()).app_url.rstrip("/")
-
-
-def redirect_uri(slug: str, settings: Settings | None = None) -> str:
-    """The OIDC redirect URI for a provider: ``{APP_URL}/auth/oidc/{slug}/callback/``."""
-    return f"{_app_url(settings)}/auth/oidc/{slug}/callback/"
-
-
-def backchannel_logout_uri(slug: str, settings: Settings | None = None) -> str:
-    """The back-channel logout URI: ``{APP_URL}/auth/oidc/{slug}/backchannel-logout/``."""
-    return f"{_app_url(settings)}/auth/oidc/{slug}/backchannel-logout/"
 
 
 def _invalid(code: str, message: str, field: str | None = None) -> AppError:
@@ -276,8 +261,8 @@ class ProviderService:
             discovery_fetched_at=provider.discovery_fetched_at,
             identity_count=identity_count,
             managed_membership_count=managed_membership_count,
-            redirect_uri=redirect_uri(provider.slug, settings),
-            backchannel_logout_uri=backchannel_logout_uri(provider.slug, settings),
+            redirect_uri=redirect_uri_for(provider.slug, settings),
+            backchannel_logout_uri=backchannel_logout_uri_for(provider.slug, settings),
             created_at=provider.created_at,
             updated_at=provider.updated_at,
         )

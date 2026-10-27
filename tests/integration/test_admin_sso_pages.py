@@ -110,6 +110,24 @@ async def test_detail_page_shows_urls_to_copy(admin_client: AsyncClient, provide
     assert provider.client_secret_encrypted not in resp.text
 
 
+async def test_detail_page_urls_carry_the_stealth_prefix(
+    admin_client: AsyncClient, provider: SsoProvider, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setenv("STEALTH_PREFIX", "/hidden")
+    get_settings.cache_clear()
+    try:
+        resp = await admin_client.get(f"/admin/sso/{provider.id}/", cookies=_cookies(admin_client))
+        assert resp.status_code == 200
+        app_url = get_settings().app_url.rstrip("/")
+        assert f"{app_url}/hidden/auth/oidc/{provider.slug}/callback/" in resp.text
+        assert f"{app_url}/hidden/auth/oidc/{provider.slug}/backchannel-logout/" in resp.text
+        assert f"{app_url}/auth/oidc/{provider.slug}/callback/" not in resp.text
+        assert f"{app_url}/hidden/auth/oidc/__slug__/callback/" in resp.text
+    finally:
+        monkeypatch.delenv("STEALTH_PREFIX")
+        get_settings.cache_clear()
+
+
 async def test_new_page_renders(admin_client: AsyncClient):
     resp = await admin_client.get("/admin/sso/new/", cookies=_cookies(admin_client))
     assert resp.status_code == 200

@@ -23,7 +23,8 @@ from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.sso import EXTRA_AUTH_PARAM_KEYS, AuthSettingsUpdate
 from specivo.services.sso.auth_settings import update_auth_settings
-from specivo.services.sso.provider_service import ProviderService, backchannel_logout_uri, redirect_uri
+from specivo.services.sso.flow import backchannel_logout_uri_for, redirect_uri_for
+from specivo.services.sso.provider_service import ProviderService
 from specivo.web.deps import get_templates
 from specivo.web.pages.admin import require_admin, require_admin_session
 
@@ -65,8 +66,8 @@ def _render_form(request: Request, user: User, provider: dict[str, object] | Non
             "group_mappings": mappings,
             "extra_param_keys": sorted(EXTRA_AUTH_PARAM_KEYS),
             # For the URL preview while the slug of a new provider is typed.
-            "callback_template": redirect_uri("__slug__"),
-            "backchannel_template": backchannel_logout_uri("__slug__"),
+            "callback_template": redirect_uri_for("__slug__"),
+            "backchannel_template": backchannel_logout_uri_for("__slug__"),
         },
     )
 
