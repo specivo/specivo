@@ -110,6 +110,38 @@ SMTP_USER=notifications@example.com
 SMTP_PASSWORD=...      # put the password in .env.local
 ```
 
+## Single sign-on: getting back in
+
+Identity providers are configured in **Administration → Single sign-on**, and the login page
+settings in **Administration → Settings → Authentication**. Those settings can hide the password
+form, send the login page straight to one provider, and limit password sign-in to administrators.
+None of them can lock an administrator out:
+
+- With the password form hidden, the login page still shows a small **Sign in with a local
+  account** link. It opens `/login/?local=1`, which always shows the form and never redirects.
+- If the identity provider is down, the error on the login page links to the same form.
+- If the SSO settings themselves are wrong (a broken provider, every admin refused), turn on the
+  environment switch below. It overrides all three settings until you turn it off again:
+
+  ```bash
+  # .env
+  SSO_FORCE_LOCAL_LOGIN=true
+  ```
+
+  ```bash
+  docker compose up -d   # recreates the containers with the new value
+  ```
+
+  Specivo logs a warning at startup while it is on. Fix the settings, then remove the line and
+  recreate the containers again.
+- If no administrator knows a password, set one from the host with
+  `make reset-password login=... password=...`, or create a new administrator with
+  `make create-admin login=... email=... password=...`.
+
+| Variable | Purpose / default |
+|---|---|
+| `SSO_FORCE_LOCAL_LOGIN` | Break-glass switch: always show the password form, never redirect the login page to a provider, and let every user sign in with a password. Default `false`. |
+
 ## Imported passwords
 
 These settings matter only if you import accounts from another system and let
