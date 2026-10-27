@@ -48,7 +48,8 @@ docker compose up -d
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
 | `CAPTCHA_ENABLED` | Captcha on the registration form. |
 | `CORS_ORIGINS` | Allowed browser origins, e.g. `["https://specivo.example.com"]`. |
-| `TRUSTED_PROXIES` | Reverse proxies whose `X-Forwarded-For` header is believed, as a JSON list of addresses or CIDR networks. The bundled stack sets `["172.16.0.0/12","10.0.0.0/8"]` (Docker's private ranges, so the bundled nginx is trusted). See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
+| `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
+| `TRUSTED_PROXY_HOPS` | How many proxies in a row stand in front of Specivo. Default `1`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |
 | `MARKDOWN_RENDER_DEADLINE_SECONDS` | CPU seconds one Markdown field (a description, a comment, a wiki page) may use to render before it is shown as plain text instead. It also may not take more than 4 times this in elapsed time. A backstop: text that would render slowly is caught before rendering. Counts CPU time, so a busy host does not trigger it. Default `2`, scaled by `MARKDOWN_RENDER_SPEED_FACTOR`; the largest realistic pages need under half a second on a fast machine. See [Size and complexity limits](../reference/markdown.md#size-and-complexity-limits). |
 | `MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS` | CPU seconds all the Markdown fields on one page or API response may use together (a description, its comments and its history). Once spent, the remaining fields are shown as plain text. Default `5`, scaled by `MARKDOWN_RENDER_SPEED_FACTOR`. |
@@ -116,39 +117,70 @@ SMTP_PASSWORD=...      # put the password in .env.local
 
 Specivo uses the client's IP address for the per-address rate limits (sign-in, single sign-on,
 anonymous reads), for the address shown on each session, for API key IP allowlists and for the
-security audit log. Behind a reverse proxy, the connection comes from the proxy, and the client's
-address is in the `X-Forwarded-For` header the proxy adds. Specivo believes that header only from
-the proxies listed in `TRUSTED_PROXIES`:
+security audit log. Behind a reverse proxy, the connection comes from the proxy. Each proxy appends
+the address it received the request from to the `X-Forwarded-For` header, so the client's address
+is in that header. Two settings decide what Specivo believes:
 
-- A connection from an address that is not listed is the client, whatever header it sends. Nobody
-  can pick their own address by making one up.
-- From a listed proxy, Specivo reads `X-Forwarded-For` from the right, skips every address that is
-  also a listed proxy, and takes the first one that is not.
+- **`TRUSTED_PROXIES`**: the address of the proxy that connects to Specivo. Only a connection from
+  one of these addresses may name the client. A connection from anywhere else is the client,
+  whatever header it sends. Default `[]`: nothing is trusted.
+- **`TRUSTED_PROXY_HOPS`**: how many proxies in a row stand in front of Specivo. The client is the
+  entry that many places from the right of `X-Forwarded-For`. Everything to the left of it was
+  written by the client and is ignored, so nobody can choose their own address by sending the
+  header. Default `1`.
 
-The bundled `docker-compose.yml` trusts Docker's private ranges, `172.16.0.0/12` and `10.0.0.0/8`.
-That covers the bundled nginx, and an HTTPS terminator such as Caddy on the same host, which
-reaches nginx from the Docker gateway address. It is safe because the api container publishes no
-port: everything reaches it through nginx, which always appends the address it saw.
+List the proxy's exact address, not a whole private range: anything in a trusted range could name
+any client.
 
-Change it in `.env` (not `.env.local`; the compose file reads it from `.env`) when:
+### The bundled stack
 
-- **A CDN or load balancer is in front** (Cloudflare, a cloud load balancer): add its published
-  address ranges, or every client appears as the CDN's edge address.
+`docker-compose.yml` puts nginx and the api on their own network, `proxy`
+(`10.213.47.0/29`), with nginx at the fixed address `10.213.47.2`, and sets
+`TRUSTED_PROXIES=["10.213.47.2/32"]`. Nothing else is on that network, the api publishes no port,
+and nginx appends the address it saw, so it works without changes. If that range is already used on
+your host (`docker compose up` fails with "Pool overlaps"), pick another one in `.env`:
 
-  ```bash
-  # .env
-  TRUSTED_PROXIES=["172.16.0.0/12","10.0.0.0/8","198.51.100.0/24"]
-  ```
+```bash
+# .env
+SPECIVO_PROXY_SUBNET=10.99.0.0/29
+SPECIVO_NGINX_IP=10.99.0.2
+```
 
-- **Docker put the stack on another network range.** Check with
-  `docker network inspect specivo_default` (the name follows `COMPOSE_PROJECT_NAME`) and add its
-  subnet.
-- **You publish the api port directly**, or run Docker in a mode where every outside connection
-  appears to come from the Docker gateway (Docker Desktop, rootless Docker). Then a trusted range
-  also covers outside clients, and they could choose their own address. List only the exact
-  address of your real proxy, or set `TRUSTED_PROXIES=[]` if there is none.
+`TRUSTED_PROXIES` follows `SPECIVO_NGINX_IP` unless you set it yourself. Set these in `.env`, not
+`.env.local`: the compose file reads them from `.env`.
 
-Without the compose file, the default is `[]`: the address of the connection is the client.
+### Another proxy in front of nginx
+
+When an HTTPS terminator or a CDN forwards to the bundled nginx, there are two proxies in a row.
+The outer one writes the client's address and nginx appends the outer proxy's address, so set:
+
+```bash
+# .env
+TRUSTED_PROXY_HOPS=2
+```
+
+- **Caddy**: `reverse_proxy` sets `X-Forwarded-For` to the client's address and does not pass on
+  a header the client sent, unless you configure Caddy's own `trusted_proxies`.
+- **Traefik**: appends the client's address. Leave `forwardedHeaders.insecure` off on the
+  entry point, so a header the client sent is not passed through as if Traefik had written it.
+- **Cloudflare**: appends the visitor's address. Nginx must then only accept connections from
+  Cloudflare (firewall the published port to Cloudflare's address ranges), because a request that
+  goes around Cloudflare can put anything in the extra entry.
+
+With `TRUSTED_PROXY_HOPS=1` and an outer proxy, every client appears as the outer proxy's address:
+safe, but everyone shares one rate limit bucket. With a hop count higher than the real number of
+proxies, clients can choose their address. Count exactly.
+
+### Without the bundled nginx
+
+If your own proxy (nginx, Caddy, Traefik) connects straight to the api, set `TRUSTED_PROXIES` to
+that proxy's address and keep `TRUSTED_PROXY_HOPS=1`. For nginx, the usual
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` is right: it appends the client's
+address.
+
+```bash
+TRUSTED_PROXIES=["192.0.2.10/32"]
+```
 
 ## Single sign-on: getting back in
 
