@@ -64,17 +64,8 @@ async def keycloak_app(
 ) -> AsyncIterator[httpx.AsyncClient]:
     """The app as Keycloak's redirect URIs expect it: APP_URL=http://testserver, http issuer allowed."""
     from specivo.core.database import get_db, set_engine
-    from specivo.services.sso import http as sso_http
     from specivo.testing.conftest_base import _create_test_app, _make_test_get_db
 
-    # The test IdP publishes its port on 127.0.0.1 only, while "localhost"
-    # resolves to ::1 first and the SSO client connects to the first answer.
-    resolve = sso_http._resolve_host
-
-    async def _ipv4_first(host: str, port: int) -> list[str]:
-        return sorted(await resolve(host, port), key=lambda address: ":" in address)
-
-    monkeypatch.setattr(sso_http, "_resolve_host", _ipv4_first)
     monkeypatch.setenv("APP_URL", seed.ASGI_BASE_URL)
     monkeypatch.setenv("SSO_ALLOW_INSECURE_HTTP", "true")
     get_settings.cache_clear()

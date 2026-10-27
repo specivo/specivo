@@ -539,6 +539,66 @@ class TestResolutionAndPinning:
                 await client.get("https://idp.example.com/hop")
         assert calls == ["idp.example.com", "idp.example.com"]
 
+    @staticmethod
+    def _failing_client(answers: list[str], failing: dict[str, Exception], seen: list[str]) -> httpx.AsyncClient:
+        async def resolver(host: str, port: int) -> list[str]:
+            return answers
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request.url.host)
+            error = failing.get(request.url.host)
+            if error is not None:
+                raise error
+            return httpx.Response(200, text=request.content.decode() or "ok")
+
+        transport = sso_http._GuardedTransport(httpx.MockTransport(handler), resolver=resolver)
+        return httpx.AsyncClient(transport=transport)
+
+    async def test_connect_failure_falls_back_to_the_next_address(self) -> None:
+        """``localhost`` answers ::1 first; an IdP listening on IPv4 only is still reached."""
+        seen: list[str] = []
+        failing = {"::1": httpx.ConnectError("connection refused")}
+        async with self._failing_client(["::1", "127.0.0.1"], failing, seen) as client:
+            resp = await client.post("http://localhost:8033/token", content=b"grant_type=authorization_code")
+        assert resp.status_code == 200
+        # The body is sent again, complete, to the second address.
+        assert resp.text == "grant_type=authorization_code"
+        assert seen == ["::1", "127.0.0.1"]
+
+    async def test_connect_timeout_falls_back_to_the_next_address(self) -> None:
+        seen: list[str] = []
+        failing = {"2606:2800:220:1::1": httpx.ConnectTimeout("no route")}
+        async with self._failing_client(["2606:2800:220:1::1", "93.184.216.34"], failing, seen) as client:
+            assert (await client.get("https://idp.example.com/x")).status_code == 200
+        assert seen == ["2606:2800:220:1::1", "93.184.216.34"]
+
+    async def test_every_address_failing_raises_the_last_connect_error(self) -> None:
+        seen: list[str] = []
+        failing: dict[str, Exception] = {
+            "::1": httpx.ConnectError("refused v6"),
+            "127.0.0.1": httpx.ConnectError("refused v4"),
+        }
+        async with self._failing_client(["::1", "127.0.0.1"], failing, seen) as client:
+            with pytest.raises(httpx.ConnectError, match="refused v4"):
+                await client.get("https://localhost/x")
+        assert seen == ["::1", "127.0.0.1"]
+
+    async def test_failure_after_connecting_is_not_retried(self) -> None:
+        """Only connection failures fall back: once a request may have been sent, it is not resent."""
+        seen: list[str] = []
+        failing = {"::1": httpx.ReadError("connection reset")}
+        async with self._failing_client(["::1", "127.0.0.1"], failing, seen) as client:
+            with pytest.raises(httpx.ReadError):
+                await client.get("https://localhost/x")
+        assert seen == ["::1"]
+
+    async def test_duplicate_answers_are_tried_once(self) -> None:
+        seen: list[str] = []
+        failing = {"::1": httpx.ConnectError("refused")}
+        async with self._failing_client(["::1", "::1", "127.0.0.1"], failing, seen) as client:
+            assert (await client.get("https://localhost/x")).status_code == 200
+        assert seen == ["::1", "127.0.0.1"]
+
     async def test_resolution_failure_is_a_connect_error(self) -> None:
         async def resolver(host: str, port: int) -> list[str]:
             raise OSError("no such host")
