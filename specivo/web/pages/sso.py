@@ -40,6 +40,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.auth_cookies import set_auth_cookies
+from specivo.core.client_ip import get_client_ip
 from specivo.core.config import Settings, get_settings
 from specivo.core.database import get_db
 from specivo.core.i18n import gettext as _
@@ -60,7 +61,11 @@ _service = SsoLoginService()
 
 _start_rate_limit = rate_limit("sso_login_start", max_requests=20, window_seconds=60)
 _callback_rate_limit = rate_limit("sso_callback", max_requests=20, window_seconds=60)
-_backchannel_rate_limit = rate_limit("sso_backchannel_logout", max_requests=60, window_seconds=60)
+# Back-channel logout is metered per provider, not per sender: the IdP is one
+# sender for all its users, and a busy or spoofing sender must not use up
+# another provider's budget. Checked once the provider is known to exist, so
+# requests for made-up slugs create no buckets.
+_BACKCHANNEL_RATE_LIMIT = ("sso_backchannel_logout", 60, 60)
 
 #: Largest back-channel logout request body read; a logout token is a few KB.
 BACKCHANNEL_MAX_BODY_BYTES = 16 * 1024
@@ -270,7 +275,7 @@ async def sso_callback(
             params={key: value for key, value in query.items()},
             binding_token=request.cookies.get(TX_COOKIE_NAME),
             device_info=request.headers.get("User-Agent"),
-            ip=request.client.host if request.client else None,
+            ip=get_client_ip(request),
             current_user_id=current_user_id,
         )
     except SsoError as exc:
@@ -366,13 +371,14 @@ async def _read_logout_token(request: Request) -> str:
 async def sso_backchannel_logout(
     slug: str,
     request: Request,
+    response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
-    _rl: Annotated[None, Depends(_backchannel_rate_limit)],
 ) -> Response:
     """End the Specivo sessions a valid logout token names (see the module docstring)."""
     provider = await _service.get_enabled_provider(db, slug)
     if provider is None or not provider.backchannel_logout_enabled:
         return _backchannel_answer(404, {"error": "not_found"})
+    await enforce_rate_limit(request, response, *_BACKCHANNEL_RATE_LIMIT, identifier=f"provider:{provider.id}")
 
     try:
         logout_token = await _read_logout_token(request)

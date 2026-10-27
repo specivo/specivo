@@ -19,6 +19,8 @@ import uuid
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from specivo.core.client_ip import client_ip_from_scope
+
 logger = logging.getLogger(__name__)
 
 REQUEST_ID_HEADER = "x-request-id"
@@ -608,11 +610,10 @@ class AuditBatchMiddleware:
         state = scope.setdefault("state", {})
         buffer: list[dict] = []
         state["audit_events"] = buffer
-        client = scope.get("client")
         user_agent = dict(scope.get("headers") or []).get(b"user-agent", b"").decode("latin-1") or None
         token = bind_audit_context(
             buffer,
-            ip_address=client[0] if client else None,
+            ip_address=client_ip_from_scope(scope),
             user_agent=user_agent,
             state=state,
         )

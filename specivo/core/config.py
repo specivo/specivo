@@ -187,7 +187,11 @@ class Settings(BaseSettings):
     # Rate limiting — disable for E2E / load testing environments
     rate_limit_enabled: bool = True
 
-    # Trusted proxies — CIDRs whose X-Forwarded-For header is trusted
+    # Trusted proxies: CIDRs of the reverse proxies in front of Specivo, as a
+    # JSON list. X-Forwarded-For is believed only from these, walking it from
+    # the right past every trusted hop (see specivo.core.client_ip). Empty:
+    # the socket peer is the client. The bundled docker-compose.yml sets the
+    # Docker private ranges so the bundled nginx is trusted.
     trusted_proxies: list[str] = []
 
     # Search
@@ -268,6 +272,18 @@ class Settings(BaseSettings):
         if v is not None and v.tzinfo is None:
             return v.replace(tzinfo=UTC)
         return v
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def validate_trusted_proxies(cls, v: list[str]) -> list[str]:
+        import ipaddress
+
+        for cidr in v:
+            try:
+                ipaddress.ip_network(cidr.strip(), strict=False)
+            except ValueError:
+                raise ValueError(f"TRUSTED_PROXIES: {cidr!r} is not an IP address or CIDR network") from None
+        return [cidr.strip() for cidr in v]
 
     @field_validator("cors_origins", mode="before")
     @classmethod
