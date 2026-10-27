@@ -71,16 +71,32 @@ class TestResolveClientSecret:
         assert resolve_client_secret(make_provider(mock_idp)) == mock_idp.client_secret
 
     def test_env_var(self, mock_idp: MockIdP, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SPECIVO_TEST_SSO_SECRET", "from-env")
-        provider = make_provider(mock_idp, client_secret_encrypted=None, client_secret_env="SPECIVO_TEST_SSO_SECRET")
+        monkeypatch.setenv("SPECIVO_SSO_SECRET_TOKENS_TEST", "from-env")
+        provider = make_provider(
+            mock_idp, client_secret_encrypted=None, client_secret_env="SPECIVO_SSO_SECRET_TOKENS_TEST"
+        )
         assert resolve_client_secret(provider) == "from-env"
 
     def test_env_var_missing(self, mock_idp: MockIdP, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.delenv("SPECIVO_TEST_SSO_SECRET", raising=False)
-        provider = make_provider(mock_idp, client_secret_encrypted=None, client_secret_env="SPECIVO_TEST_SSO_SECRET")
+        monkeypatch.delenv("SPECIVO_SSO_SECRET_TOKENS_TEST", raising=False)
+        provider = make_provider(
+            mock_idp, client_secret_encrypted=None, client_secret_env="SPECIVO_SSO_SECRET_TOKENS_TEST"
+        )
         with pytest.raises(SsoConfigurationError) as exc:
             resolve_client_secret(provider)
         assert exc.value.reason == "client_secret_env_unset"
+
+    @pytest.mark.parametrize("name", ["SECRET_KEY", "DATABASE_URL", "REDIS_URL", "SPECIVO_SSO_SECRET_", "PATH"])
+    def test_env_var_outside_namespace_is_never_read(
+        self, mock_idp: MockIdP, monkeypatch: pytest.MonkeyPatch, name: str
+    ) -> None:
+        """A forged or legacy row must not turn the token request into an exfiltration channel."""
+        monkeypatch.setenv(name, "master-secret-that-must-not-leave")
+        provider = make_provider(mock_idp, client_secret_encrypted=None, client_secret_env=name)
+        with pytest.raises(SsoConfigurationError) as exc:
+            resolve_client_secret(provider)
+        assert exc.value.reason == "client_secret_env_not_allowed"
+        assert "master-secret" not in repr(exc.value)
 
     def test_unreadable(self, mock_idp: MockIdP) -> None:
         token = secret_box.encrypt("x", "sso-client-secret", secret_key="another-secret-key-" + "y" * 32)
@@ -180,8 +196,10 @@ class TestExchangeCode:
         assert form["client_id"] == [idp.client_id]
 
     async def test_env_secret_is_used(self, mock_idp: MockIdP, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("SPECIVO_TEST_SSO_SECRET", mock_idp.client_secret or "")
-        provider = make_provider(mock_idp, client_secret_encrypted=None, client_secret_env="SPECIVO_TEST_SSO_SECRET")
+        monkeypatch.setenv("SPECIVO_SSO_SECRET_TOKENS_TEST", mock_idp.client_secret or "")
+        provider = make_provider(
+            mock_idp, client_secret_encrypted=None, client_secret_env="SPECIVO_SSO_SECRET_TOKENS_TEST"
+        )
         code, verifier = _code(mock_idp)
         result = await exchange_code(
             provider, _meta(mock_idp), code=code, redirect_uri=REDIRECT_URI, code_verifier=verifier

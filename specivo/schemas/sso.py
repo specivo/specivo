@@ -22,7 +22,7 @@ from typing import Annotated, Any, Literal
 import httpx
 from pydantic import AfterValidator, BaseModel, BeforeValidator, ConfigDict, Field, SecretStr
 
-from specivo.models.sso import SLUG_PATTERN
+from specivo.models.sso import CLIENT_SECRET_ENV_PREFIX, SLUG_PATTERN, is_allowed_client_secret_env
 
 __all__ = [
     "EXTRA_AUTH_PARAM_KEYS",
@@ -44,10 +44,11 @@ EXTRA_AUTH_PARAM_KEYS: frozenset[str] = frozenset({"prompt", "domain_hint", "log
 
 TokenEndpointAuthMethod = Literal["client_secret_basic", "client_secret_post", "none"]
 LinkPolicy = Literal["manual", "auto_verified_email"]
-SecretStatusValue = Literal["configured", "unreadable", "env", "env_missing", "missing", "not_required"]
+SecretStatusValue = Literal[
+    "configured", "unreadable", "env", "env_missing", "env_not_allowed", "missing", "not_required"
+]
 
 _SLUG_RE = re.compile(SLUG_PATTERN)
-_ENV_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 # RFC 6749 section 3.3: scope-token = 1*( %x21 / %x23-5B / %x5D-7E )
 _SCOPE_TOKEN_RE = re.compile(r"^[\x21\x23-\x5B\x5D-\x7E]+$")
 _DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$")
@@ -83,8 +84,11 @@ def _check_url(value: str) -> str:
 
 
 def _check_env_name(value: str) -> str:
-    if not _ENV_NAME_RE.fullmatch(value):
-        raise ValueError("must be an environment variable name: A-Z, 0-9 and '_', 3-64 characters, starting with A-Z")
+    if not is_allowed_client_secret_env(value):
+        raise ValueError(
+            f"must be an environment variable named {CLIENT_SECRET_ENV_PREFIX}<NAME> "
+            "(A-Z, 0-9 and '_', at most 64 characters)"
+        )
     return value
 
 
@@ -203,6 +207,7 @@ class SsoProviderCreate(BaseModel):
     #: Write-only. Stored encrypted; never returned.
     client_secret: SecretStr | None = None
     #: Alternative to ``client_secret``: the name of an environment variable holding it.
+    #: Only ``SPECIVO_SSO_SECRET_*`` names are accepted, never Specivo's own settings.
     client_secret_env: EnvName | None = None
     scopes: Scopes = "openid profile email"
     claim_config: SsoClaimConfig = Field(default_factory=SsoClaimConfig)
@@ -279,7 +284,8 @@ class SsoProviderOut(BaseModel):
     #: True when a secret source is set (stored secret or env var name).
     client_secret_configured: bool
     #: ``configured`` | ``unreadable`` (re-enter it) | ``env`` | ``env_missing``
-    #: (the env var is unset) | ``missing`` | ``not_required`` (public client).
+    #: (the env var is unset) | ``env_not_allowed`` (name outside ``SPECIVO_SSO_SECRET_*``,
+    #: never read) | ``missing`` | ``not_required`` (public client).
     client_secret_status: SecretStatusValue
     client_secret_env: str | None
     scopes: str

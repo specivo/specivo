@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core import secret_box
 from specivo.core.config import Settings, get_settings
 from specivo.core.exceptions import AppError, NotFoundError
-from specivo.models.sso import SsoGroupMapping, SsoProvider, UserIdentity
+from specivo.models.sso import SsoGroupMapping, SsoProvider, UserIdentity, is_allowed_client_secret_env
 from specivo.models.user_group import UserGroup
 from specivo.schemas.sso import (
     SsoGroupMappingIn,
@@ -112,6 +112,8 @@ class SecretStatus(StrEnum):
     UNREADABLE = "unreadable"  # stored, but SECRET_KEY changed: re-enter it
     ENV = "env"  # referenced env var is set
     ENV_MISSING = "env_missing"  # referenced env var is not set in this process
+    # Name outside SPECIVO_SSO_SECRET_*: never read, and whether it exists is not revealed.
+    ENV_NOT_ALLOWED = "env_not_allowed"
     MISSING = "missing"  # confidential client without a secret
     NOT_REQUIRED = "not_required"  # public client (auth method ``none``)
 
@@ -196,6 +198,8 @@ class ProviderService:
                 return SecretStatus.UNREADABLE
             return SecretStatus.CONFIGURED
         if provider.client_secret_env:
+            if not is_allowed_client_secret_env(provider.client_secret_env):
+                return SecretStatus.ENV_NOT_ALLOWED
             return SecretStatus.ENV if os.environ.get(provider.client_secret_env) else SecretStatus.ENV_MISSING
         return SecretStatus.MISSING
 
@@ -211,6 +215,8 @@ class ProviderService:
         if provider.client_secret_encrypted:
             return secret_box.decrypt(provider.client_secret_encrypted, CLIENT_SECRET_PURPOSE)
         if provider.client_secret_env:
+            if not is_allowed_client_secret_env(provider.client_secret_env):
+                return None
             return os.environ.get(provider.client_secret_env) or None
         return None
 
@@ -626,6 +632,8 @@ class ProviderService:
             warnings.append("client_secret_unreadable")
         elif status is SecretStatus.ENV_MISSING:
             warnings.append("client_secret_env_unset")
+        elif status is SecretStatus.ENV_NOT_ALLOWED:
+            warnings.append("client_secret_env_not_allowed")
         elif status is SecretStatus.MISSING:
             warnings.append("client_secret_missing")
         return warnings

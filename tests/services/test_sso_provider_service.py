@@ -137,10 +137,52 @@ def test_extra_auth_params_allowlist():
             _create(extra_auth_params={key: "x"})
 
 
-@pytest.mark.parametrize("name", ["lower_case", "1STARTS_WITH_DIGIT", "AB", "HAS-DASH", "A" * 65])
+@pytest.mark.parametrize(
+    "name",
+    [
+        "lower_case",
+        "1STARTS_WITH_DIGIT",
+        "AB",
+        "HAS-DASH",
+        "SPECIVO_SSO_SECRET_" + "A" * 46,
+        "specivo_sso_secret_x",
+        "SPECIVO_SSO_SECRET_",
+        "SPECIVO_SSO_SECRET_lower",
+        # Outside the namespace: these hold Specivo's own secrets.
+        "SECRET_KEY",
+        "DATABASE_URL",
+        "REDIS_URL",
+        "IDP_SECRET",
+        "XSPECIVO_SSO_SECRET_A",
+    ],
+)
 def test_bad_client_secret_env_name_rejected(name: str):
     with pytest.raises(PydanticValidationError):
         _create(client_secret_env=name)
+    with pytest.raises(PydanticValidationError):
+        SsoProviderUpdate(client_secret_env=name)
+
+
+def test_client_secret_env_name_in_namespace_accepted():
+    assert _create(client_secret_env="SPECIVO_SSO_SECRET_KEYCLOAK").client_secret_env == "SPECIVO_SSO_SECRET_KEYCLOAK"
+
+
+@pytest.mark.parametrize("name", ["SECRET_KEY", "DATABASE_URL"])
+async def test_forged_env_name_is_never_read(
+    db_session: AsyncSession, admin: User, monkeypatch: pytest.MonkeyPatch, name: str
+):
+    """A row written around the API (or before the rule) must not expose a master secret."""
+    provider = await _service.create(db_session, _create(), actor=admin)
+    provider.client_secret_env = name
+    monkeypatch.setenv(name, "master-secret-value")
+
+    # Same answer whether or not the variable exists: nothing is revealed.
+    assert _service.secret_status(provider) is SecretStatus.ENV_NOT_ALLOWED
+    monkeypatch.delenv(name)
+    assert _service.secret_status(provider) is SecretStatus.ENV_NOT_ALLOWED
+    monkeypatch.setenv(name, "master-secret-value")
+    assert _service.get_client_secret(provider) is None
+    assert _service.to_out(provider).client_secret_status == "env_not_allowed"
 
 
 @pytest.mark.parametrize("issuer", ["not a url", "ftp://idp.example.com", "https://idp.example.com/#frag", "/relative"])
@@ -185,28 +227,30 @@ async def test_create_encrypts_secret_and_reports_configured(db_session: AsyncSe
 
 
 async def test_create_with_env_secret(db_session: AsyncSession, admin: User, monkeypatch: pytest.MonkeyPatch):
-    provider = await _service.create(db_session, _create(client_secret_env="SPECIVO_TEST_IDP_SECRET"), actor=admin)
+    provider = await _service.create(db_session, _create(client_secret_env="SPECIVO_SSO_SECRET_TEST_IDP"), actor=admin)
     assert provider.client_secret_encrypted is None
-    assert provider.client_secret_env == "SPECIVO_TEST_IDP_SECRET"
+    assert provider.client_secret_env == "SPECIVO_SSO_SECRET_TEST_IDP"
 
-    monkeypatch.delenv("SPECIVO_TEST_IDP_SECRET", raising=False)
+    monkeypatch.delenv("SPECIVO_SSO_SECRET_TEST_IDP", raising=False)
     assert _service.secret_status(provider) is SecretStatus.ENV_MISSING
     assert _service.get_client_secret(provider) is None
 
-    monkeypatch.setenv("SPECIVO_TEST_IDP_SECRET", "from-the-environment")
+    monkeypatch.setenv("SPECIVO_SSO_SECRET_TEST_IDP", "from-the-environment")
     assert _service.secret_status(provider) is SecretStatus.ENV
     assert _service.get_client_secret(provider) == "from-the-environment"
 
 
 async def test_create_rejects_secret_and_env_together(db_session: AsyncSession, admin: User):
     with pytest.raises(AppError) as exc:
-        await _service.create(db_session, _create(client_secret=SECRET, client_secret_env="IDP_SECRET"), actor=admin)
+        await _service.create(
+            db_session, _create(client_secret=SECRET, client_secret_env="SPECIVO_SSO_SECRET_IDP"), actor=admin
+        )
     assert exc.value.status_code == 422
     assert exc.value.code == "sso_client_secret_conflict"
     assert SECRET not in exc.value.message
 
 
-@pytest.mark.parametrize("secret_kwargs", [{"client_secret": SECRET}, {"client_secret_env": "IDP_SECRET"}])
+@pytest.mark.parametrize("secret_kwargs", [{"client_secret": SECRET}, {"client_secret_env": "SPECIVO_SSO_SECRET_IDP"}])
 async def test_public_client_rejects_any_secret(db_session: AsyncSession, admin: User, secret_kwargs: dict[str, str]):
     with pytest.raises(AppError) as exc:
         await _service.create(db_session, _create(token_endpoint_auth_method="none", **secret_kwargs), actor=admin)
@@ -286,9 +330,11 @@ async def test_update_replaces_and_clears_secret(db_session: AsyncSession, admin
     assert _service.get_client_secret(provider) == "another-secret"
 
     # Switching to an env var replaces the stored secret.
-    await _service.update(db_session, provider.id, SsoProviderUpdate(client_secret_env="IDP_SECRET"), actor=admin)
+    await _service.update(
+        db_session, provider.id, SsoProviderUpdate(client_secret_env="SPECIVO_SSO_SECRET_IDP"), actor=admin
+    )
     assert provider.client_secret_encrypted is None
-    assert provider.client_secret_env == "IDP_SECRET"
+    assert provider.client_secret_env == "SPECIVO_SSO_SECRET_IDP"
 
     # And back: a stored secret replaces the env reference.
     await _service.update(db_session, provider.id, SsoProviderUpdate(client_secret=SECRET), actor=admin)

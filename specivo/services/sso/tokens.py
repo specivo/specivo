@@ -34,7 +34,7 @@ import httpx
 
 from specivo.core import secret_box
 from specivo.core.config import Settings, get_settings
-from specivo.models.sso import SsoProvider
+from specivo.models.sso import SsoProvider, is_allowed_client_secret_env
 from specivo.services.sso._support import parse_json_object, unreachable_from
 from specivo.services.sso.discovery import ProviderMetadata
 from specivo.services.sso.errors import (
@@ -91,6 +91,11 @@ def resolve_client_secret(provider: SsoProvider) -> str | None:
             logger.error("sso.client_secret.unreadable provider=%s", provider.slug)
             raise SsoConfigurationError("client_secret_unreadable") from None
     if provider.client_secret_env:
+        # Re-checked at use time: a row written around the API (or before the
+        # rule existed) must never make Specivo send SECRET_KEY & co. to an IdP.
+        if not is_allowed_client_secret_env(provider.client_secret_env):
+            logger.error("sso.client_secret.env_not_allowed provider=%s", provider.slug)
+            raise SsoConfigurationError("client_secret_env_not_allowed")
         value = os.environ.get(provider.client_secret_env)
         if not value:
             logger.error("sso.client_secret.env_unset provider=%s", provider.slug)

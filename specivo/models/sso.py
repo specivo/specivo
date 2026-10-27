@@ -10,6 +10,7 @@ The database also runs the ``reject_sso_identity_for_inert_user`` trigger on
 accounts and the anonymous user can never hold an external identity.
 """
 
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -37,6 +38,18 @@ TOKEN_ENDPOINT_AUTH_METHODS = ("client_secret_basic", "client_secret_post", "non
 LINK_POLICIES = ("manual", "auto_verified_email")
 LINKED_VIA_VALUES = ("jit", "user_link", "auto_email", "admin")
 SLUG_PATTERN = r"^[a-z0-9-]{2,40}$"
+
+#: ``client_secret_env`` may only name variables in this namespace. Anything
+#: else (``SECRET_KEY``, ``DATABASE_URL`` ...) would let whoever controls the
+#: provider row send Specivo's own secrets to a token endpoint of their choice.
+CLIENT_SECRET_ENV_PREFIX = "SPECIVO_SSO_SECRET_"
+CLIENT_SECRET_ENV_PATTERN = r"^SPECIVO_SSO_SECRET_[A-Z0-9][A-Z0-9_]{0,44}$"
+_CLIENT_SECRET_ENV_RE = re.compile(CLIENT_SECRET_ENV_PATTERN)
+
+
+def is_allowed_client_secret_env(name: str | None) -> bool:
+    """True when ``name`` is a variable an SSO provider may read its client secret from."""
+    return bool(name) and _CLIENT_SECRET_ENV_RE.fullmatch(name or "") is not None
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:

@@ -129,8 +129,8 @@ async def test_list_providers(admin_client: AsyncClient):
 
 
 async def test_env_secret_variant(admin_client: AsyncClient):
-    data = await _create(admin_client, client_secret=None, client_secret_env="SPECIVO_API_TEST_IDP_SECRET")
-    assert data["client_secret_env"] == "SPECIVO_API_TEST_IDP_SECRET"
+    data = await _create(admin_client, client_secret=None, client_secret_env="SPECIVO_SSO_SECRET_API_TEST")
+    assert data["client_secret_env"] == "SPECIVO_SSO_SECRET_API_TEST"
     assert data["client_secret_configured"] is True
     assert data["client_secret_status"] == "env_missing"
 
@@ -142,6 +142,8 @@ async def test_env_secret_variant(admin_client: AsyncClient):
         {"scopes": "profile email"},
         {"extra_auth_params": {"redirect_uri": "https://evil.example.com/"}},
         {"client_secret_env": "lowercase"},
+        {"client_secret": None, "client_secret_env": "SECRET_KEY"},
+        {"client_secret": None, "client_secret_env": "DATABASE_URL"},
         {"token_endpoint_auth_method": "private_key_jwt"},
         {"unknown_field": True},
     ],
@@ -155,7 +157,7 @@ async def test_field_validation_is_422_without_secret_echo(admin_client: AsyncCl
 @pytest.mark.parametrize(
     ("overrides", "code"),
     [
-        ({"client_secret_env": "IDP_SECRET"}, "sso_client_secret_conflict"),
+        ({"client_secret_env": "SPECIVO_SSO_SECRET_IDP"}, "sso_client_secret_conflict"),
         ({"token_endpoint_auth_method": "none"}, "sso_client_secret_not_allowed"),
     ],
 )
