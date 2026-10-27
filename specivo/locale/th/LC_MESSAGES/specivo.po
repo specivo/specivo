@@ -3207,6 +3207,10 @@ msgstr "ข้อมูลเข้าสู่ระบบไม่ถูกต
 msgid "Signing in..."
 msgstr "กำลังเข้าสู่ระบบ..."
 
+#: specivo/templates/themes/default/pages/auth/login.html:90
+msgid "You have been signed out."
+msgstr "คุณออกจากระบบแล้ว"
+
 #: specivo/templates/themes/default/pages/auth/login.html:82
 msgid "Password reset successfully. Please sign in with your new password."
 msgstr "รีเซ็ตรหัสผ่านสำเร็จ กรุณาเข้าสู่ระบบด้วยรหัสผ่านใหม่ของคุณ"

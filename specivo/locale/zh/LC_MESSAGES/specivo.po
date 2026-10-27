@@ -3146,6 +3146,10 @@ msgstr "凭据无效"
 msgid "Signing in..."
 msgstr "登录中……"
 
+#: specivo/templates/themes/default/pages/auth/login.html:90
+msgid "You have been signed out."
+msgstr "你已退出登录。"
+
 #: specivo/templates/themes/default/pages/auth/login.html:82
 msgid "Password reset successfully. Please sign in with your new password."
 msgstr "密码重置成功。请使用你的新密码登录。"

@@ -30,6 +30,7 @@ from specivo.schemas.auth import (
     ChangePasswordResponse,
     ForgotPasswordRequest,
     LoginRequest,
+    LogoutResponse,
     RefreshRequest,
     ResetPasswordRequest,
     SessionOut,
@@ -220,7 +221,7 @@ async def refresh(
 
 @router.post(
     "/logout/",
-    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=LogoutResponse,
     summary="End the current session",
 )
 async def logout(
@@ -229,7 +230,7 @@ async def logout(
     body: RefreshRequest | None = None,
     refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
     access_token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE)] = None,
-) -> Response:
+) -> JSONResponse:
     """Revoke the session named by the refresh token and/or the access token.
 
     The refresh token comes from the body or the cookie, the access token from
@@ -237,13 +238,22 @@ async def logout(
     to is revoked: its refresh token can no longer rotate and its access
     tokens are refused from the next request on. Without either, this only
     clears the cookies.
-    """
-    raw_token = (body.refresh_token if body else None) or refresh_token_cookie
-    await _service.end_browser_session(
-        db, refresh_token_raw=raw_token, access_token_raw=_request_access_token(request, access_token_cookie)
-    )
 
-    response = Response(status_code=status.HTTP_204_NO_CONTENT)
+    For a single sign-on session whose provider does RP-initiated logout,
+    ``end_session_url`` is the identity provider's end-session URL; the client
+    sends the user there to end the IdP session too. It is ``null`` otherwise.
+    """
+    from specivo.services.sso.logout import end_session_url, find_sso_logout_session
+
+    raw_token = (body.refresh_token if body else None) or refresh_token_cookie
+    access_raw = _request_access_token(request, access_token_cookie)
+    sso_session = await find_sso_logout_session(db, refresh_token_raw=raw_token, access_token_raw=access_raw)
+    await _service.end_browser_session(db, refresh_token_raw=raw_token, access_token_raw=access_raw)
+    # The session is ended before the IdP is asked anything.
+    await db.commit()
+
+    url = await end_session_url(sso_session) if sso_session is not None else None
+    response = JSONResponse(content=LogoutResponse(end_session_url=url).model_dump(), status_code=status.HTTP_200_OK)
     clear_auth_cookies(response)
     return response
 

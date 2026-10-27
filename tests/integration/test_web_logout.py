@@ -108,7 +108,7 @@ class TestPostLogoutRevokes:
 
         resp = await client.post("/logout/", data={"csrf_token": csrf}, follow_redirects=False)
         assert resp.status_code in (302, 303)
-        assert resp.headers["location"] == "/login/"
+        assert resp.headers["location"] == "/login/?logged_out=1"
 
         replay = await _refresh_with(client, refresh)
         assert replay.status_code == 401
@@ -188,7 +188,7 @@ class TestPostLogoutRevokes:
     async def test_without_any_session_just_redirects(self, client: AsyncClient):
         resp = await client.post("/logout/", follow_redirects=False)
         assert resp.status_code in (302, 303)
-        assert resp.headers["location"] == "/login/"
+        assert resp.headers["location"] == "/login/?logged_out=1"
 
 
 # ---------------------------------------------------------------------------

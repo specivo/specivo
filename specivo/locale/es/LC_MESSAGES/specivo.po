@@ -3258,6 +3258,10 @@ msgstr "Credenciales no válidas"
 msgid "Signing in..."
 msgstr "Iniciando sesión..."
 
+#: specivo/templates/themes/default/pages/auth/login.html:90
+msgid "You have been signed out."
+msgstr "Has cerrado sesión."
+
 #: specivo/templates/themes/default/pages/auth/login.html:82
 msgid "Password reset successfully. Please sign in with your new password."
 msgstr ""

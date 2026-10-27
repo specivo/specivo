@@ -85,6 +85,12 @@
       <span>{% trans %}Password reset successfully. Please sign in with your new password.{% endtrans %}</span>
     </div>
     {% endif %}
+    {% if logged_out %}
+    <div role="status" style="background:var(--sp-success-subtle, rgba(34,197,94,0.1));border:1px solid var(--sp-success, #22c55e);border-radius:var(--sp-border-radius);padding:var(--sp-space-md) var(--sp-space-lg);margin-bottom:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-success, #22c55e);display:flex;align-items:center;gap:var(--sp-space-sm);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+      <span>{% trans %}You have been signed out.{% endtrans %}</span>
+    </div>
+    {% endif %}
     {% if sso_error_message %}
     <div class="login-error show" role="alert">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
