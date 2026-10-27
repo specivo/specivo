@@ -182,6 +182,14 @@ async def forgot_password_form(request: Request) -> HTMLResponse:
     )
 
 
+async def _token_owner_is_sso_only(db: AsyncSession, user_id: int) -> bool:
+    """The reset token belongs to an SSO-only account, which email reset never gives a password."""
+    from specivo.services.auth_utils import is_sso_only_user
+
+    owner = await db.scalar(select(User).where(User.id == user_id))
+    return owner is not None and await is_sso_only_user(db, owner)
+
+
 @router.get("/reset-password/", response_class=HTMLResponse)
 async def reset_password_form(
     request: Request,
@@ -207,7 +215,7 @@ async def reset_password_form(
         result = await db.execute(stmt)
         record = result.scalar_one_or_none()
 
-        if record is None:
+        if record is None or await _token_owner_is_sso_only(db, record.user_id):
             token_error = _("This password reset link is invalid. Please request a new one.")
         elif record.used_at is not None:
             token_error = _("This password reset link has already been used. Please request a new one.")

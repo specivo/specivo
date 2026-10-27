@@ -29,9 +29,9 @@ from specivo.core.features import get_feature_registry
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.auth import ApiKey
-from specivo.models.sso import UserIdentity
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import AnonymousUserProtectedError
+from specivo.services.auth_utils import is_sso_only_user
 
 # Debounce interval for last_used_at updates
 _DEBOUNCE_SECONDS = 60
@@ -98,9 +98,9 @@ def sso_api_keys_refused_error() -> AppError:
 async def sso_api_keys_refused(session: AsyncSession, user: User) -> bool:
     """``True`` when ``user`` may not hold working API keys under ``sso.allow_api_keys_for_sso_users``.
 
-    Only a human account with no password and at least one connected identity
-    is concerned, and only while the setting is off. The cheap checks run
-    first, so a service account or a password user costs no query.
+    Only an SSO-only account (:func:`is_sso_only_user`: no password and at
+    least one connected identity) is concerned, and only while the setting is
+    off. A service account or a password user costs no query.
     """
     if user.is_service_account or user.password_hash:
         return False
@@ -108,8 +108,7 @@ async def sso_api_keys_refused(session: AsyncSession, user: User) -> bool:
 
     if (await get_auth_settings(session)).allow_api_keys_for_sso_users:
         return False
-    stmt = select(UserIdentity.id).where(UserIdentity.user_id == user.id).limit(1)
-    return (await session.execute(stmt)).first() is not None
+    return await is_sso_only_user(session, user)
 
 
 class ApiKeyService:
