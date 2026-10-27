@@ -586,7 +586,8 @@ class AuditBatchMiddleware:
     of issuing individual INSERTs.
 
     After the response is produced, the middleware flushes all collected events in a
-    single DB round-trip using an independent session — but **only** when the
+    single DB round-trip in a session of its own (from the ``get_db`` dependency, so a
+    test's override applies) — but **only** when the
     ``security_audit_log`` feature is available (i.e. the enterprise plugin is loaded).
     Without enterprise, events are silently discarded.
 
@@ -625,7 +626,7 @@ class AuditBatchMiddleware:
         # the enterprise plugin provides the security_audit_log feature.
         events = scope["state"].get("audit_events", [])
         if events and self._enterprise_audit_enabled():
-            await self._flush_events(events)
+            await self._flush_events(events, scope.get("app"))
 
     @staticmethod
     def _enterprise_audit_enabled() -> bool:
@@ -637,18 +638,25 @@ class AuditBatchMiddleware:
         except (RuntimeError, ImportError):
             return False
 
-    async def _flush_events(self, events: list[dict]) -> None:
-        """Batch INSERT all collected audit events using an independent session."""
+    async def _flush_events(self, events: list[dict], app: object = None) -> None:
+        """Batch INSERT all collected audit events in a session of their own.
+
+        The session comes from the ``get_db`` dependency, honouring the app's
+        ``dependency_overrides`` like every endpoint does: in production a new
+        session that commits on its own (so the events survive a request whose
+        transaction rolled back), in tests a session on the test's rolled-back
+        connection (so the rows stay inside the test).
+        """
         try:
-            from specivo.core.database import get_session_factory
+            from contextlib import asynccontextmanager
+
+            from specivo.core.database import get_db
             from specivo.models.security_audit import SecurityAuditLog
 
-            factory = get_session_factory()
-            async with factory() as session:
-                for event_data in events:
-                    log = SecurityAuditLog(**event_data)
-                    session.add(log)
-                await session.commit()
+            overrides = getattr(app, "dependency_overrides", None) or {}
+            provider = overrides.get(get_db, get_db)
+            async with asynccontextmanager(provider)() as session:
+                session.add_all(SecurityAuditLog(**event_data) for event_data in events)
         except Exception:
             logger.warning("Batch audit flush failed", exc_info=True)
 
