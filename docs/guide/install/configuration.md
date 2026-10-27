@@ -42,6 +42,7 @@ docker compose up -d
 | `DATABASE_URL` | `postgresql+asyncpg://specivo:specivo@db:5432/specivo`. Point it at an external database to use your own. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials for the bundled Postgres. |
 | `REDIS_URL` | `redis://redis:6379/0`. Point it at an external Redis if you prefer. |
+| `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails and [single sign-on](single-sign-on/index.md) addresses are built from it. |
 | `SECRET_KEY` | Signs sessions and tokens. **Must** be a strong, unique value in production. Keep in `.env.local`. |
 | `DEBUG` | `false` in production. |
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
@@ -142,33 +143,7 @@ None of them can lock an administrator out:
 |---|---|
 | `SSO_FORCE_LOCAL_LOGIN` | Break-glass switch: always show the password form, never redirect the login page to a provider, and let every user sign in with a password. Default `false`. |
 
-## Offboarding
-
-Specivo has no SCIM yet (it is on the backlog as "SCIM provisioning"), so the identity provider
-does not tell Specivo when someone leaves. A person loses access in these ways:
-
-- **Deactivate the account in Specivo.** On the user's page in **Administration → Users**, press
-  **Deactivate account** (or call `POST /api/v1/admin/users/{id}/deactivate/`). This works for
-  every account, with or without SSO, including service accounts. In one step it signs the user
-  out of every session (the browser is refused on its next request) and switches off all of
-  their API keys. The keys are kept, switched off, so their history stays readable.
-  **Reactivate account** lets the person sign in again, but their API keys stay off: they (or
-  you) switch them back on or create new ones. You cannot deactivate your own account or the
-  last active administrator.
-- **Disable the person at the identity provider.** Each SSO session has a fixed maximum age, set
-  per provider (**Maximum session length (hours)**). After it the session cannot be renewed and the
-  user goes back to the identity provider, where a disabled account fails. Back-channel logout,
-  when the provider supports it, ends the sessions sooner.
-- **Remove them from a required group or allowed email domain.** Their next SSO sign-in is
-  refused and the sessions they started through that provider end. With **Deactivate the
-  Specivo account when a sign-in is refused** turned on for the provider, the refusal also
-  deactivates the account as described above. Specivo never deactivates a service account this
-  way, nor the last active administrator (it logs a warning instead).
-
-API keys outlive browser sessions, so decide how much you trust them for SSO users. Turning off
-**Users who sign in through SSO may use API keys** (**Administration → Settings → Authentication**)
-stops users who have no password from creating keys, and their existing keys stop working while
-the setting is off. Users with a password and service accounts are not affected.
+The other SSO variables are listed in [Single sign-on](single-sign-on/index.md#settings-in-the-environment).
 
 ## Imported passwords
 

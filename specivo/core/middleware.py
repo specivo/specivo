@@ -601,11 +601,25 @@ class AuditBatchMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Initialise the per-request audit event buffer
-        scope.setdefault("state", {})
-        scope["state"]["audit_events"] = []
+        from specivo.services.security_audit_service import bind_audit_context, reset_audit_context
 
-        await self.app(scope, receive, send)
+        # Initialise the per-request audit event buffer. The same list is bound
+        # to the context, so code without the request (record_event) fills it too.
+        state = scope.setdefault("state", {})
+        buffer: list[dict] = []
+        state["audit_events"] = buffer
+        client = scope.get("client")
+        user_agent = dict(scope.get("headers") or []).get(b"user-agent", b"").decode("latin-1") or None
+        token = bind_audit_context(
+            buffer,
+            ip_address=client[0] if client else None,
+            user_agent=user_agent,
+            state=state,
+        )
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_audit_context(token)
 
         # Flush collected audit events after the response — only when
         # the enterprise plugin provides the security_audit_log feature.

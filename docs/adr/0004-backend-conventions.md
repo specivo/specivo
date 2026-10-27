@@ -491,6 +491,35 @@ await audit.log_member_change(session=db, action="added", ...)
 - Failed permission attempts must be logged before raising 403.
 - Audit writes in error paths must `commit()` before re-raising, otherwise `get_db` rollback discards them.
 - All events go to `security_audit_logs` (partitioned by month, with a default catch-all partition).
+- An audit write never breaks the action it records: catch and log the failure.
+- Code that cannot await (SSO events, session revocation) calls `record_event(...)`, which appends to the
+  request's audit buffer (bound by `AuditBatchMiddleware`, flushed after the response). Outside a request,
+  wrap the work in `async with audit_scope(session):`. Both are skipped unless the enterprise
+  `security_audit_log` feature is registered, like `log_event`.
+
+**Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
+configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line
+(`extra`: `event`, `request_id`, `audit`) in every edition, so a Community install keeps a trail without the
+audit feature.
+
+| Event | Actor (`user_id`) | Details |
+|-------|-------------------|---------|
+| `SSO_LOGIN_SUCCESS` | the user | `method`, `provider`, `iss`, `sub_hash` |
+| `SSO_LOGIN_FAILURE` | none | `method`, `provider`, `iss`, `reason` (the `sso_*` error code) |
+| `SSO_USER_PROVISIONED` | the new user | `provider`, `iss`, `sub_hash`, `user_id` |
+| `SSO_ACCOUNT_LINKED` | the user (admin for an admin link) | `provider`, `iss`, `sub_hash`, `user_id`, `method` |
+| `SSO_ACCOUNT_UNLINKED` | the user or the admin | `provider`, `iss`, `sub_hash`, `user_id`, `by`, `sessions_revoked` |
+| `SSO_ROLES_SYNCED` | the user | `provider`, `sub_hash`, `admin_before`, `admin_after`, `groups_added`, `groups_removed` (user group ids) |
+| `SSO_GROUPS_OVERAGE` | the user, if known | `provider`, `sub_hash`, `user_id`, `denied` |
+| `SSO_LOGOUT` | the user | `provider`, `iss`, `sub_hash`, `user_id`, `idp_redirect` |
+| `SSO_BACKCHANNEL_LOGOUT` | none (the IdP) | `provider`, `iss`, `sub_hash`, `by` (`sid`/`sub`), `sessions_revoked` |
+| `SSO_PROVIDER_CREATED` / `_UPDATED` / `_DELETED` / `_SECRET_CHANGED` | the admin | `provider`, `iss`, `provider_id`, `fields` (names only); a delete adds its counts |
+| `USER_DEPROVISIONED` | the admin, or none | `provider`, `user_id`, `reason`, `sessions_revoked` |
+| `SESSIONS_REVOKED` | `actor_id` passed to `SessionService` | `reason`, `user_ids`, `session_count`, `row_count` |
+
+`SSO_LOGIN_SUCCESS` / `SSO_LOGIN_FAILURE` replace the generic login events for SSO and, like them, are core
+events persisted in every edition. `sub_hash` is the first 16 hex characters of SHA-256 of the subject. Details
+never hold tokens, codes, verifiers, secrets, claim sets or group names.
 
 ## Consequences
 

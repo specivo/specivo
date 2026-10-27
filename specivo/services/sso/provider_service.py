@@ -19,9 +19,10 @@ Rules enforced here (field-level rules are in :mod:`specivo.schemas.sso`):
   identities. The user-group memberships it managed are removed on delete.
 
 Every create / update / delete / secret change goes through :meth:`ProviderService._emit`,
-the single place where these events are recorded. Today it writes a
-``specivo.sso`` log line with the provider and the *names* of the changed
-fields (never values); the audit-log subtask adds the ``AuditEvent`` write there.
+the single place where these events are recorded: a ``specivo.sso`` log line
+and an ``SSO_PROVIDER_*`` security audit event with the provider and the
+*names* of the changed fields (never values), by
+:func:`specivo.services.sso.events.provider_changed`.
 """
 
 from __future__ import annotations
@@ -49,6 +50,8 @@ from specivo.schemas.sso import (
     SsoProviderUpdate,
     SsoSelfTestResult,
 )
+from specivo.services.security_audit_service import AuditEvent
+from specivo.services.sso import events
 from specivo.services.sso.auth_settings import replace_auto_redirect_provider
 from specivo.services.sso.discovery import (
     ProviderMetadata,
@@ -68,7 +71,6 @@ if TYPE_CHECKING:
 __all__ = [
     "CLIENT_SECRET_PURPOSE",
     "ProviderDeleteResult",
-    "ProviderEvent",
     "ProviderService",
     "SecretStatus",
     "backchannel_logout_uri",
@@ -118,15 +120,6 @@ class SecretStatus(StrEnum):
     ENV_NOT_ALLOWED = "env_not_allowed"
     MISSING = "missing"  # confidential client without a secret
     NOT_REQUIRED = "not_required"  # public client (auth method ``none``)
-
-
-class ProviderEvent(StrEnum):
-    """Configuration events. Values match the future ``AuditEvent`` members (lowercased)."""
-
-    CREATED = "sso_provider_created"
-    UPDATED = "sso_provider_updated"
-    DELETED = "sso_provider_deleted"
-    SECRET_CHANGED = "sso_provider_secret_changed"
 
 
 @dataclass(frozen=True)
@@ -311,10 +304,10 @@ class ProviderService:
         session.add(provider)
         await session.flush()
 
-        self._emit(ProviderEvent.CREATED, provider, actor)
+        self._emit(AuditEvent.SSO_PROVIDER_CREATED, provider, actor)
         if source is not None:
             self._emit(
-                ProviderEvent.SECRET_CHANGED,
+                AuditEvent.SSO_PROVIDER_SECRET_CHANGED,
                 provider,
                 actor,
                 ["client_secret" if source == "stored" else "client_secret_env"],
@@ -387,9 +380,9 @@ class ProviderService:
         if "slug" in changed:
             await replace_auto_redirect_provider(session, current["slug"], values["slug"])
         if changed:
-            self._emit(ProviderEvent.UPDATED, provider, actor, changed)
+            self._emit(AuditEvent.SSO_PROVIDER_UPDATED, provider, actor, changed)
         if secret_fields:
-            self._emit(ProviderEvent.SECRET_CHANGED, provider, actor, secret_fields)
+            self._emit(AuditEvent.SSO_PROVIDER_SECRET_CHANGED, provider, actor, secret_fields)
         if changed or secret_fields:
             await invalidate_provider_cache(provider.id)
         return provider
@@ -442,13 +435,14 @@ class ProviderService:
         slug = provider.slug
         await replace_auto_redirect_provider(session, slug, None)
         self._emit(
-            ProviderEvent.DELETED,
+            AuditEvent.SSO_PROVIDER_DELETED,
             provider,
             actor,
-            extra=(
-                f"identities_unlinked={len(identity_ids)} sessions_revoked={sessions_revoked} "
-                f"memberships_removed={memberships_removed}"
-            ),
+            counts={
+                "identities_unlinked": len(identity_ids),
+                "sessions_revoked": sessions_revoked,
+                "memberships_removed": memberships_removed,
+            },
         )
         await session.execute(delete(SsoProvider).where(SsoProvider.id == provider.id))
         session.expunge(provider)
@@ -508,7 +502,7 @@ class ProviderService:
             for idp_group, group_id in pairs
         )
         await session.flush()
-        self._emit(ProviderEvent.UPDATED, provider, actor, ["group_mappings"])
+        self._emit(AuditEvent.SSO_PROVIDER_UPDATED, provider, actor, ["group_mappings"])
         return await self.list_group_mappings(session, provider_id)
 
     async def add_group_mapping(
@@ -532,7 +526,7 @@ class ProviderService:
         mapping = SsoGroupMapping(provider_id=provider_id, idp_group=item.idp_group, user_group_id=item.user_group_id)
         session.add(mapping)
         await session.flush()
-        self._emit(ProviderEvent.UPDATED, provider, actor, ["group_mappings"])
+        self._emit(AuditEvent.SSO_PROVIDER_UPDATED, provider, actor, ["group_mappings"])
         name = (await session.execute(select(UserGroup.name).where(UserGroup.id == item.user_group_id))).scalar_one()
         return SsoGroupMappingOut(
             id=mapping.id, idp_group=mapping.idp_group, user_group_id=mapping.user_group_id, user_group_name=name
@@ -550,7 +544,7 @@ class ProviderService:
             raise NotFoundError(f"Group mapping {mapping_id} not found")
         await session.delete(mapping)
         await session.flush()
-        self._emit(ProviderEvent.UPDATED, provider, actor, ["group_mappings"])
+        self._emit(AuditEvent.SSO_PROVIDER_UPDATED, provider, actor, ["group_mappings"])
 
     async def _check_user_groups(self, session: AsyncSession, group_ids: set[int]) -> None:
         if not group_ids:
@@ -754,25 +748,24 @@ class ProviderService:
 
     @staticmethod
     def _emit(
-        event: ProviderEvent,
+        event: AuditEvent,
         provider: SsoProvider,
         actor: User | None,
         fields: list[str] | None = None,
         *,
-        extra: str = "",
+        counts: dict[str, int] | None = None,
     ) -> None:
-        """Record a configuration event. The one place to add the security audit write.
+        """Record a configuration event: the log line and the ``SSO_PROVIDER_*`` audit event.
 
         ``fields`` are field *names* only. Values, and the secret above all,
         never reach this function.
         """
-        name = event.value.removeprefix("sso_provider_")
-        logger.info(
-            "sso.provider.%s provider_id=%s slug=%s actor=%s fields=%s%s",
-            name,
-            provider.id,
-            provider.slug,
-            actor.id if actor is not None else None,
-            ",".join(fields or []),
-            f" {extra}" if extra else "",
+        events.provider_changed(
+            event,
+            provider_id=provider.id,
+            provider_slug=provider.slug,
+            issuer=provider.issuer,
+            actor_id=actor.id if actor is not None else None,
+            fields=fields or [],
+            counts=counts,
         )

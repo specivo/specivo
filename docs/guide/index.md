@@ -44,6 +44,7 @@ sprint, wiki) that the rest of this guide uses.
 | Write and organize documentation | [Wiki & knowledge base](wiki/index.md) |
 | Connect Claude Code, Codex, or another AI client | [AI agents & MCP](ai-agents/index.md) |
 | Install or self-host Specivo | [Installing Specivo](install/index.md) |
+| Let people sign in with your identity provider | [Single sign-on](install/single-sign-on/index.md) |
 | Move an existing Redmine instance across | [Migrating from Redmine](install/migrating-from-redmine.md) |
 
 !!! tip "Search is built in"

@@ -160,8 +160,10 @@ class IdentityService:
             if not others:
                 raise LastSignInMethodError()
 
-        revoked = await SessionService().revoke_by_identity(db, identity.id, reason=f"sso_unlink_by_{by}")
-        subject = identity.subject
+        revoked = await SessionService().revoke_by_identity(
+            db, identity.id, reason=f"sso_unlink_by_{by}", actor_id=actor_id
+        )
+        subject, issuer = identity.subject, identity.issuer
         await db.delete(identity)
         await db.flush()
         events.account_unlinked(
@@ -171,6 +173,7 @@ class IdentityService:
             by=by,
             actor_id=actor_id,
             sessions_revoked=revoked,
+            issuer=issuer,
         )
         return UnlinkResult(
             identity_id=identity_id,
