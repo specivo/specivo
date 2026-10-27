@@ -32,10 +32,14 @@ os.environ.setdefault("SECRET_KEY", "dev-secret-key-minimum-32-bytes-for-hs256-s
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("KILL_TOKEN", "test-kill-token-secret")
 os.environ.setdefault("INSTALLED_PLUGINS", "[]")
-# DEBUG=true disables Secure flag on cookies so http://127.0.0.1 works.
 # SQL_ECHO=false prevents SQLAlchemy from logging every query.
-os.environ["DEBUG"] = "true"
 os.environ["SQL_ECHO"] = "false"
+
+# DEBUG=true disables the Secure flag on cookies so http://127.0.0.1 works.
+# It goes to the E2E server process only: pytest imports this module while
+# collecting every run, and setting it in os.environ here would turn on debug
+# for any in-process test that rebuilds the settings after a cache_clear().
+_E2E_SERVER_ENV = {"DEBUG": "true"}
 
 E2E_SERVER_HOST = "127.0.0.1"
 E2E_SERVER_PORT = int(os.environ.get("E2E_SERVER_PORT", "9944"))
@@ -120,7 +124,7 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             "--log-level",
             "warning",
         ],
-        env={**os.environ},
+        env={**os.environ, **_E2E_SERVER_ENV},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
