@@ -82,6 +82,64 @@ async def test_non_admin_is_forbidden(auth_client: AsyncClient, method: str, pat
     assert resp.status_code == 403
 
 
+async def _admin_api_key(admin_client: AsyncClient, db_session: AsyncSession) -> dict[str, str]:
+    from specivo.services.api_key_service import ApiKeyService
+
+    _, raw = await ApiKeyService().create_key(db_session, user_id=admin_client.state.user.id, name="admin-agent")  # type: ignore[attr-defined]
+    await db_session.flush()
+    return {"Authorization": f"Bearer {raw}"}
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("post", URL),
+        ("patch", f"{URL}{{id}}/"),
+        ("delete", f"{URL}{{id}}/"),
+        ("put", f"{URL}{{id}}/group-mappings/"),
+        ("post", f"{URL}{{id}}/group-mappings/"),
+        ("delete", f"{URL}{{id}}/group-mappings/1/"),
+        ("patch", AUTH_SETTINGS_URL),
+    ],
+)
+async def test_admin_api_key_cannot_change_sso_configuration(
+    admin_client: AsyncClient, db_session: AsyncSession, method: str, path: str
+):
+    """A stolen admin key must not be able to register or rewire an identity provider."""
+    provider = await _create(admin_client)
+    headers = await _admin_api_key(admin_client, db_session)
+    bodies = {
+        "post": _body(),
+        "patch": {"display_name": "Rogue IdP", "client_secret": "rogue-secret-value-0001"},
+        "put": [],
+    }
+    kwargs: dict[str, Any] = {"headers": headers}
+    if method in bodies and path != f"{URL}{{id}}/group-mappings/":
+        kwargs["json"] = bodies[method]
+    elif method == "post":
+        kwargs["json"] = {"idp_group": "admins", "user_group_id": 1}
+    elif method == "put":
+        kwargs["json"] = []
+    if path == AUTH_SETTINGS_URL:
+        kwargs["json"] = {"hide_local_login": True}
+
+    resp = await getattr(admin_client, method)(path.format(id=provider["id"]), **kwargs)
+
+    assert resp.status_code == 403, resp.text
+    assert resp.json()["errors"][0]["code"] == "api_key_not_allowed"
+    row = await db_session.get(SsoProvider, provider["id"])
+    assert row is not None
+    assert row.display_name == "Example IdP"
+
+
+async def test_admin_api_key_can_still_read_sso_configuration(admin_client: AsyncClient, db_session: AsyncSession):
+    provider = await _create(admin_client)
+    headers = await _admin_api_key(admin_client, db_session)
+    for path in (URL, f"{URL}{provider['id']}/", f"{URL}{provider['id']}/group-mappings/", AUTH_SETTINGS_URL):
+        resp = await admin_client.get(path, headers=headers)
+        assert resp.status_code == 200, (path, resp.text)
+
+
 async def test_anonymous_is_unauthorized(client: AsyncClient):
     resp = await client.get(URL)
     assert resp.status_code == 401

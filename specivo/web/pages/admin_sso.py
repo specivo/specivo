@@ -31,6 +31,21 @@ router = APIRouter(tags=["web-admin"], include_in_schema=False)
 _service = ProviderService()
 
 
+async def require_admin_session(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+) -> User:
+    """An admin signed in with a session; an admin API key sent as a Bearer header is refused.
+
+    The web layer also accepts ``Authorization: Bearer spv_...``, and a
+    request without a session cookie is not CSRF-checked, so without this a
+    leaked admin key could change the sign-in settings through the form.
+    """
+    if getattr(request.state, "api_key_id", None) is not None:
+        raise HTTPException(status_code=403, detail="A signed-in session is required")
+    return user
+
+
 async def _user_groups(db: AsyncSession) -> list[dict[str, object]]:
     rows = await db.execute(select(UserGroup.id, UserGroup.name).order_by(UserGroup.name))
     return [{"id": gid, "name": name} for gid, name in rows.all()]
@@ -107,7 +122,7 @@ async def admin_sso_provider_detail(
 @router.post("/admin/settings/authentication/", response_model=None)
 async def admin_settings_authentication(
     request: Request,
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[User, Depends(require_admin_session)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
     hide_local_login: str = Form(""),
     local_login_admins_only: str = Form(""),
