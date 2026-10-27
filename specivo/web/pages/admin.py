@@ -536,7 +536,14 @@ async def admin_settings(
 
     anonymous_access_enabled = await is_anonymous_access_enabled(db)
     anonymous_access_projects = await list_projects_with_anonymous_permissions(db)
-    generic_settings = {k: v for k, v in settings.items() if k != ANONYMOUS_ACCESS_SETTING_KEY}
+    # The sso.* authentication settings have their own card (and API) too.
+    from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS, get_auth_settings
+    from specivo.services.sso.provider_service import ProviderService
+
+    hidden_keys = AUTH_SETTING_KEYS | {ANONYMOUS_ACCESS_SETTING_KEY}
+    generic_settings = {k: v for k, v in settings.items() if k not in hidden_keys}
+    auth_settings = await get_auth_settings(db)
+    sso_providers, _ = await ProviderService().list_providers(db)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -555,6 +562,11 @@ async def admin_settings(
             "fts_language": fts_language,
             "fts_allowed": sorted(_ALLOWED_FTS_LANGUAGES),
             "fts_reindex_needed": fts_reindex_needed,
+            "auth_settings": auth_settings,
+            "sso_providers": [
+                {"slug": p.slug, "display_name": p.display_name, "enabled": p.enabled} for p in sso_providers
+            ],
+            "sso_force_local_login": get_settings().sso_force_local_login,
         },
     )
 

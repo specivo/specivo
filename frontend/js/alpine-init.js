@@ -21,6 +21,7 @@ import { projectComputedMetadata } from './components/project-computed-metadata'
 import { adminUsers } from './components/admin-users';
 import { adminGroups } from './components/admin-groups';
 import { adminGroupDetail } from './components/admin-group-detail';
+import { adminSsoProvider } from './components/admin-sso-provider';
 import { adminUserDetail } from './components/admin-user-detail';
 import { adminSettings } from './components/admin-settings';
 import { issueAutocomplete } from './components/issue-autocomplete';
@@ -78,6 +79,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('adminUsers', adminUsers);
   Alpine.data('adminGroups', adminGroups);
   Alpine.data('adminGroupDetail', adminGroupDetail);
+  Alpine.data('adminSsoProvider', adminSsoProvider);
   Alpine.data('adminUserDetail', adminUserDetail);
   Alpine.data('adminSettings', adminSettings);
   Alpine.data('issueAutocomplete', issueAutocomplete);

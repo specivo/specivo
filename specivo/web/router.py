@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from specivo.web.pages.admin import router as admin_pages
+from specivo.web.pages.admin_sso import router as admin_sso_pages
 from specivo.web.pages.auth import router as auth_pages
 from specivo.web.pages.dashboard import router as dashboard_pages
 from specivo.web.pages.issues import router as issue_pages
@@ -31,3 +32,4 @@ web_router.include_router(recurring_pages)
 web_router.include_router(time_pages)
 web_router.include_router(search_pages)
 web_router.include_router(admin_pages)
+web_router.include_router(admin_sso_pages)
