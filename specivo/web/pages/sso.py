@@ -10,15 +10,27 @@ Every refusal redirects to ``/login/?sso_error=<code>``; the login page turns
 the code into a translated message (:func:`sso_error_message`) and never
 shows anything the IdP sent. Unknown or disabled providers are 404. The
 protocol work lives in :class:`specivo.services.sso.login.SsoLoginService`.
+
+``POST /auth/oidc/{slug}/backchannel-logout/`` is called by the IdP, server
+to server, with a form-encoded ``logout_token`` (OpenID Connect Back-Channel
+Logout 1.0). No cookies, no session: the signed, single-use token is the
+proof, so the CSRF middleware exempts this one path by an anchored pattern.
+Answers, always with ``Cache-Control: no-store``: 200 (empty) when the token
+was valid, whether or not a session matched; 400 ``{"error":
+"invalid_request"}`` for a missing, malformed, invalid or replayed token;
+404 when the provider is unknown, disabled or has back-channel logout off;
+503 ``{"error": "temporarily_unavailable"}`` when the replay cache or the
+IdP's keys cannot be reached, so the IdP may retry. The work lives in
+:func:`specivo.services.sso.logout.backchannel_logout`.
 """
 
 from __future__ import annotations
 
-from typing import Annotated
-from urllib.parse import urlencode
+from typing import Annotated, Any
+from urllib.parse import parse_qs, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.auth_cookies import set_auth_cookies
@@ -28,16 +40,22 @@ from specivo.core.i18n import gettext as _
 from specivo.core.rate_limit import rate_limit
 from specivo.core.utils import utcnow
 from specivo.models.sso import SsoProvider
-from specivo.services.sso.errors import SsoError
+from specivo.services.sso.errors import SsoError, SsoTokenInvalidError
 from specivo.services.sso.flow import TX_COOKIE_NAME, TX_TTL_SECONDS, tx_cookie_path
 from specivo.services.sso.log import logger
 from specivo.services.sso.login import SsoLoginService
+from specivo.services.sso.logout import backchannel_logout, release_logout_jti
 
 router = APIRouter(prefix="/auth/oidc", tags=["web-sso"], include_in_schema=False)
 _service = SsoLoginService()
 
 _start_rate_limit = rate_limit("sso_login_start", max_requests=20, window_seconds=60)
 _callback_rate_limit = rate_limit("sso_callback", max_requests=20, window_seconds=60)
+_backchannel_rate_limit = rate_limit("sso_backchannel_logout", max_requests=60, window_seconds=60)
+
+#: Largest back-channel logout request body read; a logout token is a few KB.
+BACKCHANNEL_MAX_BODY_BYTES = 16 * 1024
+_FORM_CONTENT_TYPE = "application/x-www-form-urlencoded"
 
 # Callback parameters that must appear at most once (a repeated one is refused).
 _SINGLE_VALUED = ("state", "code", "error", "iss")
@@ -198,3 +216,84 @@ async def sso_callback(
     _clear_tx_cookie(response, settings)
     response.headers["Cache-Control"] = "no-store"
     return response
+
+
+# ---------------------------------------------------------------------------
+# Back-channel logout
+# ---------------------------------------------------------------------------
+
+
+class _BadLogoutRequestError(Exception):
+    """The request carries no usable ``logout_token``; ``reason`` is for the log."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _backchannel_answer(status: int, body: dict[str, Any] | None = None) -> Response:
+    response: Response = JSONResponse(body, status_code=status) if body is not None else Response(status_code=status)
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Pragma"] = "no-cache"
+    return response
+
+
+async def _read_logout_token(request: Request) -> str:
+    """The single ``logout_token`` of a form-encoded body of at most 16 KB."""
+    media_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+    if media_type != _FORM_CONTENT_TYPE:
+        raise _BadLogoutRequestError("content_type")
+    body = bytearray()
+    async for chunk in request.stream():
+        body.extend(chunk)
+        if len(body) > BACKCHANNEL_MAX_BODY_BYTES:
+            raise _BadLogoutRequestError("body_too_large")
+    try:
+        fields = parse_qs(body.decode("utf-8"), keep_blank_values=True, max_num_fields=16)
+    except (UnicodeDecodeError, ValueError):
+        raise _BadLogoutRequestError("malformed_body") from None
+    values = fields.get("logout_token", [])
+    if len(values) != 1:
+        raise _BadLogoutRequestError("missing_token" if not values else "repeated_token")
+    token = values[0].strip()
+    if not token:
+        raise _BadLogoutRequestError("missing_token")
+    return token
+
+
+@router.post("/{slug}/backchannel-logout/", response_model=None)
+async def sso_backchannel_logout(
+    slug: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _rl: Annotated[None, Depends(_backchannel_rate_limit)],
+) -> Response:
+    """End the Specivo sessions a valid logout token names (see the module docstring)."""
+    provider = await _service.get_enabled_provider(db, slug)
+    if provider is None or not provider.backchannel_logout_enabled:
+        return _backchannel_answer(404, {"error": "not_found"})
+
+    try:
+        logout_token = await _read_logout_token(request)
+    except _BadLogoutRequestError as exc:
+        logger.warning("sso.backchannel_logout.rejected provider=%s reason=%s", provider.slug, exc.reason)
+        return _backchannel_answer(400, {"error": "invalid_request"})
+
+    try:
+        result = await backchannel_logout(db, provider, logout_token)
+    except SsoTokenInvalidError:
+        # verify_logout_token and the replay check have logged the reason.
+        return _backchannel_answer(400, {"error": "invalid_request"})
+    except SsoError as exc:
+        logger.warning(
+            "sso.backchannel_logout.failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason
+        )
+        return _backchannel_answer(503, {"error": "temporarily_unavailable"})
+
+    # 200 tells the IdP the sessions are gone: commit before answering.
+    try:
+        await db.commit()
+    except BaseException:
+        await release_logout_jti(result.jti_key)
+        raise
+    return _backchannel_answer(200)

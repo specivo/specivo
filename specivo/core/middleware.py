@@ -12,6 +12,7 @@ import dataclasses
 import hashlib
 import hmac
 import logging
+import re
 import secrets
 import time
 import uuid
@@ -82,6 +83,16 @@ _CSRF_EXEMPT_PATHS = (
     # Pre-auth: the single-use token from the reset email is the proof.
     "/api/v1/auth/reset-password/",
 )
+# Anchored regular expressions for exempt endpoints whose path carries a
+# parameter, listed without the stealth prefix. Each one must match exactly one
+# route and nothing next to it; the contract test checks both. Matched against
+# the whole path, with or without the trailing slash.
+_CSRF_EXEMPT_PATTERNS = (
+    # SSO back-channel logout: called server to server by the IdP, never with
+    # a session; the signed, single-use logout token in the body is the proof.
+    # The slug part is the provider slug rule (specivo.models.sso.SLUG_PATTERN).
+    r"/auth/oidc/[a-z0-9-]{2,40}/backchannel-logout/",
+)
 # Mount points whose whole subtree is exempt. Only for sub-apps that never
 # accept cookie authentication.
 _CSRF_EXEMPT_MOUNTS = (
@@ -105,6 +116,8 @@ class CSRFMiddleware:
     - Requests with an ``X-API-Key`` header (API key auth, not cookie-based)
     - The exact paths in ``_CSRF_EXEMPT_PATHS`` (login, token refresh,
       password-reset request and confirm)
+    - Paths matching an anchored pattern in ``_CSRF_EXEMPT_PATTERNS`` (SSO
+      back-channel logout)
     - Everything under the mount points in ``_CSRF_EXEMPT_MOUNTS`` (MCP)
 
     Every other mutating route needs the token when the request carries the
@@ -125,10 +138,14 @@ class CSRFMiddleware:
         sp = settings.stealth_prefix.rstrip("/")
         self._exempt_paths = frozenset(sp + p for p in _CSRF_EXEMPT_PATHS)
         self._exempt_mounts = tuple(sp + m for m in _CSRF_EXEMPT_MOUNTS)
+        # Trailing slash optional, like the exact paths; fullmatch anchors both ends.
+        self._exempt_patterns = tuple(re.compile(re.escape(sp) + p + "?") for p in _CSRF_EXEMPT_PATTERNS)
 
     def _is_exempt_path(self, path: str) -> bool:
-        """Return True if *path* is one of the exempt endpoints or mounts."""
+        """Return True if *path* is one of the exempt endpoints, patterns or mounts."""
         if path.rstrip("/") + "/" in self._exempt_paths:
+            return True
+        if any(p.fullmatch(path) for p in self._exempt_patterns):
             return True
         return any(path.startswith(m) for m in self._exempt_mounts)
 

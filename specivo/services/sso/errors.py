@@ -39,6 +39,7 @@ class TokenRejection(StrEnum):
     MISSING_EVENTS = "missing_events"
     NONCE_PRESENT = "nonce_present"
     MISSING_SID_AND_SUB = "missing_sid_and_sub"
+    REPLAYED = "replayed"
     SUB_MISMATCH = "sub_mismatch"
     USERINFO_REJECTED = "userinfo_rejected"
     TOKEN_RESPONSE_INVALID = "token_response_invalid"
