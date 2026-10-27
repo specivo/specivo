@@ -6961,6 +6961,18 @@ msgstr "Учётная запись этого поставщика удосто
 msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
 msgstr "Это ваш единственный способ входа. Задайте пароль или подключите другую учётную запись, прежде чем отключать эту."
 
+#: specivo/web/pages/sso.py
+msgid "Your email domain is not allowed to sign in here. Contact your administrator."
+msgstr "Вход с адресами вашего почтового домена здесь не разрешён. Обратитесь к администратору."
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider account is not in a group that may sign in here. Contact your administrator."
+msgstr "Ваша учётная запись у поставщика удостоверений не входит ни в одну группу, которой разрешён вход. Обратитесь к администратору."
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider sent too many groups to read. Ask your administrator to send only the groups assigned to the application, or app roles."
+msgstr "Поставщик удостоверений передал слишком много групп, их невозможно прочитать. Попросите администратора передавать только группы, назначенные приложению, или роли приложения."
+
 #: specivo/web/pages/connected_accounts.py
 #, python-format
 msgid "Your %(provider)s account is now connected."

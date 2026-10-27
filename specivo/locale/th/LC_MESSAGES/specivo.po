@@ -6845,6 +6845,18 @@ msgstr "มีบัญชีของผู้ให้บริการยื
 msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
 msgstr "นี่เป็นวิธีเดียวที่คุณใช้ลงชื่อเข้าใช้ได้ กรุณาตั้งรหัสผ่านหรือเชื่อมต่อบัญชีอื่นก่อนยกเลิกการเชื่อมต่อ"
 
+#: specivo/web/pages/sso.py
+msgid "Your email domain is not allowed to sign in here. Contact your administrator."
+msgstr "โดเมนอีเมลของคุณไม่ได้รับอนุญาตให้ลงชื่อเข้าใช้ที่นี่ กรุณาติดต่อผู้ดูแลระบบ"
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider account is not in a group that may sign in here. Contact your administrator."
+msgstr "บัญชีผู้ให้บริการยืนยันตัวตนของคุณไม่ได้อยู่ในกลุ่มที่ลงชื่อเข้าใช้ที่นี่ได้ กรุณาติดต่อผู้ดูแลระบบ"
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider sent too many groups to read. Ask your administrator to send only the groups assigned to the application, or app roles."
+msgstr "ผู้ให้บริการยืนยันตัวตนของคุณส่งกลุ่มมามากเกินกว่าจะอ่านได้ กรุณาขอให้ผู้ดูแลระบบส่งเฉพาะกลุ่มที่กำหนดให้กับแอปพลิเคชัน หรือใช้บทบาทของแอปพลิเคชัน"
+
 #: specivo/web/pages/connected_accounts.py
 #, python-format
 msgid "Your %(provider)s account is now connected."

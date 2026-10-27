@@ -101,6 +101,14 @@ def sso_error_message(code: str | None) -> str | None:
         ),
         "sso_identity_in_use": _("This identity provider account is already connected to another account."),
         "sso_provider_already_linked": _("An account at this identity provider is already connected to your profile."),
+        "sso_domain_not_allowed": _("Your email domain is not allowed to sign in here. Contact your administrator."),
+        "sso_not_in_required_group": _(
+            "Your identity provider account is not in a group that may sign in here. Contact your administrator."
+        ),
+        "sso_groups_overage": _(
+            "Your identity provider sent too many groups to read. Ask your administrator to send only the "
+            "groups assigned to the application, or app roles."
+        ),
         "sso_last_sign_in_method": _(
             "This is your only way to sign in. Set a password or connect another account before disconnecting it."
         ),

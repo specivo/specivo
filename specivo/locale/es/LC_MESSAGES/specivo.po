@@ -7016,6 +7016,18 @@ msgstr "Ya hay una cuenta de este proveedor de identidad conectada a tu perfil."
 msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
 msgstr "Es tu única forma de iniciar sesión. Establece una contraseña o conecta otra cuenta antes de desconectarla."
 
+#: specivo/web/pages/sso.py
+msgid "Your email domain is not allowed to sign in here. Contact your administrator."
+msgstr "El dominio de su correo electrónico no puede iniciar sesión aquí. Póngase en contacto con su administrador."
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider account is not in a group that may sign in here. Contact your administrator."
+msgstr "Su cuenta del proveedor de identidad no pertenece a ningún grupo que pueda iniciar sesión aquí. Póngase en contacto con su administrador."
+
+#: specivo/web/pages/sso.py
+msgid "Your identity provider sent too many groups to read. Ask your administrator to send only the groups assigned to the application, or app roles."
+msgstr "Su proveedor de identidad envió demasiados grupos para leerlos. Pida a su administrador que envíe solo los grupos asignados a la aplicación, o roles de aplicación."
+
 #: specivo/web/pages/connected_accounts.py
 #, python-format
 msgid "Your %(provider)s account is now connected."
