@@ -85,8 +85,10 @@ async def logout(
 ) -> RedirectResponse:
     """Revoke this browser's session on the server, clear its cookies, go to login.
 
-    The refresh-token row is deleted and the access token's ``jti`` is
-    blocklisted, so copies of either cookie stop working immediately. CSRF is
+    The session is revoked through ``SessionService.revoke`` (its refresh rows
+    are deleted and its ``sid`` is marked revoked) and the access token's
+    ``jti`` is blocklisted, so copies of either cookie stop working
+    immediately. CSRF is
     enforced by ``CSRFMiddleware`` whenever the request carries a session
     cookie; without one there is nothing to revoke.
     """

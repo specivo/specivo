@@ -43,6 +43,11 @@ class SessionOut(BaseModel):
     ip_address: str | None
     created_at: datetime
     expires_at: datetime
+    # "password" or "sso"
+    auth_method: str
+    # Display name of the SSO provider the session signed in with; None for
+    # password sessions (and SSO sessions whose identity was unlinked).
+    provider_name: str | None = None
 
 
 # ---------------------------------------------------------------------------

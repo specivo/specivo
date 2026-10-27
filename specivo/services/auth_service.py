@@ -3,9 +3,10 @@
 Implements:
 - JWT access token generation (PyJWT, HS256, 15 min)
 - Opaque refresh token generation (secrets.token_urlsafe, stored as SHA-256 hash)
-- Token rotation on refresh (replay attack detection)
+- Token rotation on refresh (replay attack detection); the session id survives
+  rotation and is the ``sid`` claim of every access token the session mints
 - Progressive account lockout on failed logins
-- Session listing and targeted revocation
+- Session listing and targeted revocation (through ``SessionService.revoke``)
 - Self-service password reset via email token
 - Self-service password change for an authenticated user
 """
@@ -19,11 +20,10 @@ import uuid
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
-from typing import cast
 
 import jwt
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import CursorResult, delete, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
@@ -32,6 +32,7 @@ from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.auth import PasswordResetToken, RefreshToken
+from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user import User
 from specivo.services.auth_utils import (
     burn_password_check,
@@ -41,6 +42,7 @@ from specivo.services.auth_utils import (
     validate_password_policy,
     verify_password,
 )
+from specivo.services.session_service import SessionService
 from specivo.tasks.notifications import send_notification_email
 
 # ---------------------------------------------------------------------------
@@ -62,21 +64,31 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _make_access_token(user: User, settings, *, remember: bool = True) -> str:
+def _make_access_token(
+    user: User,
+    settings,
+    *,
+    remember: bool = True,
+    session_id: uuid.UUID | None = None,
+) -> str:
     """Encode a JWT access token for *user*.
 
     The ``rem`` claim stores the "Remember Me" preference so that
-    token refresh can carry the cookie-lifetime policy forward.
+    token refresh can carry the cookie-lifetime policy forward. The ``sid``
+    claim names the session (``refresh_tokens.session_id``), so revoking the
+    session revokes the token immediately.
     """
     now = utcnow()
     exp = now + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {
+    payload: dict[str, object] = {
         "sub": str(user.id),
         "iat": int(now.timestamp()),
         "exp": int(exp.timestamp()),
         "jti": str(uuid.uuid4()),
         "rem": remember,
     }
+    if session_id is not None:
+        payload["sid"] = str(session_id)
     return jwt.encode(payload, settings.secret_key, algorithm=JWT_ALGORITHM)
 
 
@@ -120,6 +132,9 @@ class LoginResult:
     # it was on before (a legacy one, or bcrypt at an outdated cost). The
     # endpoint audits it; the service has no request to audit with.
     hash_upgraded_from: str | None = None
+
+
+_sessions = SessionService()
 
 
 class AuthService:
@@ -260,9 +275,9 @@ class AuthService:
                 pass  # Non-critical — don't block login
 
         # 7 & 8. Generate tokens
-        access_token = _make_access_token(user, settings, remember=remember)
         refresh_raw = _make_refresh_token()
-        await self._store_refresh_token(session, user.id, refresh_raw, device_info, ip, settings)
+        record = await self._store_refresh_token(session, user.id, refresh_raw, device_info, ip, settings)
+        access_token = _make_access_token(user, settings, remember=remember, session_id=record.session_id)
 
         await session.flush()
         return LoginResult(
@@ -283,6 +298,11 @@ class AuthService:
         If the token is not found (already used or never existed) we raise 401.
         Replay detection: if a token is reused after rotation, the caller should
         revoke all sessions for the user (handled by the router layer via logout_all).
+
+        The new row inherits every session column (``session_id``,
+        ``auth_method``, the SSO identity fields, ``absolute_expires_at``), so
+        the session keeps its identity. Past ``absolute_expires_at`` the
+        session cannot be refreshed at all.
         """
         settings = get_settings()
         token_hash = _hash_token(refresh_token_raw)
@@ -299,8 +319,9 @@ class AuthService:
                 status_code=401,
             )
 
-        # 2. Check expiry
-        if record.expires_at < utcnow():
+        # 2. Check expiry, including the session's absolute cap
+        now = utcnow()
+        if record.expires_at < now or (record.absolute_expires_at is not None and record.absolute_expires_at <= now):
             await session.delete(record)
             await session.flush()
             raise AppError(
@@ -334,8 +355,9 @@ class AuthService:
             record.device_info,
             record.ip_address,
             settings,
+            inherit_from=record,
         )
-        new_access_token = _make_access_token(user, settings, remember=remember)
+        new_access_token = _make_access_token(user, settings, remember=remember, session_id=record.session_id)
 
         await session.flush()
         return new_access_token, new_refresh_raw, user
@@ -344,12 +366,13 @@ class AuthService:
         self,
         session: AsyncSession,
         refresh_token_raw: str,
+        *,
+        reason: str = "logout",
     ) -> None:
-        """Revoke a single refresh token. Silent if not found."""
-        token_hash = _hash_token(refresh_token_raw)
-        stmt = delete(RefreshToken).where(RefreshToken.token_hash == token_hash)
-        await session.execute(stmt)
-        await session.flush()
+        """End the session behind *refresh_token_raw*. Silent if not found."""
+        await self.end_browser_session(
+            session, refresh_token_raw=refresh_token_raw, access_token_raw=None, reason=reason
+        )
 
     async def end_browser_session(
         self,
@@ -357,47 +380,63 @@ class AuthService:
         *,
         refresh_token_raw: str | None,
         access_token_raw: str | None,
+        reason: str = "logout",
     ) -> None:
-        """Revoke the session a browser holds, on the server side.
+        """End the session a client holds, on the server side.
 
-        Deletes the refresh-token row behind *refresh_token_raw*, so the
-        cookie cannot mint new access tokens, and blocklists the ``jti`` of
-        *access_token_raw* for its remaining lifetime, so the token stops
-        working on the next request instead of when it expires. Either value
-        may be missing (an expired access cookie, a browser that only kept the
-        refresh cookie); whatever is present is revoked.
-
-        This is the single revocation step behind web sign-out; anything that
-        later revokes sessions by id should wrap or replace it here rather than
-        repeat the two steps.
+        The session is found from the refresh-token row behind
+        *refresh_token_raw* and from the ``sid`` claim of *access_token_raw*
+        (normally the same session), and revoked through
+        ``SessionService.revoke``: its refresh rows are deleted and its access
+        tokens are refused from the next request on. The access token's
+        ``jti`` is blocklisted as well, which covers a token minted before the
+        ``sid`` claim existed. Either value may be missing (an expired access
+        cookie, a Bearer client without a refresh token); whatever is present
+        is revoked.
         """
-        from specivo.core.security import blocklist_access_token
+        from specivo.core.security import access_token_session_id, blocklist_access_token
 
-        if refresh_token_raw:
-            await self.logout(session, refresh_token_raw)
+        session_ids: list[uuid.UUID] = []
+        refresh_sid = await self.current_session_id(session, refresh_token_raw=refresh_token_raw)
+        if refresh_sid is not None:
+            session_ids.append(refresh_sid)
+        access_sid = access_token_session_id(access_token_raw)
+        if access_sid is not None:
+            session_ids.append(access_sid)
+        if session_ids:
+            await _sessions.revoke(session, session_ids, reason=reason)
         if access_token_raw:
             await blocklist_access_token(access_token_raw)
+
+    async def current_session_id(
+        self,
+        session: AsyncSession,
+        *,
+        refresh_token_raw: str | None,
+    ) -> uuid.UUID | None:
+        """Return the session *refresh_token_raw* belongs to, or ``None``."""
+        if not refresh_token_raw:
+            return None
+        return await _sessions.session_id_for_refresh_token(session, _hash_token(refresh_token_raw))
 
     async def logout_all(
         self,
         session: AsyncSession,
         user_id: int,
     ) -> int:
-        """Revoke all refresh tokens for *user_id*. Returns the count deleted."""
-        stmt = delete(RefreshToken).where(RefreshToken.user_id == user_id)
-        # execute() is typed as returning Result, which has no rowcount; a DML
-        # statement always yields a CursorResult at runtime.
-        result = cast(CursorResult, await session.execute(stmt))
-        await session.flush()
-        return result.rowcount
+        """Revoke every session of *user_id*. Returns the number of refresh rows deleted."""
+        return await _sessions.revoke_user_sessions(session, user_id, reason="logout_all")
 
     async def logout_other_sessions(
         self,
         session: AsyncSession,
         user_id: int,
         keep_refresh_token_raw: str | None = None,
+        *,
+        caller_access_token_raw: str | None = None,
+        reason: str = "password_change",
     ) -> int:
-        """Revoke every refresh token for *user_id* except the caller's own.
+        """Revoke every session of *user_id* except the caller's own.
 
         Sibling of :meth:`logout_all`, used after a password change: the other
         devices must lose their sessions, but the browser that performed the
@@ -405,27 +444,36 @@ class AuthService:
         out of the page you changed it on.
 
         *keep_refresh_token_raw* is the caller's own raw refresh token (from the
-        ``refresh_token`` cookie). When it is ``None`` — a Bearer-token client
-        that never received a refresh cookie — every session is revoked, which
-        is the same outcome as :meth:`logout_all`.
+        ``refresh_token`` cookie). When it is ``None`` (or unknown) — a
+        Bearer-token client that never received a refresh cookie — every
+        session's refresh token is revoked, as with :meth:`logout_all`; the
+        access tokens of the session named by *caller_access_token_raw* are
+        spared, so the caller's own token keeps working until it expires.
 
-        Returns the number of sessions revoked.
+        Returns the number of refresh rows deleted.
         """
-        stmt = delete(RefreshToken).where(RefreshToken.user_id == user_id)
-        if keep_refresh_token_raw:
-            stmt = stmt.where(RefreshToken.token_hash != _hash_token(keep_refresh_token_raw))
-        result = cast(CursorResult, await session.execute(stmt))
-        await session.flush()
-        return result.rowcount
+        from specivo.core.security import access_token_session_id
+
+        keep = await self.current_session_id(session, refresh_token_raw=keep_refresh_token_raw)
+        spare = None if keep is not None else access_token_session_id(caller_access_token_raw)
+        return await _sessions.revoke_user_sessions(
+            session, user_id, reason=reason, keep_session_id=keep, spare_access_of=spare
+        )
 
     async def list_sessions(
         self,
         session: AsyncSession,
         user_id: int,
-    ) -> list[RefreshToken]:
-        """Return all non-expired refresh tokens for *user_id*."""
+    ) -> list[tuple[RefreshToken, str | None]]:
+        """Return *(refresh token, SSO provider name)* for every live session of *user_id*.
+
+        The provider name is ``None`` for password sessions and for SSO
+        sessions whose identity has since been unlinked.
+        """
         stmt = (
-            select(RefreshToken)
+            select(RefreshToken, SsoProvider.display_name)
+            .outerjoin(UserIdentity, UserIdentity.id == RefreshToken.user_identity_id)
+            .outerjoin(SsoProvider, SsoProvider.id == UserIdentity.provider_id)
             .where(
                 RefreshToken.user_id == user_id,
                 RefreshToken.expires_at > func.now(),
@@ -433,7 +481,7 @@ class AuthService:
             .order_by(RefreshToken.created_at.desc())
         )
         result = await session.execute(stmt)
-        return list(result.scalars().all())
+        return [(row[0], row[1]) for row in result.all()]
 
     async def revoke_session(
         self,
@@ -441,19 +489,17 @@ class AuthService:
         user_id: int,
         token_id: int,
     ) -> None:
-        """Revoke a specific session by token ID. Raises 404 if not owned by user."""
+        """Revoke the session of refresh token *token_id*. Raises 404 if not owned by user."""
         from specivo.core.exceptions import NotFoundError
 
-        stmt = select(RefreshToken).where(
+        stmt = select(RefreshToken.session_id).where(
             RefreshToken.id == token_id,
             RefreshToken.user_id == user_id,
         )
-        result = await session.execute(stmt)
-        record = result.scalar_one_or_none()
-        if record is None:
+        session_id = await session.scalar(stmt)
+        if session_id is None:
             raise NotFoundError(message=_("Session not found"))
-        await session.delete(record)
-        await session.flush()
+        await _sessions.revoke(session, [session_id], reason="revoke_session")
 
     # ------------------------------------------------------------------
     # Password reset
@@ -689,14 +735,33 @@ class AuthService:
         device_info: str | None,
         ip_address: str | None,
         settings,
+        *,
+        inherit_from: RefreshToken | None = None,
     ) -> RefreshToken:
-        """Hash *raw_token* and persist a RefreshToken record."""
+        """Hash *raw_token* and persist a RefreshToken record.
+
+        Without *inherit_from* the row starts a new password session. With it
+        (rotation) the row continues that session: every session column is
+        copied, and ``expires_at`` never runs past ``absolute_expires_at``.
+        """
+        expires_at = utcnow() + timedelta(days=settings.refresh_token_expire_days)
         record = RefreshToken(
             user_id=user_id,
             token_hash=_hash_token(raw_token),
             device_info=device_info,
             ip_address=ip_address,
-            expires_at=utcnow() + timedelta(days=settings.refresh_token_expire_days),
+            session_id=uuid.uuid4(),
+            auth_method="password",
         )
+        if inherit_from is not None:
+            record.session_id = inherit_from.session_id
+            record.auth_method = inherit_from.auth_method
+            record.user_identity_id = inherit_from.user_identity_id
+            record.idp_sid = inherit_from.idp_sid
+            record.id_token_encrypted = inherit_from.id_token_encrypted
+            record.absolute_expires_at = inherit_from.absolute_expires_at
+            if inherit_from.absolute_expires_at is not None:
+                expires_at = min(expires_at, inherit_from.absolute_expires_at)
+        record.expires_at = expires_at
         session.add(record)
         return record
