@@ -14,6 +14,8 @@ Rules enforced here (field-level rules are in :mod:`specivo.schemas.sso`):
 * Every change drops the provider's cached discovery document and JWKS; a
   change of issuer or discovery URL also drops the "last known good" copy on
   the row.
+* Disabling a provider ends the SSO sessions that came from it (the count is
+  in :class:`ProviderUpdateResult`); refresh refuses them anyway.
 * A provider with linked identities is not deleted (409): disable it instead.
   ``force`` ends the SSO sessions that came from it and unlinks the
   identities. The user-group memberships it managed are removed on delete.
@@ -72,6 +74,7 @@ __all__ = [
     "CLIENT_SECRET_PURPOSE",
     "ProviderDeleteResult",
     "ProviderService",
+    "ProviderUpdateResult",
     "SecretStatus",
     "backchannel_logout_uri",
     "redirect_uri",
@@ -120,6 +123,13 @@ class SecretStatus(StrEnum):
     ENV_NOT_ALLOWED = "env_not_allowed"
     MISSING = "missing"  # confidential client without a secret
     NOT_REQUIRED = "not_required"  # public client (auth method ``none``)
+
+
+@dataclass(frozen=True)
+class ProviderUpdateResult:
+    provider: SsoProvider
+    #: Refresh rows deleted because this update disabled the provider.
+    sessions_revoked: int = 0
 
 
 @dataclass(frozen=True)
@@ -318,7 +328,15 @@ class ProviderService:
 
     async def update(
         self, session: AsyncSession, provider_id: int, data: SsoProviderUpdate, *, actor: User | None
-    ) -> SsoProvider:
+    ) -> ProviderUpdateResult:
+        """Apply the fields present in ``data``.
+
+        Disabling the provider (``enabled`` true to false) also ends every SSO
+        session that came from it, as a force delete does: the provider's
+        policy can no longer be checked at the next sign-in, so nothing it
+        let in keeps running. Password sessions and other providers' sessions
+        stay. Enabling it again brings none of them back.
+        """
         settings = get_settings()
         provider = await self.get(session, provider_id)
         fields_set = data.model_fields_set
@@ -374,18 +392,27 @@ class ProviderService:
             provider.discovery_cache = None
             provider.discovery_fetched_at = None
         await session.flush()
+        sessions_revoked = 0
+        if current["enabled"] and not values["enabled"]:
+            sessions_revoked = await self._revoke_sessions(
+                session,
+                await self._identity_ids(session, provider.id),
+                reason="sso_provider_disabled",
+                actor_id=actor.id if actor is not None else None,
+            )
         # updated_at is set by the database on UPDATE; load it now (no lazy IO later).
         await session.refresh(provider, attribute_names=["updated_at"])
 
         if "slug" in changed:
             await replace_auto_redirect_provider(session, current["slug"], values["slug"])
         if changed:
-            self._emit(AuditEvent.SSO_PROVIDER_UPDATED, provider, actor, changed)
+            counts = {"sessions_revoked": sessions_revoked} if "enabled" in changed and not provider.enabled else None
+            self._emit(AuditEvent.SSO_PROVIDER_UPDATED, provider, actor, changed, counts=counts)
         if secret_fields:
             self._emit(AuditEvent.SSO_PROVIDER_SECRET_CHANGED, provider, actor, secret_fields)
         if changed or secret_fields:
             await invalidate_provider_cache(provider.id)
-        return provider
+        return ProviderUpdateResult(provider=provider, sessions_revoked=sessions_revoked)
 
     # ------------------------------------------------------------------
     # Delete
@@ -403,9 +430,7 @@ class ProviderService:
         Group mappings go with the provider.
         """
         provider = await self.get(session, provider_id)
-        identity_ids = list(
-            (await session.execute(select(UserIdentity.id).where(UserIdentity.provider_id == provider.id))).scalars()
-        )
+        identity_ids = await self._identity_ids(session, provider.id)
         if identity_ids and not force:
             raise AppError(
                 code="sso_provider_has_identities",
@@ -419,7 +444,12 @@ class ProviderService:
 
         # Sessions first: the identity FK on refresh_tokens is SET NULL, so
         # once the identities are gone their sessions can no longer be found.
-        sessions_revoked = await self._revoke_sessions(session, identity_ids)
+        sessions_revoked = await self._revoke_sessions(
+            session,
+            identity_ids,
+            reason="sso_provider_deleted",
+            actor_id=actor.id if actor is not None else None,
+        )
         if identity_ids:
             await session.execute(delete(UserIdentity).where(UserIdentity.provider_id == provider.id))
         removed = cast(
@@ -456,14 +486,21 @@ class ProviderService:
             memberships_removed=memberships_removed,
         )
 
-    async def _revoke_sessions(self, session: AsyncSession, identity_ids: list[int]) -> int:
+    @staticmethod
+    async def _identity_ids(session: AsyncSession, provider_id: int) -> list[int]:
+        result = await session.execute(select(UserIdentity.id).where(UserIdentity.provider_id == provider_id))
+        return list(result.scalars())
+
+    async def _revoke_sessions(
+        self, session: AsyncSession, identity_ids: list[int], *, reason: str, actor_id: int | None
+    ) -> int:
         """End the SSO sessions signed in through these identities; returns refresh rows deleted."""
         from specivo.services.session_service import SessionService
 
         sessions = SessionService()
         total = 0
         for identity_id in sorted(set(identity_ids)):
-            total += await sessions.revoke_by_identity(session, identity_id, reason="sso_provider_deleted")
+            total += await sessions.revoke_by_identity(session, identity_id, reason=reason, actor_id=actor_id)
         return total
 
     # ------------------------------------------------------------------

@@ -6477,6 +6477,18 @@ msgstr "最长会话时长（小时）"
 msgid "After this, people sign in at the provider again."
 msgstr "之后用户需在提供商处重新登录。"
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Turning it off signs out everyone who signed in through this provider."
+msgstr "关闭后，所有通过此提供方登录的用户都会被登出。"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "At most 168 hours (one week). An account disabled at the provider keeps its Specivo session until then: turn on back-channel logout to end it at once."
+msgstr "最多 168 小时（一周）。在提供方被停用的账户会保留其 Specivo 会话直到那时：开启后端通道登出（back-channel logout）可立即结束会话。"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Saved. Sessions ended: {count}."
+msgstr "已保存。已结束的会话：{count}。"
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "Claims"
 msgstr "声明（Claims）"

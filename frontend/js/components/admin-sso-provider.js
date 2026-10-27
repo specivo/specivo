@@ -169,7 +169,11 @@ export function adminSsoProvider(initial) {
                 }
                 this.provider = saved;
                 this.envInput = saved.client_secret_env || '';
-                this.saveMessage = i18n.saved || 'Saved.';
+                // Disabling the provider ends its SSO sessions: say how many.
+                var revoked = parseInt(res.headers.get('X-Revoked-Sessions') || '0', 10);
+                this.saveMessage = revoked > 0
+                    ? (i18n.savedSessionsEnded || 'Saved. Sessions ended: {count}.').replace('{count}', String(revoked))
+                    : (i18n.saved || 'Saved.');
             } else {
                 var err = await res.json().catch(function () { return {}; });
                 this.saveError = this._readError(err, i18n.saveFailed || 'Failed to save.');

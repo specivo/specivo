@@ -26,6 +26,7 @@ from specivo.models.sso import CLIENT_SECRET_ENV_PREFIX, SLUG_PATTERN, is_allowe
 
 __all__ = [
     "EXTRA_AUTH_PARAM_KEYS",
+    "SSO_SESSION_MAX_AGE_HOURS",
     "AuthSettingsOut",
     "AuthSettingsUpdate",
     "SsoClaimConfig",
@@ -56,6 +57,11 @@ _DOMAIN_RE = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\
 _CLAIM_PATH_RE = re.compile(r"^\S{1,255}$")
 _MAX_LIST_ITEMS = 200
 _MAX_GROUP_LEN = 512
+
+#: Upper bound of ``session_max_age_hours`` (one week). A session outlives a
+#: change at the IdP (account disabled, group removed) until it reaches this
+#: age, unless back-channel logout ends it sooner.
+SSO_SESSION_MAX_AGE_HOURS = 168
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +231,7 @@ class SsoProviderCreate(BaseModel):
 
     rp_logout_enabled: bool = True
     backchannel_logout_enabled: bool = False
-    session_max_age_hours: int = Field(24, ge=1, le=720)
+    session_max_age_hours: int = Field(24, ge=1, le=SSO_SESSION_MAX_AGE_HOURS)
     extra_auth_params: ExtraParams = Field(default_factory=dict)
 
 
@@ -267,7 +273,7 @@ class SsoProviderUpdate(BaseModel):
 
     rp_logout_enabled: bool | None = None
     backchannel_logout_enabled: bool | None = None
-    session_max_age_hours: int | None = Field(None, ge=1, le=720)
+    session_max_age_hours: int | None = Field(None, ge=1, le=SSO_SESSION_MAX_AGE_HOURS)
     extra_auth_params: ExtraParams | None = None
 
 

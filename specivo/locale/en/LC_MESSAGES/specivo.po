@@ -6485,6 +6485,18 @@ msgstr ""
 msgid "After this, people sign in at the provider again."
 msgstr ""
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Turning it off signs out everyone who signed in through this provider."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "At most 168 hours (one week). An account disabled at the provider keeps its Specivo session until then: turn on back-channel logout to end it at once."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Saved. Sessions ended: {count}."
+msgstr ""
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "Claims"
 msgstr ""

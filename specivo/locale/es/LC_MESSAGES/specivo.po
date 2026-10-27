@@ -6743,6 +6743,18 @@ msgstr "Duración máxima de la sesión (horas)"
 msgid "After this, people sign in at the provider again."
 msgstr "Después, las personas vuelven a iniciar sesión en el proveedor."
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Turning it off signs out everyone who signed in through this provider."
+msgstr "Al desactivarlo se cierra la sesión de todos los que iniciaron sesión con este proveedor."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "At most 168 hours (one week). An account disabled at the provider keeps its Specivo session until then: turn on back-channel logout to end it at once."
+msgstr "Como máximo 168 horas (una semana). Una cuenta desactivada en el proveedor conserva su sesión de Specivo hasta entonces: active el cierre de sesión por canal secundario (back-channel) para terminarla de inmediato."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Saved. Sessions ended: {count}."
+msgstr "Guardado. Sesiones cerradas: {count}."
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "Claims"
 msgstr "Claims"

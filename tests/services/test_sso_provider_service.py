@@ -321,7 +321,9 @@ async def test_update_without_secret_keeps_it(db_session: AsyncSession, admin: U
     provider = await _service.create(db_session, _create(client_secret=SECRET), actor=admin)
     before = provider.client_secret_encrypted
 
-    updated = await _service.update(db_session, provider.id, SsoProviderUpdate(display_name="Renamed"), actor=admin)
+    updated = (
+        await _service.update(db_session, provider.id, SsoProviderUpdate(display_name="Renamed"), actor=admin)
+    ).provider
     assert updated.display_name == "Renamed"
     assert updated.client_secret_encrypted == before
 

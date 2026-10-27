@@ -6596,6 +6596,18 @@ msgstr "ระยะเวลาเซสชันสูงสุด (ชั่�
 msgid "After this, people sign in at the provider again."
 msgstr "หลังจากนั้นผู้ใช้ต้องลงชื่อเข้าใช้ที่ผู้ให้บริการอีกครั้ง"
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Turning it off signs out everyone who signed in through this provider."
+msgstr "การปิดใช้งานจะออกจากระบบทุกคนที่ลงชื่อเข้าใช้ผ่านผู้ให้บริการนี้"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "At most 168 hours (one week). An account disabled at the provider keeps its Specivo session until then: turn on back-channel logout to end it at once."
+msgstr "สูงสุด 168 ชั่วโมง (หนึ่งสัปดาห์) บัญชีที่ถูกปิดใช้งานที่ผู้ให้บริการจะยังคงเซสชัน Specivo ไว้จนถึงตอนนั้น: เปิด back-channel logout เพื่อยุติเซสชันทันที"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Saved. Sessions ended: {count}."
+msgstr "บันทึกแล้ว เซสชันที่สิ้นสุด: {count}"
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "Claims"
 msgstr "Claims"

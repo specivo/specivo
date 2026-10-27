@@ -23,6 +23,7 @@
   backchannelTemplate: {{ backchannel_template | tojson }},
   i18n: {
     saved: {{ _("Saved.") | tojson }},
+    savedSessionsEnded: {{ _("Saved. Sessions ended: {count}.") | tojson }},
     saveFailed: {{ _("Failed to save.") | tojson }},
     deleteFailed: {{ _("Failed to delete.") | tojson }},
     testFailed: {{ _("The test could not run.") | tojson }},
@@ -199,7 +200,8 @@
     <div class="form-hint sp-mb-md">{% trans %}Optional extra parameters for the sign-in request.{% endtrans %}</div>
 
     <div class="sp-form-cols-2">
-      <label class="sp-sso-check"><input type="checkbox" x-model="form.enabled"> <span>{% trans %}Enabled (shown on the login page){% endtrans %}</span></label>
+      <label class="sp-sso-check"><input type="checkbox" x-model="form.enabled"> <span>{% trans %}Enabled (shown on the login page){% endtrans %}
+        <span class="form-hint">{% trans %}Turning it off signs out everyone who signed in through this provider.{% endtrans %}</span></span></label>
       <div class="form-group">
         <label class="form-label" for="sso-position">{% trans %}Button order{% endtrans %}</label>
         <input id="sso-position" class="form-input" type="number" min="0" x-model="form.position">
@@ -231,8 +233,9 @@
     </div>
     <div class="form-group">
       <label class="form-label" for="sso-session-age">{% trans %}Maximum session length (hours){% endtrans %}</label>
-      <input id="sso-session-age" class="form-input" type="number" min="1" max="720" x-model="form.session_max_age_hours">
-      <div class="form-hint">{% trans %}After this, people sign in at the provider again.{% endtrans %}</div>
+      <input id="sso-session-age" class="form-input" type="number" min="1" max="168" x-model="form.session_max_age_hours">
+      <div class="form-hint">{% trans %}After this, people sign in at the provider again.{% endtrans %}
+        {% trans %}At most 168 hours (one week). An account disabled at the provider keeps its Specivo session until then: turn on back-channel logout to end it at once.{% endtrans %}</div>
     </div>
   </div>
 

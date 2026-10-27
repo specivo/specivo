@@ -35,6 +35,7 @@ from specivo.core.utils import utcnow
 from specivo.models.auth import PasswordResetToken, RefreshToken
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user import User
+from specivo.schemas.sso import SSO_SESSION_MAX_AGE_HOURS
 from specivo.services.auth_utils import (
     burn_password_check,
     hash_password,
@@ -338,13 +339,16 @@ class AuthService:
         ``auth_method="sso"``, the identity, the IdP session id (``sid``
         claim, for back-channel logout) and the ID token encrypted for
         ``id_token_hint``. ``absolute_expires_at`` caps the session at
-        ``provider.session_max_age_hours``, after which the user goes back to
+        ``provider.session_max_age_hours`` (at most
+        ``SSO_SESSION_MAX_AGE_HOURS``), after which the user goes back to
         the IdP; ``expires_at`` never runs past it. Always new tokens, never a
         session the browser brought along.
         """
         settings = get_settings()
         now = utcnow()
-        absolute_expires_at = now + timedelta(hours=provider.session_max_age_hours)
+        # A row saved before the cap was lowered may still hold a longer value.
+        hours = min(provider.session_max_age_hours, SSO_SESSION_MAX_AGE_HOURS)
+        absolute_expires_at = now + timedelta(hours=hours)
 
         refresh_raw = _make_refresh_token()
         record = await self._store_refresh_token(session, user.id, refresh_raw, device_info, ip, settings)
@@ -380,7 +384,9 @@ class AuthService:
         The new row inherits every session column (``session_id``,
         ``auth_method``, the SSO identity fields, ``absolute_expires_at``), so
         the session keeps its identity. Past ``absolute_expires_at`` the
-        session cannot be refreshed at all.
+        session cannot be refreshed at all. An SSO session is refused, and
+        revoked for good, once its identity is unlinked or its provider is
+        disabled.
 
         Rotation cannot outlive a concurrent revocation: the session is locked
         (``SessionService.lock_sessions``) before the old row is claimed with
@@ -433,7 +439,21 @@ class AuthService:
             # User deleted or deactivated, or the anonymous user — refuse refresh
             raise refused
 
-        # 5. Issue new tokens
+        # 5. An SSO session lives only as long as its identity and its provider:
+        # unlinked (the FK set ``user_identity_id`` to NULL) or provider
+        # disabled ends it. The claimed row is gone for good: commit before
+        # refusing, so a rollback of the failed request cannot bring it back.
+        if record.auth_method == "sso" and not await self._sso_source_active(session, record.user_identity_id):
+            await _sessions.revoke(session, [record.session_id], reason="sso_source_inactive", actor_id=None)
+            await session.commit()
+            _logger.info(
+                "sso.session.refresh_refused user_id=%s identity_id=%s reason=identity_or_provider_inactive",
+                record.user_id,
+                record.user_identity_id,
+            )
+            raise refused
+
+        # 6. Issue new tokens
         new_refresh_raw = _make_refresh_token()
         await self._store_refresh_token(
             session,
@@ -448,6 +468,18 @@ class AuthService:
 
         await session.flush()
         return new_access_token, new_refresh_raw, user
+
+    @staticmethod
+    async def _sso_source_active(session: AsyncSession, user_identity_id: int | None) -> bool:
+        """The identity still exists and its provider is enabled."""
+        if user_identity_id is None:
+            return False
+        enabled = await session.scalar(
+            select(SsoProvider.enabled)
+            .join(UserIdentity, UserIdentity.provider_id == SsoProvider.id)
+            .where(UserIdentity.id == user_identity_id)
+        )
+        return enabled is True
 
     async def logout(
         self,
