@@ -8,8 +8,10 @@ the transport seam the mock IdP uses.
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 import os
+import time
 
 import httpx
 import pytest
@@ -18,11 +20,14 @@ from specivo.core.config import Settings, get_settings
 from specivo.services.sso import http as sso_http
 from specivo.services.sso.http import (
     MAX_RESPONSE_BYTES,
+    SSOBlockedAddressError,
+    SSODeadlineExceededError,
     SSOHttpError,
     SSOInsecureURLError,
     SSORedirectError,
     SSOResponseTooLargeError,
     create_sso_client,
+    is_blocked_address,
     override_transport,
 )
 
@@ -296,3 +301,260 @@ class TestResponseSizeCap:
             async with create_sso_client(_settings()) as client:
                 await client.get("https://idp.example.com/x")
         assert seen == ["identity"]
+
+
+# ---------------------------------------------------------------------------
+# Total deadline
+# ---------------------------------------------------------------------------
+
+
+async def _slow_chunks(count: int, delay: float):
+    for _ in range(count):
+        await asyncio.sleep(delay)
+        yield b"a"
+
+
+class TestTotalDeadline:
+    """``httpx.Timeout`` limits each phase; the deadline limits the whole request."""
+
+    async def test_slow_drip_body_hits_the_deadline(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=_slow_chunks(50, 0.02))
+
+        with override_transport(httpx.MockTransport(handler)):
+            async with create_sso_client(_settings(sso_http_timeout_seconds=0.2)) as client:
+                started = time.monotonic()
+                with pytest.raises(SSODeadlineExceededError):
+                    await client.get("https://idp.example.com/x")
+        assert time.monotonic() - started < 0.5
+
+    async def test_slow_drip_body_hits_the_deadline_when_streaming(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=_slow_chunks(50, 0.02))
+
+        with override_transport(httpx.MockTransport(handler)):
+            async with create_sso_client(_settings(sso_http_timeout_seconds=0.2)) as client:
+                with pytest.raises(SSODeadlineExceededError):
+                    async with client.stream("GET", "https://idp.example.com/x") as resp:
+                        await resp.aread()
+
+    async def test_slow_response_hits_the_deadline(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            await asyncio.sleep(1)
+            return httpx.Response(200)
+
+        with override_transport(httpx.MockTransport(handler)):
+            async with create_sso_client(_settings(sso_http_timeout_seconds=0.1)) as client:
+                with pytest.raises(SSODeadlineExceededError):
+                    await client.get("https://idp.example.com/x")
+
+    async def test_deadline_spans_redirect_hops(self) -> None:
+        async def handler(request: httpx.Request) -> httpx.Response:
+            await asyncio.sleep(0.08)
+            if request.url.path == "/a":
+                return httpx.Response(302, headers={"Location": "/b"})
+            if request.url.path == "/b":
+                return httpx.Response(302, headers={"Location": "/c"})
+            return httpx.Response(200)
+
+        with override_transport(httpx.MockTransport(handler)):
+            async with create_sso_client(_settings(sso_http_timeout_seconds=0.2)) as client:
+                with pytest.raises(SSODeadlineExceededError):
+                    await client.get("https://idp.example.com/a")
+
+    async def test_fast_response_is_unaffected(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, content=_slow_chunks(3, 0.01))
+
+        with override_transport(httpx.MockTransport(handler)):
+            async with create_sso_client(_settings(sso_http_timeout_seconds=0.5)) as client:
+                assert (await client.get("https://idp.example.com/x")).content == b"aaa"
+
+    async def test_deadline_error_is_an_httpx_timeout(self) -> None:
+        assert issubclass(SSODeadlineExceededError, httpx.TimeoutException)
+        assert issubclass(SSODeadlineExceededError, SSOHttpError)
+
+
+# ---------------------------------------------------------------------------
+# Link-local / cloud metadata destinations
+# ---------------------------------------------------------------------------
+
+BLOCKED_ADDRESSES = [
+    "169.254.169.254",
+    "169.254.0.1",
+    "169.254.255.255",
+    "100.100.100.200",
+    "fe80::1",
+    "febf:ffff::1",
+    "fd00:ec2::254",
+    "::ffff:169.254.169.254",
+    "64:ff9b::a9fe:a9fe",
+]
+
+ALLOWED_ADDRESSES = [
+    "10.0.0.5",
+    "172.16.1.1",
+    "192.168.1.10",
+    "127.0.0.1",
+    "::1",
+    "fd00:ec2::253",
+    "fc00::1",
+    "93.184.216.34",
+    "2606:2800:220:1::1",
+    "169.253.255.255",
+    "169.255.0.0",
+]
+
+
+class TestBlockedAddresses:
+    @pytest.mark.parametrize("address", BLOCKED_ADDRESSES)
+    def test_blocked(self, address: str) -> None:
+        assert is_blocked_address(address)
+
+    @pytest.mark.parametrize("address", ALLOWED_ADDRESSES)
+    def test_allowed(self, address: str) -> None:
+        """Private and loopback ranges stay usable: internal IdPs are the main use case."""
+        assert not is_blocked_address(address)
+
+    def test_ipv6_scope_id_is_ignored(self) -> None:
+        assert is_blocked_address("fe80::1%eth0")
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "https://169.254.169.254/latest/meta-data/",
+            "https://[fe80::1]/x",
+            "https://[fd00:ec2::254]/x",
+            "https://[::ffff:169.254.169.254]/x",
+        ],
+    )
+    async def test_ip_literal_refused_through_the_seam(self, url: str) -> None:
+        recorder = _Recorder()
+        with override_transport(httpx.MockTransport(recorder)):
+            async with create_sso_client(_settings(sso_allow_insecure_http=True)) as client:
+                with pytest.raises(SSOBlockedAddressError):
+                    await client.get(url)
+        assert recorder.seen == []
+
+    async def test_http_metadata_refused_even_with_insecure_http(self) -> None:
+        recorder = _Recorder()
+        with override_transport(httpx.MockTransport(recorder)):
+            async with create_sso_client(_settings(sso_allow_insecure_http=True)) as client:
+                with pytest.raises(SSOBlockedAddressError):
+                    await client.get("http://169.254.169.254/latest/meta-data/")
+        assert recorder.seen == []
+
+    async def test_redirect_to_metadata_ip_is_refused(self) -> None:
+        """A same-host check alone would not catch it if the IdP host were the IP itself."""
+        recorder = _Recorder(
+            {
+                "https://10.0.0.5/jwks": httpx.Response(
+                    302, headers={"Location": "https://169.254.169.254/latest/meta-data/"}
+                )
+            }
+        )
+        with override_transport(httpx.MockTransport(recorder)):
+            async with create_sso_client(_settings()) as client:
+                with pytest.raises((SSOBlockedAddressError, SSORedirectError)):
+                    await client.get("https://10.0.0.5/jwks")
+        assert recorder.seen == ["https://10.0.0.5/jwks"]
+
+    async def test_seam_does_not_resolve_hostnames(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def _boom(host: str, port: int) -> list[str]:
+            raise AssertionError("the test seam must not resolve DNS")
+
+        monkeypatch.setattr(sso_http, "_resolve_host", _boom)
+        with override_transport(httpx.MockTransport(_Recorder())):
+            async with create_sso_client(_settings()) as client:
+                assert (await client.get("https://idp.example.com/x")).status_code == 200
+
+
+class TestResolutionAndPinning:
+    """The real-network path resolves once, checks every address and pins the connection."""
+
+    @staticmethod
+    def _client(resolved: dict[str, list[str]], seen: list[httpx.Request]) -> httpx.AsyncClient:
+        async def resolver(host: str, port: int) -> list[str]:
+            return resolved[host]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.path == "/hop":
+                return httpx.Response(302, headers={"Location": "https://idp.example.com/end"})
+            return httpx.Response(200)
+
+        transport = sso_http._GuardedTransport(httpx.MockTransport(handler), resolver=resolver)
+        return httpx.AsyncClient(transport=transport)
+
+    async def test_connection_is_pinned_to_the_checked_address(self) -> None:
+        seen: list[httpx.Request] = []
+        async with self._client({"idp.example.com": ["93.184.216.34"]}, seen) as client:
+            resp = await client.get("https://idp.example.com/x")
+        assert resp.status_code == 200
+        (sent,) = seen
+        assert sent.url.host == "93.184.216.34"
+        assert sent.headers["Host"] == "idp.example.com"
+        assert sent.extensions["sni_hostname"] == "idp.example.com"
+        assert resp.request.url.host == "idp.example.com"
+
+    async def test_ipv6_answer_is_pinned(self) -> None:
+        seen: list[httpx.Request] = []
+        async with self._client({"idp.example.com": ["2606:2800:220:1::1"]}, seen) as client:
+            await client.get("https://idp.example.com/x")
+        assert seen[0].url.host == "2606:2800:220:1::1"
+
+    async def test_metadata_answer_is_refused(self) -> None:
+        seen: list[httpx.Request] = []
+        async with self._client({"idp.example.com": ["169.254.169.254"]}, seen) as client:
+            with pytest.raises(SSOBlockedAddressError):
+                await client.get("https://idp.example.com/x")
+        assert seen == []
+
+    async def test_any_blocked_answer_refuses_the_host(self) -> None:
+        seen: list[httpx.Request] = []
+        async with self._client({"idp.example.com": ["93.184.216.34", "169.254.169.254"]}, seen) as client:
+            with pytest.raises(SSOBlockedAddressError):
+                await client.get("https://idp.example.com/x")
+        assert seen == []
+
+    async def test_private_answer_is_allowed(self) -> None:
+        seen: list[httpx.Request] = []
+        async with self._client({"idp.internal.example.com": ["10.1.2.3"]}, seen) as client:
+            assert (await client.get("https://idp.internal.example.com/x")).status_code == 200
+
+    async def test_every_redirect_hop_is_resolved_again(self) -> None:
+        calls: list[str] = []
+        answers = iter([["93.184.216.34"], ["169.254.169.254"]])
+
+        async def resolver(host: str, port: int) -> list[str]:
+            calls.append(host)
+            return next(answers)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(302, headers={"Location": "https://idp.example.com/end"})
+
+        transport = sso_http._GuardedTransport(httpx.MockTransport(handler), resolver=resolver)
+        async with httpx.AsyncClient(transport=transport, follow_redirects=True) as client:
+            with pytest.raises(SSOBlockedAddressError):
+                await client.get("https://idp.example.com/hop")
+        assert calls == ["idp.example.com", "idp.example.com"]
+
+    async def test_resolution_failure_is_a_connect_error(self) -> None:
+        async def resolver(host: str, port: int) -> list[str]:
+            raise OSError("no such host")
+
+        transport = sso_http._GuardedTransport(httpx.MockTransport(lambda r: httpx.Response(200)), resolver=resolver)
+        async with httpx.AsyncClient(transport=transport) as client:
+            with pytest.raises(httpx.ConnectError):
+                await client.get("https://idp.example.com/x")
+
+    async def test_factory_uses_the_resolver_without_an_override(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No override: the real path resolves and refuses before opening a socket."""
+
+        async def resolver(host: str, port: int) -> list[str]:
+            return ["169.254.169.254"]
+
+        monkeypatch.setattr(sso_http, "_resolve_host", resolver)
+        async with create_sso_client(_settings()) as client:
+            with pytest.raises(SSOBlockedAddressError):
+                await client.get("https://idp.example.com/x")
