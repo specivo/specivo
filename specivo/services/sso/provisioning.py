@@ -368,6 +368,11 @@ async def _auto_link_target(
     if not _email_verified(claims):
         skip("email_not_verified")
         return None
+    if not _trusted_verified_email(provider, claims):
+        # email_verified vouches for the standard email claim only, not for
+        # the custom claim (upn, an attribute) the address would be read from.
+        skip("email_claim_not_standard")
+        return None
     email = _email_from(claims, provider)
     if email is None:
         skip("no_email")
