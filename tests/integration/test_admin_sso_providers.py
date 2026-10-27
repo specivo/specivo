@@ -11,6 +11,8 @@ transactions, so slugs here carry a module-local prefix.
 from __future__ import annotations
 
 import itertools
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -19,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
+from specivo.models.auth import RefreshToken
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user_group import UserGroup
 from specivo.testing.oidc_mock import MockIdP
@@ -230,6 +233,47 @@ async def test_patch_clear_secret(admin_client: AsyncClient):
     assert resp.status_code == 200
     assert resp.json()["client_secret_configured"] is False
     assert resp.json()["client_secret_status"] == "missing"
+
+
+async def test_patch_disable_reports_revoked_sessions(admin_client: AsyncClient, db_session: AsyncSession):
+    data = await _create(admin_client, enabled=True)
+    user = UserFactory.build()
+    db_session.add(user)
+    await db_session.flush()
+    identity = UserIdentity(
+        user_id=user.id, provider_id=data["id"], issuer=data["issuer"], subject="sub-disable", linked_via="admin"
+    )
+    db_session.add(identity)
+    await db_session.flush()
+    db_session.add(
+        RefreshToken(
+            user_id=user.id,
+            token_hash=secrets.token_hex(32),
+            expires_at=datetime.now(UTC) + timedelta(days=1),
+            auth_method="sso",
+            user_identity_id=identity.id,
+        )
+    )
+    await db_session.flush()
+
+    resp = await admin_client.patch(f"{URL}{data['id']}/", json={"display_name": "Still on"})
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["X-Revoked-Sessions"] == "0"
+
+    resp = await admin_client.patch(f"{URL}{data['id']}/", json={"enabled": False})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["enabled"] is False
+    assert resp.headers["X-Revoked-Sessions"] == "1"
+    left = await db_session.execute(select(RefreshToken.id).where(RefreshToken.user_id == user.id))
+    assert left.first() is None
+
+
+async def test_patch_rejects_session_length_over_a_week(admin_client: AsyncClient):
+    data = await _create(admin_client)
+    resp = await admin_client.patch(f"{URL}{data['id']}/", json={"session_max_age_hours": 169})
+    assert resp.status_code == 422
+    resp = await admin_client.patch(f"{URL}{data['id']}/", json={"session_max_age_hours": 168})
+    assert resp.status_code == 200, resp.text
 
 
 # ---------------------------------------------------------------------------

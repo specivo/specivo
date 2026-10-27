@@ -108,7 +108,11 @@ class TestSessionIdentity:
 
     async def test_rotation_copies_every_session_column(self, db_session: AsyncSession, user: User) -> None:
         provider = SsoProvider(
-            slug="sessrev-idp", display_name="Session IdP", issuer="https://idp.example.com", client_id="c"
+            slug="sessrev-idp",
+            display_name="Session IdP",
+            issuer="https://idp.example.com",
+            client_id="c",
+            enabled=True,  # a disabled provider's sessions are not refreshed
         )
         db_session.add(provider)
         await db_session.flush()

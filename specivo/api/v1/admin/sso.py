@@ -93,22 +93,39 @@ async def get_provider(provider_id: int, admin: AdminUser, db: AsyncSession = De
     return await _service.out(db, await _service.get(db, provider_id))
 
 
-@router.patch("/admin/sso/providers/{provider_id}/", response_model=SsoProviderOut)
+@router.patch(
+    "/admin/sso/providers/{provider_id}/",
+    response_model=SsoProviderOut,
+    responses={
+        status.HTTP_200_OK: {
+            "headers": {
+                REVOKED_SESSIONS_HEADER: {
+                    "description": "SSO sessions ended (refresh tokens) because this update disabled the provider.",
+                    "schema": {"type": "integer"},
+                },
+            },
+        },
+    },
+)
 async def update_provider(
     provider_id: int,
     data: SsoProviderUpdate,
     admin: AdminUser,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> SsoProviderOut:
     """Update the fields present in the body.
 
     Omitting ``client_secret`` keeps the stored secret. ``clear_client_secret:
     true`` removes the secret or env reference. Any change drops the cached
-    discovery document and JWKS.
+    discovery document and JWKS. Disabling the provider (``enabled: false``)
+    ends every SSO session that came from it; the count is in the
+    ``X-Revoked-Sessions`` header (0 otherwise).
     """
-    provider = await _service.update(db, provider_id, data, actor=admin)
+    result = await _service.update(db, provider_id, data, actor=admin)
     await db.commit()  # commit before response to avoid reload race condition
-    return await _service.out(db, provider)
+    response.headers[REVOKED_SESSIONS_HEADER] = str(result.sessions_revoked)
+    return await _service.out(db, result.provider)
 
 
 @router.delete(

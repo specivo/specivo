@@ -93,7 +93,7 @@ The provider form has five cards. The tables list every field.
 | Client secret | See [The client secret](#the-client-secret). Not used with `none`. |
 | Scopes | Space-separated. Default `openid profile email`. `openid` is required and is added first. Add `groups` or other scopes your IdP needs to release a claim. |
 | Extra sign-in parameters | Optional `prompt`, `domain_hint`, `login_hint`, `acr_values` and `max_age`, added to the sign-in request. Nothing else can be set here. |
-| Enabled | Shows the button on the login page. A provider cannot be enabled while a confidential client has no secret. |
+| Enabled | Shows the button on the login page. A provider cannot be enabled while a confidential client has no secret. Turning it off signs out everyone whose session came from this provider (see [Sessions](#sessions-and-logout)). |
 | Button order | Lower numbers come first. |
 
 Specivo always uses the authorization code flow with PKCE (`S256`), `state` and `nonce`, even for
@@ -140,7 +140,7 @@ Pick one source:
 | Existing accounts | How a person with a Specivo account gets connected to their IdP identity: users connect it themselves (default), or automatic linking by verified email. See [Linking an existing account](#linking-an-existing-account). |
 | This provider really verifies email addresses | Tells Specivo it may believe the `email_verified` claim. Required for automatic linking. Off by default. **Never turn it on for Microsoft Entra ID.** |
 | Allowed email domains | One domain per line. Empty allows every domain. See [Limiting who can sign in](#limiting-who-can-sign-in). |
-| Maximum session length (hours) | The longest a sign-in through this provider lasts, from 1 to 720. Default 24. See [Sessions](#sessions-and-logout). |
+| Maximum session length (hours) | The longest a sign-in through this provider lasts, from 1 to 168 (one week). Default 24. See [Sessions](#sessions-and-logout). |
 
 ### Claims
 
@@ -333,9 +333,17 @@ provider manages, are never removed.
 ## Sessions and logout
 
 **Session length.** A sign-in through a provider lasts at most **Maximum session length** (default
-24 hours), even if the person keeps using Specivo. After that they go through the IdP again. This is
-how an IdP that has disabled someone eventually stops them here. Lower the number if you cannot use
-back-channel logout.
+24 hours, at most 168 hours, one week), even if the person keeps using Specivo. After that they go
+through the IdP again. This is how an IdP that has disabled someone eventually stops them here, so
+the number is also how long a person disabled at the IdP can keep working in Specivo. For fast
+offboarding turn on back-channel logout (below); lower the number if you cannot use it.
+
+**A session follows its provider and its identity.** Each time its access token expires (every 15
+minutes by default) the browser renews the session in the background. An SSO session is not renewed,
+and ends, once its provider is disabled or its identity is disconnected. Turning a provider off ends
+every session that came from it at once (the admin page says how many; the API returns the count in
+the `X-Revoked-Sessions` header of the `PATCH`). Turning it on again does not bring them back:
+people sign in again. Password sessions and sessions from other providers are not affected.
 
 **Signing out of Specivo.** The **Sign out** button in the header is a form that posts to
 `/logout/`. A plain link or bookmark to `/logout/` opens a "Sign out?" confirmation page and does
@@ -361,7 +369,7 @@ Specivo has no SCIM, so it learns that someone left through the following. Use a
 allows.
 
 1. **Disable the person at the IdP.** They cannot sign in again. Their existing Specivo session
-   keeps working until you end it or it reaches the maximum session length.
+   keeps working until you end it or it reaches the maximum session length (at most a week).
 2. **Back-channel logout**, where the IdP supports it, ends the session when the IdP ends theirs.
 3. **A refused sign-in** because they lost a required group, or their email domain no longer
    qualifies, ends the remaining sessions that came from that identity.
