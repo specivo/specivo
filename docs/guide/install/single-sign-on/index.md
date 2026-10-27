@@ -399,7 +399,7 @@ and service accounts are not affected.
 | Setting | What it does |
 |---|---|
 | Hide the password form on the login page | Replaces the form with a link, **Sign in with a local account**, to `/login/?local=1`. With no enabled provider the form is always shown. |
-| Only administrators may sign in with a password | Everyone else must use SSO. The link above still shows the form, but a password sign-in by a non-administrator is refused. |
+| Only administrators may sign in with a password | Everyone else must use SSO. The link above still shows the form, but a password sign-in by a non-administrator is refused. Every refused password sign-in then gets the same "Invalid login or password" answer, also for an administrator account that is locked, deactivated or not verified, so the form does not reveal who is an administrator. The reason is in the `specivo.sso` log (`sso.local_login.refused_admin`). Wrong passwords still lock an administrator out for a while; they can still sign in through SSO meanwhile. |
 | Users who sign in through SSO may use API keys | On by default. |
 | Redirect the login page to | Sends visitors straight to one provider. `/login/?local=1` bypasses it, and so does a signed-in visitor, a sign-out, a password reset and any SSO error, so a failing provider cannot loop. |
 

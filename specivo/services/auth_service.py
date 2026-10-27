@@ -216,34 +216,40 @@ class AuthService:
                 status_code=401,
             )
 
+        # While password sign-in is admins-only, only administrators reach this
+        # point, so a specific refusal (not verified, deactivated, locked, ...)
+        # would tell a stranger "this login is an administrator" and which
+        # state the break-glass account is in. Every refusal then gets the
+        # wrong-password answer; the real reason goes to the log only.
+        # Wrong passwords still count towards the lockout: dropping it would
+        # leave the most valuable accounts open to unthrottled guessing, and
+        # the lockout tiers already are the per-account throttle. A locked-out
+        # administrator can still sign in through SSO or reset the password.
+        def refuse(code: str, message: str, *, details: dict[str, str] | None = None, burn: bool = True) -> AppError:
+            if not admins_only:
+                return AppError(code=code, message=message, status_code=401, details=details)
+            from specivo.services.sso.log import logger as sso_logger
+
+            sso_logger.info("sso.local_login.refused_admin user_id=%s reason=%s", user.id, code)
+            if burn:
+                burn_password_check(password)
+            return AppError(code="auth_invalid_credentials", message=_("Invalid login or password"), status_code=401)
+
         # 2. Check account status
         if user.status == "pending_verification":
-            raise AppError(
-                code="auth_email_not_verified",
-                message=_("Email address not verified"),
-                status_code=401,
-            )
+            raise refuse("auth_email_not_verified", _("Email address not verified"))
         if user.status == "deactivated":
-            raise AppError(
-                code="auth_account_deactivated",
-                message=_("Account has been deactivated"),
-                status_code=401,
-            )
+            raise refuse("auth_account_deactivated", _("Account has been deactivated"))
 
         # 3. Block service accounts from password login
         if user.is_service_account:
-            raise AppError(
-                code="auth_service_account",
-                message=_("Service accounts cannot log in. Use an API key instead."),
-                status_code=401,
-            )
+            raise refuse("auth_service_account", _("Service accounts cannot log in. Use an API key instead."))
 
         # 4. Check active lockout
         if user.locked_until is not None and user.locked_until > utcnow():
-            raise AppError(
-                code="auth_account_locked",
-                message=_("Account is temporarily locked due to too many failed login attempts"),
-                status_code=401,
+            raise refuse(
+                "auth_account_locked",
+                _("Account is temporarily locked due to too many failed login attempts"),
                 details={"locked_until": user.locked_until.isoformat()},
             )
 
@@ -276,11 +282,8 @@ class AuthService:
             # but both were caught at step 3. This branch handles the edge case
             # where status="locked" but locked_until is NULL (admin permanent lock).
             if user.locked_until is None:
-                raise AppError(
-                    code="auth_account_locked",
-                    message=_("Account is locked. Contact an administrator."),
-                    status_code=401,
-                )
+                # The password was checked already: no extra bcrypt to burn.
+                raise refuse("auth_account_locked", _("Account is locked. Contact an administrator."), burn=False)
             # locked_until is in the past — clear the lock and allow login
             user.status = "active"
 
