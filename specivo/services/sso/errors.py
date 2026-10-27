@@ -120,3 +120,43 @@ class SsoConfigurationError(SsoError):
     default_code = "sso_provider_misconfigured"
     default_message = "Single sign-on is not configured correctly"
     default_status = 500
+
+
+class SsoStateInvalidError(SsoError):
+    """The login transaction is missing, expired, reused, from another browser or for another provider."""
+
+    default_code = "sso_state_invalid"
+    default_message = "The sign-in expired, try again"
+    default_status = 400
+
+
+class SsoUnavailableError(SsoError):
+    """Single sign-on cannot run right now (no transaction store): fails closed."""
+
+    default_code = "sso_unavailable"
+    default_message = "Single sign-on is temporarily unavailable"
+    default_status = 503
+
+
+class SsoIdpRefusedError(SsoError):
+    """The IdP answered the authorization request with ``error=`` (e.g. ``access_denied``)."""
+
+    default_code = "sso_idp_error"
+    default_message = "The identity provider refused the sign-in"
+    default_status = 400
+
+
+class SsoAccountNotProvisionedError(SsoError):
+    """No Specivo account is linked to the external identity, and none may be created."""
+
+    default_code = "sso_account_not_provisioned"
+    default_message = "No account is connected to this identity"
+    default_status = 403
+
+
+class SsoAccountDisabledError(SsoError):
+    """The linked account cannot sign in (deactivated, locked by an admin, service account)."""
+
+    default_code = "sso_account_disabled"
+    default_message = "The account is disabled"
+    default_status = 403

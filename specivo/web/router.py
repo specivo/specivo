@@ -11,6 +11,7 @@ from specivo.web.pages.projects import router as project_pages
 from specivo.web.pages.recurring import router as recurring_pages
 from specivo.web.pages.search import router as search_pages
 from specivo.web.pages.sprints import router as sprint_pages
+from specivo.web.pages.sso import router as sso_pages
 from specivo.web.pages.time import router as time_pages
 from specivo.web.pages.wiki import router as wiki_pages
 from specivo.web.partials.dashboard import router as dashboard_partials
@@ -20,6 +21,7 @@ web_router = APIRouter(include_in_schema=False)
 
 web_router.include_router(dashboard_pages)
 web_router.include_router(auth_pages)
+web_router.include_router(sso_pages)
 web_router.include_router(project_pages)
 web_router.include_router(wiki_pages)
 web_router.include_router(issue_pages)

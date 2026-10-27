@@ -1,0 +1,200 @@
+"""SSO (OpenID Connect) browser routes: start a login, receive the callback.
+
+``GET /auth/oidc/{slug}/login/?next=`` redirects to the IdP and sets the
+``spv_sso_tx`` binding cookie. ``GET /auth/oidc/{slug}/callback/`` finishes
+the login, sets the usual auth cookies and redirects to ``next``. Both are
+GET-only, so the CSRF middleware has nothing to exempt: the transaction's
+state, bound to the browser by the cookie, is the CSRF defence of the flow.
+
+Every refusal redirects to ``/login/?sso_error=<code>``; the login page turns
+the code into a translated message (:func:`sso_error_message`) and never
+shows anything the IdP sent. Unknown or disabled providers are 404. The
+protocol work lives in :class:`specivo.services.sso.login.SsoLoginService`.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+from urllib.parse import urlencode
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from specivo.core.auth_cookies import set_auth_cookies
+from specivo.core.config import Settings, get_settings
+from specivo.core.database import get_db
+from specivo.core.i18n import gettext as _
+from specivo.core.rate_limit import rate_limit
+from specivo.core.utils import utcnow
+from specivo.models.sso import SsoProvider
+from specivo.services.sso.errors import SsoError
+from specivo.services.sso.flow import TX_COOKIE_NAME, TX_TTL_SECONDS, tx_cookie_path
+from specivo.services.sso.log import logger
+from specivo.services.sso.login import SsoLoginService
+
+router = APIRouter(prefix="/auth/oidc", tags=["web-sso"], include_in_schema=False)
+_service = SsoLoginService()
+
+_start_rate_limit = rate_limit("sso_login_start", max_requests=20, window_seconds=60)
+_callback_rate_limit = rate_limit("sso_callback", max_requests=20, window_seconds=60)
+
+# Callback parameters that must appear at most once (a repeated one is refused).
+_SINGLE_VALUED = ("state", "code", "error", "iss")
+
+# Error codes shown to the browser under the name of the design's error table.
+# The token endpoint refusing the code (invalid_grant, ...) is, for the user,
+# the identity provider refusing the sign-in.
+_PUBLIC_CODES = {"sso_token_exchange_failed": "sso_idp_error"}
+
+
+def sso_error_message(code: str | None) -> str | None:
+    """The translated login-page message for an ``sso_error`` code.
+
+    ``None`` when there is no code. Unknown codes get the generic message, so
+    the parameter is never reflected into the page.
+    """
+    if not code:
+        return None
+    messages = {
+        "sso_state_invalid": _("Your sign-in expired or was started in another browser. Please try again."),
+        "sso_idp_error": _("The identity provider refused the sign-in."),
+        "sso_idp_unreachable": _("The identity provider is unavailable. Please try again later."),
+        "sso_discovery_invalid": _("Single sign-on is not configured correctly. Contact your administrator."),
+        "sso_provider_misconfigured": _("Single sign-on is not configured correctly. Contact your administrator."),
+        "sso_account_not_provisioned": _(
+            "No account here is connected to your identity provider account. Contact your administrator."
+        ),
+        "sso_account_disabled": _("This account is disabled. Contact your administrator."),
+        "sso_unavailable": _("Single sign-on is temporarily unavailable. Please try again later."),
+    }
+    return messages.get(code) or _("Single sign-on failed. Please try again.")
+
+
+def _prefix(settings: Settings) -> str:
+    return settings.stealth_prefix.rstrip("/")
+
+
+def _clear_tx_cookie(response: RedirectResponse, settings: Settings) -> None:
+    response.delete_cookie(
+        TX_COOKIE_NAME,
+        path=tx_cookie_path(settings),
+        secure=not settings.debug,
+        httponly=True,
+        samesite="lax",
+    )
+
+
+def _refuse(code: str, settings: Settings) -> RedirectResponse:
+    query = urlencode({"sso_error": _PUBLIC_CODES.get(code, code)})
+    response = RedirectResponse(f"{_prefix(settings)}/login/?{query}", status_code=302)
+    _clear_tx_cookie(response, settings)
+    return response
+
+
+async def _provider_or_404(db: AsyncSession, slug: str) -> SsoProvider:
+    provider = await _service.get_enabled_provider(db, slug)
+    if provider is None:
+        raise HTTPException(status_code=404, detail="Not found")
+    return provider
+
+
+async def _audit_failure(db: AsyncSession, request: Request, provider: SsoProvider, exc: SsoError) -> None:
+    logger.warning("sso.login.failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
+    try:
+        from specivo.services.security_audit_service import SecurityAuditService
+
+        await SecurityAuditService().log_login_failure(session=db, request=request, reason=exc.code)
+    except Exception:
+        logger.exception("sso.audit.failed provider=%s", provider.slug)
+
+
+@router.get("/{slug}/login/", response_model=None)
+async def sso_login_start(
+    slug: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _rl: Annotated[None, Depends(_start_rate_limit)],
+    next_url: Annotated[str, Query(alias="next")] = "",
+) -> RedirectResponse:
+    """Send the browser to the IdP's authorization endpoint (302)."""
+    settings = get_settings()
+    provider = await _provider_or_404(db, slug)
+    try:
+        authorization = await _service.start(provider, next_path=next_url)
+    except SsoError as exc:
+        logger.warning("sso.login.start_failed provider=%s code=%s reason=%s", provider.slug, exc.code, exc.reason)
+        return _refuse(exc.code, settings)
+
+    response = RedirectResponse(authorization.url, status_code=302)
+    response.set_cookie(
+        TX_COOKIE_NAME,
+        authorization.binding_token,
+        max_age=TX_TTL_SECONDS,
+        path=tx_cookie_path(settings),
+        secure=not settings.debug,
+        httponly=True,
+        samesite="lax",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@router.get("/{slug}/callback/", response_model=None)
+async def sso_callback(
+    slug: str,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    _rl: Annotated[None, Depends(_callback_rate_limit)],
+) -> RedirectResponse:
+    """Finish the login: new session cookies and a redirect to ``next``, or a refusal redirect."""
+    settings = get_settings()
+    provider = await _provider_or_404(db, slug)
+
+    query = request.query_params
+    if any(len(query.getlist(name)) > 1 for name in _SINGLE_VALUED):
+        logger.warning("sso.callback.rejected provider=%s reason=repeated_parameter", provider.slug)
+        return _refuse("sso_state_invalid", settings)
+
+    try:
+        result = await _service.finish(
+            db,
+            provider,
+            params={key: value for key, value in query.items()},
+            binding_token=request.cookies.get(TX_COOKIE_NAME),
+            device_info=request.headers.get("User-Agent"),
+            ip=request.client.host if request.client else None,
+        )
+    except SsoError as exc:
+        await _audit_failure(db, request, provider, exc)
+        return _refuse(exc.code, settings)
+
+    try:
+        from specivo.services.security_audit_service import SecurityAuditService
+
+        await SecurityAuditService().log_login_success(
+            session=db,
+            user_id=result.user_id,
+            request=request,
+            details={"method": "sso", "provider": provider.slug},
+        )
+    except Exception:
+        logger.exception("sso.audit.failed provider=%s", provider.slug)
+
+    # Commit before the browser follows the redirect, so the new session
+    # exists on the very next request.
+    await db.commit()
+
+    response = RedirectResponse(result.next_path or f"{_prefix(settings)}/", status_code=302)
+    remaining = int((result.absolute_expires_at - utcnow()).total_seconds())
+    set_auth_cookies(
+        response,
+        result.access_token,
+        result.refresh_token,
+        settings,
+        remember=True,
+        refresh_max_age=remaining,
+    )
+    _clear_tx_cookie(response, settings)
+    response.headers["Cache-Control"] = "no-store"
+    return response
