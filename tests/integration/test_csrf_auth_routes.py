@@ -1,14 +1,18 @@
-"""CSRF exemptions under /api/v1/auth/, checked against the routing table.
+"""CSRF exemptions, checked against the routing table.
 
 The CSRF middleware exempts a short list of exact auth endpoints, never the
-``/api/v1/auth/`` prefix. The properties below hold for every route the app
-actually serves, not just the ones somebody remembered to test:
+``/api/v1/auth/`` prefix, plus one anchored path pattern: the SSO back-channel
+logout route, whose path carries the provider slug. The properties below hold
+for every route the app actually serves, not just the ones somebody
+remembered to test:
 
 - every exempt path is a mutating route the app serves, so an entry cannot
   silently stop matching after a rename;
 - every other mutating route under ``/api/v1/auth/`` refuses a
   cookie-authenticated request that carries no CSRF token, so a route added
   there later is protected by default;
+- the exempt pattern matches exactly one served route (back-channel logout)
+  and nothing next to it;
 - change-password, the cookie-authenticated endpoint that started this,
   refuses a forged request and leaves the password alone.
 """
@@ -21,7 +25,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.middleware import _CSRF_EXEMPT_PATHS, CSRFMiddleware
+from specivo.core.middleware import _CSRF_EXEMPT_PATHS, _CSRF_EXEMPT_PATTERNS, CSRFMiddleware
 from specivo.models.user import User
 from specivo.services.auth_utils import verify_password
 from specivo.testing.conftest_base import _test_app
@@ -114,6 +118,73 @@ async def test_exempt_paths_accept_cookie_requests_without_csrf(client: AsyncCli
     for path, body in bodies.items():
         resp = await client.post(path, json=body)
         assert resp.status_code != 403, f"{path} was refused: {resp.text}"
+
+
+# ---------------------------------------------------------------------------
+# The exempt pattern (SSO back-channel logout) against the routing table
+# ---------------------------------------------------------------------------
+
+_BACKCHANNEL_ROUTE = "/auth/oidc/{slug}/backchannel-logout/"
+
+
+def _mutating_routes() -> set[tuple[str, str]]:
+    return {(method, route.path) for route in iter_api_routes(_test_app) for method in route.methods & _MUTATING}
+
+
+def test_exempt_patterns_are_the_set_that_was_reviewed() -> None:
+    """Spelled out so widening the exemption shows up as a change to this file too."""
+    assert _CSRF_EXEMPT_PATTERNS == (r"/auth/oidc/[a-z0-9-]{2,40}/backchannel-logout/",)
+
+
+def test_exempt_pattern_matches_only_the_backchannel_route() -> None:
+    """Every mutating route, with sample values for its parameters, against the pattern."""
+    matching = {
+        (method, path)
+        for method, path in _mutating_routes()
+        if any(re.fullmatch(p + "?", _PATH_PARAM.sub("test-idp", path)) for p in _CSRF_EXEMPT_PATTERNS)
+    }
+    assert matching == {("POST", _BACKCHANNEL_ROUTE)}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/auth/oidc/test-idp/backchannel-logout/",
+        "/auth/oidc/test-idp/backchannel-logout",
+        "/auth/oidc/ab/backchannel-logout/",
+    ],
+)
+def test_backchannel_logout_is_exempt(path: str) -> None:
+    assert not _middleware()._needs_csrf(path, _COOKIE_HEADERS)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/auth/oidc/x/backchannel-logout/extra",
+        "/auth/oidc/test-idp/backchannel-logout/extra/",
+        "/auth/oidc/test-idp/backchannel-logout//",
+        "/auth/oidc/x/backchannel-logout/",
+        "/auth/oidc/Test-IdP/backchannel-logout/",
+        "/auth/oidc/a/b/backchannel-logout/",
+        "/auth/oidc/../backchannel-logout/",
+        "/auth/oidc/test-idp/backchannel-logout-extra/",
+        "/auth/oidc/test-idp/callback/",
+        "/auth/oidc/test-idp/login/",
+        "/prefix/auth/oidc/test-idp/backchannel-logout/",
+        "/auth/oidc/test-idp/backchannel-logout/\n",
+        "/auth/oidc/" + "a" * 41 + "/backchannel-logout/",
+    ],
+)
+def test_paths_next_to_backchannel_logout_need_csrf(path: str) -> None:
+    assert _middleware()._needs_csrf(path, _COOKIE_HEADERS)
+
+
+async def test_neighbouring_post_with_cookie_and_no_token_is_refused(unauth_client: AsyncClient) -> None:
+    unauth_client.cookies.set("access_token", "cookie-session")
+    resp = await unauth_client.post("/auth/oidc/x/backchannel-logout/extra", data={"logout_token": "x"})
+    assert resp.status_code == 403
+    assert "CSRF" in resp.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
