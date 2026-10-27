@@ -3,7 +3,7 @@
 All notable changes to Specivo are documented here, one line per change.
 Each release also has a blog post with the details.
 
-## [0.10.0] - Unreleased
+## [0.10.0] - 2026-10-28
 
 ### Added
 - Added single sign-on with OpenID Connect: people sign in through Keycloak, authentik, Microsoft Entra ID or any OIDC provider, configured under Administration → Single sign-on
