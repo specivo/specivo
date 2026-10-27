@@ -1,7 +1,41 @@
 # Changelog
 
-All notable changes to Specivo are documented here.
-Format follows [Keep a Changelog](https://keepachangelog.com/).
+All notable changes to Specivo are documented here, one line per change.
+Each release also has a blog post with the details.
+
+## [0.10.0] - Unreleased
+
+### Added
+- Added single sign-on with OpenID Connect: people sign in through Keycloak, authentik, Microsoft Entra ID or any OIDC provider, configured under Administration → Single sign-on
+- Added several sign-in providers at once, each with a connection self-test and an encrypted client secret (or one read from a `SPECIVO_SSO_SECRET_*` variable)
+- Added accounts created on first sign-in, connecting an existing account from Profile → Connected accounts, and auto-linking by verified email; all off by default
+- Added mapping of identity provider groups to Specivo user groups and the admin flag, with required groups and an email domain allowlist per provider
+- Added sign-out at the identity provider and back-channel logout, so a session ended at the provider also ends in Specivo
+- Added login page options: provider buttons, hiding the password form, auto-redirect to one provider and password sign-in for admins only, with `?local=1` and `SSO_FORCE_LOCAL_LOGIN` as the way back in
+- Added user deactivation and reactivation for admins; deactivating ends all sessions and turns off the user's API keys
+- Added a sessions list under Preferences → Security showing how each session signed in
+- Added audit events for sign-in, linking, group changes, logout and provider changes
+- Added a single sign-on guide with setup pages for Keycloak, authentik and Microsoft Entra ID
+
+### Changed
+- Changed sign-out to a form; opening `/logout/` now asks first, and `POST /api/v1/auth/logout/` returns 200 with `end_session_url`
+- Changed password resets by email, by an admin or from the CLI to end every session of the account; people who sign in only through SSO cannot reset a password by email
+- Changed admin API keys to be refused for password resets, unlocking or reactivating users, creating people or admins, issuing keys for others and changing SSO settings
+- Changed how the client address is read behind a proxy: only proxies in `TRUSTED_PROXIES` count, `TRUSTED_PROXY_HOPS` sets how many (default 1)
+- Changed the bundled nginx to a fixed address on a new `proxy` network; set `SPECIVO_PROXY_SUBNET` and `SPECIVO_NGINX_IP` if `docker compose up` reports "Pool overlaps"
+- Changed the bundled nginx access log to leave out query strings
+- Removed the unused `github_id` and `google_id` user columns
+
+### Fixed
+- Fixed sign-out leaving the server-side session and the access token valid until they expired
+- Fixed every client behind the bundled nginx sharing one rate-limit bucket
+
+### Security
+- Fixed requests that carried only the refresh cookie skipping the CSRF check
+- Fixed a token refresh racing a session revocation and keeping the session alive
+
+### Internal
+- Added migrations 0041–0043: SSO providers, identities and group mappings, a stable session id on refresh tokens, and deactivation on access loss. Rotating `SECRET_KEY` now also requires re-entering SSO client secrets
 
 ## [0.9.0] - 2026-10-26
 
