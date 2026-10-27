@@ -36,6 +36,7 @@ _service = ProviderService()
 
 UNLINKED_IDENTITIES_HEADER = "X-Unlinked-Identities"
 REVOKED_SESSIONS_HEADER = "X-Revoked-Sessions"
+REMOVED_MEMBERSHIPS_HEADER = "X-Removed-Memberships"
 
 AdminUser = Annotated[User, Depends(require_admin_api)]
 
@@ -54,12 +55,17 @@ async def list_providers(
 ) -> PaginatedResponse[SsoProviderOut]:
     """List providers in login-button order (``position``, then name)."""
     providers, total = await _service.list_providers(db, offset=offset, limit=limit)
-    counts = await _service.identity_counts(db, [p.id for p in providers])
+    ids = [p.id for p in providers]
+    counts = await _service.identity_counts(db, ids)
+    managed = await _service.managed_membership_counts(db, ids)
     return PaginatedResponse[SsoProviderOut](
         total_count=total,
         offset=offset,
         limit=limit,
-        items=[_service.to_out(p, identity_count=counts.get(p.id, 0)) for p in providers],
+        items=[
+            _service.to_out(p, identity_count=counts.get(p.id, 0), managed_membership_count=managed.get(p.id, 0))
+            for p in providers
+        ],
     )
 
 
@@ -117,7 +123,11 @@ async def update_provider(
                     "schema": {"type": "integer"},
                 },
                 REVOKED_SESSIONS_HEADER: {
-                    "description": "Sessions ended for the unlinked users.",
+                    "description": "SSO sessions ended (refresh tokens) that came from this provider.",
+                    "schema": {"type": "integer"},
+                },
+                REMOVED_MEMBERSHIPS_HEADER: {
+                    "description": "User-group memberships the provider managed, now removed.",
                     "schema": {"type": "integer"},
                 },
             },
@@ -129,9 +139,14 @@ async def delete_provider(
     provider_id: int,
     admin: AdminUser,
     db: AsyncSession = Depends(get_db),
-    force: bool = Query(False, description="Unlink the provider's identities and end their users' sessions."),
+    force: bool = Query(False, description="Unlink the provider's identities and end their SSO sessions."),
 ) -> Response:
-    """Delete a provider. Refused with 409 while users are linked to it, unless ``force=true``."""
+    """Delete a provider. Refused with 409 while users are linked to it, unless ``force=true``.
+
+    ``force`` ends the SSO sessions that came from this provider and unlinks
+    its identities. The user-group memberships the provider managed are
+    removed on every delete; the counts are in the response headers.
+    """
     result = await _service.delete(db, provider_id, force=force, actor=admin)
     await db.commit()  # commit before response to avoid reload race condition
     return Response(
@@ -139,6 +154,7 @@ async def delete_provider(
         headers={
             UNLINKED_IDENTITIES_HEADER: str(result.identities_unlinked),
             REVOKED_SESSIONS_HEADER: str(result.sessions_revoked),
+            REMOVED_MEMBERSHIPS_HEADER: str(result.memberships_removed),
         },
     )
 

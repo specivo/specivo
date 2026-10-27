@@ -80,6 +80,26 @@ async def test_list_page_renders(admin_client: AsyncClient, provider: SsoProvide
     assert provider.client_secret_encrypted not in resp.text
 
 
+async def test_delete_dialog_names_the_memberships_it_removes(
+    admin_client: AsyncClient, db_session: AsyncSession, provider: SsoProvider
+):
+    from specivo.models.user_group import UserGroup, UserGroupMember
+    from tests.factories.user import UserFactory
+
+    user = UserFactory.build()
+    group = UserGroup(name=f"spweb-group-{next(_counter)}")
+    db_session.add_all([user, group])
+    await db_session.flush()
+    db_session.add(UserGroupMember(group_id=group.id, user_id=user.id, managed_by_provider_id=provider.id))
+    await db_session.flush()
+
+    resp = await admin_client.get(f"/admin/sso/{provider.id}/", cookies=_cookies(admin_client))
+    assert "1 group membership granted by this provider is removed with it." in resp.text
+
+    api = await admin_client.get(f"/api/v1/admin/sso/providers/{provider.id}/")
+    assert api.json()["managed_membership_count"] == 1
+
+
 async def test_detail_page_shows_urls_to_copy(admin_client: AsyncClient, provider: SsoProvider):
     resp = await admin_client.get(f"/admin/sso/{provider.id}/", cookies=_cookies(admin_client))
     assert resp.status_code == 200

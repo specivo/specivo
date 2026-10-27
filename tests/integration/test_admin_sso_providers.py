@@ -239,6 +239,8 @@ async def test_delete_with_identities_is_409_then_force(admin_client: AsyncClien
     resp = await admin_client.delete(f"{URL}{data['id']}/?force=true")
     assert resp.status_code == 204
     assert resp.headers["X-Unlinked-Identities"] == "1"
+    assert resp.headers["X-Revoked-Sessions"] == "0"
+    assert resp.headers["X-Removed-Memberships"] == "0"
     gone = await db_session.execute(select(SsoProvider).where(SsoProvider.id == data["id"]))
     assert gone.scalar_one_or_none() is None
 

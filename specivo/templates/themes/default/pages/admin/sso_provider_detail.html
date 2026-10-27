@@ -326,6 +326,9 @@
       <template x-if="!hasIdentities">
         <p class="sp-mb-md">{% trans %}Nobody is linked to this provider. Its group mappings are deleted with it.{% endtrans %}</p>
       </template>
+      {% if provider.managed_membership_count %}
+      <p class="sp-mb-md">{% trans count=provider.managed_membership_count %}{{ count }} group membership granted by this provider is removed with it.{% pluralize %}{{ count }} group memberships granted by this provider are removed with it.{% endtrans %}</p>
+      {% endif %}
       <div x-show="deleteError" class="sp-msg-danger-mb-sm" x-text="deleteError"></div>
       <div class="sp-modal-actions">
         <button class="sp-btn" @click="showDelete = false">{% trans %}Cancel{% endtrans %}</button>

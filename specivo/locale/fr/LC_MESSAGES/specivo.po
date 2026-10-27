@@ -6929,3 +6929,15 @@ msgstr "Problème de variable d'environnement"
 msgid "No identity providers yet."
 msgstr "Aucun fournisseur d'identité pour l'instant."
 
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
+#, python-format
+msgid "%(count)s group membership granted by this provider is removed with it."
+msgid_plural "%(count)s group memberships granted by this provider are removed with it."
+msgstr[0] ""
+"%(count)s appartenance à un groupe accordée par ce fournisseur est "
+"supprimée avec lui."
+msgstr[1] ""
+"%(count)s appartenances à des groupes accordées par ce fournisseur sont "
+"supprimées avec lui."
+

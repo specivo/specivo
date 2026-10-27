@@ -307,6 +307,8 @@ class SsoProviderOut(BaseModel):
 
     discovery_fetched_at: datetime | None
     identity_count: int
+    #: User-group memberships this provider manages; deleting it removes them.
+    managed_membership_count: int = 0
     #: Register these at the identity provider, byte for byte.
     redirect_uri: str
     backchannel_logout_uri: str

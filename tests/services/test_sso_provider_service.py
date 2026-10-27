@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import itertools
 import logging
+import secrets
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -26,9 +28,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core import secret_box
 from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError
+from specivo.models.auth import RefreshToken
 from specivo.models.sso import SsoGroupMapping, SsoProvider, UserIdentity
 from specivo.models.user import User
-from specivo.models.user_group import UserGroup
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.schemas.sso import (
     AuthSettingsUpdate,
     SsoGroupMappingIn,
@@ -489,28 +492,98 @@ async def test_delete_with_identities_is_refused(db_session: AsyncSession, admin
     assert exc.value.details == {"identity_count": 1}
 
 
-async def test_force_delete_unlinks_and_revokes_sessions(
-    db_session: AsyncSession, admin: User, monkeypatch: pytest.MonkeyPatch
-):
+async def _refresh_row(db: AsyncSession, user: User, identity_id: int | None) -> RefreshToken:
+    row = RefreshToken(
+        user_id=user.id,
+        token_hash=secrets.token_hex(32),
+        expires_at=datetime.now(UTC) + timedelta(days=1),
+        auth_method="sso" if identity_id else "password",
+        user_identity_id=identity_id,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def _identity_id(db: AsyncSession, provider: SsoProvider, user: User) -> int:
+    result = await db.execute(
+        select(UserIdentity.id).where(UserIdentity.provider_id == provider.id, UserIdentity.user_id == user.id)
+    )
+    return result.scalar_one()
+
+
+async def _token_exists(db: AsyncSession, token_id: int) -> bool:
+    found = await db.execute(select(RefreshToken.id).where(RefreshToken.id == token_id))
+    return found.scalar_one_or_none() is not None
+
+
+async def test_force_delete_revokes_only_this_providers_sessions(db_session: AsyncSession, admin: User):
     provider = await _service.create(db_session, _create(), actor=admin)
+    other = await _service.create(db_session, _create(), actor=admin)
     first = await _link_identity(db_session, provider)
     second = await _link_identity(db_session, provider)
-    revoked: list[int] = []
-
-    async def _fake_revoke(self: ProviderService, session: AsyncSession, user_ids: list[int]) -> int:
-        revoked.extend(user_ids)
-        return len(user_ids)
-
-    monkeypatch.setattr(ProviderService, "_revoke_sessions", _fake_revoke)
+    first_sso = await _refresh_row(db_session, first, await _identity_id(db_session, provider, first))
+    second_sso = await _refresh_row(db_session, second, await _identity_id(db_session, provider, second))
+    first_password = await _refresh_row(db_session, first, None)
+    # The same user also signs in through another provider: that session stays.
+    db_session.add(
+        UserIdentity(
+            user_id=first.id, provider_id=other.id, issuer=other.issuer, subject="other-sub", linked_via="admin"
+        )
+    )
+    await db_session.flush()
+    first_other = await _refresh_row(db_session, first, await _identity_id(db_session, other, first))
 
     result = await _service.delete(db_session, provider.id, force=True, actor=admin)
 
     assert result.identities_unlinked == 2
-    assert sorted(revoked) == sorted([first.id, second.id])
+    assert result.sessions_revoked == 2
+    assert not await _token_exists(db_session, first_sso.id)
+    assert not await _token_exists(db_session, second_sso.id)
+    assert await _token_exists(db_session, first_password.id)
+    assert await _token_exists(db_session, first_other.id)
     remaining = await db_session.execute(
         select(func.count()).select_from(UserIdentity).where(UserIdentity.provider_id == provider.id)
     )
     assert remaining.scalar_one() == 0
+
+
+async def test_force_delete_removes_managed_memberships(db_session: AsyncSession, admin: User):
+    provider = await _service.create(db_session, _create(), actor=admin)
+    other = await _service.create(db_session, _create(), actor=admin)
+    user = await _link_identity(db_session, provider)
+    group = await _user_group(db_session)
+    other_group = await _user_group(db_session)
+    hand_group = await _user_group(db_session)
+    db_session.add_all(
+        [
+            UserGroupMember(group_id=group.id, user_id=user.id, managed_by_provider_id=provider.id),
+            UserGroupMember(group_id=other_group.id, user_id=user.id, managed_by_provider_id=other.id),
+            UserGroupMember(group_id=hand_group.id, user_id=user.id),
+        ]
+    )
+    await db_session.flush()
+
+    result = await _service.delete(db_session, provider.id, force=True, actor=admin)
+
+    assert result.memberships_removed == 1
+    rows = await db_session.execute(select(UserGroupMember.group_id).where(UserGroupMember.user_id == user.id))
+    assert sorted(rows.scalars()) == sorted([other_group.id, hand_group.id])
+
+
+async def test_refused_delete_changes_nothing(db_session: AsyncSession, admin: User):
+    provider = await _service.create(db_session, _create(), actor=admin)
+    user = await _link_identity(db_session, provider)
+    group = await _user_group(db_session)
+    db_session.add(UserGroupMember(group_id=group.id, user_id=user.id, managed_by_provider_id=provider.id))
+    token = await _refresh_row(db_session, user, await _identity_id(db_session, provider, user))
+
+    with pytest.raises(AppError):
+        await _service.delete(db_session, provider.id, actor=admin)
+
+    assert await _token_exists(db_session, token.id)
+    kept = await db_session.execute(select(UserGroupMember.id).where(UserGroupMember.group_id == group.id))
+    assert kept.scalar_one_or_none() is not None
 
 
 async def test_delete_clears_auto_redirect(db_session: AsyncSession, admin: User):
