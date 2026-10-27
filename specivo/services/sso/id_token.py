@@ -54,7 +54,12 @@ from redis.asyncio import Redis
 from specivo.core.config import SSO_MAX_CLOCK_SKEW_SECONDS, Settings, get_settings
 from specivo.models.sso import SsoProvider
 from specivo.services.sso.discovery import ProviderMetadata
-from specivo.services.sso.errors import SsoTokenInvalidError, SsoUnknownSigningKeyError, TokenRejection
+from specivo.services.sso.errors import (
+    SsoSigningKeyRefreshLimitedError,
+    SsoTokenInvalidError,
+    SsoUnknownSigningKeyError,
+    TokenRejection,
+)
 from specivo.services.sso.jwks import (
     get_jwks,
     refetch_jwks_for_unknown_kid,
@@ -467,22 +472,72 @@ def _validate_logout_token(
 # ---------------------------------------------------------------------------
 
 
+def _precheck_unverified(raw: str, *, issuer: str, client_id: str, now: float | None, leeway: float) -> None:
+    """Cheap plausibility checks on the *unverified* claims of a token with an unknown ``kid``.
+
+    Run before the rate-limited JWKS refetch is spent, so an unauthenticated
+    token that could never validate (another issuer, another audience, out of
+    its time window) cannot use up the refetch window a genuine token signed
+    with a freshly rotated key needs. Raises the rejection the full
+    validation would have raised.
+    """
+    try:
+        payload = jwt.decode(raw, options={"verify_signature": False})
+    except (PyJWTError, ValueError, TypeError):
+        raise _reject(TokenRejection.MALFORMED, "payload") from None
+    if not isinstance(payload, dict):  # pragma: no cover - PyJWT returns a dict or raises
+        raise _reject(TokenRejection.MALFORMED, "payload")
+    if payload.get("iss") != issuer:
+        raise _reject(TokenRejection.WRONG_ISSUER)
+    aud = payload.get("aud")
+    audiences = [aud] if isinstance(aud, str) else aud if isinstance(aud, list) else []
+    if client_id not in audiences:
+        raise _reject(TokenRejection.WRONG_AUDIENCE)
+    for name in ("exp", "iat"):
+        if name not in payload:
+            raise _reject(TokenRejection.MISSING_CLAIM, name)
+    current, skew = _resolve_time(now, leeway)
+    _check_times(payload, current, skew)
+
+
 async def _with_jwks[T](
     validate: Callable[[list[dict[str, Any]], frozenset[str]], T],
     *,
+    kind: str,
+    raw: str,
     provider: SsoProvider,
     metadata: ProviderMetadata,
     redis: Redis | None,
-    settings: Settings | None,
+    settings: Settings,
+    now: float | None,
 ) -> T:
+    """Validate with the cached JWKS; on an unknown ``kid``, refetch it once (key rotation).
+
+    The refetch is rate limited per provider. Before spending it, the token's
+    unverified ``iss``/``aud``/``iat``/``exp`` must be plausible. When the
+    window is already spent, :class:`SsoSigningKeyRefreshLimitedError` says
+    "try again" rather than "invalid": the kid may be a key the IdP has only
+    just published, and a back-channel IdP retries a 503 but not a 400.
+    """
     algorithms = signing_algorithms(metadata)
     keys = await get_jwks(provider.id, metadata.jwks_uri, redis=redis, settings=settings)
     try:
         return validate(keys, algorithms)
     except SsoUnknownSigningKeyError:
+        try:
+            _precheck_unverified(
+                raw,
+                issuer=provider.issuer,
+                client_id=provider.client_id,
+                now=now,
+                leeway=settings.sso_clock_skew_seconds,
+            )
+        except SsoTokenInvalidError as exc:
+            _log_rejection(kind, provider.issuer, exc)
+            raise
         fresh = await refetch_jwks_for_unknown_kid(provider.id, metadata.jwks_uri, redis=redis, settings=settings)
         if fresh is None:
-            raise
+            raise SsoSigningKeyRefreshLimitedError("jwks_refetch_rate_limited") from None
         return validate(fresh, algorithms)
 
 
@@ -511,10 +566,13 @@ async def verify_id_token(
             now=now,
             leeway=settings.sso_clock_skew_seconds,
         ),
+        kind="id_token",
+        raw=raw,
         provider=provider,
         metadata=metadata,
         redis=redis,
         settings=settings,
+        now=now,
     )
 
 
@@ -539,8 +597,11 @@ async def verify_logout_token(
             now=now,
             leeway=settings.sso_clock_skew_seconds,
         ),
+        kind="logout_token",
+        raw=raw,
         provider=provider,
         metadata=metadata,
         redis=redis,
         settings=settings,
+        now=now,
     )

@@ -261,7 +261,10 @@ async def backchannel_logout(
     Raises :class:`SsoTokenInvalidError` for an invalid or replayed token,
     :class:`SsoUnavailableError` when the replay cache is down, and the
     discovery/JWKS errors (``sso_idp_unreachable``, ``sso_discovery_invalid``)
-    when the provider's keys cannot be read. Does not commit: a caller whose
+    when the provider's keys cannot be read, or when the token names an
+    unknown key while the JWKS refetch window is spent
+    (:class:`~specivo.services.sso.errors.SsoSigningKeyRefreshLimitedError`;
+    the route answers 503 so the IdP retries). Does not commit: a caller whose
     commit fails calls :func:`release_logout_jti` with ``result.jti_key``.
     """
     settings = settings or get_settings()

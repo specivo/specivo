@@ -413,6 +413,56 @@ async def test_idp_keys_unreachable_is_503(
     assert resp.headers["cache-control"] == "no-store"
 
 
+async def test_new_key_while_refetch_window_is_spent_is_503_then_retry_works(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_login: SsoLoginDriver,
+    backchannel_provider: SsoProvider,
+    mock_idp: MockIdP,
+) -> None:
+    """A junk-kid token spends the JWKS refetch; the IdP's genuine token on a new key gets 503, not 400."""
+    from specivo.core.redis import get_redis
+    from specivo.services.sso.jwks import _refetch_lock_key
+
+    await _member(db_session, backchannel_provider, mock_idp)
+    access = await _sso_session(client, sso_login, sid=mock_idp.default_sid)
+
+    _assert_invalid(await _post(client, mock_idp.logout_token_variant("unknown_kid")))
+    mock_idp.rotate(drop_old=True)
+
+    resp = await _post(client, mock_idp.mint_logout_token())
+    assert resp.status_code == 503, resp.text
+    assert resp.json() == {"error": "temporarily_unavailable"}
+    assert resp.headers["cache-control"] == "no-store"
+    await _assert_alive(client, access)
+
+    # The refetch window passes; the IdP retries with a fresh token and succeeds.
+    await (await get_redis()).delete(_refetch_lock_key(backchannel_provider.id))
+    resp = await _post(client, mock_idp.mint_logout_token())
+    assert resp.status_code == 200, resp.text
+    await _assert_revoked(client, access)
+
+
+async def test_junk_kid_with_foreign_issuer_does_not_spend_the_refetch(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_login: SsoLoginDriver,
+    backchannel_provider: SsoProvider,
+    mock_idp: MockIdP,
+) -> None:
+    await _member(db_session, backchannel_provider, mock_idp)
+    access = await _sso_session(client, sso_login, sid=mock_idp.default_sid)
+
+    for _ in range(3):
+        junk = mock_idp.logout_token_variant("unknown_kid", iss="https://attacker.example.net/realms/test")
+        _assert_invalid(await _post(client, junk))
+    mock_idp.rotate(drop_old=True)
+
+    resp = await _post(client, mock_idp.mint_logout_token())
+    assert resp.status_code == 200, resp.text
+    await _assert_revoked(client, access)
+
+
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
