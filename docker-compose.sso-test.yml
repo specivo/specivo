@@ -33,7 +33,7 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_LOG_LEVEL: warn,org.keycloak.exportimport:info
     ports:
-      - "${SSO_KEYCLOAK_PORT:-8033}:8080"
+      - "127.0.0.1:${SSO_KEYCLOAK_PORT:-8033}:8080"
     # Back-channel logout calls the E2E server on the host (port 9944).
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -92,7 +92,7 @@ services:
       AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"
       AUTHENTIK_LOG_LEVEL: warning
     ports:
-      - "${SSO_AUTHENTIK_PORT:-8034}:9000"
+      - "127.0.0.1:${SSO_AUTHENTIK_PORT:-8034}:9000"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
