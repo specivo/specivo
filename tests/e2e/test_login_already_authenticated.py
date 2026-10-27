@@ -25,11 +25,11 @@ def test_login_page_has_dashboard_link(auth_page: Page) -> None:
     expect(dashboard_link).to_be_visible()
 
 
-def test_login_page_has_logout_link(auth_page: Page) -> None:
-    """Already signed in widget has a 'Sign out' link."""
+def test_login_page_has_logout_button(auth_page: Page) -> None:
+    """Already signed in widget has a 'Sign out' button (a POST form)."""
     auth_page.goto("/login/")
-    logout_link = auth_page.locator("a[href='/logout/']")
-    expect(logout_link).to_be_visible()
+    logout_button = auth_page.locator("form[action='/logout/'] button[type='submit']")
+    expect(logout_button).to_be_visible()
 
 
 def test_login_page_dashboard_link_works(auth_page: Page) -> None:
@@ -40,13 +40,13 @@ def test_login_page_dashboard_link_works(auth_page: Page) -> None:
     expect(auth_page).to_have_title("Dashboard - Specivo")
 
 
-def test_login_page_logout_link_works(auth_page: Page) -> None:
+def test_login_page_logout_button_works(signout_page: Page) -> None:
     """Clicking 'Sign out' logs out and shows login form."""
-    auth_page.goto("/login/")
-    auth_page.locator("a[href='/logout/']").click()
-    auth_page.wait_for_url("**/login/")
+    signout_page.goto("/login/")
+    signout_page.locator("form[action='/logout/'] button[type='submit']").click()
+    signout_page.wait_for_url("**/login/")
     # After logout, should see the login form, not the already-signed-in widget
-    expect(auth_page.locator("#login-field")).to_be_visible()
+    expect(signout_page.locator("#login-field")).to_be_visible()
 
 
 def test_unauthenticated_sees_login_form(page: Page, e2e_server: str) -> None:

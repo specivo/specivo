@@ -351,6 +351,33 @@ class AuthService:
         await session.execute(stmt)
         await session.flush()
 
+    async def end_browser_session(
+        self,
+        session: AsyncSession,
+        *,
+        refresh_token_raw: str | None,
+        access_token_raw: str | None,
+    ) -> None:
+        """Revoke the session a browser holds, on the server side.
+
+        Deletes the refresh-token row behind *refresh_token_raw*, so the
+        cookie cannot mint new access tokens, and blocklists the ``jti`` of
+        *access_token_raw* for its remaining lifetime, so the token stops
+        working on the next request instead of when it expires. Either value
+        may be missing (an expired access cookie, a browser that only kept the
+        refresh cookie); whatever is present is revoked.
+
+        This is the single revocation step behind web sign-out; anything that
+        later revokes sessions by id should wrap or replace it here rather than
+        repeat the two steps.
+        """
+        from specivo.core.security import blocklist_access_token
+
+        if refresh_token_raw:
+            await self.logout(session, refresh_token_raw)
+        if access_token_raw:
+            await blocklist_access_token(access_token_raw)
+
     async def logout_all(
         self,
         session: AsyncSession,

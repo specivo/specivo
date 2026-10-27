@@ -55,9 +55,7 @@ class ConsoleErrorTracker:
     def assert_no_errors(self) -> None:
         """Fail the test if any JS errors were collected."""
         all_errors = self.errors + self.page_errors
-        assert not all_errors, "JS console errors detected:\n" + "\n".join(
-            f"  - {e}" for e in all_errors
-        )
+        assert not all_errors, "JS console errors detected:\n" + "\n".join(f"  - {e}" for e in all_errors)
 
 
 # ---------------------------------------------------------------------------
@@ -79,7 +77,7 @@ def assert_avatar_popup(page: Page) -> None:
     expect(dropdown.locator("a[href='/my/profile/']")).to_be_visible()
     expect(dropdown.locator("a[href='/my/preferences/']")).to_be_visible()
     expect(dropdown.locator("a[href='/my/api-keys/']")).to_be_visible()
-    expect(dropdown.locator("a[href='/logout/']")).to_be_visible()
+    expect(dropdown.locator("form[action='/logout/'] button[type='submit']")).to_be_visible()
     # Close dropdown by pressing Escape
     page.keyboard.press("Escape")
 

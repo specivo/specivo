@@ -58,9 +58,49 @@ async def login_page(
     )
 
 
-@router.get("/logout/")
-async def logout_page() -> RedirectResponse:
-    """Clear auth cookies and redirect to login."""
+@router.get("/logout/", response_model=None)
+async def logout_confirm_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> HTMLResponse | RedirectResponse:
+    """Ask before signing out; a GET never signs anybody out.
+
+    Signing out is a state change, so it only happens on the CSRF-protected
+    ``POST /logout/``. Otherwise any page could sign the visitor out with an
+    ``<img src="/logout/">``. A bookmark or an old link lands here and gets a
+    one-button form instead. A visitor with no session has nothing to end and
+    goes straight to the login page.
+    """
+    user = await get_current_user_optional(request, db)
+    if user is None:
+        return RedirectResponse("/login/", status_code=302)
+    templates = get_templates()
+    return templates.TemplateResponse(request, "pages/auth/logout_confirm.html", context={"user": user})
+
+
+@router.post("/logout/")
+async def logout(
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> RedirectResponse:
+    """Revoke this browser's session on the server, clear its cookies, go to login.
+
+    The refresh-token row is deleted and the access token's ``jti`` is
+    blocklisted, so copies of either cookie stop working immediately. CSRF is
+    enforced by ``CSRFMiddleware`` whenever the request carries a session
+    cookie; without one there is nothing to revoke.
+    """
+    from specivo.services.auth_service import AuthService
+
+    await AuthService().end_browser_session(
+        db,
+        refresh_token_raw=request.cookies.get("refresh_token"),
+        access_token_raw=request.cookies.get("access_token"),
+    )
+    # Commit before the browser follows the redirect, so the revoked session is
+    # gone from the very next request.
+    await db.commit()
+
     response = RedirectResponse("/login/", status_code=302)
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
