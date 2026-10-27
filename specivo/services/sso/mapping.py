@@ -22,7 +22,8 @@ signed in, so a refused user is never provisioned or linked:
    ``admin_groups``: the groups decide who is an admin, and they are unknown.
 
 A refusal revokes the sessions the identity started (it lost access at the
-IdP; the "Deprovisioning (c)" rule) and is logged with
+IdP; the "Deprovisioning (c)" rule), committed before the refusal is raised
+so that a later failure in the request cannot undo it, and is logged with
 ``sso.login.refused_policy``. With the provider's
 ``deactivate_on_access_loss`` on, the account already linked to that identity
 is also deactivated (:meth:`specivo.services.user_service.UserService.deactivate`:
@@ -157,9 +158,15 @@ async def enforce_access(
     if refusal is None:
         return
 
+    # The revocation marks the sessions revoked in Redis at once, so its
+    # deleted rows are committed at once too: a step that fails later in the
+    # request (deactivation, audit, the response) must not roll them back
+    # while the Redis markers stay. The markers expire with the access token
+    # lifetime; rows brought back by a rollback would then refresh again.
     revoked = 0
     if identity is not None:
         revoked = await SessionService().revoke_by_identity(db, identity.id, reason=POLICY_REVOKE_REASON)
+        await db.commit()
     events.login_refused_policy(
         provider_slug=provider.slug,
         user_id=user_id,
@@ -170,6 +177,7 @@ async def enforce_access(
     )
     if provider.deactivate_on_access_loss and user is not None and identity is not None:
         await _deactivate_on_access_loss(db, provider, user, subject)
+        await db.commit()  # the same reason: it revoked every session of the account
     raise refusal
 
 

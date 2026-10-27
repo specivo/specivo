@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import AppError
@@ -40,6 +40,7 @@ from specivo.services.session_service import SessionService
 
 __all__ = [
     "DEACTIVATION_REVOKE_REASON",
+    "LAST_ADMIN_LOCK_KEY",
     "DeactivationResult",
     "LastActiveAdminError",
     "UserService",
@@ -52,6 +53,14 @@ logger = logging.getLogger("specivo.auth.users")
 
 #: ``reason`` recorded on the sessions a deactivation revokes.
 DEACTIVATION_REVOKE_REASON = "user_deactivated"
+
+#: Transaction-scoped advisory lock serialising the last-admin guard. Every
+#: check that may end in removing an administrator (deactivation, SSO admin
+#: demotion) takes it first, so two transactions removing two different
+#: admins at once cannot each see the other one still active. Single-bigint
+#: key like ``ANONYMOUS_ACCESS_LOCK_KEY`` (a different value); the per-session
+#: locks use the two-key form and never collide with it.
+LAST_ADMIN_LOCK_KEY = 0x5350_4C41_444D_0001
 
 
 class LastActiveAdminError(AppError):
@@ -74,7 +83,14 @@ class DeactivationResult:
 
 
 async def another_active_admin_exists(db: AsyncSession, user_id: int) -> bool:
-    """Some other active, human administrator exists (the last-admin guard)."""
+    """Some other active, human administrator exists (the last-admin guard).
+
+    Takes :data:`LAST_ADMIN_LOCK_KEY` first and holds it until the caller's
+    transaction ends, so the check and the demotion or deactivation that
+    follows it are atomic with respect to every other guard check. A second
+    transaction waits here, then (read committed) sees the first one's change.
+    """
+    await db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": LAST_ADMIN_LOCK_KEY})
     stmt = select(User.id).where(
         User.id != user_id,
         User.is_admin.is_(True),
