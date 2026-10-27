@@ -7048,3 +7048,97 @@ msgstr "Вход по паролю доступен только админис�
 #: specivo/templates/themes/default/pages/auth/login.html:160
 msgid "Sign in with a local account"
 msgstr "Войти с локальной учётной записью"
+
+#: specivo/services/user_service.py
+msgid "This is the last active administrator. Make another user an administrator first."
+msgstr "Это последний активный администратор. Сначала назначьте администратором другого пользователя."
+
+#: specivo/services/api_key_service.py
+msgid "API keys are turned off for accounts that sign in through single sign-on. Ask an administrator if you need one."
+msgstr "Ключи API отключены для учётных записей, которые входят через единый вход (SSO). Если ключ нужен, обратитесь к администратору."
+
+#: specivo/services/auth_service.py
+msgid "This account has no password. You sign in through your identity provider, so there is no password to change here."
+msgstr "У этой учётной записи нет пароля. Вы входите через своего поставщика удостоверений, поэтому менять здесь нечего."
+
+#: specivo/web/pages/admin.py
+msgid "Account deactivated. The user was signed out everywhere and their API keys were switched off."
+msgstr "Учётная запись деактивирована. Все сеансы пользователя завершены, его ключи API отключены."
+
+#: specivo/web/pages/admin.py
+msgid "Account reactivated. The user can sign in again. API keys stay inactive: activate them again or create new ones."
+msgstr "Учётная запись снова активна. Пользователь может войти. Ключи API остаются отключёнными: включите их снова или создайте новые."
+
+#: specivo/web/pages/admin.py
+msgid "You cannot deactivate your own account."
+msgstr "Нельзя деактивировать собственную учётную запись."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Account status"
+msgstr "Состояние учётной записи"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "This account is deactivated. It cannot sign in and its API keys do not work."
+msgstr "Эта учётная запись деактивирована. Она не может войти, и её ключи API не работают."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "API keys stay inactive after reactivation: activate them again or create new ones."
+msgstr "После повторной активации ключи API остаются отключёнными: включите их снова или создайте новые."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Reactivate account"
+msgstr "Активировать снова"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Deactivating signs the user out of every session and switches off all of their API keys. Reactivating the account later does not switch the keys back on."
+msgstr "Деактивация завершает все сеансы пользователя и отключает все его ключи API. Повторная активация учётной записи ключи не включает."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Deactivate account"
+msgstr "Деактивировать"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Deactivate the Specivo account when a sign-in is refused by the required groups or allowed email domains"
+msgstr "Деактивировать учётную запись Specivo, если вход отклонён из-за обязательных групп или разрешённых почтовых доменов"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Deactivation signs the user out everywhere and switches off their API keys. Without it, only the sessions started through this provider end."
+msgstr "Деактивация завершает все сеансы пользователя и отключает его ключи API. Без неё завершаются только сеансы, начатые через этого поставщика."
+
+#: specivo/templates/themes/default/pages/admin/settings.html
+msgid "Applies to users without a password. While it is off they cannot create keys and their existing keys stop working. Service accounts are never affected."
+msgstr "Относится к пользователям без пароля. Пока параметр выключен, они не могут создавать ключи, а их существующие ключи не работают. Сервисные учётные записи это не затрагивает."
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Sessions"
+msgstr "Сеансы"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+#, python-format
+msgid "Signed in with %(provider)s"
+msgstr "Вход через %(provider)s"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Signed in with single sign-on"
+msgstr "Вход через единый вход (SSO)"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Signed in with a password"
+msgstr "Вход по паролю"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Started"
+msgstr "Начало"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "No active sessions."
+msgstr "Активных сеансов нет."
+
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "API keys are turned off for accounts that sign in through single sign-on. Your existing keys do not work while this is so. Ask an administrator if you need one."
+msgstr "Ключи API отключены для учётных записей, которые входят через единый вход (SSO). Пока это так, ваши существующие ключи не работают. Если ключ нужен, обратитесь к администратору."
+
+#: specivo/templates/themes/default/pages/auth/_sso_password_notice.html
+#, python-format
+msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
+msgstr "Вы входите через своего поставщика удостоверений (%(providers)s). У этой учётной записи нет пароля, поэтому менять здесь нечего. Управляйте паролем у своего поставщика удостоверений."

@@ -1,0 +1,10 @@
+/* Preferences > Security: the user's own sessions, and the notice for an account without a password. */
+
+.sp-my-sessions-list { list-style: none; margin: var(--sp-space-sm) 0 0; padding: 0; }
+.sp-my-sessions-row { padding: var(--sp-space-sm) 0; border-bottom: 1px solid var(--sp-border); }
+.sp-my-sessions-row:first-child { border-top: 1px solid var(--sp-border); }
+.sp-my-sessions-method { font-weight: 600; font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); }
+.sp-my-sessions-meta { display: flex; flex-wrap: wrap; gap: 2px var(--sp-space-md); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: 2px; overflow-wrap: anywhere; }
+.sp-my-sessions-device { max-width: 100%; }
+
+.sp-password-sso-notice { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); line-height: 1.5; max-width: 68ch; margin-top: var(--sp-space-sm); }

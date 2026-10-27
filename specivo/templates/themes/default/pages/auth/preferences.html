@@ -71,7 +71,39 @@
 
     <div style="margin-bottom: var(--sp-space-lg);">
       <label class="form-label">{% trans %}Change password{% endtrans %}</label>
+      {% if sso_password_providers %}
+      {% include "pages/auth/_sso_password_notice.html" %}
+      {% else %}
       {% include "pages/auth/_change_password_form.html" %}
+      {% endif %}
+    </div>
+
+    <div class="sp-my-sessions" style="margin-bottom: var(--sp-space-lg);">
+      <label class="form-label">{% trans %}Sessions{% endtrans %}</label>
+      {% if sessions %}
+      <ul class="sp-my-sessions-list">
+        {% for item in sessions %}
+        <li class="sp-my-sessions-row">
+          <div class="sp-my-sessions-method">
+            {% if item.row.auth_method == "sso" and item.provider_name %}
+            {% trans provider=item.provider_name %}Signed in with {{ provider }}{% endtrans %}
+            {% elif item.row.auth_method == "sso" %}
+            {% trans %}Signed in with single sign-on{% endtrans %}
+            {% else %}
+            {% trans %}Signed in with a password{% endtrans %}
+            {% endif %}
+          </div>
+          <div class="sp-my-sessions-meta">
+            <span>{% trans %}Started{% endtrans %}: {{ item.row.created_at | localtime(user.timezone) }}</span>
+            {% if item.row.ip_address %}<span>{{ item.row.ip_address }}</span>{% endif %}
+            {% if item.row.device_info %}<span class="sp-my-sessions-device" title="{{ item.row.device_info }}">{{ item.row.device_info | truncate(60) }}</span>{% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      <p class="sp-text-muted-xs">{% trans %}No active sessions.{% endtrans %}</p>
+      {% endif %}
     </div>
 
     <div class="form-group">

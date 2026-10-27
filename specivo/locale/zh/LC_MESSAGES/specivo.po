@@ -6798,3 +6798,97 @@ msgstr "仅管理员可以使用密码登录。其他用户请使用单点登录
 #: specivo/templates/themes/default/pages/auth/login.html:160
 msgid "Sign in with a local account"
 msgstr "使用本地账户登录"
+
+#: specivo/services/user_service.py
+msgid "This is the last active administrator. Make another user an administrator first."
+msgstr "这是最后一位处于活动状态的管理员。请先将其他用户设为管理员。"
+
+#: specivo/services/api_key_service.py
+msgid "API keys are turned off for accounts that sign in through single sign-on. Ask an administrator if you need one."
+msgstr "通过单点登录登录的账户已关闭 API 密钥。如需密钥，请联系管理员。"
+
+#: specivo/services/auth_service.py
+msgid "This account has no password. You sign in through your identity provider, so there is no password to change here."
+msgstr "此账户没有密码。您通过身份提供商登录，因此这里没有可更改的密码。"
+
+#: specivo/web/pages/admin.py
+msgid "Account deactivated. The user was signed out everywhere and their API keys were switched off."
+msgstr "账户已停用。该用户已在所有位置退出登录，其 API 密钥已关闭。"
+
+#: specivo/web/pages/admin.py
+msgid "Account reactivated. The user can sign in again. API keys stay inactive: activate them again or create new ones."
+msgstr "账户已重新启用。该用户可以再次登录。API 密钥仍保持停用：请重新启用或创建新密钥。"
+
+#: specivo/web/pages/admin.py
+msgid "You cannot deactivate your own account."
+msgstr "您不能停用自己的账户。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Account status"
+msgstr "账户状态"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "This account is deactivated. It cannot sign in and its API keys do not work."
+msgstr "此账户已停用。它无法登录，其 API 密钥也无法使用。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "API keys stay inactive after reactivation: activate them again or create new ones."
+msgstr "重新启用账户后，API 密钥仍保持停用：请重新启用或创建新密钥。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Reactivate account"
+msgstr "重新启用账户"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Deactivating signs the user out of every session and switches off all of their API keys. Reactivating the account later does not switch the keys back on."
+msgstr "停用会让该用户退出所有会话，并关闭其所有 API 密钥。之后重新启用账户不会重新开启这些密钥。"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Deactivate account"
+msgstr "停用账户"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Deactivate the Specivo account when a sign-in is refused by the required groups or allowed email domains"
+msgstr "当登录因必需组或允许的邮箱域被拒绝时，停用 Specivo 账户"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Deactivation signs the user out everywhere and switches off their API keys. Without it, only the sessions started through this provider end."
+msgstr "停用会让该用户在所有位置退出登录并关闭其 API 密钥。不启用时，只会结束通过此提供商开始的会话。"
+
+#: specivo/templates/themes/default/pages/admin/settings.html
+msgid "Applies to users without a password. While it is off they cannot create keys and their existing keys stop working. Service accounts are never affected."
+msgstr "适用于没有密码的用户。关闭时，他们无法创建密钥，现有密钥也会停止工作。服务账户不受影响。"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Sessions"
+msgstr "会话"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+#, python-format
+msgid "Signed in with %(provider)s"
+msgstr "通过 %(provider)s 登录"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Signed in with single sign-on"
+msgstr "通过单点登录登录"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Signed in with a password"
+msgstr "通过密码登录"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "Started"
+msgstr "开始于"
+
+#: specivo/templates/themes/default/pages/auth/preferences.html
+msgid "No active sessions."
+msgstr "没有活动会话。"
+
+#: specivo/templates/themes/default/pages/auth/api_keys.html
+msgid "API keys are turned off for accounts that sign in through single sign-on. Your existing keys do not work while this is so. Ask an administrator if you need one."
+msgstr "通过单点登录登录的账户已关闭 API 密钥。在此期间，您现有的密钥无法使用。如需密钥，请联系管理员。"
+
+#: specivo/templates/themes/default/pages/auth/_sso_password_notice.html
+#, python-format
+msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
+msgstr "您通过身份提供商（%(providers)s）登录。此账户没有密码，因此这里没有可更改的内容。请在您的身份提供商处管理密码。"

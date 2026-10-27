@@ -199,6 +199,23 @@ async def test_patch_without_secret_keeps_it(admin_client: AsyncClient, db_sessi
     assert row.client_secret_encrypted == before
 
 
+async def test_deactivate_on_access_loss_defaults_off_and_round_trips(
+    admin_client: AsyncClient, db_session: AsyncSession
+):
+    data = await _create(admin_client)
+    assert data["deactivate_on_access_loss"] is False
+
+    resp = await admin_client.patch(f"{URL}{data['id']}/", json={"deactivate_on_access_loss": True})
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["deactivate_on_access_loss"] is True
+    row = (await db_session.execute(select(SsoProvider).where(SsoProvider.id == data["id"]))).scalar_one()
+    await db_session.refresh(row)
+    assert row.deactivate_on_access_loss is True
+
+    created = await _create(admin_client, deactivate_on_access_loss=True)
+    assert created["deactivate_on_access_loss"] is True
+
+
 async def test_patch_secret_never_echoed(admin_client: AsyncClient):
     data = await _create(admin_client)
     resp = await admin_client.patch(f"{URL}{data['id']}/", json={"client_secret": "brand-new-secret-value"})

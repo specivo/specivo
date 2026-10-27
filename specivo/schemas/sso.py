@@ -221,6 +221,7 @@ class SsoProviderCreate(BaseModel):
     admin_groups: GroupList = Field(default_factory=list)
     sync_admin_flag: bool = False
     sync_groups: bool = False
+    deactivate_on_access_loss: bool = False
 
     rp_logout_enabled: bool = True
     backchannel_logout_enabled: bool = False
@@ -262,6 +263,7 @@ class SsoProviderUpdate(BaseModel):
     admin_groups: GroupList | None = None
     sync_admin_flag: bool | None = None
     sync_groups: bool | None = None
+    deactivate_on_access_loss: bool | None = None
 
     rp_logout_enabled: bool | None = None
     backchannel_logout_enabled: bool | None = None
@@ -300,6 +302,7 @@ class SsoProviderOut(BaseModel):
     admin_groups: list[str]
     sync_admin_flag: bool
     sync_groups: bool
+    deactivate_on_access_loss: bool
 
     rp_logout_enabled: bool
     backchannel_logout_enabled: bool

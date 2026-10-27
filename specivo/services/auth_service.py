@@ -766,11 +766,21 @@ class AuthService:
         for writing the audit trail.
         """
         # Accounts without a password (service accounts authenticate by API
-        # key) have nothing to verify against — reject before touching bcrypt.
-        if user.is_service_account or not user.password_hash:
+        # key, SSO-only users through their identity provider) have nothing to
+        # verify against — reject before touching bcrypt.
+        if user.is_service_account:
             raise AppError(
                 code="password_change_unavailable",
                 message=_("This account has no password. It authenticates with an API key."),
+                status_code=400,
+            )
+        if not user.password_hash:
+            raise AppError(
+                code="password_change_unavailable",
+                message=_(
+                    "This account has no password. You sign in through your identity provider, "
+                    "so there is no password to change here."
+                ),
                 status_code=400,
             )
 

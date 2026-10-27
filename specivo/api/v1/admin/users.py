@@ -1,4 +1,4 @@
-"""Admin users API — list, create, reset password, lock/unlock."""
+"""Admin users API — list, create, reset password, lock/unlock, deactivate/reactivate."""
 
 from __future__ import annotations
 
@@ -17,13 +17,14 @@ from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
 from specivo.schemas.sso import UserIdentityOut
-from specivo.schemas.user import UserCreate, UserOut
+from specivo.schemas.user import UserCreate, UserDeactivatedOut, UserOut, UserReactivatedOut
 from specivo.services.anonymous_user_service import real_users_clause, refuse_anonymous_user
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 from specivo.services.session_service import SessionService
 from specivo.services.sso.identity_service import IdentityService
+from specivo.services.user_service import UserService
 
 router = APIRouter(tags=["admin-users"])
 _audit = SecurityAuditService()
@@ -306,6 +307,99 @@ async def unlock_user(
         pass
 
     return UserOut.model_validate(user)
+
+
+# ---------------------------------------------------------------------------
+# Deactivate / reactivate (deprovisioning)
+# ---------------------------------------------------------------------------
+
+_user_svc = UserService()
+
+
+@router.post(
+    "/admin/users/{user_id}/deactivate/",
+    response_model=UserDeactivatedOut,
+    summary="Deactivate a user: revoke every session and switch off every API key (admin only)",
+    responses={
+        400: {"description": "Cannot deactivate your own account"},
+        409: {"description": "The last active administrator cannot be deactivated"},
+    },
+)
+async def deactivate_user(
+    user_id: int,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),
+) -> UserDeactivatedOut:
+    """Deactivate the account, for every kind of user (password, SSO, service account).
+
+    In one transaction: ``status`` becomes ``deactivated``, every session is
+    revoked (its access tokens stop working on the next request) and every API
+    key is switched off (``is_active=false``; the keys are kept for the audit
+    trail). Reactivating the account later does not switch the keys back on.
+    """
+    if user_id == admin.id:
+        raise AppError(code="self_deactivate", message="Cannot deactivate your own account", status_code=400)
+    user = await _get_user_or_404(db, user_id)
+    result = await _user_svc.deactivate(db, user, reason="admin", actor_id=admin.id)
+    await db.refresh(user)
+
+    try:
+        await _audit.log_event(
+            session=db,
+            event_type=AuditEvent.MEMBER_CHANGE,
+            user_id=admin.id,
+            details={"action": "user_deactivated", "target_user_id": user.id, "target_login": user.login},
+            request=request,
+        )
+    except Exception:
+        pass
+
+    await db.commit()  # commit before response to avoid reload race condition
+    return UserDeactivatedOut.model_validate(
+        {
+            **UserOut.model_validate(user).model_dump(),
+            "sessions_revoked": result.sessions_revoked,
+            "api_keys_deactivated": result.api_keys_deactivated,
+        }
+    )
+
+
+@router.post(
+    "/admin/users/{user_id}/reactivate/",
+    response_model=UserReactivatedOut,
+    summary="Reactivate a deactivated user; its API keys stay inactive (admin only)",
+)
+async def reactivate_user(
+    user_id: int,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),
+) -> UserReactivatedOut:
+    """Let a deactivated account sign in again.
+
+    Its API keys are **not** switched back on: ``inactive_api_keys`` says how
+    many stay off. The owner (or an admin) re-enables or replaces them.
+    """
+    user = await _get_user_or_404(db, user_id)
+    inactive = await _user_svc.reactivate(db, user, actor_id=admin.id)
+    await db.refresh(user)
+
+    try:
+        await _audit.log_event(
+            session=db,
+            event_type=AuditEvent.MEMBER_CHANGE,
+            user_id=admin.id,
+            details={"action": "user_reactivated", "target_user_id": user.id, "target_login": user.login},
+            request=request,
+        )
+    except Exception:
+        pass
+
+    await db.commit()  # commit before response to avoid reload race condition
+    return UserReactivatedOut.model_validate(
+        {**UserOut.model_validate(user).model_dump(), "inactive_api_keys": inactive}
+    )
 
 
 # ---------------------------------------------------------------------------

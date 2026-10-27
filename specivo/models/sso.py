@@ -133,6 +133,10 @@ class SsoProvider(Base, TimestampMixin):
     admin_groups: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, server_default="[]")
     sync_admin_flag: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     sync_groups: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # A sign-in refused by the access policy also deactivates the linked account.
+    deactivate_on_access_loss: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
 
     # --- Sessions and logout ---
     rp_logout_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")

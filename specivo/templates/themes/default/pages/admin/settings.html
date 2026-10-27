@@ -108,7 +108,8 @@
     </label>
     <label class="sp-sso-check">
       <input type="checkbox" name="allow_api_keys_for_sso_users" value="1" {{ 'checked' if auth_settings.allow_api_keys_for_sso_users else '' }}>
-      <span>{% trans %}Users who sign in through SSO may use API keys{% endtrans %}</span>
+      <span>{% trans %}Users who sign in through SSO may use API keys{% endtrans %}
+        <span class="form-hint">{% trans %}Applies to users without a password. While it is off they cannot create keys and their existing keys stop working. Service accounts are never affected.{% endtrans %}</span></span>
     </label>
     <div class="form-group">
       <label class="form-label" for="auto_redirect_provider">{% trans %}Redirect the login page to{% endtrans %}</label>
