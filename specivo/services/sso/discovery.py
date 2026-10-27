@@ -50,6 +50,7 @@ __all__ = [
     "ProviderMetadata",
     "default_discovery_url",
     "discovery_cache_key",
+    "fetch_discovery_document",
     "get_provider_metadata",
     "invalidate_provider_cache",
     "parse_discovery",
@@ -192,6 +193,16 @@ async def _fetch_document(url: str, settings: Settings) -> dict[str, Any]:
     if doc is None:
         raise _invalid("not_json")
     return doc
+
+
+async def fetch_discovery_document(url: str, *, settings: Settings | None = None) -> dict[str, Any]:
+    """Fetch the raw discovery document at ``url``: no cache, no fallback, nothing stored.
+
+    For the admin self-test, which has to report what the IdP serves right
+    now (the issuer it claims, for a mismatch report) before validating it
+    with :func:`parse_discovery`.
+    """
+    return await _fetch_document(url, settings or get_settings())
 
 
 async def get_provider_metadata(

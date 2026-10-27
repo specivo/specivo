@@ -19,6 +19,7 @@ from specivo.api.v1.admin.metadata_presets import router as admin_metadata_prese
 from specivo.api.v1.admin.metadata_schemas import router as admin_metadata_schemas_router
 from specivo.api.v1.admin.projects import router as admin_projects_router
 from specivo.api.v1.admin.settings import router as admin_settings_router
+from specivo.api.v1.admin.sso import router as admin_sso_router
 from specivo.api.v1.admin.user_groups import router as admin_user_groups_router
 from specivo.api.v1.admin.users import router as admin_users_router
 from specivo.api.v1.admin.workflows import router as admin_workflows_router
@@ -70,6 +71,7 @@ api_router.include_router(users_router)
 api_router.include_router(agent_sessions_router)
 api_router.include_router(admin_users_router)
 api_router.include_router(admin_user_groups_router)
+api_router.include_router(admin_sso_router)
 api_router.include_router(admin_projects_router)
 api_router.include_router(admin_email_router)
 api_router.include_router(admin_metadata_presets_router)

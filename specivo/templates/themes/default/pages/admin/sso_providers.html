@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Single sign-on{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Single sign-on{% endtrans %}</span>
+</div>
+
+<div class="page-header" style="display: flex; align-items: center; justify-content: space-between; gap: var(--sp-space-md); flex-wrap: wrap; margin-bottom: var(--sp-space-lg);">
+  <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}Single sign-on{% endtrans %}</h1>
+  <a class="sp-btn sp-btn-primary" href="/admin/sso/new/">{% trans %}+ New provider{% endtrans %}</a>
+</div>
+
+<p class="sp-text-muted sp-mb-md" style="font-size: var(--sp-font-size-sm); max-width: 68ch;">
+  {% trans %}People can sign in through an OpenID Connect identity provider such as Keycloak, authentik, Microsoft Entra ID, Okta or Google. A new provider starts disabled: test the connection, then enable it.{% endtrans %}
+  <a href="/admin/settings/#authentication">{% trans %}Authentication settings{% endtrans %} &rarr;</a>
+</p>
+
+<div class="card sp-card-pad">
+  <div class="sp-table-scroll">
+    <table class="issue-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Provider{% endtrans %}</th>
+          <th>{% trans %}Slug{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th>{% trans %}Issuer{% endtrans %}</th>
+          <th>{% trans %}Client secret{% endtrans %}</th>
+          <th>{% trans %}Linked users{% endtrans %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in providers %}
+        <tr>
+          <td><a href="/admin/sso/{{ p.id }}/" class="sp-suggest-name" style="color: var(--sp-text-primary);">{{ p.display_name }}</a></td>
+          <td class="sp-mono-key">{{ p.slug }}</td>
+          <td>
+            {% if p.enabled %}<span class="sp-sso-badge sp-sso-badge-ok">{% trans %}Enabled{% endtrans %}</span>
+            {% else %}<span class="sp-sso-badge sp-sso-badge-off">{% trans %}Disabled{% endtrans %}</span>{% endif %}
+          </td>
+          <td class="sp-text-muted-xs" style="overflow-wrap: anywhere;">{{ p.issuer }}</td>
+          <td>
+            {% if p.client_secret_status in ("configured", "env", "not_required") %}
+            <span class="sp-sso-badge sp-sso-badge-ok">{% if p.client_secret_status == "not_required" %}{% trans %}Not needed{% endtrans %}{% else %}{% trans %}Set{% endtrans %}{% endif %}</span>
+            {% elif p.client_secret_status == "unreadable" %}
+            <span class="sp-sso-badge sp-sso-badge-bad">{% trans %}Unreadable, re-enter it{% endtrans %}</span>
+            {% elif p.client_secret_status == "missing" %}
+            <span class="sp-sso-badge sp-sso-badge-bad">{% trans %}Missing{% endtrans %}</span>
+            {% else %}
+            <span class="sp-sso-badge sp-sso-badge-bad">{% trans %}Environment variable problem{% endtrans %}</span>
+            {% endif %}
+          </td>
+          <td>{{ p.identity_count }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="sp-empty-td">{% trans %}No identity providers yet.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
