@@ -430,6 +430,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     # through all of them.
     templates.env.globals["sign_in_url"] = _sign_in_url
 
+    # The CSRF token for plain HTML forms that must work without JavaScript
+    # (the sign-out forms). Same reason as above for being a context function.
+    templates.env.globals["csrf_token"] = _csrf_token
+
     return templates
 
 
@@ -653,6 +657,22 @@ def login_url_for(target: str) -> str:
     if not destination:
         return LOGIN_PATH
     return f"{LOGIN_PATH}?next={quote(destination, safe='')}"
+
+
+@pass_context
+def _csrf_token(ctx) -> str:
+    """Template global: the CSRF token to embed in a form's ``csrf_token`` field.
+
+    ``CSRFMiddleware`` puts the token on ``request.state``: the valid cookie the
+    browser sent, or the new one it sets on this response. Either way it
+    matches the cookie the browser will hold when the form is submitted.
+    """
+    from specivo.core.middleware import CSRF_STATE_KEY
+
+    request = ctx.get("request")
+    if request is None:
+        return ""
+    return str(getattr(request.state, CSRF_STATE_KEY, "") or "")
 
 
 @pass_context

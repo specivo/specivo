@@ -276,7 +276,7 @@ class TestWebRedirect:
         resp = await client.get(_CHANGE_PAGE)
 
         assert "set by somebody else" in resp.text
-        assert 'href="/logout/"' in resp.text
+        assert 'action="/logout/"' in resp.text
         # The forced page sends the browser into the app once the flag clears.
         assert 'redirectTo: "/"' in resp.text
 

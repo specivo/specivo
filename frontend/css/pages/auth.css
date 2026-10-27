@@ -24,6 +24,13 @@
 .login-error.show { display: flex; align-items: center; gap: var(--sp-space-sm); }
 .sp-btn-login { width: 100%; padding: 11px; border: none; border-radius: var(--sp-border-radius); background: var(--sp-accent); color: var(--sp-accent-text); font-family: var(--sp-font-body); font-size: var(--sp-font-size-md); font-weight: 700; cursor: pointer; transition: all 0.2s; }
 .sp-btn-login:hover { background: var(--sp-accent-hover); box-shadow: 0 0 20px rgba(196, 154, 60, 0.3); }
+/* Secondary sign-out button ("already signed in" widget, sign-out confirmation). */
+.sp-btn-signout { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: var(--sp-space-sm); padding: 11px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: none; color: var(--sp-text-secondary); font-family: var(--sp-font-body); font-size: var(--sp-font-size-md); font-weight: 500; text-decoration: none; cursor: pointer; transition: all 0.2s; }
+.sp-btn-signout:hover { color: var(--sp-text-primary); text-decoration: none; }
+/* A form button that reads as a footer link. */
+.sp-signout-form-inline { display: inline; }
+.login-footer .sp-link-button { padding: 0; border: none; background: none; font: inherit; color: rgba(196, 154, 60, 0.7); cursor: pointer; }
+.login-footer .sp-link-button:hover { color: var(--sp-accent); text-decoration: underline; }
 
 /* ============================================================
    STANDALONE BODY (login, error pages)

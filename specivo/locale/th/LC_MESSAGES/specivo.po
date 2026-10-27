@@ -6193,3 +6193,13 @@ msgstr "ลิงก์รีเซ็ตรหัสผ่านนี้ถู
 msgid "This password reset link has expired. Please request a new one."
 msgstr "ลิงก์รีเซ็ตรหัสผ่านนี้หมดอายุแล้ว กรุณาขอลิงก์ใหม่"
 
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:28
+msgid "Sign out?"
+msgstr "ออกจากระบบหรือไม่?"
+
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:31
+#, python-format
+msgid ""
+"You are signed in as %(name)s. Signing out ends this session on this "
+"browser."
+msgstr "คุณเข้าสู่ระบบในชื่อ %(name)s การออกจากระบบจะสิ้นสุดเซสชันนี้ในเบราว์เซอร์นี้"

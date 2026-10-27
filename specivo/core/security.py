@@ -3,7 +3,8 @@
 This module provides:
 - ``get_current_user``: FastAPI dependency that resolves the authenticated user
   from either a JWT access token or an API key.
-- ``blocklist_token`` / ``is_token_blocked``: Redis JWT blocklist helpers.
+- ``blocklist_token`` / ``blocklist_access_token`` / ``is_token_blocked``: Redis
+  JWT blocklist helpers.
 
 Resolution order in ``get_current_user``:
 1. ``Authorization: Bearer <token>`` header
@@ -81,6 +82,26 @@ async def blocklist_token(jti: str, ttl_seconds: int) -> None:
         await redis.setex(f"{_BLOCKLIST_PREFIX}{jti}", ttl_seconds, "1")
     except Exception as exc:
         logger.warning("Redis blocklist write failed (jti=%s): %s", jti, exc)
+
+
+async def blocklist_access_token(token: str) -> None:
+    """Blocklist an access JWT for the rest of its lifetime.
+
+    Only a token this instance signed is acted on: the signature is verified
+    so a forged token cannot plant arbitrary ``jti`` keys in Redis. An expired
+    or invalid token is ignored, since ``get_current_user`` refuses it anyway.
+    """
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[JWT_ALGORITHM])
+    except jwt.InvalidTokenError:
+        return
+    jti = payload.get("jti")
+    exp = payload.get("exp")
+    if not jti or not isinstance(exp, int | float):
+        return
+    # +1 so the key outlives the token even when exp falls mid-second.
+    await blocklist_token(str(jti), int(exp - utcnow().timestamp()) + 1)
 
 
 async def is_token_blocked(jti: str) -> bool:

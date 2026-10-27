@@ -6328,3 +6328,13 @@ msgstr ""
 "Ce lien de réinitialisation du mot de passe a expiré. Veuillez en "
 "demander un nouveau."
 
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:28
+msgid "Sign out?"
+msgstr "Se déconnecter ?"
+
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:31
+#, python-format
+msgid ""
+"You are signed in as %(name)s. Signing out ends this session on this "
+"browser."
+msgstr "Vous êtes connecté en tant que %(name)s. La déconnexion met fin à cette session dans ce navigateur."

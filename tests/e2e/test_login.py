@@ -48,12 +48,29 @@ def test_unauthenticated_redirects_to_login(page: Page, e2e_server: str) -> None
     expect(page.locator("#login-field")).to_be_visible()
 
 
-def test_logout_clears_session(auth_page: Page, e2e_server: str) -> None:
-    """GET /logout/ clears cookies and redirects to /login/."""
-    auth_page.goto("/logout/")
-    auth_page.wait_for_url("**/login/")
-    expect(auth_page.locator("#login-field")).to_be_visible()
+def test_header_sign_out_lands_on_login(signout_page: Page) -> None:
+    """The header's Sign out button signs out and lands on /login/."""
+    signout_page.goto("/")
+    signout_page.locator(".header-user").click()
+    signout_page.locator(".user-dropdown form[action='/logout/'] button[type='submit']").click()
+    signout_page.wait_for_url("**/login/")
+    expect(signout_page.locator("#login-field")).to_be_visible()
 
     # After logout, navigating to dashboard should redirect back to login
-    auth_page.goto("/")
-    auth_page.wait_for_url("**/login/")
+    signout_page.goto("/")
+    signout_page.wait_for_url("**/login/")
+
+
+def test_logout_url_asks_before_signing_out(signout_page: Page) -> None:
+    """A bookmarked /logout/ shows a confirmation; only its button signs out."""
+    signout_page.goto("/logout/")
+    expect(signout_page.locator("text=Sign out?")).to_be_visible()
+
+    # Still signed in: the GET changed nothing.
+    signout_page.goto("/")
+    expect(signout_page).to_have_title("Dashboard - Specivo")
+
+    signout_page.goto("/logout/")
+    signout_page.locator("[data-testid='logout-confirm']").click()
+    signout_page.wait_for_url("**/login/")
+    expect(signout_page.locator("#login-field")).to_be_visible()

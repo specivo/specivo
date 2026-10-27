@@ -51,6 +51,15 @@ _SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
 
 _CSRF_COOKIE = "csrf_token"
 _CSRF_HEADER = b"x-csrf-token"
+# ``request.state`` key holding the CSRF token this response carries: the valid
+# cookie the browser sent, or the fresh one the middleware is about to set.
+# Templates read it (``csrf_token()``) to render the token into HTML forms, so a
+# form works on the very first page view, before the cookie exists in the browser.
+CSRF_STATE_KEY = "csrf_token"
+# Cookies that authenticate a browser. The refresh cookie counts: on its own it
+# signs the browser in through the silent refresh, so a request carrying only
+# that cookie is as forgeable as one carrying the access cookie.
+_SESSION_COOKIES = ("access_token=", "refresh_token=")
 _CSRF_MUTATING_METHODS = frozenset({b"POST", b"PATCH", b"PUT", b"DELETE"})
 # Exact paths exempt from CSRF validation, listed without the stealth prefix
 # (it is prepended at startup) and matched with or without the trailing slash.
@@ -99,7 +108,8 @@ class CSRFMiddleware:
     - Everything under the mount points in ``_CSRF_EXEMPT_MOUNTS`` (MCP)
 
     Every other mutating route needs the token when the request carries the
-    ``access_token`` cookie, including any route added under ``/api/v1/auth/``.
+    ``access_token`` or ``refresh_token`` cookie, including any route added
+    under ``/api/v1/auth/``.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -143,11 +153,9 @@ class CSRFMiddleware:
         # Exempt endpoints (pre-auth auth routes) and mounts (MCP)
         if self._is_exempt_path(path):
             return False
-        # No auth cookies present — let the auth layer handle the 401
+        # No session cookie present — let the auth layer handle the 401
         cookie_header = headers.get(b"cookie", b"").decode()
-        if "access_token=" not in cookie_header:
-            return False
-        return True
+        return any(name in cookie_header for name in _SESSION_COOKIES)
 
     @staticmethod
     def _get_cookie_token(headers: dict[bytes, bytes]) -> str:
@@ -187,13 +195,17 @@ class CSRFMiddleware:
 
         # --- Set cookie on GET responses if missing/invalid ---
         existing = self._get_cookie_token(req_headers)
-        need_cookie = not is_mutating and (not existing or not self._validate_token(existing))
+        existing_valid = bool(existing) and self._validate_token(existing)
+        need_cookie = not is_mutating and not existing_valid
 
         if not need_cookie:
+            if existing_valid:
+                scope.setdefault("state", {})[CSRF_STATE_KEY] = existing
             await self.app(scope, receive, send)
             return
 
         token = self._generate_token()
+        scope.setdefault("state", {})[CSRF_STATE_KEY] = token
 
         async def send_with_csrf_cookie(message: Message) -> None:
             if message["type"] == "http.response.start":
