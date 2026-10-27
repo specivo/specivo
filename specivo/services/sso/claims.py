@@ -50,10 +50,16 @@ def email_verified(claims: Mapping[str, Any]) -> bool:
 
 def trusted_verified_email(provider: SsoProvider, claims: Mapping[str, Any]) -> bool:
     """The token's email may be taken as verified: the admin trusts this IdP's
-    ``email_verified`` and the claim is the boolean ``true``. Only then is an
-    email copied onto an account, marked verified, or checked against the
-    domain allowlist."""
-    return provider.trust_email_verified and email_verified(claims)
+    ``email_verified``, the claim is the boolean ``true``, and the address is
+    read from the standard ``email`` claim. Only then is an email copied onto
+    an account, marked verified, or checked against the domain allowlist.
+
+    ``email_verified`` vouches for the ``email`` claim only. When the provider
+    reads the address from another claim (``upn``, a custom attribute), the
+    flag says nothing about that value, so it never counts as verified.
+    """
+    email_claim = (provider.claim_config or {}).get("email_claim") or "email"
+    return provider.trust_email_verified and email_claim == "email" and email_verified(claims)
 
 
 _ABSENT = object()

@@ -15,7 +15,7 @@ from typing import Any
 import pytest
 
 from specivo.models.sso import SsoProvider
-from specivo.services.sso.claims import Known, Missing, Overage, read_groups, resolve_path
+from specivo.services.sso.claims import Known, Missing, Overage, read_groups, resolve_path, trusted_verified_email
 
 pytestmark = pytest.mark.unit
 
@@ -130,3 +130,40 @@ def test_overage_of_another_claim_is_ignored() -> None:
     # App roles are configured; the groups overage marker does not concern them.
     claims = {"roles": ["Specivo.Admin"], "_claim_names": {"groups": "src1"}, "hasgroups": True}
     assert read_groups(claims, _provider("roles")) == Known(frozenset({"Specivo.Admin"}))
+
+
+# ---------------------------------------------------------------------------
+# trusted_verified_email
+# ---------------------------------------------------------------------------
+
+_VERIFIED = {"email": "user@example.com", "email_verified": True}
+
+
+def _email_provider(email_claim: str | None) -> SsoProvider:
+    config: dict[str, Any] = {} if email_claim is None else {"email_claim": email_claim}
+    return SsoProvider(
+        slug="claims-idp",
+        issuer="https://idp.example.com",
+        client_id="c",
+        claim_config=config,
+        trust_email_verified=True,
+    )
+
+
+@pytest.mark.parametrize("email_claim", [None, "", "email"])
+def test_verified_flag_counts_for_the_standard_email_claim(email_claim: str | None) -> None:
+    assert trusted_verified_email(_email_provider(email_claim), _VERIFIED) is True
+
+
+@pytest.mark.parametrize("email_claim", ["upn", "mail", "custom.email"])
+def test_verified_flag_does_not_vouch_for_another_email_claim(email_claim: str) -> None:
+    # email_verified describes the standard ``email`` claim only; an address
+    # read from any other claim is unverified whatever the flag says.
+    claims = {**_VERIFIED, "upn": "other@example.com", "mail": "other@example.com"}
+    assert trusted_verified_email(_email_provider(email_claim), claims) is False
+
+
+def test_untrusted_provider_is_never_verified() -> None:
+    provider = _email_provider(None)
+    provider.trust_email_verified = False
+    assert trusted_verified_email(provider, _VERIFIED) is False
