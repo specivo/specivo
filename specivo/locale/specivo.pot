@@ -6697,3 +6697,74 @@ msgstr ""
 #: specivo/web/pages/sso.py:71
 msgid "Single sign-on failed. Please try again."
 msgstr ""
+
+#: specivo/web/pages/sso.py
+msgid "The identity provider did not send an email address. Contact your administrator."
+msgstr ""
+
+#: specivo/web/pages/sso.py
+msgid "An account with this email address already exists. Sign in with your password and connect the account from your profile."
+msgstr ""
+
+#: specivo/web/pages/sso.py
+msgid "This identity provider account is already connected to another account."
+msgstr ""
+
+#: specivo/web/pages/sso.py
+msgid "An account at this identity provider is already connected to your profile."
+msgstr ""
+
+#: specivo/web/pages/sso.py
+msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
+msgstr ""
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account is now connected."
+msgstr ""
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account was disconnected."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected accounts"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Sign in with an account at your organisation's identity provider. Connect it here once, while signed in."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Last sign-in"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Disconnect"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "No accounts are connected yet."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+#, python-format
+msgid "Connect %(name)s"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Identity provider accounts this user can sign in with. Disconnecting one ends the sessions started with it."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Linked by"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "No accounts are connected."
+msgstr ""

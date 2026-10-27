@@ -35,6 +35,7 @@ __all__ = [
     "SsoProviderOut",
     "SsoProviderUpdate",
     "SsoSelfTestResult",
+    "UserIdentityOut",
 ]
 
 #: Authorization request parameters an admin may add per provider. Anything
@@ -336,6 +337,22 @@ class SsoGroupMappingOut(BaseModel):
     idp_group: str
     user_group_id: int
     user_group_name: str
+
+
+class UserIdentityOut(BaseModel):
+    """A user's connected SSO identity. The external subject is not exposed."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    provider_id: int
+    provider_slug: str
+    provider_name: str
+    provider_enabled: bool
+    linked_via: str
+    email_at_last_login: str | None
+    last_login_at: datetime | None
+    linked_at: datetime | None
 
 
 # ---------------------------------------------------------------------------

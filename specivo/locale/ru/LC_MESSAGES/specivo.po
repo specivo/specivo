@@ -6940,3 +6940,74 @@ msgstr "Единый вход временно недоступен. Попро�
 #: specivo/web/pages/sso.py:71
 msgid "Single sign-on failed. Please try again."
 msgstr "Не удалось выполнить единый вход. Попробуйте ещё раз."
+
+#: specivo/web/pages/sso.py
+msgid "The identity provider did not send an email address. Contact your administrator."
+msgstr "Поставщик удостоверений не передал адрес электронной почты. Обратитесь к администратору."
+
+#: specivo/web/pages/sso.py
+msgid "An account with this email address already exists. Sign in with your password and connect the account from your profile."
+msgstr "Учётная запись с этим адресом электронной почты уже существует. Войдите с паролем и подключите учётную запись в своём профиле."
+
+#: specivo/web/pages/sso.py
+msgid "This identity provider account is already connected to another account."
+msgstr "Эта учётная запись поставщика удостоверений уже подключена к другой учётной записи."
+
+#: specivo/web/pages/sso.py
+msgid "An account at this identity provider is already connected to your profile."
+msgstr "Учётная запись этого поставщика удостоверений уже подключена к вашему профилю."
+
+#: specivo/web/pages/sso.py
+msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
+msgstr "Это ваш единственный способ входа. Задайте пароль или подключите другую учётную запись, прежде чем отключать эту."
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account is now connected."
+msgstr "Ваша учётная запись %(provider)s подключена."
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account was disconnected."
+msgstr "Ваша учётная запись %(provider)s отключена."
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected accounts"
+msgstr "Подключённые учётные записи"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Sign in with an account at your organisation's identity provider. Connect it here once, while signed in."
+msgstr "Входите с учётной записью поставщика удостоверений вашей организации. Подключите её здесь один раз, пока вы вошли в систему."
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected"
+msgstr "Подключено"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Last sign-in"
+msgstr "Последний вход"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Disconnect"
+msgstr "Отключить"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "No accounts are connected yet."
+msgstr "Подключённых учётных записей пока нет."
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+#, python-format
+msgid "Connect %(name)s"
+msgstr "Подключить %(name)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Identity provider accounts this user can sign in with. Disconnecting one ends the sessions started with it."
+msgstr "Учётные записи поставщиков удостоверений, с которыми этот пользователь может входить. Отключение завершает сеансы, начатые с этой учётной записью."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Linked by"
+msgstr "Способ подключения"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "No accounts are connected."
+msgstr "Подключённых учётных записей нет."

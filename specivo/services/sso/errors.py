@@ -60,6 +60,9 @@ class SsoError(AppError):
         )
         #: Machine-readable cause, for logs only.
         self.reason = str(reason)
+        #: The transaction's intent once it is known (``login`` or ``link``):
+        #: a refused link returns to the profile, a refused login to the login page.
+        self.intent = "login"
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(code={self.code!r}, reason={self.reason!r})"
@@ -161,3 +164,35 @@ class SsoAccountDisabledError(SsoError):
     default_code = "sso_account_disabled"
     default_message = "The account is disabled"
     default_status = 403
+
+
+class SsoEmailMissingError(SsoError):
+    """JIT provisioning needs an email, and the identity provider sent none."""
+
+    default_code = "sso_email_missing"
+    default_message = "The identity provider did not send an email address"
+    default_status = 403
+
+
+class SsoEmailConflictError(SsoError):
+    """JIT provisioning refused: another account already uses the email (never auto-linked)."""
+
+    default_code = "sso_email_conflict"
+    default_message = "An account with this email address already exists"
+    default_status = 409
+
+
+class SsoIdentityInUseError(SsoError):
+    """A link was asked for an external identity that belongs to another user."""
+
+    default_code = "sso_identity_in_use"
+    default_message = "This identity is already connected to another account"
+    default_status = 409
+
+
+class SsoProviderAlreadyLinkedError(SsoError):
+    """A link was asked at a provider where the user already has an identity."""
+
+    default_code = "sso_provider_already_linked"
+    default_message = "An account at this identity provider is already connected"
+    default_status = 409

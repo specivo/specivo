@@ -16,12 +16,14 @@ from specivo.core.exceptions import AppError, ConflictError, NotFoundError
 from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
+from specivo.schemas.sso import UserIdentityOut
 from specivo.schemas.user import UserCreate, UserOut
 from specivo.services.anonymous_user_service import real_users_clause, refuse_anonymous_user
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 from specivo.services.session_service import SessionService
+from specivo.services.sso.identity_service import IdentityService
 
 router = APIRouter(tags=["admin-users"])
 _audit = SecurityAuditService()
@@ -413,6 +415,50 @@ async def delete_user_api_key(
     except Exception:
         pass
 
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Connected SSO identities of a user
+# ---------------------------------------------------------------------------
+
+_identity_svc = IdentityService()
+
+
+@router.get(
+    "/admin/users/{user_id}/identities/",
+    response_model=list[UserIdentityOut],
+    summary="List a user's connected SSO identities (admin only)",
+)
+async def list_user_identities(
+    user_id: int,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> list[UserIdentityOut]:
+    """Return the identity provider accounts the user can sign in with."""
+    target = await _get_user_or_404(db, user_id)
+    identities = await _identity_svc.list_for_user(db, target.id)
+    return [UserIdentityOut.model_validate(i) for i in identities]
+
+
+@router.delete(
+    "/admin/users/{user_id}/identities/{identity_id}/",
+    status_code=204,
+    summary="Disconnect a user's SSO identity (admin only)",
+)
+async def delete_user_identity(
+    user_id: int,
+    identity_id: int,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Disconnect the identity and revoke every session signed in through it.
+
+    Always allowed for an admin, also when it is the user's last way to sign in.
+    """
+    target = await _get_user_or_404(db, user_id)
+    await _identity_svc.unlink(db, user_id=target.id, identity_id=identity_id, by="admin", actor_id=admin.id)
+    await db.commit()
     return Response(status_code=204)
 
 

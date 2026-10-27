@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from specivo.web.pages.admin import router as admin_pages
 from specivo.web.pages.admin_sso import router as admin_sso_pages
 from specivo.web.pages.auth import router as auth_pages
+from specivo.web.pages.connected_accounts import router as connected_account_pages
 from specivo.web.pages.dashboard import router as dashboard_pages
 from specivo.web.pages.issues import router as issue_pages
 from specivo.web.pages.issues import short_router as issue_short_pages
@@ -23,6 +24,7 @@ web_router = APIRouter(include_in_schema=False)
 web_router.include_router(dashboard_pages)
 web_router.include_router(auth_pages)
 web_router.include_router(sso_pages)
+web_router.include_router(connected_account_pages)
 web_router.include_router(project_pages)
 web_router.include_router(wiki_pages)
 web_router.include_router(issue_pages)

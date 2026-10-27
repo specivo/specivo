@@ -6995,3 +6995,74 @@ msgstr ""
 #: specivo/web/pages/sso.py:71
 msgid "Single sign-on failed. Please try again."
 msgstr "El inicio de sesión único falló. Inténtalo de nuevo."
+
+#: specivo/web/pages/sso.py
+msgid "The identity provider did not send an email address. Contact your administrator."
+msgstr "El proveedor de identidad no envió una dirección de correo electrónico. Contacta con tu administrador."
+
+#: specivo/web/pages/sso.py
+msgid "An account with this email address already exists. Sign in with your password and connect the account from your profile."
+msgstr "Ya existe una cuenta con esta dirección de correo electrónico. Inicia sesión con tu contraseña y conecta la cuenta desde tu perfil."
+
+#: specivo/web/pages/sso.py
+msgid "This identity provider account is already connected to another account."
+msgstr "Esta cuenta del proveedor de identidad ya está conectada a otra cuenta."
+
+#: specivo/web/pages/sso.py
+msgid "An account at this identity provider is already connected to your profile."
+msgstr "Ya hay una cuenta de este proveedor de identidad conectada a tu perfil."
+
+#: specivo/web/pages/sso.py
+msgid "This is your only way to sign in. Set a password or connect another account before disconnecting it."
+msgstr "Es tu única forma de iniciar sesión. Establece una contraseña o conecta otra cuenta antes de desconectarla."
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account is now connected."
+msgstr "Tu cuenta de %(provider)s ya está conectada."
+
+#: specivo/web/pages/connected_accounts.py
+#, python-format
+msgid "Your %(provider)s account was disconnected."
+msgstr "Tu cuenta de %(provider)s se ha desconectado."
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected accounts"
+msgstr "Cuentas conectadas"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Sign in with an account at your organisation's identity provider. Connect it here once, while signed in."
+msgstr "Inicia sesión con una cuenta del proveedor de identidad de tu organización. Conéctala aquí una sola vez, con la sesión iniciada."
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Connected"
+msgstr "Conectada"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Last sign-in"
+msgstr "Último inicio de sesión"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "Disconnect"
+msgstr "Desconectar"
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+msgid "No accounts are connected yet."
+msgstr "Todavía no hay cuentas conectadas."
+
+#: specivo/templates/themes/default/pages/auth/profile.html
+#, python-format
+msgid "Connect %(name)s"
+msgstr "Conectar %(name)s"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Identity provider accounts this user can sign in with. Disconnecting one ends the sessions started with it."
+msgstr "Cuentas de proveedores de identidad con las que este usuario puede iniciar sesión. Desconectar una cierra las sesiones iniciadas con ella."
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "Linked by"
+msgstr "Vinculada por"
+
+#: specivo/templates/themes/default/pages/admin/user_detail.html
+msgid "No accounts are connected."
+msgstr "No hay cuentas conectadas."
