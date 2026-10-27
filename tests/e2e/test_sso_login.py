@@ -20,7 +20,9 @@ that session.
 
 from __future__ import annotations
 
+import os
 import re
+import subprocess
 from collections.abc import Generator, Iterator
 
 import httpx
@@ -91,15 +93,53 @@ def _delete_keycloak_provider(api: httpx.Client) -> None:
             assert deleted.status_code == 204, deleted.text
 
 
+_RELEASE_EMAILS_SCRIPT = """
+import asyncio, os, sys, uuid
+import asyncpg
+
+async def main():
+    conn = await asyncpg.connect(os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://"))
+    try:
+        await conn.execute(
+            "UPDATE users SET email = 'sso-e2e-' || id || '-' || $2 || '@example.com' "
+            "WHERE LOWER(email) = ANY($1::text[])",
+            sys.argv[1:],
+            uuid.uuid4().hex[:8],
+        )
+    finally:
+        await conn.close()
+
+asyncio.run(main())
+"""
+
+
+def _release_seed_emails() -> None:
+    """Rename the accounts JIT provisioning made, so no seeded IdP email stays taken.
+
+    The E2E database outlives a run and is shared with the integration tests,
+    which create their own ``sso-member@example.com`` user (and Keycloak may
+    have been recreated with new subject ids). Specivo has no API to delete a
+    user, so the leftover account keeps its row and gets a unique email; the
+    next sign-in provisions a fresh one. A subprocess, like the other E2E DB
+    helpers, keeps asyncio away from Playwright's sync loop.
+    """
+    emails = [user.email.lower() for user in seed.SEED_USERS]
+    result = subprocess.run(
+        ["uv", "run", "python", "-c", _RELEASE_EMAILS_SCRIPT, *emails],
+        env={**os.environ},
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
 @pytest.fixture(scope="module")
 def keycloak_provider(e2e_server: str, _admin_auth: tuple[str, list[dict]]) -> Iterator[dict]:
     """The ``keycloak`` provider, created through the admin API, removed afterwards.
 
-    JIT provisioning creates ``sso-member``'s account on the first sign-in.
-    The account outlives the provider row (the E2E database is kept between
-    runs, Keycloak may have been recreated with new subject ids), so a later
-    run links it again by its verified email instead of failing on an email
-    conflict. ``required_groups`` keeps ``sso-outsider`` out.
+    JIT provisioning creates ``sso-member``'s account on its first sign-in;
+    ``required_groups`` keeps ``sso-outsider`` out. Before and after the
+    module the seeded IdP emails are freed (``_release_seed_emails``).
 
     Deleting the provider at the end matters beyond this module: an enabled
     provider adds a "Sign in with" button to the login page every other E2E
@@ -108,6 +148,7 @@ def keycloak_provider(e2e_server: str, _admin_auth: tuple[str, list[dict]]) -> I
     token, _ = _admin_auth
     with httpx.Client(base_url=e2e_server, headers={"Authorization": f"Bearer {token}"}, timeout=10) as api:
         _delete_keycloak_provider(api)
+        _release_seed_emails()
         created = api.post(
             _PROVIDERS_PATH,
             json={
@@ -118,8 +159,6 @@ def keycloak_provider(e2e_server: str, _admin_auth: tuple[str, list[dict]]) -> I
                 "client_id": seed.CONFIDENTIAL_CLIENT_ID,
                 "client_secret": seed.CONFIDENTIAL_CLIENT_SECRET,
                 "allow_jit_provisioning": True,
-                "link_policy": "auto_verified_email",
-                "trust_email_verified": True,
                 "required_groups": [seed.GROUP_USERS],
                 "rp_logout_enabled": True,
                 "backchannel_logout_enabled": True,
@@ -128,6 +167,7 @@ def keycloak_provider(e2e_server: str, _admin_auth: tuple[str, list[dict]]) -> I
         assert created.status_code == 201, created.text
         yield created.json()
         _delete_keycloak_provider(api)
+        _release_seed_emails()
 
 
 @pytest.fixture
