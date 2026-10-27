@@ -29,7 +29,6 @@ from specivo.web.assets import missing_asset_manifests
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://specivo:specivo@localhost:5433/specivo_test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6380/0")
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-minimum-32-bytes-for-hs256-signing")
-os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("KILL_TOKEN", "test-kill-token-secret")
 os.environ.setdefault("INSTALLED_PLUGINS", "[]")
 # SQL_ECHO=false prevents SQLAlchemy from logging every query.
@@ -52,11 +51,15 @@ E2E_SSO_BASE_URL = f"http://localhost:{E2E_SERVER_PORT}"
 # any in-process test that rebuilds the settings after a cache_clear().
 #
 # DEBUG=true disables the Secure flag on cookies so http://127.0.0.1 works.
+# RATE_LIMIT_ENABLED=false (unless set for the run) lets the browser tests sign
+# in as often as they need; leaked into os.environ it would also switch the
+# limiter off for the in-process rate-limit tests.
 # APP_URL and SSO_ALLOW_INSECURE_HTTP let the SSO tests (``sso_idp``) sign in
 # through the http-only disposable Keycloak; while no SSO provider is
 # configured they change nothing for the other tests.
 _E2E_SERVER_ENV = {
     "DEBUG": "true",
+    "RATE_LIMIT_ENABLED": os.environ.get("RATE_LIMIT_ENABLED", "false"),
     "APP_URL": E2E_SSO_BASE_URL,
     "SSO_ALLOW_INSECURE_HTTP": "true",
 }

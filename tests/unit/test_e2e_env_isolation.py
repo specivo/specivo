@@ -1,9 +1,10 @@
-"""The E2E helpers must not switch on debug mode for the in-process test run.
+"""The E2E helpers must not change settings for the in-process test run.
 
 pytest imports ``specivo.testing.e2e_base`` while collecting every run, E2E or
-not. Debug mode drops the Secure flag from auth cookies, so a leaked
-``DEBUG=true`` silently changes cookie and CSRF behaviour for any test that
-rebuilds the settings with ``get_settings.cache_clear()``.
+not. Anything it puts in ``os.environ`` reaches every test that rebuilds the
+settings with ``get_settings.cache_clear()``: a leaked ``DEBUG=true`` drops the
+Secure flag from auth cookies, a leaked ``RATE_LIMIT_ENABLED=false`` switches
+the rate limiter off for the rest of the run.
 """
 
 import importlib
@@ -46,6 +47,34 @@ def test_the_e2e_server_matches_the_test_realm_redirect_uris() -> None:
 
     assert _E2E_SERVER_ENV["APP_URL"] == f"http://localhost:{E2E_SERVER_PORT}"
     assert _E2E_SERVER_ENV["SSO_ALLOW_INSECURE_HTTP"] == "true"
+
+
+def test_importing_e2e_base_leaves_rate_limiting_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A leaked RATE_LIMIT_ENABLED=false turns every rate-limit test after a cache_clear() green-blind."""
+    monkeypatch.delenv("RATE_LIMIT_ENABLED", raising=False)
+    import specivo.testing.e2e_base as e2e_base
+
+    importlib.reload(e2e_base)
+
+    assert "RATE_LIMIT_ENABLED" not in os.environ
+
+
+def test_the_e2e_server_runs_without_rate_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("RATE_LIMIT_ENABLED", raising=False)
+    import specivo.testing.e2e_base as e2e_base
+
+    importlib.reload(e2e_base)
+
+    assert e2e_base._E2E_SERVER_ENV["RATE_LIMIT_ENABLED"] == "false"
+
+
+def test_the_e2e_server_rate_limit_setting_can_be_overridden(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "true")
+    import specivo.testing.e2e_base as e2e_base
+
+    importlib.reload(e2e_base)
+
+    assert e2e_base._E2E_SERVER_ENV["RATE_LIMIT_ENABLED"] == "true"
 
 
 def test_port_cleanup_kills_the_listener_but_not_a_connected_client() -> None:
