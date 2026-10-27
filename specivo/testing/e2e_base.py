@@ -35,15 +35,31 @@ os.environ.setdefault("INSTALLED_PLUGINS", "[]")
 # SQL_ECHO=false prevents SQLAlchemy from logging every query.
 os.environ["SQL_ECHO"] = "false"
 
-# DEBUG=true disables the Secure flag on cookies so http://127.0.0.1 works.
-# It goes to the E2E server process only: pytest imports this module while
-# collecting every run, and setting it in os.environ here would turn on debug
-# for any in-process test that rebuilds the settings after a cache_clear().
-_E2E_SERVER_ENV = {"DEBUG": "true"}
-
 E2E_SERVER_HOST = "127.0.0.1"
 E2E_SERVER_PORT = int(os.environ.get("E2E_SERVER_PORT", "9944"))
 E2E_BASE_URL = f"http://{E2E_SERVER_HOST}:{E2E_SERVER_PORT}"
+# The interface uvicorn listens on. The browser and the fixtures always use
+# E2E_SERVER_HOST; only the SSO back-channel test needs more: the disposable
+# Keycloak calls the server from a container, which on Linux cannot reach the
+# host's loopback (``make test-e2e-sso`` listens on 0.0.0.0 there).
+E2E_SERVER_BIND = os.environ.get("E2E_SERVER_BIND", E2E_SERVER_HOST)
+# The public URL the SSO redirect URIs are built from. The disposable Keycloak
+# realm (tests/fixtures/sso) registers http://localhost:9944, not 127.0.0.1.
+E2E_SSO_BASE_URL = f"http://localhost:{E2E_SERVER_PORT}"
+
+# Settings for the E2E server process only: pytest imports this module while
+# collecting every run, and setting them in os.environ here would leak into
+# any in-process test that rebuilds the settings after a cache_clear().
+#
+# DEBUG=true disables the Secure flag on cookies so http://127.0.0.1 works.
+# APP_URL and SSO_ALLOW_INSECURE_HTTP let the SSO tests (``sso_idp``) sign in
+# through the http-only disposable Keycloak; while no SSO provider is
+# configured they change nothing for the other tests.
+_E2E_SERVER_ENV = {
+    "DEBUG": "true",
+    "APP_URL": E2E_SSO_BASE_URL,
+    "SSO_ALLOW_INSECURE_HTTP": "true",
+}
 E2E_PASSWORD = "testpassword"
 
 
@@ -118,7 +134,7 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             "uvicorn",
             "specivo.main:app",
             "--host",
-            E2E_SERVER_HOST,
+            E2E_SERVER_BIND,
             "--port",
             str(E2E_SERVER_PORT),
             "--log-level",

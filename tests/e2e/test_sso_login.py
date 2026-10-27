@@ -1,0 +1,245 @@
+"""SSO sign-in and sign-out in a real browser, against the disposable Keycloak.
+
+The integration test (tests/integration/sso_idp/) proves the protocol with
+httpx playing the browser. This module proves what only a browser shows: the
+cookies across the cross-site redirects (the transaction cookie must survive
+Keycloak's redirect back), the IdP's own pages, RP-initiated logout through
+Keycloak's end-session endpoint, and a back-channel logout ending the browser
+session.
+
+Requires ``make sso-idp-up`` (``make test-e2e-sso`` starts it); skipped
+otherwise (see ``tests/conftest.py``). The browser uses http://localhost:9944,
+not the suite's 127.0.0.1, because that is what the test realm registers as
+redirect URI, and the session cookies must belong to the host the redirects
+come back to.
+
+No test here touches the session-wide ``e2e_user`` login: each one signs in
+through Keycloak in a browser context of its own, so signing out revokes only
+that session.
+"""
+
+from __future__ import annotations
+
+import re
+from collections.abc import Generator, Iterator
+
+import httpx
+import pytest
+from playwright.sync_api import Browser, BrowserContext, Page, expect
+
+from specivo.testing.e2e_base import E2E_SSO_BASE_URL
+from tests.e2e.pages.keycloak_login import KeycloakLoginPage
+from tests.fixtures.sso import seed
+
+pytestmark = [pytest.mark.e2e, pytest.mark.sso_idp]
+
+_PROVIDERS_PATH = "/api/v1/admin/sso/providers/"
+_KEYCLOAK_BUTTON = "Sign in with Keycloak"
+_LOGIN_URL = re.compile(r"/login/")
+
+
+# ---------------------------------------------------------------------------
+# Keycloak admin REST API
+# ---------------------------------------------------------------------------
+
+
+def _keycloak_admin() -> httpx.Client:
+    """An httpx client signed in to Keycloak's admin REST API (master realm admin)."""
+    token = httpx.post(
+        f"{seed.KEYCLOAK_BASE_URL}/realms/master/protocol/openid-connect/token",
+        data={
+            "grant_type": "password",
+            "client_id": "admin-cli",
+            "username": seed.KEYCLOAK_ADMIN_USER,
+            "password": seed.KEYCLOAK_ADMIN_PASSWORD,
+        },
+        timeout=10,
+    )
+    assert token.status_code == 200, token.text
+    return httpx.Client(
+        base_url=f"{seed.KEYCLOAK_BASE_URL}/admin/realms/{seed.REALM}",
+        headers={"Authorization": f"Bearer {token.json()['access_token']}"},
+        timeout=10,
+    )
+
+
+def _keycloak_logout_user(username: str) -> None:
+    """End every Keycloak session of the user; Keycloak sends the back-channel logout tokens."""
+    with _keycloak_admin() as admin:
+        users = admin.get("/users", params={"username": username, "exact": "true"})
+        assert users.status_code == 200, users.text
+        [user] = users.json()
+        sessions = admin.get(f"/users/{user['id']}/sessions")
+        assert sessions.status_code == 200, sessions.text
+        assert sessions.json(), f"{username} has no Keycloak session to log out"
+        logout = admin.post(f"/users/{user['id']}/logout")
+        assert logout.status_code == 204, logout.text
+
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+
+def _delete_keycloak_provider(api: httpx.Client) -> None:
+    """Remove the ``keycloak`` provider row (and unlink its identities) if a run left one."""
+    listed = api.get(_PROVIDERS_PATH)
+    assert listed.status_code == 200, listed.text
+    for provider in listed.json()["items"]:
+        if provider["slug"] == seed.KEYCLOAK_SLUG:
+            deleted = api.delete(f"{_PROVIDERS_PATH}{provider['id']}/", params={"force": "true"})
+            assert deleted.status_code == 204, deleted.text
+
+
+@pytest.fixture(scope="module")
+def keycloak_provider(e2e_server: str, _admin_auth: tuple[str, list[dict]]) -> Iterator[dict]:
+    """The ``keycloak`` provider, created through the admin API, removed afterwards.
+
+    JIT provisioning creates ``sso-member``'s account on the first sign-in.
+    The account outlives the provider row (the E2E database is kept between
+    runs, Keycloak may have been recreated with new subject ids), so a later
+    run links it again by its verified email instead of failing on an email
+    conflict. ``required_groups`` keeps ``sso-outsider`` out.
+
+    Deleting the provider at the end matters beyond this module: an enabled
+    provider adds a "Sign in with" button to the login page every other E2E
+    test (and the visual baselines) sees.
+    """
+    token, _ = _admin_auth
+    with httpx.Client(base_url=e2e_server, headers={"Authorization": f"Bearer {token}"}, timeout=10) as api:
+        _delete_keycloak_provider(api)
+        created = api.post(
+            _PROVIDERS_PATH,
+            json={
+                "slug": seed.KEYCLOAK_SLUG,
+                "display_name": "Keycloak",
+                "enabled": True,
+                "issuer": seed.KEYCLOAK_ISSUER,
+                "client_id": seed.CONFIDENTIAL_CLIENT_ID,
+                "client_secret": seed.CONFIDENTIAL_CLIENT_SECRET,
+                "allow_jit_provisioning": True,
+                "link_policy": "auto_verified_email",
+                "trust_email_verified": True,
+                "required_groups": [seed.GROUP_USERS],
+                "rp_logout_enabled": True,
+                "backchannel_logout_enabled": True,
+            },
+        )
+        assert created.status_code == 201, created.text
+        yield created.json()
+        _delete_keycloak_provider(api)
+
+
+@pytest.fixture
+def sso_context(browser: Browser, keycloak_provider: dict) -> Generator[BrowserContext, None, None]:
+    """A fresh browser (no Specivo or Keycloak cookies) on the host the realm redirects to."""
+    context = browser.new_context(base_url=E2E_SSO_BASE_URL)
+    yield context
+    context.close()
+
+
+@pytest.fixture
+def sso_page(sso_context: BrowserContext) -> Generator[Page, None, None]:
+    page = sso_context.new_page()
+    yield page
+    page.close()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def _start_keycloak_sign_in(page: Page) -> KeycloakLoginPage:
+    """From Specivo's login page to Keycloak's login form."""
+    page.goto("/login/")
+    page.get_by_role("link", name=_KEYCLOAK_BUTTON).click()
+    keycloak = KeycloakLoginPage(page)
+    expect(keycloak.username_input).to_be_visible()
+    assert page.url.startswith(seed.KEYCLOAK_ISSUER), page.url
+    return keycloak
+
+
+def _sign_in(page: Page, user: seed.SeedUser = seed.SSO_MEMBER) -> None:
+    """Sign in through Keycloak and wait for the dashboard."""
+    _start_keycloak_sign_in(page).sign_in(user.username, seed.USER_PASSWORD)
+    page.wait_for_url(f"{E2E_SSO_BASE_URL}/")
+
+
+def _refresh_cookie(context: BrowserContext) -> str:
+    [value] = [c["value"] for c in context.cookies(E2E_SSO_BASE_URL) if c["name"] == "refresh_token"]
+    return value
+
+
+def _refresh_status(page: Page, refresh_token: str) -> int:
+    """What the refresh endpoint answers for this refresh token."""
+    response = page.request.post("/api/v1/auth/refresh/", data={"refresh_token": refresh_token})
+    return response.status
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+def test_sso_login_creates_session(sso_page: Page) -> None:
+    _sign_in(sso_page)
+
+    # The header shows the account the ID token signed in.
+    expect(sso_page.locator(".header-user")).to_be_visible()
+    expect(sso_page.locator(".user-dropdown-name")).to_have_text("SSO Member User")
+    expect(sso_page.locator(".user-dropdown-email")).to_have_text(seed.SSO_MEMBER.email)
+
+    # The profile lists the Keycloak account as connected.
+    sso_page.goto("/my/profile/")
+    expect(sso_page.locator(".sp-connected-row .sp-connected-name")).to_contain_text("Keycloak")
+
+
+def test_sso_logout_ends_idp_session(sso_page: Page, sso_context: BrowserContext) -> None:
+    _sign_in(sso_page)
+    refresh_token = _refresh_cookie(sso_context)
+
+    # Sign out through the header menu: Specivo revokes its session, then sends
+    # the browser through Keycloak's end-session endpoint and back.
+    sso_page.locator(".header-user").click()
+    sso_page.locator(".user-dropdown-logout").click()
+    # With id_token_hint Keycloak logs out without asking; tolerate its
+    # confirmation page anyway, in case a Keycloak release brings it back.
+    sso_page.wait_for_url(re.compile(r"/login/\?logged_out=1|/protocol/openid-connect/logout"))
+    if "/protocol/openid-connect/logout" in sso_page.url:
+        sso_page.locator("#kc-logout").click()
+    sso_page.wait_for_url(f"{E2E_SSO_BASE_URL}/login/?logged_out=1")
+    expect(sso_page.get_by_role("status")).to_contain_text("You have been signed out.")
+
+    # The browser's old refresh token was revoked on the server, not just dropped.
+    assert _refresh_status(sso_page, refresh_token) == 401
+
+    # The Keycloak session is gone too: signing in again asks for the password
+    # instead of coming straight back signed in.
+    _start_keycloak_sign_in(sso_page)
+
+
+def test_backchannel_logout_kills_browser_session(sso_page: Page, sso_context: BrowserContext) -> None:
+    _sign_in(sso_page)
+    refresh_token = _refresh_cookie(sso_context)
+
+    # An administrator ends the user's sessions at Keycloak. Keycloak posts a
+    # logout token to Specivo's back-channel endpoint (host.docker.internal:9944).
+    _keycloak_logout_user(seed.SSO_MEMBER.username)
+
+    # The next Specivo navigation finds the session gone.
+    sso_page.goto("/my/profile/")
+    assert _LOGIN_URL.search(sso_page.url), (
+        f"Still signed in at {sso_page.url}: the back-channel logout did not reach Specivo. Keycloak runs "
+        "in a container and calls host.docker.internal:9944; on Linux the E2E server must listen on "
+        "0.0.0.0 (E2E_SERVER_BIND, set by make test-e2e-sso)."
+    )
+    # The whole session was revoked, not only its access token.
+    assert _refresh_status(sso_page, refresh_token) == 401
+
+
+def test_sso_outsider_denied(sso_page: Page) -> None:
+    _start_keycloak_sign_in(sso_page).sign_in(seed.SSO_OUTSIDER.username, seed.USER_PASSWORD)
+
+    sso_page.wait_for_url(f"{E2E_SSO_BASE_URL}/login/?sso_error=sso_not_in_required_group")
+    expect(sso_page.get_by_text("is not in a group that may sign in here")).to_be_visible()

@@ -5,7 +5,7 @@
        test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
        install sync lock help download-model backfill-embeddings reindex-fts import-redmine import-data \
        build bundle frontend-build frontend-watch \
-       sso-idp-up sso-idp-up-authentik sso-idp-down sso-idp-reset test-sso-idp
+       sso-idp-up sso-idp-up-authentik sso-idp-down sso-idp-reset test-sso-idp test-e2e-sso
 
 # Load environment from .env and .env.local (if they exist).
 # .env.local overrides .env. Shell env overrides both.
@@ -340,5 +340,14 @@ sso-idp-down:  ## Stop the test IdPs and discard their data (checkout only)
 
 sso-idp-reset: sso-idp-down sso-idp-up  ## Recreate the Keycloak test IdP from its realm seed (checkout only)
 
-test-sso-idp:  ## Run the tests against the test IdP (make sso-idp-up first; checkout only)
-	$(RUN) pytest -m sso_idp -n 0
+test-sso-idp:  ## Run the integration tests against the test IdP (make sso-idp-up first; checkout only)
+	$(RUN) pytest -m 'sso_idp and not e2e' -n 0
+
+# Keycloak calls the E2E server's back-channel logout endpoint from its
+# container (host.docker.internal:9944). Docker Desktop forwards that to the
+# host's loopback; on Linux it arrives on the bridge, so the server must listen
+# on every interface there. Override with E2E_SERVER_BIND=...
+SSO_E2E_BIND := $(if $(filter Linux,$(shell uname -s)),0.0.0.0,127.0.0.1)
+
+test-e2e-sso: frontend-build sso-idp-up  ## Start the test IdP, run the SSO browser tests (checkout only)
+	E2E_SERVER_BIND=$${E2E_SERVER_BIND:-$(SSO_E2E_BIND)} $(RUN) pytest tests/e2e/test_sso_login.py -m 'e2e and sso_idp' -n 0
