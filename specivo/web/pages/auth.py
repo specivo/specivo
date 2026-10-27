@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,14 +21,14 @@ from specivo.web.deps import (
     require_user,
     safe_next_path,
 )
-from specivo.web.pages.sso import sso_error_message
+from specivo.web.pages.sso import sso_error_message, sso_login_path
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["web-auth"], include_in_schema=False)
 
 
-@router.get("/login/", response_class=HTMLResponse)
+@router.get("/login/", response_model=None)
 async def login_page(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
@@ -35,7 +36,8 @@ async def login_page(
     next_url: str = Query("", alias="next"),  # noqa: B008
     sso_error: str = Query(""),  # noqa: B008
     logged_out: str = Query(""),  # noqa: B008
-) -> HTMLResponse:
+    local: str = Query(""),  # noqa: B008
+) -> HTMLResponse | RedirectResponse:
     """Render the login page (standalone layout, no sidebar).
 
     If the user is already authenticated, the template shows a
@@ -55,8 +57,43 @@ async def login_page(
 
     ``?logged_out=1`` is where sign-out lands (directly, or back from the
     identity provider) and shows a "You have been signed out" notice.
+
+    Single sign-on (``get_login_policy``, which applies ``SSO_FORCE_LOCAL_LOGIN``):
+
+    * every enabled provider gets a "Sign in with ..." link carrying ``next``;
+    * ``sso.hide_local_login`` hides the password form behind a link to
+      ``?local=1``, the break-glass way back to it. With no enabled provider
+      the form is shown anyway, since there would be nothing else;
+    * ``sso.auto_redirect_provider`` answers with a redirect to that provider,
+      except for a signed-in visitor, ``?local=1``, ``?logged_out=1``,
+      ``?reset=ok``, any ``sso_error`` (a failed SSO login must not loop) and a
+      provider that is disabled or gone.
     """
+    from specivo.services.sso.auth_settings import get_login_policy
+    from specivo.services.sso.login import SsoLoginService
+
     user = await get_current_user_optional(request, db)
+    next_path = safe_next_path(next_url)
+    want_local = local == "1"
+    policy = await get_login_policy(db)
+    providers = await SsoLoginService().list_enabled_providers(db)
+
+    redirect_slug = policy.auto_redirect_provider
+    if (
+        redirect_slug
+        and user is None
+        and not want_local
+        and logged_out != "1"
+        and reset != "ok"
+        and not sso_error
+        and any(p.slug == redirect_slug for p in providers)
+    ):
+        response = RedirectResponse(sso_login_path(redirect_slug, next_path), status_code=302)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    show_local_form = want_local or not policy.hide_local_login or not providers
+    local_query = {"local": "1", **({"next": next_path} if next_path else {})}
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -64,9 +101,16 @@ async def login_page(
         context={
             "user": user,
             "reset_ok": reset == "ok",
-            "next_path": safe_next_path(next_url),
+            "next_path": next_path,
             "sso_error_message": sso_error_message(sso_error),
+            "sso_idp_unreachable": sso_error == "sso_idp_unreachable",
             "logged_out": logged_out == "1",
+            "sso_buttons": [
+                {"display_name": p.display_name, "url": sso_login_path(p.slug, next_path)} for p in providers
+            ],
+            "show_local_form": show_local_form,
+            "local_login_url": "?" + urlencode(local_query),
+            "local_login_admins_only": policy.local_login_admins_only,
         },
     )
 

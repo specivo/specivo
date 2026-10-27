@@ -33,7 +33,7 @@ IdP's keys cannot be reached, so the IdP may retry. The work lives in
 from __future__ import annotations
 
 from typing import Annotated, Any
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, quote, urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -110,6 +110,16 @@ def sso_error_message(code: str | None) -> str | None:
 
 def _prefix(settings: Settings) -> str:
     return settings.stealth_prefix.rstrip("/")
+
+
+def sso_login_path(slug: str, next_path: str = "") -> str:
+    """The URL that starts a login at provider ``slug`` (stealth prefix included).
+
+    ``next_path`` must already have been through ``safe_next_path``; an empty
+    one is left out.
+    """
+    path = f"{_prefix(get_settings())}/auth/oidc/{quote(slug, safe='')}/login/"
+    return f"{path}?{urlencode({'next': next_path})}" if next_path else path
 
 
 def _clear_tx_cookie(response: RedirectResponse, settings: Settings) -> None:

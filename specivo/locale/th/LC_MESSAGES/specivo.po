@@ -6895,3 +6895,24 @@ msgstr "เชื่อมต่อโดย"
 #: specivo/templates/themes/default/pages/admin/user_detail.html
 msgid "No accounts are connected."
 msgstr "ไม่มีบัญชีที่เชื่อมต่อ"
+
+#: specivo/templates/themes/default/pages/auth/login.html:98
+msgid "Administrators can sign in with a local account."
+msgstr "ผู้ดูแลระบบสามารถลงชื่อเข้าใช้ด้วยบัญชีภายในได้"
+
+#: specivo/templates/themes/default/pages/auth/login.html:105
+#, python-format
+msgid "Sign in with %(name)s"
+msgstr "ลงชื่อเข้าใช้ด้วย %(name)s"
+
+#: specivo/templates/themes/default/pages/auth/login.html:112
+msgid "or"
+msgstr "หรือ"
+
+#: specivo/templates/themes/default/pages/auth/login.html:115
+msgid "Only administrators can sign in with a password. Everyone else signs in with single sign-on."
+msgstr "เฉพาะผู้ดูแลระบบเท่านั้นที่ลงชื่อเข้าใช้ด้วยรหัสผ่านได้ ผู้ใช้อื่นลงชื่อเข้าใช้ผ่านการลงชื่อเข้าใช้ครั้งเดียว (SSO)"
+
+#: specivo/templates/themes/default/pages/auth/login.html:160
+msgid "Sign in with a local account"
+msgstr "ลงชื่อเข้าใช้ด้วยบัญชีภายใน"

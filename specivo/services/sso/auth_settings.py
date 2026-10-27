@@ -1,20 +1,25 @@
 """Instance-wide sign-in settings stored in the ``settings`` table under ``sso.*`` keys.
 
 Booleans are stored as ``"true"`` / ``"false"``; an unset key means the
-default. These settings are only stored and edited here; the login page and
-the API key checks read them through :func:`get_auth_settings`.
+default. These settings are stored and edited here. The login page and the
+password login read the sign-in part through :func:`get_login_policy`; the
+API key checks read :func:`get_auth_settings`.
 
-``SSO_FORCE_LOCAL_LOGIN`` (env) always wins over ``hide_local_login`` and
-``auto_redirect_provider``: it is the break-glass switch for a broken IdP.
+``SSO_FORCE_LOCAL_LOGIN`` (env) always wins over ``hide_local_login``,
+``auto_redirect_provider`` and ``local_login_admins_only``: it is the
+break-glass switch for a broken IdP or a bad SSO configuration, and
+:func:`get_login_policy` applies it.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.config import get_settings
 from specivo.core.exceptions import ValidationError
 from specivo.models.sso import SsoProvider
 from specivo.schemas.sso import AuthSettingsOut, AuthSettingsUpdate
@@ -30,7 +35,9 @@ __all__ = [
     "AUTO_REDIRECT_PROVIDER_KEY",
     "HIDE_LOCAL_LOGIN_KEY",
     "LOCAL_LOGIN_ADMINS_ONLY_KEY",
+    "LoginPolicy",
     "get_auth_settings",
+    "get_login_policy",
     "update_auth_settings",
 ]
 
@@ -72,6 +79,35 @@ async def get_auth_settings(session: AsyncSession) -> AuthSettingsOut:
     }
     values["auto_redirect_provider"] = stored.get(AUTO_REDIRECT_PROVIDER_KEY) or None
     return AuthSettingsOut.model_validate(values)
+
+
+@dataclass(frozen=True, slots=True)
+class LoginPolicy:
+    """How the login page and the password login behave right now.
+
+    The stored settings with ``SSO_FORCE_LOCAL_LOGIN`` applied: when the env
+    switch is on, every restriction is off and ``forced_local`` says why.
+    """
+
+    hide_local_login: bool
+    local_login_admins_only: bool
+    auto_redirect_provider: str | None
+    forced_local: bool
+
+
+async def get_login_policy(session: AsyncSession) -> LoginPolicy:
+    """The effective sign-in policy: the stored settings unless ``SSO_FORCE_LOCAL_LOGIN`` is on."""
+    if get_settings().sso_force_local_login:
+        return LoginPolicy(
+            hide_local_login=False, local_login_admins_only=False, auto_redirect_provider=None, forced_local=True
+        )
+    stored = await get_auth_settings(session)
+    return LoginPolicy(
+        hide_local_login=stored.hide_local_login,
+        local_login_admins_only=stored.local_login_admins_only,
+        auto_redirect_provider=stored.auto_redirect_provider,
+        forced_local=False,
+    )
 
 
 async def update_auth_settings(
