@@ -15,7 +15,8 @@ Rules enforced here (field-level rules are in :mod:`specivo.schemas.sso`):
   change of issuer or discovery URL also drops the "last known good" copy on
   the row.
 * A provider with linked identities is not deleted (409): disable it instead.
-  ``force`` unlinks the identities and revokes their users' sessions first.
+  ``force`` ends the SSO sessions that came from it and unlinks the
+  identities. The user-group memberships it managed are removed on delete.
 
 Every create / update / delete / secret change goes through :meth:`ProviderService._emit`,
 the single place where these events are recorded. Today it writes a
@@ -28,18 +29,18 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from pydantic import SecretStr
-from sqlalchemy import delete, func, select
+from sqlalchemy import CursorResult, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core import secret_box
 from specivo.core.config import Settings, get_settings
 from specivo.core.exceptions import AppError, NotFoundError
 from specivo.models.sso import SsoGroupMapping, SsoProvider, UserIdentity, is_allowed_client_secret_env
-from specivo.models.user_group import UserGroup
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.schemas.sso import (
     SsoGroupMappingIn,
     SsoGroupMappingOut,
@@ -133,6 +134,7 @@ class ProviderDeleteResult:
     slug: str
     identities_unlinked: int
     sessions_revoked: int
+    memberships_removed: int
 
 
 def _app_url(settings: Settings | None) -> str:
@@ -220,8 +222,23 @@ class ProviderService:
             return os.environ.get(provider.client_secret_env) or None
         return None
 
+    async def managed_membership_counts(self, session: AsyncSession, provider_ids: list[int]) -> dict[int, int]:
+        if not provider_ids:
+            return {}
+        rows = await session.execute(
+            select(UserGroupMember.managed_by_provider_id, func.count())
+            .where(UserGroupMember.managed_by_provider_id.in_(provider_ids))
+            .group_by(UserGroupMember.managed_by_provider_id)
+        )
+        return {pid: count for pid, count in rows.all() if pid is not None}
+
     def to_out(
-        self, provider: SsoProvider, *, identity_count: int = 0, settings: Settings | None = None
+        self,
+        provider: SsoProvider,
+        *,
+        identity_count: int = 0,
+        managed_membership_count: int = 0,
+        settings: Settings | None = None,
     ) -> SsoProviderOut:
         """The API view of a provider: no secret, plus the URLs to register at the IdP."""
         return SsoProviderOut(
@@ -253,6 +270,7 @@ class ProviderService:
             extra_auth_params={k: str(v) for k, v in (provider.extra_auth_params or {}).items()},
             discovery_fetched_at=provider.discovery_fetched_at,
             identity_count=identity_count,
+            managed_membership_count=managed_membership_count,
             redirect_uri=redirect_uri(provider.slug, settings),
             backchannel_logout_uri=backchannel_logout_uri(provider.slug, settings),
             created_at=provider.created_at,
@@ -261,7 +279,12 @@ class ProviderService:
 
     async def out(self, session: AsyncSession, provider: SsoProvider) -> SsoProviderOut:
         counts = await self.identity_counts(session, [provider.id])
-        return self.to_out(provider, identity_count=counts.get(provider.id, 0))
+        managed = await self.managed_membership_counts(session, [provider.id])
+        return self.to_out(
+            provider,
+            identity_count=counts.get(provider.id, 0),
+            managed_membership_count=managed.get(provider.id, 0),
+        )
 
     # ------------------------------------------------------------------
     # Create / update
@@ -378,31 +401,41 @@ class ProviderService:
     ) -> ProviderDeleteResult:
         """Delete a provider. With linked identities this is refused (409) unless ``force``.
 
-        ``force`` unlinks every identity of the provider and revokes the
-        sessions of the users who had one. Group mappings go with the
-        provider; user-group memberships it managed stay, as unmanaged ones.
+        ``force`` ends the SSO sessions that came from the provider's
+        identities (password sessions and other providers' sessions stay),
+        then unlinks the identities. Either way, the user-group memberships
+        the provider managed are removed: their authority came from the IdP.
+        Group mappings go with the provider.
         """
         provider = await self.get(session, provider_id)
-        user_ids = list(
-            (
-                await session.execute(select(UserIdentity.user_id).where(UserIdentity.provider_id == provider.id))
-            ).scalars()
+        identity_ids = list(
+            (await session.execute(select(UserIdentity.id).where(UserIdentity.provider_id == provider.id))).scalars()
         )
-        if user_ids and not force:
+        if identity_ids and not force:
             raise AppError(
                 code="sso_provider_has_identities",
                 message=(
-                    f"{len(user_ids)} user(s) sign in through this provider. Disable it instead, "
+                    f"{len(identity_ids)} user(s) sign in through this provider. Disable it instead, "
                     "or delete with force to unlink them and end their sessions."
                 ),
                 status_code=409,
-                details={"identity_count": len(user_ids)},
+                details={"identity_count": len(identity_ids)},
             )
 
-        sessions_revoked = 0
-        if user_ids:
+        # Sessions first: the identity FK on refresh_tokens is SET NULL, so
+        # once the identities are gone their sessions can no longer be found.
+        sessions_revoked = await self._revoke_sessions(session, identity_ids)
+        if identity_ids:
             await session.execute(delete(UserIdentity).where(UserIdentity.provider_id == provider.id))
-            sessions_revoked = await self._revoke_sessions(session, user_ids)
+        removed = cast(
+            CursorResult,
+            await session.execute(delete(UserGroupMember).where(UserGroupMember.managed_by_provider_id == provider.id)),
+        )
+        memberships_removed = removed.rowcount or 0
+        if memberships_removed:
+            from specivo.services.permission_service import clear_role_cache
+
+            clear_role_cache(session)
 
         slug = provider.slug
         await replace_auto_redirect_provider(session, slug, None)
@@ -410,7 +443,10 @@ class ProviderService:
             ProviderEvent.DELETED,
             provider,
             actor,
-            extra=f"identities_unlinked={len(user_ids)} sessions_revoked={sessions_revoked}",
+            extra=(
+                f"identities_unlinked={len(identity_ids)} sessions_revoked={sessions_revoked} "
+                f"memberships_removed={memberships_removed}"
+            ),
         )
         await session.execute(delete(SsoProvider).where(SsoProvider.id == provider.id))
         session.expunge(provider)
@@ -419,24 +455,19 @@ class ProviderService:
         return ProviderDeleteResult(
             provider_id=provider_id,
             slug=slug,
-            identities_unlinked=len(user_ids),
+            identities_unlinked=len(identity_ids),
             sessions_revoked=sessions_revoked,
+            memberships_removed=memberships_removed,
         )
 
-    async def _revoke_sessions(self, session: AsyncSession, user_ids: list[int]) -> int:
-        """End every session of these users; returns how many were revoked.
+    async def _revoke_sessions(self, session: AsyncSession, identity_ids: list[int]) -> int:
+        """End the SSO sessions signed in through these identities; returns refresh rows deleted."""
+        from specivo.services.session_service import SessionService
 
-        Revokes *all* refresh tokens of each user, not only their SSO ones:
-        until sessions record how they were created, this is the only safe
-        choice. Switch to the session-revocation primitive (sessions of one
-        identity) once it exists.
-        """
-        from specivo.services.auth_service import AuthService
-
-        auth = AuthService()
+        sessions = SessionService()
         total = 0
-        for user_id in sorted(set(user_ids)):
-            total += await auth.logout_all(session, user_id)
+        for identity_id in sorted(set(identity_ids)):
+            total += await sessions.revoke_by_identity(session, identity_id, reason="sso_provider_deleted")
         return total
 
     # ------------------------------------------------------------------
