@@ -25,6 +25,7 @@ from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.client_ip import get_client_ip
 from specivo.models.security_audit import SecurityAuditLog
 
 logger = logging.getLogger(__name__)
@@ -355,7 +356,7 @@ class SecurityAuditService:
         """Extract ip_address, request_id, and user_agent from a FastAPI Request."""
         if request is None:
             return {"ip_address": None, "request_id": None, "user_agent": None}
-        ip = request.client.host if request.client else None
+        ip = get_client_ip(request)
         request_id = request.headers.get("x-request-id")
         user_agent = request.headers.get("user-agent")
         return {"ip_address": ip, "request_id": request_id, "user_agent": user_agent}

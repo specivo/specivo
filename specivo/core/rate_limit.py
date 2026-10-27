@@ -29,6 +29,7 @@ import time
 
 from fastapi import Request, Response
 
+from specivo.core.client_ip import get_client_ip
 from specivo.core.exceptions import AppError
 
 logger = logging.getLogger(__name__)
@@ -120,54 +121,11 @@ class RateLimiter:
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract the client IP address from the request.
+    """The client's address for a per-IP bucket; ``"unknown"`` without a peer.
 
-    Only trusts ``X-Forwarded-For`` when the direct connection peer
-    (``request.client.host``) is listed in the XFF chain AND matches a
-    CIDR in ``settings.trusted_proxies``. When trusted, the leftmost
-    (original client) IP from XFF is returned.
-
-    When no trusted proxy is configured or the peer is not trusted,
-    ``request.client.host`` is returned directly.
-
-    Returns ``"unknown"`` if no client information is available.
+    See :mod:`specivo.core.client_ip` for when ``X-Forwarded-For`` is trusted.
     """
-    import ipaddress
-
-    from specivo.core.config import get_settings
-
-    client_host = request.client.host if request.client else None
-
-    if client_host:
-        forwarded_for = request.headers.get("X-Forwarded-For")
-        if forwarded_for:
-            xff_parts = [p.strip() for p in forwarded_for.split(",")]
-
-            # Check if the direct peer appears in the XFF chain — a sign
-            # that it is a proxy that appended itself.
-            if client_host in xff_parts:
-                settings = get_settings()
-
-                # Determine if the direct peer is a trusted proxy
-                is_trusted = False
-                if settings.trusted_proxies:
-                    try:
-                        client_addr = ipaddress.ip_address(client_host)
-                        is_trusted = any(
-                            client_addr in ipaddress.ip_network(cidr, strict=False) for cidr in settings.trusted_proxies
-                        )
-                    except (ValueError, TypeError):
-                        pass
-
-                # SECURITY: Only trust IPs explicitly listed in trusted_proxies.
-                # Do NOT fall back to is_private — an attacker on the local network
-                # could spoof X-Forwarded-For to bypass per-IP rate limits.
-                if is_trusted:
-                    return xff_parts[0]
-
-        return client_host
-
-    return "unknown"
+    return get_client_ip(request) or "unknown"
 
 
 def rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
@@ -198,16 +156,21 @@ def rate_limit(key_prefix: str, max_requests: int, window_seconds: int):
     return _dependency
 
 
-async def _apply(limiter: RateLimiter, request: Request, response: Response) -> None:
-    """Check *limiter* for this request, attach the headers, and raise 429 when over."""
+async def _apply(limiter: RateLimiter, request: Request, response: Response, identifier: str | None = None) -> None:
+    """Check *limiter* for this request, attach the headers, and raise 429 when over.
+
+    ``identifier`` names the bucket; by default it is the authenticated user
+    resolved upstream, else the client IP.
+    """
     from specivo.core.config import get_settings
 
     if not get_settings().rate_limit_enabled:
         return
     # Prefer an authenticated user ID if one has been resolved upstream.
     # For auth endpoints (login) we use IP because the user is not yet known.
-    user_id: str | None = getattr(request.state, "rate_limit_user_id", None)
-    identifier = str(user_id) if user_id else _get_client_ip(request)
+    if identifier is None:
+        user_id: str | None = getattr(request.state, "rate_limit_user_id", None)
+        identifier = str(user_id) if user_id else _get_client_ip(request)
 
     allowed, remaining, retry_after = await limiter.check(identifier)
 
@@ -243,13 +206,18 @@ async def enforce_rate_limit(
     key_prefix: str,
     max_requests: int,
     window_seconds: int,
+    *,
+    identifier: str | None = None,
 ) -> None:
-    """Apply a rate limit from inside another dependency.
+    """Apply a rate limit from inside another dependency or an endpoint.
 
     The check :func:`rate_limit` performs, for callers that cannot declare it
     as a route dependency because whether it applies at all is only known once
     the request's principal has been resolved. The anonymous buckets are the
     reason this exists: they must count anonymous reads only, and declaring
     them on the route would start metering signed-in callers against them too.
+
+    ``identifier`` replaces the default bucket (user, else client IP), for a
+    limit that belongs to something else, such as one identity provider.
     """
-    await _apply(RateLimiter(key_prefix, max_requests, window_seconds), request, response)
+    await _apply(RateLimiter(key_prefix, max_requests, window_seconds), request, response, identifier)

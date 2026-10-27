@@ -51,6 +51,7 @@ from fastapi import Depends, Request, Response
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.client_ip import get_client_ip
 from specivo.core.config import get_settings
 from specivo.core.constants import API_KEY_PREFIX, JWT_ALGORITHM
 from specivo.core.database import get_db
@@ -500,7 +501,7 @@ async def authenticate_request(
         )
 
     if use_api_key:
-        client_ip = request.client.host if request.client else None
+        client_ip = get_client_ip(request)
         user, api_key = await _api_key_service.authenticate(
             session=db,
             raw_key=token,
@@ -736,7 +737,7 @@ async def _log_auth_failure(db: AsyncSession, reason: str, request: Request) -> 
         from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
         audit = SecurityAuditService()
-        ip = request.client.host if request.client else None
+        ip = get_client_ip(request)
         request_id = request.headers.get("x-request-id")
         await audit.log_event(
             session=db,

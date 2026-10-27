@@ -311,3 +311,22 @@ class TestRateLimitEnabledSetting:
             await dep(request, response)
 
         assert response.headers["X-RateLimit-Limit"] == "10"
+
+
+class TestGetClientIpBehindNginx:
+    """The bundled nginx appends the client's address, never its own."""
+
+    def test_peer_is_trusted_nginx_and_header_names_the_client(self, monkeypatch):
+        from specivo.core.config import get_settings
+
+        monkeypatch.setattr(get_settings(), "trusted_proxies", ["172.16.0.0/12"])
+        req = TestGetClientIp()._make_request(forwarded_for="203.0.113.10", client_host="172.18.0.5")
+        assert _get_client_ip(req) == "203.0.113.10"
+
+    def test_two_clients_behind_nginx_get_two_buckets(self, monkeypatch):
+        from specivo.core.config import get_settings
+
+        monkeypatch.setattr(get_settings(), "trusted_proxies", ["172.16.0.0/12"])
+        first = TestGetClientIp()._make_request(forwarded_for="203.0.113.10", client_host="172.18.0.5")
+        second = TestGetClientIp()._make_request(forwarded_for="203.0.113.11", client_host="172.18.0.5")
+        assert _get_client_ip(first) != _get_client_ip(second)

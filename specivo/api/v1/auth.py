@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.auth_cookies import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
+from specivo.core.client_ip import get_client_ip
 from specivo.core.constants import API_KEY_PREFIX
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError
@@ -108,7 +109,7 @@ async def login(
 
     settings = get_settings()
     device_info = request.headers.get("User-Agent")
-    ip = request.client.host if request.client else None
+    ip = get_client_ip(request)
 
     try:
         result = await _service.login(

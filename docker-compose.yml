@@ -6,6 +6,11 @@ services:
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ${SPECIVO_DATA_DIR:-./specivo-data}/logs/nginx:/var/log/nginx
+    # nginx sits alone with the api on the `proxy` network, at a fixed address,
+    # so the api can trust exactly that address for X-Forwarded-For.
+    networks:
+      proxy:
+        ipv4_address: ${SPECIVO_NGINX_IP:-10.213.47.2}
     depends_on:
       api:
         condition: service_healthy
@@ -45,6 +50,12 @@ services:
       DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://specivo:specivo@db:5432/specivo}"
       REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
       SECRET_KEY: "${SECRET_KEY:-dev-insecure-key-change-me-in-production-please}"
+      # Only the bundled nginx may name the client in X-Forwarded-For. See
+      # "Client addresses behind a proxy" in the configuration guide.
+      TRUSTED_PROXIES: '${TRUSTED_PROXIES:-["${SPECIVO_NGINX_IP:-10.213.47.2}/32"]}'
+    networks:
+      - default
+      - proxy
     volumes:
       - ${SPECIVO_DATA_DIR:-./specivo-data}:/app/data
     depends_on:
@@ -166,3 +177,11 @@ services:
       retries: 10
       start_period: 5s
     restart: unless-stopped
+
+networks:
+  # nginx and the api only. Change SPECIVO_PROXY_SUBNET and SPECIVO_NGINX_IP
+  # together if the range is taken on your host.
+  proxy:
+    ipam:
+      config:
+        - subnet: ${SPECIVO_PROXY_SUBNET:-10.213.47.0/29}
