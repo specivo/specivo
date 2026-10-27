@@ -14,11 +14,14 @@ provisioning rules" of the SSO design):
    token's email only if *all* hold: ``trust_email_verified`` is on; the
    ``email_verified`` claim is the boolean ``true`` (not the string); exactly
    one user has that email, case-insensitively; that user is not an admin,
-   a service account or the anonymous user and has no identity at this
-   provider. This is the only code path that selects an account by email.
+   a service account or the anonymous user, has a verified email
+   (``email_verified_at`` set) and has no identity at this provider. This
+   is the only code path that selects an account by email.
 4. **JIT provisioning** when the provider allows it: a new active user
    without a password (``sso_email_missing`` without an email,
-   ``sso_email_conflict`` when another account has it: never linked).
+   ``sso_email_conflict`` when another account has it: never linked). Its
+   email counts as verified only when the provider is trusted and the claim
+   is the boolean ``true``.
 5. otherwise ``sso_account_not_provisioned``.
 
 Status checks always apply (:func:`_refusal_reason`): service accounts and
@@ -29,7 +32,8 @@ and does not block SSO.
 
 On a login (rules 1, 3 and 4) ``last_login_at`` is updated on the user and
 the identity, and the profile fields follow the token: display name, email
-(skipped, and logged, when another user has it) and language (``locale``
+(only a trusted, verified one; skipped, and logged, when another user has
+it) and language (``locale``
 mapped to a supported language). A link (rule 2) changes no profile field.
 Group and admin-flag mapping is applied elsewhere.
 """
@@ -135,6 +139,13 @@ def _email_from(claims: Mapping[str, Any], provider: SsoProvider) -> str | None:
 def _email_verified(claims: Mapping[str, Any]) -> bool:
     """``True`` only for the JSON boolean ``true``; the string ``"true"`` does not count."""
     return claims.get("email_verified") is True
+
+
+def _trusted_verified_email(provider: SsoProvider, claims: Mapping[str, Any]) -> bool:
+    """The token's email may be taken as verified: the admin trusts this IdP's
+    ``email_verified`` and the claim is the boolean ``true``. Only then is an
+    email copied onto an account or marked verified."""
+    return provider.trust_email_verified and _email_verified(claims)
 
 
 def map_locale(value: object, available: list[str] | None = None) -> str | None:
@@ -263,19 +274,25 @@ def _new_identity(user: User, provider: SsoProvider, id_token: IdTokenClaims, li
 async def _refresh_profile(
     db: AsyncSession, user: User, provider: SsoProvider, claims: Mapping[str, Any], sub_hash: str
 ) -> None:
-    """Follow the token's display name, email and language when they changed."""
+    """Follow the token's display name, email and language when they changed.
+
+    The email follows only a trusted, verified token email (otherwise an IdP
+    user could claim an address they do not own); the new address is then
+    marked verified now, so a verified flag never carries over to it.
+    """
     name = _text_claim(claims, provider, "name_claim", _MAX_DISPLAY_NAME_LENGTH)
     if name is not None and name != user.display_name:
         user.display_name = name
 
     email = _email_from(claims, provider)
     if email is not None and email != user.email:
-        if await _email_taken(db, email, except_user_id=user.id):
+        if not _trusted_verified_email(provider, claims):
+            logger.info("sso.profile.email_unverified provider=%s user_id=%s sub=%s", provider.slug, user.id, sub_hash)
+        elif await _email_taken(db, email, except_user_id=user.id):
             logger.info("sso.profile.email_conflict provider=%s user_id=%s sub=%s", provider.slug, user.id, sub_hash)
         else:
             user.email = email
-            if _email_verified(claims):
-                user.email_verified_at = utcnow()
+            user.email_verified_at = utcnow()
 
     language = map_locale(_claim(claims, provider, "locale_claim"))
     if language is not None and language != user.language:
@@ -359,6 +376,11 @@ async def _auto_link_target(
     if target.is_admin or target.is_service_account or target.is_anonymous:
         skip("protected_account")
         return None
+    if target.email_verified_at is None:
+        # A local account whose owner never proved the address: someone may
+        # have registered it first to receive the IdP identity (pre-account hijack).
+        skip("target_email_unverified")
+        return None
     if await _has_identity_at(db, target.id, provider):
         skip("already_linked_at_provider")
         return None
@@ -402,7 +424,7 @@ async def _provision(
             is_admin=False,
             is_service_account=False,
             must_change_password=False,
-            email_verified_at=now if _email_verified(claims) else None,
+            email_verified_at=now if _trusted_verified_email(provider, claims) else None,
         )
         # A savepoint: a concurrent sign-up that took the login or the email
         # between the checks and the insert only undoes this row.
