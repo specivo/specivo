@@ -79,6 +79,20 @@ async def test_email_reset_revokes_every_session(client: AsyncClient, db_session
     await _assert_sessions_dead(client, db_session, user, sessions)
 
 
+async def test_admin_api_reset_revokes_every_session(
+    client: AsyncClient, admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    user = await _create_user(db_session, "pwreset_revoke_admin")
+    sessions = [await _sign_in(client, user.login) for _ in range(2)]
+
+    resp = await admin_client.post(f"/api/v1/admin/users/{user.id}/reset-password/", json={"password": _NEW_PASSWORD})
+    assert resp.status_code == 200, resp.text
+
+    await _assert_sessions_dead(client, db_session, user, sessions)
+    # The administrator's own session is untouched.
+    assert (await admin_client.get("/api/v1/auth/sessions/")).status_code == 200
+
+
 async def test_cli_reset_revokes_every_session(client: AsyncClient, db_session: AsyncSession) -> None:
     user = await _create_user(db_session, "pwreset_revoke_cli")
     sessions = [await _sign_in(client, user.login) for _ in range(2)]

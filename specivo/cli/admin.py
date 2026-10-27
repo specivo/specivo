@@ -320,9 +320,16 @@ async def expire_legacy_passwords(session: AsyncSession, algorithm: str | None =
     clause = _legacy_hash_clause()
     if algorithm:
         clause = clause & (_algorithm_of_hash_expr() == algorithm)
-    count = (await session.execute(select(func.count()).where(clause))).scalar_one()
+    user_ids = list((await session.execute(select(User.id).where(clause))).scalars().all())
+    count = len(user_ids)
     if not count:
         return 0
+    # The password is replaced by one nobody knows: every session of these
+    # accounts ends now (a session left behind could not even complete the
+    # forced change, which asks for the current password).
+    sessions = SessionService()
+    for user_id in user_ids:
+        await sessions.revoke_user_sessions(session, user_id, reason="legacy_password_expired")
     # One hash of a discarded random secret serves every row: nobody can
     # produce a password matching it, so sharing it reveals nothing.
     unusable = hash_password(secrets.token_urlsafe(32))

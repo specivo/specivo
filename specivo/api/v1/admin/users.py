@@ -21,6 +21,7 @@ from specivo.services.anonymous_user_service import real_users_clause, refuse_an
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
+from specivo.services.session_service import SessionService
 
 router = APIRouter(tags=["admin-users"])
 _audit = SecurityAuditService()
@@ -198,6 +199,9 @@ async def reset_password(
     user.failed_login_count = 0
     user.locked_until = None
     user.must_change_password = forced_change
+    # A reset is compromise recovery: every session of the account ends now,
+    # access tokens included.
+    await SessionService().revoke_user_sessions(db, user.id, reason="admin_password_reset")
     await db.flush()
 
     try:

@@ -6,11 +6,14 @@ the bulk expiry that forces those accounts through password recovery.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 
 import specivo.services.password_hashers as hashers_mod
 from specivo.cli.admin import _hash_counts, expire_legacy_passwords, legacy_password_rows
 from specivo.core.config import get_settings
+from specivo.core.exceptions import AppError
 from specivo.services.auth_utils import is_legacy_hash, verify_password
 from specivo.services.password_hashers import ForeignBcryptHasher, RedmineSHA1WrappedHasher
 from tests.factories.user import TEST_PASSWORD, ServiceAccountFactory, UserFactory
@@ -86,6 +89,42 @@ class TestExpire:
         # A native account is untouched.
         assert accounts["lp_native"].must_change_password is False
         assert verify_password(TEST_PASSWORD, accounts["lp_native"].password_hash)
+
+    async def test_expired_accounts_lose_every_session(self, db_session, accounts):
+        """Their password is gone, so a session left behind could neither stay nor finish a forced change."""
+        import uuid
+
+        from sqlalchemy import select
+
+        from specivo.core.security import _authenticate_jwt
+        from specivo.core.utils import utcnow
+        from specivo.models.auth import RefreshToken
+        from specivo.services.auth_service import _make_access_token
+
+        tokens = {}
+        for login in ("lp_redmine", "lp_native"):
+            sid = uuid.uuid4()
+            db_session.add(
+                RefreshToken(
+                    user_id=accounts[login].id,
+                    token_hash=f"{login:x<64}"[:64],
+                    session_id=sid,
+                    expires_at=utcnow() + timedelta(days=1),
+                )
+            )
+            tokens[login] = _make_access_token(accounts[login], get_settings(), session_id=sid)
+        await db_session.commit()
+
+        await expire_legacy_passwords(db_session, "redmine_sha1")
+        await db_session.commit()
+
+        rows = (await db_session.execute(select(RefreshToken.user_id))).scalars().all()
+        assert accounts["lp_redmine"].id not in rows
+        assert accounts["lp_native"].id in rows
+        with pytest.raises(AppError) as exc_info:
+            await _authenticate_jwt(tokens["lp_redmine"], db_session)
+        assert exc_info.value.code == "auth_token_revoked"
+        assert (await _authenticate_jwt(tokens["lp_native"], db_session)).id == accounts["lp_native"].id
 
     async def test_a_service_account_just_loses_the_hash(self, db_session):
         bot = ServiceAccountFactory.build(
