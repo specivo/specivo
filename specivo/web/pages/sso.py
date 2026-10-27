@@ -40,7 +40,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.auth_cookies import set_auth_cookies
-from specivo.core.client_ip import get_client_ip
+from specivo.core.client_ip import get_client_ip, rate_limit_subject
 from specivo.core.config import Settings, get_settings
 from specivo.core.database import get_db
 from specivo.core.i18n import gettext as _
@@ -379,7 +379,7 @@ async def sso_backchannel_logout(
     provider = await _service.get_enabled_provider(db, slug)
     if provider is None or not provider.backchannel_logout_enabled:
         return _backchannel_answer(404, {"error": "not_found"})
-    sender = get_client_ip(request) or "unknown"
+    sender = rate_limit_subject(get_client_ip(request) or "unknown")
     await enforce_rate_limit(request, response, *_BACKCHANNEL_RATE_LIMIT, identifier=f"provider:{provider.id}:{sender}")
 
     try:
