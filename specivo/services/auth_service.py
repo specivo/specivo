@@ -17,8 +17,8 @@ import hashlib
 import logging
 import secrets
 import uuid
-from dataclasses import dataclass
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import jwt
@@ -26,6 +26,7 @@ from jinja2 import Environment, FileSystemLoader
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core import secret_box
 from specivo.core.config import get_settings
 from specivo.core.constants import CREDENTIAL_TOKEN_ENTROPY_BYTES, JWT_ALGORITHM, REFRESH_TOKEN_ENTROPY_BYTES
 from specivo.core.exceptions import AppError
@@ -133,6 +134,20 @@ class LoginResult:
     # endpoint audits it; the service has no request to audit with.
     hash_upgraded_from: str | None = None
 
+
+@dataclass(frozen=True, slots=True)
+class SsoSession:
+    """The tokens of a session started by :meth:`AuthService.create_sso_session`."""
+
+    access_token: str = field(repr=False)
+    refresh_token: str = field(repr=False)
+    user_id: int
+    session_id: uuid.UUID
+    absolute_expires_at: datetime
+
+
+#: ``secret_box`` purpose of ``RefreshToken.id_token_encrypted``.
+ID_TOKEN_PURPOSE = "sso-id-token"
 
 _sessions = SessionService()
 
@@ -285,6 +300,52 @@ class AuthService:
             refresh_token=refresh_raw,
             user_id=user.id,
             hash_upgraded_from=hash_upgraded_from,
+        )
+
+    async def create_sso_session(
+        self,
+        session: AsyncSession,
+        *,
+        user: User,
+        identity: UserIdentity,
+        provider: SsoProvider,
+        id_token: str,
+        idp_sid: str | None,
+        device_info: str | None = None,
+        ip: str | None = None,
+    ) -> SsoSession:
+        """Start a new session for a user who signed in through ``provider``.
+
+        The caller has already validated the ID token and resolved ``user``
+        and ``identity`` (account status included). The refresh row records
+        ``auth_method="sso"``, the identity, the IdP session id (``sid``
+        claim, for back-channel logout) and the ID token encrypted for
+        ``id_token_hint``. ``absolute_expires_at`` caps the session at
+        ``provider.session_max_age_hours``, after which the user goes back to
+        the IdP; ``expires_at`` never runs past it. Always new tokens, never a
+        session the browser brought along.
+        """
+        settings = get_settings()
+        now = utcnow()
+        absolute_expires_at = now + timedelta(hours=provider.session_max_age_hours)
+
+        refresh_raw = _make_refresh_token()
+        record = await self._store_refresh_token(session, user.id, refresh_raw, device_info, ip, settings)
+        record.auth_method = "sso"
+        record.user_identity_id = identity.id
+        record.idp_sid = idp_sid[:255] if idp_sid else None
+        record.id_token_encrypted = secret_box.encrypt(id_token, ID_TOKEN_PURPOSE)
+        record.absolute_expires_at = absolute_expires_at
+        record.expires_at = min(record.expires_at, absolute_expires_at)
+
+        access_token = _make_access_token(user, settings, remember=True, session_id=record.session_id)
+        await session.flush()
+        return SsoSession(
+            access_token=access_token,
+            refresh_token=refresh_raw,
+            user_id=user.id,
+            session_id=record.session_id,
+            absolute_expires_at=absolute_expires_at,
         )
 
     async def refresh(

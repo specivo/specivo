@@ -18,6 +18,7 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.auth_cookies import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
 from specivo.core.constants import API_KEY_PREFIX
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError
@@ -40,18 +41,6 @@ from specivo.services.auth_utils import validate_password_policy
 router = APIRouter()
 _service = AuthService()
 
-# ---------------------------------------------------------------------------
-# Cookie names and paths (mirror the wiki spec)
-# ---------------------------------------------------------------------------
-# NOTE: Using plain names ("access_token", "refresh_token") for backward
-# compatibility with existing sessions. Future versions should consider the
-# ``__Host-`` prefix (e.g. ``__Host-access_token``) which binds the cookie
-# to the origin (requires Secure, Path=/, no Domain). Changing the name
-# now would invalidate all active sessions.
-_ACCESS_COOKIE = "access_token"
-_REFRESH_COOKIE = "refresh_token"
-_REFRESH_COOKIE_PATH = "/"
-
 
 def _request_access_token(request: Request, cookie_value: str | None) -> str | None:
     """Return the access JWT the request carries: the Bearer header, else the cookie.
@@ -66,49 +55,6 @@ def _request_access_token(request: Request, cookie_value: str | None) -> str | N
     return cookie_value
 
 
-def _set_auth_cookies(
-    response: Response,
-    access_token: str,
-    refresh_token: str,
-    settings,
-    *,
-    remember: bool = False,
-) -> None:
-    """Attach httpOnly auth cookies for browser clients.
-
-    When *remember* is ``False`` (the default), cookies are set without
-    ``max_age`` so the browser treats them as session cookies and discards
-    them when the browser closes.  When ``True``, persistent ``max_age``
-    values are used.
-    """
-    access_kwargs: dict = dict(
-        key=_ACCESS_COOKIE,
-        value=access_token,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path="/",
-    )
-    refresh_kwargs: dict = dict(
-        key=_REFRESH_COOKIE,
-        value=refresh_token,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path=_REFRESH_COOKIE_PATH,
-    )
-    if remember:
-        access_kwargs["max_age"] = settings.access_token_expire_minutes * 60
-        refresh_kwargs["max_age"] = settings.refresh_token_expire_days * 86400
-    response.set_cookie(**access_kwargs)
-    response.set_cookie(**refresh_kwargs)
-
-
-def _clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(key=_ACCESS_COOKIE, path="/")
-    response.delete_cookie(key=_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
-
-
 def _read_remember_from_access_cookie(request: Request, settings) -> bool:
     """Read the ``rem`` claim from the access token cookie.
 
@@ -118,7 +64,7 @@ def _read_remember_from_access_cookie(request: Request, settings) -> bool:
     """
     import jwt as pyjwt
 
-    token = request.cookies.get(_ACCESS_COOKIE)
+    token = request.cookies.get(ACCESS_COOKIE)
     if not token:
         return True  # backward compat: no cookie → persistent (old behaviour)
     try:
@@ -214,7 +160,7 @@ async def login(
         expires_in=settings.access_token_expire_minutes * 60,
     )
     response = JSONResponse(content=token_data.model_dump(), status_code=status.HTTP_200_OK)
-    _set_auth_cookies(response, access_token, refresh_token, settings, remember=body.remember)
+    set_auth_cookies(response, access_token, refresh_token, settings, remember=body.remember)
     return response
 
 
@@ -234,7 +180,7 @@ async def refresh(
     db: Annotated[AsyncSession, Depends(get_db)],
     _rl: Annotated[None, Depends(_refresh_rate_limit)],
     body: RefreshRequest | None = None,
-    refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+    refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
 ) -> Response:
     from specivo.core.config import get_settings
 
@@ -263,7 +209,7 @@ async def refresh(
         expires_in=settings.access_token_expire_minutes * 60,
     )
     response = JSONResponse(content=token_data.model_dump(), status_code=status.HTTP_200_OK)
-    _set_auth_cookies(response, access_token, new_refresh_token, settings, remember=remember)
+    set_auth_cookies(response, access_token, new_refresh_token, settings, remember=remember)
     return response
 
 
@@ -281,8 +227,8 @@ async def logout(
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: RefreshRequest | None = None,
-    refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
-    access_token_cookie: Annotated[str | None, Cookie(alias=_ACCESS_COOKIE)] = None,
+    refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
+    access_token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE)] = None,
 ) -> Response:
     """Revoke the session named by the refresh token and/or the access token.
 
@@ -298,7 +244,7 @@ async def logout(
     )
 
     response = Response(status_code=status.HTTP_204_NO_CONTENT)
-    _clear_auth_cookies(response)
+    clear_auth_cookies(response)
     return response
 
 
@@ -318,7 +264,7 @@ async def logout_all(
     """Revoke all sessions for the currently authenticated user."""
     count = await _service.logout_all(session=db, user_id=current_user.id)
     response = JSONResponse(content={"revoked_count": count}, status_code=status.HTTP_200_OK)
-    _clear_auth_cookies(response)
+    clear_auth_cookies(response)
     return response
 
 
@@ -492,8 +438,8 @@ async def change_password(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     _rl: Annotated[None, Depends(_change_password_rate_limit)],
-    refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
-    access_token_cookie: Annotated[str | None, Cookie(alias=_ACCESS_COOKIE)] = None,
+    refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
+    access_token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE)] = None,
 ) -> ChangePasswordResponse:
     """Change your own password, proving ownership with the current one.
 

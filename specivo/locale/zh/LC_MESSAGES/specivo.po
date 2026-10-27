@@ -6645,10 +6645,44 @@ msgstr "环境变量有问题"
 msgid "No identity providers yet."
 msgstr "尚无身份提供商。"
 
-
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
 msgid_plural "%(count)s group memberships granted by this provider are removed with it."
 msgstr[0] "此提供商授予的 %(count)s 个组成员身份将一并移除。"
 
+#: specivo/web/pages/sso.py:60
+msgid ""
+"Your sign-in expired or was started in another browser. Please try again."
+msgstr "您的登录已过期，或是在其他浏览器中发起的。请重试。"
+
+#: specivo/web/pages/sso.py:61
+msgid "The identity provider refused the sign-in."
+msgstr "身份提供商拒绝了登录。"
+
+#: specivo/web/pages/sso.py:62
+msgid "The identity provider is unavailable. Please try again later."
+msgstr "身份提供商不可用。请稍后重试。"
+
+#: specivo/web/pages/sso.py:63
+msgid ""
+"Single sign-on is not configured correctly. Contact your administrator."
+msgstr "单点登录配置不正确。请联系您的管理员。"
+
+#: specivo/web/pages/sso.py:66
+msgid ""
+"No account here is connected to your identity provider account. Contact "
+"your administrator."
+msgstr "此处没有任何账户与您的身份提供商账户关联。请联系您的管理员。"
+
+#: specivo/web/pages/sso.py:68
+msgid "This account is disabled. Contact your administrator."
+msgstr "此账户已停用。请联系您的管理员。"
+
+#: specivo/web/pages/sso.py:69
+msgid "Single sign-on is temporarily unavailable. Please try again later."
+msgstr "单点登录暂时不可用。请稍后重试。"
+
+#: specivo/web/pages/sso.py:71
+msgid "Single sign-on failed. Please try again."
+msgstr "单点登录失败。请重试。"

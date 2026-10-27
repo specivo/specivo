@@ -35,6 +35,7 @@ from specivo.testing.conftest_base import (  # noqa: F401
     unauth_client,
 )
 from specivo.testing.oidc_mock import mock_idp  # noqa: F401
+from specivo.testing.sso import sso_login, sso_provider  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # Auto-skip pro / enterprise tests in core-only mode

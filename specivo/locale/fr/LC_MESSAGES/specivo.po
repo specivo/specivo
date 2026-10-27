@@ -6929,7 +6929,6 @@ msgstr "Problème de variable d'environnement"
 msgid "No identity providers yet."
 msgstr "Aucun fournisseur d'identité pour l'instant."
 
-
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
@@ -6941,3 +6940,47 @@ msgstr[1] ""
 "%(count)s appartenances à des groupes accordées par ce fournisseur sont "
 "supprimées avec lui."
 
+#: specivo/web/pages/sso.py:60
+msgid ""
+"Your sign-in expired or was started in another browser. Please try again."
+msgstr ""
+"Votre connexion a expiré ou a été lancée dans un autre navigateur. Veuillez"
+" réessayer."
+
+#: specivo/web/pages/sso.py:61
+msgid "The identity provider refused the sign-in."
+msgstr "Le fournisseur d'identité a refusé la connexion."
+
+#: specivo/web/pages/sso.py:62
+msgid "The identity provider is unavailable. Please try again later."
+msgstr ""
+"Le fournisseur d'identité est indisponible. Veuillez réessayer plus tard."
+
+#: specivo/web/pages/sso.py:63
+msgid ""
+"Single sign-on is not configured correctly. Contact your administrator."
+msgstr ""
+"L'authentification unique n'est pas configurée correctement. Contactez "
+"votre administrateur."
+
+#: specivo/web/pages/sso.py:66
+msgid ""
+"No account here is connected to your identity provider account. Contact "
+"your administrator."
+msgstr ""
+"Aucun compte ici n'est associé à votre compte du fournisseur d'identité. "
+"Contactez votre administrateur."
+
+#: specivo/web/pages/sso.py:68
+msgid "This account is disabled. Contact your administrator."
+msgstr "Ce compte est désactivé. Contactez votre administrateur."
+
+#: specivo/web/pages/sso.py:69
+msgid "Single sign-on is temporarily unavailable. Please try again later."
+msgstr ""
+"L'authentification unique est temporairement indisponible. Veuillez "
+"réessayer plus tard."
+
+#: specivo/web/pages/sso.py:71
+msgid "Single sign-on failed. Please try again."
+msgstr "L'authentification unique a échoué. Veuillez réessayer."

@@ -20,6 +20,7 @@ from specivo.web.deps import (
     require_user,
     safe_next_path,
 )
+from specivo.web.pages.sso import sso_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,7 @@ async def login_page(
     db: AsyncSession = Depends(get_db),  # noqa: B008
     reset: str = Query(""),  # noqa: B008
     next_url: str = Query("", alias="next"),  # noqa: B008
+    sso_error: str = Query(""),  # noqa: B008
 ) -> HTMLResponse:
     """Render the login page (standalone layout, no sidebar).
 
@@ -44,6 +46,11 @@ async def login_page(
     page they asked for instead of the dashboard. It is validated here rather
     than trusted — only a path within this site survives ``safe_next_path`` —
     so the parameter cannot be used to bounce somebody to another origin.
+
+    ``?sso_error=`` is where a refused single sign-on lands. Only its code is
+    read, and only a fixed, translated message is shown for it
+    (``sso_error_message``); nothing the identity provider sent reaches the
+    page.
     """
     user = await get_current_user_optional(request, db)
     templates = get_templates()
@@ -54,6 +61,7 @@ async def login_page(
             "user": user,
             "reset_ok": reset == "ok",
             "next_path": safe_next_path(next_url),
+            "sso_error_message": sso_error_message(sso_error),
         },
     )
 

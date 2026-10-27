@@ -6773,10 +6773,50 @@ msgstr "ตัวแปรสภาพแวดล้อมมีปัญหา
 msgid "No identity providers yet."
 msgstr "ยังไม่มีผู้ให้บริการข้อมูลประจำตัว"
 
-
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
 msgid_plural "%(count)s group memberships granted by this provider are removed with it."
 msgstr[0] "การเป็นสมาชิกกลุ่ม %(count)s รายการที่ผู้ให้บริการนี้มอบให้จะถูกลบไปด้วย"
 
+#: specivo/web/pages/sso.py:60
+msgid ""
+"Your sign-in expired or was started in another browser. Please try again."
+msgstr ""
+"การลงชื่อเข้าใช้หมดอายุหรือเริ่มต้นจากเบราว์เซอร์อื่น กรุณาลองอีกครั้ง"
+
+#: specivo/web/pages/sso.py:61
+msgid "The identity provider refused the sign-in."
+msgstr "ผู้ให้บริการยืนยันตัวตนปฏิเสธการลงชื่อเข้าใช้"
+
+#: specivo/web/pages/sso.py:62
+msgid "The identity provider is unavailable. Please try again later."
+msgstr "ผู้ให้บริการยืนยันตัวตนไม่พร้อมใช้งาน กรุณาลองอีกครั้งในภายหลัง"
+
+#: specivo/web/pages/sso.py:63
+msgid ""
+"Single sign-on is not configured correctly. Contact your administrator."
+msgstr ""
+"การลงชื่อเข้าใช้ครั้งเดียว (SSO) ตั้งค่าไม่ถูกต้อง กรุณาติดต่อผู้ดูแลระบบ"
+
+#: specivo/web/pages/sso.py:66
+msgid ""
+"No account here is connected to your identity provider account. Contact "
+"your administrator."
+msgstr ""
+"ไม่มีบัญชีในระบบนี้ที่เชื่อมต่อกับบัญชีผู้ให้บริการยืนยันตัวตนของคุณ "
+"กรุณาติดต่อผู้ดูแลระบบ"
+
+#: specivo/web/pages/sso.py:68
+msgid "This account is disabled. Contact your administrator."
+msgstr "บัญชีนี้ถูกปิดใช้งาน กรุณาติดต่อผู้ดูแลระบบ"
+
+#: specivo/web/pages/sso.py:69
+msgid "Single sign-on is temporarily unavailable. Please try again later."
+msgstr ""
+"การลงชื่อเข้าใช้ครั้งเดียว (SSO) ไม่พร้อมใช้งานชั่วคราว "
+"กรุณาลองอีกครั้งในภายหลัง"
+
+#: specivo/web/pages/sso.py:71
+msgid "Single sign-on failed. Please try again."
+msgstr "การลงชื่อเข้าใช้ครั้งเดียว (SSO) ล้มเหลว กรุณาลองอีกครั้ง"

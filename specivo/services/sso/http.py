@@ -19,8 +19,11 @@ Discovery, JWKS, token and userinfo requests all use
   loopback ranges stay allowed: self-hosted IdPs on internal networks are
   the main use case, and only admins configure IdP URLs. The host name is
   resolved once per hop, every answer is checked, and the connection is
-  pinned to the checked address (TLS still verifies the host name through
-  SNI), so DNS rebinding cannot swap the address after the check;
+  pinned to the checked addresses (TLS still verifies the host name through
+  SNI), so DNS rebinding cannot swap the address after the check. The
+  answers are tried in order and the next one is used when connecting fails
+  (``localhost`` resolving to ``::1`` for an IPv4-only IdP, a broken IPv6
+  path), all within the request's total deadline;
 * proxy and certificate settings from the environment are ignored
   (``trust_env=False``).
 
@@ -169,7 +172,8 @@ class _GuardedTransport(httpx.AsyncBaseTransport):
     With ``resolver=None`` (the test seam) only IP-literal hosts are checked
     and requests pass through unchanged. With a resolver, the host is resolved,
     every answer must pass :func:`is_blocked_address`, and the request is sent
-    to the first answer with the original ``Host`` header and TLS server name.
+    to the answers in order, with the original ``Host`` header and TLS server
+    name, moving to the next one only when connecting fails.
     The transport is called once per redirect hop, so every hop is checked.
     """
 
@@ -195,18 +199,30 @@ class _GuardedTransport(httpx.AsyncBaseTransport):
             raise httpx.ConnectError(f"Identity provider host {host!r} has no address", request=request)
         self._refuse_if_blocked(addresses, request)
 
-        pinned_ip = addresses[0].split("%", 1)[0]
         extensions: dict[str, Any] = dict(request.extensions)
         if request.url.scheme == "https":
             extensions["sni_hostname"] = host
-        pinned = httpx.Request(
-            request.method,
-            request.url.copy_with(host=pinned_ip),
-            headers=request.headers,  # keeps the original Host header
-            stream=request.stream,
-            extensions=extensions,
-        )
-        return await self._inner.handle_async_request(pinned)
+        # Every answer passed the check above; try them in order. A dual-stack
+        # name (``localhost`` answers ::1 first) or a broken IPv6 path must not
+        # fail when the next address works. Only a failure to *connect* moves
+        # on: after any byte may have been sent the error is raised as is. The
+        # client's total deadline still bounds all attempts together.
+        last_error: httpx.ConnectError | httpx.ConnectTimeout | None = None
+        for address in dict.fromkeys(a.split("%", 1)[0] for a in addresses):
+            pinned = httpx.Request(
+                request.method,
+                request.url.copy_with(host=address),
+                headers=request.headers,  # keeps the original Host header
+                stream=request.stream,
+                extensions=extensions,
+            )
+            try:
+                return await self._inner.handle_async_request(pinned)
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                last_error = exc
+        if last_error is None:  # pragma: no cover - addresses is never empty here
+            raise httpx.ConnectError(f"Identity provider host {host!r} has no address", request=request)
+        raise last_error
 
     @staticmethod
     def _refuse_if_blocked(addresses: list[str], request: httpx.Request) -> None:

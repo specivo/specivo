@@ -6936,7 +6936,6 @@ msgstr "Problema con la variable de entorno"
 msgid "No identity providers yet."
 msgstr "Todavía no hay proveedores de identidad."
 
-
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
@@ -6948,3 +6947,47 @@ msgstr[1] ""
 "%(count)s pertenencias a grupos otorgadas por este proveedor se eliminan "
 "con él."
 
+#: specivo/web/pages/sso.py:60
+msgid ""
+"Your sign-in expired or was started in another browser. Please try again."
+msgstr ""
+"Tu inicio de sesión caducó o se inició en otro navegador. Inténtalo de "
+"nuevo."
+
+#: specivo/web/pages/sso.py:61
+msgid "The identity provider refused the sign-in."
+msgstr "El proveedor de identidad rechazó el inicio de sesión."
+
+#: specivo/web/pages/sso.py:62
+msgid "The identity provider is unavailable. Please try again later."
+msgstr ""
+"El proveedor de identidad no está disponible. Inténtalo de nuevo más tarde."
+
+#: specivo/web/pages/sso.py:63
+msgid ""
+"Single sign-on is not configured correctly. Contact your administrator."
+msgstr ""
+"El inicio de sesión único no está configurado correctamente. Contacta con "
+"tu administrador."
+
+#: specivo/web/pages/sso.py:66
+msgid ""
+"No account here is connected to your identity provider account. Contact "
+"your administrator."
+msgstr ""
+"Ninguna cuenta de este sitio está vinculada a tu cuenta del proveedor de "
+"identidad. Contacta con tu administrador."
+
+#: specivo/web/pages/sso.py:68
+msgid "This account is disabled. Contact your administrator."
+msgstr "Esta cuenta está desactivada. Contacta con tu administrador."
+
+#: specivo/web/pages/sso.py:69
+msgid "Single sign-on is temporarily unavailable. Please try again later."
+msgstr ""
+"El inicio de sesión único no está disponible temporalmente. Inténtalo de "
+"nuevo más tarde."
+
+#: specivo/web/pages/sso.py:71
+msgid "Single sign-on failed. Please try again."
+msgstr "El inicio de sesión único falló. Inténtalo de nuevo."

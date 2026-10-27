@@ -1,7 +1,7 @@
 """Fixtures for the SSO protocol-layer unit tests (no database).
 
 ``fake_redis`` is a small in-memory stand-in for the ``redis.asyncio`` calls
-the SSO services make (``get``, ``set`` with ``ex``/``nx``, ``delete``), with a
+the SSO services make (``get``, ``set`` with ``ex``/``nx``, ``getdel``, ``delete``), with a
 controllable clock for TTLs. ``broken_redis`` raises on every call, for the
 "Redis unavailable" paths. ``sso_provider`` is a transient ``SsoProvider`` row
 pointing at the ``mock_idp`` fixture.
@@ -59,6 +59,12 @@ class FakeRedis:
             return None
         self.store[key] = (str(value), self.now + ex if ex else None)
         return True
+
+    async def getdel(self, key: str) -> str | None:
+        self.ops.append(("getdel", key))
+        value = self._live(key)
+        self.store.pop(key, None)
+        return value
 
     async def delete(self, *keys: str) -> int:
         self.ops.append(("delete", ",".join(keys)))

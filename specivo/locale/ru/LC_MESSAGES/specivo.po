@@ -6884,7 +6884,6 @@ msgstr "Проблема с переменной окружения"
 msgid "No identity providers yet."
 msgstr "Провайдеров удостоверений пока нет."
 
-
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
@@ -6899,3 +6898,41 @@ msgstr[2] ""
 "%(count)s членств в группах, выданных этим провайдером, удаляются вместе "
 "с ним."
 
+#: specivo/web/pages/sso.py:60
+msgid ""
+"Your sign-in expired or was started in another browser. Please try again."
+msgstr ""
+"Срок входа истёк, или вход был начат в другом браузере. Попробуйте ещё раз."
+
+#: specivo/web/pages/sso.py:61
+msgid "The identity provider refused the sign-in."
+msgstr "Поставщик удостоверений отклонил вход."
+
+#: specivo/web/pages/sso.py:62
+msgid "The identity provider is unavailable. Please try again later."
+msgstr "Поставщик удостоверений недоступен. Попробуйте позже."
+
+#: specivo/web/pages/sso.py:63
+msgid ""
+"Single sign-on is not configured correctly. Contact your administrator."
+msgstr "Единый вход настроен неправильно. Обратитесь к администратору."
+
+#: specivo/web/pages/sso.py:66
+msgid ""
+"No account here is connected to your identity provider account. Contact "
+"your administrator."
+msgstr ""
+"Ни одна учётная запись здесь не связана с вашей учётной записью у "
+"поставщика удостоверений. Обратитесь к администратору."
+
+#: specivo/web/pages/sso.py:68
+msgid "This account is disabled. Contact your administrator."
+msgstr "Эта учётная запись отключена. Обратитесь к администратору."
+
+#: specivo/web/pages/sso.py:69
+msgid "Single sign-on is temporarily unavailable. Please try again later."
+msgstr "Единый вход временно недоступен. Попробуйте позже."
+
+#: specivo/web/pages/sso.py:71
+msgid "Single sign-on failed. Please try again."
+msgstr "Не удалось выполнить единый вход. Попробуйте ещё раз."

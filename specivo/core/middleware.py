@@ -672,7 +672,7 @@ def _build_auth_cookie_headers(
 ) -> list[tuple[bytes, bytes]]:
     """Build raw ``Set-Cookie`` header tuples for the auth cookies.
 
-    Mirrors the cookie attributes in ``specivo.api.v1.auth._set_auth_cookies``
+    Mirrors the cookie attributes in ``specivo.core.auth_cookies.set_auth_cookies``
     but produces raw ASGI header tuples for use in middleware.
 
     When *remember* is ``False``, ``Max-Age`` is omitted so the browser
