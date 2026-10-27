@@ -181,3 +181,37 @@ class TestSettings:
 
         monkeypatch.setenv("TRUSTED_PROXIES", '["172.31.253.2/32", "fd00::/8"]')
         assert Settings().trusted_proxies == ["172.31.253.2/32", "fd00::/8"]
+
+
+# ---------------------------------------------------------------------------
+# rate_limit_subject: one bucket per IPv4 address or IPv6 /64
+# ---------------------------------------------------------------------------
+
+
+def test_ipv4_subject_is_the_address() -> None:
+    from specivo.core.client_ip import rate_limit_subject
+
+    assert rate_limit_subject("203.0.113.7") == "203.0.113.7"
+
+
+def test_ipv6_addresses_in_one_slash_64_share_a_subject() -> None:
+    # A single host is usually given a whole /64; rotating through it must not
+    # yield fresh rate-limit buckets.
+    from specivo.core.client_ip import rate_limit_subject
+
+    a = rate_limit_subject("2001:db8:1:2::1")
+    b = rate_limit_subject("2001:db8:1:2:ffff:ffff:ffff:ffff")
+    assert a == b == "2001:db8:1:2::/64"
+    assert rate_limit_subject("2001:db8:1:3::1") != a
+
+
+def test_ipv4_mapped_ipv6_subject_is_the_ipv4_address() -> None:
+    from specivo.core.client_ip import rate_limit_subject
+
+    assert rate_limit_subject("::ffff:203.0.113.7") == "203.0.113.7"
+
+
+def test_unparseable_subject_is_kept_as_is() -> None:
+    from specivo.core.client_ip import rate_limit_subject
+
+    assert rate_limit_subject("unknown") == "unknown"

@@ -116,3 +116,19 @@ def client_ip_from_scope(scope: Mapping[str, Any]) -> str | None:
         value.decode("latin-1") for name, value in scope.get("headers") or [] if name.lower() == b"x-forwarded-for"
     ]
     return _resolve(peer, values)
+
+
+def rate_limit_subject(ip: str) -> str:
+    """The rate-limit identity of a client address: the IPv4 address itself, or
+    its IPv6 /64.
+
+    A single host is usually given a whole IPv6 /64, so keying buckets by the
+    full address would let one sender rotate through fresh buckets.
+    Unparseable values (e.g. ``"unknown"``) are returned unchanged.
+    """
+    addr = _parse(ip)
+    if addr is None:
+        return ip
+    if isinstance(addr, ipaddress.IPv6Address):
+        return str(ipaddress.IPv6Network((addr, 64), strict=False))
+    return str(addr)
