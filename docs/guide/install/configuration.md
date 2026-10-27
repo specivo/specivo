@@ -42,6 +42,7 @@ docker compose up -d
 | `DATABASE_URL` | `postgresql+asyncpg://specivo:specivo@db:5432/specivo`. Point it at an external database to use your own. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials for the bundled Postgres. |
 | `REDIS_URL` | `redis://redis:6379/0`. Point it at an external Redis if you prefer. |
+| `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails and [single sign-on](single-sign-on/index.md) addresses are built from it. |
 | `SECRET_KEY` | Signs sessions and tokens. **Must** be a strong, unique value in production. Keep in `.env.local`. |
 | `DEBUG` | `false` in production. |
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
@@ -141,6 +142,8 @@ None of them can lock an administrator out:
 | Variable | Purpose / default |
 |---|---|
 | `SSO_FORCE_LOCAL_LOGIN` | Break-glass switch: always show the password form, never redirect the login page to a provider, and let every user sign in with a password. Default `false`. |
+
+The other SSO variables are listed in [Single sign-on](single-sign-on/index.md#settings-in-the-environment).
 
 ## Imported passwords
 
