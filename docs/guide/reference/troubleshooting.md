@@ -16,6 +16,12 @@ this requires the operator to have configured outbound email (SMTP).
 If no reset email arrives, or password reset isn't set up, ask your administrator to reset your password for
 you. Repeated failed attempts may temporarily lock you out; wait a moment and try again.
 
+If your organisation uses single sign-on, use the provider button on the sign-in page. An account that
+only signs in through the provider has no password, so **Forgot password** cannot give it one. When a
+single sign-on attempt fails, the message on the sign-in page names the cause; see
+[Single sign-on troubleshooting](../install/single-sign-on/index.md#troubleshooting). A deactivated
+account cannot sign in at all: ask an administrator to reactivate it.
+
 ## Search returns nothing
 
 Specivo has two search modes. **Keyword search** works out of the box and matches text in issues, comments,
