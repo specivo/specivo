@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -20,9 +21,15 @@ from httpx import AsyncClient, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.main import get_plugin_manager
 from specivo.models.auth import ApiKey, RefreshToken
+from specivo.models.security_audit import SecurityAuditLog
+from specivo.models.sso import SsoProvider
 from specivo.models.user import User
 from specivo.services.api_key_service import ApiKeyService
+from specivo.services.security_audit_service import AuditEvent
+from specivo.testing.oidc_mock import MockIdP
+from specivo.testing.sso import SsoLoginDriver, link_identity
 from tests.factories.user import TEST_PASSWORD, AdminUserFactory, ServiceAccountFactory, UserFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
@@ -242,3 +249,88 @@ class TestAdminPage:
         assert page.status_code == 200
         assert "API keys stay inactive" not in page.text
         assert f'action="/admin/users/{target.id}/reactivate/"' in page.text
+
+
+# ---------------------------------------------------------------------------
+# Audit trail and the SSO callback end to end
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def audit_on() -> Iterator[None]:
+    """Register the enterprise audit feature (the autouse snapshot fixture removes it again)."""
+    get_plugin_manager().feature_registry.register("security_audit_log", "test")
+    yield
+
+
+async def _audit_rows(db: AsyncSession, event: AuditEvent) -> list[SecurityAuditLog]:
+    stmt = select(SecurityAuditLog).where(SecurityAuditLog.event_type == event.value).order_by(SecurityAuditLog.id)
+    return list((await db.execute(stmt)).scalars().all())
+
+
+class TestAudit:
+    async def test_admin_deactivation_is_audited_with_the_admin_as_actor(
+        self, admin_client: AsyncClient, db_session: AsyncSession, audit_on: None
+    ) -> None:
+        target = await _create(db_session, login="deact_audit")
+        await ApiKeyService().create_key(db_session, user_id=target.id, name="cli")
+        await db_session.commit()
+
+        resp = await admin_client.post(f"/api/v1/admin/users/{target.id}/deactivate/")
+        assert resp.status_code == 200, resp.text
+
+        [row] = await _audit_rows(db_session, AuditEvent.USER_DEPROVISIONED)
+        assert row.user_id == admin_client.state.user.id  # type: ignore[attr-defined]
+        assert row.details["user_id"] == target.id
+        assert row.details["reason"] == "admin"
+
+
+class TestAccessLossThroughTheCallback:
+    async def test_refused_login_deactivates_and_is_audited_without_an_actor(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sso_provider: SsoProvider,
+        sso_login: SsoLoginDriver,
+        mock_idp: MockIdP,
+        audit_on: None,
+    ) -> None:
+        sso_provider.required_groups = ["deact-staff"]
+        sso_provider.deactivate_on_access_loss = True
+        user = await _create(db_session, login="deact_flow")
+        await link_identity(db_session, user, sso_provider, subject=mock_idp.default_sub)
+        _key, raw = await ApiKeyService().create_key(db_session, user_id=user.id, name="cli")
+        await db_session.commit()
+        access, _refresh = await _sign_in(client, user.login)
+
+        response = await sso_login(client, claims={"groups": ["deact-guests"]})
+
+        assert response.status_code == 302
+        assert "sso_error=sso_not_in_required_group" in response.headers["location"]
+        await db_session.refresh(user)
+        assert user.status == "deactivated"
+        assert await _active_keys(db_session, user.id) == 0
+        assert (await _get_me(client, access)).status_code == 401
+        assert (await _get_me(client, raw)).status_code == 401
+        [row] = await _audit_rows(db_session, AuditEvent.USER_DEPROVISIONED)
+        assert row.user_id is None
+        assert row.details["reason"] == "sso_access_lost"
+
+    async def test_flag_off_keeps_the_account(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        sso_provider: SsoProvider,
+        sso_login: SsoLoginDriver,
+        mock_idp: MockIdP,
+    ) -> None:
+        sso_provider.required_groups = ["deact-staff"]
+        user = await _create(db_session, login="deact_flow_off")
+        await link_identity(db_session, user, sso_provider, subject=mock_idp.default_sub)
+        await db_session.commit()
+
+        response = await sso_login(client, claims={"groups": []})
+
+        assert "sso_error=sso_not_in_required_group" in response.headers["location"]
+        await db_session.refresh(user)
+        assert user.status == "active"

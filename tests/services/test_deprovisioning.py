@@ -199,8 +199,11 @@ class TestDeactivate:
         with caplog.at_level(logging.INFO):
             await _users.deactivate(db_session, user, reason="admin", actor_id=42)
 
-        lines = [r.getMessage() for r in caplog.records if "user.deprovisioned" in r.getMessage()]
+        lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("user.deprovisioned ")]
         assert len(lines) == 1
+        sso_lines = [r.getMessage() for r in caplog.records if r.getMessage().startswith("sso.user.deprovisioned ")]
+        assert len(sso_lines) == 1
+        assert "actor_id=42" in sso_lines[0]
         assert f"user_id={user.id}" in lines[0]
         assert "reason=admin" in lines[0]
         assert "actor=42" in lines[0]

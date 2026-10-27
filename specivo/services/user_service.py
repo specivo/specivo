@@ -92,13 +92,29 @@ def record_user_deprovisioned(
     actor_id: int | None,
     sessions_revoked: int,
     api_keys_deactivated: int,
+    provider_slug: str | None = None,
+    issuer: str | None = None,
+    subject: str | None = None,
 ) -> None:
-    """Record one deactivation: the single place for its log line (and its audit event).
+    """Record one deactivation: the single place for its log line and its audit event.
 
     ``reason`` is ``admin`` for an administrator's action and
-    ``sso_access_lost`` for a sign-in refused by a provider's access policy.
-    ``actor_id`` is the administrator, ``None`` for the system.
+    ``sso_access_lost`` for a sign-in refused by a provider's access policy
+    (which also names the provider and the subject). ``actor_id`` is the
+    administrator, ``None`` for the system. The ``USER_DEPROVISIONED`` audit
+    event goes into the request's audit buffer (or an ``audit_scope``).
     """
+    from specivo.services.sso import events
+
+    events.user_deprovisioned(
+        user_id=user_id,
+        actor_id=actor_id,
+        reason=reason,
+        provider_slug=provider_slug,
+        issuer=issuer,
+        subject=subject,
+        sessions_revoked=sessions_revoked,
+    )
     logger.info(
         "user.deprovisioned user_id=%s reason=%s actor=%s sessions_revoked=%s api_keys_deactivated=%s",
         user_id,
@@ -129,8 +145,14 @@ class UserService:
         *,
         reason: str,
         actor_id: int | None,
+        provider_slug: str | None = None,
+        issuer: str | None = None,
+        subject: str | None = None,
     ) -> DeactivationResult:
         """Deactivate ``user``, revoke its sessions and switch its API keys off.
+
+        ``provider_slug`` / ``issuer`` / ``subject`` name the identity whose
+        refused sign-in caused it, for the audit trail.
 
         Raises :class:`LastActiveAdminError` when ``user`` is the last active
         administrator. Deactivating an account that already is deactivated
@@ -142,7 +164,9 @@ class UserService:
 
         user.status = "deactivated"
         await db.flush()
-        sessions = await SessionService().revoke_user_sessions(db, user.id, reason=DEACTIVATION_REVOKE_REASON)
+        sessions = await SessionService().revoke_user_sessions(
+            db, user.id, reason=DEACTIVATION_REVOKE_REASON, actor_id=actor_id
+        )
         keys = await ApiKeyService().deactivate_all(db, user.id)
         record_user_deprovisioned(
             user_id=user.id,
@@ -150,6 +174,9 @@ class UserService:
             actor_id=actor_id,
             sessions_revoked=sessions,
             api_keys_deactivated=keys,
+            provider_slug=provider_slug,
+            issuer=issuer,
+            subject=subject,
         )
         return DeactivationResult(sessions_revoked=sessions, api_keys_deactivated=keys)
 

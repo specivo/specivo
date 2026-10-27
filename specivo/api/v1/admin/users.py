@@ -341,19 +341,9 @@ async def deactivate_user(
     if user_id == admin.id:
         raise AppError(code="self_deactivate", message="Cannot deactivate your own account", status_code=400)
     user = await _get_user_or_404(db, user_id)
+    # The service records the USER_DEPROVISIONED audit event (actor: this admin).
     result = await _user_svc.deactivate(db, user, reason="admin", actor_id=admin.id)
     await db.refresh(user)
-
-    try:
-        await _audit.log_event(
-            session=db,
-            event_type=AuditEvent.MEMBER_CHANGE,
-            user_id=admin.id,
-            details={"action": "user_deactivated", "target_user_id": user.id, "target_login": user.login},
-            request=request,
-        )
-    except Exception:
-        pass
 
     await db.commit()  # commit before response to avoid reload race condition
     return UserDeactivatedOut.model_validate(

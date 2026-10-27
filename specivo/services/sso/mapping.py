@@ -169,16 +169,24 @@ async def enforce_access(
         sessions_revoked=revoked,
     )
     if provider.deactivate_on_access_loss and user is not None and identity is not None:
-        await _deactivate_on_access_loss(db, provider, user)
+        await _deactivate_on_access_loss(db, provider, user, subject)
     raise refusal
 
 
-async def _deactivate_on_access_loss(db: AsyncSession, provider: SsoProvider, user: User) -> None:
+async def _deactivate_on_access_loss(db: AsyncSession, provider: SsoProvider, user: User, subject: str) -> None:
     """Deactivate ``user`` after a policy refusal; never a service account or the last active admin."""
     if user.is_service_account or user.status != "active":
         return
     try:
-        await UserService().deactivate(db, user, reason=POLICY_REVOKE_REASON, actor_id=None)
+        await UserService().deactivate(
+            db,
+            user,
+            reason=POLICY_REVOKE_REASON,
+            actor_id=None,
+            provider_slug=provider.slug,
+            issuer=provider.issuer,
+            subject=subject,
+        )
     except LastActiveAdminError:
         logger.warning(
             "sso.deprovision.skipped provider=%s user_id=%s reason=last_active_admin "
