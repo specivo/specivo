@@ -41,7 +41,13 @@ use its page:
    your IdP is built from `APP_URL`. It is never taken from the request, so behind a reverse proxy
    nothing else needs to change. Do this first: a wrong `APP_URL` is the most common cause of a
    failed first sign-in.
-3. **Make sure you can sign in as an administrator with a password.** Keep that account while you
+3. **Keep query strings out of your proxy's access logs.** The redirect back from the IdP carries
+   a one-time `code` and `state` in its query string. The bundled nginx logs paths without query
+   strings. If another proxy sits in front (Caddy, Traefik, Cloudflare, a load balancer), configure
+   its access log to leave out the query string too, at least for `/auth/oidc/`. For the per-address
+   rate limits behind such a proxy, see
+   [Client addresses behind a proxy](../configuration.md#client-addresses-behind-a-proxy).
+4. **Make sure you can sign in as an administrator with a password.** Keep that account while you
    test.
 
 ## Setting up a provider: the outline
