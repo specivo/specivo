@@ -11,7 +11,7 @@ RP-initiated logout
     ``id_token_hint``, ``client_id`` and the fixed ``post_logout_redirect_uri``
     (:func:`post_logout_redirect_uri`, never taken from the request).
     Otherwise it is ``None`` and the caller signs out locally to
-    :data:`LOGGED_OUT_PATH`. The IdP never blocks sign-out: an unreachable or
+    :func:`logged_out_path`. The IdP never blocks sign-out: an unreachable or
     broken discovery document only means a local sign-out.
 
 Back-channel logout
@@ -75,11 +75,13 @@ __all__ = [
     "backchannel_logout",
     "end_session_url",
     "find_sso_logout_session",
+    "logged_out_path",
     "post_logout_redirect_uri",
     "release_logout_jti",
 ]
 
-#: Where a signed-out browser lands, locally or back from the IdP.
+#: Where a signed-out browser lands, locally or back from the IdP, before the
+#: stealth prefix (:func:`logged_out_path` adds it).
 LOGGED_OUT_PATH = "/login/?logged_out=1"
 
 
@@ -93,10 +95,16 @@ class SsoLogoutSession:
     user_id: int | None = None
 
 
-def post_logout_redirect_uri(settings: Settings | None = None) -> str:
-    """The fixed ``post_logout_redirect_uri``: ``{APP_URL}/login/?logged_out=1``."""
+def logged_out_path(settings: Settings | None = None) -> str:
+    """The signed-out landing path on this site: stealth prefix + :data:`LOGGED_OUT_PATH`."""
     settings = settings or get_settings()
-    return settings.app_url.rstrip("/") + LOGGED_OUT_PATH
+    return settings.stealth_prefix.rstrip("/") + LOGGED_OUT_PATH
+
+
+def post_logout_redirect_uri(settings: Settings | None = None) -> str:
+    """The fixed ``post_logout_redirect_uri``: ``{APP_URL}{prefix}/login/?logged_out=1``."""
+    settings = settings or get_settings()
+    return settings.app_url.rstrip("/") + logged_out_path(settings)
 
 
 async def find_sso_logout_session(
@@ -261,7 +269,10 @@ async def backchannel_logout(
     Raises :class:`SsoTokenInvalidError` for an invalid or replayed token,
     :class:`SsoUnavailableError` when the replay cache is down, and the
     discovery/JWKS errors (``sso_idp_unreachable``, ``sso_discovery_invalid``)
-    when the provider's keys cannot be read. Does not commit: a caller whose
+    when the provider's keys cannot be read, or when the token names an
+    unknown key while the JWKS refetch window is spent
+    (:class:`~specivo.services.sso.errors.SsoSigningKeyRefreshLimitedError`;
+    the route answers 503 so the IdP retries). Does not commit: a caller whose
     commit fails calls :func:`release_logout_jti` with ``result.jti_key``.
     """
     settings = settings or get_settings()

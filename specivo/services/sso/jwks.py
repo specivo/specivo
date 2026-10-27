@@ -14,7 +14,11 @@ Specivo SSO design:
 * an unknown ``kid`` triggers at most one refetch per provider per
   :data:`JWKS_REFETCH_INTERVAL_SECONDS` (a Redis ``SET NX EX`` lock, with an
   in-process fallback when Redis is down), so a flood of tokens with random
-  kids cannot make Specivo hammer the IdP;
+  kids cannot make Specivo hammer the IdP. The verifier
+  (:mod:`specivo.services.sso.id_token`) only spends that refetch on a token
+  whose unverified ``iss``/``aud``/``iat``/``exp`` are plausible, and answers
+  "try again" (``sso_idp_unreachable``, 503) rather than "invalid" while the
+  window is spent, because the kid may be a key the IdP has just published;
 * keys with ``use=enc``, symmetric (``oct``) keys and keys for algorithms
   outside the allowlist are dropped when the JWKS is read;
 * the algorithm allowlist is :data:`ALLOWED_ALGORITHMS` intersected with the

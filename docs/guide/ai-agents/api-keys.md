@@ -58,3 +58,27 @@ suspect is exposed. To rotate, create a new key, update the client's configurati
     Revoking a key cuts the agent off at once — its next request fails. If a connected agent is in
     the middle of work, it stops being able to read or write as soon as you revoke. Have the
     replacement key in place before revoking the old one to avoid an interruption.
+
+## What an administrator's key cannot do
+
+A key belonging to an administrator can run most administration through the API: reading users,
+locking or deactivating an account, revoking keys, project and workflow settings. It cannot do
+anything that hands out a way to sign in or to act as somebody else. These need an administrator
+signed in to Specivo, and a key gets `403` with the code `api_key_not_allowed`:
+
+- resetting a user's password (`POST /api/v1/admin/users/{id}/reset-password/`);
+- creating any account other than a service account (`POST /api/v1/admin/users/`): a person, an
+  administrator, or an account with a password. A key can still create service accounts for
+  agents (`is_service_account: true`, no password);
+- unlocking or reactivating an account (`POST /api/v1/admin/users/{id}/unlock/`,
+  `.../reactivate/`, and the **Reactivate** button when called with a key);
+- creating an API key for a user (`POST /api/v1/admin/users/{id}/api-keys/`);
+- in the enterprise edition, re-enabling a stopped agent's keys (`POST /api/v1/admin/unkill/agent/{id}/`)
+  and issuing broker credentials (`POST /api/v1/admin/credentials/issue/`);
+- changing single sign-on: creating, editing or deleting identity providers and their group
+  mappings, and saving the authentication settings (see
+  [Single sign-on](../install/single-sign-on/index.md#offboarding-people)).
+
+So a leaked administrator key cannot turn itself into a signed-in session, for example by resetting
+another administrator's password, and cannot add an identity provider that makes its users
+administrators. Taking access away stays possible with a key, so incident automation keeps working.

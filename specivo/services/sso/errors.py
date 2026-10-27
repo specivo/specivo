@@ -40,6 +40,8 @@ class TokenRejection(StrEnum):
     NONCE_PRESENT = "nonce_present"
     MISSING_SID_AND_SUB = "missing_sid_and_sub"
     REPLAYED = "replayed"
+    AUTH_TIME_MISSING = "auth_time_missing"
+    AUTH_TIME_STALE = "auth_time_stale"
     SUB_MISMATCH = "sub_mismatch"
     USERINFO_REJECTED = "userinfo_rejected"
     TOKEN_RESPONSE_INVALID = "token_response_invalid"
@@ -74,6 +76,18 @@ class SsoIdpUnreachableError(SsoError):
     default_code = "sso_idp_unreachable"
     default_message = "The identity provider is unavailable"
     default_status = 502
+
+
+class SsoSigningKeyRefreshLimitedError(SsoIdpUnreachableError):
+    """A token names an unknown ``kid`` and the JWKS was refetched moments ago.
+
+    The key may be brand new (the IdP has just rotated it), so the token is not
+    called invalid: the back-channel route answers 503 and the IdP retries, a
+    browser sign-in shows "try again". The refetch window is
+    :data:`specivo.services.sso.jwks.JWKS_REFETCH_INTERVAL_SECONDS`.
+    """
+
+    default_status = 503
 
 
 class SsoDiscoveryInvalidError(SsoError):

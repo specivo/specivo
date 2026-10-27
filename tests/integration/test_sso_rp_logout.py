@@ -468,3 +468,28 @@ async def test_signed_out_notice_is_translated(client: AsyncClient) -> None:
     assert resp.status_code == 200
     assert "คุณออกจากระบบแล้ว" in resp.text
     assert "You have been signed out." not in resp.text
+
+
+async def test_logout_lands_under_the_stealth_prefix(
+    monkeypatch: pytest.MonkeyPatch,
+    db_engine,
+    _test_connection,
+) -> None:
+    from httpx import ASGITransport
+
+    from specivo.core.database import get_db, set_engine
+    from specivo.testing.conftest_base import _create_test_app, _make_test_get_db
+
+    monkeypatch.setenv("STEALTH_PREFIX", "/hidden")
+    get_settings.cache_clear()
+    try:
+        app = _create_test_app()
+        set_engine(db_engine)
+        app.dependency_overrides[get_db] = _make_test_get_db(_test_connection)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+            resp = await ac.post("/hidden/logout/", follow_redirects=False)
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "/hidden" + LOGGED_OUT
+    finally:
+        monkeypatch.delenv("STEALTH_PREFIX")
+        get_settings.cache_clear()

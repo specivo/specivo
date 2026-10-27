@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.admin import require_admin_api
+from specivo.api.v1.admin import require_admin_api, require_admin_session_api
 from specivo.core.database import get_db
 from specivo.models.user import User
 from specivo.schemas.credential import (
@@ -80,7 +80,7 @@ async def delete_system(
 )
 async def issue_credential(
     data: CredentialIssueRequest,
-    current_user: User = Depends(require_admin_api),
+    current_user: User = Depends(require_admin_session_api),
     db: AsyncSession = Depends(get_db),
 ) -> CredentialIssueResponse:
     """Issue a temporary credential to an agent (admin only)."""

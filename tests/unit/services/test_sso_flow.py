@@ -260,3 +260,42 @@ async def test_complete_refuses_a_corrupt_record(fake_redis: FakeRedis) -> None:
 async def test_complete_fails_closed_without_redis(broken_redis: BrokenRedis) -> None:
     with pytest.raises(SsoUnavailableError):
         await complete(state="s" * 43, binding_token="b", redis=broken_redis)
+
+
+# ---------------------------------------------------------------------------
+# Re-authentication: link forces it, max_age is remembered for auth_time
+# ---------------------------------------------------------------------------
+
+
+async def test_link_forces_reauthentication(idp: MockIdP, metadata, fake_redis: FakeRedis) -> None:
+    provider = make_provider(
+        idp, extra_auth_params={"prompt": "consent", "max_age": 3600, "login_hint": "member@example.com"}
+    )
+    request = await begin(provider, metadata, intent="link", user_id=7, redis=fake_redis)
+    params = _single(request.url)
+    # The link values win over the provider's configured ones; other extras stay.
+    assert params["prompt"] == "login"
+    assert params["max_age"] == "0"
+    assert params["login_hint"] == "member@example.com"
+
+    tx = await complete(state=params["state"], binding_token=request.binding_token, redis=fake_redis)
+    assert tx.intent == "link"
+    assert tx.max_age == 0
+
+
+async def test_login_sends_and_records_the_configured_max_age(idp: MockIdP, metadata, fake_redis: FakeRedis) -> None:
+    provider = make_provider(idp, extra_auth_params={"max_age": "300"})
+    request = await begin(provider, metadata, redis=fake_redis)
+    params = _single(request.url)
+    assert params["max_age"] == "300"
+    assert "prompt" not in params
+    tx = await complete(state=params["state"], binding_token=request.binding_token, redis=fake_redis)
+    assert tx.max_age == 300
+
+
+async def test_login_without_max_age_records_none(idp: MockIdP, metadata, fake_redis: FakeRedis) -> None:
+    request = await begin(make_provider(idp), metadata, redis=fake_redis)
+    params = _single(request.url)
+    assert "max_age" not in params
+    tx = await complete(state=params["state"], binding_token=request.binding_token, redis=fake_redis)
+    assert tx.max_age is None

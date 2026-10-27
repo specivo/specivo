@@ -185,6 +185,29 @@ async def test_authentication_form_saves(admin_client: AsyncClient, db_session: 
     assert current.allow_api_keys_for_sso_users is False
 
 
+async def test_authentication_form_refuses_an_admin_api_key(admin_client: AsyncClient, db_session: AsyncSession):
+    """The web form is no side door: an admin API key (no session) cannot change sign-in settings."""
+    from httpx import ASGITransport
+
+    from specivo.services.api_key_service import ApiKeyService
+
+    _, raw = await ApiKeyService().create_key(db_session, user_id=admin_client.state.user.id, name="admin-agent")  # type: ignore[attr-defined]
+    await db_session.flush()
+    transport = admin_client._transport
+    assert isinstance(transport, ASGITransport)
+    async with AsyncClient(transport=transport, base_url="http://test") as key_client:
+        resp = await key_client.post(
+            "/admin/settings/authentication/",
+            data={"hide_local_login": "1", "local_login_admins_only": "1"},
+            headers={"Authorization": f"Bearer {raw}"},
+            follow_redirects=False,
+        )
+    assert resp.status_code == 403, resp.text
+    current = await get_auth_settings(db_session)
+    assert current.hide_local_login is False
+    assert current.local_login_admins_only is False
+
+
 async def test_authentication_form_forbidden_for_non_admin(auth_client: AsyncClient):
     resp = await auth_client.post(
         "/admin/settings/authentication/",

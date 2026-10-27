@@ -64,7 +64,8 @@ The steps are the same for every IdP. Only the screens differ.
     | Back-channel logout URI | `{APP_URL}/auth/oidc/{slug}/backchannel-logout/` |
 
     For example `https://specivo.example.com/auth/oidc/keycloak/callback/`. The trailing slash is
-    part of the address.
+    part of the address. If Specivo is served under a path prefix (`STEALTH_PREFIX`), the prefix
+    comes right after `{APP_URL}` in these addresses and in the post-logout address below.
 
 2. At the IdP, create a client (an "application") for Specivo and register the redirect URI
    **exactly as shown**. Do not use wildcards. If the IdP asks for a post-logout redirect
@@ -98,7 +99,7 @@ The provider form has five cards. The tables list every field.
 | Client authentication | How Specivo proves itself at the token endpoint: `client_secret_basic` (default), `client_secret_post`, or `none` for a public client that relies on PKCE alone. Use `client_secret_basic` unless your IdP's documentation says otherwise. |
 | Client secret | See [The client secret](#the-client-secret). Not used with `none`. |
 | Scopes | Space-separated. Default `openid profile email`. `openid` is required and is added first. Add `groups` or other scopes your IdP needs to release a claim. |
-| Extra sign-in parameters | Optional `prompt`, `domain_hint`, `login_hint`, `acr_values` and `max_age`, added to the sign-in request. Nothing else can be set here. |
+| Extra sign-in parameters | Optional `prompt`, `domain_hint`, `login_hint`, `acr_values` and `max_age`, added to the sign-in request. Nothing else can be set here. With `max_age`, the ID token must carry an `auth_time` no older than `max_age` seconds (plus `SSO_CLOCK_SKEW_SECONDS`), or the sign-in is refused with `sso_token_invalid`. **Connect** from the profile always sends `prompt=login` and `max_age=0`, whatever is set here. |
 | Enabled | Shows the button on the login page. A provider cannot be enabled while a confidential client has no secret. Turning it off signs out everyone whose session came from this provider (see [Sessions](#sessions-and-logout)). |
 | Button order | Lower numbers come first. |
 
@@ -238,8 +239,10 @@ from repeated wrong passwords does not block SSO, because it protects the passwo
 Most installs start with local accounts. There are two ways to connect them to the IdP.
 
 **Manual (default).** The person signs in with their password, opens **My profile → Connected
-accounts**, and presses **Connect *label***. After signing in at the IdP they return to their
-profile with the account connected. From then on the button on the login page works for them.
+accounts**, and presses **Connect *label***. The IdP asks them to sign in again even if they
+already have a session there (Specivo sends `prompt=login` and `max_age=0`), so a browser left
+signed in at the IdP cannot be used to connect somebody else's account. After signing in at the
+IdP they return to their profile with the account connected. From then on the button on the login page works for them.
 They can press **Disconnect** later, but only if they keep another way in (a password or another
 connected account). An administrator can disconnect any identity from the user's admin page.
 Disconnecting ends the sessions that were started through that identity.
@@ -367,7 +370,9 @@ it. Test connection shows whether the IdP advertises it.
 
 Specivo answers a valid logout request with 200 whether or not a session matched. It answers 400 to
 a missing, invalid or replayed token, 404 when the provider is unknown, disabled or has back-channel
-logout off, and 503 when it cannot check the token right now, so the IdP can retry.
+logout off, and 503 when it cannot check the token right now, so the IdP can retry: Redis or the
+IdP's keys are unreachable, or the token is signed with a key Specivo has not seen and it re-read
+the IdP's keys less than a minute ago (right after a key rotation).
 
 ## Offboarding people
 
@@ -402,6 +407,14 @@ their existing keys are refused while the setting is off. Such accounts also can
 through **Forgot password**; an administrator can still set one deliberately. Users with a password
 and service accounts are not affected.
 
+An administrator's API key can read the single sign-on configuration through the admin API
+(`/api/v1/admin/sso/...`), but cannot change it. Creating, editing or deleting a provider or its
+group mappings, and saving the authentication settings, need an administrator signed in to Specivo;
+an API key gets 403 `api_key_not_allowed`. A leaked key therefore cannot add an identity provider
+that maps its own users to administrators. The same goes for every admin action that hands out a
+way to sign in, such as resetting a password; see
+[What an administrator's key cannot do](../../ai-agents/api-keys.md#what-an-administrators-key-cannot-do).
+
 ## Authentication settings
 
 **Administration → Settings → Authentication** applies to the whole instance:
@@ -409,7 +422,7 @@ and service accounts are not affected.
 | Setting | What it does |
 |---|---|
 | Hide the password form on the login page | Replaces the form with a link, **Sign in with a local account**, to `/login/?local=1`. With no enabled provider the form is always shown. |
-| Only administrators may sign in with a password | Everyone else must use SSO. The link above still shows the form, but a password sign-in by a non-administrator is refused. |
+| Only administrators may sign in with a password | Everyone else must use SSO. The link above still shows the form, but a password sign-in by a non-administrator is refused. Every refused password sign-in then gets the same "Invalid login or password" answer, also for an administrator account that is locked, deactivated or not verified, so the form does not reveal who is an administrator. The reason is in the `specivo.sso` log (`sso.local_login.refused_admin`). Wrong passwords still lock an administrator out for a while; they can still sign in through SSO meanwhile. |
 | Users who sign in through SSO may use API keys | On by default. |
 | Redirect the login page to | Sends visitors straight to one provider. `/login/?local=1` bypasses it, and so does a signed-in visitor, a sign-out, a password reset and any SSO error, so a failing provider cannot loop. |
 
@@ -450,10 +463,10 @@ the Specivo log: search the `api` container's output for lines starting with `ss
 |---|---|---|
 | `sso_state_invalid` | "Your sign-in expired or was started in another browser." | The sign-in took longer than 10 minutes, the person used the back button, opened the link in a second browser or tab group, or blocks cookies. The cookie is scoped to `/auth/oidc/`. Behind a proxy, check that it does not strip cookies. Retry. |
 | `sso_idp_error` | "The identity provider refused the sign-in." | The IdP answered with an error, for example `access_denied` because the user is not assigned to the application, or it refused the authorization code. The same message covers a token request that failed. Check the client secret, the redirect URI and the user's access at the IdP. The log has the IdP's error code. |
-| `sso_idp_unreachable` | "The identity provider is unavailable." | Specivo could not reach the IdP's discovery, keys or token endpoint within `SSO_HTTP_TIMEOUT_SECONDS`, or got a server error. Check DNS, firewall and certificates from the Specivo container. Administrators can use the **Sign in with a local account** link meanwhile. |
+| `sso_idp_unreachable` | "The identity provider is unavailable." | Specivo could not reach the IdP's discovery, keys or token endpoint within `SSO_HTTP_TIMEOUT_SECONDS`, or got a server error. It is also shown for a minute when a token names a signing key Specivo does not know and it has just re-read the IdP's keys (the IdP may have rotated them); trying again a minute later works. Check DNS, firewall and certificates from the Specivo container. Administrators can use the **Sign in with a local account** link meanwhile. |
 | `sso_discovery_invalid` | "Single sign-on is not configured correctly." | The discovery document or keys are unusable: the issuer in the document is not the one you entered, an endpoint is `http://`, or there are no usable signing keys. Press **Test connection**. |
 | `sso_provider_misconfigured` | "Single sign-on is not configured correctly." | The client secret cannot be read or is missing. Re-enter it, or check the environment variable name and that the variable is set in the containers. |
-| `sso_token_invalid` | "Single sign-on failed. Please try again." | The ID token failed a check. See the reason in the log: a wrong issuer or audience (the issuer or client ID does not match), a bad signature, an expired token (clock drift between servers), a missing `nonce` or `sub`, or a token signed with an algorithm Specivo does not accept (such as `HS256`). |
+| `sso_token_invalid` | "Single sign-on failed. Please try again." | The ID token failed a check. See the reason in the log: a wrong issuer or audience (the issuer or client ID does not match), a bad signature, an expired token (clock drift between servers), a missing `nonce` or `sub`, a token signed with an algorithm Specivo does not accept (such as `HS256`), or a missing or too old `auth_time` when `max_age` was sent (always for **Connect**: the IdP did not make the person sign in again). |
 | `sso_unavailable` | "Single sign-on is temporarily unavailable." | Specivo could not reach Redis, which it needs to store sign-in state. Local sign-in keeps working. Check the `redis` container. |
 | `sso_account_not_provisioned` | "No account here is connected to your identity provider account." | No account is connected, automatic linking did not apply and JIT creation is off. Turn on **Create an account on first sign-in**, connect the account from the person's profile, or check the [linking conditions](#linking-an-existing-account). |
 | `sso_account_disabled` | "This account is disabled." | The connected user is deactivated, locked by an administrator, or is a service account. Check **Administration → Users**. |

@@ -25,7 +25,7 @@ from specivo.schemas.sso import EXTRA_AUTH_PARAM_KEYS, AuthSettingsUpdate
 from specivo.services.sso.auth_settings import update_auth_settings
 from specivo.services.sso.provider_service import ProviderService, backchannel_logout_uri, redirect_uri
 from specivo.web.deps import get_templates
-from specivo.web.pages.admin import require_admin
+from specivo.web.pages.admin import require_admin, require_admin_session
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 _service = ProviderService()
@@ -107,7 +107,7 @@ async def admin_sso_provider_detail(
 @router.post("/admin/settings/authentication/", response_model=None)
 async def admin_settings_authentication(
     request: Request,
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[User, Depends(require_admin_session)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
     hide_local_login: str = Form(""),
     local_login_admins_only: str = Form(""),

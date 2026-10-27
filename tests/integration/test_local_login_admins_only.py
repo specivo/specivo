@@ -120,3 +120,79 @@ async def test_api_keys_are_unaffected(client: AsyncClient, db_session: AsyncSes
     await db_session.flush()
     response = await client.get("/api/v1/projects/", headers={"Authorization": f"Bearer {raw}"})
     assert response.status_code == 200, response.text
+
+
+# ---------------------------------------------------------------------------
+# Admin accounts: no state is revealed while password sign-in is admins-only
+# ---------------------------------------------------------------------------
+
+_ADMIN_STATES: dict[str, dict[str, object]] = {
+    "pending_verification": {"status": "pending_verification"},
+    "deactivated": {"status": "deactivated"},
+    "service_account": {"is_service_account": True},
+    "admin_locked": {"status": "locked", "locked_until": None},
+    "lockout_active": {"locked_until_minutes": 15},
+}
+
+
+async def _admin_in_state(db: AsyncSession, state: str) -> User:
+    from datetime import timedelta
+
+    from specivo.core.utils import utcnow
+
+    fields = dict(_ADMIN_STATES[state])
+    minutes = fields.pop("locked_until_minutes", None)
+    if minutes is not None:
+        fields["locked_until"] = utcnow() + timedelta(minutes=int(minutes))
+        fields["failed_login_count"] = 5
+    return await _user(db, is_admin=True, **fields)
+
+
+@pytest.mark.parametrize("state", sorted(_ADMIN_STATES))
+async def test_admin_account_state_is_not_revealed(
+    client: AsyncClient, db_session: AsyncSession, state: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """With the right password, a blocked admin gets exactly the wrong-password answer; the log has the reason."""
+    import logging
+
+    await _admins_only(db_session)
+    admin = await _admin_in_state(db_session, state)
+    other_admin = await _user(db_session, is_admin=True)
+
+    with caplog.at_level(logging.INFO, logger="specivo.sso"):
+        refused = await client.post(LOGIN_URL, json={"login": admin.login, "password": TEST_PASSWORD})
+    wrong_password = await client.post(LOGIN_URL, json={"login": other_admin.login, "password": "not-the-password"})
+
+    assert _error(refused) == _error(wrong_password)
+    assert _error(refused)[:2] == (401, "auth_invalid_credentials")
+    assert "details" not in refused.json()["errors"][0] or not refused.json()["errors"][0]["details"]
+    assert "access_token" not in refused.cookies
+    assert f"sso.local_login.refused_admin user_id={admin.id}" in caplog.text
+
+
+@pytest.mark.parametrize("state", sorted(_ADMIN_STATES))
+async def test_admin_account_state_is_reported_when_the_setting_is_off(
+    client: AsyncClient, db_session: AsyncSession, state: str
+) -> None:
+    """Unchanged behaviour without admins-only: the specific code is still returned."""
+    admin = await _admin_in_state(db_session, state)
+    response = await client.post(LOGIN_URL, json={"login": admin.login, "password": TEST_PASSWORD})
+    assert response.status_code == 401
+    assert _error(response)[1] != "auth_invalid_credentials"
+
+
+async def test_admin_lockout_still_counts_but_is_not_revealed(client: AsyncClient, db_session: AsyncSession) -> None:
+    """Wrong passwords still lock an admin out (brute-force protection), but the answer stays generic."""
+    await _admins_only(db_session)
+    admin = await _user(db_session, is_admin=True)
+    answers = set()
+    for _ in range(6):
+        response = await client.post(LOGIN_URL, json={"login": admin.login, "password": "not-the-password"})
+        answers.add(_error(response))
+    await db_session.refresh(admin)
+    assert admin.failed_login_count == 5
+    assert admin.locked_until is not None
+
+    locked = await client.post(LOGIN_URL, json={"login": admin.login, "password": TEST_PASSWORD})
+    answers.add(_error(locked))
+    assert answers == {(401, "auth_invalid_credentials", "Invalid login or password")}

@@ -50,6 +50,25 @@ async def require_admin(
     return user_obj  # type: ignore[return-value]
 
 
+async def require_admin_session(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+) -> User:
+    """An admin signed in with a session; an admin API key sent as a Bearer header is refused.
+
+    The web layer also accepts ``Authorization: Bearer spv_...``, and a request
+    without a session cookie is not CSRF-checked, so a form that hands out a
+    way to sign in (reactivating an account, the sign-in settings) would
+    otherwise be a side door around the session-only admin API routes
+    (``specivo.api.v1.admin.require_admin_session_api``).
+    """
+    from fastapi import HTTPException
+
+    if getattr(request.state, "api_key_id", None) is not None:
+        raise HTTPException(status_code=403, detail="A signed-in session is required")
+    return user
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -251,7 +270,7 @@ async def admin_deactivate_user(
 @router.post("/admin/users/{user_id}/reactivate/", response_model=None)
 async def admin_reactivate_user(
     user_id: int,
-    user: Annotated[User, Depends(require_admin)],
+    user: Annotated[User, Depends(require_admin_session)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> RedirectResponse:
     """Reactivate an account from its admin page; its API keys stay inactive."""

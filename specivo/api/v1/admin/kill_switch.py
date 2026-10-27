@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.admin import require_admin_api
+from specivo.api.v1.admin import require_admin_api, require_admin_session_api
 from specivo.core.config import get_settings
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, PermissionDeniedError
@@ -125,7 +125,7 @@ async def kill_all(
 )
 async def unkill_agent(
     user_id: int,
-    current_user: User = Depends(require_admin_api),
+    current_user: User = Depends(require_admin_session_api),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Reactivate a killed agent — re-enable API keys (admin only)."""

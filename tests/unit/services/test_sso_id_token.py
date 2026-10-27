@@ -17,7 +17,12 @@ import jwt
 import pytest
 
 from specivo.services.sso.discovery import ProviderMetadata, parse_discovery
-from specivo.services.sso.errors import SsoTokenInvalidError, SsoUnknownSigningKeyError, TokenRejection
+from specivo.services.sso.errors import (
+    SsoSigningKeyRefreshLimitedError,
+    SsoTokenInvalidError,
+    SsoUnknownSigningKeyError,
+    TokenRejection,
+)
 from specivo.services.sso.id_token import (
     MAX_TOKEN_AGE_SECONDS,
     IdTokenClaims,
@@ -442,6 +447,41 @@ class TestLogoutToken:
 
 
 # ---------------------------------------------------------------------------
+# max_age / auth_time (Core 1.0, section 3.1.3.7, item 13)
+# ---------------------------------------------------------------------------
+
+
+class TestAuthTime:
+    def test_fresh_auth_time_passes_max_age_zero(self, mock_idp: MockIdP) -> None:
+        claims = _validate(mock_idp, mock_idp.mint_id_token(), max_age=0)
+        assert claims.auth_time is not None
+
+    def test_auth_time_within_max_age_plus_leeway(self, mock_idp: MockIdP) -> None:
+        now = time.time()
+        raw = mock_idp.mint_id_token(auth_time=int(now) - 300 - LEEWAY + 5)
+        _validate(mock_idp, raw, max_age=300, now=now)
+
+    @pytest.mark.parametrize(("max_age", "age"), [(0, LEEWAY + 30), (300, 300 + LEEWAY + 30)])
+    def test_stale_auth_time_is_rejected(self, mock_idp: MockIdP, max_age: int, age: int) -> None:
+        now = time.time()
+        raw = mock_idp.mint_id_token(auth_time=int(now) - age)
+        with pytest.raises(SsoTokenInvalidError) as exc:
+            _validate(mock_idp, raw, max_age=max_age, now=now)
+        assert exc.value.reason == TokenRejection.AUTH_TIME_STALE
+        assert exc.value.code == "sso_token_invalid"
+
+    def test_missing_auth_time_is_rejected_when_max_age_was_sent(self, mock_idp: MockIdP) -> None:
+        with pytest.raises(SsoTokenInvalidError) as exc:
+            _validate(mock_idp, mock_idp.mint_id_token(auth_time=OMIT), max_age=0)
+        assert exc.value.reason == TokenRejection.AUTH_TIME_MISSING
+
+    def test_auth_time_is_optional_without_max_age(self, mock_idp: MockIdP) -> None:
+        old = int(time.time()) - 86_400
+        assert _validate(mock_idp, mock_idp.mint_id_token(auth_time=old)).auth_time == old
+        assert _validate(mock_idp, mock_idp.mint_id_token(auth_time=OMIT)).auth_time is None
+
+
+# ---------------------------------------------------------------------------
 # Async glue: JWKS lookup + refetch on unknown kid
 # ---------------------------------------------------------------------------
 
@@ -486,8 +526,18 @@ class TestVerifyWithJwks:
     async def test_kid_spam_is_rate_limited(self, mock_idp: MockIdP, fake_redis: FakeRedis) -> None:
         provider = make_provider(mock_idp)
         meta = _meta(mock_idp)
-        for _ in range(5):
-            with pytest.raises(SsoUnknownSigningKeyError):
+        # The first unknown kid refetches the JWKS; the kid is still unknown, so the token is invalid.
+        with pytest.raises(SsoUnknownSigningKeyError):
+            await verify_id_token(
+                mock_idp.id_token_variant("unknown_kid"),
+                provider=provider,
+                metadata=meta,
+                nonce=mock_idp.default_nonce,
+                redis=fake_redis,
+            )
+        # Within the refetch window the key might be brand new: "try again", not "invalid".
+        for _ in range(4):
+            with pytest.raises(SsoSigningKeyRefreshLimitedError) as exc:
                 await verify_id_token(
                     mock_idp.id_token_variant("unknown_kid"),
                     provider=provider,
@@ -495,8 +545,60 @@ class TestVerifyWithJwks:
                     nonce=mock_idp.default_nonce,
                     redis=fake_redis,
                 )
+            assert exc.value.code == "sso_idp_unreachable"
+            assert exc.value.status_code == 503
         # One initial fetch plus a single refetch, however many unknown kids arrive.
         assert mock_idp.calls["jwks"] == 2
+
+    @pytest.mark.parametrize(
+        "overrides",
+        [
+            {"iss": "https://attacker.example.net/realms/test"},
+            {"aud": "another-client"},
+            {"aud": ["another-client", "third-client"]},
+            {"iat": 1_000, "exp": 2_000},
+            {"iat": OMIT},
+            {"exp": OMIT},
+        ],
+        ids=["wrong_iss", "wrong_aud", "wrong_aud_list", "expired", "no_iat", "no_exp"],
+    )
+    async def test_junk_kid_does_not_spend_the_refetch(
+        self, mock_idp: MockIdP, fake_redis: FakeRedis, overrides: dict[str, Any]
+    ) -> None:
+        """An unauthenticated token with implausible claims never consumes the refetch window."""
+        provider = make_provider(mock_idp)
+        meta = _meta(mock_idp)
+        await verify_logout_token(mock_idp.mint_logout_token(), provider=provider, metadata=meta, redis=fake_redis)
+        for _ in range(3):
+            with pytest.raises(SsoTokenInvalidError) as exc:
+                await verify_logout_token(
+                    mock_idp.logout_token_variant("unknown_kid", **overrides),
+                    provider=provider,
+                    metadata=meta,
+                    redis=fake_redis,
+                )
+            assert not isinstance(exc.value, SsoUnknownSigningKeyError)
+        assert mock_idp.calls["jwks"] == 1
+
+        # The IdP rotates its key: a genuine token with the new kid still verifies.
+        mock_idp.rotate(drop_old=True)
+        claims = await verify_logout_token(
+            mock_idp.mint_logout_token(), provider=provider, metadata=meta, redis=fake_redis
+        )
+        assert claims.sid == mock_idp.default_sid
+        assert mock_idp.calls["jwks"] == 2
+
+    async def test_rotated_key_after_spent_refetch_is_retryable(self, mock_idp: MockIdP, fake_redis: FakeRedis) -> None:
+        """A plausible junk kid spends the window; a genuine new key then gets "retry", not "invalid"."""
+        provider = make_provider(mock_idp)
+        meta = _meta(mock_idp)
+        with pytest.raises(SsoUnknownSigningKeyError):
+            await verify_logout_token(
+                mock_idp.logout_token_variant("unknown_kid"), provider=provider, metadata=meta, redis=fake_redis
+            )
+        mock_idp.rotate(drop_old=True)
+        with pytest.raises(SsoSigningKeyRefreshLimitedError):
+            await verify_logout_token(mock_idp.mint_logout_token(), provider=provider, metadata=meta, redis=fake_redis)
 
     async def test_verify_logout_token(self, mock_idp: MockIdP, fake_redis: FakeRedis) -> None:
         provider = make_provider(mock_idp)

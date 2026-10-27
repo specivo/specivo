@@ -1,6 +1,9 @@
 """Admin SSO API: OpenID Connect providers, their group mappings, and authentication settings.
 
-Every route is admin-only. The client secret is write-only: it is accepted on
+Every route is admin-only. Routes that change the configuration need a
+signed-in session: an admin API key is refused there (``api_key_not_allowed``,
+403), so a leaked key cannot register a rogue identity provider; it can still
+read the configuration and run the self-test. The client secret is write-only: it is accepted on
 create and update and never returned (``client_secret_configured`` and
 ``client_secret_status`` say whether one is set and readable). The rules
 behind each route are in :mod:`specivo.services.sso.provider_service`.
@@ -13,7 +16,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.admin import require_admin_api
+from specivo.api.v1.admin import require_admin_api, require_admin_session_api
 from specivo.core.constants import MAX_PAGE_LIMIT
 from specivo.core.database import get_db
 from specivo.models.user import User
@@ -39,6 +42,8 @@ REVOKED_SESSIONS_HEADER = "X-Revoked-Sessions"
 REMOVED_MEMBERSHIPS_HEADER = "X-Removed-Memberships"
 
 AdminUser = Annotated[User, Depends(require_admin_api)]
+#: Changes to the SSO configuration need a session: an admin API key can read it only.
+AdminSessionUser = Annotated[User, Depends(require_admin_session_api)]
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +77,7 @@ async def list_providers(
 @router.post("/admin/sso/providers/", response_model=SsoProviderOut, status_code=status.HTTP_201_CREATED)
 async def create_provider(
     data: SsoProviderCreate,
-    admin: AdminUser,
+    admin: AdminSessionUser,
     db: AsyncSession = Depends(get_db),
 ) -> SsoProviderOut:
     """Create a provider (disabled unless ``enabled`` is sent).
@@ -110,7 +115,7 @@ async def get_provider(provider_id: int, admin: AdminUser, db: AsyncSession = De
 async def update_provider(
     provider_id: int,
     data: SsoProviderUpdate,
-    admin: AdminUser,
+    admin: AdminSessionUser,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> SsoProviderOut:
@@ -154,7 +159,7 @@ async def update_provider(
 )
 async def delete_provider(
     provider_id: int,
-    admin: AdminUser,
+    admin: AdminSessionUser,
     db: AsyncSession = Depends(get_db),
     force: bool = Query(False, description="Unlink the provider's identities and end their SSO sessions."),
 ) -> Response:
@@ -205,7 +210,7 @@ async def list_group_mappings(
 async def replace_group_mappings(
     provider_id: int,
     items: list[SsoGroupMappingIn],
-    admin: AdminUser,
+    admin: AdminSessionUser,
     db: AsyncSession = Depends(get_db),
 ) -> list[SsoGroupMappingOut]:
     """Replace all mappings of the provider with ``items``. IdP group values match exactly (case-sensitive)."""
@@ -222,7 +227,7 @@ async def replace_group_mappings(
 async def add_group_mapping(
     provider_id: int,
     item: SsoGroupMappingIn,
-    admin: AdminUser,
+    admin: AdminSessionUser,
     db: AsyncSession = Depends(get_db),
 ) -> SsoGroupMappingOut:
     """Add one mapping. An identical mapping returns 409."""
@@ -238,7 +243,7 @@ async def add_group_mapping(
 async def delete_group_mapping(
     provider_id: int,
     mapping_id: int,
-    admin: AdminUser,
+    admin: AdminSessionUser,
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     """Remove one mapping. Memberships it created are re-evaluated on the users' next sign-in."""
@@ -261,7 +266,7 @@ async def get_authentication_settings(admin: AdminUser, db: AsyncSession = Depen
 @router.patch("/admin/settings/authentication/", response_model=AuthSettingsOut)
 async def update_authentication_settings(
     data: AuthSettingsUpdate,
-    admin: AdminUser,
+    admin: AdminSessionUser,
     db: AsyncSession = Depends(get_db),
 ) -> AuthSettingsOut:
     """Update the fields present in the body. ``auto_redirect_provider`` must name an existing provider."""
