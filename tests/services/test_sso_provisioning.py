@@ -431,6 +431,20 @@ async def test_auto_link_requires_trust_email_verified(db_session: AsyncSession,
     assert await _identity_count(db_session) == 0
 
 
+async def test_auto_link_requires_the_standard_email_claim(
+    db_session: AsyncSession, sso_provider: SsoProvider, caplog: pytest.LogCaptureFixture
+) -> None:
+    """``email_verified`` vouches for ``email`` only, never for a custom email claim such as ``upn``."""
+    _auto_link(sso_provider)
+    sso_provider.claim_config = {"email_claim": "upn"}
+    await _user(db_session, login="prvupn", email="prv-upn@example.com")
+
+    with caplog.at_level(logging.INFO, logger="specivo.sso"), pytest.raises(SsoAccountNotProvisionedError):
+        await _resolve(db_session, sso_provider, upn="prv-upn@example.com", email="someone-else@example.com")
+    assert await _identity_count(db_session) == 0
+    assert "reason=email_claim_not_standard" in caplog.text
+
+
 async def test_manual_link_policy_never_auto_links(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
     sso_provider.link_policy = "manual"
     sso_provider.trust_email_verified = True

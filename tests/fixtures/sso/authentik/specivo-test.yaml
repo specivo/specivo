@@ -11,10 +11,18 @@
 # Known differences from the Keycloak seed (authentik defaults, kept on purpose
 # so the compatibility smoke sees them):
 #   - the "groups" claim comes from the default profile scope mapping;
-#   - authentik emits no zoneinfo claim; sso-thai only carries its locale
-#     (user attribute settings.locale);
-#   - email_verified is authentik's own decision, sso-unverified is seeded for
-#     parity of usernames only.
+#   - the default scope mappings emit neither locale nor zoneinfo; sso-thai
+#     carries its locale as the user attribute settings.locale only, which no
+#     token shows;
+#   - the default email scope mapping always sends email_verified: false, so
+#     sso-unverified is seeded for parity of usernames only;
+#   - "sub" is the hashed user id (64 hex characters), not a readable id.
+#
+# grant_types must be set explicitly: a provider created from a blueprint
+# gets an empty list and authentik answers every authorization request with
+# invalid_request. The back-channel logout_uri below targets the E2E server;
+# tests/integration/sso_idp/test_sso_login_authentik.py repoints it at its
+# own listener while it runs.
 version: 1
 metadata:
   name: Specivo SSO test
@@ -116,6 +124,9 @@ entries:
       authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
       invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
       client_type: confidential
+      # Empty when created from a blueprint (authentik 2026.x refuses every
+      # authorization request then); the admin UI pre-ticks nearly all types.
+      grant_types: [authorization_code]
       client_id: specivo
       client_secret: specivo-test-client-secret-not-a-real-secret
       redirect_uris:
@@ -125,6 +136,9 @@ entries:
           url: http://testserver/auth/oidc/authentik/callback/
         - matching_mode: strict
           url: http://localhost:9944/login/?logged_out=1
+          redirect_uri_type: logout
+        - matching_mode: strict
+          url: http://testserver/login/?logged_out=1
           redirect_uri_type: logout
       # RS256 with the instance's self-signed key (without it authentik signs HS256).
       signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
@@ -155,6 +169,7 @@ entries:
       authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
       invalidation_flow: !Find [authentik_flows.flow, [slug, default-provider-invalidation-flow]]
       client_type: public
+      grant_types: [authorization_code]
       client_id: specivo-public
       redirect_uris:
         - matching_mode: strict

@@ -65,7 +65,9 @@ The steps are the same for every IdP. Only the screens differ.
 
     For example `https://specivo.example.com/auth/oidc/keycloak/callback/`. The trailing slash is
     part of the address. If Specivo is served under a path prefix (`STEALTH_PREFIX`), the prefix
-    comes right after `{APP_URL}` in these addresses and in the post-logout address below.
+    comes right after `{APP_URL}` in these addresses and in the post-logout address below. The
+    **Connection** card does not show the prefix: add it yourself when you register the addresses
+    at the IdP.
 
 2. At the IdP, create a client (an "application") for Specivo and register the redirect URI
    **exactly as shown**. Do not use wildcards. If the IdP asks for a post-logout redirect
@@ -98,7 +100,7 @@ The provider form has five cards. The tables list every field.
 | Client ID | The client ID registered at the IdP. |
 | Client authentication | How Specivo proves itself at the token endpoint: `client_secret_basic` (default), `client_secret_post`, or `none` for a public client that relies on PKCE alone. Use `client_secret_basic` unless your IdP's documentation says otherwise. |
 | Client secret | See [The client secret](#the-client-secret). Not used with `none`. |
-| Scopes | Space-separated. Default `openid profile email`. `openid` is required and is added first. Add `groups` or other scopes your IdP needs to release a claim. |
+| Scopes | Space-separated. Default `openid profile email`. `openid` is required and is always sent first. Add `groups` or other scopes your IdP needs to release a claim. |
 | Extra sign-in parameters | Optional `prompt`, `domain_hint`, `login_hint`, `acr_values` and `max_age`, added to the sign-in request. Nothing else can be set here. With `max_age`, the ID token must carry an `auth_time` no older than `max_age` seconds (plus `SSO_CLOCK_SKEW_SECONDS`), or the sign-in is refused with `sso_token_invalid`. **Connect** from the profile always sends `prompt=login` and `max_age=0`, whatever is set here. |
 | Enabled | Shows the button on the login page. A provider cannot be enabled while a confidential client has no secret. Turning it off signs out everyone whose session came from this provider (see [Sessions](#sessions-and-logout)). |
 | Button order | Lower numbers come first. |
@@ -231,15 +233,16 @@ account, and combine it with [required groups](#groups-and-roles) or an
 [email domain list](#limiting-who-can-sign-in) when they should not.
 
 An account can be refused even when it is connected: deactivated accounts, accounts locked by an
-administrator, and service accounts cannot sign in through SSO (`sso_account_disabled`). A lockout
+administrator, accounts still waiting for email verification, and service accounts cannot sign in
+through SSO (`sso_account_disabled`). A lockout
 from repeated wrong passwords does not block SSO, because it protects the password only.
 
 ### Linking an existing account
 
 Most installs start with local accounts. There are two ways to connect them to the IdP.
 
-**Manual (default).** The person signs in with their password, opens **My profile → Connected
-accounts**, and presses **Connect *label***. The IdP asks them to sign in again even if they
+**Manual (default).** The person signs in with their password, opens **Profile → Connected
+accounts** (in the account menu), and presses **Connect *label***. The IdP asks them to sign in again even if they
 already have a session there (Specivo sends `prompt=login` and `max_age=0`), so a browser left
 signed in at the IdP cannot be used to connect somebody else's account. After signing in at the
 IdP they return to their profile with the account connected. From then on the button on the login page works for them.
@@ -382,20 +385,21 @@ allows.
 1. **Disable the person at the IdP.** They cannot sign in again. Their existing Specivo session
    keeps working until you end it or it reaches the maximum session length (at most a week).
 2. **Back-channel logout**, where the IdP supports it, ends the session when the IdP ends theirs.
-3. **A refused sign-in** because they lost a required group, or their email domain no longer
-   qualifies, ends the remaining sessions that came from that identity.
+3. **A refused sign-in** because they lost a required group, their email domain no longer
+   qualifies, or a group overage hides their groups (`sso_groups_overage`), ends the remaining
+   sessions that came from that identity.
 4. **Deactivate the user in Specivo.** On the user's page in **Administration → Users**, press
    **Deactivate account** (or call `POST /api/v1/admin/users/{id}/deactivate/`). This works for
    every account, with or without SSO, service accounts included. In one step it ends every
    session (the browser is refused on its next request) and switches off all of their API keys.
    The keys are kept, switched off, so their history stays readable. **Reactivate account** lets
-   the person sign in again, but their API keys stay off: they (or you) switch them back on or
-   create new ones. You cannot deactivate your own account or the last active administrator.
+   the person sign in again, but their API keys stay off: they switch them back on from their API
+   keys page, or they or an administrator create new ones. You cannot deactivate your own account or the last active administrator.
 5. **Disconnect their identity** from the user's admin page to end the sessions that came from it.
 
 Each provider also has the option **Deactivate the Specivo account when a sign-in is refused by the
 required groups or allowed email domains** (`deactivate_on_access_loss`, off by default). With it
-on, a refused sign-in (step 3) deactivates the account as in step 4, but only for an account
+on, a refused sign-in (step 3, a group overage included) deactivates the account as in step 4, but only for an account
 already connected to that identity. Specivo never deactivates a service account this way, nor the
 last active administrator (it logs a warning instead).
 
@@ -403,8 +407,8 @@ last active administrator (it logs a warning instead).
 disables them, until the key expires or you deactivate the user. Turn off **Users who sign in through
 SSO may use API keys** under **Administration → Settings → Authentication** if you do not want that.
 It applies to accounts with no password and a connected identity: they cannot create keys, and
-their existing keys are refused while the setting is off. Such accounts also cannot get a password
-through **Forgot password**; an administrator can still set one deliberately. Users with a password
+their existing keys are refused while the setting is off. Whatever this setting says, such accounts
+cannot get a password through **Forgot password**; an administrator can still set one deliberately. Users with a password
 and service accounts are not affected.
 
 An administrator's API key can read the single sign-on configuration through the admin API
@@ -454,10 +458,12 @@ These are set in `.env` like other [configuration](../configuration.md). They ap
 ## Troubleshooting
 
 When a sign-in fails, the person lands on the login page with a message. For their own account
-page (a failed **Connect**) they land on **My profile** instead. The message never repeats anything the IdP
+page (a failed **Connect**) they land on their **Profile** instead. The message never repeats anything the IdP
 said, so use the code and the log. The code is in the address as `?sso_error=<code>`. The reason is in
-the Specivo log: search the `api` container's output for lines starting with `sso.`
-(`docker compose logs api | grep sso.`). Logs never contain tokens or secrets.
+the Specivo log. The `api` container writes one JSON object per line (plain text with
+`DEBUG=true`). SSO lines come from the logger `specivo.sso`, and their message starts with the
+event name, such as `sso.id_token.rejected ... reason=wrong_issuer` or `sso.login.refused_policy`.
+To see them: `docker compose logs api | grep specivo.sso`. Logs never contain tokens or secrets.
 
 | Code | What the person sees | What to check |
 |---|---|---|
@@ -469,7 +475,7 @@ the Specivo log: search the `api` container's output for lines starting with `ss
 | `sso_token_invalid` | "Single sign-on failed. Please try again." | The ID token failed a check. See the reason in the log: a wrong issuer or audience (the issuer or client ID does not match), a bad signature, an expired token (clock drift between servers), a missing `nonce` or `sub`, a token signed with an algorithm Specivo does not accept (such as `HS256`), or a missing or too old `auth_time` when `max_age` was sent (always for **Connect**: the IdP did not make the person sign in again). |
 | `sso_unavailable` | "Single sign-on is temporarily unavailable." | Specivo could not reach Redis, which it needs to store sign-in state. Local sign-in keeps working. Check the `redis` container. |
 | `sso_account_not_provisioned` | "No account here is connected to your identity provider account." | No account is connected, automatic linking did not apply and JIT creation is off. Turn on **Create an account on first sign-in**, connect the account from the person's profile, or check the [linking conditions](#linking-an-existing-account). |
-| `sso_account_disabled` | "This account is disabled." | The connected user is deactivated, locked by an administrator, or is a service account. Check **Administration → Users**. |
+| `sso_account_disabled` | "This account is disabled." | The connected user is deactivated, locked by an administrator, has not verified their email address yet, or is a service account. Check **Administration → Users**. |
 | `sso_email_missing` | "The identity provider did not send an email address." | JIT needs an email. Add the `email` scope and claim at the IdP, or set the **Email claim** to the right name. For Entra ID, add the `email` optional claim. |
 | `sso_email_conflict` | "An account with this email address already exists." | JIT would create a second account with an email that exists. The person should sign in with their password and connect the account from their profile. |
 | `sso_identity_in_use` | "This identity provider account is already connected to another account." | Seen when connecting. The IdP identity belongs to another Specivo user. Disconnect it there first. |

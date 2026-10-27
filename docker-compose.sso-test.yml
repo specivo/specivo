@@ -5,8 +5,9 @@
 # here protects anything. All state lives in RAM and is gone after a down.
 #
 #   make sso-idp-up              # Keycloak only (default)
-#   make sso-idp-up-authentik    # Keycloak + authentik (opt-in compatibility smoke)
-#   make test-sso-idp            # pytest -m 'sso_idp and not e2e'
+#   make sso-idp-up-authentik    # authentik only (opt-in compatibility smoke)
+#   make test-sso-idp            # pytest -m 'sso_idp and not e2e'; the authentik
+#                                # tests also need SSO_TEST_AUTHENTIK_ISSUER
 #   make test-e2e-sso            # sso-idp-up + the Playwright SSO tests
 #   make sso-idp-down            # stop everything, discard volumes
 #
