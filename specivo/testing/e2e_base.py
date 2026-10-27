@@ -29,17 +29,40 @@ from specivo.web.assets import missing_asset_manifests
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://specivo:specivo@localhost:5433/specivo_test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6380/0")
 os.environ.setdefault("SECRET_KEY", "dev-secret-key-minimum-32-bytes-for-hs256-signing")
-os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 os.environ.setdefault("KILL_TOKEN", "test-kill-token-secret")
 os.environ.setdefault("INSTALLED_PLUGINS", "[]")
-# DEBUG=true disables Secure flag on cookies so http://127.0.0.1 works.
 # SQL_ECHO=false prevents SQLAlchemy from logging every query.
-os.environ["DEBUG"] = "true"
 os.environ["SQL_ECHO"] = "false"
 
 E2E_SERVER_HOST = "127.0.0.1"
 E2E_SERVER_PORT = int(os.environ.get("E2E_SERVER_PORT", "9944"))
 E2E_BASE_URL = f"http://{E2E_SERVER_HOST}:{E2E_SERVER_PORT}"
+# The interface uvicorn listens on. The browser and the fixtures always use
+# E2E_SERVER_HOST; only the SSO back-channel test needs more: the disposable
+# Keycloak calls the server from a container, which on Linux cannot reach the
+# host's loopback (``make test-e2e-sso`` listens on 0.0.0.0 there).
+E2E_SERVER_BIND = os.environ.get("E2E_SERVER_BIND", E2E_SERVER_HOST)
+# The public URL the SSO redirect URIs are built from. The disposable Keycloak
+# realm (tests/fixtures/sso) registers http://localhost:9944, not 127.0.0.1.
+E2E_SSO_BASE_URL = f"http://localhost:{E2E_SERVER_PORT}"
+
+# Settings for the E2E server process only: pytest imports this module while
+# collecting every run, and setting them in os.environ here would leak into
+# any in-process test that rebuilds the settings after a cache_clear().
+#
+# DEBUG=true disables the Secure flag on cookies so http://127.0.0.1 works.
+# RATE_LIMIT_ENABLED=false (unless set for the run) lets the browser tests sign
+# in as often as they need; leaked into os.environ it would also switch the
+# limiter off for the in-process rate-limit tests.
+# APP_URL and SSO_ALLOW_INSECURE_HTTP let the SSO tests (``sso_idp``) sign in
+# through the http-only disposable Keycloak; while no SSO provider is
+# configured they change nothing for the other tests.
+_E2E_SERVER_ENV = {
+    "DEBUG": "true",
+    "RATE_LIMIT_ENABLED": os.environ.get("RATE_LIMIT_ENABLED", "false"),
+    "APP_URL": E2E_SSO_BASE_URL,
+    "SSO_ALLOW_INSECURE_HTTP": "true",
+}
 E2E_PASSWORD = "testpassword"
 
 
@@ -90,6 +113,24 @@ def _flush_redis():
     r.close()
 
 
+def kill_port_listeners(port: int) -> None:
+    """Kill a leftover server LISTENING on *port*, and nothing else.
+
+    A bare ``lsof -ti:<port>`` also lists every process with a connection to
+    the port. Docker Desktop's backend proxies container traffic to
+    ``host.docker.internal:<port>`` (an IdP calling the back-channel logout
+    URL), so killing every listed process took the Docker engine down.
+    """
+    result = subprocess.run(
+        ["lsof", "-t", f"-iTCP:{port}", "-sTCP:LISTEN"],
+        capture_output=True,
+        text=True,
+    )
+    for pid in result.stdout.split():
+        if pid.isdigit():
+            subprocess.run(["kill", "-9", pid], capture_output=True)
+
+
 @pytest.fixture(scope="session")
 def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
     """Start uvicorn, wait for /health/, yield base URL, stop on teardown."""
@@ -103,8 +144,7 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             pytrace=False,
         )
 
-    # Kill any leftover server on our port
-    subprocess.run(f"lsof -ti:{E2E_SERVER_PORT} | xargs kill -9", shell=True, capture_output=True)
+    kill_port_listeners(E2E_SERVER_PORT)
     time.sleep(0.5)
 
     proc = subprocess.Popen(
@@ -114,13 +154,13 @@ def e2e_server(_seed_lookups, _flush_redis) -> Generator[str, None, None]:
             "uvicorn",
             "specivo.main:app",
             "--host",
-            E2E_SERVER_HOST,
+            E2E_SERVER_BIND,
             "--port",
             str(E2E_SERVER_PORT),
             "--log-level",
             "warning",
         ],
-        env={**os.environ},
+        env={**os.environ, **_E2E_SERVER_ENV},
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )

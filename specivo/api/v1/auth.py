@@ -18,6 +18,9 @@ from fastapi import APIRouter, Cookie, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.auth_cookies import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
+from specivo.core.client_ip import get_client_ip
+from specivo.core.constants import API_KEY_PREFIX
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import rate_limit
@@ -28,6 +31,7 @@ from specivo.schemas.auth import (
     ChangePasswordResponse,
     ForgotPasswordRequest,
     LoginRequest,
+    LogoutResponse,
     RefreshRequest,
     ResetPasswordRequest,
     SessionOut,
@@ -39,60 +43,18 @@ from specivo.services.auth_utils import validate_password_policy
 router = APIRouter()
 _service = AuthService()
 
-# ---------------------------------------------------------------------------
-# Cookie names and paths (mirror the wiki spec)
-# ---------------------------------------------------------------------------
-# NOTE: Using plain names ("access_token", "refresh_token") for backward
-# compatibility with existing sessions. Future versions should consider the
-# ``__Host-`` prefix (e.g. ``__Host-access_token``) which binds the cookie
-# to the origin (requires Secure, Path=/, no Domain). Changing the name
-# now would invalidate all active sessions.
-_ACCESS_COOKIE = "access_token"
-_REFRESH_COOKIE = "refresh_token"
-_REFRESH_COOKIE_PATH = "/"
 
+def _request_access_token(request: Request, cookie_value: str | None) -> str | None:
+    """Return the access JWT the request carries: the Bearer header, else the cookie.
 
-def _set_auth_cookies(
-    response: Response,
-    access_token: str,
-    refresh_token: str,
-    settings,
-    *,
-    remember: bool = False,
-) -> None:
-    """Attach httpOnly auth cookies for browser clients.
-
-    When *remember* is ``False`` (the default), cookies are set without
-    ``max_age`` so the browser treats them as session cookies and discards
-    them when the browser closes.  When ``True``, persistent ``max_age``
-    values are used.
+    An API key in the header is not an access token and yields the cookie.
     """
-    access_kwargs: dict = dict(
-        key=_ACCESS_COOKIE,
-        value=access_token,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path="/",
-    )
-    refresh_kwargs: dict = dict(
-        key=_REFRESH_COOKIE,
-        value=refresh_token,
-        httponly=True,
-        samesite="lax",
-        secure=not settings.debug,
-        path=_REFRESH_COOKIE_PATH,
-    )
-    if remember:
-        access_kwargs["max_age"] = settings.access_token_expire_minutes * 60
-        refresh_kwargs["max_age"] = settings.refresh_token_expire_days * 86400
-    response.set_cookie(**access_kwargs)
-    response.set_cookie(**refresh_kwargs)
-
-
-def _clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie(key=_ACCESS_COOKIE, path="/")
-    response.delete_cookie(key=_REFRESH_COOKIE, path=_REFRESH_COOKIE_PATH)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        bearer = auth_header[len("Bearer ") :]
+        if bearer and not bearer.startswith(API_KEY_PREFIX):
+            return bearer
+    return cookie_value
 
 
 def _read_remember_from_access_cookie(request: Request, settings) -> bool:
@@ -104,7 +66,7 @@ def _read_remember_from_access_cookie(request: Request, settings) -> bool:
     """
     import jwt as pyjwt
 
-    token = request.cookies.get(_ACCESS_COOKIE)
+    token = request.cookies.get(ACCESS_COOKIE)
     if not token:
         return True  # backward compat: no cookie → persistent (old behaviour)
     try:
@@ -147,7 +109,7 @@ async def login(
 
     settings = get_settings()
     device_info = request.headers.get("User-Agent")
-    ip = request.client.host if request.client else None
+    ip = get_client_ip(request)
 
     try:
         result = await _service.login(
@@ -200,7 +162,7 @@ async def login(
         expires_in=settings.access_token_expire_minutes * 60,
     )
     response = JSONResponse(content=token_data.model_dump(), status_code=status.HTTP_200_OK)
-    _set_auth_cookies(response, access_token, refresh_token, settings, remember=body.remember)
+    set_auth_cookies(response, access_token, refresh_token, settings, remember=body.remember)
     return response
 
 
@@ -220,7 +182,7 @@ async def refresh(
     db: Annotated[AsyncSession, Depends(get_db)],
     _rl: Annotated[None, Depends(_refresh_rate_limit)],
     body: RefreshRequest | None = None,
-    refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+    refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
 ) -> Response:
     from specivo.core.config import get_settings
 
@@ -249,7 +211,7 @@ async def refresh(
         expires_in=settings.access_token_expire_minutes * 60,
     )
     response = JSONResponse(content=token_data.model_dump(), status_code=status.HTTP_200_OK)
-    _set_auth_cookies(response, access_token, new_refresh_token, settings, remember=remember)
+    set_auth_cookies(response, access_token, new_refresh_token, settings, remember=remember)
     return response
 
 
@@ -260,20 +222,40 @@ async def refresh(
 
 @router.post(
     "/logout/",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Revoke the current refresh token",
+    response_model=LogoutResponse,
+    summary="End the current session",
 )
 async def logout(
+    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
     body: RefreshRequest | None = None,
-    refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
-) -> Response:
-    raw_token = (body.refresh_token if body else None) or refresh_token_cookie
-    if raw_token:
-        await _service.logout(session=db, refresh_token_raw=raw_token)
+    refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
+    access_token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE)] = None,
+) -> JSONResponse:
+    """Revoke the session named by the refresh token and/or the access token.
 
-    response = Response(status_code=status.HTTP_204_NO_CONTENT)
-    _clear_auth_cookies(response)
+    The refresh token comes from the body or the cookie, the access token from
+    the ``Authorization: Bearer`` header or the cookie. The session they belong
+    to is revoked: its refresh token can no longer rotate and its access
+    tokens are refused from the next request on. Without either, this only
+    clears the cookies.
+
+    For a single sign-on session whose provider does RP-initiated logout,
+    ``end_session_url`` is the identity provider's end-session URL; the client
+    sends the user there to end the IdP session too. It is ``null`` otherwise.
+    """
+    from specivo.services.sso.logout import end_session_url, find_sso_logout_session
+
+    raw_token = (body.refresh_token if body else None) or refresh_token_cookie
+    access_raw = _request_access_token(request, access_token_cookie)
+    sso_session = await find_sso_logout_session(db, refresh_token_raw=raw_token, access_token_raw=access_raw)
+    await _service.end_browser_session(db, refresh_token_raw=raw_token, access_token_raw=access_raw)
+    # The session is ended before the IdP is asked anything.
+    await db.commit()
+
+    url = await end_session_url(sso_session) if sso_session is not None else None
+    response = JSONResponse(content=LogoutResponse(end_session_url=url).model_dump(), status_code=status.HTTP_200_OK)
+    clear_auth_cookies(response)
     return response
 
 
@@ -293,7 +275,7 @@ async def logout_all(
     """Revoke all sessions for the currently authenticated user."""
     count = await _service.logout_all(session=db, user_id=current_user.id)
     response = JSONResponse(content={"revoked_count": count}, status_code=status.HTTP_200_OK)
-    _clear_auth_cookies(response)
+    clear_auth_cookies(response)
     return response
 
 
@@ -313,7 +295,10 @@ async def list_sessions(
 ) -> list[SessionOut]:
     """Return active (non-expired) refresh tokens for the current user."""
     sessions = await _service.list_sessions(session=db, user_id=current_user.id)
-    return [SessionOut.model_validate(s) for s in sessions]
+    return [
+        SessionOut.model_validate(token).model_copy(update={"provider_name": provider_name})
+        for token, provider_name in sessions
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -464,7 +449,8 @@ async def change_password(
     db: Annotated[AsyncSession, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_user)],
     _rl: Annotated[None, Depends(_change_password_rate_limit)],
-    refresh_token_cookie: Annotated[str | None, Cookie(alias=_REFRESH_COOKIE)] = None,
+    refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
+    access_token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE)] = None,
 ) -> ChangePasswordResponse:
     """Change your own password, proving ownership with the current one.
 
@@ -499,11 +485,14 @@ async def change_password(
         raise
 
     # Revoke the user's other sessions, keeping the caller's own refresh
-    # token alive so a browser session survives its own password change.
+    # token alive so a browser session survives its own password change. A
+    # Bearer caller without one loses its refresh token too, but its access
+    # token is not cut off mid-flow.
     revoked = await _service.logout_other_sessions(
         session=db,
         user_id=current_user.id,
         keep_refresh_token_raw=refresh_token_cookie,
+        caller_access_token_raw=_request_access_token(request, access_token_cookie),
     )
 
     try:

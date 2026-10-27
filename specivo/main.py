@@ -56,6 +56,11 @@ async def lifespan(app: FastAPI):
     # loudly: without them pages render with no Specivo CSS/JS.
     warn_if_bundles_missing()
 
+    # Security-relevant SSO settings (insecure http identity providers).
+    from specivo.services.sso.log import log_startup_warnings
+
+    log_startup_warnings(settings)
+
     # Eagerly validate DB and Redis connectivity at startup so the container
     # fails fast rather than surfacing errors on the first request.
     engine = get_engine()

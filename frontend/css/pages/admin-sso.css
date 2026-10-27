@@ -1,0 +1,39 @@
+/* Admin > Single sign-on: provider list, provider form, self-test report. */
+
+.sp-sso-form { max-width: 860px; }
+.sp-sso-section { padding: var(--sp-space-lg); margin-bottom: var(--sp-space-lg); }
+.sp-sso-section h2 { font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs); }
+.sp-sso-section-intro { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md); max-width: 68ch; }
+
+.sp-sso-check { display: flex; align-items: flex-start; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm); font-size: var(--sp-font-size-sm); cursor: pointer; }
+.sp-sso-check input { margin-top: 3px; accent-color: var(--sp-accent); }
+.sp-sso-check .form-hint { display: block; }
+.sp-sso-subhead { font-size: var(--sp-font-size-sm); font-weight: 600; margin: var(--sp-space-lg) 0 var(--sp-space-sm); }
+
+/* A URL the admin copies into the identity provider. */
+.sp-sso-copy { display: flex; align-items: center; gap: var(--sp-space-sm); margin-bottom: var(--sp-space-sm); }
+.sp-sso-copy code { flex: 1; min-width: 0; padding: 6px 10px; border: 1px solid var(--sp-border); border-radius: 6px; background: var(--sp-bg-input); font-size: var(--sp-font-size-sm); overflow-wrap: anywhere; }
+
+.sp-sso-badge { display: inline-flex; padding: 2px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; white-space: nowrap; }
+.sp-sso-badge-ok { background: var(--sp-success-subtle); color: var(--sp-success); }
+.sp-sso-badge-off { background: var(--sp-bg-input); color: var(--sp-text-muted); }
+.sp-sso-badge-bad { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+
+.sp-sso-actions { display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); align-items: center; margin-bottom: var(--sp-space-lg); }
+
+.sp-sso-report { margin-top: var(--sp-space-md); padding: var(--sp-space-md); border: 1px solid var(--sp-border); border-radius: 8px; font-size: var(--sp-font-size-sm); }
+.sp-sso-report-ok { border-color: var(--sp-success); }
+.sp-sso-report-bad { border-color: var(--sp-danger); }
+.sp-sso-report dl { display: grid; grid-template-columns: minmax(140px, max-content) 1fr; gap: 4px var(--sp-space-md); margin: var(--sp-space-sm) 0 0; }
+.sp-sso-report dt { color: var(--sp-text-muted); font-weight: 500; }
+.sp-sso-report dd { margin: 0; overflow-wrap: anywhere; }
+.sp-sso-report ul { margin: var(--sp-space-sm) 0 0; padding-left: 1.2em; }
+
+.sp-sso-mapping-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--sp-space-sm); align-items: center; margin-bottom: var(--sp-space-sm); }
+
+@media (max-width: 640px) {
+  .sp-sso-form .sp-form-cols-2 { grid-template-columns: 1fr; }
+  .sp-sso-mapping-row { grid-template-columns: 1fr; }
+  .sp-sso-report dl { grid-template-columns: 1fr; }
+  .sp-sso-copy { flex-direction: column; align-items: stretch; }
+}

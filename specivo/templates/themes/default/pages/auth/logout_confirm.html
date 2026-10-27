@@ -1,0 +1,41 @@
+{#
+  "Sign out?" confirmation, shown for GET /logout/.
+
+  Signing out changes state on the server (the session is revoked), so it only
+  happens on a CSRF-protected POST. A bookmark or an old link that still sends
+  a GET lands here and asks first. The form works without JavaScript: the CSRF
+  token is rendered into it server-side.
+#}
+{% extends "base_standalone.html" %}
+
+{% block title %}{% trans %}Sign out{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="login-page">
+  <div class="login-brand">
+    <svg viewBox="0 0 40 40" fill="none" style="width:48px;height:48px;">
+      <circle cx="18" cy="18" r="14" stroke="#5a5770" stroke-width="1.5" fill="none"/>
+      <line x1="28" y1="28" x2="37" y2="37" stroke="#5a5770" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M18 12 L7 17.5 L18 23 L29 17.5 Z" fill="var(--sp-accent)"/>
+      <path d="M7 21 L18 26.5 L29 21" stroke="#8a8698" stroke-width="1.2" fill="none"/>
+      <path d="M7 24 L18 29.5 L29 24" stroke="#6b6880" stroke-width="1.2" fill="none"/>
+    </svg>
+    <h1>{{ brand_name }}</h1>
+  </div>
+
+  <div class="login-card" style="text-align:center;">
+    <h2 style="font-size:var(--sp-font-size-lg);font-weight:600;color:var(--sp-text-primary);margin-bottom:var(--sp-space-xs);">
+      {% trans %}Sign out?{% endtrans %}
+    </h2>
+    <p style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-lg);">
+      {% trans name=(user.display_name or user.login) %}You are signed in as {{ name }}. Signing out ends this session on this browser.{% endtrans %}
+    </p>
+
+    <form class="sp-signout-form" method="post" action="/logout/">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="sp-btn-login" data-testid="logout-confirm">{% trans %}Sign out{% endtrans %}</button>
+    </form>
+    <a href="/" class="sp-btn-signout" style="margin-top:var(--sp-space-sm);">{% trans %}Cancel{% endtrans %}</a>
+  </div>
+</div>
+{% endblock %}

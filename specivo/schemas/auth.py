@@ -33,6 +33,19 @@ class RefreshRequest(BaseModel):
     refresh_token: str
 
 
+class LogoutResponse(BaseModel):
+    """Result of POST /auth/logout: where to end the session at the identity provider."""
+
+    end_session_url: str | None = Field(
+        default=None,
+        description=(
+            "For a single sign-on session whose provider does RP-initiated logout: the identity "
+            "provider's end-session URL to send the user to. null for a local session, or when "
+            "the provider cannot be reached (the Specivo session is ended either way)."
+        ),
+    )
+
+
 class SessionOut(BaseModel):
     """A single active session (refresh token) returned by GET /auth/sessions."""
 
@@ -43,6 +56,11 @@ class SessionOut(BaseModel):
     ip_address: str | None
     created_at: datetime
     expires_at: datetime
+    # "password" or "sso"
+    auth_method: str
+    # Display name of the SSO provider the session signed in with; None for
+    # password sessions (and SSO sessions whose identity was unlinked).
+    provider_name: str | None = None
 
 
 # ---------------------------------------------------------------------------

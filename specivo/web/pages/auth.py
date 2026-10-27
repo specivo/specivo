@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from typing import Annotated
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, Response, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -20,19 +21,23 @@ from specivo.web.deps import (
     require_user,
     safe_next_path,
 )
+from specivo.web.pages.sso import sso_error_message, sso_login_path
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["web-auth"], include_in_schema=False)
 
 
-@router.get("/login/", response_class=HTMLResponse)
+@router.get("/login/", response_model=None)
 async def login_page(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     reset: str = Query(""),  # noqa: B008
     next_url: str = Query("", alias="next"),  # noqa: B008
-) -> HTMLResponse:
+    sso_error: str = Query(""),  # noqa: B008
+    logged_out: str = Query(""),  # noqa: B008
+    local: str = Query(""),  # noqa: B008
+) -> HTMLResponse | RedirectResponse:
     """Render the login page (standalone layout, no sidebar).
 
     If the user is already authenticated, the template shows a
@@ -44,8 +49,51 @@ async def login_page(
     page they asked for instead of the dashboard. It is validated here rather
     than trusted — only a path within this site survives ``safe_next_path`` —
     so the parameter cannot be used to bounce somebody to another origin.
+
+    ``?sso_error=`` is where a refused single sign-on lands. Only its code is
+    read, and only a fixed, translated message is shown for it
+    (``sso_error_message``); nothing the identity provider sent reaches the
+    page.
+
+    ``?logged_out=1`` is where sign-out lands (directly, or back from the
+    identity provider) and shows a "You have been signed out" notice.
+
+    Single sign-on (``get_login_policy``, which applies ``SSO_FORCE_LOCAL_LOGIN``):
+
+    * every enabled provider gets a "Sign in with ..." link carrying ``next``;
+    * ``sso.hide_local_login`` hides the password form behind a link to
+      ``?local=1``, the break-glass way back to it. With no enabled provider
+      the form is shown anyway, since there would be nothing else;
+    * ``sso.auto_redirect_provider`` answers with a redirect to that provider,
+      except for a signed-in visitor, ``?local=1``, ``?logged_out=1``,
+      ``?reset=ok``, any ``sso_error`` (a failed SSO login must not loop) and a
+      provider that is disabled or gone.
     """
+    from specivo.services.sso.auth_settings import get_login_policy
+    from specivo.services.sso.login import SsoLoginService
+
     user = await get_current_user_optional(request, db)
+    next_path = safe_next_path(next_url)
+    want_local = local == "1"
+    policy = await get_login_policy(db)
+    providers = await SsoLoginService().list_enabled_providers(db)
+
+    redirect_slug = policy.auto_redirect_provider
+    if (
+        redirect_slug
+        and user is None
+        and not want_local
+        and logged_out != "1"
+        and reset != "ok"
+        and not sso_error
+        and any(p.slug == redirect_slug for p in providers)
+    ):
+        response = RedirectResponse(sso_login_path(redirect_slug, next_path), status_code=302)
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
+    show_local_form = want_local or not policy.hide_local_login or not providers
+    local_query = {"local": "1", **({"next": next_path} if next_path else {})}
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -53,15 +101,72 @@ async def login_page(
         context={
             "user": user,
             "reset_ok": reset == "ok",
-            "next_path": safe_next_path(next_url),
+            "next_path": next_path,
+            "sso_error_message": sso_error_message(sso_error),
+            "sso_idp_unreachable": sso_error == "sso_idp_unreachable",
+            "logged_out": logged_out == "1",
+            "sso_buttons": [
+                {"display_name": p.display_name, "url": sso_login_path(p.slug, next_path)} for p in providers
+            ],
+            "show_local_form": show_local_form,
+            "local_login_url": "?" + urlencode(local_query),
+            "local_login_admins_only": policy.local_login_admins_only,
         },
     )
 
 
-@router.get("/logout/")
-async def logout_page() -> RedirectResponse:
-    """Clear auth cookies and redirect to login."""
-    response = RedirectResponse("/login/", status_code=302)
+@router.get("/logout/", response_model=None)
+async def logout_confirm_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> HTMLResponse | RedirectResponse:
+    """Ask before signing out; a GET never signs anybody out.
+
+    Signing out is a state change, so it only happens on the CSRF-protected
+    ``POST /logout/``. Otherwise any page could sign the visitor out with an
+    ``<img src="/logout/">``. A bookmark or an old link lands here and gets a
+    one-button form instead. A visitor with no session has nothing to end and
+    goes straight to the login page.
+    """
+    user = await get_current_user_optional(request, db)
+    if user is None:
+        return RedirectResponse("/login/", status_code=302)
+    templates = get_templates()
+    return templates.TemplateResponse(request, "pages/auth/logout_confirm.html", context={"user": user})
+
+
+@router.post("/logout/")
+async def logout(
+    request: Request,
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> RedirectResponse:
+    """Revoke this browser's session on the server, clear its cookies, sign out at the IdP.
+
+    The session is revoked through ``SessionService.revoke`` (its refresh rows
+    are deleted and its ``sid`` is marked revoked) and the access token's
+    ``jti`` is blocklisted, so copies of either cookie stop working
+    immediately. CSRF is enforced by ``CSRFMiddleware`` whenever the request
+    carries a session cookie; without one there is nothing to revoke.
+
+    An SSO session is read before it is revoked: when its provider does
+    RP-initiated logout, the browser goes on to the IdP's end-session endpoint
+    (``specivo.services.sso.logout``), which sends it back to the fixed
+    ``/login/?logged_out=1``. Everything else lands there directly. Nothing in
+    the request chooses the destination.
+    """
+    from specivo.services.auth_service import AuthService
+    from specivo.services.sso.logout import end_session_url, find_sso_logout_session, logged_out_path
+
+    refresh_raw = request.cookies.get("refresh_token")
+    access_raw = request.cookies.get("access_token")
+    sso_session = await find_sso_logout_session(db, refresh_token_raw=refresh_raw, access_token_raw=access_raw)
+    await AuthService().end_browser_session(db, refresh_token_raw=refresh_raw, access_token_raw=access_raw)
+    # Commit before the IdP is asked anything and before the browser follows
+    # the redirect, so the revoked session is gone whatever happens next.
+    await db.commit()
+
+    target = (await end_session_url(sso_session) if sso_session is not None else None) or logged_out_path()
+    response = RedirectResponse(target, status_code=302)
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     return response
@@ -75,6 +180,14 @@ async def forgot_password_form(request: Request) -> HTMLResponse:
         request,
         "pages/auth/forgot_password.html",
     )
+
+
+async def _token_owner_is_sso_only(db: AsyncSession, user_id: int) -> bool:
+    """The reset token belongs to an SSO-only account, which email reset never gives a password."""
+    from specivo.services.auth_utils import is_sso_only_user
+
+    owner = await db.scalar(select(User).where(User.id == user_id))
+    return owner is not None and await is_sso_only_user(db, owner)
 
 
 @router.get("/reset-password/", response_class=HTMLResponse)
@@ -102,7 +215,7 @@ async def reset_password_form(
         result = await db.execute(stmt)
         record = result.scalar_one_or_none()
 
-        if record is None:
+        if record is None or await _token_owner_is_sso_only(db, record.user_id):
             token_error = _("This password reset link is invalid. Please request a new one.")
         elif record.used_at is not None:
             token_error = _("This password reset link has already been used. Please request a new one.")
@@ -123,13 +236,25 @@ async def reset_password_form(
 async def profile_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+    sso_linked: str = Query(""),  # noqa: B008
+    sso_unlinked: str = Query(""),  # noqa: B008
+    sso_error: str = Query(""),  # noqa: B008
 ) -> Response:
-    """Render the user profile page."""
+    """Render the user profile page, with its "Connected accounts" section.
+
+    ``?sso_linked=``, ``?sso_unlinked=`` and ``?sso_error=`` are where the
+    connect and disconnect flows land; each selects a fixed, translated
+    message and is never reflected.
+    """
+    from specivo.web.pages.connected_accounts import profile_connected_accounts
+
+    connected = await profile_connected_accounts(db, user, linked=sso_linked, unlinked=sso_unlinked, error=sso_error)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/auth/profile.html",
-        context={"user": user, "active_page": "profile"},
+        context={"user": user, "active_page": "profile", **connected},
     )
 
 
@@ -158,10 +283,12 @@ async def preferences_page(
     """Render the user preferences page."""
     from specivo.core.config import get_settings
     from specivo.core.locales import TIMEZONE_CHOICES, get_language_choices
+    from specivo.services.auth_service import AuthService
     from specivo.services.settings_service import SettingsService
 
     settings = get_settings()
     palette = await SettingsService().get_avatar_palette(db)
+    sessions = await AuthService().list_sessions(db, user.id)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -170,6 +297,8 @@ async def preferences_page(
             "user": user,
             "active_page": "preferences",
             "avatar_palette": palette,
+            "sessions": [{"row": row, "provider_name": provider_name} for row, provider_name in sessions],
+            "sso_password_providers": await _sso_only_providers(db, user),
             "language_choices": get_language_choices(settings.available_languages),
             "timezone_choices": TIMEZONE_CHOICES,
             "password_min_length": settings.password_min_length,
@@ -177,10 +306,25 @@ async def preferences_page(
     )
 
 
+async def _sso_only_providers(db: AsyncSession, user: User) -> list[str]:
+    """Display names of the providers ``user`` signs in with, when that is the only way in.
+
+    Empty for a user with a password, a service account, or a user without a
+    connected identity: they get the ordinary password form.
+    """
+    if user.password_hash or user.is_service_account:
+        return []
+    from specivo.services.sso.identity_service import IdentityService
+
+    identities = await IdentityService().list_for_user(db, user.id)
+    return sorted({identity.provider_name for identity in identities})
+
+
 @router.get("/my/password/", response_model=None)
 async def change_password_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the standalone password-change page.
 
@@ -189,6 +333,10 @@ async def change_password_page(
     redirect rather than another hop in it. The same page serves a voluntary
     visit, which gets the form without the explanation and without being sent
     anywhere afterwards.
+
+    A user without a password who signs in through an identity provider gets
+    an explanation instead of the form: there is no current password to
+    prove, and the change endpoint refuses them.
     """
     from specivo.core.config import get_settings
 
@@ -201,6 +349,7 @@ async def change_password_page(
         context={
             "user": user,
             "forced": forced,
+            "sso_password_providers": await _sso_only_providers(db, user),
             "password_min_length": settings.password_min_length,
             # A forced user came here trying to reach the app, so put them in
             # it once the flag is cleared. A voluntary visitor asked for this
@@ -277,11 +426,22 @@ async def delete_avatar(
 async def api_keys_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
-    """Render the API keys management page (requires auth)."""
+    """Render the API keys management page (requires auth).
+
+    While ``sso.allow_api_keys_for_sso_users`` is off, a user who signs in only
+    through SSO gets an explanation instead of the "New API Key" button.
+    """
+    from specivo.services.api_key_service import sso_api_keys_refused
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/auth/api_keys.html",
-        context={"user": user, "active_page": "api-keys"},
+        context={
+            "user": user,
+            "active_page": "api-keys",
+            "api_keys_refused": await sso_api_keys_refused(db, user),
+        },
     )

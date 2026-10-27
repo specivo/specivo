@@ -128,7 +128,7 @@ class TestJwtClaims:
         assert "is_service_account" not in payload, "JWT must not contain is_service_account claim"
 
     async def test_jwt_contains_only_required_claims(self, client: AsyncClient, db_session: AsyncSession):
-        """JWT payload must contain only: sub, iat, exp, jti."""
+        """JWT payload must contain only: sub, iat, exp, jti, rem, sid."""
         await _create_user(db_session, login="jwt_minimal_user")
         resp = await _login(client, "jwt_minimal_user", TEST_PASSWORD)
         assert resp.status_code == 200
@@ -136,7 +136,7 @@ class TestJwtClaims:
         access_token = resp.json()["access_token"]
         payload = pyjwt.decode(access_token, options={"verify_signature": False})
 
-        allowed_claims = {"sub", "iat", "exp", "jti", "rem"}
+        allowed_claims = {"sub", "iat", "exp", "jti", "rem", "sid"}
         extra_claims = set(payload.keys()) - allowed_claims
         assert not extra_claims, f"JWT contains unexpected claims: {extra_claims}"
 
@@ -422,14 +422,16 @@ class TestXForwardedForTrust:
             "Request",
             (),
             {
-                "headers": {"X-Forwarded-For": "203.0.113.50, 10.0.0.1"},
+                # A proxy appends the address it saw, never its own.
+                "headers": {"X-Forwarded-For": "198.51.100.9, 203.0.113.50"},
                 "client": type("Client", (), {"host": "10.0.0.1"})(),
             },
         )()
 
-        # With 10.0.0.0/8 explicitly in trusted_proxies, XFF is used.
+        # With the proxy explicitly in trusted_proxies, its XFF entry is used.
         mock_settings = MagicMock()
-        mock_settings.trusted_proxies = ["10.0.0.0/8"]
+        mock_settings.trusted_proxies = ["10.0.0.1/32"]
+        mock_settings.trusted_proxy_hops = 1
         with patch("specivo.core.config.get_settings", return_value=mock_settings):
             ip = _get_client_ip(request)
         assert ip == "203.0.113.50"

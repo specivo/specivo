@@ -3,7 +3,10 @@
 This module provides:
 - ``get_current_user``: FastAPI dependency that resolves the authenticated user
   from either a JWT access token or an API key.
-- ``blocklist_token`` / ``is_token_blocked``: Redis JWT blocklist helpers.
+- ``blocklist_token`` / ``blocklist_access_token`` / ``is_token_blocked``: Redis
+  JWT blocklist helpers.
+- ``mark_sessions_revoked`` / ``is_access_token_revoked``: Redis revoked-session
+  markers (``revoked_session:{sid}``) written by ``SessionService.revoke``.
 
 Resolution order in ``get_current_user``:
 1. ``Authorization: Bearer <token>`` header
@@ -14,7 +17,9 @@ Resolution order in ``get_current_user``:
 
 JWT validation steps (order matters):
 1. Decode + verify signature and expiry (PyJWT, HS256)
-2. Check Redis blocklist (``jwt_blocklist:{jti}``) — gracefully degraded if Redis is down
+2. Check Redis for ``jwt_blocklist:{jti}`` and ``revoked_session:{sid}`` in one
+   round trip — fail closed (deny) if Redis is down. A token without ``sid``
+   (minted before the claim existed) is only checked by ``jti``.
 3. Load user from DB by ``sub`` claim
 4. Check ``user.status`` — only ``active`` and ``locked`` pass (locked blocks JWT per spec;
    the locked check is explicit below to return a meaningful error code)
@@ -36,14 +41,17 @@ the change-password page instead.
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator, AsyncIterator
+import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Iterable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 
 import jwt
 from fastapi import Depends, Request, Response
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.client_ip import get_client_ip
 from specivo.core.config import get_settings
 from specivo.core.constants import API_KEY_PREFIX, JWT_ALGORITHM
 from specivo.core.database import get_db
@@ -83,6 +91,26 @@ async def blocklist_token(jti: str, ttl_seconds: int) -> None:
         logger.warning("Redis blocklist write failed (jti=%s): %s", jti, exc)
 
 
+async def blocklist_access_token(token: str) -> None:
+    """Blocklist an access JWT for the rest of its lifetime.
+
+    Only a token this instance signed is acted on: the signature is verified
+    so a forged token cannot plant arbitrary ``jti`` keys in Redis. An expired
+    or invalid token is ignored, since ``get_current_user`` refuses it anyway.
+    """
+    settings = get_settings()
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[JWT_ALGORITHM])
+    except jwt.InvalidTokenError:
+        return
+    jti = payload.get("jti")
+    exp = payload.get("exp")
+    if not jti or not isinstance(exp, int | float):
+        return
+    # +1 so the key outlives the token even when exp falls mid-second.
+    await blocklist_token(str(jti), int(exp - utcnow().timestamp()) + 1)
+
+
 async def is_token_blocked(jti: str) -> bool:
     """Return True if the JWT ID is in the Redis blocklist.
 
@@ -91,14 +119,101 @@ async def is_token_blocked(jti: str) -> bool:
     purpose.  API key auth (which does not use the Redis blocklist)
     remains available as a fallback for agents and CI.
     """
+    return await is_access_token_revoked(jti, None)
+
+
+# ---------------------------------------------------------------------------
+# Revoked sessions
+# ---------------------------------------------------------------------------
+
+REVOKED_SESSION_PREFIX = "revoked_session:"
+
+
+async def mark_sessions_revoked(session_ids: Iterable[uuid.UUID | str]) -> None:
+    """Mark sessions revoked in Redis, so their access tokens stop working now.
+
+    Each key lives as long as an access token does: every token carrying the
+    ``sid`` was minted before the revocation (its refresh rows are gone, so no
+    newer one can be minted) and has expired by the time the key does.
+
+    A Redis failure is logged and swallowed, like :func:`blocklist_token`: the
+    refresh rows are already deleted, so the session still ends when its
+    current access token expires.
+    """
+    keys = [f"{REVOKED_SESSION_PREFIX}{sid}" for sid in session_ids]
+    if not keys:
+        return
+    ttl = get_settings().access_token_expire_minutes * 60 + 1
     try:
         from specivo.core.redis import get_redis
 
         redis = await get_redis()
-        return await redis.exists(f"{_BLOCKLIST_PREFIX}{jti}") > 0
+        async with redis.pipeline(transaction=False) as pipe:
+            for key in keys:
+                pipe.setex(key, ttl, "1")
+            await pipe.execute()
+    except Exception as exc:
+        logger.warning("Redis revoked-session write failed (%d sessions): %s", len(keys), exc)
+
+
+async def is_access_token_revoked(jti: str | None, sid: str | None) -> bool:
+    """Return True if the token's ``jti`` is blocklisted or its session revoked.
+
+    Both keys are checked with a single ``EXISTS``. Fails closed: an
+    unreachable Redis denies the token, like :func:`is_token_blocked`.
+    """
+    keys = []
+    if jti:
+        keys.append(f"{_BLOCKLIST_PREFIX}{jti}")
+    if sid:
+        keys.append(f"{REVOKED_SESSION_PREFIX}{sid}")
+    if not keys:
+        return False
+    try:
+        from specivo.core.redis import get_redis
+
+        redis = await get_redis()
+        return bool(await redis.exists(*keys) > 0)
     except Exception as exc:
         logger.warning("Redis blocklist unavailable — denying JWT auth (fail-closed): %s", exc)
         return True
+
+
+@dataclass(frozen=True, slots=True)
+class AccessTokenSession:
+    """The session an access JWT names, as read by :func:`access_token_session`."""
+
+    session_id: uuid.UUID
+    user_id: int | None
+    expired: bool
+
+
+def access_token_session(token: str | None) -> AccessTokenSession | None:
+    """Return the session (``sid``) of an access JWT this instance signed, else ``None``.
+
+    The signature is verified, so a forged token cannot name a session.
+    Expiry is not enforced but reported: an expired token may be old or
+    leaked, so a caller must not act on its ``sid`` alone (see
+    ``AuthService.end_browser_session``).
+    """
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token, get_settings().secret_key, algorithms=[JWT_ALGORITHM], options={"verify_exp": False}
+        )
+        sid = payload.get("sid")
+        if not sid:
+            return None
+        session_id = uuid.UUID(str(sid))
+        exp = payload.get("exp")
+        # Same rule as PyJWT's own check (no leeway): expired once exp <= now.
+        expired = not isinstance(exp, int | float) or exp <= utcnow().timestamp()
+        sub = payload.get("sub")
+        user_id = int(sub) if sub is not None and str(sub).isdigit() else None
+        return AccessTokenSession(session_id=session_id, user_id=user_id, expired=expired)
+    except (jwt.InvalidTokenError, ValueError):
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -180,9 +295,11 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> User:
             status_code=401,
         )
 
-    # Check Redis blocklist (gracefully degraded)
+    # Check the jti blocklist and the session's revocation marker (fail closed).
+    # A token minted before the sid claim existed is checked by jti only.
     jti = payload.get("jti")
-    if jti and await is_token_blocked(jti):
+    sid = payload.get("sid")
+    if await is_access_token_revoked(str(jti) if jti else None, str(sid) if sid else None):
         raise AppError(
             code="auth_token_revoked",
             message="Access token has been revoked",
@@ -384,7 +501,7 @@ async def authenticate_request(
         )
 
     if use_api_key:
-        client_ip = request.client.host if request.client else None
+        client_ip = get_client_ip(request)
         user, api_key = await _api_key_service.authenticate(
             session=db,
             raw_key=token,
@@ -620,7 +737,7 @@ async def _log_auth_failure(db: AsyncSession, reason: str, request: Request) -> 
         from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 
         audit = SecurityAuditService()
-        ip = request.client.host if request.client else None
+        ip = get_client_ip(request)
         request_id = request.headers.get("x-request-id")
         await audit.log_event(
             session=db,

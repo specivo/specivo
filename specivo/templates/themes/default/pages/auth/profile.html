@@ -114,4 +114,55 @@
   </div>
 
 </div>
+
+{% if sso_enabled %}
+<section class="card sp-connected" aria-labelledby="sp-connected-heading">
+  <h2 id="sp-connected-heading" class="sp-connected-title">{% trans %}Connected accounts{% endtrans %}</h2>
+  <p class="sp-connected-intro">{% trans %}Sign in with an account at your organisation's identity provider. Connect it here once, while signed in.{% endtrans %}</p>
+
+  {% if sso_message %}
+  <div class="sp-connected-notice sp-connected-notice-ok" role="status">{{ sso_message }}</div>
+  {% endif %}
+  {% if sso_error_text %}
+  <div class="sp-connected-notice sp-connected-notice-error" role="alert">{{ sso_error_text }}</div>
+  {% endif %}
+
+  {% if sso_identities %}
+  <ul class="sp-connected-list">
+    {% for identity in sso_identities %}
+    <li class="sp-connected-row">
+      <div class="sp-connected-info">
+        <div class="sp-connected-name">
+          {{ identity.provider_name }}
+          {% if not identity.provider_enabled %}<span class="sp-badge-warning">{% trans %}Disabled{% endtrans %}</span>{% endif %}
+        </div>
+        <div class="sp-connected-meta">
+          {% if identity.email_at_last_login %}<span>{{ identity.email_at_last_login }}</span>{% endif %}
+          <span>{% trans %}Connected{% endtrans %}: {{ identity.linked_at | localtime(user.timezone) if identity.linked_at else '-' }}</span>
+          <span>{% trans %}Last sign-in{% endtrans %}: {{ identity.last_login_at | localtime(user.timezone) if identity.last_login_at else _('Never') }}</span>
+        </div>
+      </div>
+      <form method="post" action="/my/identities/{{ identity.id }}/unlink/">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn-sm danger">{% trans %}Disconnect{% endtrans %}</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sp-connected-empty">{% trans %}No accounts are connected yet.{% endtrans %}</p>
+  {% endif %}
+
+  {% if sso_linkable_providers %}
+  <div class="sp-connected-actions">
+    {% for provider in sso_linkable_providers %}
+    <form method="post" action="/auth/oidc/{{ provider.slug }}/link/">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans name=provider.name %}Connect %(name)s{% endtrans %}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

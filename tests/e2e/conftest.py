@@ -13,6 +13,7 @@ from playwright.sync_api import BrowserContext, Page
 from specivo.testing.e2e_base import (  # noqa: F401
     _admin_auth,
     _flush_redis,
+    _login_and_get_token,
     _run_migrations,
     _seed_lookups,
     _user_auth,
@@ -25,6 +26,27 @@ from specivo.testing.e2e_base import (  # noqa: F401
     e2e_seed_data,
     e2e_server,
 )
+
+# ---------------------------------------------------------------------------
+# A session of its own, for tests that sign out
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def signout_page(browser, e2e_server, e2e_seed_data) -> Generator[Page, None, None]:  # noqa: F811
+    """Page signed in with a fresh login of the regular user.
+
+    Signing out revokes the session on the server, so a test that signs out
+    must not use ``auth_page``: that one reuses the session-wide login, and
+    revoking it would sign every later test out too.
+    """
+    _, cookies = _login_and_get_token(e2e_server, e2e_seed_data["user_login"], e2e_seed_data["password"])
+    context = browser.new_context(base_url=e2e_server)
+    context.add_cookies(cookies)
+    page = context.new_page()
+    yield page
+    context.close()
+
 
 # ---------------------------------------------------------------------------
 # Palette setting — ensure the E2E DB has a multi-color palette

@@ -224,6 +224,33 @@ class TestRequestPasswordReset:
 
 
 class TestResetPasswordWithToken:
+    @pytest.fixture(autouse=True)
+    def _revoke_sessions(self):
+        """Session revocation is covered by an integration test; here it is a stub."""
+        with patch(
+            "specivo.services.auth_service._sessions.revoke_user_sessions", new=AsyncMock(return_value=0)
+        ) as revoke:
+            self.revoke = revoke
+            yield
+
+    async def test_revokes_every_session_of_the_user(self):
+        """A reset ends every session of the account."""
+        from specivo.services.auth_service import AuthService
+
+        session = AsyncMock()
+        user = _make_user()
+        token_record = _make_reset_token(user_id=user.id)
+        mock_token_result = MagicMock()
+        mock_token_result.scalar_one_or_none.return_value = token_record
+        mock_user_result = MagicMock()
+        mock_user_result.scalar_one_or_none.return_value = user
+        session.execute = AsyncMock(side_effect=[mock_token_result, mock_user_result])
+
+        with patch("specivo.services.auth_service.hash_password", return_value="$2b$12$newhash"):
+            await AuthService().reset_password_with_token(session, token="raw", new_password="NewP@ss123")
+
+        self.revoke.assert_awaited_once_with(session, user.id, reason="password_reset", actor_id=user.id)
+
     async def test_resets_password_with_valid_token(self):
         """reset_password_with_token updates the user's password hash."""
         from specivo.services.auth_service import AuthService

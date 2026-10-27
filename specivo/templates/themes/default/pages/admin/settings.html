@@ -86,6 +86,45 @@
   </form>
 </div>
 
+<div class="card" id="authentication" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); max-width: 720px;">
+  <h2 style="font-size: var(--sp-font-size-md); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Authentication{% endtrans %}</h2>
+  <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md);">
+    {% trans %}How people sign in. Identity providers are configured under Single sign-on.{% endtrans %}
+    <a href="/admin/sso/">{% trans %}Single sign-on{% endtrans %} &rarr;</a>
+  </p>
+  {% if sso_force_local_login %}
+  <p class="sp-badge-warning sp-mb-md">{% trans %}SSO_FORCE_LOCAL_LOGIN is on: the password form is always shown and nobody is redirected automatically.{% endtrans %}</p>
+  {% endif %}
+  <form method="post" action="/admin/settings/authentication/">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="sp-sso-check">
+      <input type="checkbox" name="hide_local_login" value="1" {{ 'checked' if auth_settings.hide_local_login else '' }}>
+      <span>{% trans %}Hide the password form on the login page{% endtrans %}
+        <span class="form-hint">{% trans %}Administrators can still reach it at /login/?local=1.{% endtrans %}</span></span>
+    </label>
+    <label class="sp-sso-check">
+      <input type="checkbox" name="local_login_admins_only" value="1" {{ 'checked' if auth_settings.local_login_admins_only else '' }}>
+      <span>{% trans %}Only administrators may sign in with a password{% endtrans %}</span>
+    </label>
+    <label class="sp-sso-check">
+      <input type="checkbox" name="allow_api_keys_for_sso_users" value="1" {{ 'checked' if auth_settings.allow_api_keys_for_sso_users else '' }}>
+      <span>{% trans %}Users who sign in through SSO may use API keys{% endtrans %}
+        <span class="form-hint">{% trans %}Applies to users without a password. While it is off they cannot create keys and their existing keys stop working. Service accounts are never affected.{% endtrans %}</span></span>
+    </label>
+    <div class="form-group">
+      <label class="form-label" for="auto_redirect_provider">{% trans %}Redirect the login page to{% endtrans %}</label>
+      <select id="auto_redirect_provider" name="auto_redirect_provider" class="form-input">
+        <option value="">{% trans %}No automatic redirect{% endtrans %}</option>
+        {% for p in sso_providers %}
+        <option value="{{ p.slug }}" {{ 'selected' if auth_settings.auto_redirect_provider == p.slug else '' }}>{{ p.display_name }} ({{ p.slug }}){% if not p.enabled %} - {% trans %}disabled{% endtrans %}{% endif %}</option>
+        {% endfor %}
+      </select>
+      <div class="form-hint">{% trans %}Sends visitors straight to this identity provider. /login/?local=1 bypasses it.{% endtrans %}</div>
+    </div>
+    <button type="submit" class="sp-btn sp-btn-primary" style="margin-top: var(--sp-space-md);">{% trans %}Save{% endtrans %}</button>
+  </form>
+</div>
+
 <div class="card" style="padding: var(--sp-space-lg);" x-data='adminSettings({{ settings | tojson }}, {{ {
   "updated": _("Setting updated."),
   "saveFailed": _("Failed to save."),

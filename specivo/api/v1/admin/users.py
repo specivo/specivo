@@ -1,4 +1,4 @@
-"""Admin users API — list, create, reset password, lock/unlock."""
+"""Admin users API — list, create, reset password, lock/unlock, deactivate/reactivate."""
 
 from __future__ import annotations
 
@@ -10,17 +10,21 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.api.v1.admin import require_admin_api
+from specivo.api.v1.admin import refuse_api_key, require_admin_api, require_admin_session_api
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError
 from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut
-from specivo.schemas.user import UserCreate, UserOut
+from specivo.schemas.sso import UserIdentityOut
+from specivo.schemas.user import UserCreate, UserDeactivatedOut, UserOut, UserReactivatedOut
 from specivo.services.anonymous_user_service import real_users_clause, refuse_anonymous_user
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
+from specivo.services.session_service import SessionService
+from specivo.services.sso.identity_service import IdentityService
+from specivo.services.user_service import UserService
 
 router = APIRouter(tags=["admin-users"])
 _audit = SecurityAuditService()
@@ -99,8 +103,18 @@ async def create_user(
     admin: Annotated[User, Depends(require_admin_api)],
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
-    """Create a new user (admin only)."""
+    """Create a new user (admin only).
+
+    An API key may create service accounts only (no password, refused by
+    password sign-in), which is how automation provisions agents. A person,
+    an administrator or any account with a password needs a signed-in
+    session: a person created with an email the key holder controls could
+    be taken over through forgot-password.
+    """
     from specivo.core.config import get_settings
+
+    if data.password or data.is_admin or not data.is_service_account:
+        refuse_api_key(request)
 
     settings = get_settings()
     if data.password and len(data.password) < settings.password_min_length:
@@ -165,7 +179,7 @@ async def reset_password(
     user_id: int,
     body: ResetPasswordRequest,
     request: Request,
-    admin: Annotated[User, Depends(require_admin_api)],
+    admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Reset a user's password (admin only)."""
@@ -198,6 +212,9 @@ async def reset_password(
     user.failed_login_count = 0
     user.locked_until = None
     user.must_change_password = forced_change
+    # A reset is compromise recovery: every session of the account ends now,
+    # access tokens included.
+    await SessionService().revoke_user_sessions(db, user.id, reason="admin_password_reset", actor_id=admin.id)
     await db.flush()
 
     try:
@@ -269,7 +286,7 @@ async def lock_user(
 async def unlock_user(
     user_id: int,
     request: Request,
-    admin: Annotated[User, Depends(require_admin_api)],
+    admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = Depends(get_db),
 ) -> UserOut:
     """Unlock a user account (admin only). Cannot unlock yourself."""
@@ -300,6 +317,89 @@ async def unlock_user(
         pass
 
     return UserOut.model_validate(user)
+
+
+# ---------------------------------------------------------------------------
+# Deactivate / reactivate (deprovisioning)
+# ---------------------------------------------------------------------------
+
+_user_svc = UserService()
+
+
+@router.post(
+    "/admin/users/{user_id}/deactivate/",
+    response_model=UserDeactivatedOut,
+    summary="Deactivate a user: revoke every session and switch off every API key (admin only)",
+    responses={
+        400: {"description": "Cannot deactivate your own account"},
+        409: {"description": "The last active administrator cannot be deactivated"},
+    },
+)
+async def deactivate_user(
+    user_id: int,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),
+) -> UserDeactivatedOut:
+    """Deactivate the account, for every kind of user (password, SSO, service account).
+
+    In one transaction: ``status`` becomes ``deactivated``, every session is
+    revoked (its access tokens stop working on the next request) and every API
+    key is switched off (``is_active=false``; the keys are kept for the audit
+    trail). Reactivating the account later does not switch the keys back on.
+    """
+    if user_id == admin.id:
+        raise AppError(code="self_deactivate", message="Cannot deactivate your own account", status_code=400)
+    user = await _get_user_or_404(db, user_id)
+    # The service records the USER_DEPROVISIONED audit event (actor: this admin).
+    result = await _user_svc.deactivate(db, user, reason="admin", actor_id=admin.id)
+    await db.refresh(user)
+
+    await db.commit()  # commit before response to avoid reload race condition
+    return UserDeactivatedOut.model_validate(
+        {
+            **UserOut.model_validate(user).model_dump(),
+            "sessions_revoked": result.sessions_revoked,
+            "api_keys_deactivated": result.api_keys_deactivated,
+        }
+    )
+
+
+@router.post(
+    "/admin/users/{user_id}/reactivate/",
+    response_model=UserReactivatedOut,
+    summary="Reactivate a deactivated user; its API keys stay inactive (admin only)",
+)
+async def reactivate_user(
+    user_id: int,
+    request: Request,
+    admin: Annotated[User, Depends(require_admin_session_api)],
+    db: AsyncSession = Depends(get_db),
+) -> UserReactivatedOut:
+    """Let a deactivated account sign in again.
+
+    Its API keys are **not** switched back on: ``inactive_api_keys`` says how
+    many stay off. The owner (or an admin) re-enables or replaces them.
+    """
+    user = await _get_user_or_404(db, user_id)
+    inactive = await _user_svc.reactivate(db, user, actor_id=admin.id)
+    await db.refresh(user)
+
+    try:
+        await _audit.log_event(
+            session=db,
+            event_type=AuditEvent.MEMBER_CHANGE,
+            user_id=admin.id,
+            details={"action": "user_reactivated", "target_user_id": user.id, "target_login": user.login},
+            request=request,
+        )
+    except Exception:
+        pass
+
+    await db.commit()  # commit before response to avoid reload race condition
+    return UserReactivatedOut.model_validate(
+        {**UserOut.model_validate(user).model_dump(), "inactive_api_keys": inactive}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +436,7 @@ async def create_user_api_key(
     user_id: int,
     body: ApiKeyCreate,
     request: Request,
-    admin: Annotated[User, Depends(require_admin_api)],
+    admin: Annotated[User, Depends(require_admin_session_api)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> ApiKeyCreated:
     """Create an API key for the specified user. The raw key is returned ONCE."""
@@ -409,6 +509,50 @@ async def delete_user_api_key(
     except Exception:
         pass
 
+    return Response(status_code=204)
+
+
+# ---------------------------------------------------------------------------
+# Connected SSO identities of a user
+# ---------------------------------------------------------------------------
+
+_identity_svc = IdentityService()
+
+
+@router.get(
+    "/admin/users/{user_id}/identities/",
+    response_model=list[UserIdentityOut],
+    summary="List a user's connected SSO identities (admin only)",
+)
+async def list_user_identities(
+    user_id: int,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> list[UserIdentityOut]:
+    """Return the identity provider accounts the user can sign in with."""
+    target = await _get_user_or_404(db, user_id)
+    identities = await _identity_svc.list_for_user(db, target.id)
+    return [UserIdentityOut.model_validate(i) for i in identities]
+
+
+@router.delete(
+    "/admin/users/{user_id}/identities/{identity_id}/",
+    status_code=204,
+    summary="Disconnect a user's SSO identity (admin only)",
+)
+async def delete_user_identity(
+    user_id: int,
+    identity_id: int,
+    admin: Annotated[User, Depends(require_admin_api)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> Response:
+    """Disconnect the identity and revoke every session signed in through it.
+
+    Always allowed for an admin, also when it is the user's last way to sign in.
+    """
+    target = await _get_user_or_404(db, user_id)
+    await _identity_svc.unlink(db, user_id=target.id, identity_id=identity_id, by="admin", actor_id=admin.id)
+    await db.commit()
     return Response(status_code=204)
 
 

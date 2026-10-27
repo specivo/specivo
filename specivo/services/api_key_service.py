@@ -6,6 +6,10 @@ Key design decisions:
 - key_prefix (first 12 chars of raw key) is stored for identification in UIs.
 - last_used_at is debounced: updated at most once per 60 seconds per key.
 - IP allowlist validation uses the ipaddress stdlib module.
+- ``sso.allow_api_keys_for_sso_users`` off: a user who signs in only through
+  SSO (no password, at least one connected identity) can neither create keys
+  nor use the ones they hold (403 ``api_keys_not_allowed_for_sso_users``).
+  Service accounts and users with a password are never affected.
 """
 
 from __future__ import annotations
@@ -14,8 +18,9 @@ import hashlib
 import ipaddress
 import secrets
 from datetime import datetime
+from typing import cast
 
-from sqlalchemy import delete, select
+from sqlalchemy import CursorResult, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import API_KEY_ENTROPY_BYTES, API_KEY_PREFIX
@@ -26,6 +31,7 @@ from specivo.core.utils import utcnow
 from specivo.models.auth import ApiKey
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import AnonymousUserProtectedError
+from specivo.services.auth_utils import is_sso_only_user
 
 # Debounce interval for last_used_at updates
 _DEBOUNCE_SECONDS = 60
@@ -77,6 +83,34 @@ def _check_ip_allowlist(ip_allowlist: list | None, client_ip: str | None) -> Non
     )
 
 
+def sso_api_keys_refused_error() -> AppError:
+    """The refusal for a user who signs in only through SSO while their API keys are turned off."""
+    return AppError(
+        code="api_keys_not_allowed_for_sso_users",
+        message=_(
+            "API keys are turned off for accounts that sign in through single sign-on. "
+            "Ask an administrator if you need one."
+        ),
+        status_code=403,
+    )
+
+
+async def sso_api_keys_refused(session: AsyncSession, user: User) -> bool:
+    """``True`` when ``user`` may not hold working API keys under ``sso.allow_api_keys_for_sso_users``.
+
+    Only an SSO-only account (:func:`is_sso_only_user`: no password and at
+    least one connected identity) is concerned, and only while the setting is
+    off. A service account or a password user costs no query.
+    """
+    if user.is_service_account or user.password_hash:
+        return False
+    from specivo.services.sso.auth_settings import get_auth_settings
+
+    if (await get_auth_settings(session)).allow_api_keys_for_sso_users:
+        return False
+    return await is_sso_only_user(session, user)
+
+
 class ApiKeyService:
     """Stateless service class — all state lives in the DB session."""
 
@@ -108,9 +142,11 @@ class ApiKeyService:
         - Without ``unlimited_api_keys``: max 20 keys per user.
         - Without ``api_key_scopes``: scopes are silently ignored.
         """
-        is_anonymous = (await session.execute(select(User.is_anonymous).where(User.id == user_id))).scalar_one_or_none()
-        if is_anonymous:
+        owner = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+        if owner is not None and owner.is_anonymous:
             raise AnonymousUserProtectedError("The anonymous user cannot hold API keys.")
+        if owner is not None and await sso_api_keys_refused(session, owner):
+            raise sso_api_keys_refused_error()
 
         registry = get_feature_registry()
 
@@ -205,6 +241,9 @@ class ApiKeyService:
                 status_code=401,
             )
 
+        if await sso_api_keys_refused(session, user):
+            raise sso_api_keys_refused_error()
+
         # Debounced last_used_at update: skip if updated within the last 60s
         now = utcnow()
         if key.last_used_at is None or (now - key.last_used_at).total_seconds() >= _DEBOUNCE_SECONDS:
@@ -247,6 +286,17 @@ class ApiKeyService:
     async def deactivate(self, session: AsyncSession, user_id: int, key_id: int) -> None:
         """Soft-deactivate an API key (sets is_active=False)."""
         await self.update_key(session, user_id, key_id, is_active=False)
+
+    async def deactivate_all(self, session: AsyncSession, user_id: int) -> int:
+        """Switch off every active API key of *user_id*; returns how many were switched off.
+
+        The keys are kept (not deleted), so their audit trail stays readable.
+        """
+        stmt = update(ApiKey).where(ApiKey.user_id == user_id, ApiKey.is_active.is_(True)).values(is_active=False)
+        result = await session.execute(stmt, execution_options={"synchronize_session": "fetch"})
+        await session.flush()
+        # execute() is typed as returning Result; an UPDATE yields a CursorResult at runtime.
+        return int(cast(CursorResult, result).rowcount or 0)
 
     async def delete(self, session: AsyncSession, user_id: int, key_id: int) -> None:
         """Hard-delete an API key owned by *user_id*.

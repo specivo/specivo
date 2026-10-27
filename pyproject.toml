@@ -1,6 +1,6 @@
 [project]
 name = "specivo"
-version = "0.9.0"
+version = "0.10.0"
 description = "Your team's knowledge, finally findable. Self-hosted project tracking, wiki, and search that understands what you wrote."
 readme = "README.md"
 license = "AGPL-3.0-or-later"
@@ -14,7 +14,7 @@ dependencies = [
     "alembic>=1.14",
     "pydantic[email]>=2.10",
     "pydantic-settings>=2.7",
-    "PyJWT>=2.13.0",
+    "PyJWT[crypto]>=2.13.0",
     "python-multipart>=0.0.31",
     "httpx>=0.28",
     "celery[redis]>=5.4",
@@ -90,6 +90,7 @@ markers = [
     "serial: Tests that cannot run under xdist (shared state like Redis rate limits)",
     "e2e: End-to-end browser tests (requires running server)",
     "redmine: Importer tests against the Redmine fixture (make redmine-fixture-up)",
+    "sso_idp: Tests against the disposable IdP (make sso-idp-up)",
 ]
 # loadfile, not worksteal: test modules define fixtures that insert rows with
 # fixed unique keys (logins, project keys). Spreading one module's tests across

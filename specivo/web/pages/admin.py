@@ -50,6 +50,25 @@ async def require_admin(
     return user_obj  # type: ignore[return-value]
 
 
+async def require_admin_session(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+) -> User:
+    """An admin signed in with a session; an admin API key sent as a Bearer header is refused.
+
+    The web layer also accepts ``Authorization: Bearer spv_...``, and a request
+    without a session cookie is not CSRF-checked, so a form that hands out a
+    way to sign in (reactivating an account, the sign-in settings) would
+    otherwise be a side door around the session-only admin API routes
+    (``specivo.api.v1.admin.require_admin_session_api``).
+    """
+    from fastapi import HTTPException
+
+    if getattr(request.state, "api_key_id", None) is not None:
+        raise HTTPException(status_code=403, detail="A signed-in session is required")
+    return user
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
@@ -128,8 +147,13 @@ async def admin_user_detail(
     user_id: int,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
+    account: str = "",
 ) -> Response:
-    """Render the admin user detail page with API key management."""
+    """Render the admin user detail page: account, status, connected SSO accounts, API keys.
+
+    ``?account=`` only ever selects one of the fixed, translated messages of
+    the deactivate / reactivate forms.
+    """
     from fastapi import HTTPException
 
     result = await db.execute(select(UserModel).where(UserModel.id == user_id))
@@ -165,6 +189,10 @@ async def admin_user_detail(
         "avatar_color": target_user.preferences.get("avatar_color", "#c49a3c"),
     }
 
+    from specivo.services.sso.identity_service import IdentityService
+
+    identities = [] if target_user.is_service_account else await IdentityService().list_for_user(db, target_user.id)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -174,8 +202,84 @@ async def admin_user_detail(
             "active_page": "admin",
             "target_user": target_data,
             "api_keys": keys_data,
+            "identities": identities,
+            "is_self": target_user.id == user.id,
+            "account_message": _account_messages().get(account),
+            "account_error": _account_errors().get(account),
         },
     )
+
+
+def _account_messages() -> dict[str, str]:
+    from specivo.core.i18n import gettext as _
+
+    return {
+        "deactivated": _(
+            "Account deactivated. The user was signed out everywhere and their API keys were switched off."
+        ),
+        "reactivated": _(
+            "Account reactivated. The user can sign in again. API keys stay inactive: "
+            "activate them again or create new ones."
+        ),
+    }
+
+
+def _account_errors() -> dict[str, str]:
+    from specivo.core.i18n import gettext as _
+
+    return {
+        "self": _("You cannot deactivate your own account."),
+        "last_admin": _("This is the last active administrator. Make another user an administrator first."),
+    }
+
+
+async def _target_or_404(db: AsyncSession, user_id: int) -> User:
+    from fastapi import HTTPException
+
+    target = await db.scalar(select(UserModel).where(UserModel.id == user_id))
+    if target is None or target.is_anonymous:
+        raise HTTPException(status_code=404, detail="User not found")
+    return target
+
+
+def _user_page_redirect(user_id: int, account: str) -> RedirectResponse:
+    prefix = get_settings().stealth_prefix.rstrip("/")
+    return RedirectResponse(f"{prefix}/admin/users/{user_id}/?account={account}", status_code=303)
+
+
+@router.post("/admin/users/{user_id}/deactivate/", response_model=None)
+async def admin_deactivate_user(
+    user_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> RedirectResponse:
+    """Deactivate an account from its admin page: every session and API key ends."""
+    from specivo.services.user_service import LastActiveAdminError, UserService
+
+    target = await _target_or_404(db, user_id)
+    if target.id == user.id:
+        return _user_page_redirect(user_id, "self")
+    try:
+        await UserService().deactivate(db, target, reason="admin", actor_id=user.id)
+    except LastActiveAdminError:
+        return _user_page_redirect(user_id, "last_admin")
+    await db.commit()
+    return _user_page_redirect(user_id, "deactivated")
+
+
+@router.post("/admin/users/{user_id}/reactivate/", response_model=None)
+async def admin_reactivate_user(
+    user_id: int,
+    user: Annotated[User, Depends(require_admin_session)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> RedirectResponse:
+    """Reactivate an account from its admin page; its API keys stay inactive."""
+    from specivo.services.user_service import UserService
+
+    target = await _target_or_404(db, user_id)
+    await UserService().reactivate(db, target, actor_id=user.id)
+    await db.commit()
+    return _user_page_redirect(user_id, "reactivated")
 
 
 # ---------------------------------------------------------------------------
@@ -536,7 +640,14 @@ async def admin_settings(
 
     anonymous_access_enabled = await is_anonymous_access_enabled(db)
     anonymous_access_projects = await list_projects_with_anonymous_permissions(db)
-    generic_settings = {k: v for k, v in settings.items() if k != ANONYMOUS_ACCESS_SETTING_KEY}
+    # The sso.* authentication settings have their own card (and API) too.
+    from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS, get_auth_settings
+    from specivo.services.sso.provider_service import ProviderService
+
+    hidden_keys = AUTH_SETTING_KEYS | {ANONYMOUS_ACCESS_SETTING_KEY}
+    generic_settings = {k: v for k, v in settings.items() if k not in hidden_keys}
+    auth_settings = await get_auth_settings(db)
+    sso_providers, _ = await ProviderService().list_providers(db)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -555,6 +666,11 @@ async def admin_settings(
             "fts_language": fts_language,
             "fts_allowed": sorted(_ALLOWED_FTS_LANGUAGES),
             "fts_reindex_needed": fts_reindex_needed,
+            "auth_settings": auth_settings,
+            "sso_providers": [
+                {"slug": p.slug, "display_name": p.display_name, "enabled": p.enabled} for p in sso_providers
+            ],
+            "sso_force_local_login": get_settings().sso_force_local_login,
         },
     )
 

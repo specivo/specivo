@@ -1,12 +1,15 @@
 """Auth-related models: refresh tokens, API keys."""
 
+import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Index, String
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from specivo.models.base import Base, TimestampMixin
+
+AUTH_METHODS = ("password", "sso")
 
 
 class RefreshToken(Base, TimestampMixin):
@@ -14,6 +17,11 @@ class RefreshToken(Base, TimestampMixin):
 
     Token values are never stored raw. Only a SHA-256 hash is persisted.
     The raw token is issued once in the HTTP response and never retrievable.
+
+    The refresh token is the session. Rotation replaces the row but copies
+    ``session_id`` (and every other session column) onto the new one, so a
+    login keeps one id for its whole life. Access tokens carry it as the
+    ``sid`` claim; ``SessionService.revoke`` uses it to cut them off.
 
     Cleanup: expired tokens should be pruned by a background task (Celery beat).
     """
@@ -25,6 +33,16 @@ class RefreshToken(Base, TimestampMixin):
         Index("ix_refresh_tokens_user_id", "user_id"),
         # Index for background cleanup of expired tokens
         Index("ix_refresh_tokens_expires_at", "expires_at"),
+        # Revocation by session id
+        Index("ix_refresh_tokens_session_id", "session_id"),
+        # Back-channel logout and unlink; also covers the user_identity_id FK
+        Index(
+            "ix_refresh_tokens_user_identity_idp_sid",
+            "user_identity_id",
+            "idp_sid",
+            postgresql_where=text("user_identity_id IS NOT NULL"),
+        ),
+        CheckConstraint(f"auth_method IN {AUTH_METHODS!r}", name="ck_refresh_tokens_auth_method"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -39,6 +57,24 @@ class RefreshToken(Base, TimestampMixin):
     # IP address at token creation time (stored as string for portability)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    # Stable across rotation; the ``sid`` claim of this session's access tokens.
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, default=uuid.uuid4, server_default=text("gen_random_uuid()")
+    )
+    # How the session signed in: "password" or "sso".
+    auth_method: Mapped[str] = mapped_column(String(20), nullable=False, default="password", server_default="password")
+    # The external identity an SSO session signed in with.
+    user_identity_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("user_identities.id", ondelete="SET NULL"), nullable=True
+    )
+    # The IdP's own session id ("sid" claim), for back-channel logout.
+    idp_sid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The ID token, sealed, sent back to the IdP as ``id_token_hint`` on logout.
+    id_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Hard cap: the session cannot be refreshed past this point, whatever
+    # ``expires_at`` says. NULL means no cap (password sessions).
+    absolute_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     def __repr__(self) -> str:
         return f"<RefreshToken id={self.id} user_id={self.user_id}>"

@@ -171,7 +171,7 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
 - `ltree` for hierarchical paths (project tree), with GiST indexes.
 - `pgvector` for embedding-based semantic search.
 - Expression-based unique indexes for case-insensitive uniqueness: `Index("uq_users_login_ci", func.lower(text("login")), unique=True)`.
-- Partial indexes for sparse columns: `Index("ix_users_github_id", "github_id", postgresql_where="github_id IS NOT NULL")`.
+- Partial indexes for sparse columns: `Index("ix_user_group_members_managed_by_provider_id", "managed_by_provider_id", postgresql_where=text("managed_by_provider_id IS NOT NULL"))`.
 - `Numeric(10, 2)` (not Float) for all time/money fields to avoid IEEE 754 rounding.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
@@ -255,10 +255,15 @@ Implemented in `specivo.core.security`:
 **JWT specifics:**
 - Algorithm: HS256 (from `specivo.core.constants.JWT_ALGORITHM`).
 - Redis blocklist for revoked tokens (`jwt_blocklist:{jti}`).
+- `sid` claim = `refresh_tokens.session_id`. A session (one login) keeps its id across refresh rotation; rotation copies every session column (`session_id`, `auth_method`, `user_identity_id`, `idp_sid`, `id_token_encrypted`, `absolute_expires_at`) and refuses to refresh past `absolute_expires_at`.
+- Session revocation goes through one primitive, `SessionService.revoke(db, session_ids, reason=...)` (`specivo.services.session_service`): it deletes the session's refresh rows and sets `revoked_session:{sid}` in Redis for one access-token lifetime, so the session's access tokens are refused on the next request. Logout (web and API), logout-all, `DELETE /auth/sessions/{id}` and the password-change sweep use it; `revoke_user_sessions`, `revoke_by_idp_sid` and `revoke_by_identity` cover bulk and SSO cases. Do not delete `refresh_tokens` rows directly to end a session. Refresh and revocation both take a per-session advisory lock (`SessionService.lock_sessions`); refresh claims the old row with `DELETE ... RETURNING` and is refused when that finds nothing or when `revoked_session:{sid}` is set (fail closed). Sign-out acts on an access token's `sid` only if the token is unexpired or belongs to the user of the refresh token presented with it.
+- `_authenticate_jwt` checks `jwt_blocklist:{jti}` and `revoked_session:{sid}` in one `EXISTS`. A token without `sid` (minted before the claim existed) is checked by `jti` only and stays valid until it expires.
 - Fail-closed on Redis unavailability (denies JWT auth, API key auth remains available).
 - Token statuses: `auth_token_expired`, `auth_token_invalid`, `auth_token_revoked`, `auth_account_locked`, `auth_account_deactivated`, `auth_email_not_verified`.
 
 **API keys** use the `spv_` prefix. Locked users can still authenticate via API key (locking is brute-force protection, not agent access control). Deactivated users are blocked from both JWT and API key auth.
+
+**Session-only admin routes.** An admin route that hands out a way to sign in or to act as someone (set a password, create any account other than a service account, unlock/reactivate an account, mint or re-enable API keys or credentials for another user, change the SSO configuration) depends on `require_admin_session_api` (`specivo/api/v1/admin/__init__.py`) instead of `require_admin_api`: API-key auth (`request.state.api_key_id` set) gets 403 `api_key_not_allowed`. The matching web forms use `require_admin_session` (`specivo/web/pages/admin.py`), because the web layer also accepts a Bearer key and a request without a session cookie is not CSRF-checked. Taking access away (lock, deactivate, revoke) and ordinary administration stay key-accessible. `tests/integration/test_admin_api_key_gates.py` lists the gated routes; add a new credential-minting route there.
 
 **Cookie settings:** httpOnly, SameSite=Lax, Secure when not debug. Refresh token scoped to `/api/v1/auth` path.
 
@@ -488,6 +493,35 @@ await audit.log_member_change(session=db, action="added", ...)
 - Failed permission attempts must be logged before raising 403.
 - Audit writes in error paths must `commit()` before re-raising, otherwise `get_db` rollback discards them.
 - All events go to `security_audit_logs` (partitioned by month, with a default catch-all partition).
+- An audit write never breaks the action it records: catch and log the failure.
+- Code that cannot await (SSO events, session revocation) calls `record_event(...)`, which appends to the
+  request's audit buffer (bound by `AuditBatchMiddleware`, flushed after the response). Outside a request,
+  wrap the work in `async with audit_scope(session):`. Both are skipped unless the enterprise
+  `security_audit_log` feature is registered, like `log_event`.
+
+**Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
+configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line
+(`extra`: `event`, `request_id`, `audit`) in every edition, so a Community install keeps a trail without the
+audit feature.
+
+| Event | Actor (`user_id`) | Details |
+|-------|-------------------|---------|
+| `SSO_LOGIN_SUCCESS` | the user | `method`, `provider`, `iss`, `sub_hash` |
+| `SSO_LOGIN_FAILURE` | none | `method`, `provider`, `iss`, `reason` (the `sso_*` error code) |
+| `SSO_USER_PROVISIONED` | the new user | `provider`, `iss`, `sub_hash`, `user_id` |
+| `SSO_ACCOUNT_LINKED` | the user (admin for an admin link) | `provider`, `iss`, `sub_hash`, `user_id`, `method` |
+| `SSO_ACCOUNT_UNLINKED` | the user or the admin | `provider`, `iss`, `sub_hash`, `user_id`, `by`, `sessions_revoked` |
+| `SSO_ROLES_SYNCED` | the user | `provider`, `sub_hash`, `admin_before`, `admin_after`, `groups_added`, `groups_removed` (user group ids) |
+| `SSO_GROUPS_OVERAGE` | the user, if known | `provider`, `sub_hash`, `user_id`, `denied` |
+| `SSO_LOGOUT` | the user | `provider`, `iss`, `sub_hash`, `user_id`, `idp_redirect` |
+| `SSO_BACKCHANNEL_LOGOUT` | none (the IdP) | `provider`, `iss`, `sub_hash`, `by` (`sid`/`sub`), `sessions_revoked` |
+| `SSO_PROVIDER_CREATED` / `_UPDATED` / `_DELETED` / `_SECRET_CHANGED` | the admin | `provider`, `iss`, `provider_id`, `fields` (names only); a delete adds its counts |
+| `USER_DEPROVISIONED` | the admin, or none | `provider`, `user_id`, `reason`, `sessions_revoked` |
+| `SESSIONS_REVOKED` | `actor_id` passed to `SessionService` | `reason`, `user_ids`, `session_count`, `row_count` |
+
+`SSO_LOGIN_SUCCESS` / `SSO_LOGIN_FAILURE` replace the generic login events for SSO and, like them, are core
+events persisted in every edition. `sub_hash` is the first 16 hex characters of SHA-256 of the subject. Details
+never hold tokens, codes, verifiers, secrets, claim sets or group names.
 
 ## Consequences
 

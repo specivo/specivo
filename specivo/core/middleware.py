@@ -12,11 +12,14 @@ import dataclasses
 import hashlib
 import hmac
 import logging
+import re
 import secrets
 import time
 import uuid
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+from specivo.core.client_ip import client_ip_from_scope
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,15 @@ _SECURITY_HEADERS: list[tuple[bytes, bytes]] = [
 
 _CSRF_COOKIE = "csrf_token"
 _CSRF_HEADER = b"x-csrf-token"
+# ``request.state`` key holding the CSRF token this response carries: the valid
+# cookie the browser sent, or the fresh one the middleware is about to set.
+# Templates read it (``csrf_token()``) to render the token into HTML forms, so a
+# form works on the very first page view, before the cookie exists in the browser.
+CSRF_STATE_KEY = "csrf_token"
+# Cookies that authenticate a browser. The refresh cookie counts: on its own it
+# signs the browser in through the silent refresh, so a request carrying only
+# that cookie is as forgeable as one carrying the access cookie.
+_SESSION_COOKIES = ("access_token=", "refresh_token=")
 _CSRF_MUTATING_METHODS = frozenset({b"POST", b"PATCH", b"PUT", b"DELETE"})
 # Exact paths exempt from CSRF validation, listed without the stealth prefix
 # (it is prepended at startup) and matched with or without the trailing slash.
@@ -72,6 +84,16 @@ _CSRF_EXEMPT_PATHS = (
     "/api/v1/auth/forgot-password/",
     # Pre-auth: the single-use token from the reset email is the proof.
     "/api/v1/auth/reset-password/",
+)
+# Anchored regular expressions for exempt endpoints whose path carries a
+# parameter, listed without the stealth prefix. Each one must match exactly one
+# route and nothing next to it; the contract test checks both. Matched against
+# the whole path, with or without the trailing slash.
+_CSRF_EXEMPT_PATTERNS = (
+    # SSO back-channel logout: called server to server by the IdP, never with
+    # a session; the signed, single-use logout token in the body is the proof.
+    # The slug part is the provider slug rule (specivo.models.sso.SLUG_PATTERN).
+    r"/auth/oidc/[a-z0-9-]{2,40}/backchannel-logout/",
 )
 # Mount points whose whole subtree is exempt. Only for sub-apps that never
 # accept cookie authentication.
@@ -96,10 +118,13 @@ class CSRFMiddleware:
     - Requests with an ``X-API-Key`` header (API key auth, not cookie-based)
     - The exact paths in ``_CSRF_EXEMPT_PATHS`` (login, token refresh,
       password-reset request and confirm)
+    - Paths matching an anchored pattern in ``_CSRF_EXEMPT_PATTERNS`` (SSO
+      back-channel logout)
     - Everything under the mount points in ``_CSRF_EXEMPT_MOUNTS`` (MCP)
 
     Every other mutating route needs the token when the request carries the
-    ``access_token`` cookie, including any route added under ``/api/v1/auth/``.
+    ``access_token`` or ``refresh_token`` cookie, including any route added
+    under ``/api/v1/auth/``.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -115,10 +140,14 @@ class CSRFMiddleware:
         sp = settings.stealth_prefix.rstrip("/")
         self._exempt_paths = frozenset(sp + p for p in _CSRF_EXEMPT_PATHS)
         self._exempt_mounts = tuple(sp + m for m in _CSRF_EXEMPT_MOUNTS)
+        # Trailing slash optional, like the exact paths; fullmatch anchors both ends.
+        self._exempt_patterns = tuple(re.compile(re.escape(sp) + p + "?") for p in _CSRF_EXEMPT_PATTERNS)
 
     def _is_exempt_path(self, path: str) -> bool:
-        """Return True if *path* is one of the exempt endpoints or mounts."""
+        """Return True if *path* is one of the exempt endpoints, patterns or mounts."""
         if path.rstrip("/") + "/" in self._exempt_paths:
+            return True
+        if any(p.fullmatch(path) for p in self._exempt_patterns):
             return True
         return any(path.startswith(m) for m in self._exempt_mounts)
 
@@ -143,11 +172,9 @@ class CSRFMiddleware:
         # Exempt endpoints (pre-auth auth routes) and mounts (MCP)
         if self._is_exempt_path(path):
             return False
-        # No auth cookies present — let the auth layer handle the 401
+        # No session cookie present — let the auth layer handle the 401
         cookie_header = headers.get(b"cookie", b"").decode()
-        if "access_token=" not in cookie_header:
-            return False
-        return True
+        return any(name in cookie_header for name in _SESSION_COOKIES)
 
     @staticmethod
     def _get_cookie_token(headers: dict[bytes, bytes]) -> str:
@@ -187,13 +214,17 @@ class CSRFMiddleware:
 
         # --- Set cookie on GET responses if missing/invalid ---
         existing = self._get_cookie_token(req_headers)
-        need_cookie = not is_mutating and (not existing or not self._validate_token(existing))
+        existing_valid = bool(existing) and self._validate_token(existing)
+        need_cookie = not is_mutating and not existing_valid
 
         if not need_cookie:
+            if existing_valid:
+                scope.setdefault("state", {})[CSRF_STATE_KEY] = existing
             await self.app(scope, receive, send)
             return
 
         token = self._generate_token()
+        scope.setdefault("state", {})[CSRF_STATE_KEY] = token
 
         async def send_with_csrf_cookie(message: Message) -> None:
             if message["type"] == "http.response.start":
@@ -557,7 +588,8 @@ class AuditBatchMiddleware:
     of issuing individual INSERTs.
 
     After the response is produced, the middleware flushes all collected events in a
-    single DB round-trip using an independent session — but **only** when the
+    single DB round-trip in a session of its own (from the ``get_db`` dependency, so a
+    test's override applies) — but **only** when the
     ``security_audit_log`` feature is available (i.e. the enterprise plugin is loaded).
     Without enterprise, events are silently discarded.
 
@@ -572,17 +604,30 @@ class AuditBatchMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Initialise the per-request audit event buffer
-        scope.setdefault("state", {})
-        scope["state"]["audit_events"] = []
+        from specivo.services.security_audit_service import bind_audit_context, reset_audit_context
 
-        await self.app(scope, receive, send)
+        # Initialise the per-request audit event buffer. The same list is bound
+        # to the context, so code without the request (record_event) fills it too.
+        state = scope.setdefault("state", {})
+        buffer: list[dict] = []
+        state["audit_events"] = buffer
+        user_agent = dict(scope.get("headers") or []).get(b"user-agent", b"").decode("latin-1") or None
+        token = bind_audit_context(
+            buffer,
+            ip_address=client_ip_from_scope(scope),
+            user_agent=user_agent,
+            state=state,
+        )
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            reset_audit_context(token)
 
         # Flush collected audit events after the response — only when
         # the enterprise plugin provides the security_audit_log feature.
         events = scope["state"].get("audit_events", [])
         if events and self._enterprise_audit_enabled():
-            await self._flush_events(events)
+            await self._flush_events(events, scope.get("app"))
 
     @staticmethod
     def _enterprise_audit_enabled() -> bool:
@@ -594,18 +639,25 @@ class AuditBatchMiddleware:
         except (RuntimeError, ImportError):
             return False
 
-    async def _flush_events(self, events: list[dict]) -> None:
-        """Batch INSERT all collected audit events using an independent session."""
+    async def _flush_events(self, events: list[dict], app: object = None) -> None:
+        """Batch INSERT all collected audit events in a session of their own.
+
+        The session comes from the ``get_db`` dependency, honouring the app's
+        ``dependency_overrides`` like every endpoint does: in production a new
+        session that commits on its own (so the events survive a request whose
+        transaction rolled back), in tests a session on the test's rolled-back
+        connection (so the rows stay inside the test).
+        """
         try:
-            from specivo.core.database import get_session_factory
+            from contextlib import asynccontextmanager
+
+            from specivo.core.database import get_db
             from specivo.models.security_audit import SecurityAuditLog
 
-            factory = get_session_factory()
-            async with factory() as session:
-                for event_data in events:
-                    log = SecurityAuditLog(**event_data)
-                    session.add(log)
-                await session.commit()
+            overrides = getattr(app, "dependency_overrides", None) or {}
+            provider = overrides.get(get_db, get_db)
+            async with asynccontextmanager(provider)() as session:
+                session.add_all(SecurityAuditLog(**event_data) for event_data in events)
         except Exception:
             logger.warning("Batch audit flush failed", exc_info=True)
 
@@ -660,7 +712,7 @@ def _build_auth_cookie_headers(
 ) -> list[tuple[bytes, bytes]]:
     """Build raw ``Set-Cookie`` header tuples for the auth cookies.
 
-    Mirrors the cookie attributes in ``specivo.api.v1.auth._set_auth_cookies``
+    Mirrors the cookie attributes in ``specivo.core.auth_cookies.set_auth_cookies``
     but produces raw ASGI header tuples for use in middleware.
 
     When *remember* is ``False``, ``Max-Age`` is omitted so the browser

@@ -157,7 +157,7 @@ class TestExemptPaths:
             headers=_bearer(tokens["access_token"]),
         )
 
-        assert resp.status_code == 204
+        assert resp.status_code == 200
 
     async def test_logout_all_is_reachable(self, client: AsyncClient, db_session: AsyncSession):
         user = await _flagged_user(db_session, "fpc_exempt_logout_all")
@@ -276,7 +276,7 @@ class TestWebRedirect:
         resp = await client.get(_CHANGE_PAGE)
 
         assert "set by somebody else" in resp.text
-        assert 'href="/logout/"' in resp.text
+        assert 'action="/logout/"' in resp.text
         # The forced page sends the browser into the app once the flag clears.
         assert 'redirectTo: "/"' in resp.text
 

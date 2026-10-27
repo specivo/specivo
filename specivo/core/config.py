@@ -55,6 +55,11 @@ _ALLOWED_FTS_LANGUAGES: frozenset[str] = frozenset(
 )
 
 
+# Upper bound for ``sso_clock_skew_seconds``: more leeway than this would let
+# tokens outlive their expiry by a meaningful margin.
+SSO_MAX_CLOCK_SKEW_SECONDS = 300
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=(".env", ".env.local"),  # .env.local overrides .env (secrets)
@@ -182,8 +187,16 @@ class Settings(BaseSettings):
     # Rate limiting — disable for E2E / load testing environments
     rate_limit_enabled: bool = True
 
-    # Trusted proxies — CIDRs whose X-Forwarded-For header is trusted
+    # Trusted proxies: addresses (CIDRs, JSON list) of the reverse proxy that
+    # connects to Specivo. Only such a peer may name the client in
+    # X-Forwarded-For. Empty: the socket peer is the client. The bundled
+    # docker-compose.yml sets exactly the nginx container's address.
     trusted_proxies: list[str] = []
+    # How many proxies in a row stand in front of Specivo, each appending one
+    # X-Forwarded-For entry; the client is the entry this many places from the
+    # right (see specivo.core.client_ip). 1: nginx alone; 2: e.g. Caddy or a
+    # CDN in front of nginx.
+    trusted_proxy_hops: int = Field(default=1, ge=1, le=10)
 
     # Search
     search_fts_language: str = "english"
@@ -218,6 +231,19 @@ class Settings(BaseSettings):
     smtp_timeout: int = 30
     webhook_timeout: int = 30
 
+    # SSO (OpenID Connect). Providers are configured in the database; these
+    # are the instance-wide limits every provider shares.
+    # Break-glass: always show the local login form, whatever the
+    # "hide local login" / "auto-redirect" settings say.
+    sso_force_local_login: bool = False
+    # Allow http:// issuers and endpoints. Only for a disposable test IdP.
+    sso_allow_insecure_http: bool = False
+    # Timeout for each request to an identity provider.
+    sso_http_timeout_seconds: float = Field(default=5.0, gt=0)
+    # Leeway for exp / iat / nbf when validating ID and logout tokens.
+    # Values above the cap are lowered to it.
+    sso_clock_skew_seconds: int = Field(default=60, ge=0)
+
     @field_validator("search_fts_language")
     @classmethod
     def validate_fts_language(cls, v: str) -> str:
@@ -239,12 +265,29 @@ class Settings(BaseSettings):
             raise ValueError("password_min_length must be at least 6")
         return v
 
+    @field_validator("sso_clock_skew_seconds")
+    @classmethod
+    def cap_sso_clock_skew(cls, v: int) -> int:
+        return min(v, SSO_MAX_CLOCK_SKEW_SECONDS)
+
     @field_validator("legacy_password_hashes_expire_at")
     @classmethod
     def legacy_cutoff_is_aware(cls, v: datetime | None) -> datetime | None:
         if v is not None and v.tzinfo is None:
             return v.replace(tzinfo=UTC)
         return v
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def validate_trusted_proxies(cls, v: list[str]) -> list[str]:
+        import ipaddress
+
+        for cidr in v:
+            try:
+                ipaddress.ip_network(cidr.strip(), strict=False)
+            except ValueError:
+                raise ValueError(f"TRUSTED_PROXIES: {cidr!r} is not an IP address or CIDR network") from None
+        return [cidr.strip() for cidr in v]
 
     @field_validator("cors_origins", mode="before")
     @classmethod

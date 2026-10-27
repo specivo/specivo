@@ -42,10 +42,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
         {% trans %}Go to Dashboard{% endtrans %}
       </a>
-      <a href="/logout/" style="display:inline-flex;align-items:center;justify-content:center;gap:var(--sp-space-sm);padding:11px;border:1px solid var(--sp-border);border-radius:var(--sp-border-radius);color:var(--sp-text-secondary);font-family:var(--sp-font-body);font-size:var(--sp-font-size-md);font-weight:500;text-decoration:none;transition:all 0.2s;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-        {% trans %}Sign out{% endtrans %}
-      </a>
+      <form class="sp-signout-form" method="post" action="/logout/">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn-signout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          {% trans %}Sign out{% endtrans %}
+        </button>
+      </form>
     </div>
   </div>
 
@@ -81,6 +84,35 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
       <span>{% trans %}Password reset successfully. Please sign in with your new password.{% endtrans %}</span>
     </div>
+    {% endif %}
+    {% if logged_out %}
+    <div role="status" style="background:var(--sp-success-subtle, rgba(34,197,94,0.1));border:1px solid var(--sp-success, #22c55e);border-radius:var(--sp-border-radius);padding:var(--sp-space-md) var(--sp-space-lg);margin-bottom:var(--sp-space-lg);font-size:var(--sp-font-size-sm);color:var(--sp-success, #22c55e);display:flex;align-items:center;gap:var(--sp-space-sm);">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+      <span>{% trans %}You have been signed out.{% endtrans %}</span>
+    </div>
+    {% endif %}
+    {% if sso_error_message %}
+    <div class="login-error show" role="alert">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+      <span>{{ sso_error_message }}{% if sso_idp_unreachable and not show_local_form %}
+        <a class="sp-login-error-link" href="{{ local_login_url }}">{% trans %}Administrators can sign in with a local account.{% endtrans %}</a>{% endif %}</span>
+    </div>
+    {% endif %}
+
+    {% if sso_buttons %}
+    <div class="sp-sso-providers">
+      {% for button in sso_buttons %}
+      <a class="sp-sso-provider-btn" href="{{ button.url }}">{% trans name=button.display_name %}Sign in with {{ name }}{% endtrans %}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if show_local_form %}
+    {% if sso_buttons %}
+    <div class="sp-login-divider"><span>{% trans %}or{% endtrans %}</span></div>
+    {% endif %}
+    {% if local_login_admins_only %}
+    <p class="sp-login-hint">{% trans %}Only administrators can sign in with a password. Everyone else signs in with single sign-on.{% endtrans %}</p>
     {% endif %}
     <div class="login-error" :class="{ 'show': error }">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
@@ -124,6 +156,9 @@
         x-text="buttonText"
       >{% trans %}Sign in{% endtrans %}</button>
     </form>
+    {% else %}
+    <p class="sp-login-local-link"><a href="{{ local_login_url }}">{% trans %}Sign in with a local account{% endtrans %}</a></p>
+    {% endif %}
   </div>
 
   <div class="login-footer">

@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% set page_name = provider.display_name if provider else _("New provider") %}
+{% block title %}{{ page_name }} - {% trans %}Single sign-on{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/sso/">{% trans %}Single sign-on{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{{ page_name }}</span>
+</div>
+
+<div class="sp-sso-form" x-data='adminSsoProvider({
+  provider: {{ provider | tojson }},
+  mappings: {{ group_mappings | tojson }},
+  userGroups: {{ user_groups | tojson }},
+  extraParamKeys: {{ extra_param_keys | tojson }},
+  callbackTemplate: {{ callback_template | tojson }},
+  backchannelTemplate: {{ backchannel_template | tojson }},
+  i18n: {
+    saved: {{ _("Saved.") | tojson }},
+    savedSessionsEnded: {{ _("Saved. Sessions ended: {count}.") | tojson }},
+    saveFailed: {{ _("Failed to save.") | tojson }},
+    deleteFailed: {{ _("Failed to delete.") | tojson }},
+    testFailed: {{ _("The test could not run.") | tojson }},
+    testOk: {{ _("Discovery and signing keys work.") | tojson }},
+    yes: {{ _("Yes") | tojson }},
+    no: {{ _("No") | tojson }},
+    testErrors: {
+      sso_idp_unreachable: {{ _("The identity provider could not be reached") | tojson }},
+      sso_discovery_invalid: {{ _("The identity provider configuration is invalid") | tojson }}
+    },
+    secretStatus: {
+      configured: {{ _("Stored (encrypted)") | tojson }},
+      unreadable: {{ _("Unreadable after a SECRET_KEY change: enter it again") | tojson }},
+      env: {{ _("Read from the environment variable") | tojson }},
+      env_missing: {{ _("The environment variable is not set") | tojson }},
+      env_not_allowed: {{ _("This environment variable name is not allowed") | tojson }},
+      missing: {{ _("Not set") | tojson }},
+      not_required: {{ _("Not needed for a public client") | tojson }}
+    },
+    warnings: {
+      auth_method_not_advertised: {{ _("The provider does not advertise the selected client authentication method.") | tojson }},
+      pkce_not_advertised: {{ _("The provider does not advertise PKCE. Specivo sends it anyway (S256).") | tojson }},
+      end_session_missing: {{ _("Sign-out at the provider is on, but the provider has no end_session_endpoint.") | tojson }},
+      backchannel_logout_unsupported: {{ _("Back-channel logout is on, but the provider does not support it.") | tojson }},
+      userinfo_missing: {{ _("Userinfo is on, but the provider has no userinfo_endpoint.") | tojson }},
+      client_secret_unreadable: {{ _("The stored client secret cannot be read: enter it again.") | tojson }},
+      client_secret_env_unset: {{ _("The client secret environment variable is not set.") | tojson }},
+      client_secret_env_not_allowed: {{ _("The client secret environment variable name is not allowed.") | tojson }},
+      client_secret_missing: {{ _("No client secret is set.") | tojson }}
+    }
+  }
+})'>
+
+  <h1 class="sp-page-h1">{{ page_name }}</h1>
+
+  {# --- Actions --- #}
+  <div class="sp-sso-actions">
+    <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving">
+      <span x-show="!saving">{% if provider %}{% trans %}Save{% endtrans %}{% else %}{% trans %}Create{% endtrans %}{% endif %}</span>
+      <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+    </button>
+    {% if provider %}
+    <button class="sp-btn" @click="runTest()" :disabled="testing">
+      <span x-show="!testing">{% trans %}Test connection{% endtrans %}</span>
+      <span x-show="testing">{% trans %}Testing...{% endtrans %}</span>
+    </button>
+    <button class="sp-btn sp-btn-danger" @click="openDelete()">{% trans %}Delete{% endtrans %}</button>
+    {% endif %}
+    <span x-show="saveMessage" class="sp-sso-badge sp-sso-badge-ok" x-text="saveMessage"></span>
+  </div>
+  <div x-show="saveError" class="sp-msg-danger-mb-sm" x-text="saveError"></div>
+
+  {# --- Self-test report --- #}
+  <div x-show="testError" class="sp-msg-danger-mb-sm" x-text="testError"></div>
+  <template x-if="testResult">
+    <div class="sp-sso-report sp-mb-md" :class="testResult.ok ? 'sp-sso-report-ok' : 'sp-sso-report-bad'" data-testid="sso-test-report">
+      <strong x-text="testSummary"></strong>
+      <dl>
+        <dt>{% trans %}Discovery URL{% endtrans %}</dt><dd x-text="testResult.discovery_url"></dd>
+        <dt>{% trans %}Expected issuer{% endtrans %}</dt><dd x-text="testResult.expected_issuer"></dd>
+        <dt>{% trans %}Issuer reported{% endtrans %}</dt><dd x-text="testResult.reported_issuer || '-'"></dd>
+        <dt>{% trans %}Issuer matches{% endtrans %}</dt>
+        <dd x-text="yesNo(testResult.issuer_match)"></dd>
+        <dt>{% trans %}Authorization endpoint{% endtrans %}</dt><dd x-text="testResult.authorization_endpoint || '-'"></dd>
+        <dt>{% trans %}Token endpoint{% endtrans %}</dt><dd x-text="testResult.token_endpoint || '-'"></dd>
+        <dt>{% trans %}Userinfo endpoint{% endtrans %}</dt><dd x-text="testResult.userinfo_endpoint || '-'"></dd>
+        <dt>{% trans %}End session endpoint{% endtrans %}</dt><dd x-text="testResult.end_session_endpoint || '-'"></dd>
+        <dt>{% trans %}Signing algorithms{% endtrans %}</dt><dd x-text="listText(testResult.usable_signing_algorithms)"></dd>
+        <dt>{% trans %}Client authentication{% endtrans %}</dt><dd x-text="listText(testResult.token_endpoint_auth_methods)"></dd>
+        <dt>{% trans %}Back-channel logout{% endtrans %}</dt>
+        <dd x-text="yesNo(testResult.backchannel_logout_supported)"></dd>
+        <dt>{% trans %}Signing keys{% endtrans %}</dt>
+        <dd x-text="testResult.jwks_key_count === null ? '-' : testResult.jwks_key_count + ' (' + listText(testResult.jwks_key_ids) + ')'"></dd>
+      </dl>
+      <ul x-show="testResult.warnings.length > 0">
+        <template x-for="w in testResult.warnings" :key="w">
+          <li x-text="warningText(w)"></li>
+        </template>
+      </ul>
+    </div>
+  </template>
+
+  {# --- Connection --- #}
+  <div class="card sp-sso-section">
+    <h2>{% trans %}Connection{% endtrans %}</h2>
+    <p class="sp-sso-section-intro">{% trans %}Register Specivo at the identity provider with exactly these URLs (no wildcards), then copy its issuer and client ID here.{% endtrans %}</p>
+
+    <label class="form-label">{% trans %}Redirect URI{% endtrans %}</label>
+    <div class="sp-sso-copy">
+      <code x-text="redirectUri">{{ provider.redirect_uri if provider else '' }}</code>
+      <button type="button" class="sp-btn-sm" @click="copy('redirect')">
+        <span x-show="copied !== 'redirect'">{% trans %}Copy{% endtrans %}</span>
+        <span x-show="copied === 'redirect'">{% trans %}Copied{% endtrans %}</span>
+      </button>
+    </div>
+    <label class="form-label">{% trans %}Back-channel logout URI{% endtrans %}</label>
+    <div class="sp-sso-copy sp-mb-md">
+      <code x-text="backchannelUri">{{ provider.backchannel_logout_uri if provider else '' }}</code>
+      <button type="button" class="sp-btn-sm" @click="copy('backchannel')">
+        <span x-show="copied !== 'backchannel'">{% trans %}Copy{% endtrans %}</span>
+        <span x-show="copied === 'backchannel'">{% trans %}Copied{% endtrans %}</span>
+      </button>
+    </div>
+
+    <div class="sp-form-cols-2">
+      <div class="form-group">
+        <label class="form-label" for="sso-display-name">{% trans %}Button label{% endtrans %}</label>
+        <input id="sso-display-name" class="form-input" type="text" x-model="form.display_name" placeholder="Keycloak">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sso-slug">{% trans %}Slug{% endtrans %}</label>
+        <input id="sso-slug" class="form-input" type="text" x-model="form.slug" placeholder="keycloak" autocomplete="off">
+        <div class="form-hint">{% trans %}Part of the URLs above. Changing it means updating them at the provider.{% endtrans %}</div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="sso-issuer">{% trans %}Issuer{% endtrans %}</label>
+      <input id="sso-issuer" class="form-input" type="url" x-model="form.issuer" placeholder="https://idp.example.com/realms/example">
+      <div class="form-hint">{% trans %}Must match the issuer the provider publishes, character for character.{% endtrans %}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="sso-discovery">{% trans %}Discovery URL (optional){% endtrans %}</label>
+      <input id="sso-discovery" class="form-input" type="url" x-model="form.discovery_url" placeholder="{{ _('Issuer + /.well-known/openid-configuration') }}">
+    </div>
+    <div class="sp-form-cols-2">
+      <div class="form-group">
+        <label class="form-label" for="sso-client-id">{% trans %}Client ID{% endtrans %}</label>
+        <input id="sso-client-id" class="form-input" type="text" x-model="form.client_id" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sso-auth-method">{% trans %}Client authentication{% endtrans %}</label>
+        <select id="sso-auth-method" class="form-input" x-model="form.token_endpoint_auth_method">
+          <option value="client_secret_basic">client_secret_basic</option>
+          <option value="client_secret_post">client_secret_post</option>
+          <option value="none">{% trans %}none (public client, PKCE only){% endtrans %}</option>
+        </select>
+      </div>
+    </div>
+
+    <div x-show="!isPublicClient">
+      <label class="form-label">{% trans %}Client secret{% endtrans %}</label>
+      <p class="sp-mb-md" x-show="provider">
+        <span class="sp-sso-badge" :class="secretStatusOk ? 'sp-sso-badge-ok' : 'sp-sso-badge-bad'" x-text="secretStatusLabel"></span>
+      </p>
+      <label class="sp-sso-check"><input type="radio" value="stored" x-model="secretMode"> <span>{% trans %}Store it in Specivo (encrypted){% endtrans %}</span></label>
+      <label class="sp-sso-check"><input type="radio" value="env" x-model="secretMode"> <span>{% trans %}Read it from an environment variable{% endtrans %}</span></label>
+      <div class="form-group" x-show="secretMode === 'stored'">
+        <input class="form-input" type="password" x-model="secretInput" autocomplete="new-password"
+          placeholder="{{ _('Leave empty to keep the current secret') if provider else '' }}">
+        <div class="form-hint">{% trans %}Write-only: the secret is never shown again.{% endtrans %}</div>
+      </div>
+      <div class="form-group" x-show="secretMode === 'env'">
+        <input class="form-input" type="text" x-model="envInput" placeholder="SPECIVO_SSO_SECRET_KEYCLOAK" autocomplete="off">
+        <div class="form-hint">{% trans %}The name must start with SPECIVO_SSO_SECRET_ (capital letters, digits and underscores). Set the variable on every Specivo container.{% endtrans %}</div>
+      </div>
+      <label class="sp-sso-check" x-show="provider && provider.client_secret_configured">
+        <input type="checkbox" x-model="clearSecret"> <span>{% trans %}Remove the client secret{% endtrans %}</span>
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="sso-scopes">{% trans %}Scopes{% endtrans %}</label>
+      <input id="sso-scopes" class="form-input" type="text" x-model="form.scopes">
+      <div class="form-hint">{% trans %}Space-separated. openid is required.{% endtrans %}</div>
+    </div>
+    <div class="sp-form-cols-2">
+      <template x-for="key in extraKeys" :key="key">
+        <div class="form-group">
+          <label class="form-label" x-text="key"></label>
+          <input class="form-input" type="text" x-model="form.extra[key]" autocomplete="off">
+        </div>
+      </template>
+    </div>
+    <div class="form-hint sp-mb-md">{% trans %}Optional extra parameters for the sign-in request.{% endtrans %}</div>
+
+    <div class="sp-form-cols-2">
+      <label class="sp-sso-check"><input type="checkbox" x-model="form.enabled"> <span>{% trans %}Enabled (shown on the login page){% endtrans %}
+        <span class="form-hint">{% trans %}Turning it off signs out everyone who signed in through this provider.{% endtrans %}</span></span></label>
+      <div class="form-group">
+        <label class="form-label" for="sso-position">{% trans %}Button order{% endtrans %}</label>
+        <input id="sso-position" class="form-input" type="number" min="0" x-model="form.position">
+      </div>
+    </div>
+  </div>
+
+  {# --- Sign-in policy --- #}
+  <div class="card sp-sso-section">
+    <h2>{% trans %}Sign-in policy{% endtrans %}</h2>
+    <p class="sp-sso-section-intro">{% trans %}Who may sign in, and what happens the first time someone does.{% endtrans %}</p>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.allow_jit_provisioning">
+      <span>{% trans %}Create an account on first sign-in{% endtrans %}</span></label>
+    <div class="form-group">
+      <label class="form-label" for="sso-link-policy">{% trans %}Existing accounts{% endtrans %}</label>
+      <select id="sso-link-policy" class="form-input" x-model="form.link_policy">
+        <option value="manual">{% trans %}Users connect their account themselves, while signed in{% endtrans %}</option>
+        <option value="auto_verified_email">{% trans %}Link automatically by verified email (never for administrators){% endtrans %}</option>
+      </select>
+    </div>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.trust_email_verified">
+      <span>{% trans %}This provider really verifies email addresses{% endtrans %}
+        <span class="form-hint">{% trans %}Required for automatic linking. Never turn it on for Microsoft Entra ID.{% endtrans %}</span></span></label>
+    <div class="form-group">
+      <label class="form-label" for="sso-domains">{% trans %}Allowed email domains{% endtrans %}</label>
+      <textarea id="sso-domains" class="form-input" rows="3" x-model="form.allowed_email_domains" placeholder="example.com"></textarea>
+      <div class="form-hint">{% trans %}One per line. Empty allows every domain.{% endtrans %}
+        {% trans %}Needs email verification to be trusted (the setting above): only verified addresses are checked. Google Workspace accounts are checked by their hosted domain.{% endtrans %}</div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="sso-session-age">{% trans %}Maximum session length (hours){% endtrans %}</label>
+      <input id="sso-session-age" class="form-input" type="number" min="1" max="168" x-model="form.session_max_age_hours">
+      <div class="form-hint">{% trans %}After this, people sign in at the provider again.{% endtrans %}
+        {% trans %}At most 168 hours (one week). An account disabled at the provider keeps its Specivo session until then: turn on back-channel logout to end it at once.{% endtrans %}</div>
+    </div>
+  </div>
+
+  {# --- Claims --- #}
+  <div class="card sp-sso-section">
+    <h2>{% trans %}Claims{% endtrans %}</h2>
+    <p class="sp-sso-section-intro">{% trans %}Which token claims fill the Specivo profile. Leave a field empty for the standard claim.{% endtrans %}</p>
+    <div class="sp-form-cols-2">
+      <div class="form-group"><label class="form-label" for="sso-c-user">{% trans %}Username claim{% endtrans %}</label>
+        <input id="sso-c-user" class="form-input" type="text" x-model="form.username_claim" placeholder="preferred_username"></div>
+      <div class="form-group"><label class="form-label" for="sso-c-email">{% trans %}Email claim{% endtrans %}</label>
+        <input id="sso-c-email" class="form-input" type="text" x-model="form.email_claim" placeholder="email"></div>
+      <div class="form-group"><label class="form-label" for="sso-c-name">{% trans %}Name claim{% endtrans %}</label>
+        <input id="sso-c-name" class="form-input" type="text" x-model="form.name_claim" placeholder="name"></div>
+      <div class="form-group"><label class="form-label" for="sso-c-locale">{% trans %}Language claim{% endtrans %}</label>
+        <input id="sso-c-locale" class="form-input" type="text" x-model="form.locale_claim" placeholder="locale"></div>
+      <div class="form-group"><label class="form-label" for="sso-c-groups">{% trans %}Groups claim{% endtrans %}</label>
+        <input id="sso-c-groups" class="form-input" type="text" x-model="form.groups_claim" placeholder="groups">
+        <div class="form-hint">{% trans %}A dotted path, for example realm_access.roles.{% endtrans %}</div></div>
+    </div>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.use_userinfo">
+      <span>{% trans %}Also read claims from the userinfo endpoint{% endtrans %}</span></label>
+  </div>
+
+  {# --- Groups --- #}
+  <div class="card sp-sso-section">
+    <h2>{% trans %}Groups{% endtrans %}</h2>
+    <p class="sp-sso-section-intro">{% trans %}Group values from the groups claim decide who may sign in, who is an administrator, and which Specivo groups people are in. Values match exactly, including case.{% endtrans %}</p>
+    <div class="sp-form-cols-2">
+      <div class="form-group">
+        <label class="form-label" for="sso-required">{% trans %}Required groups{% endtrans %}</label>
+        <textarea id="sso-required" class="form-input" rows="3" x-model="form.required_groups"></textarea>
+        <div class="form-hint">{% trans %}One per line. Empty lets everyone from this provider in.{% endtrans %}</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="sso-admins">{% trans %}Administrator groups{% endtrans %}</label>
+        <textarea id="sso-admins" class="form-input" rows="3" x-model="form.admin_groups"></textarea>
+      </div>
+    </div>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.sync_admin_flag">
+      <span>{% trans %}Set the administrator flag from the administrator groups at every sign-in{% endtrans %}</span></label>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.sync_groups">
+      <span>{% trans %}Update Specivo group memberships from the mappings below at every sign-in{% endtrans %}</span></label>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.deactivate_on_access_loss">
+      <span>{% trans %}Deactivate the Specivo account when a sign-in is refused by the required groups or allowed email domains{% endtrans %}
+        <span class="form-hint">{% trans %}Deactivation signs the user out everywhere and switches off their API keys. Without it, only the sessions started through this provider end.{% endtrans %}</span></span></label>
+
+    {% if provider %}
+    <h3 class="sp-sso-subhead">{% trans %}Group mappings{% endtrans %}</h3>
+    <template x-for="(m, index) in mappings" :key="index">
+      <div class="sp-sso-mapping-row">
+        <input class="form-input" type="text" x-model="m.idp_group" placeholder="{{ _('Group at the provider') }}" aria-label="{{ _('Group at the provider') }}">
+        <select class="form-input" x-model="m.user_group_id" aria-label="{{ _('Specivo group') }}">
+          <template x-for="g in userGroups" :key="g.id">
+            <option :value="String(g.id)" x-text="g.name" :selected="String(g.id) === m.user_group_id"></option>
+          </template>
+        </select>
+        <button type="button" class="sp-btn-sm danger" @click="removeMapping(index)">{% trans %}Remove{% endtrans %}</button>
+      </div>
+    </template>
+    <p class="sp-text-muted-xs" x-show="userGroups.length === 0">{% trans %}Create a Specivo group first.{% endtrans %} <a href="/admin/groups/">{% trans %}Groups{% endtrans %} &rarr;</a></p>
+    <div class="sp-sso-actions">
+      <button type="button" class="sp-btn" @click="addMapping()" :disabled="userGroups.length === 0">{% trans %}+ Add mapping{% endtrans %}</button>
+      <button type="button" class="sp-btn sp-btn-primary" @click="saveMappings()" :disabled="mappingsSaving">{% trans %}Save mappings{% endtrans %}</button>
+      <span x-show="mappingsMessage" class="sp-sso-badge sp-sso-badge-ok" x-text="mappingsMessage"></span>
+    </div>
+    <div x-show="mappingsError" class="sp-msg-danger-mb-sm" x-text="mappingsError"></div>
+    {% else %}
+    <p class="sp-text-muted-xs">{% trans %}Group mappings can be added once the provider is saved.{% endtrans %}</p>
+    {% endif %}
+  </div>
+
+  {# --- Logout --- #}
+  <div class="card sp-sso-section">
+    <h2>{% trans %}Logout{% endtrans %}</h2>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.rp_logout_enabled">
+      <span>{% trans %}Signing out of Specivo also signs out at the provider{% endtrans %}</span></label>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.backchannel_logout_enabled">
+      <span>{% trans %}Accept back-channel logout from the provider{% endtrans %}
+        <span class="form-hint">{% trans %}Register the back-channel logout URI above at the provider.{% endtrans %}</span></span></label>
+  </div>
+
+  {% if provider %}
+  <div class="sp-modal-overlay" x-show="showDelete" x-cloak
+    @click.self="showDelete = false" @keydown.escape.window="showDelete = false">
+    <div class="sp-modal sp-modal--sm" @click.stop>
+      <h2>{% trans %}Delete provider{% endtrans %}</h2>
+      <template x-if="hasIdentities">
+        <div>
+          <p class="sp-mb-md">{% trans count=provider.identity_count %}{{ count }} user signs in through this provider. Disabling it is usually what you want.{% pluralize %}{{ count }} users sign in through this provider. Disabling it is usually what you want.{% endtrans %}</p>
+          <label class="sp-sso-check"><input type="checkbox" x-model="forceDelete">
+            <span>{% trans %}Delete anyway: unlink these users and end their sessions{% endtrans %}</span></label>
+        </div>
+      </template>
+      <template x-if="!hasIdentities">
+        <p class="sp-mb-md">{% trans %}Nobody is linked to this provider. Its group mappings are deleted with it.{% endtrans %}</p>
+      </template>
+      {% if provider.managed_membership_count %}
+      <p class="sp-mb-md">{% trans count=provider.managed_membership_count %}{{ count }} group membership granted by this provider is removed with it.{% pluralize %}{{ count }} group memberships granted by this provider are removed with it.{% endtrans %}</p>
+      {% endif %}
+      <div x-show="deleteError" class="sp-msg-danger-mb-sm" x-text="deleteError"></div>
+      <div class="sp-modal-actions">
+        <button class="sp-btn" @click="showDelete = false">{% trans %}Cancel{% endtrans %}</button>
+        <button class="sp-btn sp-btn-danger" @click="confirmDelete()" :disabled="deleting || (hasIdentities && !forceDelete)">
+          <span x-show="!deleting">{% trans %}Delete{% endtrans %}</span>
+          <span x-show="deleting">{% trans %}Deleting...{% endtrans %}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

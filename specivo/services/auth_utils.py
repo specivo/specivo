@@ -35,6 +35,8 @@ from specivo.services.password_hashers import (
 )
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from specivo.models.user import User
 
 logger = logging.getLogger(__name__)
@@ -238,3 +240,21 @@ def validate_password_policy(new_password: str, *, field: str = "new_password") 
             status_code=422,
             field=field,
         )
+
+
+async def is_sso_only_user(session: AsyncSession, user: User) -> bool:
+    """``True`` for an account that signs in only through SSO: no password and a connected identity.
+
+    The rules that depend on SSO (API keys for SSO users, no self-service
+    password) use this one definition. A service account is never SSO-only: it
+    cannot hold an identity. The cheap checks run first, so a password user
+    or a service account costs no query.
+    """
+    if user.is_service_account or user.password_hash:
+        return False
+    from sqlalchemy import select
+
+    from specivo.models.sso import UserIdentity
+
+    stmt = select(UserIdentity.id).where(UserIdentity.user_id == user.id).limit(1)
+    return (await session.execute(stmt)).first() is not None

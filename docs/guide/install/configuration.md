@@ -42,11 +42,14 @@ docker compose up -d
 | `DATABASE_URL` | `postgresql+asyncpg://specivo:specivo@db:5432/specivo`. Point it at an external database to use your own. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials for the bundled Postgres. |
 | `REDIS_URL` | `redis://redis:6379/0`. Point it at an external Redis if you prefer. |
+| `APP_URL` | The public address of Specivo, for example `https://specivo.example.com`. Links in emails and [single sign-on](single-sign-on/index.md) addresses are built from it. |
 | `SECRET_KEY` | Signs sessions and tokens. **Must** be a strong, unique value in production. Keep in `.env.local`. |
 | `DEBUG` | `false` in production. |
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
 | `CAPTCHA_ENABLED` | Captcha on the registration form. |
 | `CORS_ORIGINS` | Allowed browser origins, e.g. `["https://specivo.example.com"]`. |
+| `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
+| `TRUSTED_PROXY_HOPS` | How many proxies in a row stand in front of Specivo. Default `1`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |
 | `MARKDOWN_RENDER_DEADLINE_SECONDS` | CPU seconds one Markdown field (a description, a comment, a wiki page) may use to render before it is shown as plain text instead. It also may not take more than 4 times this in elapsed time. A backstop: text that would render slowly is caught before rendering. Counts CPU time, so a busy host does not trigger it. Default `2`, scaled by `MARKDOWN_RENDER_SPEED_FACTOR`; the largest realistic pages need under half a second on a fast machine. See [Size and complexity limits](../reference/markdown.md#size-and-complexity-limits). |
 | `MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS` | CPU seconds all the Markdown fields on one page or API response may use together (a description, its comments and its history). Once spent, the remaining fields are shown as plain text. Default `5`, scaled by `MARKDOWN_RENDER_SPEED_FACTOR`. |
@@ -109,6 +112,109 @@ SMTP_TLS=true
 SMTP_USER=notifications@example.com
 SMTP_PASSWORD=...      # put the password in .env.local
 ```
+
+## Client addresses behind a proxy
+
+Specivo uses the client's IP address for the per-address rate limits (sign-in, single sign-on,
+anonymous reads), for the address shown on each session, for API key IP allowlists and for the
+security audit log. Behind a reverse proxy, the connection comes from the proxy. Each proxy appends
+the address it received the request from to the `X-Forwarded-For` header, so the client's address
+is in that header. Two settings decide what Specivo believes:
+
+- **`TRUSTED_PROXIES`**: the address of the proxy that connects to Specivo. Only a connection from
+  one of these addresses may name the client. A connection from anywhere else is the client,
+  whatever header it sends. Default `[]`: nothing is trusted.
+- **`TRUSTED_PROXY_HOPS`**: how many proxies in a row stand in front of Specivo. The client is the
+  entry that many places from the right of `X-Forwarded-For`. Everything to the left of it was
+  written by the client and is ignored, so nobody can choose their own address by sending the
+  header. Default `1`.
+
+List the proxy's exact address, not a whole private range: anything in a trusted range could name
+any client.
+
+### The bundled stack
+
+`docker-compose.yml` puts nginx and the api on their own network, `proxy`
+(`10.213.47.0/29`), with nginx at the fixed address `10.213.47.2`, and sets
+`TRUSTED_PROXIES=["10.213.47.2/32"]`. Nothing else is on that network, the api publishes no port,
+and nginx appends the address it saw, so it works without changes. If that range is already used on
+your host (`docker compose up` fails with "Pool overlaps"), pick another one in `.env`:
+
+```bash
+# .env
+SPECIVO_PROXY_SUBNET=10.99.0.0/29
+SPECIVO_NGINX_IP=10.99.0.2
+```
+
+`TRUSTED_PROXIES` follows `SPECIVO_NGINX_IP` unless you set it yourself. Set these in `.env`, not
+`.env.local`: the compose file reads them from `.env`.
+
+### Another proxy in front of nginx
+
+When an HTTPS terminator or a CDN forwards to the bundled nginx, there are two proxies in a row.
+The outer one writes the client's address and nginx appends the outer proxy's address, so set:
+
+```bash
+# .env
+TRUSTED_PROXY_HOPS=2
+```
+
+- **Caddy**: `reverse_proxy` sets `X-Forwarded-For` to the client's address and does not pass on
+  a header the client sent, unless you configure Caddy's own `trusted_proxies`.
+- **Traefik**: appends the client's address. Leave `forwardedHeaders.insecure` off on the
+  entry point, so a header the client sent is not passed through as if Traefik had written it.
+- **Cloudflare**: appends the visitor's address. Nginx must then only accept connections from
+  Cloudflare (firewall the published port to Cloudflare's address ranges), because a request that
+  goes around Cloudflare can put anything in the extra entry.
+
+With `TRUSTED_PROXY_HOPS=1` and an outer proxy, every client appears as the outer proxy's address:
+safe, but everyone shares one rate limit bucket. With a hop count higher than the real number of
+proxies, clients can choose their address. Count exactly.
+
+### Without the bundled nginx
+
+If your own proxy (nginx, Caddy, Traefik) connects straight to the api, set `TRUSTED_PROXIES` to
+that proxy's address and keep `TRUSTED_PROXY_HOPS=1`. For nginx, the usual
+`proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` is right: it appends the client's
+address.
+
+```bash
+TRUSTED_PROXIES=["192.0.2.10/32"]
+```
+
+## Single sign-on: getting back in
+
+Identity providers are configured in **Administration → Single sign-on**, and the login page
+settings in **Administration → Settings → Authentication**. Those settings can hide the password
+form, send the login page straight to one provider, and limit password sign-in to administrators.
+None of them can lock an administrator out:
+
+- With the password form hidden, the login page still shows a small **Sign in with a local
+  account** link. It opens `/login/?local=1`, which always shows the form and never redirects.
+- If the identity provider is down, the error on the login page links to the same form.
+- If the SSO settings themselves are wrong (a broken provider, every admin refused), turn on the
+  environment switch below. It overrides all three settings until you turn it off again:
+
+  ```bash
+  # .env
+  SSO_FORCE_LOCAL_LOGIN=true
+  ```
+
+  ```bash
+  docker compose up -d   # recreates the containers with the new value
+  ```
+
+  Specivo logs a warning at startup while it is on. Fix the settings, then remove the line and
+  recreate the containers again.
+- If no administrator knows a password, set one from the host with
+  `make reset-password login=... password=...`, or create a new administrator with
+  `make create-admin login=... email=... password=...`.
+
+| Variable | Purpose / default |
+|---|---|
+| `SSO_FORCE_LOCAL_LOGIN` | Break-glass switch: always show the password form, never redirect the login page to a provider, and let every user sign in with a password. Default `false`. |
+
+The other SSO variables are listed in [Single sign-on](single-sign-on/index.md#settings-in-the-environment).
 
 ## Imported passwords
 

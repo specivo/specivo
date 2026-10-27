@@ -100,6 +100,71 @@
     </template>
   </div>
 
+  {# --- Account status: deactivate / reactivate (server-rendered; plain forms) --- #}
+  <section class="card sp-account-status" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;" aria-labelledby="sp-account-status-heading">
+    <h2 id="sp-account-status-heading" style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}Account status{% endtrans %}</h2>
+    {% if account_message %}
+    <div class="flash flash-success" role="status" style="margin: var(--sp-space-md) 0;">{{ account_message }}</div>
+    {% endif %}
+    {% if account_error %}
+    <div class="flash flash-error" role="alert" style="margin: var(--sp-space-md) 0;">{{ account_error }}</div>
+    {% endif %}
+    {% if target_user.status == "deactivated" %}
+    <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-md); line-height: 1.5;">
+      {% trans %}This account is deactivated. It cannot sign in and its API keys do not work.{% endtrans %}
+      {% trans %}API keys stay inactive after reactivation: activate them again or create new ones.{% endtrans %}
+    </p>
+    <form method="post" action="/admin/users/{{ target_user.id }}/reactivate/">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="sp-btn">{% trans %}Reactivate account{% endtrans %}</button>
+    </form>
+    {% else %}
+    <p style="font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin-bottom: var(--sp-space-md); line-height: 1.5;">
+      {% trans %}Deactivating signs the user out of every session and switches off all of their API keys. Reactivating the account later does not switch the keys back on.{% endtrans %}
+    </p>
+    {% if not is_self %}
+    <form method="post" action="/admin/users/{{ target_user.id }}/deactivate/">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="sp-btn-sm danger">{% trans %}Deactivate account{% endtrans %}</button>
+    </form>
+    {% endif %}
+    {% endif %}
+  </section>
+
+  {# --- Connected SSO accounts (server-rendered; plain forms) --- #}
+  {% if not target_user.is_service_account %}
+  <section class="card sp-connected" style="margin-top: 0; margin-bottom: var(--sp-space-lg); max-width: 720px;" aria-labelledby="sp-admin-connected-heading">
+    <h2 id="sp-admin-connected-heading" class="sp-connected-title">{% trans %}Connected accounts{% endtrans %}</h2>
+    <p class="sp-connected-intro">{% trans %}Identity provider accounts this user can sign in with. Disconnecting one ends the sessions started with it.{% endtrans %}</p>
+    {% if identities %}
+    <ul class="sp-connected-list">
+      {% for identity in identities %}
+      <li class="sp-connected-row">
+        <div class="sp-connected-info">
+          <div class="sp-connected-name">
+            {{ identity.provider_name }}
+            {% if not identity.provider_enabled %}<span class="sp-badge-warning">{% trans %}Disabled{% endtrans %}</span>{% endif %}
+          </div>
+          <div class="sp-connected-meta">
+            {% if identity.email_at_last_login %}<span>{{ identity.email_at_last_login }}</span>{% endif %}
+            <span>{% trans %}Linked by{% endtrans %}: {{ identity.linked_via }}</span>
+            <span>{% trans %}Connected{% endtrans %}: {{ identity.linked_at | localtime(user.timezone) if identity.linked_at else '-' }}</span>
+            <span>{% trans %}Last sign-in{% endtrans %}: {{ identity.last_login_at | localtime(user.timezone) if identity.last_login_at else _('Never') }}</span>
+          </div>
+        </div>
+        <form method="post" action="/admin/users/{{ target_user.id }}/identities/{{ identity.id }}/unlink/">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button type="submit" class="sp-btn-sm danger">{% trans %}Disconnect{% endtrans %}</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="sp-connected-empty">{% trans %}No accounts are connected.{% endtrans %}</p>
+    {% endif %}
+  </section>
+  {% endif %}
+
   {# --- API Keys --- #}
   <div class="card" style="padding: var(--sp-space-xl); margin-bottom: var(--sp-space-lg); max-width: 720px;">
     <h2 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-lg); font-weight: 600; margin-bottom: var(--sp-space-xs);">{% trans %}API Keys{% endtrans %}</h2>

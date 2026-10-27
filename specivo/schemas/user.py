@@ -72,7 +72,7 @@ class UserOut(BaseModel):
     """Public user response — safe to expose to any authenticated user.
 
     Excludes: password_hash, failed_login_count, locked_until, preferences,
-    github_id, google_id, email (private).
+    email (private).
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -120,3 +120,20 @@ class UserProfile(BaseModel):
     preferences: dict
     created_at: datetime
     updated_at: datetime
+
+
+class UserDeactivatedOut(UserOut):
+    """The account after ``POST /admin/users/{id}/deactivate/``, with what was revoked."""
+
+    sessions_revoked: int
+    api_keys_deactivated: int
+
+
+class UserReactivatedOut(UserOut):
+    """The account after ``POST /admin/users/{id}/reactivate/``.
+
+    ``inactive_api_keys``: the account's keys that stay switched off. A
+    reactivation never turns keys back on; the owner or an admin does that.
+    """
+
+    inactive_api_keys: int
