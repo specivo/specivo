@@ -6683,6 +6683,10 @@ msgstr "Разрешённые почтовые домены"
 msgid "One per line. Empty allows every domain."
 msgstr "По одному в строке. Пусто: разрешены все домены."
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Needs email verification to be trusted (the setting above): only verified addresses are checked. Google Workspace accounts are checked by their hosted domain."
+msgstr "Требует доверия к подтверждению адресов почты (настройка выше): проверяются только подтверждённые адреса. Учётные записи Google Workspace проверяются по их домену организации."
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:232
 msgid "Maximum session length (hours)"
 msgstr "Максимальная длительность сеанса (часы)"

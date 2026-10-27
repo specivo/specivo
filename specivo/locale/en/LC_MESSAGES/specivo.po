@@ -6473,6 +6473,10 @@ msgstr ""
 msgid "One per line. Empty allows every domain."
 msgstr ""
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Needs email verification to be trusted (the setting above): only verified addresses are checked. Google Workspace accounts are checked by their hosted domain."
+msgstr ""
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:232
 msgid "Maximum session length (hours)"
 msgstr ""
@@ -6780,6 +6784,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html
 msgid "No accounts are connected."
+msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/login.html:98
 msgid "Administrators can sign in with a local account."

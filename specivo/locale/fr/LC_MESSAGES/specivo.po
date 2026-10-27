@@ -6725,6 +6725,10 @@ msgstr "Domaines e-mail autorisés"
 msgid "One per line. Empty allows every domain."
 msgstr "Un par ligne. Vide autorise tous les domaines."
 
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html
+msgid "Needs email verification to be trusted (the setting above): only verified addresses are checked. Google Workspace accounts are checked by their hosted domain."
+msgstr "Nécessite de faire confiance à la vérification des e-mails (l'option ci-dessus) : seules les adresses vérifiées sont contrôlées. Les comptes Google Workspace sont contrôlés par leur domaine hébergé."
+
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:232
 msgid "Maximum session length (hours)"
 msgstr "Durée maximale de session (heures)"

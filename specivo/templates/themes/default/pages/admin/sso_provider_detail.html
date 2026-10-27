@@ -226,7 +226,8 @@
     <div class="form-group">
       <label class="form-label" for="sso-domains">{% trans %}Allowed email domains{% endtrans %}</label>
       <textarea id="sso-domains" class="form-input" rows="3" x-model="form.allowed_email_domains" placeholder="example.com"></textarea>
-      <div class="form-hint">{% trans %}One per line. Empty allows every domain.{% endtrans %}</div>
+      <div class="form-hint">{% trans %}One per line. Empty allows every domain.{% endtrans %}
+        {% trans %}Needs email verification to be trusted (the setting above): only verified addresses are checked. Google Workspace accounts are checked by their hosted domain.{% endtrans %}</div>
     </div>
     <div class="form-group">
       <label class="form-label" for="sso-session-age">{% trans %}Maximum session length (hours){% endtrans %}</label>

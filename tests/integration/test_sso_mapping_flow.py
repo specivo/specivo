@@ -91,6 +91,7 @@ async def test_domain_not_allowed_is_refused(
     mock_idp: MockIdP,
 ) -> None:
     sso_provider.allowed_email_domains = ["corp.example.com"]
+    sso_provider.trust_email_verified = True
     await _member(db_session, sso_provider, mock_idp, login="mflowdom", email="mflow-dom@example.com")
 
     response = await sso_login(client, claims={"email": "mflow-dom@example.com"})
