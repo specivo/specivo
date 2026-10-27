@@ -331,8 +331,8 @@ SSO_IDP_COMPOSE := docker compose -f docker-compose.sso-test.yml
 sso-idp-up:  ## Start the disposable Keycloak test IdP on :8033 (checkout only)
 	$(SSO_IDP_COMPOSE) up -d --wait
 
-sso-idp-up-authentik:  ## Start Keycloak plus the authentik test IdP on :8034 (checkout only)
-	$(SSO_IDP_COMPOSE) --profile authentik up -d --wait
+sso-idp-up-authentik:  ## Start the authentik test IdP on :8034, without Keycloak (checkout only)
+	$(SSO_IDP_COMPOSE) --profile authentik up -d --wait authentik-db authentik-server authentik-worker
 	@echo "authentik issuer: export SSO_TEST_AUTHENTIK_ISSUER=http://localhost:$${SSO_AUTHENTIK_PORT:-8034}/application/o/specivo-test/"
 
 sso-idp-down:  ## Stop the test IdPs and discard their data (checkout only)
@@ -340,7 +340,7 @@ sso-idp-down:  ## Stop the test IdPs and discard their data (checkout only)
 
 sso-idp-reset: sso-idp-down sso-idp-up  ## Recreate the Keycloak test IdP from its realm seed (checkout only)
 
-test-sso-idp:  ## Run the integration tests against the test IdP (make sso-idp-up first; checkout only)
+test-sso-idp:  ## Run the integration tests against the test IdPs that are up (make sso-idp-up and/or sso-idp-up-authentik; checkout only)
 	$(RUN) pytest -m 'sso_idp and not e2e' -n 0
 
 # Keycloak calls the E2E server's back-channel logout endpoint from its
