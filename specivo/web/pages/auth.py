@@ -182,6 +182,14 @@ async def forgot_password_form(request: Request) -> HTMLResponse:
     )
 
 
+async def _token_owner_is_sso_only(db: AsyncSession, user_id: int) -> bool:
+    """The reset token belongs to an SSO-only account, which email reset never gives a password."""
+    from specivo.services.auth_utils import is_sso_only_user
+
+    owner = await db.scalar(select(User).where(User.id == user_id))
+    return owner is not None and await is_sso_only_user(db, owner)
+
+
 @router.get("/reset-password/", response_class=HTMLResponse)
 async def reset_password_form(
     request: Request,
@@ -207,7 +215,7 @@ async def reset_password_form(
         result = await db.execute(stmt)
         record = result.scalar_one_or_none()
 
-        if record is None:
+        if record is None or await _token_owner_is_sso_only(db, record.user_id):
             token_error = _("This password reset link is invalid. Please request a new one.")
         elif record.used_at is not None:
             token_error = _("This password reset link has already been used. Please request a new one.")
@@ -275,10 +283,12 @@ async def preferences_page(
     """Render the user preferences page."""
     from specivo.core.config import get_settings
     from specivo.core.locales import TIMEZONE_CHOICES, get_language_choices
+    from specivo.services.auth_service import AuthService
     from specivo.services.settings_service import SettingsService
 
     settings = get_settings()
     palette = await SettingsService().get_avatar_palette(db)
+    sessions = await AuthService().list_sessions(db, user.id)
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -287,6 +297,8 @@ async def preferences_page(
             "user": user,
             "active_page": "preferences",
             "avatar_palette": palette,
+            "sessions": [{"row": row, "provider_name": provider_name} for row, provider_name in sessions],
+            "sso_password_providers": await _sso_only_providers(db, user),
             "language_choices": get_language_choices(settings.available_languages),
             "timezone_choices": TIMEZONE_CHOICES,
             "password_min_length": settings.password_min_length,
@@ -294,10 +306,25 @@ async def preferences_page(
     )
 
 
+async def _sso_only_providers(db: AsyncSession, user: User) -> list[str]:
+    """Display names of the providers ``user`` signs in with, when that is the only way in.
+
+    Empty for a user with a password, a service account, or a user without a
+    connected identity: they get the ordinary password form.
+    """
+    if user.password_hash or user.is_service_account:
+        return []
+    from specivo.services.sso.identity_service import IdentityService
+
+    identities = await IdentityService().list_for_user(db, user.id)
+    return sorted({identity.provider_name for identity in identities})
+
+
 @router.get("/my/password/", response_model=None)
 async def change_password_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
     """Render the standalone password-change page.
 
@@ -306,6 +333,10 @@ async def change_password_page(
     redirect rather than another hop in it. The same page serves a voluntary
     visit, which gets the form without the explanation and without being sent
     anywhere afterwards.
+
+    A user without a password who signs in through an identity provider gets
+    an explanation instead of the form: there is no current password to
+    prove, and the change endpoint refuses them.
     """
     from specivo.core.config import get_settings
 
@@ -318,6 +349,7 @@ async def change_password_page(
         context={
             "user": user,
             "forced": forced,
+            "sso_password_providers": await _sso_only_providers(db, user),
             "password_min_length": settings.password_min_length,
             # A forced user came here trying to reach the app, so put them in
             # it once the flag is cleared. A voluntary visitor asked for this
@@ -394,11 +426,22 @@ async def delete_avatar(
 async def api_keys_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> Response:
-    """Render the API keys management page (requires auth)."""
+    """Render the API keys management page (requires auth).
+
+    While ``sso.allow_api_keys_for_sso_users`` is off, a user who signs in only
+    through SSO gets an explanation instead of the "New API Key" button.
+    """
+    from specivo.services.api_key_service import sso_api_keys_refused
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/auth/api_keys.html",
-        context={"user": user, "active_page": "api-keys"},
+        context={
+            "user": user,
+            "active_page": "api-keys",
+            "api_keys_refused": await sso_api_keys_refused(db, user),
+        },
     )

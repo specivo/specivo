@@ -128,8 +128,13 @@ async def admin_user_detail(
     user_id: int,
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = Depends(get_db),  # noqa: B008
+    account: str = "",
 ) -> Response:
-    """Render the admin user detail page: account, connected SSO accounts, API keys."""
+    """Render the admin user detail page: account, status, connected SSO accounts, API keys.
+
+    ``?account=`` only ever selects one of the fixed, translated messages of
+    the deactivate / reactivate forms.
+    """
     from fastapi import HTTPException
 
     result = await db.execute(select(UserModel).where(UserModel.id == user_id))
@@ -179,8 +184,83 @@ async def admin_user_detail(
             "target_user": target_data,
             "api_keys": keys_data,
             "identities": identities,
+            "is_self": target_user.id == user.id,
+            "account_message": _account_messages().get(account),
+            "account_error": _account_errors().get(account),
         },
     )
+
+
+def _account_messages() -> dict[str, str]:
+    from specivo.core.i18n import gettext as _
+
+    return {
+        "deactivated": _(
+            "Account deactivated. The user was signed out everywhere and their API keys were switched off."
+        ),
+        "reactivated": _(
+            "Account reactivated. The user can sign in again. API keys stay inactive: "
+            "activate them again or create new ones."
+        ),
+    }
+
+
+def _account_errors() -> dict[str, str]:
+    from specivo.core.i18n import gettext as _
+
+    return {
+        "self": _("You cannot deactivate your own account."),
+        "last_admin": _("This is the last active administrator. Make another user an administrator first."),
+    }
+
+
+async def _target_or_404(db: AsyncSession, user_id: int) -> User:
+    from fastapi import HTTPException
+
+    target = await db.scalar(select(UserModel).where(UserModel.id == user_id))
+    if target is None or target.is_anonymous:
+        raise HTTPException(status_code=404, detail="User not found")
+    return target
+
+
+def _user_page_redirect(user_id: int, account: str) -> RedirectResponse:
+    prefix = get_settings().stealth_prefix.rstrip("/")
+    return RedirectResponse(f"{prefix}/admin/users/{user_id}/?account={account}", status_code=303)
+
+
+@router.post("/admin/users/{user_id}/deactivate/", response_model=None)
+async def admin_deactivate_user(
+    user_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> RedirectResponse:
+    """Deactivate an account from its admin page: every session and API key ends."""
+    from specivo.services.user_service import LastActiveAdminError, UserService
+
+    target = await _target_or_404(db, user_id)
+    if target.id == user.id:
+        return _user_page_redirect(user_id, "self")
+    try:
+        await UserService().deactivate(db, target, reason="admin", actor_id=user.id)
+    except LastActiveAdminError:
+        return _user_page_redirect(user_id, "last_admin")
+    await db.commit()
+    return _user_page_redirect(user_id, "deactivated")
+
+
+@router.post("/admin/users/{user_id}/reactivate/", response_model=None)
+async def admin_reactivate_user(
+    user_id: int,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = Depends(get_db),  # noqa: B008
+) -> RedirectResponse:
+    """Reactivate an account from its admin page; its API keys stay inactive."""
+    from specivo.services.user_service import UserService
+
+    target = await _target_or_404(db, user_id)
+    await UserService().reactivate(db, target, actor_id=user.id)
+    await db.commit()
+    return _user_page_redirect(user_id, "reactivated")
 
 
 # ---------------------------------------------------------------------------

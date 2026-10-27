@@ -39,6 +39,7 @@ from specivo.services.auth_utils import (
     burn_password_check,
     hash_password,
     hash_upgrade_source,
+    is_sso_only_user,
     rehash_if_needed,
     validate_password_policy,
     verify_password,
@@ -630,6 +631,12 @@ class AuthService:
         # user, which no one may take over — no enumeration
         if user is None or user.is_anonymous or user.status not in ("active", "locked"):
             return None
+        # An SSO-only account must not get a local password by email: it would
+        # bypass every rule tied to signing in through the IdP. Same silent
+        # answer as an unknown email; an admin can still set one deliberately.
+        if await is_sso_only_user(session, user):
+            _logger.info("password_reset.refused_sso_only user_id=%s", user.id)
+            return None
 
         # Invalidate any existing unused tokens for this user
         invalidate_stmt = (
@@ -710,7 +717,10 @@ class AuthService:
         # Load user
         user_result = await session.execute(select(User).where(User.id == record.user_id))
         user = user_result.scalar_one_or_none()
-        if user is None or user.is_anonymous:
+        # An SSO-only account (a token issued before its identity was
+        # connected) is refused like an invalid link: email reset never gives
+        # it a local password.
+        if user is None or user.is_anonymous or await is_sso_only_user(session, user):
             raise AppError(
                 code="password_reset_invalid",
                 message=_("Invalid or expired password reset link"),
@@ -767,11 +777,21 @@ class AuthService:
         for writing the audit trail.
         """
         # Accounts without a password (service accounts authenticate by API
-        # key) have nothing to verify against — reject before touching bcrypt.
-        if user.is_service_account or not user.password_hash:
+        # key, SSO-only users through their identity provider) have nothing to
+        # verify against — reject before touching bcrypt.
+        if user.is_service_account:
             raise AppError(
                 code="password_change_unavailable",
                 message=_("This account has no password. It authenticates with an API key."),
+                status_code=400,
+            )
+        if not user.password_hash:
+            raise AppError(
+                code="password_change_unavailable",
+                message=_(
+                    "This account has no password. You sign in through your identity provider, "
+                    "so there is no password to change here."
+                ),
                 status_code=400,
             )
 

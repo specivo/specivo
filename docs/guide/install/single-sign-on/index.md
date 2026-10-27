@@ -365,16 +365,28 @@ allows.
 2. **Back-channel logout**, where the IdP supports it, ends the session when the IdP ends theirs.
 3. **A refused sign-in** because they lost a required group, or their email domain no longer
    qualifies, ends the remaining sessions that came from that identity.
-4. **Deactivate the user in Specivo** (**Administration → Users**). This ends all their sessions and
-   deactivates their API keys.
+4. **Deactivate the user in Specivo.** On the user's page in **Administration → Users**, press
+   **Deactivate account** (or call `POST /api/v1/admin/users/{id}/deactivate/`). This works for
+   every account, with or without SSO, service accounts included. In one step it ends every
+   session (the browser is refused on its next request) and switches off all of their API keys.
+   The keys are kept, switched off, so their history stays readable. **Reactivate account** lets
+   the person sign in again, but their API keys stay off: they (or you) switch them back on or
+   create new ones. You cannot deactivate your own account or the last active administrator.
 5. **Disconnect their identity** from the user's admin page to end the sessions that came from it.
 
-Each provider also has an option to deactivate the account when sign-in is refused because access was
-lost (`deactivate_on_access_loss`, off by default).
+Each provider also has the option **Deactivate the Specivo account when a sign-in is refused by the
+required groups or allowed email domains** (`deactivate_on_access_loss`, off by default). With it
+on, a refused sign-in (step 3) deactivates the account as in step 4, but only for an account
+already connected to that identity. Specivo never deactivates a service account this way, nor the
+last active administrator (it logs a warning instead).
 
 **API keys.** People who sign in through SSO can create API keys, which keep working after the IdP
 disables them, until the key expires or you deactivate the user. Turn off **Users who sign in through
 SSO may use API keys** under **Administration → Settings → Authentication** if you do not want that.
+It applies to accounts with no password and a connected identity: they cannot create keys, and
+their existing keys are refused while the setting is off. Such accounts also cannot get a password
+through **Forgot password**; an administrator can still set one deliberately. Users with a password
+and service accounts are not affected.
 
 ## Authentication settings
 

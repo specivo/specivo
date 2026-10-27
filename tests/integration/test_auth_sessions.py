@@ -9,11 +9,14 @@ later when it expires.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.utils import utcnow
 from specivo.models.auth import RefreshToken
 from specivo.models.user import User
 from specivo.services.auth_service import _hash_token
@@ -185,3 +188,31 @@ class TestPasswordChange:
         assert after.status_code == 401
         assert _error_code(after) == "auth_token_revoked"
         assert (await _get_sessions(client, my_access)).status_code == 200
+
+
+class TestAbsoluteSessionCap:
+    """Past ``absolute_expires_at`` the refresh endpoint refuses; the user goes back to the IdP."""
+
+    async def _capped(self, client: AsyncClient, db: AsyncSession, login: str, offset: timedelta) -> str:
+        user = await _create_user(db, login)
+        _access, refresh = await _sign_in(client, user.login)
+        row = await db.scalar(select(RefreshToken).where(RefreshToken.token_hash == _hash_token(refresh)))
+        assert row is not None
+        row.absolute_expires_at = utcnow() + offset
+        await db.commit()
+        return refresh
+
+    async def test_refresh_past_the_cap_is_401(self, client: AsyncClient, db_session: AsyncSession) -> None:
+        refresh = await self._capped(client, db_session, "authsess_cap", timedelta(seconds=-1))
+
+        resp = await client.post("/api/v1/auth/refresh/", json={"refresh_token": refresh})
+
+        assert resp.status_code == 401
+        assert _error_code(resp) == "auth_refresh_expired"
+
+    async def test_refresh_before_the_cap_works(self, client: AsyncClient, db_session: AsyncSession) -> None:
+        refresh = await self._capped(client, db_session, "authsess_cap_ok", timedelta(minutes=10))
+
+        resp = await client.post("/api/v1/auth/refresh/", json={"refresh_token": refresh})
+
+        assert resp.status_code == 200, resp.text

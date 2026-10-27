@@ -24,11 +24,19 @@
 
   <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--sp-space-xl);">
     <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700;">{% trans %}API Keys{% endtrans %}</h1>
+    {% if not api_keys_refused %}
     <button class="sp-btn sp-btn-primary" @click="showCreate = !showCreate; newKey = null;">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
       {% trans %}New API Key{% endtrans %}
     </button>
+    {% endif %}
   </div>
+
+  {% if api_keys_refused %}
+  <div class="flash flash-warning sp-api-keys-disabled" role="status" style="margin-bottom: var(--sp-space-lg);">
+    {% trans %}API keys are turned off for accounts that sign in through single sign-on. Your existing keys do not work while this is so. Ask an administrator if you need one.{% endtrans %}
+  </div>
+  {% endif %}
 
   <!-- New key created: show raw key -->
   <template x-if="newKey">

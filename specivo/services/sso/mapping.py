@@ -23,7 +23,13 @@ signed in, so a refused user is never provisioned or linked:
 
 A refusal revokes the sessions the identity started (it lost access at the
 IdP; the "Deprovisioning (c)" rule) and is logged with
-``sso.login.refused_policy``. Every overage is logged with
+``sso.login.refused_policy``. With the provider's
+``deactivate_on_access_loss`` on, the account already linked to that identity
+is also deactivated (:meth:`specivo.services.user_service.UserService.deactivate`:
+every session, every API key), except a service account (which cannot hold an
+identity anyway) and the last active admin, which is kept with a warning
+(``sso.deprovision.skipped``). An account that would only be auto-linked by
+email is never deactivated: it has not signed in through this provider. Every overage is logged with
 ``sso.groups.overage`` and tells the admin what to configure.
 
 :func:`apply_mapping` runs once the user is known, only with a :class:`Known`
@@ -67,6 +73,8 @@ from specivo.services.sso.errors import (
     SsoGroupsOverageError,
     SsoNotInRequiredGroupError,
 )
+from specivo.services.sso.log import logger
+from specivo.services.user_service import LastActiveAdminError, UserService, another_active_admin_exists
 
 __all__ = ["GOOGLE_ISSUER", "POLICY_REVOKE_REASON", "apply_mapping", "check_access", "enforce_access"]
 
@@ -160,24 +168,37 @@ async def enforce_access(
         reason=refusal.reason,
         sessions_revoked=revoked,
     )
+    if provider.deactivate_on_access_loss and user is not None and identity is not None:
+        await _deactivate_on_access_loss(db, provider, user, subject)
     raise refusal
+
+
+async def _deactivate_on_access_loss(db: AsyncSession, provider: SsoProvider, user: User, subject: str) -> None:
+    """Deactivate ``user`` after a policy refusal; never a service account or the last active admin."""
+    if user.is_service_account or user.status != "active":
+        return
+    try:
+        await UserService().deactivate(
+            db,
+            user,
+            reason=POLICY_REVOKE_REASON,
+            actor_id=None,
+            provider_slug=provider.slug,
+            issuer=provider.issuer,
+            subject=subject,
+        )
+    except LastActiveAdminError:
+        logger.warning(
+            "sso.deprovision.skipped provider=%s user_id=%s reason=last_active_admin "
+            "(deactivation_skipped: the account keeps working; make another user an administrator)",
+            provider.slug,
+            user.id,
+        )
 
 
 # ---------------------------------------------------------------------------
 # Admin flag and user groups
 # ---------------------------------------------------------------------------
-
-
-async def _another_admin_can_sign_in(db: AsyncSession, user_id: int) -> bool:
-    """Some other active, human admin exists (the last-admin guard)."""
-    stmt = select(User.id).where(
-        User.id != user_id,
-        User.is_admin.is_(True),
-        User.status == "active",
-        User.is_service_account.is_(False),
-        User.is_anonymous.is_(False),
-    )
-    return (await db.execute(stmt.limit(1))).first() is not None
 
 
 async def _sync_admin_flag(
@@ -188,7 +209,7 @@ async def _sync_admin_flag(
         return
     if wanted:
         user.is_admin = True
-    elif await _another_admin_can_sign_in(db, user.id):
+    elif await another_active_admin_exists(db, user.id):
         user.is_admin = False
     else:
         events.admin_demotion_skipped(provider_slug=provider.slug, user_id=user.id, subject=subject)

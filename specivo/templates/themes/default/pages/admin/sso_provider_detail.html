@@ -276,6 +276,9 @@
       <span>{% trans %}Set the administrator flag from the administrator groups at every sign-in{% endtrans %}</span></label>
     <label class="sp-sso-check"><input type="checkbox" x-model="form.sync_groups">
       <span>{% trans %}Update Specivo group memberships from the mappings below at every sign-in{% endtrans %}</span></label>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.deactivate_on_access_loss">
+      <span>{% trans %}Deactivate the Specivo account when a sign-in is refused by the required groups or allowed email domains{% endtrans %}
+        <span class="form-hint">{% trans %}Deactivation signs the user out everywhere and switches off their API keys. Without it, only the sessions started through this provider end.{% endtrans %}</span></span></label>
 
     {% if provider %}
     <h3 class="sp-sso-subhead">{% trans %}Group mappings{% endtrans %}</h3>
