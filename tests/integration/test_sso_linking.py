@@ -18,6 +18,7 @@ prefix because modules run in parallel inside uncommitted transactions.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
@@ -557,6 +558,7 @@ async def test_jit_login_creates_the_user_with_the_thai_locale(
     sso_login: SsoLoginDriver,
 ) -> None:
     sso_provider.allow_jit_provisioning = True
+    sso_provider.trust_email_verified = True
     await db_session.flush()
 
     response = await sso_login(
@@ -575,6 +577,7 @@ async def test_jit_login_creates_the_user_with_the_thai_locale(
     assert user.login == "lnk-jit"
     assert user.language == "th"
     assert user.password_hash is None
+    assert user.email_verified_at is not None
     assert len(await _sessions(db_session, user.id)) == 1
 
 
@@ -629,7 +632,7 @@ async def test_auto_link_signs_in_the_matching_user(
 ) -> None:
     sso_provider.link_policy = "auto_verified_email"
     sso_provider.trust_email_verified = True
-    user = await _user(db_session, login="lnkauto", email="lnk-auto@example.com")
+    user = await _user(db_session, login="lnkauto", email="lnk-auto@example.com", email_verified_at=datetime.now(UTC))
 
     response = await sso_login(client, claims={"email": "lnk-auto@example.com", "email_verified": True})
 
@@ -646,7 +649,13 @@ async def test_auto_link_never_captures_an_admin_end_to_end(
 ) -> None:
     sso_provider.link_policy = "auto_verified_email"
     sso_provider.trust_email_verified = True
-    admin = await _user(db_session, AdminUserFactory, login="lnkautoadmin", email="lnk-autoadmin@example.com")
+    admin = await _user(
+        db_session,
+        AdminUserFactory,
+        login="lnkautoadmin",
+        email="lnk-autoadmin@example.com",
+        email_verified_at=datetime.now(UTC),
+    )
 
     response = await sso_login(client, claims={"email": "lnk-autoadmin@example.com", "email_verified": True})
 

@@ -20,6 +20,7 @@ uncommitted transactions and both columns are unique.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 from typing import Any
 
 import pytest
@@ -94,7 +95,12 @@ async def _resolve(
     )
 
 
+VERIFIED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+
+
 async def _user(db: AsyncSession, factory=UserFactory, **fields: Any) -> User:
+    """A local user whose email is verified unless ``email_verified_at=None`` is passed."""
+    fields.setdefault("email_verified_at", VERIFIED_AT)
     user = factory.build(**fields)
     db.add(user)
     await db.flush()
@@ -135,6 +141,7 @@ async def test_existing_identity_wins_over_an_email_match(db_session: AsyncSessi
 
 
 async def test_existing_identity_refreshes_the_profile(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
+    sso_provider.trust_email_verified = True
     user = await _user(db_session, login="prvprofile", email="prv-old@example.com", display_name="Old Name")
     await link_identity(db_session, user, sso_provider, subject=SUB)
 
@@ -149,6 +156,7 @@ async def test_existing_identity_refreshes_the_profile(db_session: AsyncSession,
 async def test_profile_email_change_skipped_on_collision(
     db_session: AsyncSession, sso_provider: SsoProvider, caplog: pytest.LogCaptureFixture
 ) -> None:
+    sso_provider.trust_email_verified = True
     user = await _user(db_session, login="prvcollide", email="prv-mine@example.com")
     await _user(db_session, login="prvtaken", email="prv-taken@example.com")
     await link_identity(db_session, user, sso_provider, subject=SUB)
@@ -163,6 +171,79 @@ async def test_profile_email_change_skipped_on_collision(
     assert "sso.profile.email_conflict" in caplog.text
 
 
+# --- Email trust on login ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("trusted", "email_verified"),
+    [(False, True), (True, None), (True, False), (True, "true")],
+    ids=["provider_not_trusted", "claim_missing", "claim_false", "claim_string_true"],
+)
+async def test_unverified_token_email_is_not_copied_to_the_user(
+    db_session: AsyncSession,
+    sso_provider: SsoProvider,
+    caplog: pytest.LogCaptureFixture,
+    trusted: bool,
+    email_verified: Any,
+) -> None:
+    sso_provider.trust_email_verified = trusted
+    user = await _user(db_session, login="prvsquat", email="prv-squat-old@example.com")
+    await link_identity(db_session, user, sso_provider, subject=SUB)
+
+    with caplog.at_level(logging.INFO, logger="specivo.sso"):
+        await _resolve(
+            db_session, sso_provider, email="prv-squat-new@example.com", email_verified=email_verified, name="Renamed"
+        )
+
+    await db_session.refresh(user)
+    assert user.email == "prv-squat-old@example.com"
+    assert user.email_verified_at == VERIFIED_AT
+    # The other profile fields still follow the token.
+    assert user.display_name == "Renamed"
+    assert "sso.profile.email_unverified" in caplog.text
+
+
+async def test_trusted_verified_email_change_marks_the_new_address_verified(
+    db_session: AsyncSession, sso_provider: SsoProvider
+) -> None:
+    sso_provider.trust_email_verified = True
+    user = await _user(db_session, login="prvnewaddr", email="prv-addr-old@example.com", email_verified_at=None)
+    await link_identity(db_session, user, sso_provider, subject=SUB)
+
+    await _resolve(db_session, sso_provider, email="prv-addr-new@example.com")
+
+    await db_session.refresh(user)
+    assert user.email == "prv-addr-new@example.com"
+    assert user.email_verified_at is not None
+    assert user.email_verified_at != VERIFIED_AT
+
+
+async def test_verified_flag_is_never_carried_to_a_new_address(
+    db_session: AsyncSession, sso_provider: SsoProvider
+) -> None:
+    """The old address was verified; an email change always re-stamps (or clears) the flag for the new one."""
+    sso_provider.trust_email_verified = True
+    user = await _user(db_session, login="prvcarry", email="prv-carry-old@example.com")
+    await link_identity(db_session, user, sso_provider, subject=SUB)
+
+    await _resolve(db_session, sso_provider, email="prv-carry-new@example.com")
+
+    await db_session.refresh(user)
+    assert user.email == "prv-carry-new@example.com"
+    assert user.email_verified_at is not None
+    assert user.email_verified_at > VERIFIED_AT
+
+
+async def test_same_email_keeps_the_verified_flag(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
+    user = await _user(db_session, login="prvsame", email="prv-same@example.com")
+    await link_identity(db_session, user, sso_provider, subject=SUB)
+
+    await _resolve(db_session, sso_provider, email="prv-same@example.com", email_verified=None)
+
+    await db_session.refresh(user)
+    assert user.email_verified_at == VERIFIED_AT
+
+
 async def test_unsupported_locale_leaves_the_language(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
     user = await _user(db_session, login="prvlocale", email="prv-locale@example.com", language="en")
     await link_identity(db_session, user, sso_provider, subject=SUB)
@@ -175,6 +256,7 @@ async def test_unsupported_locale_leaves_the_language(db_session: AsyncSession, 
 
 async def test_custom_claim_names_are_used(db_session: AsyncSession, sso_provider: SsoProvider) -> None:
     sso_provider.claim_config = {"name_claim": "full_name", "locale_claim": "lang", "email_claim": "mail"}
+    sso_provider.trust_email_verified = True
     user = await _user(db_session, login="prvclaims", email="prv-claims@example.com")
     await link_identity(db_session, user, sso_provider, subject=SUB)
 
@@ -415,6 +497,31 @@ async def test_auto_link_matches_the_email_case_insensitively(
     assert account.user.id == user.id
 
 
+async def test_auto_link_requires_the_local_email_to_be_verified(
+    db_session: AsyncSession, sso_provider: SsoProvider, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Pre-account hijack: an unverified local sign-up must not receive the IdP identity."""
+    _auto_link(sso_provider)
+    await _user(db_session, login="prvpreacct", email="prv-member@example.com", email_verified_at=None)
+
+    with caplog.at_level(logging.INFO, logger="specivo.sso"), pytest.raises(SsoAccountNotProvisionedError):
+        await _resolve(db_session, sso_provider)
+    assert "reason=target_email_unverified" in caplog.text
+    assert await _identity_count(db_session) == 0
+
+
+async def test_auto_link_to_an_unverified_target_falls_through_to_jit_conflict(
+    db_session: AsyncSession, sso_provider: SsoProvider
+) -> None:
+    _auto_link(sso_provider)
+    sso_provider.allow_jit_provisioning = True
+    await _user(db_session, login="prvpreacct2", email="prv-member@example.com", email_verified_at=None)
+
+    with pytest.raises(SsoEmailConflictError):
+        await _resolve(db_session, sso_provider)
+    assert await _identity_count(db_session) == 0
+
+
 async def test_auto_link_refused_when_the_target_has_an_identity_at_this_provider(
     db_session: AsyncSession, sso_provider: SsoProvider
 ) -> None:
@@ -473,6 +580,7 @@ async def test_jit_creates_a_user_without_a_password(
     db_session: AsyncSession, sso_provider: SsoProvider, caplog: pytest.LogCaptureFixture
 ) -> None:
     sso_provider.allow_jit_provisioning = True
+    sso_provider.trust_email_verified = True
 
     with caplog.at_level(logging.INFO, logger="specivo.sso"):
         account = await _resolve(db_session, sso_provider, locale="th")
@@ -502,6 +610,25 @@ async def test_jit_unverified_email_leaves_email_verified_at_empty(
 ) -> None:
     sso_provider.allow_jit_provisioning = True
     account = await _resolve(db_session, sso_provider, email_verified="true")
+    assert account.user.email_verified_at is None
+
+
+@pytest.mark.parametrize(
+    ("trusted", "claims"),
+    [
+        (False, {"email_verified": True}),
+        (True, {"email_verified": None}),
+        (True, {"email_verified": False}),
+    ],
+    ids=["provider_not_trusted", "entra_style_no_claim", "claim_false"],
+)
+async def test_jit_marks_the_email_verified_only_when_trusted_and_verified(
+    db_session: AsyncSession, sso_provider: SsoProvider, trusted: bool, claims: dict[str, Any]
+) -> None:
+    sso_provider.allow_jit_provisioning = True
+    sso_provider.trust_email_verified = trusted
+    account = await _resolve(db_session, sso_provider, **claims)
+    assert account.user.email == "prv-member@example.com"
     assert account.user.email_verified_at is None
 
 
