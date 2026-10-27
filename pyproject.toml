@@ -91,7 +91,6 @@ markers = [
     "e2e: End-to-end browser tests (requires running server)",
     "redmine: Importer tests against the Redmine fixture (make redmine-fixture-up)",
     "sso_idp: Tests against the disposable IdP (make sso-idp-up)",
-    "sso_authentik: sso_idp tests against the opt-in authentik IdP (make sso-idp-up-authentik, SSO_TEST_AUTHENTIK_ISSUER)",
 ]
 # loadfile, not worksteal: test modules define fixtures that insert rows with
 # fixed unique keys (logins, project keys). Spreading one module's tests across

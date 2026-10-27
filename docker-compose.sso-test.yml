@@ -1,23 +1,19 @@
-# Disposable OpenID Connect identity providers for the SSO tests.
+# Disposable OpenID Connect identity provider (Keycloak) for the SSO tests.
 #
 # Test fixture, not part of running Specivo. Every credential in this file and
 # in the seeds under tests/fixtures/sso/ is a fixed, public test value; nothing
 # here protects anything. All state lives in RAM and is gone after a down.
 #
-#   make sso-idp-up              # Keycloak only (default)
-#   make sso-idp-up-authentik    # authentik only (opt-in compatibility smoke)
-#   make test-sso-idp            # pytest -m 'sso_idp and not e2e'; the authentik
-#                                # tests also need SSO_TEST_AUTHENTIK_ISSUER
+#   make sso-idp-up              # start Keycloak
+#   make test-sso-idp            # pytest -m 'sso_idp and not e2e'
 #   make test-e2e-sso            # sso-idp-up + the Playwright SSO tests
 #   make sso-idp-down            # stop everything, discard volumes
 #
 # Keycloak:  issuer http://localhost:8033/realms/specivo-test
 #            admin console http://localhost:8033/admin/ (admin / admin-test-only)
-# authentik: issuer http://localhost:8034/application/o/specivo-test/
-#            admin UI http://localhost:8034/if/admin/ (akadmin / admin-test-only)
 #
 # Specivo must run with SSO_ALLOW_INSECURE_HTTP=true to accept these http
-# issuers. That is a test-only setting.
+# issuer. That is a test-only setting.
 
 name: specivo-sso-test
 
@@ -57,74 +53,3 @@ services:
       retries: 40
       start_period: 10s
 
-  authentik-db:
-    profiles: ["authentik"]
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: authentik
-      POSTGRES_PASSWORD: authentik-test-only
-      POSTGRES_DB: authentik
-    # No host port: only authentik talks to it.
-    tmpfs:
-      - /var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authentik"]
-      interval: 3s
-      timeout: 3s
-      retries: 20
-
-  authentik-server:
-    profiles: ["authentik"]
-    image: ghcr.io/goauthentik/server:2026.8.3
-    command: server
-    depends_on:
-      authentik-db:
-        condition: service_healthy
-    environment: &authentik-env
-      AUTHENTIK_SECRET_KEY: authentik-test-only-secret-key-not-used-anywhere-else
-      AUTHENTIK_POSTGRESQL__HOST: authentik-db
-      AUTHENTIK_POSTGRESQL__USER: authentik
-      AUTHENTIK_POSTGRESQL__NAME: authentik
-      AUTHENTIK_POSTGRESQL__PASSWORD: authentik-test-only
-      AUTHENTIK_BOOTSTRAP_PASSWORD: admin-test-only
-      AUTHENTIK_BOOTSTRAP_TOKEN: authentik-test-only-bootstrap-token
-      AUTHENTIK_BOOTSTRAP_EMAIL: akadmin@example.com
-      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
-      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
-      AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"
-      AUTHENTIK_LOG_LEVEL: warning
-    ports:
-      - "127.0.0.1:${SSO_AUTHENTIK_PORT:-8034}:9000"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      - ./tests/fixtures/sso/authentik:/blueprints/custom/specivo:ro
-    healthcheck:
-      test: ["CMD", "ak", "healthcheck"]
-      interval: 5s
-      timeout: 5s
-      retries: 40
-      start_period: 60s
-
-  authentik-worker:
-    profiles: ["authentik"]
-    image: ghcr.io/goauthentik/server:2026.8.3
-    command: worker
-    depends_on:
-      authentik-db:
-        condition: service_healthy
-    environment: *authentik-env
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    volumes:
-      # The worker applies blueprints.
-      - ./tests/fixtures/sso/authentik:/blueprints/custom/specivo:ro
-    tmpfs:
-      - /media
-      - /certs
-    healthcheck:
-      test: ["CMD", "ak", "healthcheck"]
-      interval: 5s
-      timeout: 5s
-      retries: 40
-      start_period: 60s

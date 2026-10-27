@@ -1,11 +1,10 @@
-"""What the disposable IdPs in ``docker-compose.sso-test.yml`` are seeded with.
+"""What the disposable IdP in ``docker-compose.sso-test.yml`` are seeded with.
 
-The Keycloak realm (``keycloak/specivo-test-realm.json``) and the authentik
-blueprint (``authentik/specivo-test.yaml``) carry the same logical content.
-Tests import the values from here instead of repeating them.
+The Keycloak realm (``keycloak/specivo-test-realm.json``) carries this
+content. Tests import the values from here instead of repeating them.
 
 Every credential below is a fixed, public test value. None of them protects
-anything: the IdPs run on localhost, keep their state in RAM and are discarded
+anything: the IdP runs on localhost, keep their state in RAM and are discarded
 by ``make sso-idp-down``.
 """
 
@@ -15,31 +14,23 @@ import os
 from dataclasses import dataclass
 
 KEYCLOAK_PORT = int(os.environ.get("SSO_KEYCLOAK_PORT", "8033"))
-AUTHENTIK_PORT = int(os.environ.get("SSO_AUTHENTIK_PORT", "8034"))
 
 REALM = "specivo-test"
 
 # Overridable so the suite can point at an IdP on another host or port.
 KEYCLOAK_ISSUER = os.environ.get("SSO_TEST_ISSUER", f"http://localhost:{KEYCLOAK_PORT}/realms/{REALM}")
 KEYCLOAK_BASE_URL = KEYCLOAK_ISSUER.split("/realms/", 1)[0]
-# Only set when authentik was started (make sso-idp-up-authentik), e.g.
-# http://localhost:8034/application/o/specivo-test/
-AUTHENTIK_ISSUER = os.environ.get("SSO_TEST_AUTHENTIK_ISSUER", "")
 
 # Keycloak master-realm admin (KC_BOOTSTRAP_ADMIN_* in the compose file). Test-only.
 KEYCLOAK_ADMIN_USER = "admin"
 KEYCLOAK_ADMIN_PASSWORD = "admin-test-only"
 
-# authentik API token (AUTHENTIK_BOOTSTRAP_TOKEN in the compose file). Test-only.
-AUTHENTIK_API_TOKEN = "authentik-test-only-bootstrap-token"
-
 CONFIDENTIAL_CLIENT_ID = "specivo"
 CONFIDENTIAL_CLIENT_SECRET = "specivo-test-client-secret-not-a-real-secret"
 PUBLIC_CLIENT_ID = "specivo-public"
 
-# Provider slugs the redirect URIs are registered for.
+# Provider slug the redirect URIs are registered for.
 KEYCLOAK_SLUG = "keycloak"
-AUTHENTIK_SLUG = "authentik"
 
 E2E_BASE_URL = "http://localhost:9944"
 ASGI_BASE_URL = "http://testserver"
