@@ -15,13 +15,15 @@ stopping at the first failure:
 4. an ``error`` response becomes ``sso_idp_error``; its ``error_description``
    is logged truncated and never shown;
 5. exchange the code (PKCE verifier, the stored ``redirect_uri``), validate
-   the ID token (nonce from the record, ``at_hash``), and fetch userinfo when
+   the ID token (nonce from the record, ``at_hash``, ``auth_time`` against
+   the ``max_age`` the request sent), and fetch userinfo when
    ``claim_config.use_userinfo`` is on (its ``sub`` must match);
 6. resolve the account (:func:`specivo.services.sso.provisioning.resolve_user`);
 7. start a new Specivo session (:meth:`AuthService.create_sso_session`).
 
 A **link** transaction (``intent="link"``, started by a signed-in user from
-their profile with :meth:`SsoLoginService.start_link`) must be finished by
+their profile with :meth:`SsoLoginService.start_link`) asks the IdP to
+authenticate the person again (``prompt=login``, ``max_age=0``) and must be finished by
 the browser still signed in as that user; step 6 then links the identity and
 step 7 is skipped: the user's existing sessions stay, no new one starts.
 
@@ -214,6 +216,7 @@ class SsoLoginService:
             metadata=metadata,
             nonce=tx.nonce,
             access_token=tokens.access_token,
+            max_age=tx.max_age,
         )
 
         claims: dict[str, Any] = dict(id_token.claims)

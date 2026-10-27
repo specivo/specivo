@@ -220,6 +220,40 @@ async def test_link_start_records_the_intent_and_user(
     assert record["intent"] == "link"
     assert record["user_id"] == user.id
     assert record["next"] == "/my/profile/"
+    assert record["max_age"] == 0
+
+
+async def test_link_requires_a_fresh_idp_sign_in(
+    client: AsyncClient, db_session: AsyncSession, sso_provider: SsoProvider, mock_idp: MockIdP
+) -> None:
+    """Link sends prompt=login and max_age=0; an ID token from an old IdP session is refused."""
+    import time
+
+    browser, me = await _browser(client, db_session, login="lnkstale", email="lnk-stale@example.com")
+    started = await browser.post(LINK_PATH)
+    params = _params(started.headers["location"])
+    assert params["prompt"] == "login"
+    assert params["max_age"] == "0"
+
+    response = await browser.link(mock_idp, claims={"auth_time": int(time.time()) - 3600})
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/my/profile/?sso_error=sso_token_invalid"
+    assert await _identities(db_session, me.id) == []
+
+
+async def test_link_without_auth_time_is_refused(
+    client: AsyncClient, db_session: AsyncSession, sso_provider: SsoProvider, mock_idp: MockIdP
+) -> None:
+    from specivo.testing.oidc_mock import OMIT
+
+    browser, me = await _browser(client, db_session, login="lnknoauth", email="lnk-noauth@example.com")
+
+    response = await browser.link(mock_idp, claims={"auth_time": OMIT})
+
+    assert response.status_code == 302
+    assert response.headers["location"] == "/my/profile/?sso_error=sso_token_invalid"
+    assert await _identities(db_session, me.id) == []
 
 
 async def test_link_of_an_identity_owned_by_another_user_is_refused(

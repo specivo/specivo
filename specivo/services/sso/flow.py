@@ -18,7 +18,11 @@ the callback checks. Every transaction:
   so the token request sends byte for byte the value of the authorization
   request;
 * records the provider and its issuer, so the callback can refuse a response
-  meant for another provider (mix-up, RFC 9207) without trusting the request.
+  meant for another provider (mix-up, RFC 9207) without trusting the request;
+* forces re-authentication for a link (``prompt=login`` and ``max_age=0``,
+  over any configured value), and records the ``max_age`` it sent, so the
+  callback can require a fresh ``auth_time`` in the ID token (Core 1.0,
+  section 3.1.3.7, item 13).
 
 Redis is the source of truth here, so a Redis failure is
 ``sso_unavailable``: the flow fails closed.
@@ -48,10 +52,12 @@ from specivo.services.sso.log import logger
 __all__ = [
     "ALLOWED_EXTRA_AUTH_PARAMS",
     "TX_COOKIE_NAME",
+    "LINK_REAUTH_PARAMS",
     "TX_TTL_SECONDS",
     "AuthorizationRequest",
     "Intent",
     "LoginTransaction",
+    "auth_params_for",
     "begin",
     "build_authorize_url",
     "complete",
@@ -73,6 +79,8 @@ _RECORD_VERSION = 1
 # token_urlsafe(32) is 43 characters; anything far longer is not ours.
 _MAX_STATE_LENGTH = 128
 _MAX_EXTRA_PARAM_LENGTH = 512
+#: Sent with a link: the person proves at the IdP, now, that they own the account.
+LINK_REAUTH_PARAMS: dict[str, str] = {"prompt": "login", "max_age": "0"}
 
 
 def tx_key(state: str) -> str:
@@ -124,6 +132,8 @@ class LoginTransaction:
     next_path: str
     intent: Intent
     user_id: int | None
+    #: The ``max_age`` sent in the authorization request, or ``None``.
+    max_age: int | None = None
 
 
 def _scopes(provider: SsoProvider) -> str:
@@ -148,6 +158,22 @@ def _extra_params(provider: SsoProvider) -> dict[str, str]:
     return result
 
 
+def auth_params_for(provider: SsoProvider, intent: Intent) -> dict[str, str]:
+    """The optional authorization parameters for ``intent``: allowlisted extras, link overrides on top."""
+    params = _extra_params(provider)
+    if intent == "link":
+        params.update(LINK_REAUTH_PARAMS)
+    return params
+
+
+def _max_age(params: dict[str, str]) -> int | None:
+    """The ``max_age`` these parameters send, as an int (``None`` when absent or not a number)."""
+    value = params.get("max_age")
+    if value is None or not value.isdigit():
+        return None
+    return int(value)
+
+
 def build_authorize_url(
     provider: SsoProvider,
     metadata: ProviderMetadata,
@@ -156,14 +182,16 @@ def build_authorize_url(
     state: str,
     nonce: str,
     code_challenge: str,
+    extra_params: dict[str, str] | None = None,
 ) -> str:
     """The authorization request URL (Core 1.0 section 3.1.2.1, RFC 7636 section 4.3).
 
-    A query already present in the ``authorization_endpoint`` is kept. The
-    protocol parameters are set last, so no configured value can replace them.
+    ``extra_params`` defaults to the provider's allowlisted extras. A query
+    already present in the ``authorization_endpoint`` is kept. The protocol
+    parameters are set last, so no configured value can replace them.
     """
     params: dict[str, str] = {
-        **_extra_params(provider),
+        **(_extra_params(provider) if extra_params is None else extra_params),
         "response_type": "code",
         "client_id": provider.client_id,
         "redirect_uri": redirect_uri,
@@ -209,6 +237,7 @@ async def begin(
     code_verifier = secrets.token_urlsafe(64)
     binding_token = secrets.token_urlsafe(32)
     redirect_uri = redirect_uri_for(provider.slug, settings)
+    extra_params = auth_params_for(provider, intent)
 
     record: dict[str, Any] = {
         "v": _RECORD_VERSION,
@@ -221,6 +250,7 @@ async def begin(
         "next": safe_next_path(next_path),
         "intent": intent,
         "user_id": user_id,
+        "max_age": _max_age(extra_params),
         "binding_hash": _sha256(binding_token),
     }
     try:
@@ -237,6 +267,7 @@ async def begin(
         state=state,
         nonce=nonce,
         code_challenge=_pkce_challenge(code_verifier),
+        extra_params=extra_params,
     )
     logger.info("sso.login.started provider=%s intent=%s", provider.slug, intent)
     return AuthorizationRequest(url=url, binding_token=binding_token)
@@ -252,6 +283,9 @@ def _parse_record(raw: str) -> tuple[LoginTransaction, str] | None:
         if not isinstance(binding_hash, str) or not binding_hash:
             return None
         user_id = data.get("user_id")
+        max_age = data.get("max_age")
+        if max_age is not None and (isinstance(max_age, bool) or not isinstance(max_age, int) or max_age < 0):
+            return None
         tx = LoginTransaction(
             provider_id=int(data["provider_id"]),
             provider_slug=str(data["provider_slug"]),
@@ -262,6 +296,7 @@ def _parse_record(raw: str) -> tuple[LoginTransaction, str] | None:
             next_path=str(data.get("next") or ""),
             intent=data["intent"],
             user_id=int(user_id) if user_id is not None else None,
+            max_age=max_age,
         )
     except (ValueError, TypeError, KeyError):
         return None

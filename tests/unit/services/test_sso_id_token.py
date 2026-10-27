@@ -447,6 +447,41 @@ class TestLogoutToken:
 
 
 # ---------------------------------------------------------------------------
+# max_age / auth_time (Core 1.0, section 3.1.3.7, item 13)
+# ---------------------------------------------------------------------------
+
+
+class TestAuthTime:
+    def test_fresh_auth_time_passes_max_age_zero(self, mock_idp: MockIdP) -> None:
+        claims = _validate(mock_idp, mock_idp.mint_id_token(), max_age=0)
+        assert claims.auth_time is not None
+
+    def test_auth_time_within_max_age_plus_leeway(self, mock_idp: MockIdP) -> None:
+        now = time.time()
+        raw = mock_idp.mint_id_token(auth_time=int(now) - 300 - LEEWAY + 5)
+        _validate(mock_idp, raw, max_age=300, now=now)
+
+    @pytest.mark.parametrize(("max_age", "age"), [(0, LEEWAY + 30), (300, 300 + LEEWAY + 30)])
+    def test_stale_auth_time_is_rejected(self, mock_idp: MockIdP, max_age: int, age: int) -> None:
+        now = time.time()
+        raw = mock_idp.mint_id_token(auth_time=int(now) - age)
+        with pytest.raises(SsoTokenInvalidError) as exc:
+            _validate(mock_idp, raw, max_age=max_age, now=now)
+        assert exc.value.reason == TokenRejection.AUTH_TIME_STALE
+        assert exc.value.code == "sso_token_invalid"
+
+    def test_missing_auth_time_is_rejected_when_max_age_was_sent(self, mock_idp: MockIdP) -> None:
+        with pytest.raises(SsoTokenInvalidError) as exc:
+            _validate(mock_idp, mock_idp.mint_id_token(auth_time=OMIT), max_age=0)
+        assert exc.value.reason == TokenRejection.AUTH_TIME_MISSING
+
+    def test_auth_time_is_optional_without_max_age(self, mock_idp: MockIdP) -> None:
+        old = int(time.time()) - 86_400
+        assert _validate(mock_idp, mock_idp.mint_id_token(auth_time=old)).auth_time == old
+        assert _validate(mock_idp, mock_idp.mint_id_token(auth_time=OMIT)).auth_time is None
+
+
+# ---------------------------------------------------------------------------
 # Async glue: JWKS lookup + refetch on unknown kid
 # ---------------------------------------------------------------------------
 

@@ -16,7 +16,8 @@ one decoder:
    can pass ``now``: ``exp`` not passed, ``iat`` not in the future and not
    older than :data:`MAX_TOKEN_AGE_SECONDS`, ``nbf`` reached, all with the
    ``SSO_CLOCK_SKEW_SECONDS`` leeway;
-4. token-specific rules: ``azp``, ``nonce`` (constant-time) and ``at_hash`` for
+4. token-specific rules: ``azp``, ``nonce`` (constant-time), ``at_hash`` and,
+   when the request sent ``max_age``, a present and fresh ``auth_time`` for
    ID tokens; ``events``, ``jti``, ``sid``/``sub``, no ``nonce`` and
    ``typ=logout+jwt`` for logout tokens.
 
@@ -293,8 +294,13 @@ def validate_id_token(
     access_token: str | None = None,
     now: float | None = None,
     leeway: float | None = None,
+    max_age: int | None = None,
 ) -> IdTokenClaims:
     """Validate an ID token (Core 1.0, section 3.1.3.7) and return its claims.
+
+    ``max_age`` is the value sent in the authorization request, if any: then
+    ``auth_time`` is required and must be at most ``max_age`` (plus leeway)
+    seconds old (section 3.1.3.7, item 13).
 
     ``keys`` are the provider's usable JWKs, ``algorithms`` its allowlist
     (:func:`~specivo.services.sso.jwks.signing_algorithms`), ``nonce`` the value
@@ -313,6 +319,7 @@ def validate_id_token(
             access_token=access_token,
             now=now,
             leeway=leeway,
+            max_age=max_age,
         )
     except SsoTokenInvalidError as exc:
         _log_rejection("id_token", issuer, exc)
@@ -330,6 +337,7 @@ def _validate_id_token(
     access_token: str | None,
     now: float | None,
     leeway: float | None,
+    max_age: int | None,
 ) -> IdTokenClaims:
     current, skew = _resolve_time(now, leeway)
     payload = _decode(
@@ -343,6 +351,11 @@ def _validate_id_token(
     )
     exp, iat = _check_times(payload, current, skew)
     auth_time = _numeric_date(payload, "auth_time")
+    if max_age is not None:
+        if auth_time is None:
+            raise _reject(TokenRejection.AUTH_TIME_MISSING, "max_age was requested")
+        if current - auth_time > max_age + skew:
+            raise _reject(TokenRejection.AUTH_TIME_STALE, f"max_age={max_age}")
 
     subject = payload["sub"]  # PyJWT has checked it is a string
     if not subject:
@@ -551,6 +564,7 @@ async def verify_id_token(
     redis: Redis | None = None,
     settings: Settings | None = None,
     now: float | None = None,
+    max_age: int | None = None,
 ) -> IdTokenClaims:
     """:func:`validate_id_token` with the provider's JWKS (refetched once on an unknown kid)."""
     settings = settings or get_settings()
@@ -565,6 +579,7 @@ async def verify_id_token(
             access_token=access_token,
             now=now,
             leeway=settings.sso_clock_skew_seconds,
+            max_age=max_age,
         ),
         kind="id_token",
         raw=raw,
