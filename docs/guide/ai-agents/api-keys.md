@@ -66,8 +66,10 @@ locking or deactivating an account, revoking keys, project and workflow settings
 anything that hands out a way to sign in or to act as somebody else. These need an administrator
 signed in to Specivo, and a key gets `403` with the code `api_key_not_allowed`:
 
-- resetting a user's password (`POST /api/v1/admin/users/{id}/reset-password/`), or creating a user
-  with a password (`POST /api/v1/admin/users/` with `password`; without one it is allowed);
+- resetting a user's password (`POST /api/v1/admin/users/{id}/reset-password/`);
+- creating any account other than a service account (`POST /api/v1/admin/users/`): a person, an
+  administrator, or an account with a password. A key can still create service accounts for
+  agents (`is_service_account: true`, no password);
 - unlocking or reactivating an account (`POST /api/v1/admin/users/{id}/unlock/`,
   `.../reactivate/`, and the **Reactivate** button when called with a key);
 - creating an API key for a user (`POST /api/v1/admin/users/{id}/api-keys/`);

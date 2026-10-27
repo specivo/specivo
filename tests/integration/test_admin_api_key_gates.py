@@ -107,9 +107,49 @@ async def test_create_user_with_a_password_is_session_only(key_client: AsyncClie
     _assert_refused(await key_client.post("/api/v1/admin/users/", json=body))
 
 
-async def test_create_user_without_a_password_stays_key_accessible(key_client: AsyncClient) -> None:
+async def test_key_cannot_create_a_person_and_take_it_over_by_forgot_password(
+    key_client: AsyncClient, client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """No password, but an email the key holder controls: forgot-password would hand out a session."""
+    from unittest.mock import patch
+
+    from sqlalchemy import func, select
+
     body = {"login": "gatenopw", "email": "gate-nopw@example.com", "display_name": "Gate"}
+    _assert_refused(await key_client.post("/api/v1/admin/users/", json=body))
+    assert await db_session.scalar(select(func.count()).select_from(User).where(User.login == "gatenopw")) == 0
+
+    with patch("specivo.tasks.notifications.send_notification_email.delay") as mock_delay:
+        resp = await client.post("/api/v1/auth/forgot-password/", json={"email": "gate-nopw@example.com"})
+    assert resp.status_code == 202
+    mock_delay.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"status": "pending_verification"},
+        {"is_admin": True},
+        {"is_admin": True, "is_service_account": True},
+    ],
+    ids=["pending_person", "admin_person", "admin_service_account"],
+)
+async def test_create_person_or_admin_is_session_only(key_client: AsyncClient, extra: dict[str, Any]) -> None:
+    body = {"login": "gateperson", "email": "gate-person@example.com", "display_name": "Gate", **extra}
+    _assert_refused(await key_client.post("/api/v1/admin/users/", json=body))
+
+
+async def test_create_service_account_stays_key_accessible(key_client: AsyncClient) -> None:
+    """Automation provisions agent accounts with a key: no password, refused by password sign-in."""
+    body = {"login": "gatebot", "email": "gate-bot@example.com", "display_name": "Gate bot", "is_service_account": True}
     resp = await key_client.post("/api/v1/admin/users/", json=body)
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["is_service_account"] is True
+
+
+async def test_create_person_works_with_a_session(admin_client: AsyncClient) -> None:
+    body = {"login": "gatesession", "email": "gate-session@example.com", "display_name": "Gate"}
+    resp = await admin_client.post("/api/v1/admin/users/", json=body)
     assert resp.status_code == 201, resp.text
 
 

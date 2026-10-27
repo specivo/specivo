@@ -105,12 +105,15 @@ async def create_user(
 ) -> UserOut:
     """Create a new user (admin only).
 
-    With a ``password``, this needs a signed-in session: an API key may create
-    accounts but not ones it knows the password of.
+    An API key may create service accounts only (no password, refused by
+    password sign-in), which is how automation provisions agents. A person,
+    an administrator or any account with a password needs a signed-in
+    session: a person created with an email the key holder controls could
+    be taken over through forgot-password.
     """
     from specivo.core.config import get_settings
 
-    if data.password:
+    if data.password or data.is_admin or not data.is_service_account:
         refuse_api_key(request)
 
     settings = get_settings()
