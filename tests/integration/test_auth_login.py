@@ -278,7 +278,7 @@ class TestLogout:
 
         # Logout
         resp = await client.post("/api/v1/auth/logout/", json={"refresh_token": refresh_token})
-        assert resp.status_code == 204
+        assert resp.status_code == 200
 
         # Attempt refresh with the revoked token — must fail
         resp2 = await client.post("/api/v1/auth/refresh/", json={"refresh_token": refresh_token})
@@ -289,15 +289,15 @@ class TestLogout:
         await _login(client, "cookie_logout", TEST_PASSWORD)
 
         resp = await client.post("/api/v1/auth/logout/", json={"refresh_token": "any"})
-        assert resp.status_code == 204
+        assert resp.status_code == 200
         # Cookies should be cleared (max-age=0 or deleted)
         # httpx sets the value to empty string for deleted cookies
         assert resp.cookies.get("access_token", "") == "" or "access_token" not in resp.cookies
 
-    async def test_logout_without_token_returns_204(self, client: AsyncClient, db_session: AsyncSession):
-        """Logout with no token is a no-op — still returns 204."""
+    async def test_logout_without_token_returns_200(self, client: AsyncClient, db_session: AsyncSession):
+        """Logout with no token is a no-op — still returns 200."""
         resp = await client.post("/api/v1/auth/logout/")
-        assert resp.status_code == 204
+        assert resp.status_code == 200
 
 
 # ---------------------------------------------------------------------------

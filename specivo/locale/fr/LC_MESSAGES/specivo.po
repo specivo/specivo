@@ -3258,6 +3258,10 @@ msgstr "Identifiants invalides"
 msgid "Signing in..."
 msgstr "Connexion..."
 
+#: specivo/templates/themes/default/pages/auth/login.html:90
+msgid "You have been signed out."
+msgstr "Vous avez été déconnecté."
+
 #: specivo/templates/themes/default/pages/auth/login.html:82
 msgid "Password reset successfully. Please sign in with your new password."
 msgstr ""

@@ -34,6 +34,7 @@ async def login_page(
     reset: str = Query(""),  # noqa: B008
     next_url: str = Query("", alias="next"),  # noqa: B008
     sso_error: str = Query(""),  # noqa: B008
+    logged_out: str = Query(""),  # noqa: B008
 ) -> HTMLResponse:
     """Render the login page (standalone layout, no sidebar).
 
@@ -51,6 +52,9 @@ async def login_page(
     read, and only a fixed, translated message is shown for it
     (``sso_error_message``); nothing the identity provider sent reaches the
     page.
+
+    ``?logged_out=1`` is where sign-out lands (directly, or back from the
+    identity provider) and shows a "You have been signed out" notice.
     """
     user = await get_current_user_optional(request, db)
     templates = get_templates()
@@ -62,6 +66,7 @@ async def login_page(
             "reset_ok": reset == "ok",
             "next_path": safe_next_path(next_url),
             "sso_error_message": sso_error_message(sso_error),
+            "logged_out": logged_out == "1",
         },
     )
 
@@ -91,27 +96,33 @@ async def logout(
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
 ) -> RedirectResponse:
-    """Revoke this browser's session on the server, clear its cookies, go to login.
+    """Revoke this browser's session on the server, clear its cookies, sign out at the IdP.
 
     The session is revoked through ``SessionService.revoke`` (its refresh rows
     are deleted and its ``sid`` is marked revoked) and the access token's
     ``jti`` is blocklisted, so copies of either cookie stop working
-    immediately. CSRF is
-    enforced by ``CSRFMiddleware`` whenever the request carries a session
-    cookie; without one there is nothing to revoke.
+    immediately. CSRF is enforced by ``CSRFMiddleware`` whenever the request
+    carries a session cookie; without one there is nothing to revoke.
+
+    An SSO session is read before it is revoked: when its provider does
+    RP-initiated logout, the browser goes on to the IdP's end-session endpoint
+    (``specivo.services.sso.logout``), which sends it back to the fixed
+    ``/login/?logged_out=1``. Everything else lands there directly. Nothing in
+    the request chooses the destination.
     """
     from specivo.services.auth_service import AuthService
+    from specivo.services.sso.logout import LOGGED_OUT_PATH, end_session_url, find_sso_logout_session
 
-    await AuthService().end_browser_session(
-        db,
-        refresh_token_raw=request.cookies.get("refresh_token"),
-        access_token_raw=request.cookies.get("access_token"),
-    )
-    # Commit before the browser follows the redirect, so the revoked session is
-    # gone from the very next request.
+    refresh_raw = request.cookies.get("refresh_token")
+    access_raw = request.cookies.get("access_token")
+    sso_session = await find_sso_logout_session(db, refresh_token_raw=refresh_raw, access_token_raw=access_raw)
+    await AuthService().end_browser_session(db, refresh_token_raw=refresh_raw, access_token_raw=access_raw)
+    # Commit before the IdP is asked anything and before the browser follows
+    # the redirect, so the revoked session is gone whatever happens next.
     await db.commit()
 
-    response = RedirectResponse("/login/", status_code=302)
+    target = (await end_session_url(sso_session) if sso_session is not None else None) or LOGGED_OUT_PATH
+    response = RedirectResponse(target, status_code=302)
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     return response

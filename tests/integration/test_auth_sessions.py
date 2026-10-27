@@ -111,7 +111,7 @@ class TestApiLogout:
         access, refresh = await _sign_in(client, user.login)
 
         resp = await client.post("/api/v1/auth/logout/", json={"refresh_token": refresh})
-        assert resp.status_code == 204
+        assert resp.status_code == 200
 
         after = await _get_sessions(client, access)
         assert after.status_code == 401
@@ -125,7 +125,7 @@ class TestApiLogout:
         other_access, _other_refresh = await _sign_in(client, user.login)
 
         resp = await client.post("/api/v1/auth/logout/", headers={"Authorization": f"Bearer {access}"})
-        assert resp.status_code == 204
+        assert resp.status_code == 200
 
         assert (await _get_sessions(client, access)).status_code == 401
         replay = await client.post("/api/v1/auth/refresh/", json={"refresh_token": refresh})

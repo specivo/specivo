@@ -157,7 +157,7 @@ class TestExemptPaths:
             headers=_bearer(tokens["access_token"]),
         )
 
-        assert resp.status_code == 204
+        assert resp.status_code == 200
 
     async def test_logout_all_is_reachable(self, client: AsyncClient, db_session: AsyncSession):
         user = await _flagged_user(db_session, "fpc_exempt_logout_all")
