@@ -4,7 +4,8 @@
        test-db-up test-db-down test-db-reset test-ci \
        test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
        install sync lock help download-model backfill-embeddings reindex-fts import-redmine import-data \
-       build bundle frontend-build frontend-watch
+       build bundle frontend-build frontend-watch \
+       sso-idp-up sso-idp-up-authentik sso-idp-down sso-idp-reset test-sso-idp
 
 # Load environment from .env and .env.local (if they exist).
 # .env.local overrides .env. Shell env overrides both.
@@ -321,3 +322,23 @@ redmine-fixture-down:  ## Stop the fixture and discard its data (PROFILE=pg|mysq
 	$(REDMINE_COMPOSE) down -v
 
 redmine-fixture-reset: redmine-fixture-down redmine-fixture-up redmine-fixture-seed  ## Recreate and reseed the fixture (checkout only)
+
+# --- SSO test IdP (SSO integration/E2E tests only) ---------------------------
+# Keycloak by default; authentik is an opt-in compatibility smoke. All state is
+# in RAM and every credential is a fixed test value (docker-compose.sso-test.yml).
+SSO_IDP_COMPOSE := docker compose -f docker-compose.sso-test.yml
+
+sso-idp-up:  ## Start the disposable Keycloak test IdP on :8033 (checkout only)
+	$(SSO_IDP_COMPOSE) up -d --wait
+
+sso-idp-up-authentik:  ## Start Keycloak plus the authentik test IdP on :8034 (checkout only)
+	$(SSO_IDP_COMPOSE) --profile authentik up -d --wait
+	@echo "authentik issuer: export SSO_TEST_AUTHENTIK_ISSUER=http://localhost:$${SSO_AUTHENTIK_PORT:-8034}/application/o/specivo-test/"
+
+sso-idp-down:  ## Stop the test IdPs and discard their data (checkout only)
+	$(SSO_IDP_COMPOSE) --profile authentik down -v
+
+sso-idp-reset: sso-idp-down sso-idp-up  ## Recreate the Keycloak test IdP from its realm seed (checkout only)
+
+test-sso-idp:  ## Run the tests against the test IdP (make sso-idp-up first; checkout only)
+	$(RUN) pytest -m sso_idp -n 0
