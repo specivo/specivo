@@ -1,21 +1,28 @@
-"""The client's address, with ``X-Forwarded-For`` trusted only from trusted proxies.
+"""The client's address, with ``X-Forwarded-For`` believed only from a trusted proxy.
 
 The direct peer of the socket is the only address Specivo has seen for itself.
-A reverse proxy in front of Specivo (the bundled nginx, Caddy, a load
-balancer) appends the address *it* received the request from to
-``X-Forwarded-For``. It does not append its own address: that is the peer.
+A reverse proxy in front of Specivo (the bundled nginx, Caddy, Traefik)
+appends the address *it* received the request from to ``X-Forwarded-For``; it
+does not append its own address, which is the peer.
 
-So the client is found by walking the header from the right:
+Two settings decide what is believed:
 
-- If the peer is not in ``settings.trusted_proxies``, the peer is the client
-  and the header is ignored. An app exposed directly cannot be fooled by a
-  made-up header.
-- Otherwise each hop, right to left, is skipped while it is a trusted proxy
-  too; the first address that is not is the client. Anything left of it was
-  written by someone Specivo does not trust.
-- If every hop is trusted, the leftmost one is the client.
-- A hop that is not an IP address stops the walk: the peer is returned, since
-  nothing beyond it can be believed.
+- ``trusted_proxies``: the addresses (CIDRs) of the proxy that connects to
+  Specivo. Only a peer in this list may name the client. Empty (the default):
+  the peer is the client and the header is ignored.
+- ``trusted_proxy_hops``: how many proxies in a row stand in front of
+  Specivo, each appending one entry. The client is the entry that many places
+  from the right; everything left of it was written by the client or someone
+  else Specivo does not trust. Default 1: the address the proxy saw.
+
+Addresses in the header are never trusted because of the range they are in:
+a client whose traffic is NAT'd into a private range, or another container on
+the network, gains nothing by adding private addresses to the header.
+
+If the header has fewer entries than ``trusted_proxy_hops``, the leftmost
+one is taken: the request skipped the outer proxies, and the first proxy that
+saw it wrote that entry. If the chosen entry is not an IP address, the peer
+is returned.
 
 Every per-IP rate limit, the IP recorded on a session, the API key IP
 allowlist and the security audit trail use this one function.
@@ -43,7 +50,7 @@ def _networks(cidrs: tuple[str, ...]) -> tuple[_IPNetwork, ...]:
 
 
 def _parse(value: str) -> _IPAddress | None:
-    """An address from a peer or an XFF hop; a port or brackets are removed."""
+    """An address from a peer or a header entry; a port or brackets are removed."""
     value = value.strip()
     if value.startswith("["):  # [2001:db8::1]:443
         value = value[1:].partition("]")[0]
@@ -58,33 +65,26 @@ def _parse(value: str) -> _IPAddress | None:
     return addr
 
 
-def _trusted(addr: _IPAddress, networks: Iterable[_IPNetwork]) -> bool:
-    return any(addr in net for net in networks)
-
-
-def resolve_client_ip(peer: str | None, forwarded_for: str | None, trusted_proxies: Sequence[str]) -> str | None:
+def resolve_client_ip(
+    peer: str | None,
+    forwarded_for: str | None,
+    trusted_proxies: Sequence[str],
+    hops: int = 1,
+) -> str | None:
     """The client's address, given the socket peer and the ``X-Forwarded-For`` value."""
     if not peer:
         return None
     if not forwarded_for or not trusted_proxies:
         return peer
-    networks = _networks(tuple(trusted_proxies))
     peer_addr = _parse(peer)
-    if peer_addr is None or not _trusted(peer_addr, networks):
+    if peer_addr is None or not any(peer_addr in net for net in _networks(tuple(trusted_proxies))):
         return peer
 
-    hops = [hop for hop in (part.strip() for part in forwarded_for.split(",")) if hop]
-    if not hops:
+    entries = [entry for entry in (part.strip() for part in forwarded_for.split(",")) if entry]
+    if not entries:
         return peer
-    leftmost: _IPAddress | None = None
-    for hop in reversed(hops):
-        addr = _parse(hop)
-        if addr is None:
-            return peer
-        if not _trusted(addr, networks):
-            return str(addr)
-        leftmost = addr
-    return str(leftmost)
+    chosen = _parse(entries[max(0, len(entries) - max(1, hops))])
+    return str(chosen) if chosen is not None else peer
 
 
 def _forwarded_for(values: Iterable[str]) -> str | None:
@@ -93,13 +93,19 @@ def _forwarded_for(values: Iterable[str]) -> str | None:
     return joined or None
 
 
+def _resolve(peer: str | None, values: Iterable[str]) -> str | None:
+    settings = config.get_settings()
+    hops = settings.trusted_proxy_hops if isinstance(settings.trusted_proxy_hops, int) else 1
+    return resolve_client_ip(peer, _forwarded_for(values), settings.trusted_proxies, hops)
+
+
 def get_client_ip(request: HTTPConnection) -> str | None:
     """The client's address for ``request``; ``None`` when the peer is unknown."""
     peer = request.client.host if request.client else None
     headers: Any = request.headers
     getlist = getattr(headers, "getlist", None)
     values = getlist("x-forwarded-for") if getlist else [headers.get("X-Forwarded-For") or ""]
-    return resolve_client_ip(peer, _forwarded_for(values), config.get_settings().trusted_proxies)
+    return _resolve(peer, values)
 
 
 def client_ip_from_scope(scope: Mapping[str, Any]) -> str | None:
@@ -109,4 +115,4 @@ def client_ip_from_scope(scope: Mapping[str, Any]) -> str | None:
     values = [
         value.decode("latin-1") for name, value in scope.get("headers") or [] if name.lower() == b"x-forwarded-for"
     ]
-    return resolve_client_ip(peer, _forwarded_for(values), config.get_settings().trusted_proxies)
+    return _resolve(peer, values)

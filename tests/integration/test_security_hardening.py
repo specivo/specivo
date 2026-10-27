@@ -422,14 +422,16 @@ class TestXForwardedForTrust:
             "Request",
             (),
             {
-                "headers": {"X-Forwarded-For": "203.0.113.50, 10.0.0.1"},
+                # A proxy appends the address it saw, never its own.
+                "headers": {"X-Forwarded-For": "198.51.100.9, 203.0.113.50"},
                 "client": type("Client", (), {"host": "10.0.0.1"})(),
             },
         )()
 
-        # With 10.0.0.0/8 explicitly in trusted_proxies, XFF is used.
+        # With the proxy explicitly in trusted_proxies, its XFF entry is used.
         mock_settings = MagicMock()
-        mock_settings.trusted_proxies = ["10.0.0.0/8"]
+        mock_settings.trusted_proxies = ["10.0.0.1/32"]
+        mock_settings.trusted_proxy_hops = 1
         with patch("specivo.core.config.get_settings", return_value=mock_settings):
             ip = _get_client_ip(request)
         assert ip == "203.0.113.50"

@@ -187,12 +187,16 @@ class Settings(BaseSettings):
     # Rate limiting — disable for E2E / load testing environments
     rate_limit_enabled: bool = True
 
-    # Trusted proxies: CIDRs of the reverse proxies in front of Specivo, as a
-    # JSON list. X-Forwarded-For is believed only from these, walking it from
-    # the right past every trusted hop (see specivo.core.client_ip). Empty:
-    # the socket peer is the client. The bundled docker-compose.yml sets the
-    # Docker private ranges so the bundled nginx is trusted.
+    # Trusted proxies: addresses (CIDRs, JSON list) of the reverse proxy that
+    # connects to Specivo. Only such a peer may name the client in
+    # X-Forwarded-For. Empty: the socket peer is the client. The bundled
+    # docker-compose.yml sets exactly the nginx container's address.
     trusted_proxies: list[str] = []
+    # How many proxies in a row stand in front of Specivo, each appending one
+    # X-Forwarded-For entry; the client is the entry this many places from the
+    # right (see specivo.core.client_ip). 1: nginx alone; 2: e.g. Caddy or a
+    # CDN in front of nginx.
+    trusted_proxy_hops: int = Field(default=1, ge=1, le=10)
 
     # Search
     search_fts_language: str = "english"
