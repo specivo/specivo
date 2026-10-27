@@ -6302,3 +6302,585 @@ msgid ""
 "You are signed in as %(name)s. Signing out ends this session on this "
 "browser."
 msgstr "Вы вошли как %(name)s. Выход завершит этот сеанс в этом браузере."
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:79
+#: specivo/templates/themes/default/pages/admin/settings.html:93
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:4
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:12
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:3
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:11
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:15
+msgid "Single sign-on"
+msgstr "Единый вход"
+
+#: specivo/templates/themes/default/pages/admin/dashboard.html:80
+msgid "Let people sign in through your identity provider (OpenID Connect)."
+msgstr "Вход через ваш провайдер удостоверений (OpenID Connect)."
+
+#: specivo/templates/themes/default/pages/admin/settings.html:90
+msgid "Authentication"
+msgstr "Аутентификация"
+
+#: specivo/templates/themes/default/pages/admin/settings.html:92
+msgid ""
+"How people sign in. Identity providers are configured under Single sign-"
+"on."
+msgstr ""
+"Как пользователи входят в систему. Провайдеры удостоверений настраиваются"
+" в разделе «Единый вход»."
+
+#: specivo/templates/themes/default/pages/admin/settings.html:96
+msgid ""
+"SSO_FORCE_LOCAL_LOGIN is on: the password form is always shown and nobody"
+" is redirected automatically."
+msgstr ""
+"SSO_FORCE_LOCAL_LOGIN включён: форма пароля показывается всегда, "
+"автоматического перенаправления нет."
+
+#: specivo/templates/themes/default/pages/admin/settings.html:102
+msgid "Hide the password form on the login page"
+msgstr "Скрыть форму пароля на странице входа"
+
+#: specivo/templates/themes/default/pages/admin/settings.html:103
+msgid "Administrators can still reach it at /login/?local=1."
+msgstr "Администраторы по-прежнему могут открыть её по адресу /login/?local=1."
+
+#: specivo/templates/themes/default/pages/admin/settings.html:107
+msgid "Only administrators may sign in with a password"
+msgstr "Входить по паролю могут только администраторы"
+
+#: specivo/templates/themes/default/pages/admin/settings.html:111
+msgid "Users who sign in through SSO may use API keys"
+msgstr "Пользователи, входящие через SSO, могут использовать API-ключи"
+
+#: specivo/templates/themes/default/pages/admin/settings.html:114
+msgid "Redirect the login page to"
+msgstr "Перенаправлять страницу входа на"
+
+#: specivo/templates/themes/default/pages/admin/settings.html:116
+msgid "No automatic redirect"
+msgstr "Без автоматического перенаправления"
+
+#: specivo/templates/themes/default/pages/admin/settings.html:118
+msgid "disabled"
+msgstr "отключён"
+
+#: specivo/templates/themes/default/pages/admin/settings.html:121
+msgid ""
+"Sends visitors straight to this identity provider. /login/?local=1 "
+"bypasses it."
+msgstr ""
+"Сразу отправляет посетителей к этому провайдеру удостоверений. "
+"/login/?local=1 обходит перенаправление."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:3
+msgid "New provider"
+msgstr "Новый провайдер"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:25
+msgid "Saved."
+msgstr "Сохранено."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:27
+msgid "Failed to delete."
+msgstr "Не удалось удалить."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:28
+msgid "The test could not run."
+msgstr "Не удалось выполнить проверку."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:29
+msgid "Discovery and signing keys work."
+msgstr "Discovery и ключи подписи работают."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:33
+msgid "The identity provider could not be reached"
+msgstr "Провайдер удостоверений недоступен"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:34
+msgid "The identity provider configuration is invalid"
+msgstr "Конфигурация провайдера удостоверений некорректна"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:37
+msgid "Stored (encrypted)"
+msgstr "Сохранён (зашифрован)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:38
+msgid "Unreadable after a SECRET_KEY change: enter it again"
+msgstr "Не читается после смены SECRET_KEY: введите его снова"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:39
+msgid "Read from the environment variable"
+msgstr "Читается из переменной окружения"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:40
+msgid "The environment variable is not set"
+msgstr "Переменная окружения не задана"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:41
+msgid "This environment variable name is not allowed"
+msgstr "Такое имя переменной окружения не разрешено"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:42
+msgid "Not set"
+msgstr "Не задан"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:43
+msgid "Not needed for a public client"
+msgstr "Не нужен для публичного клиента"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:46
+msgid "The provider does not advertise the selected client authentication method."
+msgstr "Провайдер не объявляет выбранный способ аутентификации клиента."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:47
+msgid "The provider does not advertise PKCE. Specivo sends it anyway (S256)."
+msgstr "Провайдер не объявляет PKCE. Specivo всё равно его отправляет (S256)."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:48
+msgid ""
+"Sign-out at the provider is on, but the provider has no "
+"end_session_endpoint."
+msgstr "Выход у провайдера включён, но у провайдера нет end_session_endpoint."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:49
+msgid "Back-channel logout is on, but the provider does not support it."
+msgstr "Back-channel logout включён, но провайдер его не поддерживает."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:50
+msgid "Userinfo is on, but the provider has no userinfo_endpoint."
+msgstr "Userinfo включён, но у провайдера нет userinfo_endpoint."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:51
+msgid "The stored client secret cannot be read: enter it again."
+msgstr "Сохранённый секрет клиента не читается: введите его снова."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:52
+msgid "The client secret environment variable is not set."
+msgstr "Переменная окружения с секретом клиента не задана."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:53
+msgid "The client secret environment variable name is not allowed."
+msgstr "Имя переменной окружения с секретом клиента не разрешено."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:54
+msgid "No client secret is set."
+msgstr "Секрет клиента не задан."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:69
+msgid "Test connection"
+msgstr "Проверить подключение"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:70
+msgid "Testing..."
+msgstr "Проверка..."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:84
+msgid "Discovery URL"
+msgstr "URL discovery"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:85
+msgid "Expected issuer"
+msgstr "Ожидаемый издатель"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:86
+msgid "Issuer reported"
+msgstr "Заявленный издатель"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:87
+msgid "Issuer matches"
+msgstr "Издатель совпадает"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:89
+msgid "Authorization endpoint"
+msgstr "Endpoint авторизации"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:90
+msgid "Token endpoint"
+msgstr "Endpoint токенов"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:91
+msgid "Userinfo endpoint"
+msgstr "Endpoint userinfo"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:92
+msgid "End session endpoint"
+msgstr "Endpoint завершения сеанса"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:93
+msgid "Signing algorithms"
+msgstr "Алгоритмы подписи"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:94
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:156
+msgid "Client authentication"
+msgstr "Аутентификация клиента"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:95
+msgid "Back-channel logout"
+msgstr "Back-channel logout"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:97
+msgid "Signing keys"
+msgstr "Ключи подписи"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:110
+msgid "Connection"
+msgstr "Подключение"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:111
+msgid ""
+"Register Specivo at the identity provider with exactly these URLs (no "
+"wildcards), then copy its issuer and client ID here."
+msgstr ""
+"Зарегистрируйте Specivo у провайдера удостоверений точно с этими URL (без"
+" масок), затем скопируйте сюда издателя и ID клиента."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:113
+msgid "Redirect URI"
+msgstr "URI перенаправления"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:118
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:126
+msgid "Copied"
+msgstr "Скопировано"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:121
+msgid "Back-channel logout URI"
+msgstr "URI back-channel logout"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:132
+msgid "Button label"
+msgstr "Надпись на кнопке"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:138
+msgid "Part of the URLs above. Changing it means updating them at the provider."
+msgstr "Входит в URL выше. При изменении обновите их у провайдера."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:142
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:32
+msgid "Issuer"
+msgstr "Издатель"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:144
+msgid "Must match the issuer the provider publishes, character for character."
+msgstr "Должен посимвольно совпадать с издателем, который публикует провайдер."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:147
+msgid "Discovery URL (optional)"
+msgstr "URL discovery (необязательно)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:148
+msgid "Issuer + /.well-known/openid-configuration"
+msgstr "Издатель + /.well-known/openid-configuration"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:152
+msgid "Client ID"
+msgstr "ID клиента"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:160
+msgid "none (public client, PKCE only)"
+msgstr "none (публичный клиент, только PKCE)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:166
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:33
+msgid "Client secret"
+msgstr "Секрет клиента"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:170
+msgid "Store it in Specivo (encrypted)"
+msgstr "Хранить в Specivo (в зашифрованном виде)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:171
+msgid "Read it from an environment variable"
+msgstr "Читать из переменной окружения"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:174
+msgid "Leave empty to keep the current secret"
+msgstr "Оставьте пустым, чтобы сохранить текущий секрет"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:175
+msgid "Write-only: the secret is never shown again."
+msgstr "Только запись: секрет больше никогда не показывается."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:179
+msgid ""
+"The name must start with SPECIVO_SSO_SECRET_ (capital letters, digits and"
+" underscores). Set the variable on every Specivo container."
+msgstr ""
+"Имя должно начинаться с SPECIVO_SSO_SECRET_ (заглавные буквы, цифры и "
+"подчёркивания). Задайте переменную во всех контейнерах Specivo."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:182
+msgid "Remove the client secret"
+msgstr "Удалить секрет клиента"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:187
+msgid "Scopes"
+msgstr "Области (scopes)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:189
+msgid "Space-separated. openid is required."
+msgstr "Через пробел. openid обязателен."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:199
+msgid "Optional extra parameters for the sign-in request."
+msgstr "Необязательные дополнительные параметры запроса входа."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:202
+msgid "Enabled (shown on the login page)"
+msgstr "Включён (показывается на странице входа)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:204
+msgid "Button order"
+msgstr "Порядок кнопки"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:212
+msgid "Sign-in policy"
+msgstr "Политика входа"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:213
+msgid "Who may sign in, and what happens the first time someone does."
+msgstr "Кто может входить и что происходит при первом входе."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:215
+msgid "Create an account on first sign-in"
+msgstr "Создавать учётную запись при первом входе"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:217
+msgid "Existing accounts"
+msgstr "Существующие учётные записи"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:219
+msgid "Users connect their account themselves, while signed in"
+msgstr "Пользователи сами привязывают учётную запись, войдя в систему"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:220
+msgid "Link automatically by verified email (never for administrators)"
+msgstr ""
+"Привязывать автоматически по подтверждённому email (никогда для "
+"администраторов)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:224
+msgid "This provider really verifies email addresses"
+msgstr "Этот провайдер действительно проверяет адреса email"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:225
+msgid "Required for automatic linking. Never turn it on for Microsoft Entra ID."
+msgstr ""
+"Нужно для автоматической привязки. Никогда не включайте для Microsoft "
+"Entra ID."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:227
+msgid "Allowed email domains"
+msgstr "Разрешённые почтовые домены"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:229
+msgid "One per line. Empty allows every domain."
+msgstr "По одному в строке. Пусто: разрешены все домены."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:232
+msgid "Maximum session length (hours)"
+msgstr "Максимальная длительность сеанса (часы)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:234
+msgid "After this, people sign in at the provider again."
+msgstr "После этого пользователи снова входят через провайдера."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
+msgid "Claims"
+msgstr "Утверждения (claims)"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:241
+msgid ""
+"Which token claims fill the Specivo profile. Leave a field empty for the "
+"standard claim."
+msgstr ""
+"Какие утверждения токена заполняют профиль Specivo. Оставьте поле пустым "
+"для стандартного утверждения."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:243
+msgid "Username claim"
+msgstr "Утверждение имени пользователя"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
+msgid "Email claim"
+msgstr "Утверждение email"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:247
+msgid "Name claim"
+msgstr "Утверждение имени"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:249
+msgid "Language claim"
+msgstr "Утверждение языка"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
+msgid "Groups claim"
+msgstr "Утверждение групп"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:253
+msgid "A dotted path, for example realm_access.roles."
+msgstr "Путь через точку, например realm_access.roles."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:256
+msgid "Also read claims from the userinfo endpoint"
+msgstr "Также читать утверждения из endpoint userinfo"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:262
+msgid ""
+"Group values from the groups claim decide who may sign in, who is an "
+"administrator, and which Specivo groups people are in. Values match "
+"exactly, including case."
+msgstr ""
+"Значения из утверждения групп определяют, кто может входить, кто "
+"администратор и в каких группах Specivo состоит пользователь. Значения "
+"сравниваются точно, с учётом регистра."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
+msgid "Required groups"
+msgstr "Обязательные группы"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:267
+msgid "One per line. Empty lets everyone from this provider in."
+msgstr "По одному в строке. Пусто: пускать всех пользователей этого провайдера."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:270
+msgid "Administrator groups"
+msgstr "Группы администраторов"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:275
+msgid "Set the administrator flag from the administrator groups at every sign-in"
+msgstr ""
+"Выставлять признак администратора по группам администраторов при каждом "
+"входе"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:277
+msgid "Update Specivo group memberships from the mappings below at every sign-in"
+msgstr ""
+"Обновлять членство в группах Specivo по сопоставлениям ниже при каждом "
+"входе"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:280
+msgid "Group mappings"
+msgstr "Сопоставления групп"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:283
+msgid "Group at the provider"
+msgstr "Группа у провайдера"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:284
+msgid "Specivo group"
+msgstr "Группа Specivo"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:292
+msgid "Create a Specivo group first."
+msgstr "Сначала создайте группу Specivo."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:294
+msgid "+ Add mapping"
+msgstr "+ Добавить сопоставление"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:295
+msgid "Save mappings"
+msgstr "Сохранить сопоставления"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:300
+msgid "Group mappings can be added once the provider is saved."
+msgstr "Сопоставления групп можно добавить после сохранения провайдера."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:306
+msgid "Logout"
+msgstr "Выход"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:308
+msgid "Signing out of Specivo also signs out at the provider"
+msgstr "Выход из Specivo также выполняет выход у провайдера"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:310
+msgid "Accept back-channel logout from the provider"
+msgstr "Принимать back-channel logout от провайдера"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:311
+msgid "Register the back-channel logout URI above at the provider."
+msgstr "Зарегистрируйте URI back-channel logout, указанный выше, у провайдера."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:318
+msgid "Delete provider"
+msgstr "Удалить провайдера"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:321
+#, python-format
+msgid ""
+"%(count)s user signs in through this provider. Disabling it is usually "
+"what you want."
+msgid_plural ""
+"%(count)s users sign in through this provider. Disabling it is usually "
+"what you want."
+msgstr[0] ""
+"%(count)s пользователь входит через этого провайдера. Обычно лучше его "
+"отключить."
+msgstr[1] ""
+"%(count)s пользователя входят через этого провайдера. Обычно лучше его "
+"отключить."
+msgstr[2] ""
+"%(count)s пользователей входят через этого провайдера. Обычно лучше его "
+"отключить."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:323
+msgid "Delete anyway: unlink these users and end their sessions"
+msgstr "Всё равно удалить: отвязать этих пользователей и завершить их сеансы"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:327
+msgid "Nobody is linked to this provider. Its group mappings are deleted with it."
+msgstr ""
+"К этому провайдеру никто не привязан. Его сопоставления групп удаляются "
+"вместе с ним."
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:16
+msgid "+ New provider"
+msgstr "+ Новый провайдер"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:20
+msgid ""
+"People can sign in through an OpenID Connect identity provider such as "
+"Keycloak, authentik, Microsoft Entra ID, Okta or Google. A new provider "
+"starts disabled: test the connection, then enable it."
+msgstr ""
+"Пользователи могут входить через провайдера удостоверений OpenID Connect,"
+" например Keycloak, authentik, Microsoft Entra ID, Okta или Google. Новый"
+" провайдер создаётся отключённым: проверьте подключение, затем включите "
+"его."
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:21
+msgid "Authentication settings"
+msgstr "Настройки аутентификации"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:29
+msgid "Provider"
+msgstr "Провайдер"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:34
+msgid "Linked users"
+msgstr "Привязанные пользователи"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
+msgid "Not needed"
+msgstr "Не нужен"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:51
+msgid "Unreadable, re-enter it"
+msgstr "Не читается, введите снова"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:53
+msgid "Missing"
+msgstr "Отсутствует"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:55
+msgid "Environment variable problem"
+msgstr "Проблема с переменной окружения"
+
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:61
+msgid "No identity providers yet."
+msgstr "Провайдеров удостоверений пока нет."
+
