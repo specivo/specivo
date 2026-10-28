@@ -1,0 +1,244 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/lookups.schema.json",
+  "title": "Import bundle v1: lookups.json",
+  "description": "Instance-wide lookup tables.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "trackers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tracker"
+      }
+    },
+    "statuses": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/status"
+      }
+    },
+    "priorities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/priority"
+      }
+    },
+    "activities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/activity"
+      }
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/role"
+      }
+    }
+  },
+  "$defs": {
+    "tracker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "name"
+      ],
+      "properties": {
+        "source_ref": {
+          "$ref": "common.schema.json#/$defs/sourceRef"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "is_in_roadmap": {
+          "type": "boolean"
+        },
+        "default_status_ref": {
+          "$ref": "common.schema.json#/$defs/optionalRef"
+        },
+        "disabled_core_fields": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Specivo issue fields hidden for this type, e.g. estimated_hours."
+        },
+        "position": {
+          "type": "integer"
+        },
+        "private_by_default": {
+          "type": "boolean",
+          "description": "New issues of this type start private."
+        },
+        "extra": {
+          "$ref": "common.schema.json#/$defs/extra"
+        }
+      }
+    },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "name",
+        "category"
+      ],
+      "properties": {
+        "source_ref": {
+          "$ref": "common.schema.json#/$defs/sourceRef"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "backlog",
+            "active",
+            "done",
+            "closed"
+          ],
+          "description": "Specivo's grouping of the status."
+        },
+        "position": {
+          "type": "integer"
+        },
+        "default_done_ratio": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "extra": {
+          "$ref": "common.schema.json#/$defs/extra"
+        }
+      }
+    },
+    "priority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "name"
+      ],
+      "properties": {
+        "source_ref": {
+          "$ref": "common.schema.json#/$defs/sourceRef"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "position": {
+          "type": "integer"
+        },
+        "is_default": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "extra": {
+          "$ref": "common.schema.json#/$defs/extra"
+        }
+      }
+    },
+    "activity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "name"
+      ],
+      "properties": {
+        "source_ref": {
+          "$ref": "common.schema.json#/$defs/sourceRef"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "is_default": {
+          "type": "boolean"
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "extra": {
+          "$ref": "common.schema.json#/$defs/extra"
+        }
+      }
+    },
+    "role": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "name"
+      ],
+      "properties": {
+        "source_ref": {
+          "$ref": "common.schema.json#/$defs/sourceRef"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "builtin": {
+          "type": "integer",
+          "enum": [
+            0,
+            1,
+            2
+          ],
+          "description": "0 an ordinary role, 1 the non-member role, 2 the anonymous role."
+        },
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Ignored on import: roles arrive without permissions, for an administrator to fill in."
+        },
+        "users_visibility": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "all",
+            "members_of_visible_projects",
+            null
+          ]
+        },
+        "time_entries_visibility": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "all",
+            "own",
+            null
+          ]
+        },
+        "extra": {
+          "$ref": "common.schema.json#/$defs/extra"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/versions.schema.json",
+  "title": "Import bundle v1: versions.jsonl",
+  "description": "One project version (release, milestone) per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "project_ref",
+    "name"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "locked",
+        "closed"
+      ]
+    },
+    "effective_date": {
+      "$ref": "common.schema.json#/$defs/optionalDate"
+    },
+    "sharing": {
+      "type": "string",
+      "enum": [
+        "none",
+        "descendants",
+        "hierarchy",
+        "tree",
+        "system"
+      ]
+    },
+    "wiki_page_title": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

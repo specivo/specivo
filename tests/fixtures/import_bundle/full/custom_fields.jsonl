@@ -1,0 +1,2 @@
+{"source_ref": "cf-sev", "name": "Severity", "key": "severity", "field_format": "list", "json_schema": {"type": "string", "enum": ["Low", "High"]}, "is_for_all": true, "tracker_refs": ["defect"]}
+{"source_ref": "cf-rev", "name": "Reviewer", "key": "reviewer", "field_format": "user", "json_schema": {"type": "integer"}, "is_for_all": true}

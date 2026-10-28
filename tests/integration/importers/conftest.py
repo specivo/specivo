@@ -1,8 +1,8 @@
 """Fixtures for importer tests that run against a real Redmine.
 
-These read the Redmine fixture started by ``make redmine-fixture-up`` and write
-into the ordinary rollback-isolated test session, so a full import can be
-exercised without leaving anything behind.
+These read the Redmine fixture started by ``make redmine-fixture-up``, or an
+import bundle, and write into the ordinary rollback-isolated test session, so a
+full import can be exercised without leaving anything behind.
 
 A run is built the way ``python -m specivo.cli.import_data --source redmine``
 builds it: the command line is parsed with the registry's ``redmine`` source,
@@ -109,6 +109,12 @@ def _argv(profile: dict[str, str], **option_kwargs) -> list[str]:
         "--source-instance",
         "pytest-fixture",
     ]
+    return argv + _flags(**option_kwargs)
+
+
+def _flags(**option_kwargs) -> list[str]:
+    """Translate run-option keywords (``dry_run=True``) into the command's generic flags."""
+    argv: list[str] = []
     for name, value in option_kwargs.items():
         flag = "--" + name.replace("_", "-")
         if name == "resume_run_id":
@@ -140,6 +146,33 @@ def build_import(db_session, redmine_profile, redmine_adapter, tmp_path, monkeyp
     def _build(**option_kwargs) -> ImportPipeline:
         args, adapter_cls = parse_args(_argv(redmine_profile, **option_kwargs), build_source_registry())
         assert adapter_cls is RedmineSourceAdapter
+        return build_pipeline(
+            args,
+            adapter_cls.from_args(args),
+            session_factory=lambda: _SharedSession(db_session),  # type: ignore[arg-type]
+            reporter=NullProgressReporter(),
+        )
+
+    _build.storage = storage  # type: ignore[attr-defined]
+    return _build
+
+
+@pytest.fixture
+def build_bundle_import(db_session, tmp_path, monkeypatch):
+    """Return a factory building a wired pipeline that loads a bundle.
+
+    Built the way ``--source bundle --path PATH`` builds it, against the
+    test's session, with attachment storage in a temporary directory.
+    """
+    import specivo.services.attachment_service as attachment_service
+
+    storage = tmp_path / "bundle-attachments"
+    storage.mkdir()
+    monkeypatch.setattr(attachment_service, "_upload_dir", storage)
+
+    def _build(path: Path, **option_kwargs) -> ImportPipeline:
+        argv = ["--source", "bundle", "--path", str(path), *_flags(**option_kwargs)]
+        args, adapter_cls = parse_args(argv, build_source_registry())
         return build_pipeline(
             args,
             adapter_cls.from_args(args),

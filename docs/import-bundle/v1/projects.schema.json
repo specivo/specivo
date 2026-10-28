@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/projects.schema.json",
+  "title": "Import bundle v1: projects.jsonl",
+  "description": "One project per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "identifier",
+    "name"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "identifier": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short name, used to derive the project key."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "$ref": "common.schema.json#/$defs/optionalMarkdown"
+    },
+    "is_public": {
+      "type": "boolean"
+    },
+    "parent_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "status": {
+      "type": "integer",
+      "enum": [
+        1,
+        5,
+        9
+      ],
+      "description": "1 active, 5 closed, 9 archived."
+    },
+    "modules": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "issue_tracking",
+          "wiki",
+          "time_tracking"
+        ]
+      }
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

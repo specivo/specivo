@@ -1,0 +1,3 @@
+{"source_ref": "u-alice", "login": "bundle_alice", "display_name": "Alice Example", "email": "bundle_alice@example.com", "language": "th", "created_at": "2023-01-10T08:00:00+07:00", "last_login_at": "2024-02-28T17:45:00+07:00"}
+{"source_ref": "u-bob", "login": "bundle_bob", "display_name": "Bob Example", "email": "bundle_bob@example.com", "is_admin": true, "created_at": "2023-01-11T08:00:00Z"}
+{"source_ref": "u-carol", "login": "bundle_carol", "display_name": "Carol Example", "status": "locked", "external_auth": true}

@@ -4,12 +4,16 @@ description: Import from a tracker Specivo has no built-in importer for, with a 
 
 # Writing an import source plugin
 
-Specivo's importer ships with one source, Redmine (see
-[Migrating from Redmine](migrating-from-redmine.md)). To move in from anything
-else, such as another tracker's export, an in-house app or a CSV dump, write an
-import source plugin. You don't have to patch Specivo. The plugin only reads the
-old system. Specivo does all the writing, and the import gets the same dry run,
-report and resume as a Redmine import.
+Specivo's importer ships with two sources: Redmine (see [Migrating from
+Redmine](migrating-from-redmine.md)), and `bundle`, which loads an [import
+bundle](https://github.com/specivo/specivo/blob/main/docs/import-bundle/v1.md),
+a documented file format any program can write. Writing a bundle is usually the
+simpler way in from another system, in any language and without running inside
+Specivo. To read the other system from within Specivo instead, such as another
+tracker's export, an in-house app or a CSV dump, write an import source plugin.
+You don't have to patch Specivo. The plugin only reads the old system. Specivo
+does all the writing, and the import gets the same dry run, report and resume as
+a Redmine import.
 
 Paired with a [password hasher plugin](password-hasher-plugins.md), it can also
 let people keep their old passwords.
@@ -271,6 +275,7 @@ docker compose exec api python -m specivo.cli.import_data --list-sources
 
 ```
 acme     plugin:acme-import  Acme Tracker JSON export
+bundle   core                An import bundle (directory or .zip) written by an importer
 redmine  core                Redmine 7.x, read from its database and files directory
 ```
 
@@ -338,6 +343,7 @@ When the report looks right, run the same command without `--dry-run`. Add
 | `--flatten-excess-depth` | Import projects nested deeper than Specivo allows by moving them higher up. |
 | `--import-passwords` | Let accounts keep their password. See [Passwords](#passwords). |
 | `--dry-run` | Run everything and roll it back. |
+| `--validate` | Only check the source and report what is wrong with it, writing nothing. Only for sources that can check themselves, such as `bundle`. |
 | `--resume RUN_ID` | Continue an interrupted run. Each phase commits when it finishes, and anything already imported is skipped. |
 | `--strict` | Treat every warning as a failure. Useful while you develop the plugin. |
 | `--report-json PATH` | Also write the report as JSON. |

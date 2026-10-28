@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import argparse
+import json
 import uuid
 
 import pytest
 
-from specivo.cli.import_data import build_options, format_source_list, main, parse_args
+from specivo.cli.import_data import build_options, format_source_list, main, parse_args, run_validation
+from specivo.importers.bundle import BundleSourceAdapter
 from specivo.importers.core.cli_args import parse_list, parse_map
 from specivo.importers.core.pipeline import ImportPhase
 from specivo.importers.core.source import BaseSourceAdapter, build_source_registry
 from specivo.importers.redmine import RedmineSourceAdapter
 from tests.fixtures.acme_import import AcmeJsonSource
+from tests.fixtures.import_bundle import FULL, user, write_bundle
 
 pytestmark = pytest.mark.unit
 
@@ -75,7 +78,8 @@ class TestSourceSelection:
         assert exc.value.code == 0
         lines = capsys.readouterr().out.splitlines()
         assert lines[0].split()[:2] == ["acme", "plugin:acme-import"]
-        assert lines[1].split()[:2] == ["redmine", "core"]
+        assert lines[1].split()[:2] == ["bundle", "core"]
+        assert lines[2].split()[:2] == ["redmine", "core"]
         assert "Acme Tracker JSON export" in lines[0]
 
     def test_an_unknown_source_fails_with_the_known_names(self, registry, capsys):
@@ -84,20 +88,20 @@ class TestSourceSelection:
         assert exc.value.code == 2
         err = capsys.readouterr().err
         assert "Unknown import source 'nope'" in err
-        assert "acme, redmine" in err
+        assert "acme, bundle, redmine" in err
 
     def test_a_missing_source_fails_with_the_known_names(self, registry, capsys):
         with pytest.raises(SystemExit) as exc:
             parse_args(["--dry-run"], registry)
         assert exc.value.code == 2
-        assert "--source is required. Registered sources: acme, redmine" in capsys.readouterr().err
+        assert "--source is required. Registered sources: acme, bundle, redmine" in capsys.readouterr().err
 
     def test_help_without_a_source_lists_the_sources(self, registry, capsys):
         with pytest.raises(SystemExit) as exc:
             parse_args(["--help"], registry)
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        assert "Registered sources: acme, redmine" in out
+        assert "Registered sources: acme, bundle, redmine" in out
         assert "--dry-run" in out
         assert "--source-db-url" not in out
 
@@ -191,6 +195,47 @@ class TestRunOptions:
         with pytest.raises(SystemExit):
             parse_args(["--help"], registry)
         assert "--dry-run" in capsys.readouterr().out
+
+
+class TestBundleSource:
+    def _parse(self, registry, *args):
+        return parse_args(["--source", "bundle", "--path", str(FULL), *args], registry)
+
+    def test_the_bundle_source_reads_a_path(self, registry):
+        args, cls = self._parse(registry)
+        assert cls is BundleSourceAdapter
+        adapter = cls.from_args(args)
+        assert adapter.path == FULL
+        assert build_options(args, adapter).source_instance == "sample:tracker.example.com"
+
+    def test_the_path_is_required(self, registry):
+        with pytest.raises(SystemExit):
+            parse_args(["--source", "bundle"], registry)
+
+    def test_validate_and_dry_run_are_two_different_things(self, registry, capsys):
+        with pytest.raises(SystemExit) as exc:
+            self._parse(registry, "--validate", "--dry-run")
+        assert exc.value.code == 2
+        assert "not allowed with argument" in capsys.readouterr().err
+
+    async def test_a_valid_bundle_validates_with_exit_code_0(self, registry, capsys, tmp_path):
+        report = tmp_path / "report.json"
+        args, cls = self._parse(registry, "--validate", "--report-json", str(report))
+        assert await run_validation(args, cls.from_args(args)) == 0
+        assert "valid — 0 error(s), 0 warning(s)" in capsys.readouterr().out
+        assert json.loads(report.read_text())["valid"] is True
+
+    async def test_an_invalid_bundle_exits_1_and_says_where(self, registry, capsys, tmp_path):
+        root = write_bundle(tmp_path / "b", users=[user("u1"), user("u1")])
+        args, cls = parse_args(["--source", "bundle", "--path", str(root), "--validate"], registry)
+        assert await run_validation(args, cls.from_args(args)) == 1
+        assert "users.jsonl:2: error: Duplicate source_ref 'u1'" in capsys.readouterr().out
+
+    async def test_a_source_that_cannot_validate_itself_says_so(self, registry, tmp_path):
+        export = tmp_path / "acme.json"
+        export.write_text("{}")
+        args, cls = parse_args(["--source", "acme", "--export", str(export), "--validate"], registry)
+        assert await run_validation(args, cls.from_args(args)) == 2
 
 
 class TestRedmineFromArgs:
