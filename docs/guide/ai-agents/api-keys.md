@@ -73,8 +73,6 @@ signed in to Specivo, and a key gets `403` with the code `api_key_not_allowed`:
 - unlocking or reactivating an account (`POST /api/v1/admin/users/{id}/unlock/`,
   `.../reactivate/`, and the **Reactivate** button when called with a key);
 - creating an API key for a user (`POST /api/v1/admin/users/{id}/api-keys/`);
-- in the enterprise edition, re-enabling a stopped agent's keys (`POST /api/v1/admin/unkill/agent/{id}/`)
-  and issuing broker credentials (`POST /api/v1/admin/credentials/issue/`);
 - changing single sign-on: creating, editing or deleting identity providers and their group
   mappings, and saving the authentication settings (see
   [Single sign-on](../install/single-sign-on/index.md#offboarding-people)).
