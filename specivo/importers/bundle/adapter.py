@@ -23,7 +23,7 @@ from zipfile import BadZipFile, ZipFile
 
 from specivo.importers.bundle import format as bundle_format
 from specivo.importers.bundle.codec import LOOKUP_TYPES, from_record
-from specivo.importers.bundle.container import BundleContainer, open_bundle
+from specivo.importers.bundle.container import BundleContainer, open_bundle, open_regular
 from specivo.importers.bundle.format import FILES_DIR, LOOKUP_LISTS, MANIFEST, SHA256_RE, RecordFile
 from specivo.importers.bundle.limits import BundleLimits, format_size, parse_size, positive_int
 from specivo.importers.bundle.report import ProblemCode, ValidationReport
@@ -333,7 +333,7 @@ class BundleSourceAdapter(BaseSourceAdapter):
         offsets = list(offsets)
         if not offsets:
             return
-        with self._path(record_file).open("rb") as handle:
+        with open_regular(self._path(record_file)) as handle:
             for offset in offsets:
                 handle.seek(offset)
                 yield from_record(cls, loads(handle.readline(self.limits.max_line_bytes + 1)))
@@ -438,7 +438,7 @@ def _source_from_manifest(path: Path, limits: BundleLimits) -> tuple[str, str]:
     fallback = (BundleSourceAdapter.source_system, BundleSourceAdapter.source_system)
     try:
         if path.is_dir():
-            with (path / MANIFEST).open("rb") as handle:
+            with open_regular(path / MANIFEST) as handle:
                 raw = handle.read(limits.max_json_bytes + 1)
         else:
             with ZipFile(path) as archive, archive.open(MANIFEST) as handle:

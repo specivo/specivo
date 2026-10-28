@@ -8,7 +8,9 @@ wrong earlier import.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 import tempfile
 import zipfile
 from pathlib import Path
@@ -22,7 +24,7 @@ from specivo.importers.bundle import container as container_module
 from specivo.importers.bundle.limits import GIB, MIB, BundleLimits, parse_size
 from specivo.importers.bundle.report import Severity, ValidationReport
 from specivo.importers.core.source import build_source_registry
-from tests.fixtures.import_bundle import FULL, issue, manifest, project, user, write_bundle
+from tests.fixtures.import_bundle import FULL, issue, manifest, project, stored, user, within_seconds, write_bundle
 
 pytestmark = pytest.mark.unit
 
@@ -239,3 +241,130 @@ class TestLabels:
         report = await _validate(root)
         assert _codes(report) == [("issues.jsonl", 1, "invalid_ref")]
         assert "']]'" in report.problems[0].message
+
+
+def _validate_now(path: Path, files_path: Path | None = None) -> ValidationReport:
+    """Validate from a plain thread, so :func:`within_seconds` can time it."""
+    return asyncio.run(BundleSourceAdapter(path, files_path=files_path).validate())
+
+
+class TestEntriesThatAreNotRegularFiles:
+    """A pipe, device, socket or directory under a name the reader opens refuses the bundle unopened.
+
+    Opening a FIFO for reading blocks until something writes to it, so a
+    bundle could otherwise hang the import; each case must end within 5 s.
+    """
+
+    @pytest.mark.parametrize("name", ["issues.jsonl", "manifest.json", "lookups.json"])
+    def test_a_fifo_under_a_known_name(self, tmp_path, name):
+        root = write_bundle(tmp_path / "b")
+        (root / name).unlink(missing_ok=True)
+        os.mkfifo(root / name)
+        report = within_seconds(5, lambda: _validate_now(root), root / name)
+        assert _codes(report) == [(name, None, "unsafe_entry")]
+        assert report.records == {}
+
+    def test_a_directory_under_a_known_name(self, tmp_path):
+        root = write_bundle(tmp_path / "b")
+        (root / "users.jsonl").mkdir()
+        report = within_seconds(5, lambda: _validate_now(root))
+        assert _codes(report) == [("users.jsonl", None, "unsafe_entry")]
+        assert report.records == {}
+
+    def test_a_fifo_in_files(self, tmp_path):
+        root = write_bundle(tmp_path / "b", files={stored(b"x"): b"x"})
+        fifo = root / "files" / stored(b"y")
+        os.mkfifo(fifo)
+        report = within_seconds(5, lambda: _validate_now(root), fifo)
+        assert _codes(report) == [(f"files/{stored(b'y')}", None, "unsafe_entry")]
+        assert report.records == {}
+
+    def test_a_fifo_in_a_separate_files_directory(self, tmp_path):
+        root = write_bundle(tmp_path / "b")
+        files = tmp_path / "store"
+        files.mkdir()
+        fifo = files / stored(b"x")
+        os.mkfifo(fifo)
+        report = within_seconds(5, lambda: _validate_now(root, files), fifo)
+        assert _codes(report) == [(f"files/{stored(b'x')}", None, "unsafe_entry")]
+        assert report.records == {}
+
+    def test_a_fifo_with_an_unknown_name_is_only_ignored(self, tmp_path):
+        root = write_bundle(tmp_path / "b")
+        os.mkfifo(root / "notes")
+        report = within_seconds(5, lambda: _validate_now(root), root / "notes")
+        assert report.ok
+        assert _codes(report, Severity.WARNING) == [("notes", None, "unknown_file")]
+
+    def test_a_record_file_swapped_for_a_fifo_after_the_check(self, tmp_path, monkeypatch):
+        root = write_bundle(tmp_path / "b", users=[user("u1")])
+        check = container_module._check_directory
+
+        def check_then_swap(directory, report, skip_own_files=False):
+            safe = check(directory, report, skip_own_files)
+            (directory / "users.jsonl").unlink()
+            os.mkfifo(directory / "users.jsonl")
+            return safe
+
+        monkeypatch.setattr(container_module, "_check_directory", check_then_swap)
+        report = within_seconds(5, lambda: _validate_now(root), root / "users.jsonl")
+        assert _codes(report) == [("users.jsonl", None, "unreadable")]
+
+
+class TestOpenRegular:
+    def test_a_regular_file_is_read_in_blocking_mode(self, tmp_path):
+        path = tmp_path / "data"
+        path.write_bytes(b"data")
+        with container_module.open_regular(path) as handle:
+            assert os.get_blocking(handle.fileno())
+            assert handle.read() == b"data"
+
+    def test_a_fifo_is_refused_without_blocking(self, tmp_path):
+        fifo = tmp_path / "fifo"
+        os.mkfifo(fifo)
+
+        def open_it():
+            with pytest.raises(OSError, match="Not a regular file"):
+                container_module.open_regular(fifo)
+
+        within_seconds(5, open_it, fifo)
+
+    def test_a_directory_is_refused(self, tmp_path):
+        with pytest.raises(OSError, match="Not a regular file"):
+            container_module.open_regular(tmp_path)
+
+    def test_a_symlink_is_not_followed(self, tmp_path):
+        (tmp_path / "target").write_bytes(b"secret")
+        os.symlink(tmp_path / "target", tmp_path / "link")
+        with pytest.raises(OSError):
+            container_module.open_regular(tmp_path / "link")
+
+
+SECRET_HASH = "$2y$10$Q9mWkzVtH3secretvaluexyzAbCdEfGhIjKlMnOpQrStUvWxYz012"
+
+
+class TestSecretsStayOutOfTheReport:
+    """A credential that fails its schema is reported without its value: the report is printed and logged."""
+
+    @pytest.mark.parametrize(
+        "credential",
+        [
+            {"algorithm": "", "fields": {"hash": SECRET_HASH}},
+            {"algorithm": "bcrypt", "fields": {"hash": [SECRET_HASH]}},
+            {"algorithm": "bcrypt", "fields": {"hash": "x"}, "salt": SECRET_HASH},
+            SECRET_HASH,
+        ],
+        ids=["empty-algorithm", "hash-not-a-string", "unknown-property", "not-an-object"],
+    )
+    async def test_a_bad_credential(self, tmp_path, credential):
+        root = write_bundle(tmp_path / "b", users=[user("u1", credential=credential)])
+        report = await _validate(root)
+        assert _codes(report) == [("users.jsonl", 1, "schema")]
+        assert [p.message for p in report.problems] == ["/credential: does not match the schema (anyOf)"]
+        assert SECRET_HASH not in report.format_text()
+        assert SECRET_HASH not in json.dumps(report.as_dict())
+
+    async def test_other_values_are_still_shown(self, tmp_path):
+        root = write_bundle(tmp_path / "b", users=[user("u1", status="gone")])
+        [problem] = (await _validate(root)).problems
+        assert "'gone'" in problem.message

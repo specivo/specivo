@@ -10,9 +10,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
+import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+
+import pytest
 
 FULL = Path(__file__).parent / "full"
 
@@ -98,3 +103,35 @@ def copy_full(target: Path) -> Path:
     """Copy the full example bundle to *target*, for a test that changes it."""
     shutil.copytree(FULL, target)
     return target
+
+
+def within_seconds[T](seconds: float, call: Callable[[], T], *fifos: Path) -> T:
+    """Return ``call()``, failing the test if it takes more than *seconds*.
+
+    A reader that opens one of *fifos* without ``O_NONBLOCK`` blocks until a
+    writer appears; on a timeout each is opened for writing and closed again,
+    so the stuck thread gets end-of-file and ends instead of outliving the test.
+    """
+    outcome: list[T] = []
+    failure: list[BaseException] = []
+
+    def run() -> None:
+        try:
+            outcome.append(call())
+        except BaseException as exc:  # noqa: BLE001 - re-raised in the test's thread
+            failure.append(exc)
+
+    thread = threading.Thread(target=run, daemon=True)
+    thread.start()
+    thread.join(seconds)
+    if thread.is_alive():
+        for fifo in fifos:
+            try:
+                os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+            except OSError:
+                pass
+        thread.join(seconds)
+        pytest.fail(f"Still running after {seconds} s: a non-regular file was opened and blocked")
+    if failure:
+        raise failure[0]
+    return outcome[0]

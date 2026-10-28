@@ -8,6 +8,7 @@ mistake both report the same problems.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import shutil
@@ -18,7 +19,7 @@ import pytest
 from specivo.importers.bundle import BundleSourceAdapter
 from specivo.importers.bundle.report import ValidationReport
 from tests.fixtures import migration_sdk as migration_sdk_fixture
-from tests.fixtures.import_bundle import FULL, issue, manifest, project, stored, user, write_bundle
+from tests.fixtures.import_bundle import FULL, issue, manifest, project, stored, user, within_seconds, write_bundle
 from tests.fixtures.migration_sdk import migration_sdk, write_sdk_bundle
 
 pytestmark = pytest.mark.unit
@@ -169,6 +170,69 @@ class TestTheValidatorsAgreeOnASeparateFilesDirectory:
         bundle, files = self._case(tmp_path, case)
         sdk_report = sdk.validate_bundle(bundle, files_path=files)
         core_report = await BundleSourceAdapter(bundle, files_path=files).validate()
+        assert _problems(sdk_report) == _problems(core_report)
+        assert [p.message for p in sdk_report.problems] == [p.message for p in core_report.problems]
+
+
+SECRET_HASH = "$2y$10$Q9mWkzVtH3secretvaluexyzAbCdEfGhIjKlMnOpQrStUvWxYz012"
+
+
+class TestTheValidatorsAgreeOnSecretsAndUnsafeEntries:
+    """A bad credential is reported without its value, and non-regular files are refused, the same way by both."""
+
+    @pytest.mark.parametrize(
+        "credential",
+        [
+            {"algorithm": "", "fields": {"hash": SECRET_HASH}},
+            {"algorithm": "bcrypt", "fields": {"hash": [SECRET_HASH]}},
+            {"algorithm": "bcrypt", "fields": {"hash": "x"}, "salt": SECRET_HASH},
+            SECRET_HASH,
+        ],
+        ids=["empty-algorithm", "hash-not-a-string", "unknown-property", "not-an-object"],
+    )
+    async def test_on_a_bad_credential(self, tmp_path, credential):
+        root = write_bundle(tmp_path / "b", users=[user("u1", credential=credential)])
+        sdk_report = migration_sdk().validate_bundle(root)
+        core_report = await _core(root)
+        assert _problems(sdk_report) == _problems(core_report)
+        assert [p.message for p in sdk_report.problems] == [p.message for p in core_report.problems]
+        for report in (sdk_report, core_report):
+            assert SECRET_HASH not in report.format_text()
+
+    @pytest.mark.parametrize(
+        "case", ["fifo-record-file", "fifo-manifest", "directory-record-file", "fifo-in-files", "fifo-in-files-path"]
+    )
+    def test_on_a_non_regular_file(self, tmp_path, case):
+        sdk = migration_sdk()
+        # With a separate files directory the bundle has no files/ of its own to be warned about.
+        own_files = None if case == "fifo-in-files-path" else {stored(b"x"): b"x"}
+        root = write_bundle(tmp_path / "b", users=[user("u1")], files=own_files)
+        files_path = None
+        if case == "fifo-record-file":
+            target = root / "issues.jsonl"
+            os.mkfifo(target)
+        elif case == "fifo-manifest":
+            target = root / "manifest.json"
+            target.unlink()
+            os.mkfifo(target)
+        elif case == "directory-record-file":
+            target = root / "users.jsonl"
+            target.unlink()
+            target.mkdir()
+        elif case == "fifo-in-files":
+            target = root / "files" / stored(b"y")
+            os.mkfifo(target)
+        else:
+            files_path = tmp_path / "store"
+            files_path.mkdir()
+            target = files_path / stored(b"y")
+            os.mkfifo(target)
+
+        sdk_report = within_seconds(5, lambda: sdk.validate_bundle(root, files_path=files_path), target)
+        core_report = within_seconds(
+            5, lambda: asyncio.run(BundleSourceAdapter(root, files_path=files_path).validate()), target
+        )
+        assert [str(p.code) for p in core_report.errors] == ["unsafe_entry"]
         assert _problems(sdk_report) == _problems(core_report)
         assert [p.message for p in sdk_report.problems] == [p.message for p in core_report.problems]
 
