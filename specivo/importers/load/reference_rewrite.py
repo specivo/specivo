@@ -107,7 +107,9 @@ async def _rewrite_issues(session: AsyncSession, mapping: dict[str, str]) -> int
         await session.execute(
             update(Issue)
             .where(Issue.id == issue_id)
-            .values(description=updated)
+            # Set to itself: rewriting a reference is not an edit, and the
+            # column's onupdate would otherwise stamp the import time.
+            .values(description=updated, updated_at=Issue.updated_at)
             .execution_options(synchronize_session=False)
         )
         changed += 1
@@ -132,7 +134,7 @@ async def _rewrite_journals(session: AsyncSession, mapping: dict[str, str]) -> i
         await session.execute(
             update(Journal)
             .where(Journal.id == journal_id)
-            .values(notes=updated)
+            .values(notes=updated, updated_at=Journal.updated_at)
             .execution_options(synchronize_session=False)
         )
         changed += 1

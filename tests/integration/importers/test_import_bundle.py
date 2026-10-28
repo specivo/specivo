@@ -78,6 +78,15 @@ async def _page(session, title: str) -> WikiPage:
     return (await session.execute(select(WikiPage).where(WikiPage.title == title))).scalar_one()
 
 
+async def _texts(session) -> dict[str, list]:
+    """Every imported text with its timestamp."""
+    return {
+        "issues": sorted((await session.execute(select(Issue.id, Issue.description, Issue.updated_at))).all()),
+        "journals": sorted((await session.execute(select(Journal.id, Journal.notes, Journal.updated_at))).all()),
+        "wiki": sorted((await session.execute(select(WikiContent.id, WikiContent.text, WikiContent.updated_at))).all()),
+    }
+
+
 async def _counts(session) -> dict[str, int]:
     return {model.__name__: await _count(session, model) for model in COUNTED}
 
@@ -115,11 +124,36 @@ class TestFullBundle:
         assert alice.email == "bundle_alice@example.com"
         assert alice.display_name == "Alice Example"
         assert alice.created_at == datetime(2023, 1, 10, 1, 0, tzinfo=UTC)
-        assert (await _user(db_session, "bundle_bob")).is_admin is True
+        # The source's administrator, imported as an ordinary account by default.
+        assert (await _user(db_session, "bundle_bob")).is_admin is False
         carol = await _user(db_session, "bundle_carol")
         assert carol.status == "locked"
         # No address in the source: a placeholder in the reserved domain.
         assert carol.email == "bundle_carol@invalid"
+
+    async def test_accounts_to_review_are_listed(self, imported):
+        assert imported.notes["source_administrators_imported_without_administrator_rights"] == [
+            "bundle_bob (re-run with --import-admins to keep the rights)"
+        ]
+        assert imported.notes["accounts_that_signed_in_through_an_external_directory"] == ["bundle_carol"]
+        assert imported.notes["accounts_imported_locked_or_not_active"] == ["bundle_carol (locked)"]
+
+    async def test_placeholder_expansion_keeps_the_bundles_timestamps(self, db_session, imported):
+        """Expanding a reference is not an edit: updated_at stays what the bundle said."""
+        issue = await _issue(db_session, "Login fails after the session times out")
+        assert issue.updated_at == datetime(2024, 2, 10, 9, 0, tzinfo=UTC)
+        comment = (
+            await db_session.execute(select(Journal).where(Journal.notes.like("Reproduced on staging%")))
+        ).scalar_one()
+        assert comment.updated_at == datetime(2024, 2, 6, 10, 0, tzinfo=UTC)
+        home = await _page(db_session, "Home")
+        revision = (
+            await db_session.execute(
+                select(WikiContent).where(WikiContent.page_id == home.id, WikiContent.version == 2)
+            )
+        ).scalar_one()
+        assert "{{" not in revision.text
+        assert revision.updated_at == datetime(2024, 1, 25, 10, 0, tzinfo=UTC)
 
     async def test_the_group_and_memberships(self, db_session, imported):
         group = (await db_session.execute(select(UserGroup).where(UserGroup.name == "Bundle Core Team"))).scalar_one()
@@ -311,6 +345,15 @@ class TestFullBundle:
         assert scopes == {("bundle", "sample:tracker.example.com")}
 
 
+class TestAdministrators:
+    async def test_with_import_admins_the_sources_administrator_is_one(self, db_session, build_bundle_import):
+        summary = await build_bundle_import(FULL, import_admins=True).run()
+        assert (await _user(db_session, "bundle_bob")).is_admin is True
+        assert (await _user(db_session, "bundle_alice")).is_admin is False
+        assert summary.notes["accounts_imported_as_administrators"] == ["bundle_bob"]
+        assert "source_administrators_imported_without_administrator_rights" not in summary.notes
+
+
 class TestDryRun:
     async def test_nothing_is_written(self, db_session, build_bundle_import):
         summary = await build_bundle_import(FULL, dry_run=True).run()
@@ -332,7 +375,52 @@ class TestRerun:
         assert await _counts(db_session) == before
         assert sum(second.created.values()) == 0
         assert second.skipped[EntityType.ISSUE] == 3
-        assert second.warnings == []
+        (warning,) = second.warnings
+        assert warning.message.startswith("This source was imported into this database before")
+        assert warning.context["source"] == "bundle:sample:tracker.example.com"
+
+    async def test_rerunning_leaves_text_and_timestamps_as_they_were(self, db_session, build_bundle_import):
+        await build_bundle_import(FULL).run()
+        before = await _texts(db_session)
+
+        await build_bundle_import(FULL).run()
+
+        assert await _texts(db_session) == before
+
+    async def test_a_placeholder_waits_for_its_record_and_is_expanded_by_a_later_run(
+        self, db_session, build_bundle_import
+    ):
+        """Importing only the API project leaves its references into the website as written;
+        importing the website later expands them, and nothing else changes."""
+        first = await build_bundle_import(FULL, project="p-api").run()
+        rate_limits = await _issue(db_session, "Rate limit headers are missing")
+        stamped = rate_limits.updated_at
+        assert "{{issue:web-1|the login bug}}" in rate_limits.description
+        assert {w.context.get("placeholder") for w in first.warnings} >= {"issue:web-1", "wiki:w-home"}
+
+        await build_bundle_import(FULL).run()
+
+        await db_session.refresh(rate_limits)
+        assert "[the login bug](/issue/BUNDLEWEB-1/)" in rate_limits.description
+        assert "[the runbook](/projects/BUNDLEWEB/wiki/home/)" in rate_limits.description
+        assert "```\n{{issue:web-1}} stays as written in code\n```" in rate_limits.description
+        # The bundle gives it no updated_at, so it kept the first run's; the
+        # expansion did not stamp it again.
+        assert rate_limits.updated_at == stamped
+
+    async def test_a_different_instance_is_a_different_import(self, db_session, build_bundle_import, tmp_path):
+        """Same system, other installation: nothing is mistaken for already imported."""
+        await build_bundle_import(FULL).run()
+        other = copy_full(tmp_path / "other")
+        manifest = json.loads((other / "manifest.json").read_text())
+        manifest["source"]["instance"] = "other.example.com"
+        (other / "manifest.json").write_text(json.dumps(manifest))
+        # Logins and identifiers are unique, so the second copy is renamed; the
+        # point here is only that it is not skipped.
+        second = await build_bundle_import(other).run()
+
+        assert second.created[EntityType.ISSUE] == 3
+        assert not any(w.message.startswith("This source was imported") for w in second.warnings)
 
     async def test_a_later_bundle_adds_only_what_is_new(self, db_session, build_bundle_import, tmp_path):
         """A delta run: same source, same refs, one more issue."""

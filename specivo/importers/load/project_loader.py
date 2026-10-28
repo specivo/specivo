@@ -28,7 +28,7 @@ import logging
 import re
 from typing import Any, Literal, cast
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_PROJECT_DEPTH
@@ -533,12 +533,15 @@ async def restore_version_statuses(ctx: PhaseContext) -> None:
         return
 
     for version_id, status in intended.items():
-        version = await ctx.session.get(Version, version_id)
-        if version is None:
-            continue
-        version.status = status
-        ctx.tick()
-    await ctx.session.flush()
+        result = await ctx.session.execute(
+            update(Version)
+            .where(Version.id == version_id)
+            # Restoring the source's status is not an edit; keep its timestamp.
+            .values(status=status, updated_at=Version.updated_at)
+            .execution_options(synchronize_session="fetch")
+        )
+        if result.rowcount:  # type: ignore[attr-defined]
+            ctx.tick()
 
 
 async def _project_for(ctx: PhaseContext, project_ref: str) -> Project | None:

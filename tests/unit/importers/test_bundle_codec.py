@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 
@@ -180,3 +181,43 @@ class TestParentOrdering:
         order, cyclic = order_parents_first({"a": "b", "b": "a", "c": None, "self": "self"})
         assert order == ["c"]
         assert cyclic == ["a", "b", "self"]
+
+
+class TestPlaceholderLabelsCannotInjectLinks:
+    """A label is text: whatever it holds, the expanded link goes where the placeholder said."""
+
+    LABELS = [
+        "x](javascript:alert(1))",
+        "x\\](javascript:alert(1))",
+        "x\\",
+        "[nested](javascript:alert(1))",
+    ]
+
+    def _render(self, placeholder: Placeholder, target, project_id: int = 1) -> str:
+        from specivo.importers.load.placeholder_rewrite import _format
+        from specivo.services.markdown_service import render_wiki_markdown
+
+        return str(render_wiki_markdown(_format(placeholder, target, project_id), "WEB"))
+
+    @pytest.mark.parametrize("label", LABELS)
+    def test_an_issue_label(self, label):
+        from specivo.importers.load.placeholder_rewrite import _Target
+
+        html = self._render(Placeholder(PlaceholderKind.ISSUE, "1", label), _Target(text="WEB-1"))
+        assert re.findall(r'href="([^"]*)"', html) == ["/issue/WEB-1/"]
+        assert "javascript:" not in html.split(">", 1)[0]
+
+    @pytest.mark.parametrize("label", LABELS)
+    @pytest.mark.parametrize("project_id", [1, 2], ids=["same project", "other project"])
+    def test_a_wiki_label(self, label, project_id):
+        from specivo.importers.load.placeholder_rewrite import _Target
+
+        target = _Target(text="Home", project_id=1, project_key="WEB", slug="home")
+        html = self._render(Placeholder(PlaceholderKind.WIKI, "w1", label), target, project_id)
+        assert re.findall(r'href="([^"]*)"', html) == ["/projects/WEB/wiki/home/"]
+
+    def test_a_plain_label_stays_a_wiki_link(self):
+        from specivo.importers.load.placeholder_rewrite import _format, _Target
+
+        target = _Target(text="Home", project_id=1, project_key="WEB", slug="home")
+        assert _format(Placeholder(PlaceholderKind.WIKI, "w1", "the runbook"), target, 1) == "[[Home|the runbook]]"

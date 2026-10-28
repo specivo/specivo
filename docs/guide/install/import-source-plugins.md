@@ -342,6 +342,7 @@ When the report looks right, run the same command without `--dry-run`. Add
 | `--merge-duplicate-statuses` | Reuse an existing status, tracker or priority of the same name. |
 | `--flatten-excess-depth` | Import projects nested deeper than Specivo allows by moving them higher up. |
 | `--import-passwords` | Let accounts keep their password. See [Passwords](#passwords). |
+| `--import-admins` | Make the source's administrators administrators here too. Without it they arrive as ordinary accounts, listed in the report. |
 | `--dry-run` | Run everything and roll it back. |
 | `--validate` | Only check the source and report what is wrong with it, writing nothing. Only for sources that can check themselves, such as `bundle`. |
 | `--resume RUN_ID` | Continue an interrupted run. Each phase commits when it finishes, and anything already imported is skipped. |

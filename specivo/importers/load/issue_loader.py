@@ -25,6 +25,7 @@ Two things are deliberately deferred to a later pass:
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -91,11 +92,31 @@ async def load_issues(ctx: PhaseContext) -> None:
         if project is None:
             continue
 
+        # Creating a child recalculates its parent's progress and dates, which
+        # stamps the parent's updated_at with the time of the import. That is
+        # derived data, not an edit, so each parent gets the source's time back
+        # once the project's issues are in.
+        updated_at: dict[str, datetime | None] = {}
+        parents: set[str] = set()
         async for ir in ctx.adapter.extract_issues(project_ref):
+            updated_at[ir.source_ref] = ir.updated_at
             if await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.source_ref):
                 ctx.summary.record_skipped(EntityType.ISSUE)
                 continue
-            await _create_issue(ctx, project, ir)
+            issue = await _create_issue(ctx, project, ir)
+            if issue is not None and issue.parent_id is not None and ir.parent_ref is not None:
+                parents.add(ir.parent_ref)
+        await _restore_parent_timestamps(ctx, parents, updated_at)
+
+
+async def _restore_parent_timestamps(
+    ctx: PhaseContext, parent_refs: set[str], updated_at: dict[str, datetime | None]
+) -> None:
+    """Put back the source's updated_at on parents a new child just touched."""
+    for parent_ref in sorted(parent_refs):
+        parent_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, parent_ref)
+        if parent_id is not None and updated_at.get(parent_ref) is not None:
+            await backdate(ctx.session, Issue, parent_id, updated_at=updated_at[parent_ref])
 
 
 async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Issue | None:
@@ -165,7 +186,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
         await ctx.session.execute(
             update(Journal)
             .where(Journal.issue_id == issue.id)
-            .values(created_at=ir.created_at)
+            .values(created_at=ir.created_at, updated_at=ir.created_at)
             .execution_options(synchronize_session=False)
         )
 
@@ -301,7 +322,8 @@ async def _rewrite_metadata_key(session: AsyncSession, key: str, mapping: dict[s
         await session.execute(
             update(Issue)
             .where(Issue.id == issue_id)
-            .values(issue_metadata=updated)
+            # Resolving an id is not an edit; keep the source's timestamp.
+            .values(issue_metadata=updated, updated_at=Issue.updated_at)
             .execution_options(synchronize_session=False)
         )
 

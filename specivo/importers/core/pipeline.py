@@ -96,6 +96,9 @@ class ImportOptions:
     # Carry source passwords over (opt-in). Takes effect only for algorithms
     # also listed in LEGACY_PASSWORD_ALGORITHMS, and never for administrators.
     import_passwords: bool = False
+    # Make the source's administrators Specivo administrators (opt-in). Without
+    # it they are imported as ordinary accounts and listed in the summary.
+    import_admins: bool = False
 
 
 @dataclass(slots=True)

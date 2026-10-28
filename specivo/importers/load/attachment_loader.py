@@ -13,7 +13,11 @@ tried, which is also how the operator notices they mounted the wrong volume.
 A file can be one this instance would refuse today. The content-type allowlist
 governs what people may upload now; a file attached years ago predates that
 policy, and dropping it would lose exactly the history the operator asked to
-migrate. Those are imported and counted.
+migrate. Those are imported and counted, but stored as
+``application/octet-stream``: the allowlist exists because some types (HTML,
+SVG) run script when a browser displays them, and the type an import source
+declares is not to be trusted with that. Stored that way the file is only ever
+downloaded, never rendered.
 """
 
 from __future__ import annotations
@@ -33,6 +37,10 @@ logger = logging.getLogger(__name__)
 # Report sections.
 NOTE_MISSING_FILES = "attachments_whose_file_was_not_found"
 NOTE_UNUSUAL_TYPES = "attachments_of_a_type_this_instance_no_longer_accepts"
+
+# What a file of a type the allowlist refuses is stored as, so it is downloaded
+# rather than displayed.
+_NEUTRAL_CONTENT_TYPE = "application/octet-stream"
 
 # Specivo's polymorphic container names.
 _CONTAINER_TYPES: dict[ContainerKind, str] = {
@@ -85,6 +93,8 @@ async def _load_one(ctx: PhaseContext, ir: IRAttachment) -> Attachment | None:
         return None
 
     author = await _resolve_author(ctx, ir.author_ref)
+    declared = ir.content_type
+    content_type = declared if declared is None or declared in ALLOWED_CONTENT_TYPES else _NEUTRAL_CONTENT_TYPE
 
     try:
         attachment = await _attachment_service.upload_from_path(
@@ -95,7 +105,7 @@ async def _load_one(ctx: PhaseContext, ir: IRAttachment) -> Attachment | None:
             ir.filename or source_path.name,
             author,
             description=ir.description,
-            content_type=ir.content_type,
+            content_type=content_type,
             # A dry run rolls the database back; a copied file would stay.
             copy_file=not ctx.options.dry_run,
         )
@@ -110,8 +120,8 @@ async def _load_one(ctx: PhaseContext, ir: IRAttachment) -> Attachment | None:
         ctx.summary.add_note(NOTE_MISSING_FILES, f"{ir.filename} ({source_path})")
         return None
 
-    if attachment.content_type not in ALLOWED_CONTENT_TYPES:
-        ctx.summary.add_note(NOTE_UNUSUAL_TYPES, f"{attachment.filename} ({attachment.content_type})")
+    if declared is not None and declared != content_type:
+        ctx.summary.add_note(NOTE_UNUSUAL_TYPES, f"{attachment.filename} ({declared}, stored as {content_type})")
 
     await backdate(ctx.session, Attachment, attachment.id, created_at=ir.created_at, updated_at=ir.created_at)
     await ctx.id_map.put(ctx.session, EntityType.ATTACHMENT, ir.source_ref, "attachments", attachment.id)

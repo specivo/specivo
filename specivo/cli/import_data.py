@@ -149,6 +149,14 @@ def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None 
         ),
     )
     mapping.add_argument(
+        "--import-admins",
+        action="store_true",
+        help=(
+            "Make the source's administrators administrators here too. Without this flag they are imported as "
+            "ordinary accounts and listed in the summary, so an administrator can grant the rights by hand."
+        ),
+    )
+    mapping.add_argument(
         "--flatten-excess-depth",
         action="store_true",
         help="Import projects nested deeper than Specivo allows by re-parenting them higher up.",
@@ -245,6 +253,7 @@ def build_options(args: argparse.Namespace, adapter: SourceAdapter) -> ImportOpt
         flatten_excess_depth=args.flatten_excess_depth,
         merge_duplicate_statuses=args.merge_duplicate_statuses,
         import_passwords=args.import_passwords,
+        import_admins=args.import_admins,
     )
 
 

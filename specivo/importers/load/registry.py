@@ -49,8 +49,31 @@ async def _bootstrap(ctx: PhaseContext) -> None:
     writes anything.
     """
     check_credential_import(ctx)
+    await _warn_about_an_earlier_import(ctx)
     await ensure_import_account(ctx)
     _record_source_notes(ctx)
+
+
+async def _warn_about_an_earlier_import(ctx: PhaseContext) -> None:
+    """Say so, loudly, when this source has been imported into this database before.
+
+    The identifier map is keyed by source system and instance. Finding rows
+    under the same key means this run adds to that earlier import: what it
+    already brought over is skipped, not created again or updated. That is
+    right for a resumed or a delta run, and wrong for a different installation
+    that happens to have the same name, which must be given its own.
+    """
+    if ctx.options.resume_run_id is not None:
+        return
+    existing = await ctx.id_map.count(ctx.session)
+    if existing:
+        ctx.warn(
+            "This source was imported into this database before; this run adds to that import, skipping what is "
+            "already here. If it is a different installation, give it its own instance name "
+            "(source.instance in a bundle's manifest, or --source-instance)",
+            source=f"{ctx.id_map.source_system}:{ctx.id_map.source_instance}",
+            records_already_imported=existing,
+        )
 
 
 def _record_source_notes(ctx: PhaseContext) -> None:

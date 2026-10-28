@@ -115,7 +115,9 @@ async def _rewrite_column(
             await ctx.session.execute(
                 update(model)
                 .where(model.id == row_id)
-                .values({column.key: updated})
+                # Set to itself: expanding a reference is not an edit, and
+                # the column's onupdate would otherwise stamp the import time.
+                .values({column.key: updated, "updated_at": model.updated_at})
                 .execution_options(synchronize_session=False)
             )
             changed += 1
@@ -178,7 +180,7 @@ async def _rewrite_wiki(ctx: PhaseContext, resolver: _Resolver) -> int:
             await ctx.session.execute(
                 update(WikiContent)
                 .where(WikiContent.id == content_id)
-                .values(text=updated)
+                .values(text=updated, updated_at=WikiContent.updated_at)
                 .execution_options(synchronize_session=False)
             )
             changed += 1
@@ -259,8 +261,11 @@ def _format(placeholder: Placeholder, target: _Target, project_id: int | None) -
 
     title = target.text
     # [[Title]] links within the page's own project only, and cannot hold a
-    # title with a bracket or bar in it; anything else is an ordinary link.
-    if target.project_id == project_id and not any(char in title for char in "[]|"):
+    # bracket, bar or backslash in its title or label (the renderer does not
+    # escape them); anything else is an ordinary link, whose label is escaped
+    # so it cannot close early and smuggle in a target.
+    plain = not any(char in title + (label or "") for char in "[]|\\")
+    if target.project_id == project_id and plain:
         return f"[[{title}|{label}]]" if label else f"[[{title}]]"
     return f"[{_escape_label(label or title)}](/projects/{target.project_key}/wiki/{target.slug}/)"
 
@@ -277,5 +282,9 @@ def link_target(filename: str) -> str:
 
 
 def _escape_label(label: str) -> str:
-    """Escape the brackets that would end a Markdown link label early."""
-    return label.replace("[", "\\[").replace("]", "\\]")
+    """Escape what would end a Markdown link label early.
+
+    Backslashes are escaped first, so one at the end of a label cannot
+    cancel the escape of the bracket after it.
+    """
+    return label.replace("\\", "\\\\").replace("[", "\\[").replace("]", "\\]")
