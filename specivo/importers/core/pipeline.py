@@ -232,6 +232,17 @@ class PhaseContext:
     id_map: ImportIdMap
     project_refs: list[str] = field(default_factory=list)
     state: dict[str, Any] = field(default_factory=dict)
+    phase_end_hooks: list[Callable[[bool], None]] = field(default_factory=list)
+
+    def at_phase_end(self, hook: Callable[[bool], None]) -> None:
+        """Call *hook* once the phase's transaction has ended.
+
+        It is passed ``True`` when the transaction committed, and ``False`` when
+        it was rolled back: the phase failed, or the run is a dry run. For work
+        outside the database (a file) that must only become permanent once the
+        rows it describes are. A hook must not raise.
+        """
+        self.phase_end_hooks.append(hook)
 
     def warn(self, message: str, **context: Any) -> None:
         """Record a warning on both the reporter and the summary.
@@ -247,6 +258,14 @@ class PhaseContext:
     def tick(self, count: int = 1) -> None:
         """Report *count* processed items for the current phase."""
         self.reporter.item_done(str(self.phase), count)
+
+
+def _end_phase(hooks: list[Callable[[bool], None]], *, committed: bool) -> None:
+    for hook in hooks:
+        try:
+            hook(committed)
+        except Exception:  # pragma: no cover - hooks report their own failures
+            logger.exception("A phase-end hook failed")
 
 
 class PhaseFailedError(RuntimeError):
@@ -339,24 +358,32 @@ class ImportPipeline:
                 continue
 
             self._reporter.phase_started(str(phase))
-            async with self._phase_session(shared) as session:
-                context = PhaseContext(
-                    phase=phase,
-                    session=session,
-                    adapter=self._adapter,
-                    options=self._options,
-                    summary=summary,
-                    reporter=self._reporter,
-                    id_map=id_map,
-                    project_refs=project_refs,
-                    state=state,
-                )
-                for handler in handlers:
-                    await handler(context)
-                # A handler may narrow or discover the project scope (the
-                # projects phase does), so carry its view into later phases.
-                project_refs = context.project_refs
-                state = context.state
+            hooks: list[Callable[[bool], None]] = []
+            try:
+                async with self._phase_session(shared) as session:
+                    context = PhaseContext(
+                        phase=phase,
+                        session=session,
+                        adapter=self._adapter,
+                        options=self._options,
+                        summary=summary,
+                        reporter=self._reporter,
+                        id_map=id_map,
+                        project_refs=project_refs,
+                        state=state,
+                        phase_end_hooks=hooks,
+                    )
+                    for handler in handlers:
+                        await handler(context)
+                    # A handler may narrow or discover the project scope (the
+                    # projects phase does), so carry its view into later phases.
+                    project_refs = context.project_refs
+                    state = context.state
+            except BaseException:
+                _end_phase(hooks, committed=False)
+                raise
+            # A shared session (a dry run) is rolled back at the end, never committed.
+            _end_phase(hooks, committed=shared is None)
 
             summary.phases_run.append(str(phase))
             self._reporter.phase_done(str(phase))

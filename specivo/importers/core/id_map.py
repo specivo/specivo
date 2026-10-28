@@ -23,7 +23,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -371,3 +371,24 @@ async def rename_scope(
         to_instance,
     )
     return moved
+
+
+async def purge_scope(session: AsyncSession, system: str, instance: str, *, dry_run: bool = False) -> int:
+    """Delete every row of one scope, and return how many there were.
+
+    For after cut-over, when the source will not be imported again: the rows
+    are what let a later import skip what is already here, so once they are
+    gone a delta import of that source is impossible. The imported records
+    themselves are untouched. With *dry_run* it only counts. Runs in the
+    caller's transaction, which the caller commits.
+    """
+    count = await _scope_count(session, system, instance)
+    if dry_run or not count:
+        return count
+    await session.execute(
+        delete(ImportIdMapping)
+        .where(ImportIdMapping.source_system == system, ImportIdMapping.source_instance == instance)
+        .execution_options(synchronize_session=False)
+    )
+    logger.info("Deleted %d identifier-map rows of %s @ %s", count, system, instance)
+    return count

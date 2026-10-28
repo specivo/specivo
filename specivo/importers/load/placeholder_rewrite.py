@@ -14,8 +14,13 @@ earlier run's records too, so a bundle may name an issue a previous bundle of
 the same source brought in. A placeholder whose record was not imported, in
 this run or an earlier one, is written as plain text, its label or else its
 ref, so a reader never sees the placeholder syntax; they are counted in one
-summary warning. A later run that imports the record does not link that text:
-load the records a text refers to first.
+summary warning.
+
+Each text left with such a placeholder is returned as a
+:class:`~specivo.importers.core.links_file.PendingText`, so the import can keep
+it in its links file. :func:`resolve_pending` is the other half: once a later
+run has brought the records, it expands those texts again from their source,
+unless they were edited since (see :mod:`specivo.importers.load.pending_links`).
 
 Each text is expanded in a single pass: what an expansion produces is never
 read as a placeholder in turn.
@@ -28,15 +33,18 @@ uses with ``reference_style``.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import Select, Update, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import EntityType
+from specivo.importers.core.links_file import ALLOWED_COLUMNS, LinksStore, PendingText, text_sha256
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.core.placeholders import (
+    PLACEHOLDER_ENTITY_TYPES,
     REFERENCE_STYLE_HASH,
     REFERENCE_STYLE_PLACEHOLDERS,
     Placeholder,
@@ -45,6 +53,7 @@ from specivo.importers.core.placeholders import (
     find_placeholders,
 )
 from specivo.models.attachment import Attachment
+from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.project import Project
@@ -77,17 +86,115 @@ class _Target:
     slug: str | None = None
 
 
-async def rewrite_placeholders(ctx: PhaseContext) -> None:
-    """Expand placeholders in issue descriptions, comments, description history and wiki text."""
-    if reference_style(ctx) != REFERENCE_STYLE_PLACEHOLDERS:
-        return
+@dataclass(frozen=True, slots=True)
+class _TextColumn:
+    """A column placeholder expansion writes, named as the links file names it."""
 
-    resolver = _Resolver(ctx)
+    entity_type: str
+    column: str
+
+    def rows(self, ids: list[int]) -> Select[int, str | None, int]:
+        """Select ``(id, text, project_id)`` for the rows *ids*."""
+        if self.entity_type == "issue":
+            return select(Issue.id, Issue.description, Issue.project_id).where(Issue.id.in_(ids))
+        if self.entity_type == "journal":
+            return select(Journal.id, Journal.notes, Journal.project_id).where(Journal.id.in_(ids))
+        if self.entity_type == "journal_detail":
+            return (
+                select(JournalDetail.id, getattr(JournalDetail, self.column), Journal.project_id)
+                .join(Journal, Journal.id == JournalDetail.journal_id)
+                .where(JournalDetail.id.in_(ids))
+            )
+        return (
+            select(WikiContent.id, WikiContent.text, Wiki.project_id)
+            .join(WikiPage, WikiPage.id == WikiContent.page_id)
+            .join(Wiki, Wiki.id == WikiPage.wiki_id)
+            .where(WikiContent.id.in_(ids))
+        )
+
+    async def imported(self, session: AsyncSession, id_map: ImportIdMap, ids: list[int]) -> set[int]:
+        """Return those of *ids* this scope imported: the only rows a links file may lead to.
+
+        A description change counts when it is a description change of an issue
+        the scope imported, as the rewrite pass decides (the history entry
+        creating an issue is not itself in the identifier map).
+        """
+
+        def mapped(entity_type: EntityType) -> Select[int]:
+            return select(ImportIdMapping.target_id).where(
+                ImportIdMapping.source_system == id_map.source_system,
+                ImportIdMapping.source_instance == id_map.source_instance,
+                ImportIdMapping.entity_type == str(entity_type),
+            )
+
+        if self.entity_type == "journal_detail":
+            stmt = (
+                select(JournalDetail.id)
+                .join(Journal, Journal.id == JournalDetail.journal_id)
+                .where(
+                    JournalDetail.id.in_(ids),
+                    JournalDetail.property == "attr",
+                    JournalDetail.prop_key == "description",
+                    Journal.issue_id.in_(mapped(EntityType.ISSUE)),
+                )
+            )
+        else:
+            entity_type = {"issue": EntityType.ISSUE, "journal": EntityType.JOURNAL}.get(
+                self.entity_type, EntityType.WIKI_VERSION
+            )
+            stmt = mapped(entity_type).where(ImportIdMapping.target_id.in_(ids))
+        return {int(row_id) for row_id in (await session.execute(stmt)).scalars()}
+
+    def write(self, row_id: int, text: str) -> Update:
+        """Set the column of row *row_id* to *text*, keeping ``updated_at``.
+
+        ``updated_at`` is set to itself: expanding a reference is not an edit,
+        and the column's onupdate would otherwise stamp the import time.
+        """
+        model: Any = {"issue": Issue, "journal": Journal, "journal_detail": JournalDetail}.get(
+            self.entity_type, WikiContent
+        )
+        values: dict[str, Any] = {self.column: text}
+        if model is not JournalDetail:
+            values["updated_at"] = model.updated_at
+        return update(model).where(model.id == row_id).values(values).execution_options(synchronize_session=False)
+
+
+ISSUE_DESCRIPTION = _TextColumn("issue", "description")
+JOURNAL_NOTES = _TextColumn("journal", "notes")
+DETAIL_OLD_VALUE = _TextColumn("journal_detail", "old_value")
+DETAIL_NEW_VALUE = _TextColumn("journal_detail", "new_value")
+WIKI_TEXT = _TextColumn("wiki_version", "text")
+
+# Every text expansion writes, by ``(entity_type, column)``.
+TEXT_COLUMNS: dict[tuple[str, str], _TextColumn] = {
+    (c.entity_type, c.column): c
+    for c in (ISSUE_DESCRIPTION, JOURNAL_NOTES, DETAIL_OLD_VALUE, DETAIL_NEW_VALUE, WIKI_TEXT)
+}
+# The links file accepts exactly these; keep the two lists in step.
+assert frozenset(TEXT_COLUMNS) == ALLOWED_COLUMNS
+
+
+def _pending(column: _TextColumn, row_id: int, source: str, written: str, left: list[Placeholder]) -> PendingText:
+    refs = tuple(sorted({(str(p.kind), p.ref) for p in left}))
+    return PendingText(column.entity_type, row_id, column.column, source, text_sha256(written), refs)
+
+
+async def rewrite_placeholders(ctx: PhaseContext, resolver: PlaceholderResolver | None = None) -> list[PendingText]:
+    """Expand placeholders in issue descriptions, comments, description history and wiki text.
+
+    Returns the texts left with placeholders whose records were not imported.
+    """
+    if reference_style(ctx) != REFERENCE_STYLE_PLACEHOLDERS:
+        return []
+
+    resolver = resolver or PlaceholderResolver(ctx.session, ctx.id_map)
+    pending: list[PendingText] = []
     changed = 0
-    changed += await _rewrite_column(ctx, resolver, EntityType.ISSUE, Issue, Issue.description, Issue.project_id)
-    changed += await _rewrite_column(ctx, resolver, EntityType.JOURNAL, Journal, Journal.notes, Journal.project_id)
-    changed += await _rewrite_description_changes(ctx, resolver)
-    changed += await _rewrite_wiki(ctx, resolver)
+    changed += await _rewrite_column(ctx, resolver, EntityType.ISSUE, ISSUE_DESCRIPTION, pending)
+    changed += await _rewrite_column(ctx, resolver, EntityType.JOURNAL, JOURNAL_NOTES, pending)
+    changed += await _rewrite_description_changes(ctx, resolver, pending)
+    changed += await _rewrite_column(ctx, resolver, EntityType.WIKI_VERSION, WIKI_TEXT, pending)
 
     unresolved = resolver.unresolved()
     if unresolved:
@@ -102,44 +209,38 @@ async def rewrite_placeholders(ctx: PhaseContext) -> None:
     if changed:
         logger.info("Expanded reference placeholders in %d records", changed)
     ctx.tick(changed)
+    return pending
 
 
 async def _rewrite_column(
     ctx: PhaseContext,
-    resolver: _Resolver,
+    resolver: PlaceholderResolver,
     entity_type: EntityType,
-    model: Any,
-    column: Any,
-    project_column: Any,
+    column: _TextColumn,
+    pending: list[PendingText],
 ) -> int:
     """Rewrite one text column of the rows imported as *entity_type*."""
     ids = sorted((await ctx.id_map.preload(ctx.session, entity_type)).values())
     changed = 0
     for start in range(0, len(ids), _BATCH):
-        rows = (
-            await ctx.session.execute(
-                select(model.id, column, project_column).where(
-                    model.id.in_(ids[start : start + _BATCH]), column.contains("{{")
-                )
-            )
-        ).all()
+        stmt = column.rows(ids[start : start + _BATCH])
+        rows = (await ctx.session.execute(stmt.where(stmt.selected_columns[1].contains("{{")))).all()
         for row_id, text, project_id in rows:
-            updated = await resolver.expand(text, project_id)
+            if text is None:
+                continue
+            updated, left = await resolver.expand(text, project_id)
             if updated == text:
                 continue
-            await ctx.session.execute(
-                update(model)
-                .where(model.id == row_id)
-                # Set to itself: expanding a reference is not an edit, and
-                # the column's onupdate would otherwise stamp the import time.
-                .values({column.key: updated, "updated_at": model.updated_at})
-                .execution_options(synchronize_session=False)
-            )
+            await ctx.session.execute(column.write(row_id, updated))
+            if left:
+                pending.append(_pending(column, row_id, text, updated, left))
             changed += 1
     return changed
 
 
-async def _rewrite_description_changes(ctx: PhaseContext, resolver: _Resolver) -> int:
+async def _rewrite_description_changes(
+    ctx: PhaseContext, resolver: PlaceholderResolver, pending: list[PendingText]
+) -> int:
     """Rewrite the descriptions recorded in imported issues' history.
 
     That includes the one creating an issue records, which holds the
@@ -161,52 +262,133 @@ async def _rewrite_description_changes(ctx: PhaseContext, resolver: _Resolver) -
             )
         ).all()
         for detail_id, old_value, new_value, project_id in rows:
-            old_updated = await resolver.expand(old_value, project_id) if old_value else old_value
-            new_updated = await resolver.expand(new_value, project_id) if new_value else new_value
-            if (old_updated, new_updated) == (old_value, new_value):
-                continue
-            await ctx.session.execute(
-                update(JournalDetail)
-                .where(JournalDetail.id == detail_id)
-                .values(old_value=old_updated, new_value=new_updated)
-                .execution_options(synchronize_session=False)
-            )
-            changed += 1
+            row_changed = False
+            for column, value in ((DETAIL_OLD_VALUE, old_value), (DETAIL_NEW_VALUE, new_value)):
+                if not value:
+                    continue
+                updated, left = await resolver.expand(value, project_id)
+                if updated == value:
+                    continue
+                await ctx.session.execute(column.write(detail_id, updated))
+                if left:
+                    pending.append(_pending(column, detail_id, value, updated, left))
+                row_changed = True
+            changed += row_changed
     return changed
 
 
-async def _rewrite_wiki(ctx: PhaseContext, resolver: _Resolver) -> int:
-    """Rewrite every imported wiki revision, each in its own page's project."""
-    ids = sorted((await ctx.id_map.preload(ctx.session, EntityType.WIKI_VERSION)).values())
-    changed = 0
-    for start in range(0, len(ids), _BATCH):
-        rows = (
-            await ctx.session.execute(
-                select(WikiContent.id, WikiContent.text, Wiki.project_id)
-                .join(WikiPage, WikiPage.id == WikiContent.page_id)
-                .join(Wiki, Wiki.id == WikiPage.wiki_id)
-                .where(WikiContent.id.in_(ids[start : start + _BATCH]), WikiContent.text.contains("{{"))
-            )
-        ).all()
-        for content_id, text, project_id in rows:
-            updated = await resolver.expand(text, project_id)
-            if updated == text:
-                continue
-            await ctx.session.execute(
-                update(WikiContent)
-                .where(WikiContent.id == content_id)
-                .values(text=updated, updated_at=WikiContent.updated_at)
-                .execution_options(synchronize_session=False)
-            )
-            changed += 1
-    return changed
+@dataclass(slots=True)
+class ResolveResult:
+    """What :func:`resolve_pending` did to the texts waiting in a links file."""
+
+    linked: list[tuple[str, int]] = field(default_factory=list)
+    edited: list[tuple[str, int]] = field(default_factory=list)
+    gone: int = 0
+    waiting: int = 0
+    # Rows the file held that this installation did not write (bad or no
+    # signature, or malformed), and signed rows naming a record this scope did
+    # not import. Both are ignored and removed from the file.
+    untrusted: int = 0
+    foreign: int = 0
 
 
-class _Resolver:
+async def resolve_pending(
+    session: AsyncSession,
+    id_map: ImportIdMap,
+    store: LinksStore,
+    resolver: PlaceholderResolver | None = None,
+) -> ResolveResult:
+    """Link the waiting texts whose records the identifier map now holds.
+
+    The file is untrusted, so a row is only considered when it is well
+    formed and signed by this installation, and only when it names a row this
+    scope imported; anything else is dropped from *store* and counted.
+
+    A text whose column still holds what Specivo wrote (the hashes match) is
+    expanded again from its stored source text, against the current map, and
+    written keeping ``updated_at``; it stays in *store* with whatever is still
+    unresolved, or leaves it when nothing is. A text somebody edited since is
+    left as it is and dropped from *store*; so is one whose row is gone. Writes
+    go to *session* and *store*, neither of which is committed here.
+    """
+    resolver = resolver or PlaceholderResolver(session, id_map)
+    result = ResolveResult()
+    by_kind: dict[str, list[str]] = {}
+    for kind, ref in store.refs():
+        by_kind.setdefault(kind, []).append(ref)
+
+    resolvable: list[tuple[str, str]] = []
+    for kind, refs in by_kind.items():
+        try:
+            entity_type = PLACEHOLDER_ENTITY_TYPES[PlaceholderKind(kind)]
+        except ValueError:
+            continue
+        found = await id_map.get_many(session, entity_type, refs)
+        resolvable.extend((kind, ref) for ref in refs if ref in found)
+
+    grouped: dict[tuple[str, str], list[PendingText]] = {}
+    for text in store.texts_naming(resolvable) if resolvable else []:
+        if not store.is_trusted(text):
+            store.delete(*text.key)
+            result.untrusted += 1
+            continue
+        grouped.setdefault((text.entity_type, text.column), []).append(text)
+    for key, group in grouped.items():
+        column = TEXT_COLUMNS[key]
+        for start in range(0, len(group), _BATCH):
+            batch = group[start : start + _BATCH]
+            imported = await column.imported(session, id_map, [text.row_id for text in batch])
+            for text in batch:
+                if text.row_id not in imported:
+                    store.delete(*text.key)
+                    result.foreign += 1
+            batch = [text for text in batch if text.row_id in imported]
+            if batch:
+                await _resolve_batch(session, resolver, store, column, batch, result)
+
+    result.waiting = store.count()
+    return result
+
+
+async def _resolve_batch(
+    session: AsyncSession,
+    resolver: PlaceholderResolver,
+    store: LinksStore,
+    column: _TextColumn,
+    texts: list[PendingText],
+    result: ResolveResult,
+) -> None:
+    current = {
+        row_id: (text, project_id)
+        for row_id, text, project_id in (await session.execute(column.rows([t.row_id for t in texts]))).all()
+    }
+    for pending in texts:
+        text, project_id = current.get(pending.row_id, (None, None))
+        if text is None:
+            store.delete(*pending.key)
+            result.gone += 1
+            continue
+        if text_sha256(text) != pending.written_sha256:
+            # Edited after the import wrote it: somebody's work is never overwritten.
+            store.delete(*pending.key)
+            result.edited.append((pending.entity_type, pending.row_id))
+            continue
+        updated, left = await resolver.expand(pending.source_text, project_id)
+        if updated != text:
+            await session.execute(column.write(pending.row_id, updated))
+            result.linked.append((pending.entity_type, pending.row_id))
+        if left:
+            store.put(_pending(column, pending.row_id, pending.source_text, updated, left))
+        else:
+            store.delete(*pending.key)
+
+
+class PlaceholderResolver:
     """Resolves placeholders against the id map, caching each record it reads."""
 
-    def __init__(self, ctx: PhaseContext) -> None:
-        self._ctx = ctx
+    def __init__(self, session: AsyncSession, id_map: ImportIdMap) -> None:
+        self._session = session
+        self._id_map = id_map
         self._targets: dict[tuple[PlaceholderKind, str], _Target | None] = {}
         self._unresolved: dict[tuple[PlaceholderKind, str], Placeholder] = {}
 
@@ -214,12 +396,12 @@ class _Resolver:
         """Return each placeholder that named a record not in the import, once."""
         return list(self._unresolved.values())
 
-    async def expand(self, text: str, project_id: int | None) -> str:
-        """Return *text* with its placeholders expanded for a row in *project_id*."""
+    async def expand(self, text: str, project_id: int | None) -> tuple[str, list[Placeholder]]:
+        """Return *text* expanded for a row in *project_id*, and the placeholders left unresolved."""
         for placeholder in find_placeholders(text):
             key = (placeholder.kind, placeholder.ref)
             if key not in self._targets:
-                self._targets[key] = await self._fetch(self._ctx.session, placeholder)
+                self._targets[key] = await self._fetch(self._session, placeholder)
 
         def resolve(placeholder: Placeholder) -> str | None:
             target = self._targets.get((placeholder.kind, placeholder.ref))
@@ -228,11 +410,10 @@ class _Resolver:
                 return None
             return _format(placeholder, target, project_id)
 
-        expanded, _ = expand_placeholders(text, resolve)
-        return expanded
+        return expand_placeholders(text, resolve)
 
     async def _fetch(self, session: AsyncSession, placeholder: Placeholder) -> _Target | None:
-        target_id = await self._ctx.id_map.get(session, placeholder.entity_type, placeholder.ref)
+        target_id = await self._id_map.get(session, placeholder.entity_type, placeholder.ref)
         if target_id is None:
             return None
 

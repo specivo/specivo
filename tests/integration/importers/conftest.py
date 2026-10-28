@@ -162,13 +162,25 @@ def build_bundle_import(db_session, tmp_path, monkeypatch):
     """Return a factory building a wired pipeline that loads a bundle.
 
     Built the way ``--source bundle --path PATH`` builds it, against the
-    test's session, with attachment storage in a temporary directory.
+    test's session, with attachment storage in a temporary directory. The
+    links file a bundle would get next to it goes to a temporary directory
+    too (``links_path(bundle)`` names it), so a load of the fixture bundle
+    never writes into the source tree.
     """
+    import specivo.importers.bundle.adapter as bundle_adapter
     import specivo.services.attachment_service as attachment_service
+    from specivo.importers.core.links_file import default_links_path
 
     storage = tmp_path / "bundle-attachments"
     storage.mkdir()
     monkeypatch.setattr(attachment_service, "_upload_dir", storage)
+    links_dir = tmp_path / "bundle-links"
+    links_dir.mkdir()
+    monkeypatch.setattr(
+        bundle_adapter,
+        "default_links_path",
+        lambda _directory, system, instance: default_links_path(links_dir, system, instance),
+    )
 
     def _build(path: Path, **option_kwargs) -> ImportPipeline:
         argv = ["--source", "bundle", "--path", str(path), *_flags(**option_kwargs)]
@@ -180,5 +192,9 @@ def build_bundle_import(db_session, tmp_path, monkeypatch):
             reporter=NullProgressReporter(),
         )
 
+    def _links_path(_bundle: Path, instance: str = "tracker.example.com", system: str = "sample") -> Path:
+        return default_links_path(links_dir, system, instance)
+
     _build.storage = storage  # type: ignore[attr-defined]
+    _build.links_path = _links_path  # type: ignore[attr-defined]
     return _build

@@ -20,7 +20,7 @@ from specivo.importers.load.issue_loader import (
     resolve_custom_field_references,
 )
 from specivo.importers.load.lookup_loader import load_lookups
-from specivo.importers.load.placeholder_rewrite import rewrite_placeholders
+from specivo.importers.load.pending_links import check_links_file, link_placeholders
 from specivo.importers.load.project_loader import (
     load_custom_field_schemas,
     load_memberships,
@@ -44,12 +44,13 @@ from specivo.importers.load.wiki_loader import load_wiki_pages, load_wiki_redire
 async def _bootstrap(ctx: PhaseContext) -> None:
     """Check the run can do what it was asked, then create the import account.
 
-    The account owns anything with no resolvable author. The check comes first
-    so a run that cannot import the passwords it was asked to stops before it
-    writes anything.
+    The account owns anything with no resolvable author. The checks come first
+    so a run that cannot import the passwords it was asked to, or was given
+    another import's links file, stops before it writes anything.
     """
     check_credential_import(ctx)
     await _warn_about_an_earlier_import(ctx)
+    check_links_file(ctx)
     await ensure_import_account(ctx)
     _record_source_notes(ctx)
 
@@ -143,10 +144,12 @@ async def _link_graph(ctx: PhaseContext) -> None:
     """Expand reference placeholders, then rebuild the wiki link graph.
 
     Placeholders wait until here because they can name any imported record,
-    wiki pages and their attachments included. The link graph comes after,
-    since an expanded placeholder can be a wiki link.
+    wiki pages and their attachments included. Text earlier imports of the
+    source left waiting for this run's records is linked in the same step
+    (see :mod:`~specivo.importers.load.pending_links`). The link graph comes
+    after, since an expanded placeholder can be a wiki link.
     """
-    await rewrite_placeholders(ctx)
+    await link_placeholders(ctx)
     await rebuild_wiki_link_graph(ctx)
 
 

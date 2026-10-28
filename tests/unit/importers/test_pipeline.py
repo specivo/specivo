@@ -314,6 +314,30 @@ class TestTransactions:
         assert factory.sessions[0].rollbacks == 1
         assert factory.sessions[0].commits == 0
 
+    @pytest.mark.parametrize(
+        ("dry_run", "fails", "expected"),
+        [(False, False, [1, True]), (False, True, [0, False]), (True, False, [0, False])],
+    )
+    async def test_a_phase_end_hook_learns_whether_the_phase_committed(self, dry_run, fails, expected):
+        """Work outside the database (the links file) is made permanent only after the commit."""
+        adapter, factory = FakeAdapter(), FakeSessionFactory()
+        pipeline = _pipeline(factory, adapter, dry_run=dry_run)
+        seen: list = []
+
+        async def handler(ctx):
+            ctx.at_phase_end(lambda committed: seen.extend([ctx.session.commits, committed]))
+            if fails:
+                raise PhaseFailedError("no")
+
+        pipeline.register(ImportPhase.USERS, handler)
+        if fails:
+            with pytest.raises(PhaseFailedError):
+                await pipeline.run()
+        else:
+            await pipeline.run()
+
+        assert seen == expected
+
 
 @async_test
 class TestPhaseContextWarnings:
