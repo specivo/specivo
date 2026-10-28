@@ -21,6 +21,7 @@ dependencies = [
     "redis>=5.2",
     "bcrypt>=5.0.0",
     "jsonschema>=4.26.0",
+    "referencing>=0.37",
     "mcp[cli]>=2.3",
     "pgvector>=0.4.2",
     "jinja2>=3.1.6",
