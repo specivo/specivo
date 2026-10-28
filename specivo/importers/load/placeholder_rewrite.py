@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import EntityType
-from specivo.importers.core.links_file import LinksStore, PendingText, text_sha256
+from specivo.importers.core.links_file import ALLOWED_COLUMNS, LinksStore, PendingText, text_sha256
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.core.placeholders import (
     PLACEHOLDER_ENTITY_TYPES,
@@ -53,6 +53,7 @@ from specivo.importers.core.placeholders import (
     find_placeholders,
 )
 from specivo.models.attachment import Attachment
+from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.project import Project
@@ -111,6 +112,39 @@ class _TextColumn:
             .where(WikiContent.id.in_(ids))
         )
 
+    async def imported(self, session: AsyncSession, id_map: ImportIdMap, ids: list[int]) -> set[int]:
+        """Return those of *ids* this scope imported: the only rows a links file may lead to.
+
+        A description change counts when it is a description change of an issue
+        the scope imported, as the rewrite pass decides (the history entry
+        creating an issue is not itself in the identifier map).
+        """
+
+        def mapped(entity_type: EntityType) -> Select[int]:
+            return select(ImportIdMapping.target_id).where(
+                ImportIdMapping.source_system == id_map.source_system,
+                ImportIdMapping.source_instance == id_map.source_instance,
+                ImportIdMapping.entity_type == str(entity_type),
+            )
+
+        if self.entity_type == "journal_detail":
+            stmt = (
+                select(JournalDetail.id)
+                .join(Journal, Journal.id == JournalDetail.journal_id)
+                .where(
+                    JournalDetail.id.in_(ids),
+                    JournalDetail.property == "attr",
+                    JournalDetail.prop_key == "description",
+                    Journal.issue_id.in_(mapped(EntityType.ISSUE)),
+                )
+            )
+        else:
+            entity_type = {"issue": EntityType.ISSUE, "journal": EntityType.JOURNAL}.get(
+                self.entity_type, EntityType.WIKI_VERSION
+            )
+            stmt = mapped(entity_type).where(ImportIdMapping.target_id.in_(ids))
+        return {int(row_id) for row_id in (await session.execute(stmt)).scalars()}
+
     def write(self, row_id: int, text: str) -> Update:
         """Set the column of row *row_id* to *text*, keeping ``updated_at``.
 
@@ -137,6 +171,8 @@ TEXT_COLUMNS: dict[tuple[str, str], _TextColumn] = {
     (c.entity_type, c.column): c
     for c in (ISSUE_DESCRIPTION, JOURNAL_NOTES, DETAIL_OLD_VALUE, DETAIL_NEW_VALUE, WIKI_TEXT)
 }
+# The links file accepts exactly these; keep the two lists in step.
+assert frozenset(TEXT_COLUMNS) == ALLOWED_COLUMNS
 
 
 def _pending(column: _TextColumn, row_id: int, source: str, written: str, left: list[Placeholder]) -> PendingText:
@@ -249,6 +285,11 @@ class ResolveResult:
     edited: list[tuple[str, int]] = field(default_factory=list)
     gone: int = 0
     waiting: int = 0
+    # Rows the file held that this installation did not write (bad or no
+    # signature, or malformed), and signed rows naming a record this scope did
+    # not import. Both are ignored and removed from the file.
+    untrusted: int = 0
+    foreign: int = 0
 
 
 async def resolve_pending(
@@ -258,6 +299,10 @@ async def resolve_pending(
     resolver: PlaceholderResolver | None = None,
 ) -> ResolveResult:
     """Link the waiting texts whose records the identifier map now holds.
+
+    The file is untrusted, so a row is only considered when it is well
+    formed and signed by this installation, and only when it names a row this
+    scope imported; anything else is dropped from *store* and counted.
 
     A text whose column still holds what Specivo wrote (the hashes match) is
     expanded again from its stored source text, against the current map, and
@@ -283,17 +328,23 @@ async def resolve_pending(
 
     grouped: dict[tuple[str, str], list[PendingText]] = {}
     for text in store.texts_naming(resolvable) if resolvable else []:
+        if not store.is_trusted(text):
+            store.delete(*text.key)
+            result.untrusted += 1
+            continue
         grouped.setdefault((text.entity_type, text.column), []).append(text)
     for key, group in grouped.items():
-        column = TEXT_COLUMNS.get(key)
-        if column is None:
-            # Not a column this version writes: nothing can be done with it.
-            for text in group:
-                store.delete(*text.key)
-                result.gone += 1
-            continue
+        column = TEXT_COLUMNS[key]
         for start in range(0, len(group), _BATCH):
-            await _resolve_batch(session, resolver, store, column, group[start : start + _BATCH], result)
+            batch = group[start : start + _BATCH]
+            imported = await column.imported(session, id_map, [text.row_id for text in batch])
+            for text in batch:
+                if text.row_id not in imported:
+                    store.delete(*text.key)
+                    result.foreign += 1
+            batch = [text for text in batch if text.row_id in imported]
+            if batch:
+                await _resolve_batch(session, resolver, store, column, batch, result)
 
     result.waiting = store.count()
     return result

@@ -174,7 +174,10 @@ docker compose exec api python -m specivo.cli.admin import-map resolve-pending \
 
 The file deletes itself once nothing is waiting. It is a throwaway: if you lose
 it, or delete it after the migration, the remaining references simply stay
-plain text.
+plain text. It only works with the Specivo that wrote it: each entry is signed
+with a key derived from `SECRET_KEY`, so after changing `SECRET_KEY`, or on
+another installation, its entries are ignored (with a warning) and those
+references stay plain text. Keep it a regular file: a symbolic link is refused.
 
 ### After cut-over
 

@@ -15,6 +15,8 @@ import hashlib
 import json
 import os
 import shutil
+import sqlite3
+import uuid
 import zipfile
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -25,8 +27,9 @@ from sqlalchemy import func, select
 
 from specivo.cli.import_data import parse_args, run_validation
 from specivo.importers.bundle import BundleInvalidError
+from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import EntityType
-from specivo.importers.core.links_file import LinksStore, PendingText, text_sha256
+from specivo.importers.core.links_file import LinksStore, PendingText, links_signing_key, text_sha256
 from specivo.importers.core.pipeline import PhaseFailedError
 from specivo.importers.core.source import build_source_registry
 from specivo.importers.load.pending_links import resolve_links_file
@@ -843,6 +846,142 @@ class TestResolvePendingCommand:
         assert later.updated_at == datetime(2024, 3, 2, 8, 0, tzinfo=UTC)
         assert ("issue", later.id) in outcome.linked
         assert not links.exists()
+
+
+LINKS_UNTRUSTED = "Rows of the links file that this installation did not write were ignored"
+LINKS_FOREIGN = "Rows of the links file naming records this source did not import were ignored"
+
+
+class TestForgedLinksFile:
+    """Whoever supplies the bundle folder can supply a links file too: it must not reach other rows."""
+
+    async def _setup(self, db_session, build_bundle_import, tmp_path):
+        """B imported (its file waits for web-1), a victim imported by another source, web-1 now mapped."""
+        b = TestLinksFile()._b(tmp_path / "b")
+        await build_bundle_import(b).run()
+        victim_bundle = write_bundle(
+            tmp_path / "v",
+            manifest_data=manifest(source={"system": "sample", "instance": "victim.example.com"}),
+            projects=[project("p-v", identifier="victim")],
+            issues=[issue("v-1", "p-v", description="Original text."), issue("v-2", "p-v")],
+        )
+        await build_bundle_import(victim_bundle).run()
+        victim = await _issue(db_session, "Issue v-1")
+        # web-1 arrives in this scope; any issue but the victim will do as its target.
+        target = await _issue(db_session, "Issue v-2")
+        await ImportIdMap("sample", "tracker.example.com", uuid.uuid4()).put(
+            db_session, EntityType.ISSUE, "web-1", "issues", target.id
+        )
+        await db_session.commit()
+        return build_bundle_import.links_path(b), victim
+
+    def _forge(
+        self,
+        path: Path,
+        row_id: int,
+        current: str,
+        *,
+        key: bytes | None,
+        column: str = "description",
+        entity: str = "issue",
+    ) -> None:
+        forged = PendingText(
+            entity, row_id, column, "{{issue:web-1}} was here", text_sha256(current), (("issue", "web-1"),)
+        )
+        if key is None:
+            conn = sqlite3.connect(path)
+            conn.execute(
+                "INSERT INTO pending (entity_type, row_id, column_name, source_text, written_sha256, signature) "
+                "VALUES (?, ?, ?, ?, ?, '')",
+                (entity, row_id, column, forged.source_text, forged.written_sha256),
+            )
+            conn.execute("INSERT INTO pending_ref VALUES (?, ?, ?, 'issue', 'web-1')", (entity, row_id, column))
+            conn.commit()
+            conn.close()
+            return
+        store = LinksStore.open(path, "sample", "tracker.example.com", writable=True, key=key)
+        store.put(forged)
+        store.commit()
+
+    @pytest.mark.parametrize("key", [None, links_signing_key("another-installations-secret-key-0123456789")])
+    async def test_a_forged_row_without_this_installations_signature_is_not_written(
+        self, db_session, build_bundle_import, tmp_path, key
+    ):
+        links, victim = await self._setup(db_session, build_bundle_import, tmp_path)
+        self._forge(links, victim.id, victim.description, key=key)
+
+        outcome = await resolve_links_file(db_session, links, dry_run=False)
+
+        await db_session.refresh(victim)
+        assert victim.description == "Original text."
+        assert outcome.untrusted == 1
+        assert ("issue", victim.id) not in outcome.linked
+        if links.exists():
+            assert _pending(links).get("issue", victim.id, "description") is None
+
+    async def test_a_signed_row_naming_a_record_this_source_did_not_import_is_not_written(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        """Even a genuine signature (a file this installation wrote, edited) cannot reach outside the scope."""
+        links, victim = await self._setup(db_session, build_bundle_import, tmp_path)
+        self._forge(links, victim.id, victim.description, key=links_signing_key())
+
+        outcome = await resolve_links_file(db_session, links, dry_run=False)
+
+        await db_session.refresh(victim)
+        assert victim.description == "Original text."
+        assert outcome.foreign == 1
+
+    async def test_a_signed_row_for_an_imported_issue_is_linked(self, db_session, build_bundle_import, tmp_path):
+        links, victim = await self._setup(db_session, build_bundle_import, tmp_path)
+        later = await _issue(db_session, "Issue b-1")
+
+        outcome = await resolve_links_file(db_session, links, dry_run=False)
+
+        await db_session.refresh(later)
+        assert later.description == f"Follows [the login bug](/issue/{victim.project_key}-2/)."
+        assert ("issue", later.id) in outcome.linked
+        assert (outcome.untrusted, outcome.foreign) == (0, 0)
+
+    @pytest.mark.parametrize(("entity", "column"), [("issue", "subject"), ("project", "description")])
+    async def test_an_unknown_column_or_entity_is_dropped(
+        self, db_session, build_bundle_import, tmp_path, entity, column
+    ):
+        links, victim = await self._setup(db_session, build_bundle_import, tmp_path)
+        self._forge(links, victim.id, victim.subject, key=links_signing_key(), entity=entity, column=column)
+
+        outcome = await resolve_links_file(db_session, links, dry_run=False)
+
+        await db_session.refresh(victim)
+        assert victim.subject == "Issue v-1"
+        assert outcome.untrusted == 1
+        if links.exists():
+            assert _pending(links).get(entity, victim.id, column) is None
+
+    async def test_the_import_reports_forged_rows(self, db_session, build_bundle_import, tmp_path):
+        links, victim = await self._setup(db_session, build_bundle_import, tmp_path)
+        self._forge(links, victim.id, victim.description, key=None)
+
+        summary = await build_bundle_import(FULL, continue_import=True).run()
+
+        await db_session.refresh(victim)
+        assert victim.description == "Original text."
+        (untrusted,) = [w for w in summary.warnings if w.message.startswith(LINKS_UNTRUSTED)]
+        assert untrusted.context["count"] == 1
+
+    async def test_a_symlinked_links_file_is_refused_with_a_warning(self, db_session, build_bundle_import, tmp_path):
+        b = TestLinksFile()._b(tmp_path / "b")
+        real = tmp_path / "real.sqlite"
+        LinksStore.open(real, "sample", "tracker.example.com", writable=True).commit()
+        links = build_bundle_import.links_path(b)
+        links.symlink_to(tmp_path / "elsewhere.sqlite")
+
+        summary = await build_bundle_import(b).run()
+
+        (refused,) = [w for w in summary.warnings if w.message.startswith(LINKS_UNREADABLE)]
+        assert "symbolic link" in refused.context["reason"]
+        assert not (tmp_path / "elsewhere.sqlite").exists()
+        assert (await _issue(db_session, "Issue b-1")).description == "Follows the login bug."
 
 
 def _data_only_zip(source: Path, target: Path) -> Path:

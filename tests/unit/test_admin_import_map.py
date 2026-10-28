@@ -135,3 +135,10 @@ class TestPurge:
             "5 row(s) of redmine @ t would be deleted. Nothing was changed; re-run with --yes to delete them."
         )
         assert format_purge("redmine", "t", 5, dry_run=False).startswith("Deleted 5 row(s) of redmine @ t.")
+
+    def test_resolve_pending_names_the_rows_it_ignored(self):
+        outcome = LinksOutcome(Path("l.sqlite"), ("sample", "t"), untrusted=2, foreign=1)
+        assert format_resolve(outcome, dry_run=False).endswith(
+            "Ignored and removed: 2 row(s) this installation did not write, "
+            "1 naming records this source did not import."
+        )

@@ -19,6 +19,7 @@ belongs to another import is refused, before anything is written.
 from __future__ import annotations
 
 import logging
+import os
 import sqlite3
 import uuid
 from dataclasses import dataclass, field
@@ -70,7 +71,7 @@ def check_links_file(ctx: PhaseContext) -> None:
     A file that cannot be read is reported and left alone for the rest of the run.
     """
     path = links_path(ctx)
-    if path is None or not path.exists():
+    if path is None or not os.path.lexists(path):
         return
     try:
         check_scope(path, ctx.id_map.source_system, ctx.id_map.source_instance)
@@ -93,7 +94,7 @@ async def link_placeholders(ctx: PhaseContext) -> None:
     path = links_path(ctx)
     if path is None or ctx.state.get(_UNREADABLE):
         return
-    if not path.exists() and not pending:
+    if not os.path.lexists(path) and not pending:
         return
 
     store = _open(ctx, path, pending)
@@ -150,6 +151,20 @@ def _examples(rows: list[tuple[str, int]]) -> str:
 def _report(ctx: PhaseContext, result: ResolveResult, store: LinksStore, path: Path) -> None:
     if result.linked:
         ctx.summary.add_note(LINKED_NOTE, f"{len(result.linked)} text(s), e.g. {_examples(result.linked)}")
+    if result.untrusted:
+        ctx.warn(
+            "Rows of the links file that this installation did not write were ignored and removed (no valid "
+            "signature, or not a text an import writes): a links file only works with the Specivo, and the "
+            "SECRET_KEY, that wrote it",
+            count=result.untrusted,
+            path=str(path),
+        )
+    if result.foreign:
+        ctx.warn(
+            "Rows of the links file naming records this source did not import were ignored and removed",
+            count=result.foreign,
+            path=str(path),
+        )
     if result.edited:
         ctx.warn(
             "Texts edited since an earlier import were left as they are, so references in them whose records this "
@@ -197,6 +212,8 @@ class LinksOutcome:
     edited: list[tuple[str, int]] = field(default_factory=list)
     gone: int = 0
     waiting: int = 0
+    untrusted: int = 0
+    foreign: int = 0
 
 
 async def resolve_links_file(session: AsyncSession, path: Path, *, dry_run: bool) -> LinksOutcome:
@@ -207,7 +224,7 @@ async def resolve_links_file(session: AsyncSession, path: Path, *, dry_run: bool
     committed and then the file. Raises :class:`LinksFileError` for a file that
     cannot be used.
     """
-    if not path.exists():
+    if not os.path.lexists(path):
         return LinksOutcome(path, None)
     scope = read_scope(path)
     if scope is None:
@@ -230,7 +247,9 @@ async def resolve_links_file(session: AsyncSession, path: Path, *, dry_run: bool
     except BaseException:
         store.rollback()
         raise
-    return LinksOutcome(path, scope, result.linked, result.edited, result.gone, result.waiting)
+    return LinksOutcome(
+        path, scope, result.linked, result.edited, result.gone, result.waiting, result.untrusted, result.foreign
+    )
 
 
 async def _refresh_derived(session: AsyncSession, linked: list[tuple[str, int]]) -> None:

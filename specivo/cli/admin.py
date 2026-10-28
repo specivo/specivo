@@ -48,6 +48,7 @@ import asyncio
 import getpass
 import json
 import logging
+import os
 import secrets
 import sys
 from datetime import datetime
@@ -505,12 +506,18 @@ def format_resolve(outcome: LinksOutcome, *, dry_run: bool) -> str:
     """Return what ``import-map resolve-pending`` did, or would do."""
     if outcome.scope is None:
         return f"Nothing is waiting in {outcome.path}."
+    ignored = ""
+    if outcome.untrusted or outcome.foreign:
+        ignored = (
+            f" Ignored{' and removed' if not dry_run else ''}: {outcome.untrusted} row(s) this installation did not "
+            f"write, {outcome.foreign} naming records this source did not import."
+        )
     if dry_run:
         return (
             f"{len(outcome.linked)} text(s) would be linked, {_edited(outcome)}, {outcome.waiting} still waiting. "
-            "Nothing was changed; re-run with --yes to write them."
+            f"Nothing was changed; re-run with --yes to write them.{ignored}"
         )
-    return f"Linked {len(outcome.linked)} text(s); {_edited(outcome)}; {outcome.waiting} still waiting."
+    return f"Linked {len(outcome.linked)} text(s); {_edited(outcome)}; {outcome.waiting} still waiting.{ignored}"
 
 
 def format_purge(system: str, instance: str, count: int, *, dry_run: bool) -> str:
@@ -530,7 +537,7 @@ def format_purge(system: str, instance: str, count: int, *, dry_run: bool) -> st
 
 async def _run_import_map_pending(args: argparse.Namespace) -> int:
     path = Path(args.links_file)
-    if not path.exists():
+    if not os.path.lexists(path):
         print(format_pending(path, None, 0, {}))
         return 0
     try:

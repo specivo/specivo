@@ -14,6 +14,16 @@ stay plain text. One file belongs to one identifier-map scope (source system and
 instance), which its ``meta`` table names; a file of another scope, or of a
 format version this code does not know, is refused.
 
+The file is untrusted input: it sits next to the bundles, and whoever supplies
+those can supply it. So every ``pending`` row carries an HMAC-SHA256 over the
+scope, the row and column it names, its source text and its hash, keyed from
+``SECRET_KEY`` (see :func:`links_signing_key`); a row without a valid signature
+is never used, and neither is one naming a column outside a fixed allowlist or
+holding a malformed id or hash. A file that is a symbolic link is refused. A
+links file therefore only works with the installation (the ``SECRET_KEY``) that
+wrote it. Which rows the import may touch at all is checked against the
+identifier map by the caller.
+
 Everything here is synchronous: the file is small and local. A store is opened
 for one import or command and holds one SQLite transaction until
 :meth:`LinksStore.commit` or :meth:`LinksStore.rollback`, so the import can
@@ -22,14 +32,19 @@ commit it only after the database transaction it describes has committed.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import hashlib
+import hmac
+import json
 import os
 import re
 import sqlite3
+import stat
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 LINKS_FORMAT_VERSION = "1"
 
@@ -40,7 +55,7 @@ _SCHEMA = (
     "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
     "CREATE TABLE pending ("
     " entity_type TEXT NOT NULL, row_id INTEGER NOT NULL, column_name TEXT NOT NULL,"
-    " source_text TEXT NOT NULL, written_sha256 TEXT NOT NULL,"
+    " source_text TEXT NOT NULL, written_sha256 TEXT NOT NULL, signature TEXT NOT NULL,"
     " PRIMARY KEY (entity_type, row_id, column_name))",
     "CREATE TABLE pending_ref ("
     " entity_type TEXT NOT NULL, row_id INTEGER NOT NULL, column_name TEXT NOT NULL,"
@@ -48,6 +63,24 @@ _SCHEMA = (
     " PRIMARY KEY (entity_type, row_id, column_name, kind, ref))",
     "CREATE INDEX ix_pending_ref_kind_ref ON pending_ref (kind, ref)",
 )
+
+# The texts an import may write, as ``(entity_type, column)``: nothing else in a
+# file is ever acted on.
+ALLOWED_COLUMNS = frozenset(
+    {
+        ("issue", "description"),
+        ("journal", "notes"),
+        ("journal_detail", "old_value"),
+        ("journal_detail", "new_value"),
+        ("wiki_version", "text"),
+    }
+)
+_MAX_ROW_ID = 2**31 - 1
+# Longest source text accepted from a file, in characters.
+_MAX_SOURCE_TEXT = 16 * 1024 * 1024
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+# What the signing key is derived for; part of every signature too.
+SIGNING_PURPOSE = "import-links-file-v1"
 
 # Characters kept as they are in the instance part of a file name.
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
@@ -68,7 +101,11 @@ class LinksFileMismatchError(LinksFileError):
 
 @dataclass(frozen=True, slots=True)
 class PendingText:
-    """One imported text with placeholders that are still waiting for their records."""
+    """One imported text with placeholders that are still waiting for their records.
+
+    Read from a file, the fields are whatever the file held (see
+    :meth:`LinksStore.is_trusted`); ``signature`` is the one it carried.
+    """
 
     entity_type: str
     row_id: int
@@ -76,6 +113,7 @@ class PendingText:
     source_text: str
     written_sha256: str
     refs: tuple[tuple[str, str], ...]
+    signature: str | None = field(default=None, compare=False)
 
     @property
     def key(self) -> tuple[str, int, str]:
@@ -105,6 +143,56 @@ def default_links_path(directory: Path, system: str, instance: str) -> Path:
     return directory / f"specivo-links.{system}.{instance_slug(instance)}.sqlite"
 
 
+def links_signing_key(secret_key: str | None = None) -> bytes:
+    """Return the key links-file rows are signed with, derived from ``SECRET_KEY``.
+
+    Derived with HKDF the way :mod:`specivo.core.secret_box` derives its keys,
+    for a purpose of its own, so it is independent of every other key.
+    """
+    from specivo.core.config import get_settings
+    from specivo.core.secret_box import derive_key
+
+    secret = secret_key if secret_key is not None else get_settings().secret_key
+    return base64.urlsafe_b64decode(derive_key(secret, SIGNING_PURPOSE))
+
+
+def well_formed(text: PendingText) -> bool:
+    """Whether a row read from a file names an allowed column and holds sane values."""
+    return (
+        isinstance(text.entity_type, str)
+        and isinstance(text.column, str)
+        and (text.entity_type, text.column) in ALLOWED_COLUMNS
+        and type(text.row_id) is int
+        and 0 < text.row_id <= _MAX_ROW_ID
+        and isinstance(text.source_text, str)
+        and len(text.source_text) <= _MAX_SOURCE_TEXT
+        and isinstance(text.written_sha256, str)
+        and _SHA256_RE.match(text.written_sha256) is not None
+    )
+
+
+def _refuse_symlink(path: Path) -> os.stat_result | None:
+    """Return ``lstat(path)``, or ``None`` when nothing is there; refuse a link or a non-file."""
+    try:
+        info = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    except OSError as exc:
+        raise LinksFileUnreadableError(f"{path} cannot be examined: {exc}") from exc
+    if stat.S_ISLNK(info.st_mode):
+        raise LinksFileUnreadableError(f"{path} is a symbolic link; a links file must be a regular file")
+    if not stat.S_ISREG(info.st_mode):
+        raise LinksFileUnreadableError(f"{path} is not a regular file")
+    return info
+
+
+def _same_file(path: Path, before: os.stat_result | None) -> None:
+    """Refuse when *path* changed into a link, or into another file, while it was being opened."""
+    after = _refuse_symlink(path)
+    if before is not None and (after is None or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)):
+        raise LinksFileUnreadableError(f"{path} was replaced while it was being opened")
+
+
 def is_writable(path: Path) -> bool:
     """Whether *path* can be created or rewritten (SQLite also writes its journal beside it)."""
     directory = path.parent
@@ -114,7 +202,16 @@ def is_writable(path: Path) -> bool:
 
 
 def _connect_read_only(path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True, isolation_level=None)
+    """Open *path* read-only, refusing a symbolic link (checked before and after: SQLite follows them)."""
+    before = _refuse_symlink(path)
+    # absolute(), not resolve(): resolving would follow a link swapped in meanwhile.
+    conn = sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, isolation_level=None)
+    try:
+        _same_file(path, before)
+    except BaseException:
+        conn.close()
+        raise
+    return conn
 
 
 def _tables(conn: sqlite3.Connection) -> set[str]:
@@ -190,9 +287,20 @@ class LinksStore:
     never touched.
     """
 
-    def __init__(self, conn: sqlite3.Connection, path: Path, *, persistent: bool, created: bool) -> None:
+    def __init__(
+        self,
+        conn: sqlite3.Connection,
+        path: Path,
+        scope: tuple[str, str],
+        key: bytes,
+        *,
+        persistent: bool,
+        created: bool,
+    ) -> None:
         self._conn: sqlite3.Connection | None = conn
         self.path = path
+        self.scope = scope
+        self._key = key
         self.persistent = persistent
         self._created = created
 
@@ -201,20 +309,25 @@ class LinksStore:
     # ------------------------------------------------------------------
 
     @classmethod
-    def open(cls, path: Path, system: str, instance: str, *, writable: bool) -> LinksStore:
+    def open(cls, path: Path, system: str, instance: str, *, writable: bool, key: bytes | None = None) -> LinksStore:
         """Open the links file at *path* for *system* @ *instance*.
 
         A missing file is created when *writable* (and deleted again if the
         store is rolled back or ends up empty); read-only it starts empty.
-        Raises :class:`LinksFileUnreadableError`, :class:`LinksFileMismatchError`,
-        or :class:`sqlite3.Error` when the file cannot be locked or written.
+        *key* signs and checks rows; it defaults to :func:`links_signing_key`.
+        Raises :class:`LinksFileUnreadableError` (a symbolic link among them),
+        :class:`LinksFileMismatchError`, or :class:`sqlite3.Error` when the
+        file cannot be locked or written.
         """
+        key = key if key is not None else links_signing_key()
         if not writable:
-            return cls._open_copy(path, system, instance)
+            return cls._open_copy(path, system, instance, key)
 
-        created = not path.exists()
+        before = _refuse_symlink(path)
+        created = before is None
         conn = sqlite3.connect(path, timeout=_BUSY_TIMEOUT_MS / 1000, isolation_level=None)
         try:
+            _same_file(path, before)
             conn.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
             # No WAL: a single file, with no side files to be left behind or forgotten.
             conn.execute("PRAGMA journal_mode = DELETE")
@@ -228,15 +341,15 @@ class LinksStore:
             with contextlib.suppress(sqlite3.Error):
                 conn.rollback()
             conn.close()
-            if created:
+            if created and not os.path.islink(path):
                 path.unlink(missing_ok=True)
             raise
-        return cls(conn, path, persistent=True, created=created)
+        return cls(conn, path, (system, instance), key, persistent=True, created=created)
 
     @classmethod
-    def _open_copy(cls, path: Path, system: str, instance: str) -> LinksStore:
+    def _open_copy(cls, path: Path, system: str, instance: str, key: bytes) -> LinksStore:
         memory = sqlite3.connect(":memory:", isolation_level=None)
-        if path.exists():
+        if os.path.lexists(path):
             try:
                 source = _connect_read_only(path)
             except sqlite3.Error as exc:
@@ -255,7 +368,7 @@ class LinksStore:
         if not _tables(memory):
             _initialise(memory, system, instance)
         memory.execute("BEGIN")
-        return cls(memory, path, persistent=False, created=False)
+        return cls(memory, path, (system, instance), key, persistent=False, created=False)
 
     # ------------------------------------------------------------------
     # Reads
@@ -289,7 +402,8 @@ class LinksStore:
         conn.execute("DELETE FROM temp.wanted")
         conn.executemany("INSERT INTO temp.wanted (kind, ref) VALUES (?, ?)", list(keys))
         rows = conn.execute(
-            "SELECT p.entity_type, p.row_id, p.column_name, p.source_text, p.written_sha256 FROM pending p "
+            "SELECT p.entity_type, p.row_id, p.column_name, p.source_text, p.written_sha256, p.signature "
+            "FROM pending p "
             "WHERE EXISTS (SELECT 1 FROM pending_ref r JOIN temp.wanted w ON w.kind = r.kind AND w.ref = r.ref "
             "WHERE r.entity_type = p.entity_type AND r.row_id = p.row_id AND r.column_name = p.column_name) "
             "ORDER BY p.entity_type, p.column_name, p.row_id"
@@ -299,19 +413,50 @@ class LinksStore:
 
     def get(self, entity_type: str, row_id: int, column: str) -> PendingText | None:
         row = self.conn.execute(
-            "SELECT entity_type, row_id, column_name, source_text, written_sha256 FROM pending "
+            "SELECT entity_type, row_id, column_name, source_text, written_sha256, signature FROM pending "
             "WHERE entity_type = ? AND row_id = ? AND column_name = ?",
             (entity_type, row_id, column),
         ).fetchone()
         return self._with_refs(*row) if row else None
 
-    def _with_refs(self, entity_type: str, row_id: int, column: str, source_text: str, sha: str) -> PendingText:
+    def _with_refs(
+        self, entity_type: Any, row_id: Any, column: Any, source_text: Any, sha: Any, sig: Any
+    ) -> PendingText:
+        # Kept exactly as the file holds them: is_trusted() decides what may be used.
         refs = self.conn.execute(
             "SELECT kind, ref FROM pending_ref WHERE entity_type = ? AND row_id = ? AND column_name = ? "
             "ORDER BY kind, ref",
             (entity_type, row_id, column),
         ).fetchall()
-        return PendingText(entity_type, int(row_id), column, source_text, sha, tuple((k, r) for k, r in refs))
+        return PendingText(entity_type, row_id, column, source_text, sha, tuple((k, r) for k, r in refs), sig)
+
+    # ------------------------------------------------------------------
+    # Signatures
+    # ------------------------------------------------------------------
+
+    def sign(self, text: PendingText) -> str:
+        """Return the signature of *text* in this file's scope."""
+        message = json.dumps(
+            [
+                SIGNING_PURPOSE,
+                self.scope[0],
+                self.scope[1],
+                text.entity_type,
+                text.row_id,
+                text.column,
+                text.source_text,
+                text.written_sha256,
+            ],
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("ascii")
+        return hmac.new(self._key, message, hashlib.sha256).hexdigest()
+
+    def is_trusted(self, text: PendingText) -> bool:
+        """Whether a row read from the file may be used: well formed, and signed by this installation."""
+        if not well_formed(text) or not isinstance(text.signature, str) or not text.signature:
+            return False
+        return hmac.compare_digest(text.signature, self.sign(text))
 
     # ------------------------------------------------------------------
     # Writes (inside the open transaction)
@@ -321,16 +466,16 @@ class LinksStore:
         """Store *text*, replacing what was stored for the same row and column."""
         self.delete(*text.key)
         self.conn.execute(
-            "INSERT INTO pending (entity_type, row_id, column_name, source_text, written_sha256) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (text.entity_type, text.row_id, text.column, text.source_text, text.written_sha256),
+            "INSERT INTO pending (entity_type, row_id, column_name, source_text, written_sha256, signature) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (text.entity_type, text.row_id, text.column, text.source_text, text.written_sha256, self.sign(text)),
         )
         self.conn.executemany(
             "INSERT OR IGNORE INTO pending_ref (entity_type, row_id, column_name, kind, ref) VALUES (?, ?, ?, ?, ?)",
             [(text.entity_type, text.row_id, text.column, kind, ref) for kind, ref in text.refs],
         )
 
-    def delete(self, entity_type: str, row_id: int, column: str) -> None:
+    def delete(self, entity_type: Any, row_id: Any, column: Any) -> None:
         """Forget the text stored for one row and column, if any."""
         for table in ("pending_ref", "pending"):
             self.conn.execute(

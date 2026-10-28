@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from dataclasses import replace
 
 import pytest
 
@@ -16,6 +17,7 @@ from specivo.importers.core.links_file import (
     default_links_path,
     instance_slug,
     is_writable,
+    links_signing_key,
     read_scope,
     text_sha256,
 )
@@ -216,3 +218,118 @@ class TestRefusals:
             folder.chmod(0o755)
         assert is_writable(folder / "links.sqlite") is True
         assert is_writable(tmp_path / "missing" / "links.sqlite") is False
+
+
+KEY_A = links_signing_key("the-secret-key-of-this-installation-0123456789")
+KEY_B = links_signing_key("the-secret-key-of-another-installation-987654")
+
+
+class TestUntrustedFile:
+    """A links file comes from wherever the bundles do: nothing in it is trusted until checked."""
+
+    def _signed(self, path, key=KEY_A) -> PendingText:
+        store = LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=key)
+        store.put(_text(1))
+        store.commit()
+        reader = LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A)
+        (text,) = reader.texts_naming([("issue", "web-1")])
+        trusted = reader.is_trusted(text)
+        reader.rollback()
+        return text, trusted
+
+    def test_a_row_this_installation_wrote_is_trusted(self, tmp_path):
+        _, trusted = self._signed(tmp_path / "links.sqlite")
+        assert trusted is True
+
+    def test_a_row_signed_with_another_key_is_not(self, tmp_path):
+        _, trusted = self._signed(tmp_path / "links.sqlite", key=KEY_B)
+        assert trusted is False
+
+    def test_an_unsigned_row_is_not(self, tmp_path):
+        path = tmp_path / "links.sqlite"
+        self._signed(path)
+        conn = sqlite3.connect(path)
+        conn.execute("UPDATE pending SET signature = ''")
+        conn.commit()
+        conn.close()
+        reader = LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A)
+        (text,) = reader.texts_naming([("issue", "web-1")])
+        assert reader.is_trusted(text) is False
+        reader.rollback()
+
+    def test_the_signature_covers_the_scope(self, tmp_path):
+        """A row signed for one scope cannot be copied into another scope's file."""
+        mine = tmp_path / "mine.sqlite"
+        self._signed(mine)
+        other = tmp_path / "other.sqlite"
+        store = LinksStore.open(other, SYSTEM, "other.example.com", writable=True, key=KEY_A)
+        store.put(_text(9))
+        store.commit()
+        conn = sqlite3.connect(other)
+        signature = conn.execute("SELECT signature FROM pending").fetchone()[0]
+        conn.close()
+        conn = sqlite3.connect(mine)
+        conn.execute("UPDATE pending SET row_id = 9, signature = ?", (signature,))
+        conn.execute("UPDATE pending_ref SET row_id = 9")
+        conn.commit()
+        conn.close()
+        reader = LinksStore.open(mine, SYSTEM, INSTANCE, writable=False, key=KEY_A)
+        (text,) = reader.texts_naming([("issue", "web-1")])
+        assert reader.is_trusted(text) is False
+        reader.rollback()
+
+    @pytest.mark.parametrize(
+        ("column", "value"),
+        [
+            ("column_name", "subject"),
+            ("entity_type", "project"),
+            ("row_id", "twelve"),
+            ("row_id", 1.5),
+            ("row_id", -4),
+            ("written_sha256", "not-a-hash"),
+        ],
+    )
+    def test_a_malformed_row_is_not_trusted_even_when_signed(self, tmp_path, column, value):
+        path = tmp_path / "links.sqlite"
+        store = LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        store.put(_text(1))
+        store.commit()
+        conn = sqlite3.connect(path)
+        conn.execute(f"UPDATE pending SET {column} = ?", (value,))  # noqa: S608
+        if column != "written_sha256":
+            conn.execute(f"UPDATE pending_ref SET {column} = ?", (value,))  # noqa: S608
+        conn.commit()
+        conn.close()
+        reader = LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A)
+        (text,) = reader.texts_naming([("issue", "web-1")])
+        # Re-signing the tampered row with the right key does not make it acceptable.
+        assert reader.is_trusted(text) is False
+        assert reader.is_trusted(replace(text, signature=reader.sign(text))) is False
+        reader.rollback()
+
+    def test_a_symlinked_file_is_refused(self, tmp_path):
+        real = tmp_path / "real.sqlite"
+        store = LinksStore.open(real, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        store.put(_text(1))
+        store.commit()
+        before = real.read_bytes()
+        link = tmp_path / "links.sqlite"
+        link.symlink_to(real)
+
+        for attempt in (
+            lambda: check_scope(link, SYSTEM, INSTANCE),
+            lambda: read_scope(link),
+            lambda: LinksStore.open(link, SYSTEM, INSTANCE, writable=True, key=KEY_A),
+            lambda: LinksStore.open(link, SYSTEM, INSTANCE, writable=False, key=KEY_A),
+        ):
+            with pytest.raises(LinksFileUnreadableError, match="symbolic link"):
+                attempt()
+        assert real.read_bytes() == before
+
+    def test_a_dangling_symlink_is_refused_and_nothing_is_created_through_it(self, tmp_path):
+        target = tmp_path / "elsewhere.sqlite"
+        link = tmp_path / "links.sqlite"
+        link.symlink_to(target)
+        with pytest.raises(LinksFileUnreadableError, match="symbolic link"):
+            LinksStore.open(link, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        assert not target.exists()
