@@ -18,8 +18,7 @@ replaces each placeholder with the Specivo form:
 Only those four kinds are recognised; any other ``{{...}}`` is ordinary text.
 A placeholder whose record was not imported becomes its label, or else its
 ref, as plain text: a reader never sees the placeholder syntax.
-Text inside fenced code blocks is left alone, as the Redmine reference rewrite
-does, so a code sample can show a placeholder without it being expanded.
+Text inside fenced code blocks is left alone, so a code sample can show a placeholder without it being expanded.
 """
 
 from __future__ import annotations
@@ -30,11 +29,6 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from specivo.importers.core.ir import EntityType
-
-# Values of an adapter's ``reference_style``: how its text refers to other
-# records. Redmine writes ``#123``; a bundle writes placeholders.
-REFERENCE_STYLE_HASH = "hash"
-REFERENCE_STYLE_PLACEHOLDERS = "placeholders"
 
 
 class PlaceholderKind(StrEnum):

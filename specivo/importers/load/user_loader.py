@@ -5,7 +5,7 @@ Three things happen here that are worth knowing about.
 **Passwords survive only when asked to.** With ``--import-passwords``, an
 account whose source credential uses an algorithm listed in
 ``LEGACY_PASSWORD_ALGORITHMS`` keeps its password: the credential's raw source
-columns go through the legacy hasher's ``from_source`` (for Redmine, the SHA1
+columns go through the legacy hasher's ``from_source`` (for ``redmine_sha1``, the SHA1
 digest wrapped in bcrypt), and the first sign-in replaces it with a native
 hash. Everybody else — no flag, no credential (an LDAP account, a blank hash),
 or an administrator, who always has to choose a new one — gets a random
@@ -14,14 +14,14 @@ account is eventually given by somebody else is not the one it keeps. The
 report lists which accounts kept their password and which are waiting for one.
 
 **Identity has to be squeezed into narrower columns.** Specivo requires an email
-and enforces case-insensitive uniqueness on both login and email, while Redmine
-allows an account with no address at all. Anything that would collide or fail is
+and enforces case-insensitive uniqueness on both login and email, while a source
+can allow an account with no address at all. Anything that would collide or fail is
 adjusted rather than dropped, and the adjustment is reported.
 
 **Groups become groups.** A Specivo ``UserGroup`` holds project roles the same
 way a user does, so a source group is imported as one, with its members, and the
 memberships phase grants roles to the group itself. Group names are unique
-case-insensitively in Specivo and are not in Redmine, so a name that is already
+case-insensitively in Specivo and may not be in the source, so a name that is already
 taken is suffixed rather than merged onto whatever holds it.
 """
 
@@ -83,7 +83,7 @@ _user_group_service = UserGroupService()
 async def ensure_import_account(ctx: PhaseContext) -> User:
     """Return the service account that owns anything with no resolvable author.
 
-    Redmine allows a row whose author was deleted, and Specivo requires one, so
+    A source can keep a row whose author was deleted, and Specivo requires one, so
     the import needs an account to attribute those to. Marked as a service
     account so it is not mistaken for a person, and reused across runs.
 
@@ -106,8 +106,8 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
             ctx.state[IMPORT_ACCOUNT_STATE_KEY] = account.id
             return account
 
-    # Named after the system the identifier map is keyed by, so a bundle from
-    # a Redmine tool reuses the account a direct Redmine import created.
+    # Named after the system the identifier map is keyed by, so a later bundle
+    # of the same source reuses the account an earlier import created.
     system = ctx.id_map.source_system
     wanted = f"{system}-import"
     login, existing = await _import_account_login(ctx.session, wanted)
@@ -424,7 +424,7 @@ async def _group_name_taken(session: AsyncSession, name: str) -> bool:
 async def _unique_group_name(ctx: PhaseContext, ir: IRGroup) -> str:
     """Return a group name that fits the column and is not already taken.
 
-    ``user_groups`` is unique on the lowercased name and Redmine is not, so two
+    ``user_groups`` is unique on the lowercased name and the source's may not be, so two
     source groups differing only in case, and a source group whose name matches
     one this instance already has, both land on the same row otherwise.
 
@@ -453,7 +453,7 @@ async def _unique_group_name(ctx: PhaseContext, ir: IRGroup) -> str:
 async def _unique_email(ctx: PhaseContext, ir: IRUser, login: str) -> tuple[str, bool]:
     """Return an address for the account and whether it had to be invented.
 
-    Specivo requires an address and Redmine does not always have one. A
+    Specivo requires an address and a source does not always have one. A
     placeholder under the reserved ``.invalid`` domain keeps the account
     importable while guaranteeing no mail is ever sent to a real inbox.
     """

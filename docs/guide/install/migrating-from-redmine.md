@@ -4,6 +4,15 @@ description: Move a Redmine instance into Specivo — projects, users, groups, i
 
 # Migrating from Redmine
 
+!!! warning "The direct Redmine import has been removed"
+    Specivo no longer reads a Redmine database itself, and `import_data --source redmine`,
+    `make import-redmine` and the `specivo[importers]` extra no longer exist. Redmine is imported
+    with the [Redmine migration tool](https://github.com/specivo/redmine-migration-tool), which
+    writes an import bundle that `python -m specivo.cli.import_data --source bundle --path ...`
+    loads. The sections below still describe the removed command and are being rewritten; the
+    parts about what is carried across, `--dry-run`, `--resume` and importing again apply to a
+    bundle unchanged.
+
 Specivo can take over from a Redmine instance: projects and their hierarchy,
 users, groups and memberships, issues with their full history, wiki pages with
 every revision and the redirects left behind by page renames, attachments and

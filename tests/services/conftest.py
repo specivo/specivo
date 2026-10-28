@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Callable
+from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.importers.core.converter import ContentConverter, ConversionContext, PassthroughConverter
 from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import (
     IRAttachment,
@@ -35,6 +37,36 @@ from specivo.importers.core.ir import (
 )
 from specivo.importers.core.pipeline import ImportOptions, ImportPhase, ImportSummary, PhaseContext
 from specivo.importers.core.progress import NullProgressReporter
+
+
+class MarkedConverter:
+    """A converter that marks what it was given, so a test can see a loader applied it."""
+
+    PREFIX = "[converted] "
+
+    def convert(self, raw: str, ctx: ConversionContext) -> str:
+        return f"{self.PREFIX}{raw}"
+
+
+def order_parents_first(parents: dict[str, str | None]) -> list[str]:
+    """Order references so a parent precedes its children; a parent outside *parents* makes a root."""
+    children: dict[str, list[str]] = {}
+    roots: list[str] = []
+    for ref, parent in parents.items():
+        if parent is None or parent not in parents:
+            roots.append(ref)
+        else:
+            children.setdefault(parent, []).append(ref)
+    ordered: list[str] = []
+    queue = list(roots)
+    while queue:
+        ref = queue.pop(0)
+        ordered.append(ref)
+        queue.extend(children.get(ref, []))
+    if len(ordered) < len(parents):
+        placed = set(ordered)
+        ordered.extend(ref for ref in parents if ref not in placed)
+    return ordered
 
 
 class FakeAdapter:
@@ -67,7 +99,7 @@ class FakeAdapter:
         attachments: list[IRAttachment] | None = None,
         files_dir: object | None = None,
         dropped: dict[str, list[str]] | None = None,
-        source_format: str = "textile",
+        converter: ContentConverter | None = None,
         source_system: str = "redmine",
         credential_algorithms: tuple[str, ...] = (),
     ) -> None:
@@ -93,13 +125,10 @@ class FakeAdapter:
         self.attachments = attachments or []
         self.source_files_dir = files_dir
         self._dropped = dropped or {}
-        self.source_format = source_format
+        self._converter = converter or PassthroughConverter()
 
     def content_converter(self):
-        """Redmine's converter, which the loader tests were written against."""
-        from specivo.importers.redmine.textile_convert import RedmineTextileConverter
-
-        return RedmineTextileConverter()
+        return self._converter
 
     async def connect(self) -> None:
         return None
@@ -146,8 +175,6 @@ class FakeAdapter:
 
     async def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
         """Yield parents before children, as the real adapter guarantees."""
-        from specivo.importers.redmine.extract import order_parents_first
-
         in_project = {issue.source_ref: issue for issue in self.issues if issue.project_ref == project_ref}
         parents = {ref: issue.parent_ref for ref, issue in in_project.items()}
         for ref in order_parents_first(parents):
@@ -173,8 +200,6 @@ class FakeAdapter:
 
     async def extract_wiki_pages(self, project_ref: str) -> AsyncIterator[IRWikiPage]:
         """Yield parents before children, as the real adapter guarantees."""
-        from specivo.importers.redmine.extract import order_parents_first
-
         in_project = {page.source_ref: page for page in self.wiki_pages if page.project_ref == project_ref}
         parents = {ref: page.parent_ref for ref, page in in_project.items()}
         for ref in order_parents_first(parents):
@@ -201,11 +226,17 @@ class FakeAdapter:
             yield attachment
 
     def resolve_attachment_path(self, attachment: IRAttachment):
-        from specivo.importers.redmine.files import resolve_attachment_path
-
+        """Return the stored file under the files directory, refusing a locator that escapes it."""
         if self.source_files_dir is None:
             raise ValueError("No source files directory was configured")
-        return resolve_attachment_path(self.source_files_dir, attachment.storage_key)
+        key = (attachment.storage_key or "").strip()
+        if not key:
+            raise ValueError("Attachment has no stored filename")
+        base = Path(str(self.source_files_dir)).resolve()
+        candidate = (base / key).resolve()
+        if candidate != base and base not in candidate.parents:
+            raise ValueError(f"Attachment path escapes the source files directory: {key!r}")
+        return candidate
 
 
 @pytest.fixture

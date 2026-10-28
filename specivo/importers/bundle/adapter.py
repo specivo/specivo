@@ -48,7 +48,6 @@ from specivo.importers.core.ir import (
     IRWikiRedirect,
 )
 from specivo.importers.core.links_file import default_links_path
-from specivo.importers.core.placeholders import REFERENCE_STYLE_PLACEHOLDERS
 from specivo.importers.core.source import BaseSourceAdapter
 
 logger = logging.getLogger(__name__)
@@ -76,16 +75,13 @@ class BundleSourceAdapter(BaseSourceAdapter):
     """Reads an import bundle: a directory, or a ``.zip`` of one.
 
     ``bundle`` names the source on the command line only. The identifier map
-    is keyed by the system and instance the manifest names, as an import
-    straight from that system would be: two bundles from the same
-    installation share one map, which is what lets a later bundle add to an
-    earlier import, and a bundle from a Redmine tool finds what a direct
-    Redmine import under the same instance name already brought over.
+    is keyed by the system and instance the manifest names: two bundles from
+    the same installation share one map, which is what lets a later bundle add
+    to an earlier import.
     """
 
     source_system: ClassVar[str] = "bundle"
     description: ClassVar[str] = "An import bundle (directory or .zip) written by an importer"
-    reference_style: ClassVar[str] = REFERENCE_STYLE_PLACEHOLDERS
     # The identifier-map scope comes from the manifest, not the operator, so
     # adding to an earlier import of it needs --continue-import.
     scope_from_source_data: ClassVar[bool] = True

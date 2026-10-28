@@ -1,7 +1,7 @@
 """Intermediate representation (IR) shared by every import source.
 
 The IR is the seam that keeps source adapters and loaders independent. An
-adapter reads its own database (Redmine today, RT or Jira later) and emits
+adapter reads its own source (a bundle today) and emits
 these dataclasses; loaders consume them and never learn where they came from.
 
 Two rules make that separation work:
@@ -12,8 +12,8 @@ Two rules make that separation work:
    translate refs to Specivo ids through the id map, so the IR never holds a
    Specivo id.
 2. **Field names describe Specivo concepts, not source concepts.** Where the
-   two disagree the adapter does the translation (for example Redmine's binary
-   ``is_closed`` becomes the four-way :attr:`IRStatus.category`).
+   two disagree the adapter does the translation (for example a binary
+   "is closed" flag becomes the four-way :attr:`IRStatus.category`).
 
 Streams are flat rather than deeply nested: issues, journals, relations,
 watchers and attachments are separate extraction streams so each import phase
@@ -100,7 +100,7 @@ class PrincipalKind(StrEnum):
 
 @dataclass(slots=True)
 class IRTracker:
-    """Issue type (Redmine tracker, Jira issue type)."""
+    """Issue type (a tracker, an issue type)."""
 
     source_ref: str
     name: str
@@ -380,8 +380,9 @@ class IRCustomValue:
 class IRIssue:
     """An issue. ``description`` is already converted to Markdown.
 
-    Cross-issue references such as Redmine's ``#123`` are left verbatim; the
-    pipeline rewrites them to Specivo display keys once every issue exists.
+    Cross-issue references are placeholders (see
+    :mod:`specivo.importers.core.placeholders`) that the pipeline expands to
+    Specivo display keys once every issue exists.
     """
 
     source_ref: str

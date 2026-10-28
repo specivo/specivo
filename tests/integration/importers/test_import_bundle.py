@@ -4,7 +4,7 @@ The bundle is ``tests/fixtures/import_bundle/full``: hand-written, so these
 tests check the format as documented rather than what the writer happens to
 produce. It uses every file of the format, so a full load touches every loader.
 
-Marked ``serial`` for the same reason as the Redmine imports: a load writes
+Marked ``serial`` because a load writes
 instance-wide rows (roles, statuses, activities, accounts) that other tests
 insert too.
 """

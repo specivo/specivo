@@ -38,7 +38,7 @@ from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
 from specivo.models.watcher import Watcher
 from specivo.models.wiki import WikiContent, WikiPage, WikiRedirect
-from tests.services.conftest import FakeAdapter
+from tests.services.conftest import FakeAdapter, MarkedConverter
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.service]
 
@@ -121,7 +121,7 @@ class TestPages:
         assert page.slug == "home"
 
     async def test_markup_is_converted(self, db_session, loaded):
-        ctx = await loaded(_adapter(wiki_pages=[_page()]))
+        ctx = await loaded(_adapter(wiki_pages=[_page()], converter=MarkedConverter()))
         await load_wiki_pages(ctx)
 
         page_id = await ctx.id_map.get(db_session, EntityType.WIKI_PAGE, "10")
@@ -130,7 +130,7 @@ class TestPages:
                 select(WikiContent).where(WikiContent.page_id == page_id, WikiContent.version == 1)
             )
         ).scalar_one()
-        assert content.text.startswith("# Home")
+        assert content.text.startswith(MarkedConverter.PREFIX)
 
     async def test_protected_flag_carries_over(self, db_session, loaded):
         ctx = await loaded(_adapter(wiki_pages=[_page(protected=True)]))

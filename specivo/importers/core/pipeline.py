@@ -58,11 +58,10 @@ class ImportPhase(StrEnum):
     CUSTOM_FIELD_SCHEMAS = "custom_field_schemas"
     ISSUES = "issues"
     WATCHERS = "watchers"
-    CUSTOM_FIELD_VALUES = "custom_field_values"
     JOURNALS = "journals"
     RELATIONS = "relations"
     ISSUE_ATTACHMENTS = "issue_attachments"
-    ISSUE_REF_REWRITE = "issue_ref_rewrite"
+    VERSION_STATUSES = "version_statuses"
     WIKI_PAGES = "wiki_pages"
     WIKI_ATTACHMENTS = "wiki_attachments"
     TIME_ENTRIES = "time_entries"
@@ -78,8 +77,7 @@ class ImportOptions:
     """Operator-supplied settings for one import run.
 
     Most fields come straight from the generic flags of the import command.
-    Options only one source understands (Redmine's status and custom-field
-    maps, say) belong to that source's adapter, not here.
+    Options only one source understands (its own file locations, say) belong to that source's adapter, not here.
     """
 
     source_instance: str

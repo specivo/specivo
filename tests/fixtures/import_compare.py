@@ -9,20 +9,20 @@ pages with every revision, memberships with their roles, time entries,
 relations, watchers and lookups. :func:`raw_differences` lists where two
 snapshots disagree.
 
-Used by the bundle round-trip test and by anything else that has to show two
-ways of importing one source give the same database.
+Used by the bundle snapshot test and by anything else that has to show two
+ways of importing one bundle give the same database.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +52,7 @@ from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 IMPORT_ACCOUNT = "<import account>"
+IMPORT_TIME = "<import time>"
 
 COUNTED = (
     User,
@@ -79,6 +80,11 @@ COUNTED = (
     TimeEntryActivity,
     Role,
 )
+
+
+def _ordered(items):
+    """Sort *items* for comparison; entries may hold ``None`` beside strings, so order by their repr."""
+    return sorted(items, key=repr)
 
 
 class Snapshot:
@@ -121,11 +127,11 @@ class Snapshot:
             "projects": {p.identifier: self._project(p) for p in projects.values()},
             "memberships": await self._memberships(),
             "versions": {(self.identifiers[v.project_id], v.name): self._version(v) for v in await self._all(Version)},
-            "categories": sorted(
+            "categories": _ordered(
                 (self.identifiers[c.project_id], c.name, self.logins.get(c.assigned_to_id))
                 for c in await self._all(IssueCategory)
             ),
-            "metadata_schemas": sorted(
+            "metadata_schemas": _ordered(
                 (
                     self.identifiers[m.project_id],
                     names[Tracker].get(m.tracker_id),
@@ -136,21 +142,21 @@ class Snapshot:
             ),
             "issues": {self.keys[iid]: self._issue(i) for iid, i in issues.items()},
             "journals": await self._journals(),
-            "relations": sorted(
+            "relations": _ordered(
                 (self.keys[r.issue_from_id], self.keys[r.issue_to_id], r.relation_type, r.delay)
                 for r in await self._all(IssueRelation)
             ),
-            "watchers": sorted(
+            "watchers": _ordered(
                 (self.keys.get(w.issue_id) or str(self.pages.get(w.wiki_page_id)), self.logins[w.user_id])
                 for w in await self._all(Watcher)
             ),
-            "attachments": sorted(self._attachment(a) for a in await self._all(Attachment)),
+            "attachments": _ordered(self._attachment(a) for a in await self._all(Attachment)),
             "wiki": await self._wiki(pages),
-            "redirects": sorted(
+            "redirects": _ordered(
                 (self.identifiers[wikis[r.wiki_id]], r.title_from, r.redirected_to)
                 for r in await self._all(WikiRedirect)
             ),
-            "time_entries": sorted(self._time_entry(t) for t in await self._all(TimeEntry)),
+            "time_entries": _ordered(self._time_entry(t) for t in await self._all(TimeEntry)),
             "lookups": await self._lookups(),
         }
 
@@ -165,7 +171,7 @@ class Snapshot:
         groups: dict[str, list[str]] = {name: [] for name in self.names[UserGroup].values()}
         for group_id, user_id in rows:
             groups[self.names[UserGroup][group_id]].append(self.logins[user_id])
-        return {name: sorted(members) for name, members in groups.items()}
+        return {name: _ordered(members) for name, members in groups.items()}
 
     def _project(self, p: Project) -> tuple:
         return (
@@ -187,7 +193,7 @@ class Snapshot:
                 )
             )
         ).all()
-        return sorted(
+        return _ordered(
             (
                 self.identifiers[project_id],
                 self.logins.get(user_id) or self.names[UserGroup][group_id],
@@ -296,14 +302,14 @@ class Snapshot:
     async def _lookups(self) -> dict[str, list[tuple]]:
         statuses = {s.id: s.name for s in await self._all(IssueStatus)}
         return {
-            "statuses": sorted((s.name, s.category, s.default_done_ratio) for s in await self._all(IssueStatus)),
-            "trackers": sorted(
+            "statuses": _ordered((s.name, s.category, s.default_done_ratio) for s in await self._all(IssueStatus)),
+            "trackers": _ordered(
                 (t.name, t.is_in_roadmap, tuple(t.disabled_core_fields), statuses.get(t.default_status_id))
                 for t in await self._all(Tracker)
             ),
-            "priorities": sorted((p.name, p.is_default, p.active) for p in await self._all(IssuePriority)),
-            "activities": sorted((a.name, a.is_default, a.active) for a in await self._all(TimeEntryActivity)),
-            "roles": sorted(
+            "priorities": _ordered((p.name, p.is_default, p.active) for p in await self._all(IssuePriority)),
+            "activities": _ordered((a.name, a.is_default, a.active) for a in await self._all(TimeEntryActivity)),
+            "roles": _ordered(
                 (r.name, r.builtin, tuple(sorted(r.permissions or [])), r.users_visibility, r.time_entries_visibility)
                 for r in await self._all(Role)
             ),
@@ -314,7 +320,7 @@ class Snapshot:
 async def fresh_database() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     """Create, migrate and finally drop a database of its own for one import."""
     base = make_url(os.environ["DATABASE_URL"])
-    name = f"specivo_roundtrip_{uuid.uuid4().hex[:12]}"
+    name = f"specivo_snapshot_{uuid.uuid4().hex[:12]}"
     admin = create_async_engine(base.set(database="postgres"), isolation_level="AUTOCOMMIT")
     async with admin.connect() as conn:
         await conn.execute(text(f'CREATE DATABASE "{name}"'))
@@ -359,46 +365,29 @@ async def import_into_fresh_database(
     return summary, snapshot
 
 
-def known_direct_bug(differences: dict[str, tuple[Any, Any]]) -> dict[str, tuple[Any, Any]]:
-    """Return the differences that are the direct import's creation-history bug.
+def mask_import_time(value: Any, since: datetime) -> Any:
+    """Return *value* with every timestamp at or after *since* replaced by a marker.
 
-    The direct Redmine import leaves ``#N`` as written in the description an
-    issue's creation history records, where a bundle import expands it. One is
-    that bug when the two histories are identical except for
-    description details, where the direct import holds ``#N`` and the bundle
-    the display key of issue ``N``.
+    A record the source gave no date gets the moment it was imported, which
+    differs between two imports of the same source. Masking those leaves the
+    dates the source did state to be compared.
     """
-    known = {}
-    for key, (direct, bundle) in differences.items():
-        if not key.startswith("journals[") or direct is None or bundle is None or len(direct) != len(bundle):
-            continue
-        explained = True
-        for left, right in zip(direct, bundle, strict=True):
-            if left[:-1] != right[:-1]:
-                explained = False
-                break
-            for d, b in zip(left[-1], right[-1], strict=True):
-                if d == b:
-                    continue
-                if d[:2] != ("attr", "description") or d[:2] != b[:2]:
-                    explained = False
-                elif not (
-                    re.search(r"#\d+", d[3] or "") and re.sub(r"#\d+", "", d[3]) == re.sub(KEY_PATTERN, "", b[3])
-                ):
-                    explained = False
-        if explained:
-            known[key] = (direct, bundle)
-    return known
+    if isinstance(value, datetime):
+        return IMPORT_TIME if value >= since else value
+    if isinstance(value, dict):
+        return {key: mask_import_time(item, since) for key, item in value.items()}
+    if isinstance(value, list):
+        return [mask_import_time(item, since) for item in value]
+    if isinstance(value, tuple):
+        return tuple(mask_import_time(item, since) for item in value)
+    return value
 
 
-KEY_PATTERN = r"\b[A-Z][A-Z0-9]+-\d+\b"
-
-
-def raw_differences(direct: dict[str, Any], bundle: dict[str, Any]) -> dict[str, tuple[Any, Any]]:
-    """Return ``{"section[key]": (direct, bundle)}`` for every entry the two snapshots disagree on."""
+def raw_differences(first: dict[str, Any], second: dict[str, Any]) -> dict[str, tuple[Any, Any]]:
+    """Return ``{"section[key]": (first, second)}`` for every entry the two snapshots disagree on."""
     found: dict[str, tuple[Any, Any]] = {}
-    for section in direct:
-        left, right = direct[section], bundle[section]
+    for section in first:
+        left, right = first[section], second[section]
         if left == right:
             continue
         if isinstance(left, dict):

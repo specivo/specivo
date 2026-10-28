@@ -1,8 +1,8 @@
 """``ContentConverter`` protocol — source markup to Specivo Markdown.
 
-Each source brings its own markup: Redmine uses Textile, Jira its own wiki
-syntax, RT plain text. A converter turns one field's raw text into the Markdown
-Specivo stores, including any rewriting of source-specific link syntax.
+Each source can bring its own markup (Textile, a wiki syntax, plain text). A
+converter turns one field's raw text into the Markdown Specivo stores,
+including any rewriting of source-specific link syntax.
 
 Converters are synchronous and pure so they can be unit-tested without a
 database or a live source.
@@ -19,13 +19,10 @@ class ConversionContext:
     """Everything a converter needs beyond the text itself.
 
     ``attachment_filenames`` lets a converter decide whether a reference points
-    at a real attachment. ``source_format`` lets an adapter tell the converter
-    that an instance is already storing Markdown, in which case only link
-    rewriting is needed.
+    at a real attachment.
     """
 
     project_ref: str | None = None
-    source_format: str = "textile"
     attachment_filenames: frozenset[str] = field(default_factory=frozenset)
 
 

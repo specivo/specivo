@@ -7,7 +7,7 @@ one version to the next as somebody edits it, and seeding a history that
 already exists is not that. Each revision keeps its own author, comment and
 date, so the page history reads the way it did in the source.
 
-Redirects are imported too. Redmine records one whenever a page is renamed and
+Redirects are imported too. A source can record one whenever a page is renamed and
 Specivo has the same table, so a link written against a page's old name keeps
 working after the migration.
 """
@@ -119,7 +119,7 @@ async def _create_page(ctx: PhaseContext, project_id: int, ir: IRWikiPage) -> Wi
 async def _replay_revisions(ctx: PhaseContext, page: WikiPage, revisions: list, next_version: int = 2) -> None:
     """Insert revisions directly from *next_version* on, each keeping its own author and date.
 
-    Version numbers are renumbered consecutively rather than copied. Redmine
+    Version numbers are renumbered consecutively rather than copied. A source
     can leave gaps when a revision is deleted, and Specivo's history reads by
     position, so a gap would look like a missing revision. A revision already
     imported is skipped and takes no number.
