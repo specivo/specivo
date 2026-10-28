@@ -33,8 +33,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.converter import ContentConverter, ConversionContext
-from specivo.importers.core.ir import EntityType, IRIssue, IRJournalEntry, IRRelation
+from specivo.importers.core.ir import EntityType, IRIssue, IRJournalEntry, IRRelation, ValueKind
 from specivo.importers.core.pipeline import PhaseContext
+from specivo.importers.core.placeholders import REFERENCE_STYLE_PLACEHOLDERS
+from specivo.importers.load.placeholder_rewrite import reference_style
 from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
@@ -115,7 +117,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
     if ir.parent_ref and parent_id is None:
         ctx.warn("Issue's parent was not imported; imported as a top-level issue", issue=ir.source_ref)
 
-    metadata = {value.key: value.value for value in ir.custom_values}
+    metadata = await _metadata(ctx, ir)
 
     try:
         issue = await _issue_service.create(
@@ -173,6 +175,41 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
     return issue
 
 
+async def _metadata(ctx: PhaseContext, ir: IRIssue) -> dict[str, Any]:
+    """Return the issue's custom-field values, keyed as its metadata stores them.
+
+    A source writing Redmine-style references stores user and version values
+    as the source's ids and has them rewritten after every issue exists (see
+    :func:`resolve_custom_field_references`). A placeholder-style source (a
+    bundle) names them by ref strings that a schema expecting a Specivo id
+    would reject, so they are resolved here: users and versions are imported
+    before issues. A value naming something that was not imported is left out.
+    """
+    if reference_style(ctx) != REFERENCE_STYLE_PLACEHOLDERS:
+        return {value.key: value.value for value in ir.custom_values}
+
+    metadata: dict[str, Any] = {}
+    for value in ir.custom_values:
+        if value.value_kind is ValueKind.SCALAR:
+            metadata[value.key] = value.value
+            continue
+        entity = EntityType.USER if value.value_kind is ValueKind.USER_REF else EntityType.VERSION
+        refs = value.value if isinstance(value.value, list) else [value.value]
+        resolved = [await ctx.id_map.get(ctx.session, entity, str(ref)) for ref in refs]
+        if None in resolved:
+            ctx.warn(
+                f"Custom field value names a {entity} that was not imported; left out",
+                issue=ir.source_ref,
+                field=value.key,
+            )
+        found = [target for target in resolved if target is not None]
+        if isinstance(value.value, list):
+            metadata[value.key] = found
+        elif found:
+            metadata[value.key] = found[0]
+    return metadata
+
+
 async def _resolve_author(ctx: PhaseContext, author_ref: str | None):
     """Return the issue's author, falling back to the import account.
 
@@ -227,7 +264,11 @@ async def resolve_custom_field_references(ctx: PhaseContext) -> None:
 
     These are stored as source ids while issues are created, because the
     referenced user or version may be imported after the issue that names it.
+    A placeholder-style source has them resolved at creation instead (see
+    :func:`_metadata`), so there is nothing left to rewrite.
     """
+    if reference_style(ctx) == REFERENCE_STYLE_PLACEHOLDERS:
+        return
     fields = ctx.state.get("custom_field_keys") or {}
     reference_fields = [field for field in fields.values() if field.field_format in {"user", "version"}]
     if not reference_fields:

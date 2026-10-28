@@ -61,7 +61,11 @@ async def load_public_access(ctx: PhaseContext) -> None:
     reader = getattr(ctx.adapter, "extract_public_access", None)
     if not callable(reader):
         return
-    access: IRPublicAccess = await reader()
+    # None: the source can say nothing about it (a bundle without
+    # public_access.json), which is not the same as saying nobody had access.
+    access: IRPublicAccess | None = await reader()
+    if access is None:
+        return
 
     await _report_non_member_role(ctx, access)
     for line in access.not_carried_over:

@@ -13,6 +13,11 @@ something unrelated would be worse than leaving it alone.
 
 Text inside fenced code blocks is skipped, so a shell prompt or a colour
 literal in a code sample is not silently rewritten.
+
+Only sources that write references this way run it. A source that names
+records by placeholder instead (an import bundle) is expanded by
+:mod:`specivo.importers.load.placeholder_rewrite`, and ``#123`` in its text is
+ordinary text.
 """
 
 from __future__ import annotations
@@ -25,6 +30,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.importers.core.ir import EntityType
 from specivo.importers.core.pipeline import PhaseContext
+from specivo.importers.core.placeholders import REFERENCE_STYLE_HASH
+from specivo.importers.load.placeholder_rewrite import reference_style
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 
@@ -40,6 +47,8 @@ _FENCE_RE = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
 
 async def rewrite_issue_references(ctx: PhaseContext) -> None:
     """Rewrite source references in issue descriptions and comments."""
+    if reference_style(ctx) != REFERENCE_STYLE_HASH:
+        return
     mapping = await _display_keys(ctx)
     if not mapping:
         return

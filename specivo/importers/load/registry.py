@@ -20,6 +20,7 @@ from specivo.importers.load.issue_loader import (
     resolve_custom_field_references,
 )
 from specivo.importers.load.lookup_loader import load_lookups
+from specivo.importers.load.placeholder_rewrite import rewrite_placeholders
 from specivo.importers.load.project_loader import (
     load_custom_field_schemas,
     load_memberships,
@@ -49,6 +50,21 @@ async def _bootstrap(ctx: PhaseContext) -> None:
     """
     check_credential_import(ctx)
     await ensure_import_account(ctx)
+    _record_source_notes(ctx)
+
+
+def _record_source_notes(ctx: PhaseContext) -> None:
+    """Copy what the source itself wants reported into the summary.
+
+    An adapter that knows something the operator should read before anything
+    is loaded (what its exporter left behind, say) offers it as
+    ``(category, line)`` pairs from an optional ``source_notes()``.
+    """
+    reader = getattr(ctx.adapter, "source_notes", None)
+    if not callable(reader):
+        return
+    for category, line in reader():
+        ctx.summary.add_note(category, line)
 
 
 async def _users_and_groups(ctx: PhaseContext) -> None:
@@ -81,6 +97,17 @@ async def _after_issues(ctx: PhaseContext) -> None:
     await restore_version_statuses(ctx)
 
 
+async def _link_graph(ctx: PhaseContext) -> None:
+    """Expand reference placeholders, then rebuild the wiki link graph.
+
+    Placeholders wait until here because they can name any imported record,
+    wiki pages and their attachments included. The link graph comes after,
+    since an expanded placeholder can be a wiki link.
+    """
+    await rewrite_placeholders(ctx)
+    await rebuild_wiki_link_graph(ctx)
+
+
 async def _wiki(ctx: PhaseContext) -> None:
     """Import wiki pages, then their watchers and redirects."""
     await load_wiki_pages(ctx)
@@ -109,7 +136,7 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.WIKI_PAGES: _wiki,
             ImportPhase.WIKI_ATTACHMENTS: load_wiki_attachments,
             ImportPhase.TIME_ENTRIES: load_time_entries,
-            ImportPhase.WIKI_LINK_GRAPH: rebuild_wiki_link_graph,
+            ImportPhase.WIKI_LINK_GRAPH: _link_graph,
             ImportPhase.SEARCH_BACKFILL: backfill_search_index,
         }
     )
