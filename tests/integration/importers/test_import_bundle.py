@@ -49,7 +49,7 @@ pytestmark = [
 ]
 
 # How the import summary starts its warning about placeholders it could not expand.
-PLACEHOLDERS_LEFT = "Placeholders left as written"
+PLACEHOLDERS_LEFT = "Placeholders written as plain text"
 
 SHA_LOG = "bb184ab3bffbeb05ed23843ec1ffebc22065b8f6ef3d9c11e4fd5cc0f043be44"
 SHA_NOTES = "6bceefb7c7e1eaed129f5d3a374d751a1a6d68a6bd46508aeeb78e3f4cd0fe3d"
@@ -428,15 +428,17 @@ class TestRerun:
 
         assert await _texts(db_session) == before
 
-    async def test_a_placeholder_waits_for_its_record_and_is_expanded_by_a_later_run(
-        self, db_session, build_bundle_import
-    ):
-        """Importing only the API project leaves its references into the website as written;
-        importing the website later expands them, and nothing else changes."""
+    async def test_a_placeholder_whose_record_is_not_imported_becomes_its_label(self, db_session, build_bundle_import):
+        """Importing only the API project writes its references into the website as their labels,
+        as plain text; importing the website later leaves that text as it is."""
         first = await build_bundle_import(FULL, project="p-api").run()
         rate_limits = await _issue(db_session, "Rate limit headers are missing")
         stamped = rate_limits.updated_at
-        assert "{{issue:web-1|the login bug}}" in rate_limits.description
+        expected = (
+            "Found while fixing the login bug; background in the runbook.\n\n"
+            "```\n{{issue:web-1}} stays as written in code\n```"
+        )
+        assert rate_limits.description == expected
         (left,) = [w for w in first.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
         assert left.context["count"] == 2
         assert set(left.context["examples"].split(", ")) == {"issue:web-1", "wiki:w-home"}
@@ -444,11 +446,7 @@ class TestRerun:
         await build_bundle_import(FULL, continue_import=True).run()
 
         await db_session.refresh(rate_limits)
-        assert "[the login bug](/issue/BUNDLEWEB-1/)" in rate_limits.description
-        assert "[the runbook](/projects/BUNDLEWEB/wiki/home/)" in rate_limits.description
-        assert "```\n{{issue:web-1}} stays as written in code\n```" in rate_limits.description
-        # The bundle gives it no updated_at, so it kept the first run's; the
-        # expansion did not stamp it again.
+        assert rate_limits.description == expected
         assert rate_limits.updated_at == stamped
 
     async def test_a_different_instance_is_a_different_import(self, db_session, build_bundle_import, tmp_path):
@@ -525,18 +523,20 @@ class TestIssueReferencesAcrossBundles:
         await db_session.refresh(web_1)
         assert web_1.description == web_1_text
 
-    async def test_a_ref_in_neither_the_bundle_nor_the_map_stays_as_text(
+    async def test_a_ref_in_neither_the_bundle_nor_the_map_becomes_its_label_or_ref(
         self, db_session, build_bundle_import, tmp_path
     ):
         await build_bundle_import(FULL).run()
-        later = self._later(tmp_path / "b", "Follows {{issue:web-1}} and {{issue:gone-9|a lost one}}.")
+        later = self._later(
+            tmp_path / "b", "Follows {{issue:web-1}}, {{issue:gone-9|a [lost] one}} and {{issue:gone-8}}."
+        )
 
         second = await build_bundle_import(later, continue_import=True).run()
 
         added = await _issue(db_session, "Issue b-1")
-        assert added.description == "Follows BUNDLEWEB-1 and {{issue:gone-9|a lost one}}."
+        assert added.description == "Follows BUNDLEWEB-1, a [lost] one and gone-8."
         (left,) = [w for w in second.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
-        assert left.context == {"count": 1, "examples": "issue:gone-9"}
+        assert left.context == {"count": 2, "examples": "issue:gone-9, issue:gone-8"}
 
     async def test_the_same_ref_in_another_scope_does_not_resolve(self, db_session, build_bundle_import, tmp_path):
         """The identifier map is per system and instance: another installation's web-1 is not this one's."""
@@ -546,7 +546,7 @@ class TestIssueReferencesAcrossBundles:
         second = await build_bundle_import(other).run()
 
         added = await _issue(db_session, "Issue b-1")
-        assert added.description == "Follows {{issue:web-1}}."
+        assert added.description == "Follows web-1."
         (left,) = [w for w in second.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
         assert left.context["examples"] == "issue:web-1"
 

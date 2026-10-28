@@ -16,6 +16,8 @@ replaces each placeholder with the Specivo form:
 ==========================  ===============================================
 
 Only those four kinds are recognised; any other ``{{...}}`` is ordinary text.
+A placeholder whose record was not imported becomes its label, or else its
+ref, as plain text: a reader never sees the placeholder syntax.
 Text inside fenced code blocks is left alone, as the Redmine reference rewrite
 does, so a code sample can show a placeholder without it being expanded.
 """
@@ -102,9 +104,9 @@ def find_placeholders(text: str | None) -> Iterator[Placeholder]:
 def expand_placeholders(text: str, resolve: Callable[[Placeholder], str | None]) -> tuple[str, list[Placeholder]]:
     """Return *text* with each placeholder replaced by what *resolve* returns.
 
-    A placeholder *resolve* cannot place (it returns ``None``) is kept exactly
-    as written, so a later run that imports the missing record can still
-    expand it. Those are returned alongside the text.
+    A placeholder *resolve* cannot place (it returns ``None``) is written as
+    its label, or as its ref when it has none, as plain text, so a reader never
+    sees the placeholder syntax. Those are returned alongside the text.
     """
     unresolved: list[Placeholder] = []
     if "{{" not in text:
@@ -115,7 +117,7 @@ def expand_placeholders(text: str, resolve: Callable[[Placeholder], str | None])
         expanded = resolve(placeholder)
         if expanded is None:
             unresolved.append(placeholder)
-            return match.group(0)
+            return placeholder.label or placeholder.ref
         return expanded
 
     parts = _FENCE_RE.split(text)

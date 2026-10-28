@@ -617,7 +617,7 @@ class _Scanner:
                 ProblemCode.EXTERNAL_REF,
                 record_file.name,
                 f"{len(found)} issue placeholder(s) name no issue in this bundle, e.g. {shown}; loading looks "
-                "them up in earlier imports of the same source and leaves any it cannot find as written",
+                "them up in earlier imports of the same source and writes any it cannot find as plain text",
             )
 
     # -- per-file checks ---------------------------------------------------

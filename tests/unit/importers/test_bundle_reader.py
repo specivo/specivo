@@ -255,11 +255,11 @@ class TestReferences:
         ]
         assert [p.message for p in report.warnings] == [
             "3 issue placeholder(s) name no issue in this bundle, e.g. 'a-7' (line 1), 'a-8' (line 2); "
-            "loading looks them up in earlier imports of the same source and leaves any it cannot find as written",
+            "loading looks them up in earlier imports of the same source and writes any it cannot find as plain text",
             "1 issue placeholder(s) name no issue in this bundle, e.g. 'a-9' (line 1); "
-            "loading looks them up in earlier imports of the same source and leaves any it cannot find as written",
+            "loading looks them up in earlier imports of the same source and writes any it cannot find as plain text",
             "1 issue placeholder(s) name no issue in this bundle, e.g. 'a-7' (line 1); "
-            "loading looks them up in earlier imports of the same source and leaves any it cannot find as written",
+            "loading looks them up in earlier imports of the same source and writes any it cannot find as plain text",
         ]
 
     async def test_an_outside_issue_warning_gives_at_most_five_examples(self, tmp_path):
