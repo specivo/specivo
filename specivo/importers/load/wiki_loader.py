@@ -177,8 +177,8 @@ async def load_wiki_redirects(ctx: PhaseContext) -> None:
         if wiki is None:
             continue
 
-        async for title, target in reader(project_ref):
-            slug_from, slug_to = slugify(title), slugify(target)
+        async for redirect in reader(project_ref):
+            slug_from, slug_to = slugify(redirect.title), slugify(redirect.redirects_to)
             if not slug_from or not slug_to or slug_from == slug_to:
                 continue
 

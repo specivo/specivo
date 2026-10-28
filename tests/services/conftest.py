@@ -31,6 +31,7 @@ from specivo.importers.core.ir import (
     IRVersion,
     IRWatcher,
     IRWikiPage,
+    IRWikiRedirect,
 )
 from specivo.importers.core.pipeline import ImportOptions, ImportPhase, ImportSummary, PhaseContext
 from specivo.importers.core.progress import NullProgressReporter
@@ -61,7 +62,7 @@ class FakeAdapter:
         watchers: list[IRWatcher] | None = None,
         wiki_pages: list[IRWikiPage] | None = None,
         wiki_watchers: list[IRWatcher] | None = None,
-        wiki_redirects: list[tuple[str, str]] | None = None,
+        wiki_redirects: list[IRWikiRedirect] | None = None,
         time_entries: list[IRTimeEntry] | None = None,
         attachments: list[IRAttachment] | None = None,
         files_dir: object | None = None,
@@ -185,9 +186,10 @@ class FakeAdapter:
             if watcher.container_ref in refs:
                 yield watcher
 
-    async def extract_wiki_redirects(self, project_ref: str) -> AsyncIterator[tuple[str, str]]:
-        for pair in self.wiki_redirects:
-            yield pair
+    async def extract_wiki_redirects(self, project_ref: str) -> AsyncIterator[IRWikiRedirect]:
+        for redirect in self.wiki_redirects:
+            if redirect.project_ref == project_ref:
+                yield redirect
 
     async def extract_time_entries(self, project_ref: str) -> AsyncIterator[IRTimeEntry]:
         for entry in self.time_entries:

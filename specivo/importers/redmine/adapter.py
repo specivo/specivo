@@ -44,6 +44,7 @@ from specivo.importers.core.ir import (
     IRVersion,
     IRWatcher,
     IRWikiPage,
+    IRWikiRedirect,
     PrincipalKind,
 )
 from specivo.importers.core.source import BaseSourceAdapter
@@ -854,8 +855,8 @@ class RedmineSourceAdapter(BaseSourceAdapter):
         for row in rows:
             yield extract.extract_watcher(dict(row), ContainerKind.WIKI_PAGE)
 
-    async def extract_wiki_redirects(self, project_ref: str) -> AsyncIterator[tuple[str, str]]:
-        """Stream a project's wiki redirects as (from title, to title) pairs.
+    async def extract_wiki_redirects(self, project_ref: str) -> AsyncIterator[IRWikiRedirect]:
+        """Stream a project's wiki redirects.
 
         Redmine records one whenever a page is renamed and Specivo has the same
         table, so links to a page's old name keep working after the import.
@@ -875,7 +876,7 @@ class RedmineSourceAdapter(BaseSourceAdapter):
         for row in rows:
             title, target = (row.get("title") or "").strip(), (row.get("redirects_to") or "").strip()
             if title and target:
-                yield title, target
+                yield IRWikiRedirect(project_ref=project_ref, title=title, redirects_to=target)
 
     # ------------------------------------------------------------------
     # Time tracking
