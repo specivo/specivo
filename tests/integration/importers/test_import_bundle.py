@@ -40,13 +40,16 @@ from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.version import Version
 from specivo.models.watcher import Watcher
 from specivo.models.wiki import WikiContent, WikiPage, WikiRedirect
-from tests.fixtures.import_bundle import FULL, copy_full, issue, stored, user, write_bundle
+from tests.fixtures.import_bundle import FULL, copy_full, issue, manifest, project, stored, user, write_bundle
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="function"),
     pytest.mark.integration,
     pytest.mark.serial,
 ]
+
+# How the import summary starts its warning about placeholders it could not expand.
+PLACEHOLDERS_LEFT = "Placeholders written as plain text"
 
 SHA_LOG = "bb184ab3bffbeb05ed23843ec1ffebc22065b8f6ef3d9c11e4fd5cc0f043be44"
 SHA_NOTES = "6bceefb7c7e1eaed129f5d3a374d751a1a6d68a6bd46508aeeb78e3f4cd0fe3d"
@@ -425,25 +428,25 @@ class TestRerun:
 
         assert await _texts(db_session) == before
 
-    async def test_a_placeholder_waits_for_its_record_and_is_expanded_by_a_later_run(
-        self, db_session, build_bundle_import
-    ):
-        """Importing only the API project leaves its references into the website as written;
-        importing the website later expands them, and nothing else changes."""
+    async def test_a_placeholder_whose_record_is_not_imported_becomes_its_label(self, db_session, build_bundle_import):
+        """Importing only the API project writes its references into the website as their labels,
+        as plain text; importing the website later leaves that text as it is."""
         first = await build_bundle_import(FULL, project="p-api").run()
         rate_limits = await _issue(db_session, "Rate limit headers are missing")
         stamped = rate_limits.updated_at
-        assert "{{issue:web-1|the login bug}}" in rate_limits.description
-        assert {w.context.get("placeholder") for w in first.warnings} >= {"issue:web-1", "wiki:w-home"}
+        expected = (
+            "Found while fixing the login bug; background in the runbook.\n\n"
+            "```\n{{issue:web-1}} stays as written in code\n```"
+        )
+        assert rate_limits.description == expected
+        (left,) = [w for w in first.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
+        assert left.context["count"] == 2
+        assert set(left.context["examples"].split(", ")) == {"issue:web-1", "wiki:w-home"}
 
         await build_bundle_import(FULL, continue_import=True).run()
 
         await db_session.refresh(rate_limits)
-        assert "[the login bug](/issue/BUNDLEWEB-1/)" in rate_limits.description
-        assert "[the runbook](/projects/BUNDLEWEB/wiki/home/)" in rate_limits.description
-        assert "```\n{{issue:web-1}} stays as written in code\n```" in rate_limits.description
-        # The bundle gives it no updated_at, so it kept the first run's; the
-        # expansion did not stamp it again.
+        assert rate_limits.description == expected
         assert rate_limits.updated_at == stamped
 
     async def test_a_different_instance_is_a_different_import(self, db_session, build_bundle_import, tmp_path):
@@ -480,6 +483,72 @@ class TestRerun:
         added = await _issue(db_session, "Issue web-3")
         assert (added.project_key, added.sequence_number) == ("BUNDLEWEB", 3)
         assert added.description == "Follow-up to BUNDLEWEB-1."
+
+
+class TestIssueReferencesAcrossBundles:
+    """A source exported in parts: a later bundle's issue placeholders may name issues of an earlier one."""
+
+    def _later(self, root: Path, description: str, *, instance: str = "tracker.example.com") -> Path:
+        later = issue("b-1", "p-b", description=description, updated_at="2024-03-02T08:00:00Z")
+        return write_bundle(
+            root,
+            manifest_data=manifest(source={"system": "sample", "instance": instance}),
+            projects=[project("p-b", identifier="bundleb")],
+            issues=[later],
+        )
+
+    async def test_a_placeholder_resolves_to_the_earlier_bundles_issue(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(FULL).run()
+        later = self._later(tmp_path / "b", "Follows {{issue:web-1}}, see {{issue:web-1|the login bug}}.")
+
+        second = await build_bundle_import(later, continue_import=True).run()
+
+        added = await _issue(db_session, "Issue b-1")
+        assert added.description == "Follows BUNDLEWEB-1, see [the login bug](/issue/BUNDLEWEB-1/)."
+        # Expanding is not an edit: the bundle's updated_at stays.
+        assert added.updated_at == datetime(2024, 3, 2, 8, 0, tzinfo=UTC)
+        assert not [w for w in second.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
+
+    async def test_an_expanded_key_is_not_expanded_again(self, db_session, build_bundle_import, tmp_path):
+        """One pass: text that an expansion produces is never read as a placeholder."""
+        await build_bundle_import(FULL).run()
+        web_1 = await _issue(db_session, "Login fails after the session times out")
+        web_1_text = web_1.description
+        later = self._later(tmp_path / "b", "{{issue:web-1|{{issue:web-2}}}} and {{issue:web-2}}")
+
+        await build_bundle_import(later, continue_import=True).run()
+
+        added = await _issue(db_session, "Issue b-1")
+        assert added.description == "{{issue:web-1|BUNDLEWEB-2}} and BUNDLEWEB-2"
+        await db_session.refresh(web_1)
+        assert web_1.description == web_1_text
+
+    async def test_a_ref_in_neither_the_bundle_nor_the_map_becomes_its_label_or_ref(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        await build_bundle_import(FULL).run()
+        later = self._later(
+            tmp_path / "b", "Follows {{issue:web-1}}, {{issue:gone-9|a [lost] one}} and {{issue:gone-8}}."
+        )
+
+        second = await build_bundle_import(later, continue_import=True).run()
+
+        added = await _issue(db_session, "Issue b-1")
+        assert added.description == "Follows BUNDLEWEB-1, a [lost] one and gone-8."
+        (left,) = [w for w in second.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
+        assert left.context == {"count": 2, "examples": "issue:gone-9, issue:gone-8"}
+
+    async def test_the_same_ref_in_another_scope_does_not_resolve(self, db_session, build_bundle_import, tmp_path):
+        """The identifier map is per system and instance: another installation's web-1 is not this one's."""
+        await build_bundle_import(FULL).run()
+        other = self._later(tmp_path / "b", "Follows {{issue:web-1}}.", instance="other.example.com")
+
+        second = await build_bundle_import(other).run()
+
+        added = await _issue(db_session, "Issue b-1")
+        assert added.description == "Follows web-1."
+        (left,) = [w for w in second.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
+        assert left.context["examples"] == "issue:web-1"
 
 
 def _data_only_zip(source: Path, target: Path) -> Path:

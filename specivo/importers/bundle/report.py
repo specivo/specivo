@@ -37,6 +37,7 @@ class ProblemCode(StrEnum):
     DUPLICATE_REF = "duplicate_ref"
     UNRESOLVED_REF = "unresolved_ref"
     INVALID_REF = "invalid_ref"
+    EXTERNAL_REF = "external_ref"
     PARENT_CYCLE = "parent_cycle"
     MISSING_FILE = "missing_file"
     HASH_MISMATCH = "hash_mismatch"

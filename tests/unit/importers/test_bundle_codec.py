@@ -152,12 +152,27 @@ class TestPlaceholders:
         text = "{{issue:1}}\n\n```\n{{issue:2}}\n```\n\n~~~\n{{user:3}}\n~~~"
         assert [p.ref for p in find_placeholders(text)] == ["1"]
 
-    def test_expansion_replaces_what_resolves_and_keeps_the_rest(self):
+    def test_expansion_replaces_what_resolves_and_writes_the_rest_as_its_ref(self):
         text, unresolved = expand_placeholders(
             "See {{issue:1}} and {{issue:2}}.", lambda p: "ACME-7" if p.ref == "1" else None
         )
-        assert text == "See ACME-7 and {{issue:2}}."
+        assert text == "See ACME-7 and 2."
         assert unresolved == [Placeholder(PlaceholderKind.ISSUE, "2")]
+
+    def test_an_unresolved_placeholder_with_a_label_becomes_the_label(self):
+        """A reader never sees the placeholder syntax: the label, as plain text, or else the ref."""
+        text, unresolved = expand_placeholders(
+            "{{issue:a-7|the [old] bug}}, {{wiki:w9|the runbook}}, {{wiki:w8}}, {{user:u9}}, ![x]({{attachment:a9}})",
+            lambda p: None,
+        )
+        assert text == "the [old] bug, the runbook, w8, u9, ![x](a9)"
+        assert [(p.kind, p.ref, p.label) for p in unresolved] == [
+            (PlaceholderKind.ISSUE, "a-7", "the [old] bug"),
+            (PlaceholderKind.WIKI, "w9", "the runbook"),
+            (PlaceholderKind.WIKI, "w8", None),
+            (PlaceholderKind.USER, "u9", None),
+            (PlaceholderKind.ATTACHMENT, "a9", None),
+        ]
 
     def test_expansion_skips_fenced_code(self):
         text, _ = expand_placeholders("{{user:1}}\n```\n{{user:1}}\n```", lambda p: "@alex")

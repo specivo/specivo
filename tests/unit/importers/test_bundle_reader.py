@@ -221,7 +221,55 @@ class TestReferences:
             issues=[issue("i1", description="See {{issue:i9}} and {{wiki:w1}}.")],
         )
         report = await _validate(root)
-        assert _codes(report) == [("issues.jsonl", 1, "unresolved_ref"), ("issues.jsonl", 1, "unresolved_ref")]
+        # An issue may be in an earlier bundle of the same source; any other
+        # record must be in this one.
+        assert _codes(report) == [("issues.jsonl", 1, "unresolved_ref")]
+        assert report.errors[0].message.startswith("description {{wiki:…}}: no wiki_page")
+        assert _codes(report, Severity.WARNING) == [("issues.jsonl", None, "external_ref")]
+
+    async def test_an_issue_placeholder_outside_the_bundle_is_a_warning(self, tmp_path):
+        """The load looks it up among the source's earlier imports, which validation cannot see."""
+        root = write_bundle(
+            tmp_path / "b",
+            projects=[project("p1")],
+            issues=[
+                issue("i1", description="Follows {{issue:a-7}} and {{issue:i2}}."),
+                issue("i2", description="Also {{issue:a-7|the old bug}}, {{issue:a-8}}."),
+            ],
+            journals=[{"source_ref": "j1", "issue_ref": "i1", "notes": "See {{issue:a-9}}."}],
+            wiki_pages=[
+                {
+                    "source_ref": "w1",
+                    "project_ref": "p1",
+                    "title": "Home",
+                    "versions": [{"source_ref": "wv1", "version": 1, "text": "{{issue:a-7}}"}],
+                }
+            ],
+        )
+        report = await _validate(root)
+        assert report.ok, report.format_text()
+        assert [(p.file, p.line, p.pointer, str(p.code)) for p in report.warnings] == [
+            ("issues.jsonl", None, None, "external_ref"),
+            ("journals.jsonl", None, None, "external_ref"),
+            ("wiki_pages.jsonl", None, None, "external_ref"),
+        ]
+        assert [p.message for p in report.warnings] == [
+            "3 issue placeholder(s) name no issue in this bundle, e.g. 'a-7' (line 1), 'a-8' (line 2); "
+            "loading looks them up in earlier imports of the same source and writes any it cannot find as plain text",
+            "1 issue placeholder(s) name no issue in this bundle, e.g. 'a-9' (line 1); "
+            "loading looks them up in earlier imports of the same source and writes any it cannot find as plain text",
+            "1 issue placeholder(s) name no issue in this bundle, e.g. 'a-7' (line 1); "
+            "loading looks them up in earlier imports of the same source and writes any it cannot find as plain text",
+        ]
+
+    async def test_an_outside_issue_warning_gives_at_most_five_examples(self, tmp_path):
+        text = " ".join(f"{{{{issue:x-{n}}}}}" for n in range(7))
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], issues=[issue("i1", description=text)])
+        (warning,) = (await _validate(root)).warnings
+        assert warning.message.startswith(
+            "7 issue placeholder(s) name no issue in this bundle, e.g. 'x-0' (line 1), 'x-1' (line 1), "
+            "'x-2' (line 1), 'x-3' (line 1), 'x-4' (line 1); "
+        )
 
     async def test_a_placeholder_may_name_a_record_in_a_later_file(self, tmp_path):
         data = b"bytes"
