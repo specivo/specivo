@@ -8,9 +8,15 @@ pages are imported after issues. This pass runs once everything is in and
 replaces each placeholder with the Specivo form.
 
 Only rows this source imported are touched, found through the id map, so text
-somebody wrote in Specivo is never rewritten. A placeholder whose record was
-not imported is kept as written and reported; a later run that imports the
+somebody wrote in Specivo is never rewritten. A placeholder is looked up in the
+id map of the run's scope (its source system and instance), which holds every
+earlier run's records too, so a bundle may name an issue a previous bundle of
+the same source brought in. A placeholder whose record was not imported is kept
+as written and counted in one summary warning; a later run that imports the
 record expands it then.
+
+Each text is expanded in a single pass: what an expansion produces is never
+read as a placeholder in turn.
 
 Sources that write Redmine-style ``#123`` references instead are handled by
 :mod:`specivo.importers.load.reference_rewrite`; an adapter says which style it
@@ -47,6 +53,8 @@ logger = logging.getLogger(__name__)
 
 # Rows read per query when scanning imported text.
 _BATCH = 500
+# Placeholders named in the warning about those left as written.
+_MAX_EXAMPLES = 10
 
 
 def reference_style(ctx: PhaseContext) -> str:
@@ -79,10 +87,15 @@ async def rewrite_placeholders(ctx: PhaseContext) -> None:
     changed += await _rewrite_description_changes(ctx, resolver)
     changed += await _rewrite_wiki(ctx, resolver)
 
-    for placeholder in resolver.unresolved():
+    unresolved = resolver.unresolved()
+    if unresolved:
+        # One warning however many there are: a source exported in parts can
+        # leave thousands, and the summary should stay readable.
         ctx.warn(
-            "Text refers to a record that was not imported; the placeholder was left as written",
-            placeholder=f"{placeholder.kind}:{placeholder.ref}",
+            "Placeholders left as written: they name records that were not imported, "
+            "in this run or an earlier one of the same source",
+            count=len(unresolved),
+            examples=", ".join(f"{p.kind}:{p.ref}" for p in unresolved[:_MAX_EXAMPLES]),
         )
     if changed:
         logger.info("Expanded reference placeholders in %d records", changed)

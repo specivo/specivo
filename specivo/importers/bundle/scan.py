@@ -7,7 +7,8 @@ adapter streams from comes out of it for free.
 
 **What is checked.** Each record against its JSON Schema; ``source_ref``
 uniqueness per entity type; every reference to another record, including the
-placeholders in text; stored files exist and hash to their names; parent
+placeholders in text (an issue placeholder may name an issue outside the
+bundle, a warning); stored files exist and hash to their names; parent
 chains have no cycles; the manifest's counts match the files.
 
 **What is kept in memory.** Never a whole JSON-lines file: each record (one
@@ -73,7 +74,7 @@ from specivo.importers.bundle.format import (
 from specivo.importers.bundle.limits import BundleLimits, format_size
 from specivo.importers.bundle.report import ProblemCode, ValidationReport
 from specivo.importers.core.ir import ContainerKind, EntityType, PrincipalKind, ValueKind
-from specivo.importers.core.placeholders import LABELLED_KINDS, find_placeholders
+from specivo.importers.core.placeholders import LABELLED_KINDS, PlaceholderKind, find_placeholders
 
 _HASH_CHUNK = 1024 * 1024
 # Long values (a whole description) make a schema message unreadable.
@@ -81,6 +82,8 @@ _MAX_MESSAGE = 300
 _EARLIEST = datetime.min.replace(tzinfo=UTC)
 # Read size when skipping the rest of an over-long line.
 _SKIP_CHUNK = 1024 * 1024
+# Refs named in the warning about issue placeholders outside the bundle.
+_MAX_OUTSIDE_EXAMPLES = 5
 
 
 # --------------------------------------------------------------------------
@@ -243,6 +246,9 @@ class _Pending:
     field: str
     entity_type: EntityType
     ref: str
+    # An issue placeholder may name an issue of an earlier bundle of the same
+    # source, which only the load can look up.
+    outside_ok: bool = False
 
 
 class _Scanner:
@@ -255,6 +261,8 @@ class _Scanner:
         self.refs: dict[EntityType, dict[str, int | None]] = {}
         self.done: set[EntityType] = set()
         self.pending: list[_Pending] = []
+        # Issue placeholders naming no issue in the bundle: (line, ref) by file.
+        self.outside: dict[str, list[tuple[int | None, str]]] = {}
         # Unknown properties are errors, unless the bundle is a newer minor
         # version: it may add optional fields this reader does not know.
         self.tolerate_unknown = False
@@ -528,11 +536,20 @@ class _Scanner:
     def _known(self, entity_type: EntityType, ref: str) -> bool:
         return ref in self.refs.get(entity_type, {})
 
-    def _ref(self, file: str, line: int | None, field_name: str, entity_type: EntityType, ref: Any) -> None:
+    def _ref(
+        self,
+        file: str,
+        line: int | None,
+        field_name: str,
+        entity_type: EntityType,
+        ref: Any,
+        *,
+        outside_ok: bool = False,
+    ) -> None:
         """Check that *ref* names a record, now or once its file has been read."""
         if ref is None:
             return
-        pending = _Pending(file, line, field_name, entity_type, str(ref))
+        pending = _Pending(file, line, field_name, entity_type, str(ref), outside_ok)
         if entity_type in self.done:
             self._resolve(pending)
         else:
@@ -540,6 +557,9 @@ class _Scanner:
 
     def _resolve(self, pending: _Pending) -> None:
         if self._known(pending.entity_type, pending.ref):
+            return
+        if pending.outside_ok:
+            self.outside.setdefault(pending.file, []).append((pending.line, pending.ref))
             return
         where: dict[str, Any] = {"line": pending.line} if pending.line is not None else {"pointer": pending.field}
         label = pending.field if pending.line is not None else pending.field.rsplit("/", 1)[-1]
@@ -568,7 +588,37 @@ class _Scanner:
                     line=line,
                 )
             where = f"{field_name} {{{{{placeholder.kind}:…}}}}"
-            self._ref(file, line, where, placeholder.entity_type, placeholder.ref)
+            self._ref(
+                file,
+                line,
+                where,
+                placeholder.entity_type,
+                placeholder.ref,
+                outside_ok=placeholder.kind is PlaceholderKind.ISSUE,
+            )
+
+    def _report_outside_issues(self) -> None:
+        """Warn, once per file, about issue placeholders naming no issue in the bundle.
+
+        They are not errors: the bundle may be one part of a source exported in
+        parts, and the load looks them up in the identifier map of the same
+        source. Validation reads no database, so it cannot tell which will
+        resolve.
+        """
+        for record_file in RECORD_FILES:
+            found = self.outside.get(record_file.name)
+            if not found:
+                continue
+            examples: dict[str, int | None] = {}
+            for line, ref in sorted(found, key=lambda item: item[0] or 0):
+                examples.setdefault(ref, line)
+            shown = ", ".join(f"{ref!r} (line {line})" for ref, line in list(examples.items())[:_MAX_OUTSIDE_EXAMPLES])
+            self.report.warning(
+                ProblemCode.EXTERNAL_REF,
+                record_file.name,
+                f"{len(found)} issue placeholder(s) name no issue in this bundle, e.g. {shown}; loading looks "
+                "them up in earlier imports of the same source and leaves any it cannot find as written",
+            )
 
     # -- per-file checks ---------------------------------------------------
     #
@@ -832,6 +882,7 @@ class _Scanner:
     def _finish(self) -> None:
         for pending in self.pending:
             self._resolve(pending)
+        self._report_outside_issues()
 
         order, cyclic = order_parents_first(self.project_parents)
         self._report_cycles(PROJECTS, cyclic)

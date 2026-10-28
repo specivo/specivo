@@ -90,6 +90,7 @@ class TestTheValidatorsAgree:
                     }
                 ],
             },
+            {"projects": [project("p1")], "issues": [issue("i1", description="{{issue:a-7}} {{issue:a-8|older}}")]},
         ],
         ids=[
             "unresolved",
@@ -101,6 +102,7 @@ class TestTheValidatorsAgree:
             "group-assignee",
             "newline-ref",
             "description-change",
+            "issue-outside-bundle",
         ],
     )
     async def test_on_a_bundle_with_a_mistake(self, tmp_path, records):
