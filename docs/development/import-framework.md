@@ -7,11 +7,13 @@ tracker and writes an import bundle, specified in
 the code that loads a bundle: its architecture, the phase pipeline, the identifier
 map and how the tests are laid out.
 
-The reasoning behind the decisions below — why the write path goes through
-Specivo's own services, why idempotency lives in a database table, why phases
-commit individually — is recorded in
-[ADR-0006](../adr/0006-redmine-importer-architecture.md). This page is the "what"
-and "where"; the ADR is the "why".
+Three decisions shape everything below. The write path goes through Specivo's
+own services, so sequence numbers, nested sets and auto-watching stay correct
+as those services change. The identifier map lives in a database table, written
+in the same transaction as the rows it describes, so a rolled-back write never
+leaves a stale entry. Each phase commits on its own, so a failure late in a
+large import keeps what the earlier phases loaded and `--resume` continues from
+there.
 
 ## Package layout
 
