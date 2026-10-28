@@ -17,7 +17,6 @@ from specivo.importers.load.issue_loader import (
     load_journals,
     load_relations,
     load_watchers,
-    resolve_custom_field_references,
 )
 from specivo.importers.load.lookup_loader import load_lookups
 from specivo.importers.load.pending_links import check_links_file, link_placeholders
@@ -29,7 +28,6 @@ from specivo.importers.load.project_loader import (
     restore_version_statuses,
 )
 from specivo.importers.load.public_access_loader import load_public_access
-from specivo.importers.load.reference_rewrite import rewrite_issue_references
 from specivo.importers.load.search_index import backfill_search_index, rebuild_wiki_link_graph
 from specivo.importers.load.time_entry_loader import load_time_entries
 from specivo.importers.load.user_loader import (
@@ -129,17 +127,6 @@ async def _memberships(ctx: PhaseContext) -> None:
     await load_public_access(ctx)
 
 
-async def _after_issues(ctx: PhaseContext) -> None:
-    """The fix-ups that can only be done once every issue exists.
-
-    References because one can point into a project imported later, and version
-    statuses because a locked version cannot be assigned to an issue while the
-    issues are still being created.
-    """
-    await rewrite_issue_references(ctx)
-    await restore_version_statuses(ctx)
-
-
 async def _link_graph(ctx: PhaseContext) -> None:
     """Expand reference placeholders, then rebuild the wiki link graph.
 
@@ -173,11 +160,10 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.CUSTOM_FIELD_SCHEMAS: load_custom_field_schemas,
             ImportPhase.ISSUES: load_issues,
             ImportPhase.WATCHERS: load_watchers,
-            ImportPhase.CUSTOM_FIELD_VALUES: resolve_custom_field_references,
             ImportPhase.JOURNALS: load_journals,
             ImportPhase.RELATIONS: load_relations,
             ImportPhase.ISSUE_ATTACHMENTS: load_issue_attachments,
-            ImportPhase.ISSUE_REF_REWRITE: _after_issues,
+            ImportPhase.VERSION_STATUSES: restore_version_statuses,
             ImportPhase.WIKI_PAGES: _wiki,
             ImportPhase.WIKI_ATTACHMENTS: load_wiki_attachments,
             ImportPhase.TIME_ENTRIES: load_time_entries,

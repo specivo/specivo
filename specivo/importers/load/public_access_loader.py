@@ -1,6 +1,6 @@
 """Carry the source's non-member and anonymous access over, without opening anything.
 
-Redmine decides what people without a membership may see with two builtin
+A source can decide what people without a membership may see with two builtin
 roles that apply instance-wide, behind a "sign-in required" setting. Specivo
 decides it per project: a seeded read-only Non member role for signed-in
 non-members, and a project's ``anonymous_permissions`` for visitors without an

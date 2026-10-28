@@ -24,10 +24,6 @@ unless they were edited since (see :mod:`specivo.importers.load.pending_links`).
 
 Each text is expanded in a single pass: what an expansion produces is never
 read as a placeholder in turn.
-
-Sources that write Redmine-style ``#123`` references instead are handled by
-:mod:`specivo.importers.load.reference_rewrite`; an adapter says which style it
-uses with ``reference_style``.
 """
 
 from __future__ import annotations
@@ -45,8 +41,6 @@ from specivo.importers.core.links_file import ALLOWED_COLUMNS, LinksStore, Pendi
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.core.placeholders import (
     PLACEHOLDER_ENTITY_TYPES,
-    REFERENCE_STYLE_HASH,
-    REFERENCE_STYLE_PLACEHOLDERS,
     Placeholder,
     PlaceholderKind,
     expand_placeholders,
@@ -66,14 +60,6 @@ logger = logging.getLogger(__name__)
 _BATCH = 500
 # Placeholders named in the warning about those written as plain text.
 _MAX_EXAMPLES = 10
-
-
-def reference_style(ctx: PhaseContext) -> str:
-    """Return how the run's source writes references between records.
-
-    Adapters that predate placeholders write ``#123`` and declare nothing.
-    """
-    return str(getattr(ctx.adapter, "reference_style", REFERENCE_STYLE_HASH))
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,9 +171,6 @@ async def rewrite_placeholders(ctx: PhaseContext, resolver: PlaceholderResolver 
 
     Returns the texts left with placeholders whose records were not imported.
     """
-    if reference_style(ctx) != REFERENCE_STYLE_PLACEHOLDERS:
-        return []
-
     resolver = resolver or PlaceholderResolver(ctx.session, ctx.id_map)
     pending: list[PendingText] = []
     changed = 0

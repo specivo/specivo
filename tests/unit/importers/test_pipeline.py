@@ -92,7 +92,7 @@ class TestPhaseOrder:
         assert index[ImportPhase.PROJECT_LOOKUPS] < index[ImportPhase.ISSUES]
         assert index[ImportPhase.ISSUES] < index[ImportPhase.JOURNALS]
         assert index[ImportPhase.ISSUES] < index[ImportPhase.RELATIONS]
-        assert index[ImportPhase.ISSUE_ATTACHMENTS] < index[ImportPhase.ISSUE_REF_REWRITE]
+        assert index[ImportPhase.ISSUE_ATTACHMENTS] < index[ImportPhase.VERSION_STATUSES]
         assert index[ImportPhase.WIKI_PAGES] < index[ImportPhase.WIKI_LINK_GRAPH]
         assert index[ImportPhase.SEARCH_BACKFILL] == len(PHASE_ORDER) - 1
 
@@ -100,7 +100,7 @@ class TestPhaseOrder:
         """Cross-project relations need the full issue map, not one project's."""
         index = {phase: position for position, phase in enumerate(PHASE_ORDER)}
         assert index[ImportPhase.RELATIONS] > index[ImportPhase.ISSUES]
-        assert index[ImportPhase.ISSUE_REF_REWRITE] > index[ImportPhase.RELATIONS]
+        assert index[ImportPhase.VERSION_STATUSES] > index[ImportPhase.RELATIONS]
 
 
 @async_test

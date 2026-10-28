@@ -3,10 +3,10 @@ memberships and custom-field schemas.
 
 Most of this is a direct mapping. Three things are not.
 
-**Projects need a key that Redmine never had.** Specivo identifies an issue as
-``ACME-15``; Redmine identifies it as ``#15`` and has no per-project prefix at
-all. A key is derived from the project identifier, which is the closest thing
-Redmine has to a short name, and the operator can override any of them. It is
+**Projects need a key that a source may never have had.** Specivo identifies an
+issue as ``ACME-15``; a source can identify it as ``#15`` with no per-project
+prefix at all. A key is derived from the project identifier, which is the
+closest thing such a source has to a short name, and the operator can override any of them. It is
 the one mapping worth reviewing before a large import, so every derived key is
 reported.
 
@@ -16,8 +16,8 @@ membership row held by the group the users phase created. Permission resolution
 unions a user's own roles with those of every group they are in, so the people
 in it get the access without a grant of their own.
 
-**Custom fields become metadata schemas per project.** A Redmine custom field
-is instance-wide; a Specivo metadata schema belongs to a project and optionally
+**Custom fields become metadata schemas per project.** A source's custom field
+can be instance-wide; a Specivo metadata schema belongs to a project and optionally
 a tracker. Fields are therefore grouped by the scope they apply to, so a project
 gets one schema per tracker that has fields rather than one schema per field.
 """
@@ -54,9 +54,6 @@ VersionSharing = Literal["none", "descendants", "hierarchy", "tree", "system"]
 # Report sections.
 NOTE_PROJECT_KEYS = "project_keys_assigned"
 NOTE_MODULES_DROPPED = "project_modules_without_an_equivalent"
-
-# Where the derived custom-field keys are parked for the issue phase.
-CUSTOM_FIELD_KEYS_STATE_KEY = "custom_field_keys"
 
 # Versions are created open and their real status applied once every issue
 # that targets them exists. See restore_version_statuses.
@@ -248,7 +245,7 @@ async def _identifier_taken(session: AsyncSession, identifier: str) -> bool:
 async def _unique_key(ctx: PhaseContext, ir: IRProject, identifier: str) -> str:
     """Return the issue-key prefix for a project.
 
-    Redmine has no such concept, so it is derived from the identifier unless the
+    A source may have no such concept, so it is derived from the identifier unless the
     operator supplied one. Every result is reported, because this is the mapping
     people most often want to correct.
     """
@@ -441,14 +438,13 @@ async def _principal_for(ctx: PhaseContext, ir: IRMembership, project_key: str) 
 
 
 async def load_custom_field_schemas(ctx: PhaseContext) -> None:
-    """Turn Redmine custom fields into per-project metadata schemas.
+    """Turn the source's custom fields into per-project metadata schemas.
 
     A field applying to several trackers produces one schema per tracker, since
     a schema carries a single tracker. A field with no tracker link becomes a
     project-wide schema, so its historical values still validate.
     """
     fields = [field async for field in ctx.adapter.extract_custom_fields()]
-    ctx.state[CUSTOM_FIELD_KEYS_STATE_KEY] = {field.source_ref: field for field in fields}
     if not fields:
         return
 

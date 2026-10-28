@@ -321,8 +321,8 @@ async def rename_scope(
     """Move every row of one scope to another, and return how many moved.
 
     For an operator whose earlier import was keyed differently from the one
-    that comes next (a direct Redmine import keyed by its masked database URL,
-    say, before a tool's bundle names the installation): once the rows are
+    that comes next (an import keyed by a masked database URL, say, before a
+    bundle names the installation): once the rows are
     under the new key, the next import finds what is already there.
 
     Refuses, with :class:`ScopeRenameError` and nothing changed, a target that

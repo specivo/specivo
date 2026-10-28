@@ -1,9 +1,8 @@
-"""Loading roles and public access from IR, without a Redmine fixture.
+"""Loading roles and public access from IR written by hand.
 
-The fixture-backed tests in ``test_import_redmine_public_access.py`` skip when
-the fixture is down, so the load-layer rules that keep an import from opening
-an instance, and the builtin-role handling, are pinned here against IR written
-by hand.
+Pins the load-layer rules that keep an import from opening an instance, and the
+builtin-role handling, without a bundle. The bundle tests cover the same path
+end to end.
 """
 
 from __future__ import annotations

@@ -38,7 +38,6 @@ from specivo.importers.load.issue_loader import (
     load_journals,
     load_relations,
     load_watchers,
-    resolve_custom_field_references,
 )
 from specivo.importers.load.lookup_loader import load_lookups
 from specivo.importers.load.project_loader import load_projects
@@ -47,7 +46,7 @@ from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.relation import IssueRelation
 from specivo.models.watcher import Watcher
-from tests.services.conftest import FakeAdapter
+from tests.services.conftest import FakeAdapter, MarkedConverter
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.service]
 
@@ -137,19 +136,19 @@ class TestIssues:
         assert issue.display_key == f"ISSUETEST-{issue.sequence_number}"
 
     async def test_description_markup_is_converted(self, db_session, loaded):
-        ctx = await loaded(_adapter(issues=[_issue()]))
+        ctx = await loaded(_adapter(issues=[_issue()], converter=MarkedConverter()))
         await load_issues(ctx)
 
         issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
-        assert (await db_session.get(Issue, issue_id)).description.startswith("## Steps")
+        assert (await db_session.get(Issue, issue_id)).description.startswith(MarkedConverter.PREFIX)
 
     async def test_issue_references_are_left_for_the_later_pass(self, db_session, loaded):
-        """A reference can point at an issue in a project imported later."""
-        ctx = await loaded(_adapter(issues=[_issue(description="Caused by #42.")]))
+        """A placeholder can point at an issue in a project imported later."""
+        ctx = await loaded(_adapter(issues=[_issue(description="Caused by {{issue:42}}.")]))
         await load_issues(ctx)
 
         issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
-        assert "#42" in (await db_session.get(Issue, issue_id)).description
+        assert "{{issue:42}}" in (await db_session.get(Issue, issue_id)).description
 
     async def test_original_timestamps_are_restored(self, db_session, loaded):
         ctx = await loaded(_adapter(issues=[_issue()]))
@@ -287,8 +286,8 @@ class TestCustomFieldValues:
         issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
         assert (await db_session.get(Issue, issue_id)).issue_metadata["severity"] == "High"
 
-    async def test_user_references_are_rewritten_to_specivo_ids(self, db_session, loaded):
-        """Stored as source ids first, since the user may be imported later."""
+    async def test_user_references_become_specivo_ids(self, db_session, loaded):
+        """Users are imported before issues, so the reference resolves as the issue is created."""
         values = [IRCustomValue(field_ref="1", key="reviewer", value=7, value_kind=ValueKind.USER_REF)]
         adapter = _adapter(
             issues=[_issue(custom_values=values)],
@@ -304,14 +303,12 @@ class TestCustomFieldValues:
         )
         ctx = await loaded(adapter)
         await load_issues(ctx)
-        ctx.state["custom_field_keys"] = {field.source_ref: field for field in adapter.custom_fields}
-        await resolve_custom_field_references(ctx)
 
         issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
         expected = await ctx.id_map.get(db_session, EntityType.USER, "7")
         assert (await db_session.get(Issue, issue_id)).issue_metadata["reviewer"] == expected
 
-    async def test_multi_value_references_are_rewritten(self, db_session, loaded):
+    async def test_multi_value_references_become_specivo_ids(self, db_session, loaded):
         values = [IRCustomValue(field_ref="1", key="reviewers", value=[7], value_kind=ValueKind.USER_REF)]
         adapter = _adapter(
             issues=[_issue(custom_values=values)],
@@ -328,8 +325,6 @@ class TestCustomFieldValues:
         )
         ctx = await loaded(adapter)
         await load_issues(ctx)
-        ctx.state["custom_field_keys"] = {field.source_ref: field for field in adapter.custom_fields}
-        await resolve_custom_field_references(ctx)
 
         issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
         expected = await ctx.id_map.get(db_session, EntityType.USER, "7")
@@ -428,12 +423,14 @@ class TestJournals:
         assert journal.is_private is True
 
     async def test_note_markup_is_converted(self, db_session, loaded):
-        ctx = await loaded(_adapter(issues=[_issue()], journals=[self._journal(notes="*urgent*")]))
+        ctx = await loaded(
+            _adapter(issues=[_issue()], journals=[self._journal(notes="urgent")], converter=MarkedConverter())
+        )
         await load_issues(ctx)
         await load_journals(ctx)
 
         journal = await db_session.get(Journal, await ctx.id_map.get(db_session, EntityType.JOURNAL, "500"))
-        assert journal.notes == "**urgent**"
+        assert journal.notes == f"{MarkedConverter.PREFIX}urgent"
 
     async def test_second_run_replays_nothing(self, db_session, loaded):
         ctx = await loaded(_adapter(issues=[_issue()], journals=[self._journal()]))

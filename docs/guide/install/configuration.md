@@ -227,7 +227,7 @@ and [Writing a password hasher plugin](password-hasher-plugins.md).
 | `LEGACY_PASSWORD_ALGORITHMS` | Imported password formats allowed to sign in, e.g. `["redmine_sha1"]`. Default `[]`: none. |
 | `LEGACY_PASSWORD_HASHES_EXPIRE_AT` | After this moment no imported password works and those people use password recovery, e.g. `2027-03-31T00:00:00Z`. Default unset. |
 | `PASSWORD_HASHERS` | Extra hasher classes by dotted path, e.g. `["acme_hashers.AcmeTrackerMd5"]`. |
-| `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers and [import sources](import-source-plugins.md). |
+| `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers. |
 
 ## Semantic search model
 

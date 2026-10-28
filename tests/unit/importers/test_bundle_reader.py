@@ -17,7 +17,6 @@ import pytest
 from specivo.importers.bundle import BundleInvalidError, BundleSourceAdapter
 from specivo.importers.bundle.report import Severity, ValidationReport
 from specivo.importers.core.ir import IRAttachment, IRIssue, IRProject, IRUser
-from specivo.importers.core.placeholders import REFERENCE_STYLE_PLACEHOLDERS
 from tests.fixtures.import_bundle import FULL, copy_full, issue, manifest, project, stored, user, write_bundle
 
 pytestmark = pytest.mark.unit
@@ -75,7 +74,6 @@ class TestAValidBundle:
         assert adapter.source_system == "bundle"
         assert adapter.id_map_system == "sample"
         assert adapter.source_instance == "tracker.example.com"
-        assert adapter.reference_style == REFERENCE_STYLE_PLACEHOLDERS
 
     def test_source_instance_can_be_overridden(self):
         adapter = BundleSourceAdapter(FULL, source_instance="legacy")

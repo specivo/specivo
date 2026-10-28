@@ -10,10 +10,8 @@ write path:
   only and know nothing about any source system.
 * ``bundle`` — the IR as a documented file format (``docs/import-bundle/v1.md``)
   and the adapter that reads it. Importers outside Specivo write bundles.
-* ``redmine`` — the first source adapter: reads a Redmine database and its
-  ``files/`` directory and emits IR.
 
-Adding another source means writing an importer that produces a bundle, or a
-new adapter package that implements ``SourceAdapter`` and emits the same IR.
-No change to ``core`` or ``load`` is required either way.
+There is one source, ``bundle``. An importer for another tracker is a separate
+tool that reads that tracker and writes a bundle; nothing in ``core`` or
+``load`` changes for it.
 """

@@ -30,17 +30,13 @@ from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.selectable import ScalarSelect
 
 from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.converter import ContentConverter, ConversionContext
 from specivo.importers.core.ir import EntityType, IRIssue, IRJournalEntry, IRRelation, ValueKind
 from specivo.importers.core.pipeline import PhaseContext
-from specivo.importers.core.placeholders import REFERENCE_STYLE_PLACEHOLDERS
-from specivo.importers.load.placeholder_rewrite import reference_style
 from specivo.importers.load.user_loader import ensure_import_account
-from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.project import Project
@@ -65,9 +61,7 @@ def converter_for(ctx: PhaseContext) -> tuple[ContentConverter, ConversionContex
     if converter is None:
         converter = ctx.adapter.content_converter()
         ctx.state[CONVERTER_STATE_KEY] = converter
-        ctx.state[CONVERSION_CONTEXT_STATE_KEY] = ConversionContext(
-            source_format=getattr(ctx.adapter, "source_format", "markdown")
-        )
+        ctx.state[CONVERSION_CONTEXT_STATE_KEY] = ConversionContext()
     return converter, ctx.state[CONVERSION_CONTEXT_STATE_KEY]
 
 
@@ -133,7 +127,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
     author = await _resolve_author(ctx, ir.author_ref)
     assigned_to_id = await ctx.id_map.get(ctx.session, EntityType.USER, ir.assigned_to_ref)
     if ir.assigned_to_ref and assigned_to_id is None:
-        # Redmine can assign an issue to a group, which Specivo cannot express.
+        # A source can assign an issue to a group, which Specivo cannot express.
         ctx.warn("Issue is assigned to someone who was not imported; left unassigned", issue=ir.source_ref)
 
     parent_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.parent_ref)
@@ -201,16 +195,11 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
 async def _metadata(ctx: PhaseContext, ir: IRIssue) -> dict[str, Any]:
     """Return the issue's custom-field values, keyed as its metadata stores them.
 
-    A source writing Redmine-style references stores user and version values
-    as the source's ids and has them rewritten after every issue exists (see
-    :func:`resolve_custom_field_references`). A placeholder-style source (a
-    bundle) names them by ref strings that a schema expecting a Specivo id
-    would reject, so they are resolved here: users and versions are imported
-    before issues. A value naming something that was not imported is left out.
+    A bundle names users and versions by ref strings that a schema expecting a
+    Specivo id would reject, so they are resolved here: users and versions are
+    imported before issues. A value naming something that was not imported is
+    left out.
     """
-    if reference_style(ctx) != REFERENCE_STYLE_PLACEHOLDERS:
-        return {value.key: value.value for value in ir.custom_values}
-
     metadata: dict[str, Any] = {}
     for value in ir.custom_values:
         if value.value_kind is ValueKind.SCALAR:
@@ -236,7 +225,7 @@ async def _metadata(ctx: PhaseContext, ir: IRIssue) -> dict[str, Any]:
 async def _resolve_author(ctx: PhaseContext, author_ref: str | None):
     """Return the issue's author, falling back to the import account.
 
-    Redmine keeps rows whose author was deleted; Specivo requires one.
+    A source can keep rows whose author was deleted; Specivo requires one.
     """
     author_id = await ctx.id_map.get(ctx.session, EntityType.USER, author_ref)
     if author_id is not None:
@@ -275,76 +264,6 @@ async def load_watchers(ctx: PhaseContext) -> None:
             ctx.summary.record_created(EntityType.WATCHER)
             ctx.tick()
     await ctx.session.flush()
-
-
-# --------------------------------------------------------------------------
-# Custom-field references
-# --------------------------------------------------------------------------
-
-
-async def resolve_custom_field_references(ctx: PhaseContext) -> None:
-    """Rewrite user and version custom-field values to Specivo ids.
-
-    These are stored as source ids while issues are created, because the
-    referenced user or version may be imported after the issue that names it.
-    A placeholder-style source has them resolved at creation instead (see
-    :func:`_metadata`), so there is nothing left to rewrite.
-
-    Only issues this run created are rewritten (a resumed run is the same run).
-    An issue an earlier run created holds Specivo ids already, and rewriting
-    one again would turn it into whichever source record has that number.
-    """
-    if reference_style(ctx) == REFERENCE_STYLE_PLACEHOLDERS:
-        return
-    fields = ctx.state.get("custom_field_keys") or {}
-    reference_fields = [field for field in fields.values() if field.field_format in {"user", "version"}]
-    if not reference_fields:
-        return
-
-    id_map = ctx.id_map
-    created_by_this_run = (
-        select(ImportIdMapping.target_id)
-        .where(
-            ImportIdMapping.source_system == id_map.source_system,
-            ImportIdMapping.source_instance == id_map.source_instance,
-            ImportIdMapping.entity_type == EntityType.ISSUE,
-            ImportIdMapping.import_run_id == id_map.run_id,
-        )
-        .scalar_subquery()
-    )
-    for field in reference_fields:
-        entity = EntityType.USER if field.field_format == "user" else EntityType.VERSION
-        mapping = await ctx.id_map.preload(ctx.session, entity)
-        if not mapping:
-            continue
-        await _rewrite_metadata_key(ctx.session, field.key, mapping, created_by_this_run)
-        ctx.tick()
-
-
-async def _rewrite_metadata_key(
-    session: AsyncSession, key: str, mapping: dict[str, int], issue_ids: ScalarSelect[int]
-) -> None:
-    """Replace source ids stored under *key* with the Specivo ids they map to, in the issues *issue_ids* selects."""
-    stmt = select(Issue.id, Issue.issue_metadata).where(Issue.issue_metadata.has_key(key), Issue.id.in_(issue_ids))
-    rows = (await session.execute(stmt)).all()
-
-    for issue_id, metadata in rows:
-        current = metadata.get(key)
-        if isinstance(current, list):
-            resolved: Any = [mapping.get(str(item), item) for item in current]
-        else:
-            resolved = mapping.get(str(current), current)
-        if resolved == current:
-            continue
-        updated = dict(metadata)
-        updated[key] = resolved
-        await session.execute(
-            update(Issue)
-            .where(Issue.id == issue_id)
-            # Resolving an id is not an edit; keep the source's timestamp.
-            .values(issue_metadata=updated, updated_at=Issue.updated_at)
-            .execution_options(synchronize_session=False)
-        )
 
 
 # --------------------------------------------------------------------------
@@ -455,7 +374,7 @@ async def _create_relation(ctx: PhaseContext, ir: IRRelation) -> None:
     try:
         relation = await _relation_service.create(ctx.session, issue_from, issue_to, ir.relation_type, delay=ir.delay)
     except AppError as exc:
-        # Specivo validates more strictly than Redmine — it refuses a relation
+        # Specivo validates more strictly than a source may — it refuses a relation
         # between an issue and its own descendant, for one. A relation the
         # source allowed is reported rather than ending the import.
         ctx.warn(

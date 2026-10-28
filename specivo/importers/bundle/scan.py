@@ -369,7 +369,7 @@ class _Scanner:
                     ProblemCode.SCHEMA,
                     MANIFEST,
                     f"{system!r} is reserved and cannot be a bundle's source system; name the system the data comes "
-                    "from (e.g. redmine)",
+                    "from (e.g. jira)",
                     pointer="/source/system",
                 )
         return data

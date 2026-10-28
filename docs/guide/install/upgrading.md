@@ -307,9 +307,7 @@ The web search page clamps the offset rather than failing.
 `python -m specivo.cli.import_redmine` is now `python -m specivo.cli.import_data --source redmine`,
 with the same options. `make import-redmine` still works and runs the new command. Update any
 script or scheduled job that calls the old module by name. `--list-sources` shows which sources
-are installed, which can include ones added by a plugin. See
-[Migrating from Redmine](migrating-from-redmine.md) and
-[Writing an import source plugin](import-source-plugins.md).
+are installed. See [Migrating from Redmine](migrating-from-redmine.md).
 
 The Redmine import also carries over anonymous and non-member access, a role's visibility settings
 and a tracker's private default. It never turns the instance-wide anonymous access switch on.

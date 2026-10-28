@@ -3,7 +3,7 @@
        migrate migrate-gen migrate-merge seed \
        test-db-up test-db-down test-db-reset test-ci \
        test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
-       install sync lock help download-model backfill-embeddings reindex-fts import-redmine import-data \
+       install sync lock help download-model backfill-embeddings reindex-fts import-data \
        build bundle frontend-build frontend-watch \
        sso-idp-up sso-idp-down sso-idp-reset test-sso-idp test-e2e-sso
 
@@ -298,30 +298,8 @@ backfill-embeddings:  ## Rebuild search chunks and embed them (ARGS='--reembed -
 reindex-fts:  ## Rebuild FTS vectors (optionally PROJECT=KEY) after a language change
 	$(APP_COMPOSE) exec api python -m specivo.cli.reindex_fts $(if $(PROJECT),--project $(PROJECT),)
 
-import-redmine:  ## Import a Redmine instance (ARGS='--source-db-url ... --dry-run'; see --help)
-	$(APP_COMPOSE) exec api python -m specivo.cli.import_data --source redmine $(ARGS)
-
-import-data:  ## Import from any registered source (SOURCE=name ARGS='...'; SOURCE=name ARGS=--help for its options)
+import-data:  ## Import a bundle (SOURCE=bundle ARGS='--path /import/x.zip --dry-run'; ARGS=--help for the options)
 	$(APP_COMPOSE) exec api python -m specivo.cli.import_data $(if $(SOURCE),--source $(SOURCE),--list-sources) $(ARGS)
-
-# --- Redmine test fixture (importer development only) ----------------------
-# PROFILE=pg (default) or PROFILE=mysql — the importer supports both databases
-# Redmine runs on, so both are testable.
-REDMINE_PROFILE ?= $(if $(PROFILE),$(PROFILE),pg)
-REDMINE_APP := $(if $(filter mysql,$(REDMINE_PROFILE)),redmine-my,redmine-pg)
-REDMINE_COMPOSE := docker compose -f docker-compose.redmine.yml --profile $(REDMINE_PROFILE)
-
-redmine-fixture-up:  ## Start the Redmine 7.0.1 fixture (PROFILE=pg|mysql; checkout only)
-	@mkdir -p .redmine-fixture/files-pg .redmine-fixture/files-mysql
-	$(REDMINE_COMPOSE) up -d --wait
-
-redmine-fixture-seed:  ## Fill the fixture with importer test content (PROFILE=pg|mysql; checkout only)
-	$(REDMINE_COMPOSE) exec $(REDMINE_APP) bundle exec rails runner /seed/seed.rb
-
-redmine-fixture-down:  ## Stop the fixture and discard its data (PROFILE=pg|mysql; checkout only)
-	$(REDMINE_COMPOSE) down -v
-
-redmine-fixture-reset: redmine-fixture-down redmine-fixture-up redmine-fixture-seed  ## Recreate and reseed the fixture (checkout only)
 
 # --- SSO test IdP (SSO integration/E2E tests only) ---------------------------
 # A disposable Keycloak. All state is

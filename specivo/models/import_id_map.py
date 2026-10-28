@@ -46,7 +46,7 @@ class ImportIdMapping(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Groups the rows written by one invocation. Reporting and audit only.
     import_run_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    # e.g. "redmine"; later "rt", "jira".
+    # e.g. "redmine" for rows a direct import wrote; a bundle names its own.
     source_system: Mapped[str] = mapped_column(String(30), nullable=False)
     # Distinguishes two installations of the same system, e.g. a host name.
     source_instance: Mapped[str] = mapped_column(String(255), nullable=False)

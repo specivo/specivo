@@ -1,40 +1,30 @@
-"""Import another tracker into Specivo.
+"""Import an import bundle into Specivo.
 
-One command for every import source. ``--source`` picks the adapter: the
-built-in ``redmine``, or one a plugin listed in ``INSTALLED_PLUGINS`` adds
-through ``get_import_sources()``. The adapter adds its own options (where its
-database or export lives, mapping overrides); the run options below are the
-same for every source.
+``bundle`` is the only source. An importer for another tracker (Redmine, Jira)
+is a separate tool that reads that tracker and writes a bundle
+(``docs/import-bundle/v1.md``); this command is the one place that writes a
+bundle into the database. The source adds its own options (the bundle path,
+where its files live); the run options below are the same for every run.
 
 Usage:
     python -m specivo.cli.import_data --list-sources
-    python -m specivo.cli.import_data --source redmine --help
+    python -m specivo.cli.import_data --source bundle --help
 
-    # an import bundle written by an importer (docs/import-bundle/v1.md):
-    # check it, rehearse it, then import it
+    # check the bundle, rehearse the import, then import it
     python -m specivo.cli.import_data --source bundle --path export.zip --validate
     python -m specivo.cli.import_data --source bundle --path export.zip --dry-run
     python -m specivo.cli.import_data --source bundle --path export.zip
-
-    python -m specivo.cli.import_data --source redmine \\
-        --source-db-url postgresql://redmine:secret@db.internal/redmine \\
-        --source-files-dir /var/redmine/files \\
-        --dry-run
-
-    # or via the Makefile, which runs it inside the API container:
-    make import-redmine ARGS='--source-db-url ... --source-files-dir ... --dry-run'
 
 Start with --dry-run. It exercises the whole import and rolls it back, and its
 report is the list of decisions worth reviewing before anything is written:
 the project key chosen for each project, statuses whose category had to be
 guessed, and anything that could not be carried across.
 
-Running inside the container means the source has to be reachable from there:
-its database over the network, its files or export mounted in. A read-only
-mount is enough; nothing here writes to the source. A bundle import does keep
-a small links file next to the bundle (``--links-file`` moves it), for text a
-later bundle of the same source can link; without a writable place for it the
-import still runs, and says what it cannot do.
+Running inside the container means the bundle has to be mounted in. A read-only
+mount is enough for the bundle itself. An import does keep a small links file
+next to the bundle (``--links-file`` moves it), for text a later bundle of the
+same source can link; without a writable place for it the import still runs,
+and says what it cannot do.
 """
 
 from __future__ import annotations
@@ -60,6 +50,12 @@ logger = logging.getLogger(__name__)
 
 PROG = "python -m specivo.cli.import_data"
 
+# Direct Redmine import is gone; point anyone still asking for it at the tool.
+REDMINE_HINT = (
+    "Redmine is imported with the Redmine migration tool (https://github.com/specivo/redmine-migration-tool), "
+    "which writes a bundle to load with --source bundle."
+)
+
 
 def _phase(value: str) -> ImportPhase:
     try:
@@ -77,15 +73,10 @@ def _run_id(value: str) -> uuid.UUID:
 
 
 def format_source_list(registry: SourceAdapterRegistry) -> str:
-    """Return one line per registered source: name, origin and description."""
-    entries = registry.entries()
-    width = max((len(name) for name in entries), default=0)
-    origin_width = max((len(entry.origin) for entry in entries.values()), default=0)
-    lines = []
-    for name in registry.names():
-        entry = entries[name]
-        lines.append(f"{name:<{width}}  {entry.origin:<{origin_width}}  {entry.description}".rstrip())
-    return "\n".join(lines)
+    """Return one line per registered source: name and description."""
+    descriptions = registry.descriptions()
+    width = max((len(name) for name in descriptions), default=0)
+    return "\n".join(f"{name:<{width}}  {descriptions[name]}".rstrip() for name in registry.names())
 
 
 def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None = None) -> argparse.ArgumentParser:
@@ -97,7 +88,7 @@ def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None 
     sources = ", ".join(registry.names()) or "none"
     parser = argparse.ArgumentParser(
         prog=PROG,
-        description="Import users, projects, issues, wiki pages and attachments from another tracker.",
+        description="Import an import bundle: users, projects, issues, wiki pages and attachments.",
         epilog=(
             f"Registered sources: {sources}. Use --source NAME --help for a source's own options. "
             "Run with --dry-run first: it exercises the whole import, rolls it back, and reports "
@@ -113,7 +104,7 @@ def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None 
     parser.add_argument(
         "--list-sources",
         action="store_true",
-        help="List the registered import sources and where each comes from, then exit.",
+        help="List the registered import sources, then exit.",
     )
     parser.add_argument(
         "--source-instance",
@@ -245,7 +236,10 @@ def parse_args(argv: Sequence[str], registry: SourceAdapterRegistry) -> tuple[ar
     try:
         adapter_cls = registry.get(known.source)
     except UnknownSourceError as exc:
-        build_parser(registry).error(str(exc))
+        message = str(exc)
+        if known.source == "redmine":
+            message += f" {REDMINE_HINT}"
+        build_parser(registry).error(message)
 
     args = build_parser(registry, adapter_cls).parse_args(argv)
     return args, adapter_cls
@@ -337,8 +331,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     argv = list(sys.argv[1:] if argv is None else argv)
 
-    # Load plugins the way the web app does: a plugin can add an import source,
-    # and the password hasher its credentials need, and both must be seen here.
+    # Load plugins the way the web app does: a bundle can carry credentials that
+    # need a plugin's password hasher, and it must be registered here.
     try:
         bootstrap()
     except Exception as exc:  # noqa: BLE001 - a misconfigured plugin is reported, not traced
