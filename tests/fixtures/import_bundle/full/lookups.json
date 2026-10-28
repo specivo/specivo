@@ -1,0 +1,22 @@
+{
+  "trackers": [
+    {"source_ref": "defect", "name": "Defect", "default_status_ref": "triage", "position": 1},
+    {"source_ref": "chore", "name": "Chore", "default_status_ref": "triage", "position": 2, "is_in_roadmap": false, "disabled_core_fields": ["estimated_hours"]}
+  ],
+  "statuses": [
+    {"source_ref": "triage", "name": "Triage", "category": "backlog", "position": 1},
+    {"source_ref": "review", "name": "In Review", "category": "active", "position": 2, "default_done_ratio": 50},
+    {"source_ref": "shipped", "name": "Shipped", "category": "closed", "position": 3, "extra": {"source_name": "Released"}}
+  ],
+  "priorities": [
+    {"source_ref": "routine", "name": "Routine", "position": 1, "is_default": true},
+    {"source_ref": "urgent", "name": "Urgent", "position": 2}
+  ],
+  "activities": [
+    {"source_ref": "eng", "name": "Engineering", "is_default": true}
+  ],
+  "roles": [
+    {"source_ref": "maintainer", "name": "Maintainer", "permissions": ["edit_issues"], "users_visibility": "all"},
+    {"source_ref": "contributor", "name": "Contributor", "time_entries_visibility": "own"}
+  ]
+}

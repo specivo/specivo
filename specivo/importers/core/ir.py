@@ -513,6 +513,19 @@ class IRWikiPage:
     versions: list[IRWikiVersion] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class IRWikiRedirect:
+    """A title a wiki page used to have, so links to it keep working.
+
+    Both titles are page titles as written, not slugs; the loader slugifies
+    them. ``redirects_to`` names the page's current title.
+    """
+
+    project_ref: str
+    title: str
+    redirects_to: str
+
+
 # --------------------------------------------------------------------------
 # Time tracking
 # --------------------------------------------------------------------------

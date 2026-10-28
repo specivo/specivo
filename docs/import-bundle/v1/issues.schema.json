@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/issues.schema.json",
+  "title": "Import bundle v1: issues.jsonl",
+  "description": "One issue per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "project_ref",
+    "tracker_ref",
+    "status_ref",
+    "priority_ref",
+    "subject"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "tracker_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "status_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "priority_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "author_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "assigned_to_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "description": {
+      "$ref": "common.schema.json#/$defs/optionalMarkdown"
+    },
+    "parent_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "category_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "fixed_version_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "start_date": {
+      "$ref": "common.schema.json#/$defs/optionalDate"
+    },
+    "due_date": {
+      "$ref": "common.schema.json#/$defs/optionalDate"
+    },
+    "estimated_hours": {
+      "$ref": "common.schema.json#/$defs/optionalDecimal"
+    },
+    "done_ratio": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "is_private": {
+      "type": "boolean"
+    },
+    "custom_values": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/customValue"
+      }
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "closed_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  },
+  "$defs": {
+    "customValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field_ref",
+        "key",
+        "value"
+      ],
+      "properties": {
+        "field_ref": {
+          "$ref": "common.schema.json#/$defs/sourceRef"
+        },
+        "key": {
+          "type": "string",
+          "description": "Must equal the field's key."
+        },
+        "value": {
+          "description": "A JSON value matching the field's json_schema; a ref, or a list of refs, for user_ref and version_ref."
+        },
+        "value_kind": {
+          "type": "string",
+          "enum": [
+            "scalar",
+            "user_ref",
+            "version_ref"
+          ]
+        }
+      }
+    }
+  }
+}

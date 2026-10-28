@@ -183,12 +183,18 @@ Redmine? See [Writing an import source plugin](import-source-plugins.md) and
 | `--source-instance name` | Name this Redmine, so two installations can be imported into one Specivo. |
 | `--import-passwords` | Let accounts keep their Redmine password. Needs `redmine_sha1` in `LEGACY_PASSWORD_ALGORITHMS`; see [Keeping people's passwords](#keeping-peoples-passwords). |
 | `--report-json path` | Write the report as JSON as well as printing it. |
+| `--import-admins` | Make Redmine's administrators administrators in Specivo too. Without it they arrive as ordinary accounts and the report lists them, so you can grant the rights by hand. |
 | `--batch-size n` | Rows read per page from the source (default 500). Lower it if the source database is memory-constrained; raise it to reduce round trips on a fast connection to a large instance. |
 
 ## What does not come across
 
 Some things have no Specivo equivalent. The importer says so rather than
 guessing:
+
+- **Administrator rights, unless you ask for them.** Redmine's administrators
+  are imported as ordinary accounts unless you pass `--import-admins`. Either
+  way the report lists them, along with every locked or not yet active account
+  and every account that signed in through LDAP.
 
 - **Passwords, unless you ask for them.** Without `--import-passwords` (see
   [Keeping people's passwords](#keeping-peoples-passwords)), every imported

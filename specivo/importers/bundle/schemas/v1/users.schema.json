@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/users.schema.json",
+  "title": "Import bundle v1: users.jsonl",
+  "description": "One person per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "login",
+    "display_name"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "login": {
+      "type": "string",
+      "minLength": 1
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "email": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "locked",
+        "pending_verification",
+        "deactivated"
+      ]
+    },
+    "is_admin": {
+      "type": "boolean"
+    },
+    "language": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "A language code such as th; unknown ones fall back to the instance default."
+    },
+    "last_login_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "credential": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/credential"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "must_change_password": {
+      "type": "boolean"
+    },
+    "password_changed_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "external_auth": {
+      "type": "boolean",
+      "description": "The account signs in through an external directory and has no local password."
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  },
+  "$defs": {
+    "credential": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm"
+      ],
+      "properties": {
+        "algorithm": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The legacy password hasher that reads these fields."
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "description": "The source's stored password. Secret: a bundle holding these must be protected."
+    }
+  }
+}

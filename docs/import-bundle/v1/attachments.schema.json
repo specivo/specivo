@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/attachments.schema.json",
+  "title": "Import bundle v1: attachments.jsonl",
+  "description": "One attached file per line; its bytes are files/<sha256>.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "container_kind",
+    "container_ref",
+    "filename",
+    "sha256"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "container_kind": {
+      "type": "string",
+      "enum": [
+        "issue",
+        "wiki_page"
+      ]
+    },
+    "container_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "filename": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "SHA-256 of the bytes, lower-case hex."
+    },
+    "content_type": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "filesize": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "description": "Advisory; the real size is measured."
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 512
+    },
+    "author_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

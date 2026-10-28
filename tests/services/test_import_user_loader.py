@@ -77,11 +77,31 @@ class TestLoadUser:
         user = await db_session.get(User, user_id)
         assert user.last_login_at == datetime(2026, 3, 1, 8, 0, tzinfo=UTC)
 
-    async def test_admin_flag_carries_over(self, db_session, make_context):
+    async def test_an_administrator_is_not_made_one_by_default(self, db_session, make_context):
+        """The source decides who its administrators are; Specivo's are the operator's call."""
         ctx = make_context(FakeAdapter(users=[_user(is_admin=True)]))
         await load_users(ctx)
         user_id = await ctx.id_map.get(db_session, EntityType.USER, "12")
-        assert (await db_session.get(User, user_id)).is_admin is True
+        user = await db_session.get(User, user_id)
+        assert user.is_admin is False
+        assert ctx.summary.notes["source_administrators_imported_without_administrator_rights"] == [
+            f"{user.login} (re-run with --import-admins to keep the rights)"
+        ]
+
+    async def test_the_admin_flag_carries_over_when_asked(self, db_session, make_context):
+        ctx = make_context(FakeAdapter(users=[_user(is_admin=True)]), import_admins=True)
+        await load_users(ctx)
+        user_id = await ctx.id_map.get(db_session, EntityType.USER, "12")
+        user = await db_session.get(User, user_id)
+        assert user.is_admin is True
+        assert ctx.summary.notes["accounts_imported_as_administrators"] == [user.login]
+
+    async def test_accounts_that_are_not_active_are_listed(self, db_session, make_context):
+        ctx = make_context(FakeAdapter(users=[_user(status="locked")]))
+        await load_users(ctx)
+        user_id = await ctx.id_map.get(db_session, EntityType.USER, "12")
+        user = await db_session.get(User, user_id)
+        assert ctx.summary.notes["accounts_imported_locked_or_not_active"] == [f"{user.login} (locked)"]
 
     async def test_locked_account_stays_locked(self, db_session, make_context):
         ctx = make_context(FakeAdapter(users=[_user(status="locked")]))

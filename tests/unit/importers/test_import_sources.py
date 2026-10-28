@@ -86,15 +86,15 @@ class TestBootstrap:
         assert registry.entries()["acme"].origin == "plugin:acme-import"
         assert registry.entries()["redmine"].origin == "core"
 
-    def test_without_the_plugin_only_redmine_is_there(self):
+    def test_without_the_plugin_only_the_builtin_sources_are_there(self):
         _bootstrap()
-        assert get_source_registry().names() == ["redmine"]
+        assert get_source_registry().names() == ["bundle", "redmine"]
 
     def test_bootstrapping_twice_is_not_a_duplicate(self):
         """create_app() runs the bootstrap per app, and tests build many apps."""
         _bootstrap("tests.fixtures.acme_import.Plugin")
         _bootstrap("tests.fixtures.acme_import.Plugin")
-        assert get_source_registry().names() == ["acme", "redmine"]
+        assert get_source_registry().names() == ["acme", "bundle", "redmine"]
 
     def test_claiming_redmine_fails(self):
         with pytest.raises(SourceRegistrationError, match="reserved"):

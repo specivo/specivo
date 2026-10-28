@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/memberships.schema.json",
+  "title": "Import bundle v1: memberships.jsonl",
+  "description": "One role grant on a project per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "project_ref",
+    "principal_ref",
+    "principal_kind"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "principal_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "principal_kind": {
+      "type": "string",
+      "enum": [
+        "user",
+        "group"
+      ]
+    },
+    "role_refs": {
+      "$ref": "common.schema.json#/$defs/refList"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

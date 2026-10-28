@@ -246,6 +246,25 @@ class TestContentTypes:
         assert attachment_id is not None
         assert ctx.summary.notes[NOTE_UNUSUAL_TYPES]
 
+    @pytest.mark.parametrize("declared", ["text/html", "image/svg+xml"])
+    async def test_a_type_a_browser_would_run_script_in_is_stored_as_a_download(
+        self, db_session, loaded, files_dir, attachment_dir, declared
+    ):
+        """The source's declared type is not trusted with rendering: such a file is only downloaded."""
+        ctx = await loaded(_adapter(files_dir, attachments=[_attachment(content_type=declared)]))
+        await load_issue_attachments(ctx)
+
+        attachment_id = await ctx.id_map.get(db_session, EntityType.ATTACHMENT, "800")
+        assert (await db_session.get(Attachment, attachment_id)).content_type == "application/octet-stream"
+        (line,) = ctx.summary.notes[NOTE_UNUSUAL_TYPES]
+        assert f"({declared}, stored as application/octet-stream)" in line
+
+    async def test_an_accepted_type_is_kept(self, db_session, loaded, files_dir, attachment_dir):
+        ctx = await loaded(_adapter(files_dir, attachments=[_attachment(content_type="text/plain")]))
+        await load_issue_attachments(ctx)
+        attachment_id = await ctx.id_map.get(db_session, EntityType.ATTACHMENT, "800")
+        assert (await db_session.get(Attachment, attachment_id)).content_type == "text/plain"
+
     async def test_an_accepted_type_is_not_listed(self, db_session, loaded, files_dir, attachment_dir):
         ctx = await loaded(_adapter(files_dir, attachments=[_attachment()]))
         await load_issue_attachments(ctx)

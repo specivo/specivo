@@ -20,6 +20,7 @@ from specivo.importers.load.issue_loader import (
     resolve_custom_field_references,
 )
 from specivo.importers.load.lookup_loader import load_lookups
+from specivo.importers.load.placeholder_rewrite import rewrite_placeholders
 from specivo.importers.load.project_loader import (
     load_custom_field_schemas,
     load_memberships,
@@ -48,7 +49,45 @@ async def _bootstrap(ctx: PhaseContext) -> None:
     writes anything.
     """
     check_credential_import(ctx)
+    await _warn_about_an_earlier_import(ctx)
     await ensure_import_account(ctx)
+    _record_source_notes(ctx)
+
+
+async def _warn_about_an_earlier_import(ctx: PhaseContext) -> None:
+    """Say so, loudly, when this source has been imported into this database before.
+
+    The identifier map is keyed by source system and instance. Finding rows
+    under the same key means this run adds to that earlier import: what it
+    already brought over is skipped, not created again or updated. That is
+    right for a resumed or a delta run, and wrong for a different installation
+    that happens to have the same name, which must be given its own.
+    """
+    if ctx.options.resume_run_id is not None:
+        return
+    existing = await ctx.id_map.count(ctx.session)
+    if existing:
+        ctx.warn(
+            "This source was imported into this database before; this run adds to that import, skipping what is "
+            "already here. If it is a different installation, give it its own instance name "
+            "(source.instance in a bundle's manifest, or --source-instance)",
+            source=f"{ctx.id_map.source_system}:{ctx.id_map.source_instance}",
+            records_already_imported=existing,
+        )
+
+
+def _record_source_notes(ctx: PhaseContext) -> None:
+    """Copy what the source itself wants reported into the summary.
+
+    An adapter that knows something the operator should read before anything
+    is loaded (what its exporter left behind, say) offers it as
+    ``(category, line)`` pairs from an optional ``source_notes()``.
+    """
+    reader = getattr(ctx.adapter, "source_notes", None)
+    if not callable(reader):
+        return
+    for category, line in reader():
+        ctx.summary.add_note(category, line)
 
 
 async def _users_and_groups(ctx: PhaseContext) -> None:
@@ -81,6 +120,17 @@ async def _after_issues(ctx: PhaseContext) -> None:
     await restore_version_statuses(ctx)
 
 
+async def _link_graph(ctx: PhaseContext) -> None:
+    """Expand reference placeholders, then rebuild the wiki link graph.
+
+    Placeholders wait until here because they can name any imported record,
+    wiki pages and their attachments included. The link graph comes after,
+    since an expanded placeholder can be a wiki link.
+    """
+    await rewrite_placeholders(ctx)
+    await rebuild_wiki_link_graph(ctx)
+
+
 async def _wiki(ctx: PhaseContext) -> None:
     """Import wiki pages, then their watchers and redirects."""
     await load_wiki_pages(ctx)
@@ -109,7 +159,7 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.WIKI_PAGES: _wiki,
             ImportPhase.WIKI_ATTACHMENTS: load_wiki_attachments,
             ImportPhase.TIME_ENTRIES: load_time_entries,
-            ImportPhase.WIKI_LINK_GRAPH: rebuild_wiki_link_graph,
+            ImportPhase.WIKI_LINK_GRAPH: _link_graph,
             ImportPhase.SEARCH_BACKFILL: backfill_search_index,
         }
     )

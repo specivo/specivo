@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/wiki_pages.schema.json",
+  "title": "Import bundle v1: wiki_pages.jsonl",
+  "description": "One wiki page with its whole history per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "project_ref",
+    "title"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "parent_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "protected": {
+      "type": "boolean"
+    },
+    "versions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/version"
+      },
+      "description": "Every revision, oldest first."
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  },
+  "$defs": {
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_ref",
+        "version",
+        "text"
+      ],
+      "properties": {
+        "source_ref": {
+          "$ref": "common.schema.json#/$defs/sourceRef"
+        },
+        "version": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "text": {
+          "$ref": "common.schema.json#/$defs/markdown"
+        },
+        "comments": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 1024
+        },
+        "author_ref": {
+          "$ref": "common.schema.json#/$defs/optionalRef"
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/optionalDateTime"
+        }
+      }
+    }
+  }
+}

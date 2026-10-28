@@ -20,7 +20,7 @@ import logging
 import uuid
 from collections.abc import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -149,13 +149,13 @@ class ImportIdMap:
 
     async def count(self, session: AsyncSession, entity_type: str | None = None) -> int:
         """Count mappings for this source, optionally narrowed to one entity type."""
-        stmt = select(ImportIdMapping.id).where(
+        stmt = select(func.count()).where(
             ImportIdMapping.source_system == self.source_system,
             ImportIdMapping.source_instance == self.source_instance,
         )
         if entity_type is not None:
             stmt = stmt.where(ImportIdMapping.entity_type == str(entity_type))
-        return len((await session.execute(stmt)).all())
+        return int((await session.execute(stmt)).scalar_one())
 
     # ------------------------------------------------------------------
     # Writes

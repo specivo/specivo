@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/manifest.schema.json",
+  "title": "Import bundle v1: manifest.json",
+  "description": "What the bundle is, where it came from and how many records it holds.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "format_version",
+    "source",
+    "generator",
+    "exported_at"
+  ],
+  "properties": {
+    "format": {
+      "const": "specivo-import-bundle"
+    },
+    "format_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "MAJOR.MINOR. This schema is version 1.0."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "system",
+        "instance"
+      ],
+      "properties": {
+        "system": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]{0,29}$",
+          "description": "The source product, lower case, e.g. jira."
+        },
+        "instance": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200,
+          "description": "Which installation of it, e.g. a host name. Scopes the identifier map: a later bundle with the same system and instance adds to the earlier import."
+        },
+        "version": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "The source product's version, if known."
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "description": "The program that wrote the bundle."
+    },
+    "exported_at": {
+      "$ref": "common.schema.json#/$defs/dateTime"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Records per file (and per lookups list). Each count given is checked.",
+      "properties": {
+        "trackers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "statuses": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "priorities": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "activities": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "roles": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "users": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "groups": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "projects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "memberships": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "versions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "categories": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "custom_fields": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "issues": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "journals": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "relations": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wiki_pages": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wiki_versions": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "wiki_redirects": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "watchers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "attachments": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "time_entries": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "not_carried_over": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "what"
+        ],
+        "properties": {
+          "what": {
+            "type": "string",
+            "minLength": 1,
+            "description": "What was left behind, in a sentence."
+          },
+          "count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "entity_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_ref": {
+            "$ref": "common.schema.json#/$defs/optionalRef"
+          }
+        }
+      },
+      "description": "Source data the importer could not express in the bundle. Reported to the operator."
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

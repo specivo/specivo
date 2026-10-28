@@ -60,6 +60,9 @@ NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
 NOTE_PASSWORD_KEPT = "accounts_that_keep_their_existing_password"
 NOTE_ADMIN_PASSWORD_RESET = "administrators_asked_to_set_a_new_password"
 NOTE_EXTERNAL_AUTH = "accounts_that_signed_in_through_an_external_directory"
+NOTE_ADMINS_GRANTED = "accounts_imported_as_administrators"
+NOTE_ADMINS_NOT_GRANTED = "source_administrators_imported_without_administrator_rights"
+NOTE_NOT_ACTIVE = "accounts_imported_locked_or_not_active"
 
 # Identifier under which the fallback author account is mapped, so a resumed
 # run finds the one it made rather than creating another.
@@ -182,7 +185,7 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
         display_name=(ir.display_name or login)[:_MAX_DISPLAY_NAME],
         password_hash=kept_hash or _unusable_password(),
         status=ir.status,
-        is_admin=ir.is_admin,
+        is_admin=ir.is_admin and ctx.options.import_admins,
         is_service_account=False,
         # Without a kept password nobody holds this one, so the first password
         # the account actually has will have been chosen by somebody else.
@@ -205,8 +208,7 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
         ctx.summary.add_note(NOTE_PASSWORD_KEPT, login)
     else:
         ctx.summary.add_note(NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN, login)
-    if ir.external_auth:
-        ctx.summary.add_note(NOTE_EXTERNAL_AUTH, login)
+    _report_account(ctx, ir, login)
     if synthesised:
         ctx.summary.add_note(NOTE_SYNTHETIC_EMAIL, f"{login} ({email})")
     ctx.tick()
@@ -265,6 +267,25 @@ async def load_group(ctx: PhaseContext, ir: IRGroup) -> UserGroup | None:
 
     ctx.tick()
     return group
+
+
+def _report_account(ctx: PhaseContext, ir: IRUser, login: str) -> None:
+    """List the accounts an administrator should look at after the import.
+
+    Administrators come first: the source's administrators only become
+    Specivo administrators when the operator asked for it with
+    ``--import-admins``, because the import source decides who they are, and
+    a bundle can be written by anyone.
+    """
+    if ir.is_admin:
+        if ctx.options.import_admins:
+            ctx.summary.add_note(NOTE_ADMINS_GRANTED, login)
+        else:
+            ctx.summary.add_note(NOTE_ADMINS_NOT_GRANTED, f"{login} (re-run with --import-admins to keep the rights)")
+    if ir.external_auth:
+        ctx.summary.add_note(NOTE_EXTERNAL_AUTH, login)
+    if ir.status != "active":
+        ctx.summary.add_note(NOTE_NOT_ACTIVE, f"{login} ({ir.status})")
 
 
 def _imported_password(ctx: PhaseContext, ir: IRUser, login: str) -> str | None:

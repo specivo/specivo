@@ -26,6 +26,7 @@ from specivo.importers.core.ir import (
     IRUser,
     IRWatcher,
     IRWikiPage,
+    IRWikiRedirect,
     IRWikiVersion,
 )
 from specivo.importers.load.lookup_loader import load_lookups
@@ -76,6 +77,10 @@ def _page(ref: str = "10", title: str = "Home", **overrides) -> IRWikiPage:
     }
     data.update(overrides)
     return IRWikiPage(**data)
+
+
+def _redirect(title: str, redirects_to: str) -> IRWikiRedirect:
+    return IRWikiRedirect(project_ref="1", title=title, redirects_to=redirects_to)
 
 
 def _adapter(**kwargs) -> WikiAdapter:
@@ -265,7 +270,7 @@ class TestWatchersAndRedirects:
 
     async def test_redirect_is_recreated_from_the_rename(self, db_session, loaded):
         """A link written against a page's old name keeps working."""
-        ctx = await loaded(_adapter(wiki_pages=[_page()], wiki_redirects=[("Old Name", "Home")]))
+        ctx = await loaded(_adapter(wiki_pages=[_page()], wiki_redirects=[_redirect("Old Name", "Home")]))
         await load_wiki_pages(ctx)
         await load_wiki_redirects(ctx)
 
@@ -275,7 +280,7 @@ class TestWatchersAndRedirects:
         assert redirect.redirected_to == "home"
 
     async def test_redirect_to_itself_is_ignored(self, db_session, loaded):
-        ctx = await loaded(_adapter(wiki_pages=[_page()], wiki_redirects=[("Home", "Home")]))
+        ctx = await loaded(_adapter(wiki_pages=[_page()], wiki_redirects=[_redirect("Home", "Home")]))
         await load_wiki_pages(ctx)
         await load_wiki_redirects(ctx)
 
@@ -283,7 +288,7 @@ class TestWatchersAndRedirects:
         assert count == 0
 
     async def test_redirects_are_not_duplicated_on_a_second_run(self, db_session, loaded):
-        ctx = await loaded(_adapter(wiki_pages=[_page()], wiki_redirects=[("Old Name", "Home")]))
+        ctx = await loaded(_adapter(wiki_pages=[_page()], wiki_redirects=[_redirect("Old Name", "Home")]))
         await load_wiki_pages(ctx)
         await load_wiki_redirects(ctx)
         await load_wiki_redirects(ctx)

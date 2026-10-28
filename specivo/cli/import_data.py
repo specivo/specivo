@@ -10,6 +10,12 @@ Usage:
     python -m specivo.cli.import_data --list-sources
     python -m specivo.cli.import_data --source redmine --help
 
+    # an import bundle written by an importer (docs/import-bundle/v1.md):
+    # check it, rehearse it, then import it
+    python -m specivo.cli.import_data --source bundle --path export.zip --validate
+    python -m specivo.cli.import_data --source bundle --path export.zip --dry-run
+    python -m specivo.cli.import_data --source bundle --path export.zip
+
     python -m specivo.cli.import_data --source redmine \\
         --source-db-url postgresql://redmine:secret@db.internal/redmine \\
         --source-files-dir /var/redmine/files \\
@@ -143,16 +149,33 @@ def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None 
         ),
     )
     mapping.add_argument(
+        "--import-admins",
+        action="store_true",
+        help=(
+            "Make the source's administrators administrators here too. Without this flag they are imported as "
+            "ordinary accounts and listed in the summary, so an administrator can grant the rights by hand."
+        ),
+    )
+    mapping.add_argument(
         "--flatten-excess-depth",
         action="store_true",
         help="Import projects nested deeper than Specivo allows by re-parenting them higher up.",
     )
 
     run = parser.add_argument_group("run")
-    run.add_argument(
+    mode = run.add_mutually_exclusive_group()
+    mode.add_argument(
         "--dry-run",
         action="store_true",
         help="Exercise the whole import inside a transaction that is always rolled back.",
+    )
+    mode.add_argument(
+        "--validate",
+        action="store_true",
+        help=(
+            "Only check the source and report what is wrong with it; nothing is written and the database is not "
+            "touched. For a bundle: schema, cross-reference and file checks. Exits 1 if the source is invalid."
+        ),
     )
     run.add_argument(
         "--resume",
@@ -166,7 +189,9 @@ def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None 
         action="store_true",
         help="Treat anything that would be reported as a warning as a failure. For testing an import, not running one.",
     )
-    run.add_argument("--report-json", metavar="PATH", help="Also write the summary to this file as JSON.")
+    run.add_argument(
+        "--report-json", metavar="PATH", help="Also write the summary (or the --validate report) to this file as JSON."
+    )
     run.add_argument(
         "--stop-after-phase",
         metavar="PHASE",
@@ -228,6 +253,7 @@ def build_options(args: argparse.Namespace, adapter: SourceAdapter) -> ImportOpt
         flatten_excess_depth=args.flatten_excess_depth,
         merge_duplicate_statuses=args.merge_duplicate_statuses,
         import_passwords=args.import_passwords,
+        import_admins=args.import_admins,
     )
 
 
@@ -250,11 +276,31 @@ def build_pipeline(
     )
 
 
+async def run_validation(args: argparse.Namespace, adapter: Any) -> int:
+    """Check the source without importing it, print the report, and return the exit code.
+
+    Needs no database: only the source is read.
+    """
+    validate = getattr(adapter, "validate", None)
+    if not callable(validate):
+        logger.error("The %s source cannot be checked on its own; use --dry-run instead.", args.source)
+        return 2
+
+    report = await validate()
+    print(report.format_text())
+    if args.report_json:
+        Path(args.report_json).write_text(json.dumps(report.as_dict(), indent=2))
+        logger.info("Wrote the report to %s", args.report_json)
+    return 0 if report.ok else 1
+
+
 async def _run(args: argparse.Namespace, adapter_cls: type[Any]) -> int:
     from specivo.core.database import get_session_factory
     from specivo.importers.core.progress import CliProgressReporter
 
     adapter = adapter_cls.from_args(args)
+    if args.validate:
+        return await run_validation(args, adapter)
     pipeline = build_pipeline(args, adapter, get_session_factory(), CliProgressReporter())
 
     summary = await pipeline.run()

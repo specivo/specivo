@@ -8,8 +8,8 @@ Extraction methods return async iterators so a large instance streams rather
 than materialising. Implementations should page their queries (keyset
 pagination on the source primary key) instead of reading a whole table.
 
-Adapters are found through :class:`SourceAdapterRegistry`. The built-in Redmine
-adapter is always there; a plugin adds its own with ``get_import_sources()``,
+Adapters are found through :class:`SourceAdapterRegistry`. The built-in
+``bundle`` and Redmine adapters are always there; a plugin adds its own with ``get_import_sources()``,
 and :func:`specivo.core.plugin_manager.bootstrap` builds the registry from
 both, refusing a duplicate or reserved name.
 """
@@ -262,7 +262,7 @@ SOURCE_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,29}$")
 
 # Names only a built-in adapter may use, so a plugin cannot take over the
 # identifier map of an import that already ran.
-RESERVED_SOURCE_NAMES: frozenset[str] = frozenset({"redmine"})
+RESERVED_SOURCE_NAMES: frozenset[str] = frozenset({"bundle", "redmine"})
 
 ORIGIN_CORE = "core"
 
@@ -347,9 +347,10 @@ class SourceAdapterRegistry:
 
 def builtin_sources() -> list[type[Any]]:
     """Return the adapter classes shipped with Specivo."""
+    from specivo.importers.bundle.adapter import BundleSourceAdapter
     from specivo.importers.redmine.adapter import RedmineSourceAdapter
 
-    return [RedmineSourceAdapter]
+    return [BundleSourceAdapter, RedmineSourceAdapter]
 
 
 def _check_source_shape(source: object, origin: str) -> tuple[str, type[Any]]:

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/wiki_redirects.schema.json",
+  "title": "Import bundle v1: wiki_redirects.jsonl",
+  "description": "One former wiki page title per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "project_ref",
+    "title",
+    "redirects_to"
+  ],
+  "properties": {
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "The old title."
+    },
+    "redirects_to": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "description": "The page's current title."
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

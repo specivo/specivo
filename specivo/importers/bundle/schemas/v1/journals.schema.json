@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/journals.schema.json",
+  "title": "Import bundle v1: journals.jsonl",
+  "description": "One history entry (a comment, field changes, or both) per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "issue_ref"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "issue_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "user_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "notes": {
+      "$ref": "common.schema.json#/$defs/optionalMarkdown"
+    },
+    "is_private": {
+      "type": "boolean"
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "details": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/detail"
+      }
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  },
+  "$defs": {
+    "detail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "property",
+        "prop_key"
+      ],
+      "properties": {
+        "property": {
+          "type": "string",
+          "enum": [
+            "attr",
+            "cf",
+            "attachment",
+            "relation"
+          ]
+        },
+        "prop_key": {
+          "type": "string",
+          "maxLength": 255
+        },
+        "old_value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "new_value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    }
+  }
+}

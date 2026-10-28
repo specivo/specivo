@@ -1,0 +1,8 @@
+{
+  "anonymous_allowed": true,
+  "anonymous_source_setting": "The source let visitors without an account read public projects",
+  "anonymous_permissions": {"p-web": ["view_issues", "view_wiki"]},
+  "non_member_source_name": "Visitor",
+  "non_member_permissions": ["view_issues"],
+  "not_carried_over": ["Visitor role: view_boards"]
+}

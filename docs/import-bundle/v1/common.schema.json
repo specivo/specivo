@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/common.schema.json",
+  "title": "Import bundle v1: shared definitions",
+  "description": "Types used by every other schema of import bundle format 1.",
+  "$defs": {
+    "sourceRef": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255,
+      "pattern": "^[^\\s{}|]+$",
+      "description": "A record's identifier in the source system, unique per entity type. No whitespace, braces or '|'."
+    },
+    "optionalRef": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/sourceRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "refList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/sourceRef"
+      }
+    },
+    "dateTime": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,6})?(Z|[+-][0-9]{2}:[0-9]{2})$",
+      "description": "ISO 8601 date and time with a UTC offset, e.g. 2024-03-01T09:30:00+07:00."
+    },
+    "optionalDateTime": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/dateTime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "ISO 8601 calendar date."
+    },
+    "optionalDate": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/date"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "decimal": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]+)?$"
+        }
+      ],
+      "description": "A decimal number. A string keeps the exact value."
+    },
+    "optionalDecimal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/decimal"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "markdown": {
+      "type": "string",
+      "description": "Markdown. May contain reference placeholders."
+    },
+    "optionalMarkdown": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/markdown"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "extra": {
+      "type": "object",
+      "description": "Source data with no place in Specivo, kept with the record. Not imported."
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/categories.schema.json",
+  "title": "Import bundle v1: categories.jsonl",
+  "description": "One issue category per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "project_ref",
+    "name"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "assigned_to_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

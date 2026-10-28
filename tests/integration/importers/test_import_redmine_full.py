@@ -22,7 +22,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from specivo.importers.core.ir import EntityType
 from specivo.models.attachment import Attachment
@@ -139,6 +139,25 @@ class TestFullImport:
         ).scalar_one()
         assert "Related to #2" not in issue.description
         assert "Related to ACMEAPP-" in issue.description
+
+    async def test_rewriting_references_keeps_redmines_timestamps(self, db_session, imported, redmine_adapter):
+        """A rewritten #2 is not an edit: updated_at is still Redmine's.
+
+        This issue is also a parent, whose progress is recalculated when its
+        child arrives; that keeps Redmine's time too.
+        """
+        expected = {}
+        async for project in redmine_adapter.extract_projects():
+            async for ir in redmine_adapter.extract_issues(project.source_ref):
+                expected[ir.subject] = ir.updated_at
+        issue = (
+            await db_session.execute(select(Issue).where(Issue.subject == "Login fails after session timeout"))
+        ).scalar_one()
+        assert "Related to ACMEAPP-" in issue.description
+        assert issue.updated_at == expected["Login fails after session timeout"]
+
+        for journal in (await db_session.execute(select(Journal).where(Journal.notes.is_not(None)))).scalars():
+            assert journal.updated_at == journal.created_at
 
     async def test_custom_fields_became_metadata(self, db_session, imported):
         issue = (
@@ -328,6 +347,27 @@ class TestRerun:
         assert after == before
         assert second.created[EntityType.ISSUE] == 0
         assert second.skipped[EntityType.ISSUE] > 0
+
+    async def test_a_rerun_over_an_import_without_membership_mappings_adds_nothing(self, db_session, build_import):
+        """An import made before memberships were mapped: the rerun finds the grants
+        already there, adds no member or role, and records them so the next run skips them."""
+        await build_import(merge_duplicate_statuses=True).run()
+        await db_session.execute(delete(ImportIdMapping).where(ImportIdMapping.entity_type == EntityType.MEMBERSHIP))
+        members, roles = await _count(db_session, Member), await _count(db_session, MemberRole)
+
+        second = await build_import(merge_duplicate_statuses=True).run()
+
+        assert (await _count(db_session, Member), await _count(db_session, MemberRole)) == (members, roles)
+        mapped = (
+            await db_session.execute(
+                select(func.count()).select_from(ImportIdMapping).where(ImportIdMapping.entity_type == "membership")
+            )
+        ).scalar_one()
+        assert mapped == second.created[EntityType.MEMBERSHIP] > 0
+
+        third = await build_import(merge_duplicate_statuses=True).run()
+        assert third.created[EntityType.MEMBERSHIP] == 0
+        assert third.skipped[EntityType.MEMBERSHIP] == mapped
 
     async def test_a_second_import_copies_no_more_files(self, db_session, build_import):
         await build_import(merge_duplicate_statuses=True).run()

@@ -1,0 +1,2 @@
+{"source_ref": "p-api", "identifier": "bundle-api", "name": "Bundle API", "parent_ref": "p-web", "modules": ["issue_tracking", "time_tracking"], "created_at": "2023-02-01T09:00:00Z"}
+{"source_ref": "p-web", "identifier": "bundle-web", "name": "Bundle Website", "description": "The public website.", "is_public": true, "modules": ["issue_tracking", "wiki", "time_tracking"], "created_at": "2023-01-15T09:00:00Z", "updated_at": "2024-01-15T09:00:00Z"}
