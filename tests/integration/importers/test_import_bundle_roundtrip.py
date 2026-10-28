@@ -95,7 +95,9 @@ async def test_a_bundle_import_matches_a_direct_import(redmine_profile, redmine_
     unexplained = {key: value for key, value in differences.items() if key not in known}
     assert unexplained == {}, "\n".join(f"{k}:\n  direct {d!r}\n  bundle {b!r}" for k, (d, b) in unexplained.items())
     # The known bug is there to see, on the one issue whose description has a reference.
-    assert sorted(known) == ["journals[ACMEAPP-2]"]
+    # Its key depends on the order issues come out of the source database, so it is found by subject.
+    (referring,) = [key for key, issue in direct["issues"].items() if issue[0] == "Login fails after session timeout"]
+    assert sorted(known) == [f"journals[{referring}]"]
     assert sorted(w.message for w in bundle_summary.warnings) == sorted(w.message for w in direct_summary.warnings)
 
 
