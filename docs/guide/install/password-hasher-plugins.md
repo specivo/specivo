@@ -115,10 +115,9 @@ PASSWORD_HASHERS=["acme_hashers.AcmeTrackerMd5"]
 
 Registering a hasher does not switch it on.
 
-To bring the accounts over from the source system in the first place, pair the
-hasher with an [import source plugin](import-source-plugins.md). The import
-source hands over the raw `salt` and `password_digest`, and the hasher does the
-rest.
+To bring the accounts over from the source system in the first place, have the
+importer tool write the raw `salt` and `password_digest` into each user's
+`credential` in the import bundle, and the hasher does the rest.
 
 ## Check it against a known row
 

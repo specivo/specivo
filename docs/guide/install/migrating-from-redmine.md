@@ -270,8 +270,7 @@ LEGACY_PASSWORD_HASHES_EXPIRE_AT=2027-03-31T00:00:00Z
 
 Either way, the sign-in page shows the usual "Invalid login or password", so it
 doesn't reveal which accounts are affected. Coming from something other than
-Redmine? See [Writing an import source plugin](import-source-plugins.md) and
-[Writing a password hasher plugin](password-hasher-plugins.md).
+Redmine? See [Writing a password hasher plugin](password-hasher-plugins.md).
 
 ## Large migrations
 
