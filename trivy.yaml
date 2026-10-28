@@ -14,8 +14,7 @@ scan:
     - frontend/node_modules
     # Test seeds and fixtures hold fake credentials on purpose.
     - tests/fixtures
-    # Local fixture data and agent worktrees, never committed.
-    - .redmine-fixture
+    # Agent worktrees, never committed.
     - .claude
   skip-files:
     # Local environment files are gitignored and hold real local secrets.

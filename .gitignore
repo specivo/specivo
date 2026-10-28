@@ -58,6 +58,3 @@ docs-site/
 frontend/node_modules/
 specivo/static/dist/
 
-# Redmine test fixture: its attachment directory is bind-mounted so the
-# importer can read files the way an operator would. Disposable.
-.redmine-fixture/
