@@ -40,6 +40,11 @@ LOOKUPS = "lookups.json"
 PUBLIC_ACCESS = "public_access.json"
 FILES_DIR = "files"
 
+# Source systems a manifest may not name. The identifier map is keyed by the
+# manifest's system, and ``bundle`` is what bundle imports were keyed by
+# before that, so a manifest naming it would land among those rows.
+RESERVED_SOURCE_SYSTEMS: frozenset[str] = frozenset({"bundle"})
+
 # A stored file is named after the SHA-256 of its bytes, lower-case hex.
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 

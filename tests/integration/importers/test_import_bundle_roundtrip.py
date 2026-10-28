@@ -13,9 +13,9 @@ and wiki revisions.
 Differences must be none, or explained here:
 
 * **The import account.** Records without a resolvable author belong to an
-  account named after the source: ``redmine-import`` for the direct import,
-  ``bundle-import`` for the bundle. Both are compared as "the import account",
-  and its own row is left out.
+  account named after the source system, ``redmine-import`` for both (a bundle
+  is keyed by the system its manifest names). It is compared as "the import
+  account", and its own row is left out.
 * **Issue references.** A direct Redmine import rewrites ``#2`` to a display
   key after loading. A bundle uses placeholders instead, so the export writes
   ``{{issue:2}}`` wherever the direct import would rewrite, which is in issue
@@ -509,8 +509,33 @@ async def test_reloading_the_exported_bundle_creates_nothing(
     await build_bundle_import(bundle, merge_duplicate_statuses=True).run()
     before = {m.__name__: (await db_session.execute(select(func.count()).select_from(m))).scalar_one() for m in COUNTED}
 
-    second = await build_bundle_import(bundle, merge_duplicate_statuses=True).run()
+    second = await build_bundle_import(bundle, merge_duplicate_statuses=True, continue_import=True).run()
 
     after = {m.__name__: (await db_session.execute(select(func.count()).select_from(m))).scalar_one() for m in COUNTED}
     assert after == before
     assert sum(second.created.values()) == 0
+
+
+async def test_a_bundle_after_a_direct_import_creates_nothing(
+    db_session, build_import, redmine_adapter, build_bundle_import, tmp_path
+):
+    """The upgrade path: a database imported directly takes the tool's bundle as a delta.
+
+    The direct import runs with ``--source-instance pytest-fixture`` and the
+    bundle's manifest names the same instance, so both land in one scope of
+    the identifier map and the bundle finds everything already there.
+    """
+    await build_import(merge_duplicate_statuses=True).run()
+    before = {m.__name__: (await db_session.execute(select(func.count()).select_from(m))).scalar_one() for m in COUNTED}
+    bundle = tmp_path / "redmine.zip"
+    await _export(redmine_adapter, bundle)
+
+    summary = await build_bundle_import(bundle, merge_duplicate_statuses=True, continue_import=True).run()
+
+    after = {m.__name__: (await db_session.execute(select(func.count()).select_from(m))).scalar_one() for m in COUNTED}
+    assert after == before
+    assert {entity: count for entity, count in summary.created.items() if count} == {}
+    assert (summary.source_system, summary.source_instance) == ("redmine", "pytest-fixture")
+    import_accounts = set((await db_session.execute(select(User.login).where(User.is_service_account))).scalars())
+    assert "bundle-import" not in import_accounts
+    assert "redmine-import" in import_accounts

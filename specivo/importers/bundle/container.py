@@ -15,10 +15,17 @@ expand, all counted on the bytes actually written, so an archive that lies in
 its headers is caught as well. Unpacking costs disk space, but the attachment loader copies a file from a
 path, and the readers seek within the JSON-lines files, which a compressed zip
 member cannot do cheaply.
+
+The stored files can also come from a directory of their own (``--files-path``),
+so a migration with many gigabytes of attachments never has to fit them in an
+archive. The bundle's own ``files/``, if it has one, is then ignored (and not
+unpacked), and the directory gets the same checks: no links anywhere in it,
+anything that is not a stored file ignored with a warning.
 """
 
 from __future__ import annotations
 
+import os
 import stat
 import tempfile
 import zipfile
@@ -31,14 +38,27 @@ from specivo.importers.bundle.report import ProblemCode, ValidationReport
 _COPY_CHUNK = 1024 * 1024
 
 
-class BundleContainer:
-    """An opened bundle: the directory holding its files.
+# Reported when a separate files directory replaces the bundle's own files/.
+OWN_FILES_IGNORED = "Stored files are read from the files directory given; the bundle's own are ignored"
+_SYMLINK = "Symbolic links are not allowed in a bundle"
 
-    For a zip that is a temporary directory, removed by :meth:`close`.
+
+class BundleContainer:
+    """An opened bundle: the directory holding its files, and the one holding its stored files.
+
+    For a zip the first is a temporary directory, removed by :meth:`close`.
+    ``files_dir`` is the bundle's ``files/`` unless a separate directory was
+    given.
     """
 
-    def __init__(self, root: Path, temporary: tempfile.TemporaryDirectory[str] | None = None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        temporary: tempfile.TemporaryDirectory[str] | None = None,
+        files_dir: Path | None = None,
+    ) -> None:
         self.root = root
+        self.files_dir = files_dir if files_dir is not None else root / FILES_DIR
         self._temporary = temporary
 
     def close(self) -> None:
@@ -47,14 +67,59 @@ class BundleContainer:
             self._temporary = None
 
 
-def open_bundle(path: Path, report: ValidationReport, limits: BundleLimits | None = None) -> BundleContainer | None:
-    """Open the bundle at *path*, or return ``None`` with the reason in *report*."""
+def open_bundle(
+    path: Path,
+    report: ValidationReport,
+    limits: BundleLimits | None = None,
+    files_path: Path | None = None,
+) -> BundleContainer | None:
+    """Open the bundle at *path*, or return ``None`` with the reason in *report*.
+
+    With *files_path* the stored files are read from that directory instead
+    of the bundle's ``files/``.
+    """
+    files_dir = None
+    if files_path is not None:
+        files_dir = _resolve_files_dir(path, files_path, report)
+        if files_dir is None:
+            return None
+    skip_own_files = files_dir is not None
+
+    container: BundleContainer | None
     if path.is_dir():
-        return BundleContainer(path) if _check_directory(path, report) else None
-    if path.is_file() and zipfile.is_zipfile(path):
-        return _unpack_zip(path, report, limits or BundleLimits())
-    report.error(ProblemCode.UNREADABLE, path.name, "Not a bundle: expected a directory or a .zip archive")
-    return None
+        container = BundleContainer(path) if _check_directory(path, report, skip_own_files) else None
+    elif path.is_file() and zipfile.is_zipfile(path):
+        container = _unpack_zip(path, report, limits or BundleLimits(), skip_own_files)
+    else:
+        report.error(ProblemCode.UNREADABLE, path.name, "Not a bundle: expected a directory or a .zip archive")
+        return None
+
+    if container is None or files_dir is None:
+        return container
+    if not _check_files_dir(files_dir, report, recursive=True):
+        container.close()
+        return None
+    container.files_dir = files_dir
+    return container
+
+
+def _resolve_files_dir(bundle: Path, files_path: Path, report: ValidationReport) -> Path | None:
+    """Return the separate files directory, resolved, or ``None`` with the reason in *report*.
+
+    The directory itself may be a link (to the current export, say); it is
+    resolved once here, and nothing inside it may be one. It must be neither
+    inside the bundle nor around it, or one would be read as part of the other.
+    """
+    label = files_path.name or str(files_path)
+    resolved = files_path.resolve()
+    if not resolved.is_dir():
+        report.error(ProblemCode.UNREADABLE, label, "The files directory does not exist or is not a directory")
+        return None
+    bundle = bundle.resolve()
+    if resolved == bundle or bundle in resolved.parents or resolved in bundle.parents:
+        report.error(ProblemCode.UNREADABLE, label, "The files directory must not be inside the bundle or contain it")
+        return None
+    return resolved
 
 
 # --------------------------------------------------------------------------
@@ -62,14 +127,20 @@ def open_bundle(path: Path, report: ValidationReport, limits: BundleLimits | Non
 # --------------------------------------------------------------------------
 
 
-def _check_directory(root: Path, report: ValidationReport) -> bool:
-    """Check a directory bundle holds no links. Unknown entries are warned about and ignored."""
+def _check_directory(root: Path, report: ValidationReport, skip_own_files: bool = False) -> bool:
+    """Check a directory bundle holds no links. Unknown entries are warned about and ignored.
+
+    With *skip_own_files* the bundle's ``files/`` is not looked into: the
+    stored files come from elsewhere, so it is reported as ignored.
+    """
     safe = True
     for entry in sorted(root.iterdir()):
         name = entry.name
         if entry.is_symlink():
-            report.error(ProblemCode.SYMLINK, name, "Symbolic links are not allowed in a bundle")
+            report.error(ProblemCode.SYMLINK, name, _SYMLINK)
             safe = False
+        elif name == FILES_DIR and skip_own_files:
+            report.warning(ProblemCode.UNKNOWN_FILE, FILES_DIR, OWN_FILES_IGNORED)
         elif name == FILES_DIR and entry.is_dir():
             safe = _check_files_dir(entry, report) and safe
         elif name not in KNOWN_FILES:
@@ -77,15 +148,34 @@ def _check_directory(root: Path, report: ValidationReport) -> bool:
     return safe
 
 
-def _check_files_dir(files_dir: Path, report: ValidationReport) -> bool:
+def _check_files_dir(files_dir: Path, report: ValidationReport, recursive: bool = False) -> bool:
+    """Check the stored files: no links, and anything but ``<sha256>`` files warned about and ignored.
+
+    Entries are named ``files/<name>`` wherever the directory is. *recursive*
+    also looks for links below the top level, for a directory that did not
+    come inside the bundle and so was never checked as part of it.
+    """
     safe = True
     for entry in sorted(files_dir.iterdir()):
         name = f"{FILES_DIR}/{entry.name}"
         if entry.is_symlink():
-            report.error(ProblemCode.SYMLINK, name, "Symbolic links are not allowed in a bundle")
+            report.error(ProblemCode.SYMLINK, name, _SYMLINK)
             safe = False
         elif not entry.is_file() or not SHA256_RE.match(entry.name):
             report.warning(ProblemCode.UNKNOWN_FILE, name, "Not a stored file (files/<sha256>); ignored")
+            if recursive and entry.is_dir():
+                safe = _check_no_links_below(entry, files_dir, report) and safe
+    return safe
+
+
+def _check_no_links_below(directory: Path, files_dir: Path, report: ValidationReport) -> bool:
+    safe = True
+    for parent, dirs, names in os.walk(directory, followlinks=False):
+        for name in sorted(dirs + names):
+            entry = Path(parent) / name
+            if entry.is_symlink():
+                report.error(ProblemCode.SYMLINK, f"{FILES_DIR}/{entry.relative_to(files_dir).as_posix()}", _SYMLINK)
+                safe = False
     return safe
 
 
@@ -100,10 +190,12 @@ class _LimitExceededError(Exception):
         self.entry = entry
 
 
-def _unpack_zip(path: Path, report: ValidationReport, limits: BundleLimits) -> BundleContainer | None:
+def _unpack_zip(
+    path: Path, report: ValidationReport, limits: BundleLimits, skip_own_files: bool = False
+) -> BundleContainer | None:
     try:
         with zipfile.ZipFile(path) as archive:
-            wanted = _check_zip_entries(archive, report)
+            wanted = _check_zip_entries(archive, report, skip_own_files)
             if wanted is None:
                 return None
             if not _check_declared_sizes(archive, wanted, report, limits):
@@ -199,12 +291,17 @@ def _copy_entry(
 
 
 def _check_zip_entries(
-    archive: zipfile.ZipFile, report: ValidationReport
+    archive: zipfile.ZipFile, report: ValidationReport, skip_own_files: bool = False
 ) -> list[tuple[zipfile.ZipInfo, list[str]]] | None:
-    """Return the entries to unpack, or ``None`` if any entry is unsafe."""
+    """Return the entries to unpack, or ``None`` if any entry is unsafe.
+
+    With *skip_own_files* nothing under ``files/`` is unpacked, and one
+    warning says the archive's stored files are ignored.
+    """
     safe = True
     seen: set[str] = set()
     wanted: list[tuple[zipfile.ZipInfo, list[str]]] = []
+    own_files = False
 
     for info in archive.infolist():
         name = info.filename
@@ -216,7 +313,7 @@ def _check_zip_entries(
 
         mode = info.external_attr >> 16
         if stat.S_ISLNK(mode):
-            report.error(ProblemCode.SYMLINK, name, "Symbolic links are not allowed in a bundle")
+            report.error(ProblemCode.SYMLINK, name, _SYMLINK)
             safe = False
             continue
         # Archivers that record no file type (Python's own, for one) leave
@@ -238,6 +335,9 @@ def _check_zip_entries(
             continue
         seen.add(key)
 
+        if skip_own_files and parts[0] == FILES_DIR:
+            own_files = True
+            continue
         if info.is_dir():
             continue
         if len(parts) == 1 and key in KNOWN_FILES:
@@ -247,6 +347,8 @@ def _check_zip_entries(
         else:
             report.warning(ProblemCode.UNKNOWN_FILE, name, "Not part of the bundle format; ignored")
 
+    if own_files:
+        report.warning(ProblemCode.UNKNOWN_FILE, FILES_DIR, OWN_FILES_IGNORED)
     return wanted if safe else None
 
 

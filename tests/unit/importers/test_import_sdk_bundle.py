@@ -9,6 +9,7 @@ mistake both report the same problems.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -17,7 +18,7 @@ import pytest
 from specivo.importers.bundle import BundleSourceAdapter
 from specivo.importers.bundle.report import ValidationReport
 from tests.fixtures import import_sdk as import_sdk_fixture
-from tests.fixtures.import_bundle import FULL, issue, manifest, project, user, write_bundle
+from tests.fixtures.import_bundle import FULL, issue, manifest, project, stored, user, write_bundle
 from tests.fixtures.import_sdk import import_sdk, write_sdk_bundle
 
 pytestmark = pytest.mark.unit
@@ -128,6 +129,46 @@ class TestTheValidatorsAgree:
         sdk_report = import_sdk().validate_bundle(archive)
         assert not sdk_report.ok
         assert _problems(sdk_report) == _problems(await _core(archive))
+
+
+class TestTheValidatorsAgreeOnASeparateFilesDirectory:
+    """``files_path`` in the SDK and ``--files-path`` in core give the same verdicts."""
+
+    def _case(self, tmp_path: Path, case: str) -> tuple[Path, Path]:
+        attachment = {
+            "source_ref": "a1",
+            "container_kind": "issue",
+            "container_ref": "i1",
+            "filename": "log.txt",
+            "sha256": stored(b"x"),
+            "filesize": 1,
+        }
+        bundle = write_bundle(tmp_path / "b", projects=[project("p1")], issues=[issue("i1")], attachments=[attachment])
+        files = tmp_path / "store"
+        files.mkdir()
+        if case == "valid":
+            (files / stored(b"x")).write_bytes(b"x")
+        elif case == "tampered":
+            (files / stored(b"x")).write_bytes(b"y")
+        elif case == "symlink":
+            (tmp_path / "secret").write_bytes(b"x")
+            os.symlink(tmp_path / "secret", files / stored(b"x"))
+        elif case == "extra":
+            (files / stored(b"x")).write_bytes(b"x")
+            (files / stored(b"unused")).write_bytes(b"unused")
+            (files / "README.txt").write_text("hello")
+        elif case == "absent":
+            files.rmdir()
+        return bundle, files
+
+    @pytest.mark.parametrize("case", ["valid", "missing", "tampered", "symlink", "extra", "absent"])
+    async def test_on_each_case(self, tmp_path, case):
+        sdk = import_sdk()
+        bundle, files = self._case(tmp_path, case)
+        sdk_report = sdk.validate_bundle(bundle, files_path=files)
+        core_report = await BundleSourceAdapter(bundle, files_path=files).validate()
+        assert _problems(sdk_report) == _problems(core_report)
+        assert [p.message for p in sdk_report.problems] == [p.message for p in core_report.problems]
 
 
 class TestTheSdkMustBeThere:

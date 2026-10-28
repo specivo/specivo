@@ -11,15 +11,20 @@ insert too.
 
 from __future__ import annotations
 
+import hashlib
 import json
+import shutil
+import zipfile
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
 
 from specivo.importers.bundle import BundleInvalidError
 from specivo.importers.core.ir import EntityType
+from specivo.importers.core.pipeline import PhaseFailedError
 from specivo.models.attachment import Attachment
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
@@ -35,7 +40,7 @@ from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.version import Version
 from specivo.models.watcher import Watcher
 from specivo.models.wiki import WikiContent, WikiPage, WikiRedirect
-from tests.fixtures.import_bundle import FULL, copy_full, issue, user, write_bundle
+from tests.fixtures.import_bundle import FULL, copy_full, issue, stored, user, write_bundle
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="function"),
@@ -338,11 +343,17 @@ class TestFullBundle:
         ]
         assert imported.notes["records_with_source_data_kept_only_in_the_bundle"] == ["issues: 1"]
 
-    async def test_the_identifier_map_is_scoped_by_the_bundles_source(self, db_session, imported):
+    async def test_bundle_rows_are_scoped_by_the_manifest_source(self, db_session, imported):
+        """Keyed as an import straight from that system would be, so the two can meet."""
         scopes = set(
             (await db_session.execute(select(ImportIdMapping.source_system, ImportIdMapping.source_instance))).all()
         )
-        assert scopes == {("bundle", "sample:tracker.example.com")}
+        assert scopes == {("sample", "tracker.example.com")}
+        assert (imported.source_system, imported.source_instance) == ("sample", "tracker.example.com")
+
+    async def test_the_import_account_is_named_after_the_manifests_system(self, db_session, imported):
+        accounts = set((await db_session.execute(select(User.login).where(User.login.like("%-import")))).scalars())
+        assert accounts == {"sample-import"}
 
 
 class TestAdministrators:
@@ -370,20 +381,47 @@ class TestRerun:
         await build_bundle_import(FULL).run()
         before = await _counts(db_session)
 
-        second = await build_bundle_import(FULL).run()
+        second = await build_bundle_import(FULL, continue_import=True).run()
 
         assert await _counts(db_session) == before
         assert sum(second.created.values()) == 0
         assert second.skipped[EntityType.ISSUE] == 3
         (warning,) = second.warnings
         assert warning.message.startswith("This source was imported into this database before")
-        assert warning.context["source"] == "bundle:sample:tracker.example.com"
+        assert warning.context["source"] == "sample:tracker.example.com"
+
+    @pytest.mark.parametrize("dry_run", [False, True])
+    async def test_adding_to_an_earlier_import_needs_the_operators_say_so(
+        self, db_session, build_bundle_import, dry_run
+    ):
+        """A bundle names its own scope, so it could claim another import's records; that takes an opt-in."""
+        await build_bundle_import(FULL).run()
+        before = await _counts(db_session)
+        mapped = await _count(db_session, ImportIdMapping)
+
+        with pytest.raises(PhaseFailedError) as refused:
+            await build_bundle_import(FULL, dry_run=dry_run).run()
+
+        message = str(refused.value)
+        assert "sample @ tracker.example.com" in message
+        assert f"{mapped} identifier-map rows" in message
+        assert "3 issue" in message
+        assert "--continue-import" in message
+        await db_session.rollback()
+        assert await _counts(db_session) == before
+
+    async def test_resuming_a_run_is_adding_to_it(self, db_session, build_bundle_import):
+        first = await build_bundle_import(FULL, stop_after_phase="users").run()
+
+        resumed = await build_bundle_import(FULL, resume_run_id=first.run_id).run()
+
+        assert resumed.created[EntityType.ISSUE] == 3
 
     async def test_rerunning_leaves_text_and_timestamps_as_they_were(self, db_session, build_bundle_import):
         await build_bundle_import(FULL).run()
         before = await _texts(db_session)
 
-        await build_bundle_import(FULL).run()
+        await build_bundle_import(FULL, continue_import=True).run()
 
         assert await _texts(db_session) == before
 
@@ -398,7 +436,7 @@ class TestRerun:
         assert "{{issue:web-1|the login bug}}" in rate_limits.description
         assert {w.context.get("placeholder") for w in first.warnings} >= {"issue:web-1", "wiki:w-home"}
 
-        await build_bundle_import(FULL).run()
+        await build_bundle_import(FULL, continue_import=True).run()
 
         await db_session.refresh(rate_limits)
         assert "[the login bug](/issue/BUNDLEWEB-1/)" in rate_limits.description
@@ -435,13 +473,98 @@ class TestRerun:
         manifest["counts"]["issues"] = 4
         (later / "manifest.json").write_text(json.dumps(manifest))
 
-        second = await build_bundle_import(later).run()
+        second = await build_bundle_import(later, continue_import=True).run()
 
         assert second.created[EntityType.ISSUE] == 1
         assert second.skipped[EntityType.ISSUE] == 3
         added = await _issue(db_session, "Issue web-3")
         assert (added.project_key, added.sequence_number) == ("BUNDLEWEB", 3)
         assert added.description == "Follow-up to BUNDLEWEB-1."
+
+
+def _data_only_zip(source: Path, target: Path) -> Path:
+    """Zip the bundle at *source* without its ``files/``, as a tool does when the bytes go elsewhere."""
+    with zipfile.ZipFile(target, "w") as archive:
+        for path in sorted(source.iterdir()):
+            if path.is_file():
+                archive.write(path, path.name)
+    return target
+
+
+class TestSeparateFiles:
+    """``--files-path``: records from a zip, bytes from a directory copied over on their own."""
+
+    async def test_a_data_only_zip_loads_every_attachment_from_the_directory(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        archive = _data_only_zip(FULL, tmp_path / "data.zip")
+
+        summary = await build_bundle_import(archive, files_path=FULL / "files").run()
+
+        assert summary.created[EntityType.ATTACHMENT] == 3
+        attachments = {a.filename: a for a in (await db_session.execute(select(Attachment))).scalars()}
+        assert attachments["deploy.log"].content_hash == SHA_LOG
+        assert attachments["notes.txt"].content_hash == SHA_NOTES
+        for attachment in attachments.values():
+            stored_copy = build_bundle_import.storage / attachment.disk_filename
+            assert hashlib.sha256(stored_copy.read_bytes()).hexdigest() == attachment.content_hash
+
+    async def test_a_dry_run_writes_nothing(self, db_session, build_bundle_import, tmp_path):
+        archive = _data_only_zip(FULL, tmp_path / "data.zip")
+
+        summary = await build_bundle_import(archive, files_path=FULL / "files", dry_run=True).run()
+
+        assert summary.created[EntityType.ATTACHMENT] == 3
+        await db_session.rollback()
+        assert await _count(db_session, Attachment) == 0
+        assert list(build_bundle_import.storage.iterdir()) == []
+
+    async def test_a_rerun_after_new_files_arrive_creates_only_the_new_attachments(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        files = tmp_path / "store"
+        shutil.copytree(FULL / "files", files)
+        await build_bundle_import(_data_only_zip(FULL, tmp_path / "first.zip"), files_path=files).run()
+
+        later = copy_full(tmp_path / "later")
+        body = b"Release checklist\n"
+        (files / stored(body)).write_bytes(body)
+        record = {
+            "source_ref": "a-checklist",
+            "container_kind": "issue",
+            "container_ref": "web-2",
+            "filename": "checklist.txt",
+            "sha256": stored(body),
+            "filesize": len(body),
+        }
+        with (later / "attachments.jsonl").open("a") as handle:
+            handle.write(json.dumps(record) + "\n")
+        manifest = json.loads((later / "manifest.json").read_text())
+        manifest["counts"]["attachments"] += 1
+        (later / "manifest.json").write_text(json.dumps(manifest))
+
+        second = await build_bundle_import(
+            _data_only_zip(later, tmp_path / "second.zip"), files_path=files, continue_import=True
+        ).run()
+
+        assert second.created[EntityType.ATTACHMENT] == 1
+        assert second.skipped[EntityType.ATTACHMENT] == 3
+        added = (
+            await db_session.execute(select(Attachment).where(Attachment.filename == "checklist.txt"))
+        ).scalar_one()
+        assert (build_bundle_import.storage / added.disk_filename).read_bytes() == body
+
+    async def test_a_bad_directory_refuses_the_import_before_anything_is_written(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        files = tmp_path / "store"
+        shutil.copytree(FULL / "files", files)
+        (files / SHA_LOG).write_bytes(b"tampered")
+
+        with pytest.raises(BundleInvalidError, match=r"attachments\.jsonl:1: error: files/bb18"):
+            await build_bundle_import(_data_only_zip(FULL, tmp_path / "data.zip"), files_path=files).run()
+
+        assert await _count(db_session, ImportIdMapping) == 0
 
 
 class TestInvalidBundle:

@@ -10,7 +10,7 @@ declared on :class:`~specivo.importers.core.pipeline.ImportPhase`.
 
 from __future__ import annotations
 
-from specivo.importers.core.pipeline import ImportPhase, ImportPipeline, PhaseContext
+from specivo.importers.core.pipeline import ImportPhase, ImportPipeline, PhaseContext, PhaseFailedError
 from specivo.importers.load.attachment_loader import load_issue_attachments, load_wiki_attachments
 from specivo.importers.load.issue_loader import (
     load_issues,
@@ -62,10 +62,29 @@ async def _warn_about_an_earlier_import(ctx: PhaseContext) -> None:
     already brought over is skipped, not created again or updated. That is
     right for a resumed or a delta run, and wrong for a different installation
     that happens to have the same name, which must be given its own.
+
+    A source whose scope comes from its own data (a bundle names it in its
+    manifest) is refused instead, unless the operator passed
+    ``--continue-import`` or is resuming a run.
     """
     if ctx.options.resume_run_id is not None:
         return
     existing = await ctx.id_map.count(ctx.session)
+    if existing and getattr(ctx.adapter, "scope_from_source_data", False) and not ctx.options.continue_import:
+        # The scope comes from the data (a bundle's manifest), not from the
+        # operator, so a bundle could name another import's scope and have its
+        # records skip, or attach to, rows that import created. Adding to an
+        # earlier import is therefore something the operator says, every time.
+        counts = await ctx.id_map.counts(ctx.session)
+        held = ", ".join(f"{count} {entity_type}" for entity_type, count in sorted(counts.items()))
+        scope = f"{ctx.id_map.source_system} @ {ctx.id_map.source_instance}"
+        raise PhaseFailedError(
+            f"The source this bundle names, {scope}, was imported into this database before "
+            f"({existing} identifier-map rows: {held}). Loading it adds to that import: records it already "
+            "brought over are skipped, and new ones attach to what is there. If this is a later export of the "
+            "same installation, re-run with --continue-import. If it is a different installation, give it its "
+            "own source.instance. Nothing was imported."
+        )
     if existing:
         ctx.warn(
             "This source was imported into this database before; this run adds to that import, skipping what is "

@@ -4,7 +4,8 @@ Written by :class:`specivo.importers.core.id_map.ImportIdMap` during an import
 and read by every loader before it creates anything, which is what lets an
 interrupted import be re-run safely.
 
-Rows are immutable once written, so there is no ``updated_at``.
+Rows are not updated once written, so there is no ``updated_at``; the one
+exception is ``admin import-map rename``, which moves a whole scope to a new key.
 """
 
 from __future__ import annotations

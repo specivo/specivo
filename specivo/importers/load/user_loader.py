@@ -106,13 +106,25 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
             ctx.state[IMPORT_ACCOUNT_STATE_KEY] = account.id
             return account
 
-    login = f"{ctx.adapter.source_system}-import"
-    existing = await _find_user_by_login(ctx.session, login)
+    # Named after the system the identifier map is keyed by, so a bundle from
+    # a Redmine tool reuses the account a direct Redmine import created.
+    system = ctx.id_map.source_system
+    wanted = f"{system}-import"
+    login, existing = await _import_account_login(ctx.session, wanted)
+    if login != wanted:
+        # A bundle names its own system, so the login it leads to may belong to
+        # someone: a person, or a service account with another job. Neither is
+        # ever made the author of imported records.
+        ctx.warn(
+            f"The login {wanted!r} belongs to an account the import did not create, so it was left alone; "
+            "records without an author belong to another import account",
+            account=login,
+        )
     if existing is None:
         existing = User(
             login=login,
-            email=f"{login}@{_PLACEHOLDER_EMAIL_DOMAIN}",
-            display_name=f"{ctx.adapter.source_system.title()} Import",
+            email=_import_account_email(login),
+            display_name=f"{system.replace('_', ' ').title()} Import",
             password_hash=_unusable_password(),
             status="active",
             is_admin=False,
@@ -341,6 +353,34 @@ def _supported_language(language: str | None) -> str:
     if language and language in settings.available_languages:
         return language
     return settings.default_language
+
+
+def _import_account_email(login: str) -> str:
+    """The placeholder address an import account is created with, which also marks it as one."""
+    return f"{login}@{_PLACEHOLDER_EMAIL_DOMAIN}"
+
+
+def _is_import_account(user: User) -> bool:
+    """Whether *user* is an account an import created for itself, and so may be reused."""
+    return bool(user.is_service_account) and (user.email or "").lower() == _import_account_email(user.login).lower()
+
+
+async def _import_account_login(session: AsyncSession, wanted: str) -> tuple[str, User | None]:
+    """Return the login to use for the import account, and the account if it already exists.
+
+    *wanted* when it is free or already an import account; otherwise the first
+    of ``<wanted>-2``, ``<wanted>-3``, ... that is.
+    """
+    for attempt in range(1, 1000):
+        login = wanted if attempt == 1 else f"{wanted}-{attempt}"
+        found = await _find_user_by_login(session, login)
+        if found is not None:
+            if _is_import_account(found):
+                return login, found
+            continue
+        if not await _exists(session, User.login, login):
+            return login, None
+    raise PhaseFailedError(f"No free login for the import account starting with {wanted!r}")
 
 
 async def _find_user_by_login(session: AsyncSession, login: str) -> User | None:

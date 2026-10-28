@@ -22,6 +22,8 @@ from tests.fixtures.import_bundle import FULL, copy_full, issue, manifest, proje
 
 pytestmark = pytest.mark.unit
 
+SHA_LOG = "bb184ab3bffbeb05ed23843ec1ffebc22065b8f6ef3d9c11e4fd5cc0f043be44"
+
 
 async def _validate(path: Path) -> ValidationReport:
     return await BundleSourceAdapter(path).validate()
@@ -68,12 +70,28 @@ class TestAValidBundle:
 
     async def test_the_identifier_map_is_scoped_by_the_manifests_source(self):
         adapter = BundleSourceAdapter(FULL)
+        # "bundle" names the source on the command line; the rows go under the
+        # system and instance the manifest names.
         assert adapter.source_system == "bundle"
-        assert adapter.source_instance == "sample:tracker.example.com"
+        assert adapter.id_map_system == "sample"
+        assert adapter.source_instance == "tracker.example.com"
         assert adapter.reference_style == REFERENCE_STYLE_PLACEHOLDERS
 
     def test_source_instance_can_be_overridden(self):
-        assert BundleSourceAdapter(FULL, source_instance="legacy").source_instance == "legacy"
+        adapter = BundleSourceAdapter(FULL, source_instance="legacy")
+        assert (adapter.id_map_system, adapter.source_instance) == ("sample", "legacy")
+
+    @pytest.mark.parametrize("system", ["Redmine", "red mine", "red-mine", "redmine/../x", "r" * 31, ""])
+    async def test_the_source_system_is_a_strict_slug(self, tmp_path, system):
+        """It becomes part of the import account's login, so nothing else gets through."""
+        root = write_bundle(tmp_path / "b", manifest_data=manifest(source={"system": system, "instance": "x"}))
+        assert _codes(await _validate(root)) == [("manifest.json", None, "schema")]
+
+    async def test_bundle_is_not_a_source_system_a_manifest_may_name(self, tmp_path):
+        root = write_bundle(tmp_path / "b", manifest_data=manifest(source={"system": "bundle", "instance": "x"}))
+        report = await _validate(root)
+        assert _codes(report) == [("manifest.json", None, "schema")]
+        assert "reserved" in report.errors[0].message
 
 
 class TestVersions:
@@ -357,6 +375,161 @@ class TestFiles:
         report = await _validate(root)
         assert report.ok
         assert _codes(report, Severity.WARNING) == [("README.txt", None, "unknown_file")]
+
+
+class TestASeparateFilesDirectory:
+    """``--files-path``: the records come from the bundle, the bytes from a directory of their own."""
+
+    def _attachment(self, sha256: str, **fields) -> dict:
+        return {
+            "source_ref": "a1",
+            "container_kind": "issue",
+            "container_ref": "i1",
+            "filename": "log.txt",
+            "sha256": sha256,
+            **fields,
+        }
+
+    def _data(self, root: Path, attachment: dict) -> Path:
+        return write_bundle(root, projects=[project("p1")], issues=[issue("i1")], attachments=[attachment])
+
+    def _files(self, root: Path, files: dict[str, bytes]) -> Path:
+        root.mkdir(parents=True)
+        for name, data in files.items():
+            (root / name).write_bytes(data)
+        return root
+
+    async def _validate(self, bundle: Path, files: Path) -> ValidationReport:
+        return await BundleSourceAdapter(bundle, files_path=files).validate()
+
+    async def test_a_zipped_data_only_bundle_reads_the_bytes_from_the_directory(self, tmp_path):
+        data = {name: body for name, body in _bundle_entries(FULL).items() if not name.startswith("files/")}
+        archive = _zip(tmp_path / "data.zip", data)
+        adapter = BundleSourceAdapter(archive, files_path=FULL / "files")
+        await adapter.connect()
+        try:
+            attachments = [a async for a in adapter.extract_attachments("p-web")]
+            paths = {a.filename: adapter.resolve_attachment_path(a) for a in attachments}
+        finally:
+            await adapter.close()
+        assert paths["deploy.log"] == (FULL / "files" / SHA_LOG).resolve()
+        assert paths["deploy.log"].read_bytes().startswith(b"2024-02-01T10:00:00Z deploy started")
+
+    async def test_a_valid_split_bundle_reports_nothing(self, tmp_path):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x"), filesize=1))
+        files = self._files(tmp_path / "store", {stored(b"x"): b"x"})
+        report = await self._validate(bundle, files)
+        assert report.ok, report.format_text()
+        assert report.problems == []
+
+    async def test_a_missing_file_names_the_record_line(self, tmp_path):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x")))
+        report = await self._validate(bundle, self._files(tmp_path / "store", {}))
+        assert _codes(report) == [("attachments.jsonl", 1, "missing_file")]
+        assert report.errors[0].message == f"files/{stored(b'x')} is not in the bundle"
+
+    async def test_a_wrong_hash_names_the_record_line(self, tmp_path):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x")))
+        report = await self._validate(bundle, self._files(tmp_path / "store", {stored(b"x"): b"tampered"}))
+        assert _codes(report) == [("attachments.jsonl", 1, "hash_mismatch")]
+        assert report.errors[0].message == f"files/{stored(b'x')} does not hash to its name"
+
+    async def test_a_wrong_size_is_only_a_warning(self, tmp_path):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x"), filesize=99))
+        report = await self._validate(bundle, self._files(tmp_path / "store", {stored(b"x"): b"x"}))
+        assert report.ok
+        assert _codes(report, Severity.WARNING) == [("attachments.jsonl", 1, "size_mismatch")]
+
+    async def test_a_symlink_in_the_directory_is_refused_and_no_record_is_read(self, tmp_path):
+        secret = tmp_path / "secret.txt"
+        secret.write_bytes(b"server secret")
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"server secret")))
+        files = self._files(tmp_path / "store", {})
+        os.symlink(secret, files / stored(b"server secret"))
+        report = await self._validate(bundle, files)
+        assert _codes(report) == [(f"files/{stored(b'server secret')}", None, "symlink")]
+        assert report.errors[0].message == "Symbolic links are not allowed in a bundle"
+        assert report.records == {}
+
+    async def test_a_symlink_further_down_is_refused_too(self, tmp_path):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x")))
+        files = self._files(tmp_path / "store", {stored(b"x"): b"x"})
+        (files / "nested").mkdir()
+        os.symlink(tmp_path / "secret.txt", files / "nested" / "link")
+        report = await self._validate(bundle, files)
+        assert _codes(report) == [("files/nested/link", None, "symlink")]
+
+    async def test_the_directory_itself_may_be_a_link(self, tmp_path):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x")))
+        files = self._files(tmp_path / "store", {stored(b"x"): b"x"})
+        os.symlink(files, tmp_path / "current")
+        report = await self._validate(bundle, tmp_path / "current")
+        assert report.ok, report.format_text()
+        assert report.problems == []
+
+    async def test_other_entries_are_ignored_and_unused_files_are_warned_about(self, tmp_path):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x")))
+        files = self._files(tmp_path / "store", {stored(b"x"): b"x", stored(b"y"): b"y", "README.txt": b"hi"})
+        report = await self._validate(bundle, files)
+        assert report.ok
+        assert _codes(report, Severity.WARNING) == [
+            ("files/README.txt", None, "unknown_file"),
+            (f"files/{stored(b'y')}", None, "unreferenced_file"),
+        ]
+        assert report.warnings[0].message == "Not a stored file (files/<sha256>); ignored"
+
+    @pytest.mark.parametrize("kind", ["missing", "file"])
+    async def test_a_directory_that_is_not_there_is_refused_before_the_scan(self, tmp_path, kind):
+        bundle = self._data(tmp_path / "b", self._attachment(stored(b"x")))
+        files = tmp_path / "store"
+        if kind == "file":
+            files.write_bytes(b"not a directory")
+        report = await self._validate(bundle, files)
+        assert _codes(report) == [("store", None, "unreadable")]
+        assert report.errors[0].message == "The files directory does not exist or is not a directory"
+        assert report.records == {}
+
+    async def test_the_bundles_own_files_are_ignored_with_a_warning(self, tmp_path):
+        bundle = write_bundle(
+            tmp_path / "b",
+            projects=[project("p1")],
+            issues=[issue("i1")],
+            attachments=[self._attachment(stored(b"x"))],
+            files={stored(b"x"): b"stale", "junk": b"j"},
+        )
+        files = self._files(tmp_path / "store", {stored(b"x"): b"x"})
+        report = await self._validate(bundle, files)
+        assert report.ok, report.format_text()
+        assert [(p.file, str(p.code), p.message) for p in report.warnings] == [
+            (
+                "files",
+                "unknown_file",
+                "Stored files are read from the files directory given; the bundle's own are ignored",
+            )
+        ]
+
+    async def test_a_zips_own_files_are_ignored_with_a_warning_and_not_unpacked(self, tmp_path):
+        archive = _zip(tmp_path / "full.zip", _bundle_entries(FULL))
+        adapter = BundleSourceAdapter(archive, files_path=FULL / "files")
+        await adapter.connect()
+        try:
+            assert not (adapter.index.root / "files").exists()
+            assert [(p.file, str(p.code)) for p in adapter.report.warnings] == [("files", "unknown_file")]
+        finally:
+            await adapter.close()
+
+    @pytest.mark.parametrize("where", ["inside", "around"])
+    async def test_the_directory_cannot_be_inside_the_bundle_or_hold_it(self, tmp_path, where):
+        if where == "inside":
+            bundle = self._data(tmp_path / "b", self._attachment(stored(b"x")))
+            files = self._files(bundle / "store", {stored(b"x"): b"x"})
+        else:
+            files = self._files(tmp_path / "store", {stored(b"x"): b"x"})
+            bundle = self._data(files / "b", self._attachment(stored(b"x")))
+        report = await self._validate(bundle, files)
+        assert _codes(report) == [("store", None, "unreadable")]
+        assert report.errors[0].message == "The files directory must not be inside the bundle or contain it"
+        assert report.records == {}
 
 
 class TestZipSafety:

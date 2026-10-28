@@ -81,7 +81,7 @@ class TestBundleWriter:
     async def test_what_is_written_validates_and_reads_back(self, tmp_path, name):
         written = _write(tmp_path / name)
         adapter = BundleSourceAdapter(tmp_path / name)
-        assert adapter.source_instance == "sample:tracker.example.com"
+        assert (adapter.id_map_system, adapter.source_instance) == ("sample", "tracker.example.com")
 
         await adapter.connect()
         try:

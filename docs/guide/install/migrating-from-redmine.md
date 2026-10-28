@@ -98,6 +98,48 @@ Each phase commits as it finishes, so a resumed run keeps what landed and
 continues. Re-running an import that already finished is safe: everything is
 recognised and skipped.
 
+## Importing again later
+
+Specivo remembers which Redmine record became which Specivo row, under a key
+made of the source system (`redmine`) and the instance name: `--source-instance`
+if you gave one, otherwise the source database URL with its password masked
+(`postgresql://redmine:***@db.internal/redmine`). A later import under the same
+key adds only what is new and skips the rest.
+
+An import bundle written by a Redmine export tool is keyed the same way, by the
+system and instance its manifest names. So a bundle can carry on from a direct
+import, as long as both use the same instance name. If your earlier direct
+import ran without `--source-instance`, its key is the masked URL. Before you
+load the first bundle, move it to the name the bundle uses:
+
+```
+# the keys in this database, with what each holds
+docker compose exec api python -m specivo.cli.admin import-map list
+
+# check the move (a dry run: nothing changes without --yes)
+docker compose exec api python -m specivo.cli.admin import-map rename --system redmine \
+  --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com
+# then do it
+docker compose exec api python -m specivo.cli.admin import-map rename --system redmine \
+  --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com --yes
+```
+
+The move is one transaction. It is refused if the new key already holds rows.
+
+A bundle that names a key with rows is refused unless you say it continues that
+import, so a bundle cannot quietly attach its records to an import it does not
+belong to. Once the keys line up, load it with `--continue-import`:
+
+```
+docker compose exec api python -m specivo.cli.import_data --source bundle \
+  --path /import/export --continue-import --dry-run
+```
+
+The dry run should report that the source was imported before and that nothing
+is created except records added in Redmine since. Then run it without
+`--dry-run`. Records without an author still belong to the `redmine-import`
+account.
+
 ## Keeping people's passwords
 
 By default every imported account arrives without a usable password (see
@@ -171,6 +213,45 @@ Either way, the sign-in page shows the usual "Invalid login or password", so it
 doesn't reveal which accounts are affected. Coming from something other than
 Redmine? See [Writing an import source plugin](import-source-plugins.md) and
 [Writing a password hasher plugin](password-hasher-plugins.md).
+
+## Large migrations
+
+A Redmine with years of attachments can hold many gigabytes of files. Keep
+them out of any archive: export the bundle to a folder, and copy the folder
+with `rsync`, which can resume and skips files already copied. Files are
+named by their content hash, so a later export only adds new ones and a second
+`rsync` only moves those.
+
+1. Export to a folder (the export tool's default; a zip is only for small
+   exports and trial runs).
+2. Copy it to the Specivo host, records and files together or apart:
+
+   ```
+   rsync -a --partial export/ specivo-host:/srv/import/export/
+   ```
+
+   The records are small; if you would rather move them as a zip, zip only
+   the records and copy `files/` on its own to, say, `/srv/import/files/`.
+3. Make the folder visible to the API container (a read-only mount is
+   enough), then check it. Nothing is written and the database is not touched:
+
+   ```
+   docker compose exec api python -m specivo.cli.import_data --source bundle \
+     --path /import/export --validate
+   # records in a zip, files apart:
+   docker compose exec api python -m specivo.cli.import_data --source bundle \
+     --path /import/data.zip --files-path /import/files --validate
+   ```
+
+   A missing file, one whose bytes do not match its name, or a symbolic link
+   among the files is reported with the record it belongs to.
+4. Rehearse with `--dry-run` instead of `--validate`, and read the report.
+5. Import: the same command without either.
+
+For a later delta, export again into the same folder, `rsync` again, and run
+the same steps with `--continue-import` added to the dry run and the import.
+Records and files already imported are recognised and skipped; only what is new
+is created and copied.
 
 ## Useful options
 
