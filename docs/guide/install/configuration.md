@@ -219,8 +219,9 @@ The other SSO variables are listed in [Single sign-on](single-sign-on/index.md#s
 ## Imported passwords
 
 These settings matter only if you import accounts from another system and let
-them keep their passwords. See [Migrating from Redmine](migrating-from-redmine.md#keeping-peoples-passwords)
-and [Writing a password hasher plugin](password-hasher-plugins.md).
+them keep their passwords. A bundle can carry the old password hashes (see the
+[Redmine migration tool](https://github.com/specivo/redmine-migration-tool/blob/main/docs/migrating-from-redmine.md)). See also
+[Writing a password hasher plugin](password-hasher-plugins.md).
 
 | Variable | Purpose / default |
 |---|---|

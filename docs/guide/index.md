@@ -10,8 +10,8 @@ instead of around it. You run it on your own server, you own the data, and there
 
 This guide is for the people who use Specivo every day — creating and tracking issues, writing wiki
 pages, and connecting AI assistants. If you want to install and operate Specivo, jump to
-[Installing Specivo](install/index.md). Already running Redmine? Your projects, issues, history,
-wiki pages and attachments can come with you — see [Migrating from Redmine](install/migrating-from-redmine.md).
+[Installing Specivo](install/index.md). Moving from another tracker? Specivo loads import bundles and migration tools write them; for Redmine, see the
+[Redmine migration tool](https://github.com/specivo/redmine-migration-tool/blob/main/docs/migrating-from-redmine.md).
 
 ![The Specivo dashboard](assets/img/hero-dashboard.webp)
 
@@ -45,7 +45,7 @@ sprint, wiki) that the rest of this guide uses.
 | Connect Claude Code, Codex, or another AI client | [AI agents & MCP](ai-agents/index.md) |
 | Install or self-host Specivo | [Installing Specivo](install/index.md) |
 | Let people sign in with your identity provider | [Single sign-on](install/single-sign-on/index.md) |
-| Move an existing Redmine instance across | [Migrating from Redmine](install/migrating-from-redmine.md) |
+| Move an existing Redmine instance across | [Redmine migration tool](https://github.com/specivo/redmine-migration-tool/blob/main/docs/migrating-from-redmine.md) |
 
 !!! tip "Search is built in"
     Press <kbd>⌘K</kbd> (<kbd>Ctrl+K</kbd>) anywhere in Specivo to search. It uses **hybrid search** — exact keywords *and*

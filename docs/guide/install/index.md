@@ -75,4 +75,4 @@ files are not in the image: you download them once. See
 - [Configuration](configuration.md) — environment variables, external database, SMTP, secrets.
 - [Single sign-on](single-sign-on/index.md) — let people sign in through Keycloak, authentik, Microsoft Entra ID and other OpenID Connect providers.
 - [Backup & restore](backup-restore.md) — protect your data before you depend on it.
-- [Migrating from Redmine](migrating-from-redmine.md) — bring your projects, issues, history, wiki and attachments across.
+- Moving from another tracker: Specivo loads import bundles; migration tools write them. For Redmine, see the [Redmine migration tool](https://github.com/specivo/redmine-migration-tool/blob/main/docs/migrating-from-redmine.md).
