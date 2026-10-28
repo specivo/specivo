@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import stat
 from dataclasses import replace
 
 import pytest
 
+from specivo.importers.core import links_file
 from specivo.importers.core.links_file import (
     LinksFileMismatchError,
     LinksFileUnreadableError,
@@ -333,3 +335,106 @@ class TestUntrustedFile:
         with pytest.raises(LinksFileUnreadableError, match="symbolic link"):
             LinksStore.open(link, SYSTEM, INSTANCE, writable=True, key=KEY_A)
         assert not target.exists()
+
+
+class TestOpeningRaces:
+    """The check that nothing (or no link) is there and the open are two steps: what comes between is refused."""
+
+    def _attacker_file(self, tmp_path) -> tuple:
+        target = tmp_path / "attacker.sqlite"
+        store = LinksStore.open(target, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        store.put(_text(7))
+        store.commit()
+        return target, target.read_bytes()
+
+    def test_a_new_file_is_private_to_its_owner(self, tmp_path):
+        path = tmp_path / "links.sqlite"
+        store = LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        store.put(_text(1))
+        store.commit()
+        assert stat.S_IMODE(os.lstat(path).st_mode) == 0o600
+
+    @pytest.mark.parametrize("target_exists", [False, True])
+    def test_a_symlink_appearing_after_the_existence_check_is_refused(self, tmp_path, monkeypatch, target_exists):
+        if target_exists:
+            target, before = self._attacker_file(tmp_path)
+        else:
+            target, before = tmp_path / "elsewhere.sqlite", None
+        link = tmp_path / "links.sqlite"
+        link.symlink_to(target)
+        # The existence check ran while nothing was there yet.
+        monkeypatch.setattr(links_file, "_refuse_symlink", lambda path: None)
+
+        with pytest.raises(LinksFileUnreadableError, match="symbolic link"):
+            LinksStore.open(link, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+
+        assert link.is_symlink()
+        if target_exists:
+            assert target.read_bytes() == before
+        else:
+            assert not target.exists()
+
+    def test_an_existing_file_turned_into_a_symlink_is_refused(self, tmp_path, monkeypatch):
+        target, before = self._attacker_file(tmp_path)
+        link = tmp_path / "links.sqlite"
+        link.symlink_to(target)
+        # The check saw a regular file there.
+        monkeypatch.setattr(links_file, "_refuse_symlink", lambda path: os.lstat(target))
+
+        for writable in (True, False):
+            with pytest.raises(LinksFileUnreadableError, match="symbolic link"):
+                LinksStore.open(link, SYSTEM, INSTANCE, writable=writable, key=KEY_A)
+        assert target.read_bytes() == before
+
+    @pytest.mark.parametrize("existing", [False, True])
+    @pytest.mark.parametrize("dangling", [False, True])
+    def test_a_symlink_swapped_in_before_sqlite_opens_the_file_is_refused(
+        self, tmp_path, monkeypatch, existing, dangling
+    ):
+        """The window between the no-follow open and SQLite's own open: SQLite follows links."""
+        path = tmp_path / "links.sqlite"
+        if existing:
+            store = LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+            store.put(_text(1))
+            store.commit()
+        if dangling:
+            target, before = tmp_path / "elsewhere.sqlite", None
+        else:
+            target, before = self._attacker_file(tmp_path)
+        real_connect = sqlite3.connect
+
+        def swap_then_connect(*args, **kwargs):
+            path.rename(tmp_path / "moved-away.sqlite")
+            path.symlink_to(target)
+            return real_connect(*args, **kwargs)
+
+        monkeypatch.setattr(links_file.sqlite3, "connect", swap_then_connect)
+        with pytest.raises(LinksFileUnreadableError):
+            LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        monkeypatch.setattr(links_file.sqlite3, "connect", real_connect)
+
+        if dangling:
+            assert not target.exists()
+        else:
+            assert target.read_bytes() == before
+
+    def test_a_file_created_by_another_process_meanwhile_fails_cleanly(self, tmp_path, monkeypatch):
+        path = tmp_path / "links.sqlite"
+        store = LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        store.put(_text(1))
+        store.commit()
+        before = path.read_bytes()
+        # The existence check ran before the other process created the file.
+        monkeypatch.setattr(links_file, "_refuse_symlink", lambda path: None)
+
+        with pytest.raises(LinksFileUnreadableError, match="created by something else"):
+            LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        assert path.read_bytes() == before
+
+    def test_a_planted_journal_link_is_refused(self, tmp_path):
+        path = tmp_path / "links.sqlite"
+        (tmp_path / "links.sqlite-journal").symlink_to(tmp_path / "victim.txt")
+        with pytest.raises(LinksFileUnreadableError, match="-journal"):
+            LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        assert not (tmp_path / "victim.txt").exists()
+        assert not path.exists()

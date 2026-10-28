@@ -797,6 +797,25 @@ class TestLinksFile:
         assert links.read_bytes() == before
         assert not links.with_name(links.name + "-journal").exists()
 
+    async def test_a_file_created_meanwhile_is_a_warning_not_a_failure(
+        self, db_session, build_bundle_import, tmp_path, monkeypatch
+    ):
+        """Another process created the file between the existence check and the exclusive create."""
+        b = self._b(tmp_path / "b")
+        links = build_bundle_import.links_path(b)
+        store = LinksStore.open(links, "sample", "tracker.example.com", writable=True)
+        store.put(PendingText("issue", 1, "description", "{{issue:x}}", text_sha256("x"), (("issue", "x"),)))
+        store.commit()
+        before = links.read_bytes()
+        monkeypatch.setattr("specivo.importers.core.links_file._refuse_symlink", lambda path: None)
+
+        summary = await build_bundle_import(b).run()
+
+        (refused,) = [w for w in summary.warnings if w.message.startswith(LINKS_UNREADABLE)]
+        assert "created by something else" in refused.context["reason"]
+        assert (await _issue(db_session, "Issue b-1")).description == "Follows the login bug."
+        assert links.read_bytes() == before
+
     async def test_validate_ignores_the_links_file(self, build_bundle_import, tmp_path):
         b = self._b(tmp_path / "b")
         links = build_bundle_import.links_path(b)

@@ -186,11 +186,94 @@ def _refuse_symlink(path: Path) -> os.stat_result | None:
     return info
 
 
-def _same_file(path: Path, before: os.stat_result | None) -> None:
-    """Refuse when *path* changed into a link, or into another file, while it was being opened."""
-    after = _refuse_symlink(path)
-    if before is not None and (after is None or (after.st_dev, after.st_ino) != (before.st_dev, before.st_ino)):
+_SYMLINK_REFUSED = "is a symbolic link; a links file must be a regular file"
+
+
+def _refuse_link_at(path: Path, exc: OSError) -> LinksFileUnreadableError:
+    """Turn a failed no-follow open into the refusal it stands for."""
+    if os.path.islink(path):
+        return LinksFileUnreadableError(f"{path} {_SYMLINK_REFUSED}")
+    if isinstance(exc, FileExistsError):
+        return LinksFileUnreadableError(f"{path} was created by something else while this import was creating it")
+    return LinksFileUnreadableError(f"{path} cannot be opened: {exc}")
+
+
+def _pin(path: Path, *, write: bool, create: bool) -> tuple[int, os.stat_result]:
+    """Open *path* without following a symbolic link and return the descriptor and its ``fstat``.
+
+    With *create* the file must not exist yet: it is created here, mode 0600
+    (it holds source texts), and an existing file or link makes the open fail.
+    The descriptor pins the inode SQLite must then turn out to have opened.
+    """
+    flags = (os.O_RDWR if write or create else os.O_RDONLY) | getattr(os, "O_NOFOLLOW", 0)
+    if create:
+        flags |= os.O_CREAT | os.O_EXCL
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise _refuse_link_at(path, exc) from exc
+    info = os.fstat(fd)
+    if not stat.S_ISREG(info.st_mode):
+        os.close(fd)
+        raise LinksFileUnreadableError(f"{path} is not a regular file")
+    return fd, info
+
+
+def _same_file(path: Path, pinned: os.stat_result) -> None:
+    """Refuse unless *path* is still the regular file *pinned* describes, not a link or another file."""
+    try:
+        now = os.lstat(path)
+    except OSError as exc:
+        raise LinksFileUnreadableError(f"{path} disappeared while it was being opened") from exc
+    if stat.S_ISLNK(now.st_mode):
+        raise LinksFileUnreadableError(f"{path} {_SYMLINK_REFUSED}")
+    if not stat.S_ISREG(now.st_mode) or (now.st_dev, now.st_ino) != (pinned.st_dev, pinned.st_ino):
         raise LinksFileUnreadableError(f"{path} was replaced while it was being opened")
+
+
+def _refuse_linked_journal(path: Path) -> None:
+    """Refuse a planted ``-journal`` link next to the file: SQLite would write through it."""
+    journal = path.with_name(path.name + "-journal")
+    if os.path.islink(journal) or (os.path.lexists(journal) and not journal.is_file()):
+        raise LinksFileUnreadableError(f"{journal} is not a regular file; remove it")
+
+
+def _connect_pinned(path: Path, *, write: bool, create: bool = False) -> sqlite3.Connection:
+    """Connect SQLite to *path*, proving it opened the file pinned without following links.
+
+    SQLite cannot be handed a descriptor and follows links itself, so the file
+    is first opened (or created) here with ``O_NOFOLLOW``; SQLite is told not to
+    create anything (``mode=rw``/``ro``), so a link swapped in meanwhile cannot
+    make it create a file elsewhere; and before anything is read or written the
+    path must still be the very inode pinned. The descriptor is closed only
+    after that check.
+    """
+    _refuse_linked_journal(path)
+    fd, pinned = _pin(path, write=write, create=create)
+    try:
+        mode = "rw" if write else "ro"
+        # absolute(), not resolve(): resolving would follow a link.
+        conn = sqlite3.connect(
+            f"{path.absolute().as_uri()}?mode={mode}",
+            uri=True,
+            timeout=_BUSY_TIMEOUT_MS / 1000,
+            isolation_level=None,
+        )
+        try:
+            _same_file(path, pinned)
+            _refuse_linked_journal(path)
+        except BaseException:
+            conn.close()
+            raise
+    except BaseException as exc:
+        if create:
+            _unlink_if(path, pinned)
+        if isinstance(exc, sqlite3.Error):
+            raise LinksFileUnreadableError(f"{path} cannot be opened: {exc}") from exc
+        raise
+    finally:
+        os.close(fd)
+    return conn
 
 
 def is_writable(path: Path) -> bool:
@@ -202,16 +285,8 @@ def is_writable(path: Path) -> bool:
 
 
 def _connect_read_only(path: Path) -> sqlite3.Connection:
-    """Open *path* read-only, refusing a symbolic link (checked before and after: SQLite follows them)."""
-    before = _refuse_symlink(path)
-    # absolute(), not resolve(): resolving would follow a link swapped in meanwhile.
-    conn = sqlite3.connect(f"{path.absolute().as_uri()}?mode=ro", uri=True, isolation_level=None)
-    try:
-        _same_file(path, before)
-    except BaseException:
-        conn.close()
-        raise
-    return conn
+    """Open *path* read-only, refusing a symbolic link."""
+    return _connect_pinned(path, write=False)
 
 
 def _tables(conn: sqlite3.Connection) -> set[str]:
@@ -296,6 +371,7 @@ class LinksStore:
         *,
         persistent: bool,
         created: bool,
+        pinned: os.stat_result | None = None,
     ) -> None:
         self._conn: sqlite3.Connection | None = conn
         self.path = path
@@ -303,6 +379,8 @@ class LinksStore:
         self._key = key
         self.persistent = persistent
         self._created = created
+        # The file as opened: only that inode is ever removed again.
+        self._pinned = pinned
 
     # ------------------------------------------------------------------
     # Opening
@@ -323,11 +401,14 @@ class LinksStore:
         if not writable:
             return cls._open_copy(path, system, instance, key)
 
-        before = _refuse_symlink(path)
-        created = before is None
-        conn = sqlite3.connect(path, timeout=_BUSY_TIMEOUT_MS / 1000, isolation_level=None)
+        created = _refuse_symlink(path) is None
+        conn = _connect_pinned(path, write=True, create=created)
         try:
-            _same_file(path, before)
+            pinned = os.lstat(path)
+        except OSError as exc:
+            conn.close()
+            raise LinksFileUnreadableError(f"{path} disappeared while it was being opened") from exc
+        try:
             conn.execute(f"PRAGMA busy_timeout = {_BUSY_TIMEOUT_MS}")
             # No WAL: a single file, with no side files to be left behind or forgotten.
             conn.execute("PRAGMA journal_mode = DELETE")
@@ -341,10 +422,10 @@ class LinksStore:
             with contextlib.suppress(sqlite3.Error):
                 conn.rollback()
             conn.close()
-            if created and not os.path.islink(path):
-                path.unlink(missing_ok=True)
+            if created:
+                _unlink_if(path, pinned)
             raise
-        return cls(conn, path, (system, instance), key, persistent=True, created=created)
+        return cls(conn, path, (system, instance), key, persistent=True, created=created, pinned=pinned)
 
     @classmethod
     def _open_copy(cls, path: Path, system: str, instance: str, key: bytes) -> LinksStore:
@@ -498,7 +579,7 @@ class LinksStore:
             return self.path.exists()
         if self.count() == 0:
             self._close(rollback=True)
-            self.path.unlink(missing_ok=True)
+            self._remove()
             return False
         self.conn.execute("COMMIT")
         self._close()
@@ -510,7 +591,11 @@ class LinksStore:
             return
         self._close(rollback=True)
         if self.persistent and self._created:
-            self.path.unlink(missing_ok=True)
+            self._remove()
+
+    def _remove(self) -> None:
+        if self._pinned is not None:
+            _unlink_if(self.path, self._pinned)
 
     def _close(self, *, rollback: bool = False) -> None:
         conn, self._conn = self._conn, None
@@ -521,6 +606,14 @@ class LinksStore:
                 conn.execute("ROLLBACK")
         finally:
             conn.close()
+
+
+def _unlink_if(path: Path, pinned: os.stat_result) -> None:
+    """Remove *path* if it is still the file this store created, and nothing else."""
+    with contextlib.suppress(OSError):
+        now = os.lstat(path)
+        if stat.S_ISREG(now.st_mode) and (now.st_dev, now.st_ino) == (pinned.st_dev, pinned.st_ino):
+            path.unlink()
 
 
 def _initialise(conn: sqlite3.Connection, system: str, instance: str) -> None:
