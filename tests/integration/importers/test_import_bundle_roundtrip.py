@@ -509,7 +509,7 @@ async def test_reloading_the_exported_bundle_creates_nothing(
     await build_bundle_import(bundle, merge_duplicate_statuses=True).run()
     before = {m.__name__: (await db_session.execute(select(func.count()).select_from(m))).scalar_one() for m in COUNTED}
 
-    second = await build_bundle_import(bundle, merge_duplicate_statuses=True).run()
+    second = await build_bundle_import(bundle, merge_duplicate_statuses=True, continue_import=True).run()
 
     after = {m.__name__: (await db_session.execute(select(func.count()).select_from(m))).scalar_one() for m in COUNTED}
     assert after == before
@@ -530,7 +530,7 @@ async def test_a_bundle_after_a_direct_import_creates_nothing(
     bundle = tmp_path / "redmine.zip"
     await _export(redmine_adapter, bundle)
 
-    summary = await build_bundle_import(bundle, merge_duplicate_statuses=True).run()
+    summary = await build_bundle_import(bundle, merge_duplicate_statuses=True, continue_import=True).run()
 
     after = {m.__name__: (await db_session.execute(select(func.count()).select_from(m))).scalar_one() for m in COUNTED}
     assert after == before

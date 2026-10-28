@@ -183,6 +183,15 @@ def build_parser(registry: SourceAdapterRegistry, adapter_cls: type[Any] | None 
         type=_run_id,
         help="Continue a previous run. Anything already imported is recognised and skipped either way.",
     )
+    run.add_argument(
+        "--continue-import",
+        action="store_true",
+        help=(
+            "Add to an earlier import of the same source. A bundle names its own source, so loading one whose "
+            "system and instance were imported before is refused without this flag (--resume implies it). "
+            "Use it for a later export of the same installation."
+        ),
+    )
     run.add_argument("--batch-size", type=int, default=500, help="Rows read per page from the source (default: 500).")
     run.add_argument(
         "--strict",
@@ -254,6 +263,7 @@ def build_options(args: argparse.Namespace, adapter: SourceAdapter) -> ImportOpt
         merge_duplicate_statuses=args.merge_duplicate_statuses,
         import_passwords=args.import_passwords,
         import_admins=args.import_admins,
+        continue_import=args.continue_import,
     )
 
 

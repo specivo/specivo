@@ -99,6 +99,9 @@ class ImportOptions:
     # Make the source's administrators Specivo administrators (opt-in). Without
     # it they are imported as ordinary accounts and listed in the summary.
     import_admins: bool = False
+    # Add to an earlier import of the same scope. Needed only by a source whose
+    # scope comes from its data (a bundle); a resumed run implies it.
+    continue_import: bool = False
 
 
 @dataclass(slots=True)

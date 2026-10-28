@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 
 from specivo.importers.bundle import BundleInvalidError
 from specivo.importers.core.ir import EntityType
+from specivo.importers.core.pipeline import PhaseFailedError
 from specivo.models.attachment import Attachment
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
@@ -380,7 +381,7 @@ class TestRerun:
         await build_bundle_import(FULL).run()
         before = await _counts(db_session)
 
-        second = await build_bundle_import(FULL).run()
+        second = await build_bundle_import(FULL, continue_import=True).run()
 
         assert await _counts(db_session) == before
         assert sum(second.created.values()) == 0
@@ -389,11 +390,38 @@ class TestRerun:
         assert warning.message.startswith("This source was imported into this database before")
         assert warning.context["source"] == "sample:tracker.example.com"
 
+    @pytest.mark.parametrize("dry_run", [False, True])
+    async def test_adding_to_an_earlier_import_needs_the_operators_say_so(
+        self, db_session, build_bundle_import, dry_run
+    ):
+        """A bundle names its own scope, so it could claim another import's records; that takes an opt-in."""
+        await build_bundle_import(FULL).run()
+        before = await _counts(db_session)
+        mapped = await _count(db_session, ImportIdMapping)
+
+        with pytest.raises(PhaseFailedError) as refused:
+            await build_bundle_import(FULL, dry_run=dry_run).run()
+
+        message = str(refused.value)
+        assert "sample @ tracker.example.com" in message
+        assert f"{mapped} identifier-map rows" in message
+        assert "3 issue" in message
+        assert "--continue-import" in message
+        await db_session.rollback()
+        assert await _counts(db_session) == before
+
+    async def test_resuming_a_run_is_adding_to_it(self, db_session, build_bundle_import):
+        first = await build_bundle_import(FULL, stop_after_phase="users").run()
+
+        resumed = await build_bundle_import(FULL, resume_run_id=first.run_id).run()
+
+        assert resumed.created[EntityType.ISSUE] == 3
+
     async def test_rerunning_leaves_text_and_timestamps_as_they_were(self, db_session, build_bundle_import):
         await build_bundle_import(FULL).run()
         before = await _texts(db_session)
 
-        await build_bundle_import(FULL).run()
+        await build_bundle_import(FULL, continue_import=True).run()
 
         assert await _texts(db_session) == before
 
@@ -408,7 +436,7 @@ class TestRerun:
         assert "{{issue:web-1|the login bug}}" in rate_limits.description
         assert {w.context.get("placeholder") for w in first.warnings} >= {"issue:web-1", "wiki:w-home"}
 
-        await build_bundle_import(FULL).run()
+        await build_bundle_import(FULL, continue_import=True).run()
 
         await db_session.refresh(rate_limits)
         assert "[the login bug](/issue/BUNDLEWEB-1/)" in rate_limits.description
@@ -445,7 +473,7 @@ class TestRerun:
         manifest["counts"]["issues"] = 4
         (later / "manifest.json").write_text(json.dumps(manifest))
 
-        second = await build_bundle_import(later).run()
+        second = await build_bundle_import(later, continue_import=True).run()
 
         assert second.created[EntityType.ISSUE] == 1
         assert second.skipped[EntityType.ISSUE] == 3
@@ -515,7 +543,9 @@ class TestSeparateFiles:
         manifest["counts"]["attachments"] += 1
         (later / "manifest.json").write_text(json.dumps(manifest))
 
-        second = await build_bundle_import(_data_only_zip(later, tmp_path / "second.zip"), files_path=files).run()
+        second = await build_bundle_import(
+            _data_only_zip(later, tmp_path / "second.zip"), files_path=files, continue_import=True
+        ).run()
 
         assert second.created[EntityType.ATTACHMENT] == 1
         assert second.skipped[EntityType.ATTACHMENT] == 3

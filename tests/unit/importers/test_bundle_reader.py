@@ -81,6 +81,12 @@ class TestAValidBundle:
         adapter = BundleSourceAdapter(FULL, source_instance="legacy")
         assert (adapter.id_map_system, adapter.source_instance) == ("sample", "legacy")
 
+    @pytest.mark.parametrize("system", ["Redmine", "red mine", "red-mine", "redmine/../x", "r" * 31, ""])
+    async def test_the_source_system_is_a_strict_slug(self, tmp_path, system):
+        """It becomes part of the import account's login, so nothing else gets through."""
+        root = write_bundle(tmp_path / "b", manifest_data=manifest(source={"system": system, "instance": "x"}))
+        assert _codes(await _validate(root)) == [("manifest.json", None, "schema")]
+
     async def test_bundle_is_not_a_source_system_a_manifest_may_name(self, tmp_path):
         root = write_bundle(tmp_path / "b", manifest_data=manifest(source={"system": "bundle", "instance": "x"}))
         report = await _validate(root)

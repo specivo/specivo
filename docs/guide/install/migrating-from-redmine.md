@@ -125,9 +125,20 @@ docker compose exec api python -m specivo.cli.admin import-map rename --system r
 ```
 
 The move is one transaction. It is refused if the new key already holds rows.
-After it, `--dry-run` with the bundle should report that the source was imported
-before and that nothing new is created except records added in Redmine since.
-Records without an author still belong to the `redmine-import` account.
+
+A bundle that names a key with rows is refused unless you say it continues that
+import, so a bundle cannot quietly attach its records to an import it does not
+belong to. Once the keys line up, load it with `--continue-import`:
+
+```
+docker compose exec api python -m specivo.cli.import_data --source bundle \
+  --path /import/export --continue-import --dry-run
+```
+
+The dry run should report that the source was imported before and that nothing
+is created except records added in Redmine since. Then run it without
+`--dry-run`. Records without an author still belong to the `redmine-import`
+account.
 
 ## Keeping people's passwords
 
@@ -238,8 +249,9 @@ named by their content hash, so a later export only adds new ones and a second
 5. Import: the same command without either.
 
 For a later delta, export again into the same folder, `rsync` again, and run
-the same steps. Records and files already imported are recognised and
-skipped; only what is new is created and copied.
+the same steps with `--continue-import` added to the dry run and the import.
+Records and files already imported are recognised and skipped; only what is new
+is created and copied.
 
 ## Useful options
 

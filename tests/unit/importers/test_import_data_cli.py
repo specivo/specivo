@@ -212,6 +212,12 @@ class TestBundleSource:
         args, cls = self._parse(registry, "--files-path", str(tmp_path))
         assert cls.from_args(args).files_path == tmp_path
 
+    def test_adding_to_an_earlier_import_is_an_explicit_option(self, registry):
+        args, cls = self._parse(registry)
+        assert build_options(args, cls.from_args(args)).continue_import is False
+        args, cls = self._parse(registry, "--continue-import")
+        assert build_options(args, cls.from_args(args)).continue_import is True
+
     def test_by_default_they_come_from_the_bundle(self, registry):
         args, cls = self._parse(registry)
         assert cls.from_args(args).files_path is None

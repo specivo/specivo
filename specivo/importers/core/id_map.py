@@ -164,6 +164,18 @@ class ImportIdMap:
             stmt = stmt.where(ImportIdMapping.entity_type == str(entity_type))
         return int((await session.execute(stmt)).scalar_one())
 
+    async def counts(self, session: AsyncSession) -> dict[str, int]:
+        """Count mappings for this source per entity type."""
+        stmt = (
+            select(ImportIdMapping.entity_type, func.count())
+            .where(
+                ImportIdMapping.source_system == self.source_system,
+                ImportIdMapping.source_instance == self.source_instance,
+            )
+            .group_by(ImportIdMapping.entity_type)
+        )
+        return {entity_type: int(count) for entity_type, count in (await session.execute(stmt)).all()}
+
     # ------------------------------------------------------------------
     # Writes
     # ------------------------------------------------------------------

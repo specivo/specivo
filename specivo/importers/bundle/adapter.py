@@ -85,6 +85,9 @@ class BundleSourceAdapter(BaseSourceAdapter):
     source_system: ClassVar[str] = "bundle"
     description: ClassVar[str] = "An import bundle (directory or .zip) written by an importer"
     reference_style: ClassVar[str] = REFERENCE_STYLE_PLACEHOLDERS
+    # The identifier-map scope comes from the manifest, not the operator, so
+    # adding to an earlier import of it needs --continue-import.
+    scope_from_source_data: ClassVar[bool] = True
 
     def __init__(
         self,
