@@ -30,6 +30,7 @@ from typing import Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.selectable import ScalarSelect
 
 from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
@@ -39,6 +40,7 @@ from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.core.placeholders import REFERENCE_STYLE_PLACEHOLDERS
 from specivo.importers.load.placeholder_rewrite import reference_style
 from specivo.importers.load.user_loader import ensure_import_account
+from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.project import Project
@@ -287,6 +289,10 @@ async def resolve_custom_field_references(ctx: PhaseContext) -> None:
     referenced user or version may be imported after the issue that names it.
     A placeholder-style source has them resolved at creation instead (see
     :func:`_metadata`), so there is nothing left to rewrite.
+
+    Only issues this run created are rewritten (a resumed run is the same run).
+    An issue an earlier run created holds Specivo ids already, and rewriting
+    one again would turn it into whichever source record has that number.
     """
     if reference_style(ctx) == REFERENCE_STYLE_PLACEHOLDERS:
         return
@@ -295,18 +301,31 @@ async def resolve_custom_field_references(ctx: PhaseContext) -> None:
     if not reference_fields:
         return
 
+    id_map = ctx.id_map
+    created_by_this_run = (
+        select(ImportIdMapping.target_id)
+        .where(
+            ImportIdMapping.source_system == id_map.source_system,
+            ImportIdMapping.source_instance == id_map.source_instance,
+            ImportIdMapping.entity_type == EntityType.ISSUE,
+            ImportIdMapping.import_run_id == id_map.run_id,
+        )
+        .scalar_subquery()
+    )
     for field in reference_fields:
         entity = EntityType.USER if field.field_format == "user" else EntityType.VERSION
         mapping = await ctx.id_map.preload(ctx.session, entity)
         if not mapping:
             continue
-        await _rewrite_metadata_key(ctx.session, field.key, mapping)
+        await _rewrite_metadata_key(ctx.session, field.key, mapping, created_by_this_run)
         ctx.tick()
 
 
-async def _rewrite_metadata_key(session: AsyncSession, key: str, mapping: dict[str, int]) -> None:
-    """Replace source ids stored under *key* with the Specivo ids they map to."""
-    stmt = select(Issue.id, Issue.issue_metadata).where(Issue.issue_metadata.has_key(key))
+async def _rewrite_metadata_key(
+    session: AsyncSession, key: str, mapping: dict[str, int], issue_ids: ScalarSelect[int]
+) -> None:
+    """Replace source ids stored under *key* with the Specivo ids they map to, in the issues *issue_ids* selects."""
+    stmt = select(Issue.id, Issue.issue_metadata).where(Issue.issue_metadata.has_key(key), Issue.id.in_(issue_ids))
     rows = (await session.execute(stmt)).all()
 
     for issue_id, metadata in rows:

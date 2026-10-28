@@ -498,6 +498,51 @@ class TestRerun:
         assert (added.project_key, added.sequence_number) == ("BUNDLEWEB", 3)
         assert added.description == "Follow-up to BUNDLEWEB-1."
 
+    async def test_a_later_bundle_adds_a_new_revision_of_an_existing_page(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        """A page edited between two exports gets the new revision, after the ones it has."""
+        await build_bundle_import(FULL).run()
+        home = await _page(db_session, "Home")
+
+        later = copy_full(tmp_path / "later")
+        pages = [json.loads(line) for line in (later / "wiki_pages.jsonl").read_text().splitlines()]
+        for page in pages:
+            if page["source_ref"] == "w-home":
+                page["versions"].append(
+                    {
+                        "source_ref": "wv-9",
+                        "version": 4,
+                        "text": "# Home\n\nThird draft.",
+                        "comments": "Edited after the first export",
+                        "author_ref": "u-alice",
+                        "created_at": "2024-02-01T10:00:00Z",
+                    }
+                )
+        (later / "wiki_pages.jsonl").write_text("".join(json.dumps(page) + "\n" for page in pages))
+        manifest = json.loads((later / "manifest.json").read_text())
+        manifest["counts"]["wiki_versions"] = 4
+        (later / "manifest.json").write_text(json.dumps(manifest))
+
+        second = await build_bundle_import(later, continue_import=True).run()
+
+        assert second.created[EntityType.WIKI_VERSION] == 1
+        assert second.created[EntityType.WIKI_PAGE] == 0
+        contents = (
+            (
+                await db_session.execute(
+                    select(WikiContent).where(WikiContent.page_id == home.id).order_by(WikiContent.version)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [c.version for c in contents] == [1, 2, 3]
+        latest = contents[-1]
+        assert (latest.text, latest.comments) == ("# Home\n\nThird draft.", "Edited after the first export")
+        assert latest.created_at == datetime(2024, 2, 1, 10, tzinfo=UTC)
+        assert (await _user(db_session, "bundle_alice")).id == latest.author_id
+
 
 class TestIssueReferencesAcrossBundles:
     """A source exported in parts: a later bundle's issue placeholders may name issues of an earlier one."""
