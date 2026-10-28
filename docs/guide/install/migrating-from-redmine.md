@@ -203,6 +203,44 @@ doesn't reveal which accounts are affected. Coming from something other than
 Redmine? See [Writing an import source plugin](import-source-plugins.md) and
 [Writing a password hasher plugin](password-hasher-plugins.md).
 
+## Large migrations
+
+A Redmine with years of attachments can hold many gigabytes of files. Keep
+them out of any archive: export the bundle to a folder, and copy the folder
+with `rsync`, which can resume and skips files already copied. Files are
+named by their content hash, so a later export only adds new ones and a second
+`rsync` only moves those.
+
+1. Export to a folder (the export tool's default; a zip is only for small
+   exports and trial runs).
+2. Copy it to the Specivo host, records and files together or apart:
+
+   ```
+   rsync -a --partial export/ specivo-host:/srv/import/export/
+   ```
+
+   The records are small; if you would rather move them as a zip, zip only
+   the records and copy `files/` on its own to, say, `/srv/import/files/`.
+3. Make the folder visible to the API container (a read-only mount is
+   enough), then check it. Nothing is written and the database is not touched:
+
+   ```
+   docker compose exec api python -m specivo.cli.import_data --source bundle \
+     --path /import/export --validate
+   # records in a zip, files apart:
+   docker compose exec api python -m specivo.cli.import_data --source bundle \
+     --path /import/data.zip --files-path /import/files --validate
+   ```
+
+   A missing file, one whose bytes do not match its name, or a symbolic link
+   among the files is reported with the record it belongs to.
+4. Rehearse with `--dry-run` instead of `--validate`, and read the report.
+5. Import: the same command without either.
+
+For a later delta, export again into the same folder, `rsync` again, and run
+the same steps. Records and files already imported are recognised and
+skipped; only what is new is created and copied.
+
 ## Useful options
 
 | Option | What it does |

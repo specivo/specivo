@@ -159,6 +159,8 @@ class BundleIndex:
 
     root: Path
     manifest: dict[str, Any]
+    # Where the stored files are: the bundle's files/, or a directory of their own.
+    files_dir: Path | None = None
     lookups: dict[str, Any] = field(default_factory=dict)
     public_access: dict[str, Any] | None = None
     projects: list[int] = field(default_factory=list)
@@ -208,15 +210,23 @@ def _reject_constant(name: str) -> Any:
     raise ValueError(f"{name} is not a JSON value")
 
 
-def scan_bundle(root: Path, report: ValidationReport, limits: BundleLimits | None = None) -> BundleIndex | None:
+def scan_bundle(
+    root: Path,
+    report: ValidationReport,
+    limits: BundleLimits | None = None,
+    files_dir: Path | None = None,
+) -> BundleIndex | None:
     """Check the bundle unpacked at *root*, recording problems in *report*.
+
+    Stored files are looked up in *files_dir*, ``root/files`` by default;
+    problems with them are named ``files/<sha256>`` either way.
 
     Returns the index, or ``None`` when the manifest is missing or names a
     format version this reader does not support, in which case nothing else
     was read. A returned index belongs to a loadable bundle only if
     ``report.ok``.
     """
-    return _Scanner(root, report, limits or BundleLimits()).run()
+    return _Scanner(root, report, limits or BundleLimits(), files_dir or root / FILES_DIR).run()
 
 
 # --------------------------------------------------------------------------
@@ -236,11 +246,12 @@ class _Pending:
 
 
 class _Scanner:
-    def __init__(self, root: Path, report: ValidationReport, limits: BundleLimits) -> None:
+    def __init__(self, root: Path, report: ValidationReport, limits: BundleLimits, files_dir: Path) -> None:
         self.root = root
+        self.files_dir = files_dir
         self.report = report
         self.limits = limits
-        self.index = BundleIndex(root=root, manifest={})
+        self.index = BundleIndex(root=root, manifest={}, files_dir=files_dir)
         self.refs: dict[EntityType, dict[str, int | None]] = {}
         self.done: set[EntityType] = set()
         self.pending: list[_Pending] = []
@@ -796,7 +807,7 @@ class _Scanner:
         Each file is hashed once, however many attachments share it.
         """
         if sha256 not in self.stored_files:
-            path = self.root / FILES_DIR / sha256
+            path = self.files_dir / sha256
             if not path.is_file() or path.is_symlink():
                 self.stored_files[sha256] = None
             else:
@@ -867,7 +878,7 @@ class _Scanner:
                     )
 
     def _report_unreferenced_files(self) -> None:
-        files_dir = self.root / FILES_DIR
+        files_dir = self.files_dir
         if not files_dir.is_dir():
             return
         for path in sorted(files_dir.iterdir()):

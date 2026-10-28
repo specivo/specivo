@@ -208,6 +208,14 @@ class TestBundleSource:
         assert adapter.path == FULL
         assert build_options(args, adapter).source_instance == "tracker.example.com"
 
+    def test_attachments_can_come_from_a_directory_of_their_own(self, registry, tmp_path):
+        args, cls = self._parse(registry, "--files-path", str(tmp_path))
+        assert cls.from_args(args).files_path == tmp_path
+
+    def test_by_default_they_come_from_the_bundle(self, registry):
+        args, cls = self._parse(registry)
+        assert cls.from_args(args).files_path is None
+
     def test_the_path_is_required(self, registry):
         with pytest.raises(SystemExit):
             parse_args(["--source", "bundle"], registry)

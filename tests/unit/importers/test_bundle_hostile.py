@@ -196,7 +196,7 @@ class TestFailures:
     ):
         seen: list[Path] = []
 
-        def explode(root, report, limits=None):
+        def explode(root, report, limits=None, files_dir=None):
             seen.append(root)
             raise RuntimeError("disk on fire")
 

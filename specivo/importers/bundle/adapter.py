@@ -91,9 +91,12 @@ class BundleSourceAdapter(BaseSourceAdapter):
         path: str | Path,
         source_instance: str | None = None,
         limits: BundleLimits | None = None,
+        files_path: str | Path | None = None,
     ) -> None:
         self.path = Path(path)
         self.limits = limits or BundleLimits()
+        # Stored files from a directory of their own instead of the bundle's files/.
+        self.files_path = Path(files_path) if files_path is not None else None
         system, instance = _source_from_manifest(self.path, self.limits)
         self._id_map_system = system
         super().__init__(source_instance or instance)
@@ -117,6 +120,15 @@ class BundleSourceAdapter(BaseSourceAdapter):
             "--path",
             required=True,
             help="The bundle: a directory, or a .zip archive of one (unpacked to a temporary directory).",
+        )
+        group.add_argument(
+            "--files-path",
+            metavar="DIR",
+            help=(
+                "Read the stored attachment files (files/<sha256>) from this directory instead of the bundle's own "
+                "files/, which is then ignored. For large migrations: copy the files over on their own (rsync "
+                "resumes and skips what is there) and keep the bundle small. Works with a zip too."
+            ),
         )
         limits = parser.add_argument_group(
             "bundle limits",
@@ -188,7 +200,13 @@ class BundleSourceAdapter(BaseSourceAdapter):
             max_line_bytes=args.max_line_size,
             max_json_bytes=args.max_json_size,
         )
-        return cls(args.path, source_instance=args.source_instance, limits=limits)
+        files_path = getattr(args, "files_path", None)
+        return cls(
+            args.path,
+            source_instance=args.source_instance,
+            limits=limits,
+            files_path=Path(files_path) if files_path else None,
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -230,9 +248,11 @@ class BundleSourceAdapter(BaseSourceAdapter):
         report = ValidationReport(path=str(self.path))
         self.report = report
         try:
-            self._container = open_bundle(self.path, report, self.limits)
+            self._container = open_bundle(self.path, report, self.limits, self.files_path)
             if self._container is not None:
-                self._index = scan_bundle(self._container.root, report, self.limits)
+                self._index = scan_bundle(
+                    self._container.root, report, self.limits, files_dir=self._container.files_dir
+                )
         except Exception as exc:  # noqa: BLE001 - a hostile bundle must give a report, not a traceback
             logger.debug("Reading bundle %s failed", self.path, exc_info=True)
             report.error(ProblemCode.UNREADABLE, self.path.name, f"The bundle could not be read: {exc!r}")
@@ -365,14 +385,15 @@ class BundleSourceAdapter(BaseSourceAdapter):
         return from_record(IRPublicAccess, data) if data is not None else None
 
     def resolve_attachment_path(self, attachment: IRAttachment) -> Path:
-        """Return ``files/<sha256>`` for *attachment*.
+        """Return ``files/<sha256>`` for *attachment*, in the separate files directory if one was given.
 
         The name was checked to be a hash when the bundle was read, so it
-        cannot step outside the bundle; checked again here all the same.
+        cannot step outside the directory; checked again here all the same.
         """
         if not SHA256_RE.match(attachment.storage_key):
             raise ValueError(f"Not a stored file name: {attachment.storage_key!r}")
-        return self.index.root / FILES_DIR / attachment.storage_key
+        files_dir = self.index.files_dir or self.index.root / FILES_DIR
+        return files_dir / attachment.storage_key
 
 
 def _source_from_manifest(path: Path, limits: BundleLimits) -> tuple[str, str]:
