@@ -345,6 +345,35 @@ class TestMemberships:
         roles = (await db_session.execute(select(MemberRole).where(MemberRole.member_id == member.id))).scalars().all()
         assert len(roles) == 1
 
+    async def test_a_rerun_does_not_hand_back_a_role_taken_away(self, db_session, loaded, with_roles):
+        """A grant is applied once; what an administrator changed since stays changed."""
+        adapter = with_roles(
+            projects=[_project()],
+            users=[IRUser(source_ref="7", login="proj_alex", display_name="Alex", email="proj_alex@example.org")],
+            memberships=[
+                IRMembership(
+                    source_ref="100",
+                    project_ref="1",
+                    principal_ref="7",
+                    principal_kind=PrincipalKind.USER,
+                    role_refs=["3"],
+                )
+            ],
+        )
+        ctx = await loaded(adapter)
+        await load_memberships(ctx)
+        member_id = await ctx.id_map.get(db_session, EntityType.MEMBERSHIP, "100")
+        assert member_id is not None
+        for role in (await db_session.execute(select(MemberRole).where(MemberRole.member_id == member_id))).scalars():
+            await db_session.delete(role)
+        await db_session.flush()
+
+        await load_memberships(ctx)
+
+        roles = (await db_session.execute(select(MemberRole).where(MemberRole.member_id == member_id))).scalars().all()
+        assert roles == []
+        assert ctx.summary.skipped[EntityType.MEMBERSHIP] == 1
+
     async def test_group_membership_is_held_by_the_group(self, db_session, loaded, with_roles):
         """One membership row, held by the group — not one copy per member."""
         adapter = with_roles(

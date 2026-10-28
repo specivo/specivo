@@ -387,6 +387,11 @@ async def load_memberships(ctx: PhaseContext) -> None:
             continue
 
         async for ir in ctx.adapter.extract_memberships(project_ref):
+            # A grant is applied once: a re-run must not hand back a role an
+            # administrator has since taken away.
+            if await ctx.id_map.get(ctx.session, EntityType.MEMBERSHIP, ir.source_ref):
+                ctx.summary.record_skipped(EntityType.MEMBERSHIP)
+                continue
             role_ids = [
                 role_id
                 for role_id in [
@@ -402,7 +407,8 @@ async def load_memberships(ctx: PhaseContext) -> None:
             if principal is None:
                 continue
 
-            await _project_service.add_member(ctx.session, project, principal, role_ids)
+            member = await _project_service.add_member(ctx.session, project, principal, role_ids)
+            await ctx.id_map.put(ctx.session, EntityType.MEMBERSHIP, ir.source_ref, "members", member.id)
             ctx.summary.record_created(EntityType.MEMBERSHIP)
             ctx.tick()
 
