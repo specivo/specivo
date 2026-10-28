@@ -140,6 +140,60 @@ is created except records added in Redmine since. Then run it without
 `--dry-run`. Records without an author still belong to the `redmine-import`
 account.
 
+### One project at a time, in any order
+
+An export tool can write one bundle per project. Load them in any order, the
+first as usual and every later one with `--continue-import`. A reference to an
+issue of a project that is not loaded yet is written as plain text at first
+(`ACME-15` cannot be known yet, so the text shows the label or the Redmine
+number), and becomes a link when that project's bundle is loaded.
+
+Specivo remembers those texts in a **links file**, a small SQLite file next to
+the bundle: `specivo-links.redmine.<instance>.sqlite`. Every load of the same
+source has to see the same file, so:
+
+- When imports run in Docker, keep the bundles **and the links file** in a
+  folder mounted from the host, not inside the container, where the file would
+  be lost with it.
+- If the bundles are on a read-only mount, put the links file on a writable one
+  with `--links-file /import/state/links.sqlite`, and pass the same option to
+  every load. Without a writable location the import still succeeds, with a
+  warning that its references will not be linked later.
+
+A text somebody edits in Specivo between two loads is never overwritten: it
+keeps the plain-text reference, and the report says which texts were left
+alone. To see what is still waiting, or to link it without a new import:
+
+```
+docker compose exec api python -m specivo.cli.admin import-map pending \
+  --links-file /import/specivo-links.redmine.tracker.example.com.sqlite
+# a dry run, then for real
+docker compose exec api python -m specivo.cli.admin import-map resolve-pending \
+  --links-file /import/specivo-links.redmine.tracker.example.com.sqlite --yes
+```
+
+The file deletes itself once nothing is waiting. It is a throwaway: if you lose
+it, or delete it after the migration, the remaining references simply stay
+plain text.
+
+### After cut-over
+
+Once Redmine is retired and nothing more will be imported from it, you can
+delete what the import remembered about it:
+
+```
+# a dry run: counts the rows
+docker compose exec api python -m specivo.cli.admin import-map purge \
+  --system redmine --instance tracker.example.com
+docker compose exec api python -m specivo.cli.admin import-map purge \
+  --system redmine --instance tracker.example.com --yes
+```
+
+The imported issues, pages and accounts stay. But those rows are how a later
+import recognises what is already here, so after a purge **no delta import of
+that source is possible**: one would create everything a second time. Delete
+the links file too.
+
 ## Keeping people's passwords
 
 By default every imported account arrives without a usable password (see
@@ -232,8 +286,11 @@ named by their content hash, so a later export only adds new ones and a second
 
    The records are small; if you would rather move them as a zip, zip only
    the records and copy `files/` on its own to, say, `/srv/import/files/`.
-3. Make the folder visible to the API container (a read-only mount is
-   enough), then check it. Nothing is written and the database is not touched:
+3. Make the folder visible to the API container, then check it. A read-only
+   mount is enough for the bundle, but the import keeps its links file next to
+   it (see [One project at a time](#one-project-at-a-time-in-any-order)):
+   mount it writable, or point `--links-file` at a writable folder. Nothing is
+   written by the check, and the database is not touched:
 
    ```
    docker compose exec api python -m specivo.cli.import_data --source bundle \
@@ -264,6 +321,7 @@ is created and copied.
 | `--source-instance name` | Name this Redmine, so two installations can be imported into one Specivo. |
 | `--import-passwords` | Let accounts keep their Redmine password. Needs `redmine_sha1` in `LEGACY_PASSWORD_ALGORITHMS`; see [Keeping people's passwords](#keeping-peoples-passwords). |
 | `--report-json path` | Write the report as JSON as well as printing it. |
+| `--links-file path` | For a bundle: where to keep the [links file](#one-project-at-a-time-in-any-order) (default: next to the bundle). |
 | `--import-admins` | Make Redmine's administrators administrators in Specivo too. Without it they arrive as ordinary accounts and the report lists them, so you can grant the rights by hand. |
 | `--batch-size n` | Rows read per page from the source (default 500). Lower it if the source database is memory-constrained; raise it to reduce round trips on a fast connection to a large instance. |
 

@@ -20,6 +20,7 @@ from specivo.importers.core.id_map import (
     MissingMappingError,
     ScopeRenameError,
     list_scopes,
+    purge_scope,
     rename_scope,
 )
 from specivo.importers.core.ir import EntityType
@@ -327,3 +328,20 @@ class TestRenameScope:
                 to_system=system,
                 to_instance=instance,
             )
+
+
+async def test_purge_scope_deletes_one_scope_and_a_dry_run_only_counts(db_session):
+    """After cut-over: the scope's rows go, every other scope's stay."""
+    done = ImportIdMap("redmine", "tracker.example.org", uuid.uuid4())
+    await done.put(db_session, EntityType.ISSUE, "1", "issues", 10)
+    await done.put(db_session, EntityType.USER, "5", "users", 3)
+    other = ImportIdMap("redmine", "other.example.org", uuid.uuid4())
+    await other.put(db_session, EntityType.ISSUE, "1", "issues", 20)
+
+    assert await purge_scope(db_session, "redmine", "tracker.example.org", dry_run=True) == 2
+    assert len(await _scope_rows(db_session, "redmine", "tracker.example.org")) == 2
+
+    assert await purge_scope(db_session, "redmine", "tracker.example.org") == 2
+    assert await _scope_rows(db_session, "redmine", "tracker.example.org") == []
+    assert len(await _scope_rows(db_session, "redmine", "other.example.org")) == 1
+    assert await purge_scope(db_session, "redmine", "tracker.example.org") == 0
