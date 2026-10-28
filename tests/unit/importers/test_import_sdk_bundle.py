@@ -16,6 +16,7 @@ import pytest
 
 from specivo.importers.bundle import BundleSourceAdapter
 from specivo.importers.bundle.report import ValidationReport
+from tests.fixtures import import_sdk as import_sdk_fixture
 from tests.fixtures.import_bundle import FULL, issue, manifest, project, user, write_bundle
 from tests.fixtures.import_sdk import import_sdk, write_sdk_bundle
 
@@ -76,8 +77,30 @@ class TestTheValidatorsAgree:
                 "projects": [project("p1")],
                 "issues": [issue("i1", assigned_to_ref="g1")],
             },
+            {"users": [user("u1\n")]},
+            {
+                "projects": [project("p1")],
+                "issues": [issue("i1")],
+                "journals": [
+                    {
+                        "source_ref": "j1",
+                        "issue_ref": "i1",
+                        "details": [{"property": "attr", "prop_key": "description", "new_value": "{{wiki:nope}}"}],
+                    }
+                ],
+            },
         ],
-        ids=["unresolved", "duplicate", "bad-date", "bad-json", "cycle", "placeholders", "group-assignee"],
+        ids=[
+            "unresolved",
+            "duplicate",
+            "bad-date",
+            "bad-json",
+            "cycle",
+            "placeholders",
+            "group-assignee",
+            "newline-ref",
+            "description-change",
+        ],
     )
     async def test_on_a_bundle_with_a_mistake(self, tmp_path, records):
         root = write_bundle(tmp_path / "b", **records)
@@ -105,3 +128,17 @@ class TestTheValidatorsAgree:
         sdk_report = import_sdk().validate_bundle(archive)
         assert not sdk_report.ok
         assert _problems(sdk_report) == _problems(await _core(archive))
+
+
+class TestTheSdkMustBeThere:
+    def test_without_it_the_cross_check_skips(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(import_sdk_fixture, "SDK_SRC", tmp_path / "missing")
+        monkeypatch.delenv("SPECIVO_REQUIRE_SDK", raising=False)
+        with pytest.raises(pytest.skip.Exception):
+            import_sdk_fixture.import_sdk()
+
+    def test_when_required_a_missing_sdk_fails(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(import_sdk_fixture, "SDK_SRC", tmp_path / "missing")
+        monkeypatch.setenv("SPECIVO_REQUIRE_SDK", "1")
+        with pytest.raises(pytest.fail.Exception, match="SPECIVO_REQUIRE_SDK"):
+            import_sdk_fixture.import_sdk()

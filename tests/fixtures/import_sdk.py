@@ -8,6 +8,7 @@ alone) the tests that use it are skipped.
 from __future__ import annotations
 
 import importlib
+import os
 import sys
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -23,8 +24,14 @@ NOTES = b"Runbook notes\n"
 
 
 def import_sdk() -> ModuleType:
-    """Import ``specivo_import_sdk`` from its source tree, or skip the test."""
+    """Import ``specivo_import_sdk`` from its source tree, or skip the test.
+
+    With ``SPECIVO_REQUIRE_SDK=1`` (set in CI) a missing SDK fails the test
+    instead, so the cross-check cannot quietly stop running.
+    """
     if not SDK_SRC.is_dir():
+        if os.environ.get("SPECIVO_REQUIRE_SDK") == "1":
+            pytest.fail(f"SPECIVO_REQUIRE_SDK=1 but the import SDK is not at {SDK_SRC}")
         pytest.skip("tools/import-sdk is not in this checkout")
     if str(SDK_SRC) not in sys.path:
         sys.path.insert(0, str(SDK_SRC))

@@ -486,6 +486,10 @@ class _Scanner:
         pointer: str | None = None,
     ) -> None:
         """Claim *ref* for *entity_type*, reporting a second claim."""
+        if ref.endswith("\n"):
+            # The schema's pattern cannot refuse this: Python's "$" matches before a final newline.
+            where_: dict[str, Any] = {"line": line} if line is not None else {"pointer": pointer}
+            self.report.error(ProblemCode.SCHEMA, file, f"source_ref {ref!r} ends in a newline", **where_)
         seen = self.refs.setdefault(entity_type, {})
         if ref in seen:
             first = seen[ref]
@@ -676,6 +680,11 @@ class _Scanner:
         project_ref = self._issue_scope(JOURNALS, line, "issue_ref", record["issue_ref"])
         self._ref(JOURNALS.name, line, "user_ref", EntityType.USER, record.get("user_ref"))
         self._text(JOURNALS.name, line, "notes", record.get("notes"))
+        for detail in record.get("details") or []:
+            # A description change is Markdown, and its placeholders are expanded.
+            if detail["property"] == "attr" and detail["prop_key"] == "description":
+                self._text(JOURNALS.name, line, "details.old_value", detail.get("old_value"))
+                self._text(JOURNALS.name, line, "details.new_value", detail.get("new_value"))
         if project_ref is not None:
             created = record.get("created_at")
             key = datetime.fromisoformat(created) if created else _EARLIEST

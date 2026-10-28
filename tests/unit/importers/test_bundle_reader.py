@@ -504,3 +504,38 @@ class TestTheAdapterReadsBack:
             assert adapter.credential_algorithms == ("acme_md5",)
         finally:
             await adapter.close()
+
+
+class TestRefsAndHistoryText:
+    async def test_a_source_ref_ending_in_a_newline(self, tmp_path):
+        """The schema's pattern lets it through under Python, so the reader checks it."""
+        report = await _validate(write_bundle(tmp_path / "b", users=[user("u1\n")]))
+        assert _codes(report) == [("users.jsonl", 1, "schema")]
+        assert "ends in a newline" in report.problems[0].message
+
+    async def test_a_lookup_ref_ending_in_a_newline(self, tmp_path):
+        lookups = {"priorities": [{"source_ref": "n\n", "name": "Normal"}]}
+        report = await _validate(write_bundle(tmp_path / "b", lookups=lookups))
+        assert [(p.file, p.pointer, str(p.code)) for p in report.errors] == [
+            ("lookups.json", "/priorities/0", "schema")
+        ]
+
+    async def test_placeholders_in_a_description_change_are_checked(self, tmp_path):
+        journal = {
+            "source_ref": "j1",
+            "issue_ref": "i1",
+            "details": [
+                {
+                    "property": "attr",
+                    "prop_key": "description",
+                    "old_value": "{{issue:i1}}",
+                    "new_value": "{{user:ghost}}",
+                },
+                # Any other field's values are stored as written.
+                {"property": "attr", "prop_key": "subject", "new_value": "{{user:ghost}}"},
+            ],
+        }
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], issues=[issue("i1")], journals=[journal])
+        report = await _validate(root)
+        assert _codes(report) == [("journals.jsonl", 1, "unresolved_ref")]
+        assert report.problems[0].message.startswith("details.new_value {{user:…}}: no user")
