@@ -34,6 +34,8 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import fcntl
+import functools
 import hashlib
 import hmac
 import json
@@ -41,6 +43,7 @@ import os
 import re
 import sqlite3
 import stat
+import tempfile
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -206,17 +209,49 @@ def _pin(path: Path, *, write: bool, create: bool) -> tuple[int, os.stat_result]
     The descriptor pins the inode SQLite must then turn out to have opened.
     """
     flags = (os.O_RDWR if write or create else os.O_RDONLY) | getattr(os, "O_NOFOLLOW", 0)
+    # Non-blocking, so a FIFO or a device planted at the path cannot hang the
+    # open; it is refused below as not a regular file.
+    flags |= os.O_NONBLOCK | getattr(os, "O_NOCTTY", 0)
     if create:
         flags |= os.O_CREAT | os.O_EXCL
     try:
         fd = os.open(path, flags, 0o600)
     except OSError as exc:
         raise _refuse_link_at(path, exc) from exc
-    info = os.fstat(fd)
-    if not stat.S_ISREG(info.st_mode):
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            raise LinksFileUnreadableError(f"{path} is not a regular file")
+        fcntl.fcntl(fd, fcntl.F_SETFL, fcntl.fcntl(fd, fcntl.F_GETFL) & ~os.O_NONBLOCK)
+    except BaseException:
         os.close(fd)
-        raise LinksFileUnreadableError(f"{path} is not a regular file")
+        raise
     return fd, info
+
+
+# Bound at import, so the probe is not affected by anything wrapping sqlite3.connect later.
+_probe_connect = sqlite3.connect
+
+
+@functools.cache
+def sqlite_honours_nofollow() -> bool:
+    """Whether this SQLite refuses a symbolic link given ``nofollow=1`` in a URI.
+
+    Python's sqlite3 cannot pass ``SQLITE_OPEN_NOFOLLOW`` itself, and some
+    builds ignore the URI form, so it is probed once; the inode check after
+    connecting is what is relied on either way.
+    """
+    if sqlite3.sqlite_version_info < (3, 31):
+        return False
+    with tempfile.TemporaryDirectory() as directory:
+        real, link = Path(directory, "real.sqlite"), Path(directory, "link.sqlite")
+        _probe_connect(real).close()
+        link.symlink_to(real)
+        try:
+            _probe_connect(f"{link.as_uri()}?mode=ro&nofollow=1", uri=True).close()
+        except sqlite3.Error:
+            return True
+        return False
 
 
 def _same_file(path: Path, pinned: os.stat_result) -> None:
@@ -252,9 +287,10 @@ def _connect_pinned(path: Path, *, write: bool, create: bool = False) -> sqlite3
     fd, pinned = _pin(path, write=write, create=create)
     try:
         mode = "rw" if write else "ro"
+        nofollow = "&nofollow=1" if sqlite_honours_nofollow() else ""
         # absolute(), not resolve(): resolving would follow a link.
         conn = sqlite3.connect(
-            f"{path.absolute().as_uri()}?mode={mode}",
+            f"{path.absolute().as_uri()}?mode={mode}{nofollow}",
             uri=True,
             timeout=_BUSY_TIMEOUT_MS / 1000,
             isolation_level=None,

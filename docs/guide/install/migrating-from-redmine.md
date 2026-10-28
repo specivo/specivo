@@ -178,6 +178,8 @@ plain text. It only works with the Specivo that wrote it: each entry is signed
 with a key derived from `SECRET_KEY`, so after changing `SECRET_KEY`, or on
 another installation, its entries are ignored (with a warning) and those
 references stay plain text. Keep it a regular file: a symbolic link is refused.
+Keep its folder writable by you only; anyone else who can write there could
+still tamper with the file while an import opens it.
 
 ### After cut-over
 

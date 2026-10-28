@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import stat
+import threading
 from dataclasses import replace
 
 import pytest
@@ -438,3 +439,54 @@ class TestOpeningRaces:
             LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
         assert not (tmp_path / "victim.txt").exists()
         assert not path.exists()
+
+
+class TestSpecialFiles:
+    def test_a_fifo_at_the_links_path_is_refused_at_once(self, tmp_path):
+        """A planted FIFO must not hang the import: an open without O_NONBLOCK waits for a writer forever."""
+        path = tmp_path / "links.sqlite"
+        os.mkfifo(path)
+        attempts = (
+            lambda: check_scope(path, SYSTEM, INSTANCE),
+            lambda: read_scope(path),
+            lambda: LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A),
+            lambda: LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A),
+        )
+        for attempt in attempts:
+            outcome: list[BaseException | None] = []
+
+            def run(attempt=attempt, outcome=outcome) -> None:
+                try:
+                    attempt()
+                    outcome.append(None)
+                except BaseException as exc:  # noqa: BLE001 - handed to the test thread
+                    outcome.append(exc)
+
+            # A daemon thread: if the open hangs, the test fails instead of hanging with it.
+            worker = threading.Thread(target=run, daemon=True)
+            worker.start()
+            worker.join(timeout=5)
+            assert outcome, "opening a FIFO hung"
+            assert isinstance(outcome[0], LinksFileUnreadableError)
+            assert "not a regular file" in str(outcome[0])
+        assert stat.S_ISFIFO(os.lstat(path).st_mode)
+
+    @pytest.mark.parametrize("honoured", [False, True])
+    def test_sqlite_is_asked_not_to_follow_links_when_it_can(self, tmp_path, monkeypatch, honoured):
+        monkeypatch.setattr(links_file, "sqlite_honours_nofollow", lambda: honoured)
+        seen: list[str] = []
+        real_connect = sqlite3.connect
+
+        def recording(database, *args, **kwargs):
+            seen.append(str(database))
+            return real_connect(database, *args, **kwargs)
+
+        monkeypatch.setattr(links_file.sqlite3, "connect", recording)
+        store = LinksStore.open(tmp_path / "links.sqlite", SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        store.rollback()
+        assert ("nofollow=1" in seen[0]) is honoured
+
+    def test_the_probe_answers_for_this_sqlite(self):
+        """Whatever this build does, the answer is a plain bool and is worked out once."""
+        assert links_file.sqlite_honours_nofollow() in (True, False)
+        assert links_file.sqlite_honours_nofollow.cache_info().currsize == 1
