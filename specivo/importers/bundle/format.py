@@ -48,6 +48,10 @@ RESERVED_SOURCE_SYSTEMS: frozenset[str] = frozenset({"bundle"})
 # A stored file is named after the SHA-256 of its bytes, lower-case hex.
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
+# Properties whose values are secret (a user's password hash). A schema error
+# at or below one is reported without the value, which jsonschema would quote.
+SECRET_PROPERTIES: frozenset[str] = frozenset({"credential"})
+
 # The schemas core validates against. The same files are published under
 # docs/import-bundle/v1/, and a unit test keeps the two copies identical.
 SCHEMA_DIR = Path(__file__).parent / "schemas" / "v1"

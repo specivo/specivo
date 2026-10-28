@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from collections import Counter
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -42,6 +43,7 @@ from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
 
 from specivo.importers.bundle.codec import LOOKUP_TYPES, value_problems
+from specivo.importers.bundle.container import open_regular
 from specivo.importers.bundle.format import (
     ATTACHMENTS,
     CATEGORIES,
@@ -63,6 +65,7 @@ from specivo.importers.bundle.format import (
     RELATIONS,
     RESERVED_SOURCE_SYSTEMS,
     SCHEMA_DIR,
+    SECRET_PROPERTIES,
     SHA256_RE,
     TIME_ENTRIES,
     VERSIONS,
@@ -185,7 +188,7 @@ def iter_lines(path: Path, max_line_bytes: int) -> Iterator[tuple[int, int, byte
     ``None`` and skipped without being held in memory, so one huge line cannot
     exhaust memory before it is even parsed.
     """
-    with path.open("rb") as handle:
+    with open_regular(path) as handle:
         offset = 0
         number = 0
         while raw := handle.readline(max_line_bytes + 1):
@@ -202,6 +205,25 @@ def iter_lines(path: Path, max_line_bytes: int) -> Iterator[tuple[int, int, byte
                 length += len(raw)
             yield number, offset, None
             offset += length
+
+
+def schema_message(error: ValidationError) -> str:
+    """Return what to say about a schema failure, without the value if it is a secret.
+
+    jsonschema's message quotes the offending value. Under a secret property
+    (see :data:`~specivo.importers.bundle.format.SECRET_PROPERTIES`), here or
+    in any sub-error of an ``anyOf``, that value is a password hash, so only
+    the kind of check that failed is named; the caller adds where.
+    """
+    if _touches_secret(error):
+        return f"does not match the schema ({error.validator})"
+    return error.message
+
+
+def _touches_secret(error: ValidationError) -> bool:
+    if any(part in SECRET_PROPERTIES for part in error.absolute_path):
+        return True
+    return any(_touches_secret(sub) for sub in error.context or ())
 
 
 def loads(raw: bytes | str) -> Any:
@@ -375,15 +397,16 @@ class _Scanner:
                 self.report.error(ProblemCode.MISSING_FILE, name, "The bundle has no manifest")
             return None
         try:
-            size = path.stat().st_size
-            if size > self.limits.max_json_bytes:
-                self.report.error(
-                    ProblemCode.TOO_LARGE,
-                    name,
-                    f"{size} bytes; the limit is {format_size(self.limits.max_json_bytes)} (--max-json-size)",
-                )
-                return None
-            return loads(path.read_bytes())
+            with open_regular(path) as handle:
+                size = os.fstat(handle.fileno()).st_size
+                if size > self.limits.max_json_bytes:
+                    self.report.error(
+                        ProblemCode.TOO_LARGE,
+                        name,
+                        f"{size} bytes; the limit is {format_size(self.limits.max_json_bytes)} (--max-json-size)",
+                    )
+                    return None
+                return loads(handle.read())
         except OSError as exc:
             self.report.error(ProblemCode.UNREADABLE, name, f"Could not be read: {exc}")
         except (ValueError, UnicodeDecodeError) as exc:
@@ -493,7 +516,9 @@ class _Scanner:
         for error in errors:
             pointer = "/" + "/".join(str(part) for part in error.absolute_path)
             where: dict[str, Any] = {"line": line} if line is not None else {"pointer": pointer}
-            message = error.message if len(error.message) <= _MAX_MESSAGE else error.message[:_MAX_MESSAGE] + "…"
+            message = schema_message(error)
+            if len(message) > _MAX_MESSAGE:
+                message = message[:_MAX_MESSAGE] + "…"
             if line is not None and pointer != "/":
                 message = f"{pointer}: {message}"
             if self.tolerate_unknown and error.validator == "additionalProperties":
@@ -863,7 +888,7 @@ class _Scanner:
             else:
                 digest = hashlib.sha256()
                 size = 0
-                with path.open("rb") as handle:
+                with open_regular(path) as handle:
                     while chunk := handle.read(_HASH_CHUNK):
                         digest.update(chunk)
                         size += len(chunk)

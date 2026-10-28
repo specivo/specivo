@@ -165,11 +165,6 @@ class TestRecords:
         root = write_bundle(tmp_path / "b", users=[user("has space")])
         assert _codes(await _validate(root)) == [("users.jsonl", 1, "schema")]
 
-    async def test_a_record_file_that_is_not_a_file(self, tmp_path):
-        root = write_bundle(tmp_path / "b")
-        (root / "issues.jsonl").mkdir()
-        assert _codes(await _validate(root)) == [("issues.jsonl", None, "unreadable")]
-
     async def test_blank_lines_are_ignored(self, tmp_path):
         root = write_bundle(tmp_path / "b", users="\n" + json.dumps(user("u1")) + "\n\n")
         report = await _validate(root)

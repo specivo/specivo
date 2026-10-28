@@ -7,7 +7,11 @@ path, a drive letter), a symbolic link, a device or an encrypted entry makes
 the whole archive refused before a byte is written. A directory bundle gets the
 same treatment for links: a symbolic link anywhere in it is refused rather than
 followed, because a bundle comes from outside and a link would let it point the
-import at any file the server can read.
+import at any file the server can read. A pipe, device, socket or directory
+under a name the reader opens (a record file, or a stored file) is refused
+too, without being opened: opening a pipe for reading waits for a writer, so
+one would hang the reader. Files are then opened with :func:`open_regular`,
+which refuses anything swapped in since the check without waiting on it.
 
 Unpacking is bounded by :class:`~specivo.importers.bundle.limits.BundleLimits`:
 total size, number of entries, size of one entry and how far one entry may
@@ -30,6 +34,7 @@ import stat
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import BinaryIO
 
 from specivo.importers.bundle.format import FILES_DIR, KNOWN_FILES, SHA256_RE
 from specivo.importers.bundle.limits import RATIO_CHECKED_FROM, BundleLimits, format_size
@@ -41,6 +46,28 @@ _COPY_CHUNK = 1024 * 1024
 # Reported when a separate files directory replaces the bundle's own files/.
 OWN_FILES_IGNORED = "Stored files are read from the files directory given; the bundle's own are ignored"
 _SYMLINK = "Symbolic links are not allowed in a bundle"
+_NOT_REGULAR = "Not a regular file (a directory, pipe, device or socket); refused without being read"
+# Absent on Windows, which has neither FIFOs nor this kind of link.
+_OPEN_FLAGS = os.O_RDONLY | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+
+
+def open_regular(path: Path) -> BinaryIO:
+    """Open *path* for reading in binary, provided it is a regular file and not a link.
+
+    Opened without blocking, so a pipe put in place of the file since it was
+    checked cannot make the open wait for a writer; then checked with
+    ``fstat`` on the open descriptor, which no later swap can change, and only
+    then switched back to blocking reads. Anything else raises :class:`OSError`.
+    """
+    fd = os.open(path, _OPEN_FLAGS)
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            raise OSError(f"Not a regular file: {path.name}")
+        os.set_blocking(fd, True)
+        return os.fdopen(fd, "rb")
+    except BaseException:
+        os.close(fd)
+        raise
 
 
 class BundleContainer:
@@ -128,43 +155,58 @@ def _resolve_files_dir(bundle: Path, files_path: Path, report: ValidationReport)
 
 
 def _check_directory(root: Path, report: ValidationReport, skip_own_files: bool = False) -> bool:
-    """Check a directory bundle holds no links. Unknown entries are warned about and ignored.
+    """Check a directory bundle holds no links, and only regular files under the names it reads.
 
-    With *skip_own_files* the bundle's ``files/`` is not looked into: the
-    stored files come from elsewhere, so it is reported as ignored.
+    Unknown entries are warned about and ignored; they are never opened. With
+    *skip_own_files* the bundle's ``files/`` is not looked into: the stored
+    files come from elsewhere, so it is reported as ignored.
     """
     safe = True
     for entry in sorted(root.iterdir()):
         name = entry.name
-        if entry.is_symlink():
+        mode = entry.lstat().st_mode
+        if stat.S_ISLNK(mode):
             report.error(ProblemCode.SYMLINK, name, _SYMLINK)
             safe = False
         elif name == FILES_DIR and skip_own_files:
             report.warning(ProblemCode.UNKNOWN_FILE, FILES_DIR, OWN_FILES_IGNORED)
-        elif name == FILES_DIR and entry.is_dir():
+        elif name == FILES_DIR and stat.S_ISDIR(mode):
             safe = _check_files_dir(entry, report) and safe
         elif name not in KNOWN_FILES:
             report.warning(ProblemCode.UNKNOWN_FILE, name, "Not part of the bundle format; ignored")
+        elif not stat.S_ISREG(mode):
+            report.error(ProblemCode.UNSAFE_ENTRY, name, _NOT_REGULAR)
+            safe = False
     return safe
 
 
 def _check_files_dir(files_dir: Path, report: ValidationReport, recursive: bool = False) -> bool:
-    """Check the stored files: no links, and anything but ``<sha256>`` files warned about and ignored.
+    """Check the stored files: no links, and nothing but regular files and directories.
 
-    Entries are named ``files/<name>`` wherever the directory is. *recursive*
-    also looks for links below the top level, for a directory that did not
-    come inside the bundle and so was never checked as part of it.
+    A regular file not named by a hash, or a directory, is warned about and
+    ignored; a pipe, device or socket, or a directory named by a hash, refuses
+    it. Entries are named ``files/<name>`` wherever the directory is.
+    *recursive* also looks for links below the top level, for a directory that
+    did not come inside the bundle and so was never checked as part of it.
     """
     safe = True
     for entry in sorted(files_dir.iterdir()):
         name = f"{FILES_DIR}/{entry.name}"
-        if entry.is_symlink():
+        mode = entry.lstat().st_mode
+        stored_name = SHA256_RE.match(entry.name) is not None
+        if stat.S_ISLNK(mode):
             report.error(ProblemCode.SYMLINK, name, _SYMLINK)
             safe = False
-        elif not entry.is_file() or not SHA256_RE.match(entry.name):
+        elif stat.S_ISREG(mode) and stored_name:
+            continue
+        elif stat.S_ISREG(mode) or (stat.S_ISDIR(mode) and not stored_name):
             report.warning(ProblemCode.UNKNOWN_FILE, name, "Not a stored file (files/<sha256>); ignored")
-            if recursive and entry.is_dir():
+            if recursive and stat.S_ISDIR(mode):
                 safe = _check_no_links_below(entry, files_dir, report) and safe
+        else:
+            # A pipe, device or socket, or a directory named as a stored file.
+            report.error(ProblemCode.UNSAFE_ENTRY, name, _NOT_REGULAR)
+            safe = False
     return safe
 
 
