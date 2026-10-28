@@ -122,6 +122,6 @@ class TestAnSdkBundle:
 
     async def test_loading_it_again_creates_nothing(self, db_session, build_bundle_import, sdk_bundle, imported):
         before = (await db_session.execute(select(func.count()).select_from(Issue))).scalar_one()
-        again = await build_bundle_import(sdk_bundle).run()
+        again = await build_bundle_import(sdk_bundle, continue_import=True).run()
         assert sum(again.created.values()) == 0
         assert (await db_session.execute(select(func.count()).select_from(Issue))).scalar_one() == before
