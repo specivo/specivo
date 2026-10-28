@@ -25,7 +25,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "system"
+        "system",
+        "instance"
       ],
       "properties": {
         "system": {
@@ -34,13 +35,10 @@
           "description": "The source product, lower case, e.g. jira."
         },
         "instance": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": "string",
           "minLength": 1,
           "maxLength": 200,
-          "description": "Which installation of it, e.g. a host name. Scopes the identifier map."
+          "description": "Which installation of it, e.g. a host name. Scopes the identifier map: a later bundle with the same system and instance adds to the earlier import."
         },
         "version": {
           "type": [

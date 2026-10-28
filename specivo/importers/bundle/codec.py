@@ -19,6 +19,16 @@ from enum import Enum
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
 from specivo.importers.bundle.format import RENAMED_FIELDS
+from specivo.importers.core.ir import IRActivity, IRPriority, IRRole, IRStatus, IRTracker
+
+# The IR class of each list in lookups.json.
+LOOKUP_TYPES: dict[str, type] = {
+    "trackers": IRTracker,
+    "statuses": IRStatus,
+    "priorities": IRPriority,
+    "activities": IRActivity,
+    "roles": IRRole,
+}
 
 _HINTS: dict[type, dict[str, Any]] = {}
 
@@ -120,3 +130,44 @@ def _decode(hint: Any, value: Any) -> Any:
     if isinstance(hint, type) and dataclasses.is_dataclass(hint):
         return from_record(hint, value)
     return value
+
+
+def value_problems(cls: type, record: dict[str, Any], prefix: str = "") -> list[str]:
+    """Return what in *record* would not decode into *cls*, one message per value.
+
+    The schemas check the shape of a date or a timestamp but not that it
+    exists (``2024-02-30``); this parses every one, so a bad value is reported
+    with its place in the record instead of failing the import half way.
+    """
+    hints = _hints(cls)
+    problems: list[str] = []
+    for field in dataclasses.fields(cls):
+        name = json_name(cls, field.name)
+        if record.get(name) is not None:
+            problems.extend(_value_problems(hints[field.name], record[name], f"{prefix}/{name}"))
+    return problems
+
+
+def _value_problems(hint: Any, value: Any, pointer: str) -> list[str]:
+    origin = get_origin(hint)
+    if origin in (Union, types.UnionType):
+        if value is None:
+            return []
+        (inner,) = [arg for arg in get_args(hint) if arg is not type(None)]
+        return _value_problems(inner, value, pointer)
+    if origin is list and isinstance(value, list):
+        (item_hint,) = get_args(hint)
+        return [p for index, item in enumerate(value) for p in _value_problems(item_hint, item, f"{pointer}/{index}")]
+    if isinstance(hint, type) and dataclasses.is_dataclass(hint) and isinstance(value, dict):
+        return value_problems(hint, value, pointer)
+    try:
+        if hint is datetime:
+            datetime.fromisoformat(value)
+        elif hint is date:
+            date.fromisoformat(value)
+        elif hint is Decimal and not Decimal(str(value)).is_finite():
+            return [f"{pointer}: {value!r} is not a finite number"]
+    except (ValueError, TypeError):
+        kind = "timestamp" if hint is datetime else "date" if hint is date else "number"
+        return [f"{pointer}: {value!r} is not a valid {kind}"]
+    return []

@@ -10,10 +10,13 @@ uniqueness per entity type; every reference to another record, including the
 placeholders in text; stored files exist and hash to their names; parent
 chains have no cycles; the manifest's counts match the files.
 
-**What is kept in memory.** Never a whole file: each record is parsed, checked
-and dropped. What stays is one entry per record — its source ref and the byte
-offset of its line — plus the few fields needed to put records in load order
-(parents, journal timestamps). The adapter later reads records back by offset.
+**What is kept in memory.** Never a whole JSON-lines file: each record (one
+line, at most ``max_line_bytes``) is parsed, checked and dropped. The three
+small JSON files are read whole, each at most ``max_json_bytes``. What stays
+is one entry per record — its source ref and the byte offset of its line —
+plus the few fields needed to put records in load order (parents, journal
+timestamps), so memory grows with the number of records, not their size. The
+adapter later reads records back by offset.
 
 **Order.** Files are checked in :data:`~specivo.importers.bundle.format.RECORD_FILES`
 order, in which a file only refers to the ones before it. A reference that
@@ -37,6 +40,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
 
+from specivo.importers.bundle.codec import LOOKUP_TYPES, value_problems
 from specivo.importers.bundle.format import (
     ATTACHMENTS,
     CATEGORIES,
@@ -65,6 +69,7 @@ from specivo.importers.bundle.format import (
     WIKI_REDIRECTS,
     RecordFile,
 )
+from specivo.importers.bundle.limits import BundleLimits, format_size
 from specivo.importers.bundle.report import ProblemCode, ValidationReport
 from specivo.importers.core.ir import ContainerKind, EntityType, PrincipalKind, ValueKind
 from specivo.importers.core.placeholders import LABELLED_KINDS, find_placeholders
@@ -73,6 +78,8 @@ _HASH_CHUNK = 1024 * 1024
 # Long values (a whole description) make a schema message unreadable.
 _MAX_MESSAGE = 300
 _EARLIEST = datetime.min.replace(tzinfo=UTC)
+# Read size when skipping the rest of an over-long line.
+_SKIP_CHUNK = 1024 * 1024
 
 
 # --------------------------------------------------------------------------
@@ -165,16 +172,42 @@ class BundleIndex:
         return self.by_project.get(file.name, {}).get(project_ref, [])
 
 
-def iter_lines(path: Path) -> Iterator[tuple[int, int, bytes]]:
-    """Yield ``(line number, byte offset, raw line)`` for each line of *path*."""
+def iter_lines(path: Path, max_line_bytes: int) -> Iterator[tuple[int, int, bytes | None]]:
+    """Yield ``(line number, byte offset, raw line)`` for each line of *path*.
+
+    A line longer than *max_line_bytes* (newline included) is yielded as
+    ``None`` and skipped without being held in memory, so one huge line cannot
+    exhaust memory before it is even parsed.
+    """
     with path.open("rb") as handle:
         offset = 0
-        for number, raw in enumerate(handle, start=1):
-            yield number, offset, raw
-            offset += len(raw)
+        number = 0
+        while raw := handle.readline(max_line_bytes + 1):
+            number += 1
+            if len(raw) <= max_line_bytes:
+                yield number, offset, raw
+                offset += len(raw)
+                continue
+            length = len(raw)
+            while not raw.endswith(b"\n"):
+                raw = handle.readline(_SKIP_CHUNK)
+                if not raw:
+                    break
+                length += len(raw)
+            yield number, offset, None
+            offset += length
 
 
-def scan_bundle(root: Path, report: ValidationReport) -> BundleIndex | None:
+def loads(raw: bytes | str) -> Any:
+    """Parse JSON as the format defines it: no ``NaN`` or ``Infinity``."""
+    return json.loads(raw, parse_constant=_reject_constant)
+
+
+def _reject_constant(name: str) -> Any:
+    raise ValueError(f"{name} is not a JSON value")
+
+
+def scan_bundle(root: Path, report: ValidationReport, limits: BundleLimits | None = None) -> BundleIndex | None:
     """Check the bundle unpacked at *root*, recording problems in *report*.
 
     Returns the index, or ``None`` when the manifest is missing or names a
@@ -182,7 +215,7 @@ def scan_bundle(root: Path, report: ValidationReport) -> BundleIndex | None:
     was read. A returned index belongs to a loadable bundle only if
     ``report.ok``.
     """
-    return _Scanner(root, report).run()
+    return _Scanner(root, report, limits or BundleLimits()).run()
 
 
 # --------------------------------------------------------------------------
@@ -202,9 +235,10 @@ class _Pending:
 
 
 class _Scanner:
-    def __init__(self, root: Path, report: ValidationReport) -> None:
+    def __init__(self, root: Path, report: ValidationReport, limits: BundleLimits) -> None:
         self.root = root
         self.report = report
+        self.limits = limits
         self.index = BundleIndex(root=root, manifest={})
         self.refs: dict[EntityType, dict[str, int | None]] = {}
         self.done: set[EntityType] = set()
@@ -277,7 +311,16 @@ class _Scanner:
                 pointer="/format_version",
             )
 
-        self._validate(MANIFEST, "manifest.schema.json", data)
+        if self._validate(MANIFEST, "manifest.schema.json", data):
+            try:
+                datetime.fromisoformat(data["exported_at"])
+            except ValueError:
+                self.report.error(
+                    ProblemCode.SCHEMA,
+                    MANIFEST,
+                    f"{data['exported_at']!r} is not a valid timestamp",
+                    pointer="/exported_at",
+                )
         return data
 
     def _check_counts(self) -> None:
@@ -303,7 +346,15 @@ class _Scanner:
                 self.report.error(ProblemCode.MISSING_FILE, name, "The bundle has no manifest")
             return None
         try:
-            return json.loads(path.read_bytes())
+            size = path.stat().st_size
+            if size > self.limits.max_json_bytes:
+                self.report.error(
+                    ProblemCode.TOO_LARGE,
+                    name,
+                    f"{size} bytes; the limit is {format_size(self.limits.max_json_bytes)} (--max-json-size)",
+                )
+                return None
+            return loads(path.read_bytes())
         except OSError as exc:
             self.report.error(ProblemCode.UNREADABLE, name, f"Could not be read: {exc}")
         except (ValueError, UnicodeDecodeError) as exc:
@@ -312,7 +363,7 @@ class _Scanner:
 
     def _scan_lookups(self) -> None:
         data = self._read_json(LOOKUPS)
-        if data is not None and self._validate(LOOKUPS, "lookups.schema.json", data):
+        if data is not None and self._validate(LOOKUPS, "lookups.schema.json", data) and self._lookup_values(data):
             self.index.lookups = data
             for list_name, entity_type in LOOKUP_LISTS.items():
                 for position, item in enumerate(data.get(list_name) or []):
@@ -328,6 +379,16 @@ class _Scanner:
                 EntityType.STATUS,
                 tracker.get("default_status_ref"),
             )
+
+    def _lookup_values(self, data: dict[str, Any]) -> bool:
+        valid = True
+        for list_name, cls in LOOKUP_TYPES.items():
+            for position, item in enumerate(data.get(list_name) or []):
+                for problem in value_problems(cls, item, f"/{list_name}/{position}"):
+                    pointer, _, message = problem.partition(": ")
+                    self.report.error(ProblemCode.SCHEMA, LOOKUPS, message, pointer=pointer)
+                    valid = False
+        return valid
 
     def _scan_public_access(self) -> None:
         data = self._read_json(PUBLIC_ACCESS)
@@ -353,7 +414,15 @@ class _Scanner:
 
     def _scan_lines(self, record_file: RecordFile, path: Path) -> None:
         check = getattr(self, f"_check_{record_file.stem}")
-        for number, offset, raw in iter_lines(path):
+        for number, offset, raw in iter_lines(path, self.limits.max_line_bytes):
+            if raw is None:
+                self.report.error(
+                    ProblemCode.TOO_LARGE,
+                    record_file.name,
+                    f"Line is longer than {format_size(self.limits.max_line_bytes)} (--max-line-size); not read",
+                    line=number,
+                )
+                continue
             if not raw.strip():
                 continue
             record = self._parse_line(record_file, number, raw)
@@ -367,14 +436,19 @@ class _Scanner:
 
     def _parse_line(self, record_file: RecordFile, number: int, raw: bytes) -> dict[str, Any] | None:
         try:
-            record = json.loads(raw)
+            record = loads(raw)
         except (ValueError, UnicodeDecodeError) as exc:
             self.report.error(ProblemCode.INVALID_JSON, record_file.name, f"Not valid JSON: {exc}", line=number)
             return None
         # Counted whether or not it is valid, so a broken record is reported
         # once, not again as a count that does not match the manifest.
         self.report.records[record_file.stem] += 1
-        if not self._validate(record_file.name, record_file.schema, record, line=number):
+        valid = self._validate(record_file.name, record_file.schema, record, line=number)
+        if valid:
+            for problem in value_problems(record_file.ir_type, record):
+                self.report.error(ProblemCode.SCHEMA, record_file.name, problem, line=number)
+                valid = False
+        if not valid:
             # Still claim the ref, so a record that points at this one is not
             # reported a second time as unresolved.
             if isinstance(record, dict) and isinstance(record.get("source_ref"), str) and record_file.entity_type:
@@ -459,6 +533,13 @@ class _Scanner:
                     ProblemCode.INVALID_REF,
                     file,
                     f"{field_name}: a {placeholder.kind} placeholder takes no label",
+                    line=line,
+                )
+            elif placeholder.label is not None and "]]" in placeholder.label:
+                self.report.error(
+                    ProblemCode.INVALID_REF,
+                    file,
+                    f"{field_name}: a placeholder's label may not contain ']]'",
                     line=line,
                 )
             where = f"{field_name} {{{{{placeholder.kind}:…}}}}"

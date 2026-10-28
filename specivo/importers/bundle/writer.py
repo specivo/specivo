@@ -72,7 +72,7 @@ class BundleWriter:
         target: str | Path,
         *,
         source_system: str,
-        source_instance: str | None = None,
+        source_instance: str,
         source_version: str | None = None,
         exported_at: datetime | None = None,
     ) -> None:
@@ -87,9 +87,7 @@ class BundleWriter:
                 raise FileExistsError(f"{self.target} is not empty")
             self.root = self.target
 
-        self._source: dict[str, Any] = {"system": source_system}
-        if source_instance:
-            self._source["instance"] = source_instance
+        self._source: dict[str, Any] = {"system": source_system, "instance": source_instance}
         if source_version:
             self._source["version"] = source_version
         self._exported_at = exported_at or datetime.now(UTC)

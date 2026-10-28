@@ -28,6 +28,7 @@ class ProblemCode(StrEnum):
 
     UNREADABLE = "unreadable"
     UNSAFE_ENTRY = "unsafe_entry"
+    TOO_LARGE = "too_large"
     SYMLINK = "symlink"
     UNKNOWN_FILE = "unknown_file"
     UNSUPPORTED_VERSION = "unsupported_version"

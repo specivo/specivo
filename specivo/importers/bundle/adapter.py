@@ -9,13 +9,12 @@ then checks all of it before the first phase runs: an import never starts on a
 bundle that fails validation. The same check is what ``--validate`` prints.
 
 Records are read back from the files by byte offset, one at a time, in the
-order the scan worked out; nothing holds a whole file in memory.
+order the scan worked out, so no JSON-lines file is ever held whole in memory.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 from collections.abc import AsyncIterator, Iterable, Iterator
 from pathlib import Path
@@ -23,13 +22,13 @@ from typing import Any, ClassVar, TypeVar
 from zipfile import BadZipFile, ZipFile
 
 from specivo.importers.bundle import format as bundle_format
-from specivo.importers.bundle.codec import from_record
+from specivo.importers.bundle.codec import LOOKUP_TYPES, from_record
 from specivo.importers.bundle.container import BundleContainer, open_bundle
 from specivo.importers.bundle.format import FILES_DIR, LOOKUP_LISTS, MANIFEST, SHA256_RE, RecordFile
-from specivo.importers.bundle.report import ValidationReport
-from specivo.importers.bundle.scan import BundleIndex, scan_bundle
+from specivo.importers.bundle.limits import BundleLimits, format_size, parse_size, positive_int
+from specivo.importers.bundle.report import ProblemCode, ValidationReport
+from specivo.importers.bundle.scan import BundleIndex, iter_lines, loads, scan_bundle
 from specivo.importers.core.ir import (
-    IRActivity,
     IRAttachment,
     IRCategory,
     IRCustomField,
@@ -38,14 +37,10 @@ from specivo.importers.core.ir import (
     IRJournalEntry,
     IRLookups,
     IRMembership,
-    IRPriority,
     IRProject,
     IRPublicAccess,
     IRRelation,
-    IRRole,
-    IRStatus,
     IRTimeEntry,
-    IRTracker,
     IRUser,
     IRVersion,
     IRWatcher,
@@ -66,14 +61,6 @@ NOTE_VALIDATION_WARNINGS = "bundle_validation_warnings"
 
 # How many problems an import that refuses a bundle puts in its error.
 _ERRORS_SHOWN = 20
-
-_LOOKUP_TYPES: dict[str, type] = {
-    "trackers": IRTracker,
-    "statuses": IRStatus,
-    "priorities": IRPriority,
-    "activities": IRActivity,
-    "roles": IRRole,
-}
 
 
 class BundleInvalidError(ValueError):
@@ -98,9 +85,15 @@ class BundleSourceAdapter(BaseSourceAdapter):
     description: ClassVar[str] = "An import bundle (directory or .zip) written by an importer"
     reference_style: ClassVar[str] = REFERENCE_STYLE_PLACEHOLDERS
 
-    def __init__(self, path: str | Path, source_instance: str | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        source_instance: str | None = None,
+        limits: BundleLimits | None = None,
+    ) -> None:
         self.path = Path(path)
-        super().__init__(source_instance or _instance_from_manifest(self.path))
+        self.limits = limits or BundleLimits()
+        super().__init__(source_instance or _instance_from_manifest(self.path, self.limits))
         self._container: BundleContainer | None = None
         self._index: BundleIndex | None = None
         self.report: ValidationReport | None = None
@@ -117,14 +110,77 @@ class BundleSourceAdapter(BaseSourceAdapter):
             required=True,
             help="The bundle: a directory, or a .zip archive of one (unpacked to a temporary directory).",
         )
+        limits = parser.add_argument_group(
+            "bundle limits",
+            "A bundle is untrusted input. Raise these only for a bundle you know to be that large.",
+        )
+        default = BundleLimits()
+        limits.add_argument(
+            "--max-unpacked-size",
+            type=parse_size,
+            default=default.max_unpacked_bytes,
+            metavar="SIZE",
+            help=(
+                f"Most a zip may unpack to, counted as it unpacks (default: {format_size(default.max_unpacked_bytes)})."
+            ),
+        )
+        limits.add_argument(
+            "--max-entries",
+            type=positive_int,
+            default=default.max_entries,
+            metavar="N",
+            help=f"Most entries a zip may hold (default: {default.max_entries}).",
+        )
+        limits.add_argument(
+            "--max-entry-size",
+            type=parse_size,
+            default=default.max_entry_bytes,
+            metavar="SIZE",
+            help=f"Most one zip entry may unpack to (default: {format_size(default.max_entry_bytes)}).",
+        )
+        limits.add_argument(
+            "--max-compression-ratio",
+            type=positive_int,
+            default=default.max_compression_ratio,
+            metavar="N",
+            help=(
+                "Most a zip entry larger than 1M may expand relative to its stored size "
+                f"(default: {default.max_compression_ratio})."
+            ),
+        )
+        limits.add_argument(
+            "--max-line-size",
+            type=parse_size,
+            default=default.max_line_bytes,
+            metavar="SIZE",
+            help=f"Longest JSON-lines record, newline included (default: {format_size(default.max_line_bytes)}).",
+        )
+        limits.add_argument(
+            "--max-json-size",
+            type=parse_size,
+            default=default.max_json_bytes,
+            metavar="SIZE",
+            help=(
+                "Largest manifest.json, lookups.json or public_access.json "
+                f"(default: {format_size(default.max_json_bytes)})."
+            ),
+        )
 
     @classmethod
     def from_args(cls, args: argparse.Namespace) -> BundleSourceAdapter:
-        """Build the adapter from ``--path``.
+        """Build the adapter from ``--path`` and the limits.
 
         ``--source-instance`` defaults to the source the manifest names.
         """
-        return cls(args.path, source_instance=args.source_instance)
+        limits = BundleLimits(
+            max_unpacked_bytes=args.max_unpacked_size,
+            max_entries=args.max_entries,
+            max_entry_bytes=args.max_entry_size,
+            max_compression_ratio=args.max_compression_ratio,
+            max_line_bytes=args.max_line_size,
+            max_json_bytes=args.max_json_size,
+        )
+        return cls(args.path, source_instance=args.source_instance, limits=limits)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -149,17 +205,31 @@ class BundleSourceAdapter(BaseSourceAdapter):
         logger.info("Bundle %s is valid: %s", self.path, _summarise(report))
 
     async def close(self) -> None:
+        self._close_container()
+
+    def _close_container(self) -> None:
         if self._container is not None:
             self._container.close()
             self._container = None
         self._index = None
 
     def _open(self) -> ValidationReport:
+        """Open and scan the bundle, always returning a report.
+
+        Whatever goes wrong is reported rather than raised, and on any error
+        the bundle is closed again, so no unpacked copy is left behind.
+        """
         report = ValidationReport(path=str(self.path))
         self.report = report
-        self._container = open_bundle(self.path, report)
-        if self._container is not None:
-            self._index = scan_bundle(self._container.root, report)
+        try:
+            self._container = open_bundle(self.path, report, self.limits)
+            if self._container is not None:
+                self._index = scan_bundle(self._container.root, report, self.limits)
+        except Exception as exc:  # noqa: BLE001 - a hostile bundle must give a report, not a traceback
+            logger.debug("Reading bundle %s failed", self.path, exc_info=True)
+            report.error(ProblemCode.UNREADABLE, self.path.name, f"The bundle could not be read: {exc!r}")
+        if not report.ok:
+            self._close_container()
         return report
 
     @property
@@ -195,10 +265,10 @@ class BundleSourceAdapter(BaseSourceAdapter):
         path = self._path(record_file)
         if not path.exists():
             return
-        with path.open("rb") as handle:
-            for raw in handle:
-                if raw.strip():
-                    yield from_record(cls, json.loads(raw))
+        for _, _, raw in iter_lines(path, self.limits.max_line_bytes):
+            # The scan already refused a bundle with an over-long line.
+            if raw is not None and raw.strip():
+                yield from_record(cls, loads(raw))
 
     def _at(self, record_file: RecordFile, offsets: Iterable[int], cls: type[T]) -> Iterator[T]:
         """Read the records starting at *offsets*, in that order."""
@@ -208,7 +278,7 @@ class BundleSourceAdapter(BaseSourceAdapter):
         with self._path(record_file).open("rb") as handle:
             for offset in offsets:
                 handle.seek(offset)
-                yield from_record(cls, json.loads(handle.readline()))
+                yield from_record(cls, loads(handle.readline(self.limits.max_line_bytes + 1)))
 
     async def _stream(self, records: Iterator[T]) -> AsyncIterator[T]:
         for record in records:
@@ -224,7 +294,7 @@ class BundleSourceAdapter(BaseSourceAdapter):
     async def extract_lookups(self) -> IRLookups:
         lookups = self.index.lookups
         built: dict[str, list[Any]] = {
-            name: [from_record(_LOOKUP_TYPES[name], item) for item in lookups.get(name) or []] for name in LOOKUP_LISTS
+            name: [from_record(LOOKUP_TYPES[name], item) for item in lookups.get(name) or []] for name in LOOKUP_LISTS
         }
         return IRLookups(**built)
 
@@ -297,22 +367,27 @@ class BundleSourceAdapter(BaseSourceAdapter):
         return self.index.root / FILES_DIR / attachment.storage_key
 
 
-def _instance_from_manifest(path: Path) -> str:
+def _instance_from_manifest(path: Path, limits: BundleLimits) -> str:
     """Return ``<system>:<instance>`` from the bundle's manifest, or ``bundle`` if it cannot be read.
 
     Read before the bundle is opened, because the run options are built from
     the adapter before ``connect``. A manifest that cannot be read is
-    reported by validation; the fallback only has to get that far.
+    reported by validation; the fallback only has to get that far. Read
+    within the same size limit as the scan applies, from a zip too: the
+    archive has not been checked yet.
     """
     try:
         if path.is_dir():
-            manifest = json.loads((path / MANIFEST).read_bytes())
+            with (path / MANIFEST).open("rb") as handle:
+                raw = handle.read(limits.max_json_bytes + 1)
         else:
-            with ZipFile(path) as archive:
-                manifest = json.loads(archive.read(MANIFEST))
-        source = manifest["source"]
+            with ZipFile(path) as archive, archive.open(MANIFEST) as handle:
+                raw = handle.read(limits.max_json_bytes + 1)
+        if len(raw) > limits.max_json_bytes:
+            return BundleSourceAdapter.source_system
+        source = loads(raw)["source"]
         system, instance = str(source["system"]), source.get("instance")
-    except (OSError, BadZipFile, KeyError, TypeError, ValueError):
+    except (OSError, BadZipFile, KeyError, TypeError, ValueError, RuntimeError):
         return BundleSourceAdapter.source_system
     return (f"{system}:{instance}" if instance else system)[:255]
 

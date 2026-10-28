@@ -108,7 +108,7 @@ class TestBundleWriter:
         assert manifest["not_carried_over"] == [{"what": "Boards", "count": 2}]
 
     def test_one_file_per_content(self, tmp_path):
-        with BundleWriter(tmp_path / "b", source_system="sample") as writer:
+        with BundleWriter(tmp_path / "b", source_system="sample", source_instance="tracker.example.com") as writer:
             first = writer.add_bytes(b"same")
             second = writer.add_bytes(b"same")
         assert first == second
@@ -120,7 +120,7 @@ class TestBundleWriter:
         )
         with (
             pytest.raises(ValueError, match="add its file first"),
-            BundleWriter(tmp_path / "b", source_system="s") as w,
+            BundleWriter(tmp_path / "b", source_system="s", source_instance="x") as w,
         ):
             w.add(attachment)
 
@@ -128,4 +128,4 @@ class TestBundleWriter:
         (tmp_path / "b").mkdir()
         (tmp_path / "b" / "keep.txt").write_text("x")
         with pytest.raises(FileExistsError):
-            BundleWriter(tmp_path / "b", source_system="sample")
+            BundleWriter(tmp_path / "b", source_system="sample", source_instance="tracker.example.com")
