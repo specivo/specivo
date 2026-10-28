@@ -7,7 +7,7 @@ xdist distribution mode in §16.
 **Revised:** 2026-10-26 — recorded role visibility settings and the time tracking permissions,
 the password hasher and import source plugin hooks, and that the plugin contract lists them.
 **Revised:** 2026-10-28 — removed the import source plugin hook and the `redmine` test marker with
-the direct Redmine import (imports now go through bundles, see ADR-0007); recorded the `sso_idp`
+the direct Redmine import (imports now go through bundles, see `docs/import-bundle/v1.md`); recorded the `sso_idp`
 marker.
 **Status:** Accepted
 **Deciders:** Boris
