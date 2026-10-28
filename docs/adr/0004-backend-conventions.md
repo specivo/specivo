@@ -6,6 +6,9 @@ debug), the `Permission` enum, and project membership becoming principal-shaped;
 xdist distribution mode in §16.
 **Revised:** 2026-10-26 — recorded role visibility settings and the time tracking permissions,
 the password hasher and import source plugin hooks, and that the plugin contract lists them.
+**Revised:** 2026-10-28 — removed the import source plugin hook and the `redmine` test marker with
+the direct Redmine import (imports now go through bundles, see ADR-0007); recorded the `sso_idp`
+marker.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -319,11 +322,10 @@ class PluginConfig(Protocol):
     def get_static_assets(self) -> dict[str, list[str]]: ...
     def get_locale_dirs(self) -> list[tuple[Path, str]]: ...
     def get_password_hashers(self) -> list: ...
-    def get_import_sources(self) -> list: ...
     def on_startup(self, app: Any) -> None: ...
 ```
 
-`BasePluginConfig(ABC)` provides no-op defaults for all hooks. Plugins are specified as dotted paths in `settings.installed_plugins` and loaded via `importlib.import_module`. `get_password_hashers` returns legacy password hashers (`WrappedLegacyHasher` subclasses from `specivo.services.password_hashers`); registering one does not enable it, since only algorithms listed in `LEGACY_PASSWORD_ALGORITHMS` ever verify a sign-in. `get_import_sources` returns `BaseSourceAdapter` subclasses, each registered under its `source_system` and run with `python -m specivo.cli.import_data --source NAME`; `bootstrap()` refuses an invalid, duplicate or reserved (`redmine`) name at startup.
+`BasePluginConfig(ABC)` provides no-op defaults for all hooks. Plugins are specified as dotted paths in `settings.installed_plugins` and loaded via `importlib.import_module`. `get_password_hashers` returns legacy password hashers (`WrappedLegacyHasher` subclasses from `specivo.services.password_hashers`); registering one does not enable it, since only algorithms listed in `LEGACY_PASSWORD_ALGORITHMS` ever verify a sign-in.
 
 **Feature registry** (`specivo.core.features`): plugins register feature flags (e.g., `"security_audit_log"`). Application code checks `has_feature("feature_name")` before enabling optional behavior. Templates access it via Jinja2 global `{% if has_feature("feature_name") %}`.
 
@@ -422,7 +424,7 @@ Template rendering uses `Jinja2Templates` with a `ChoiceLoader` for theme suppor
 - `pro` / `enterprise` -- auto-skipped when the corresponding plugin is not installed.
 - `serial` -- cannot run under pytest-xdist (shared state like Redis rate limits, MCP globals).
 - `e2e` -- browser tests requiring a running server.
-- `redmine` -- importer tests against the on-demand Redmine fixture; skipped when it is not up.
+- `sso_idp` -- single sign-on tests against the on-demand identity provider (`make sso-idp-up`); skipped when it is not up.
 
 **Client fixtures** in `specivo.testing.conftest_base`:
 - `client` -- unauthenticated HTTPX `AsyncClient`.

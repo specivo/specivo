@@ -5,6 +5,8 @@
 recorded the `slow` and `redmine` markers, and noted that tests import factories through the
 `tests/factories/` shims. The operational detail now lives in the "Testing Conventions" wiki page
 in the SPECIVO project; this ADR keeps the decisions and their rationale.
+**Revised:** 2026-10-28 — removed the `redmine` marker with the direct Redmine import (the Redmine
+fixture now lives with the Redmine migration tool), and recorded the `sso_idp` marker.
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -68,13 +70,13 @@ markers = [
     "pro",          # Requires specivo-pro plugin
     "enterprise",   # Requires specivo-enterprise plugin
     "e2e",          # Browser tests, excluded from backend runs
-    "redmine",      # Importer tests against the on-demand Redmine fixture
+    "sso_idp",      # Single sign-on tests against the on-demand identity provider
 ]
 ```
 
 `--strict-markers` is on, so an undeclared marker is a collection error rather than a silent no-op.
 
-`pytest_collection_modifyitems` in `tests/conftest.py` skips what is not available: `@pytest.mark.pro` and `@pytest.mark.enterprise` when the plugin is not in `INSTALLED_PLUGINS`, and `@pytest.mark.redmine` when nothing is listening on the importer fixture's database port. The fixture is probed with a raw socket rather than a driver connection, so collection stays cheap when it is down.
+`pytest_collection_modifyitems` in `tests/conftest.py` skips what is not available: `@pytest.mark.pro` and `@pytest.mark.enterprise` when the plugin is not in `INSTALLED_PLUGINS`, and `@pytest.mark.sso_idp` when the disposable identity provider does not answer at its issuer URL. The provider is only probed when such a test was collected, so collection stays cheap when it is down.
 
 ### Test data
 

@@ -1,7 +1,14 @@
 # ADR-0006: Redmine Importer Architecture
 
 **Date:** 2026-09-08
-**Status:** Accepted
+**Status:** Superseded by [ADR-0007](0007-import-bundles-and-migration-tools.md) (2026-10-28)
+
+> Since 0.11.0 Specivo no longer reads Redmine itself: the Redmine adapter, the
+> `get_import_sources()` plugin hook and the issue-reference rewrite described here are
+> removed, and every import goes through an import bundle written by a separate migration tool.
+> The pipeline, the loaders, the identifier map and the transaction rules below still describe
+> how a bundle is loaded. This record is kept for that, and for the reasoning behind reading
+> the Redmine database rather than its REST API, which the Redmine migration tool follows.
 **Deciders:** Boris
 
 ## Context
