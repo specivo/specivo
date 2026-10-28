@@ -492,7 +492,7 @@ make reset-password login=admin password=newpassword
 ```
 
 Accounts imported with their old passwords can be inspected and retired with the same command
-(see [Migrating from Redmine](https://specivo.io/docs/specivo/install/migrating-from-redmine/)):
+(see [Imported passwords](https://specivo.io/docs/specivo/install/configuration/#imported-passwords)):
 
 ```bash
 # Registered password hashers, whether each is enabled, and how many accounts use it
