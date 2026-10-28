@@ -1,4 +1,4 @@
-"""Bundles written with the import SDK (``tools/import-sdk``), for cross-checking core.
+"""Bundles written with the migration SDK (``tools/migration-sdk``), for cross-checking core.
 
 The SDK is a separate project that core does not depend on, so it is imported
 from its source directory. Where that directory is absent (a checkout of core
@@ -17,25 +17,25 @@ from types import ModuleType
 
 import pytest
 
-SDK_SRC = Path(__file__).resolve().parents[2] / "tools" / "import-sdk" / "src"
+SDK_SRC = Path(__file__).resolve().parents[2] / "tools" / "migration-sdk" / "src"
 
 LOG = b"2024-02-01T10:00:00Z deploy started\n2024-02-01T10:00:05Z login failed\n"
 NOTES = b"Runbook notes\n"
 
 
-def import_sdk() -> ModuleType:
-    """Import ``specivo_import_sdk`` from its source tree, or skip the test.
+def migration_sdk() -> ModuleType:
+    """Import ``specivo_migration_sdk`` from its source tree, or skip the test.
 
-    With ``SPECIVO_REQUIRE_SDK=1`` (set in CI) a missing SDK fails the test
+    With ``SPECIVO_REQUIRE_MIGRATION_SDK=1`` (set in CI) a missing SDK fails the test
     instead, so the cross-check cannot quietly stop running.
     """
     if not SDK_SRC.is_dir():
-        if os.environ.get("SPECIVO_REQUIRE_SDK") == "1":
-            pytest.fail(f"SPECIVO_REQUIRE_SDK=1 but the import SDK is not at {SDK_SRC}")
-        pytest.skip("tools/import-sdk is not in this checkout")
+        if os.environ.get("SPECIVO_REQUIRE_MIGRATION_SDK") == "1":
+            pytest.fail(f"SPECIVO_REQUIRE_MIGRATION_SDK=1 but the migration SDK is not at {SDK_SRC}")
+        pytest.skip("tools/migration-sdk is not in this checkout")
     if str(SDK_SRC) not in sys.path:
         sys.path.insert(0, str(SDK_SRC))
-    return importlib.import_module("specivo_import_sdk")
+    return importlib.import_module("specivo_migration_sdk")
 
 
 def write_sdk_bundle(target: Path) -> Path:
@@ -44,7 +44,7 @@ def write_sdk_bundle(target: Path) -> Path:
     Logins, identifiers and names start with ``sdk`` so the rows are easy to
     tell from those other tests create.
     """
-    sdk = import_sdk()
+    sdk = migration_sdk()
     ph = sdk.placeholders
     with sdk.BundleWriter(
         target,

@@ -1,7 +1,7 @@
-"""Loading a bundle written with the import SDK, end to end.
+"""Loading a bundle written with the migration SDK, end to end.
 
-The bundle comes from ``tests/fixtures/import_sdk.py``, which writes it with
-``tools/import-sdk`` the way an importer outside core would. These tests check
+The bundle comes from ``tests/fixtures/migration_sdk.py``, which writes it with
+``tools/migration-sdk`` the way an importer outside core would. These tests check
 that what the SDK writes is not only valid but loads as intended.
 
 Marked ``serial`` for the same reason as the other bundle imports: a load
@@ -25,7 +25,7 @@ from specivo.models.project import Project
 from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
 from specivo.models.wiki import WikiContent, WikiPage
-from tests.fixtures.import_sdk import LOG, write_sdk_bundle
+from tests.fixtures.migration_sdk import LOG, write_sdk_bundle
 
 pytestmark = [
     pytest.mark.asyncio(loop_scope="function"),

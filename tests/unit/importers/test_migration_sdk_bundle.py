@@ -1,6 +1,6 @@
-"""A bundle written with the import SDK passes core's validation, and the two validators agree.
+"""A bundle written with the migration SDK passes core's validation, and the two validators agree.
 
-The SDK (``tools/import-sdk``) is a separate project that reimplements the
+The SDK (``tools/migration-sdk``) is a separate project that reimplements the
 format for importers that do not link to core. These tests hold it to core's
 reading of the format: what the SDK writes core accepts, and on a bundle with a
 mistake both report the same problems.
@@ -17,9 +17,9 @@ import pytest
 
 from specivo.importers.bundle import BundleSourceAdapter
 from specivo.importers.bundle.report import ValidationReport
-from tests.fixtures import import_sdk as import_sdk_fixture
+from tests.fixtures import migration_sdk as migration_sdk_fixture
 from tests.fixtures.import_bundle import FULL, issue, manifest, project, stored, user, write_bundle
-from tests.fixtures.import_sdk import import_sdk, write_sdk_bundle
+from tests.fixtures.migration_sdk import migration_sdk, write_sdk_bundle
 
 pytestmark = pytest.mark.unit
 
@@ -59,7 +59,7 @@ class TestWhatTheSdkWrites:
 
 class TestTheValidatorsAgree:
     def test_on_the_full_example(self):
-        sdk = import_sdk()
+        sdk = migration_sdk()
         report = sdk.validate_bundle(FULL)
         assert report.ok, report.format_text()
         assert report.problems == []
@@ -107,20 +107,20 @@ class TestTheValidatorsAgree:
     )
     async def test_on_a_bundle_with_a_mistake(self, tmp_path, records):
         root = write_bundle(tmp_path / "b", **records)
-        sdk_report = import_sdk().validate_bundle(root)
+        sdk_report = migration_sdk().validate_bundle(root)
         core_report = await _core(root)
         assert _problems(sdk_report) == _problems(core_report)
         assert [p.message for p in sdk_report.problems] == [p.message for p in core_report.problems]
 
     async def test_on_a_bad_manifest_and_counts(self, tmp_path):
         root = write_bundle(tmp_path / "b", manifest_data=manifest(counts={"users": 2}), users=[user("u1")])
-        assert _problems(import_sdk().validate_bundle(root)) == _problems(await _core(root))
+        assert _problems(migration_sdk().validate_bundle(root)) == _problems(await _core(root))
 
     async def test_on_a_tampered_file(self, tmp_path):
         root = write_sdk_bundle(tmp_path / "bundle")
         stored = next((root / "files").iterdir())
         stored.write_bytes(b"tampered")
-        sdk_report = import_sdk().validate_bundle(root)
+        sdk_report = migration_sdk().validate_bundle(root)
         assert not sdk_report.ok
         assert _problems(sdk_report) == _problems(await _core(root))
 
@@ -128,7 +128,7 @@ class TestTheValidatorsAgree:
         root = write_sdk_bundle(tmp_path / "bundle")
         (root / "manifest.json").write_text(json.dumps({**json.loads((root / "manifest.json").read_text()), "x": 1}))
         archive = Path(shutil.make_archive(str(tmp_path / "bundle"), "zip", root))
-        sdk_report = import_sdk().validate_bundle(archive)
+        sdk_report = migration_sdk().validate_bundle(archive)
         assert not sdk_report.ok
         assert _problems(sdk_report) == _problems(await _core(archive))
 
@@ -165,7 +165,7 @@ class TestTheValidatorsAgreeOnASeparateFilesDirectory:
 
     @pytest.mark.parametrize("case", ["valid", "missing", "tampered", "symlink", "extra", "absent"])
     async def test_on_each_case(self, tmp_path, case):
-        sdk = import_sdk()
+        sdk = migration_sdk()
         bundle, files = self._case(tmp_path, case)
         sdk_report = sdk.validate_bundle(bundle, files_path=files)
         core_report = await BundleSourceAdapter(bundle, files_path=files).validate()
@@ -175,13 +175,13 @@ class TestTheValidatorsAgreeOnASeparateFilesDirectory:
 
 class TestTheSdkMustBeThere:
     def test_without_it_the_cross_check_skips(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(import_sdk_fixture, "SDK_SRC", tmp_path / "missing")
-        monkeypatch.delenv("SPECIVO_REQUIRE_SDK", raising=False)
+        monkeypatch.setattr(migration_sdk_fixture, "SDK_SRC", tmp_path / "missing")
+        monkeypatch.delenv("SPECIVO_REQUIRE_MIGRATION_SDK", raising=False)
         with pytest.raises(pytest.skip.Exception):
-            import_sdk_fixture.import_sdk()
+            migration_sdk_fixture.migration_sdk()
 
     def test_when_required_a_missing_sdk_fails(self, tmp_path, monkeypatch):
-        monkeypatch.setattr(import_sdk_fixture, "SDK_SRC", tmp_path / "missing")
-        monkeypatch.setenv("SPECIVO_REQUIRE_SDK", "1")
-        with pytest.raises(pytest.fail.Exception, match="SPECIVO_REQUIRE_SDK"):
-            import_sdk_fixture.import_sdk()
+        monkeypatch.setattr(migration_sdk_fixture, "SDK_SRC", tmp_path / "missing")
+        monkeypatch.setenv("SPECIVO_REQUIRE_MIGRATION_SDK", "1")
+        with pytest.raises(pytest.fail.Exception, match="SPECIVO_REQUIRE_MIGRATION_SDK"):
+            migration_sdk_fixture.migration_sdk()
