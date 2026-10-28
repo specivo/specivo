@@ -16,11 +16,14 @@ entries and the run deadlocks. ``make test-serial`` runs these.
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from specivo.importers.core.ir import EntityType
 from specivo.importers.core.pipeline import ImportPhase
+from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.project import Project
@@ -95,3 +98,42 @@ class TestResume:
             await db_session.execute(select(func.count()).select_from(User).where(User.is_service_account.is_(True)))
         ).scalar_one()
         assert count == 1
+
+    async def test_a_later_run_leaves_resolved_user_fields_alone(self, db_session, build_import):
+        """A user custom field resolved by one run is not resolved again by the next.
+
+        The first run rewrites the Redmine user id to a Specivo id. If a later
+        run rewrote it again, a Specivo id that is also some Redmine user's id
+        (common when both number their users alike) would turn into that user.
+        """
+        await build_import(merge_duplicate_statuses=True).run()
+        issue = (
+            await db_session.execute(select(Issue).where(Issue.subject == "Login fails after session timeout"))
+        ).scalar_one()
+        reviewer = issue.issue_metadata["reviewer"]
+        someone_else = (await db_session.execute(select(User.id).where(User.login == "fixture_thai"))).scalar_one()
+        # Let the resolved id also be a Redmine user's id, naming someone else.
+        await db_session.execute(
+            delete(ImportIdMapping).where(
+                ImportIdMapping.source_system == "redmine",
+                ImportIdMapping.entity_type == EntityType.USER,
+                ImportIdMapping.source_id == str(reviewer),
+            )
+        )
+        db_session.add(
+            ImportIdMapping(
+                import_run_id=uuid.uuid4(),
+                source_system="redmine",
+                source_instance="pytest-fixture",
+                entity_type=EntityType.USER,
+                source_id=str(reviewer),
+                target_table="users",
+                target_id=someone_else,
+            )
+        )
+        await db_session.flush()
+
+        await build_import(merge_duplicate_statuses=True).run()
+
+        await db_session.refresh(issue)
+        assert issue.issue_metadata["reviewer"] == reviewer
