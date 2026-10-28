@@ -98,6 +98,37 @@ Each phase commits as it finishes, so a resumed run keeps what landed and
 continues. Re-running an import that already finished is safe: everything is
 recognised and skipped.
 
+## Importing again later
+
+Specivo remembers which Redmine record became which Specivo row, under a key
+made of the source system (`redmine`) and the instance name: `--source-instance`
+if you gave one, otherwise the source database URL with its password masked
+(`postgresql://redmine:***@db.internal/redmine`). A later import under the same
+key adds only what is new and skips the rest.
+
+An import bundle written by a Redmine export tool is keyed the same way, by the
+system and instance its manifest names. So a bundle can carry on from a direct
+import, as long as both use the same instance name. If your earlier direct
+import ran without `--source-instance`, its key is the masked URL. Before you
+load the first bundle, move it to the name the bundle uses:
+
+```
+# the keys in this database, with what each holds
+docker compose exec api python -m specivo.cli.admin import-map list
+
+# check the move (a dry run: nothing changes without --yes)
+docker compose exec api python -m specivo.cli.admin import-map rename --system redmine \
+  --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com
+# then do it
+docker compose exec api python -m specivo.cli.admin import-map rename --system redmine \
+  --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com --yes
+```
+
+The move is one transaction. It is refused if the new key already holds rows.
+After it, `--dry-run` with the bundle should report that the source was imported
+before and that nothing new is created except records added in Redmine since.
+Records without an author still belong to the `redmine-import` account.
+
 ## Keeping people's passwords
 
 By default every imported account arrives without a usable password (see

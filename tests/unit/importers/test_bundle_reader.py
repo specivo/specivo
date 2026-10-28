@@ -68,12 +68,22 @@ class TestAValidBundle:
 
     async def test_the_identifier_map_is_scoped_by_the_manifests_source(self):
         adapter = BundleSourceAdapter(FULL)
+        # "bundle" names the source on the command line; the rows go under the
+        # system and instance the manifest names.
         assert adapter.source_system == "bundle"
-        assert adapter.source_instance == "sample:tracker.example.com"
+        assert adapter.id_map_system == "sample"
+        assert adapter.source_instance == "tracker.example.com"
         assert adapter.reference_style == REFERENCE_STYLE_PLACEHOLDERS
 
     def test_source_instance_can_be_overridden(self):
-        assert BundleSourceAdapter(FULL, source_instance="legacy").source_instance == "legacy"
+        adapter = BundleSourceAdapter(FULL, source_instance="legacy")
+        assert (adapter.id_map_system, adapter.source_instance) == ("sample", "legacy")
+
+    async def test_bundle_is_not_a_source_system_a_manifest_may_name(self, tmp_path):
+        root = write_bundle(tmp_path / "b", manifest_data=manifest(source={"system": "bundle", "instance": "x"}))
+        report = await _validate(root)
+        assert _codes(report) == [("manifest.json", None, "schema")]
+        assert "reserved" in report.errors[0].message
 
 
 class TestVersions:

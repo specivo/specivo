@@ -179,6 +179,15 @@ class BaseSourceAdapter:
         # different instance names; a single one can use the system name.
         self.source_instance = source_instance or self.source_system
 
+    @property
+    def id_map_system(self) -> str:
+        """The system the identifier map is keyed by: this source's own name.
+
+        A source that carries another system's data, as a bundle does,
+        overrides it with that system's name.
+        """
+        return self.source_system
+
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Add no options. Override to add the source's own."""
@@ -250,6 +259,16 @@ class BaseSourceAdapter:
         adapter that forgot this loses the file, not the import.
         """
         raise ValueError(f"The {self.source_system} source does not provide attachment files")
+
+
+def id_map_system(adapter: object) -> str:
+    """Return the system *adapter*'s rows go under in the identifier map.
+
+    Its ``id_map_system`` when it has one, else its ``source_system``: an
+    adapter written to the protocol alone need not know about the former.
+    """
+    system = getattr(adapter, "id_map_system", None)
+    return system if isinstance(system, str) and system else str(adapter.source_system)  # type: ignore[attr-defined]
 
 
 # ---------------------------------------------------------------------------

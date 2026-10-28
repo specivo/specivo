@@ -74,11 +74,12 @@ class BundleInvalidError(ValueError):
 class BundleSourceAdapter(BaseSourceAdapter):
     """Reads an import bundle: a directory, or a ``.zip`` of one.
 
-    The identifier map is kept under the ``bundle`` source, scoped by the
-    instance the manifest names (``<system>:<instance>``), so two bundles from
-    the same installation share one map — which is what lets a later bundle
-    add to an earlier import — while bundles from different systems never
-    collide.
+    ``bundle`` names the source on the command line only. The identifier map
+    is keyed by the system and instance the manifest names, as an import
+    straight from that system would be: two bundles from the same
+    installation share one map, which is what lets a later bundle add to an
+    earlier import, and a bundle from a Redmine tool finds what a direct
+    Redmine import under the same instance name already brought over.
     """
 
     source_system: ClassVar[str] = "bundle"
@@ -93,10 +94,17 @@ class BundleSourceAdapter(BaseSourceAdapter):
     ) -> None:
         self.path = Path(path)
         self.limits = limits or BundleLimits()
-        super().__init__(source_instance or _instance_from_manifest(self.path, self.limits))
+        system, instance = _source_from_manifest(self.path, self.limits)
+        self._id_map_system = system
+        super().__init__(source_instance or instance)
         self._container: BundleContainer | None = None
         self._index: BundleIndex | None = None
         self.report: ValidationReport | None = None
+
+    @property
+    def id_map_system(self) -> str:
+        """The system the manifest names, which the identifier map is keyed by."""
+        return self._id_map_system
 
     # ------------------------------------------------------------------
     # Command line
@@ -367,15 +375,16 @@ class BundleSourceAdapter(BaseSourceAdapter):
         return self.index.root / FILES_DIR / attachment.storage_key
 
 
-def _instance_from_manifest(path: Path, limits: BundleLimits) -> str:
-    """Return ``<system>:<instance>`` from the bundle's manifest, or ``bundle`` if it cannot be read.
+def _source_from_manifest(path: Path, limits: BundleLimits) -> tuple[str, str]:
+    """Return the manifest's ``(system, instance)``, or ``("bundle", "bundle")`` if it cannot be read.
 
     Read before the bundle is opened, because the run options are built from
-    the adapter before ``connect``. A manifest that cannot be read is
-    reported by validation; the fallback only has to get that far. Read
-    within the same size limit as the scan applies, from a zip too: the
-    archive has not been checked yet.
+    the adapter before ``connect``. A manifest that cannot be read, or names
+    a reserved system, is refused by validation before anything is written;
+    the fallback only has to get that far. Read within the same size limit as
+    the scan applies, from a zip too: the archive has not been checked yet.
     """
+    fallback = (BundleSourceAdapter.source_system, BundleSourceAdapter.source_system)
     try:
         if path.is_dir():
             with (path / MANIFEST).open("rb") as handle:
@@ -384,12 +393,17 @@ def _instance_from_manifest(path: Path, limits: BundleLimits) -> str:
             with ZipFile(path) as archive, archive.open(MANIFEST) as handle:
                 raw = handle.read(limits.max_json_bytes + 1)
         if len(raw) > limits.max_json_bytes:
-            return BundleSourceAdapter.source_system
+            return fallback
         source = loads(raw)["source"]
-        system, instance = str(source["system"]), source.get("instance")
+        system, instance = source["system"], source.get("instance")
     except (OSError, BadZipFile, KeyError, TypeError, ValueError, RuntimeError):
-        return BundleSourceAdapter.source_system
-    return (f"{system}:{instance}" if instance else system)[:255]
+        return fallback
+    if not isinstance(system, str) or not system:
+        return fallback
+    # The schema bounds both; cut to the columns all the same, since the scan
+    # that enforces it has not run yet.
+    system = system[:30]
+    return system, (str(instance) if instance else system)[:255]
 
 
 def _summarise(report: ValidationReport) -> str:

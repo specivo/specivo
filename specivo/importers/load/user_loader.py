@@ -106,13 +106,16 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
             ctx.state[IMPORT_ACCOUNT_STATE_KEY] = account.id
             return account
 
-    login = f"{ctx.adapter.source_system}-import"
+    # Named after the system the identifier map is keyed by, so a bundle from
+    # a Redmine tool reuses the account a direct Redmine import created.
+    system = ctx.id_map.source_system
+    login = f"{system}-import"
     existing = await _find_user_by_login(ctx.session, login)
     if existing is None:
         existing = User(
             login=login,
             email=f"{login}@{_PLACEHOLDER_EMAIL_DOMAIN}",
-            display_name=f"{ctx.adapter.source_system.title()} Import",
+            display_name=f"{system.replace('_', ' ').title()} Import",
             password_hash=_unusable_password(),
             status="active",
             is_admin=False,

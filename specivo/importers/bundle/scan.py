@@ -60,6 +60,7 @@ from specivo.importers.bundle.format import (
     PUBLIC_ACCESS,
     RECORD_FILES,
     RELATIONS,
+    RESERVED_SOURCE_SYSTEMS,
     SCHEMA_DIR,
     SHA256_RE,
     TIME_ENTRIES,
@@ -320,6 +321,15 @@ class _Scanner:
                     MANIFEST,
                     f"{data['exported_at']!r} is not a valid timestamp",
                     pointer="/exported_at",
+                )
+            system = data["source"]["system"]
+            if system in RESERVED_SOURCE_SYSTEMS:
+                self.report.error(
+                    ProblemCode.SCHEMA,
+                    MANIFEST,
+                    f"{system!r} is reserved and cannot be a bundle's source system; name the system the data comes "
+                    "from (e.g. redmine)",
+                    pointer="/source/system",
                 )
         return data
 

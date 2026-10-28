@@ -206,7 +206,7 @@ class TestBundleSource:
         assert cls is BundleSourceAdapter
         adapter = cls.from_args(args)
         assert adapter.path == FULL
-        assert build_options(args, adapter).source_instance == "sample:tracker.example.com"
+        assert build_options(args, adapter).source_instance == "tracker.example.com"
 
     def test_the_path_is_required(self, registry):
         with pytest.raises(SystemExit):

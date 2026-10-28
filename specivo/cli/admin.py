@@ -22,6 +22,12 @@ Usage::
     # Expire them now: each has to set a new password through recovery
     uv run python -m specivo.cli.admin legacy-passwords expire --yes
 
+    # Imports in the identifier map: one scope per source system and instance
+    uv run python -m specivo.cli.admin import-map list
+    # Move a scope to the key the next import will use (a dry run without --yes)
+    uv run python -m specivo.cli.admin import-map rename --system redmine \
+        --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com --yes
+
 The ``create`` subcommand is idempotent: existing admins are skipped,
 non-admin users are promoted.  When no CLI args are given it reads the
 bootstrap file and deletes it after success: ``/app/data/state/bootstrap.json``,
@@ -42,10 +48,11 @@ from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from specivo.core.config import get_settings
 from specivo.core.utils import utcnow
+from specivo.importers.core.id_map import IdMapScope, ScopeRenameError, list_scopes, rename_scope
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import RESERVED_LOGIN_PREFIX, is_reserved_login
 from specivo.services.auth_utils import hash_password, legacy_hashes_expired
@@ -389,9 +396,124 @@ async def _run_legacy_expire(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+def format_scopes(scopes: list[IdMapScope]) -> str:
+    """Return the ``import-map list`` table: one block per scope, its rows counted per entity type."""
+    if not scopes:
+        return "The identifier map is empty: nothing has been imported into this database."
+    lines: list[str] = []
+    for scope in scopes:
+        last = scope.last_imported_at.isoformat(timespec="seconds") if scope.last_imported_at else "unknown"
+        lines.append(f"{scope.source_system} @ {scope.source_instance}")
+        lines.append(f"  {scope.total} row(s) from {scope.runs} run(s), last written {last}")
+        width = max(len(name) for name in scope.counts)
+        lines.extend(f"  {name:<{width}}  {count}" for name, count in sorted(scope.counts.items()))
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
+
+def _session_factory() -> tuple[async_sessionmaker[AsyncSession], AsyncEngine]:
+    engine = create_async_engine(get_settings().database_url, echo=False)
+    return async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False), engine
+
+
+async def _run_import_map_list(args: argparse.Namespace) -> int:
+    factory, engine = _session_factory()
+    try:
+        async with factory() as session:
+            scopes = await list_scopes(session)
+    finally:
+        await engine.dispose()
+    print(format_scopes(scopes))
+    return 0
+
+
+def rename_targets(args: argparse.Namespace) -> tuple[str, str, str, str]:
+    """Return ``(from_system, from_instance, to_system, to_instance)`` from the ``import-map rename`` options.
+
+    ``--system`` gives both systems; ``--from-system``/``--to-system`` set one
+    side each. An instance left out stays as it is.
+    """
+    from_system = args.from_system or args.system
+    to_system = args.to_system or args.system or from_system
+    if not from_system:
+        raise ScopeRenameError("Give the scope's system with --system (or --from-system)")
+    if args.from_instance is None:
+        raise ScopeRenameError("Give the scope's current instance with --from")
+    to_instance = args.from_instance if args.to_instance is None else args.to_instance
+    return from_system, args.from_instance, to_system, to_instance
+
+
+async def _run_import_map_rename(args: argparse.Namespace) -> int:
+    try:
+        from_system, from_instance, to_system, to_instance = rename_targets(args)
+    except ScopeRenameError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    dry_run = args.dry_run or not args.yes
+    factory, engine = _session_factory()
+    try:
+        async with factory() as session:
+            try:
+                moved = await rename_scope(
+                    session,
+                    from_system=from_system,
+                    from_instance=from_instance,
+                    to_system=to_system,
+                    to_instance=to_instance,
+                    dry_run=dry_run,
+                )
+            except ScopeRenameError as exc:
+                await session.rollback()
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            await session.commit()
+    finally:
+        await engine.dispose()
+    move = f"{from_system} @ {from_instance} to {to_system} @ {to_instance}"
+    if dry_run:
+        print(f"{moved} row(s) would move from {move}. Nothing was changed; re-run with --yes to move them.")
+    else:
+        print(f"Moved {moved} row(s) from {move}.")
+    return 0
+
+
+def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    import_map = sub.add_parser(
+        "import-map",
+        help="Inspect and rename the scopes of the import identifier map",
+        description=(
+            "Every import records which source record became which Specivo row, under a scope: the source "
+            "system and instance. A later import with the same scope skips what is already there."
+        ),
+    )
+    import_map_sub = import_map.add_subparsers(dest="import_map_command", required=True)
+    import_map_sub.add_parser(
+        "list", help="List the scopes: system, instance, rows per entity type, runs and when the last one wrote"
+    )
+    rename = import_map_sub.add_parser(
+        "rename",
+        help="Move a scope to a new system and/or instance, so the next import under that key finds its rows",
+        description=(
+            "Move every row of one scope to another in one transaction. Use it when the next import will be keyed "
+            "differently from an earlier one: a direct Redmine import was keyed by its masked database URL, a "
+            "bundle by the instance its manifest names. Refused when the target scope already holds rows. "
+            "Without --yes it is a dry run: it checks and counts, and changes nothing."
+        ),
+    )
+    rename.add_argument("--system", help="The source system on both sides, e.g. redmine")
+    rename.add_argument("--from-system", help="The scope's current system, when it changes (e.g. bundle)")
+    rename.add_argument("--to-system", help="The new system, when it changes")
+    rename.add_argument(
+        "--from", "--from-instance", dest="from_instance", metavar="INSTANCE", help="The scope's current instance"
+    )
+    rename.add_argument(
+        "--to", "--to-instance", dest="to_instance", metavar="INSTANCE", help="The new instance (default: unchanged)"
+    )
+    rename.add_argument("--dry-run", action="store_true", help="Only check and count (the default without --yes)")
+    rename.add_argument("--yes", action="store_true", help="Actually move the rows")
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Specivo admin management")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -427,7 +549,14 @@ def main() -> None:
     legacy_expire.add_argument("--algorithm", help="Only expire hashes under this algorithm id")
     legacy_expire.add_argument("--yes", action="store_true", help="Actually do it (otherwise only count)")
 
-    args = parser.parse_args()
+    _add_import_map_commands(sub)
+    return parser
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    args = build_parser().parse_args()
 
     # Load plugins as the web app does, so plugin-provided hashers are listed.
     from specivo.core.plugin_manager import bootstrap
@@ -446,6 +575,9 @@ def main() -> None:
         if args.legacy_command == "expire":
             sys.exit(asyncio.run(_run_legacy_expire(args)))
         asyncio.run(_run_legacy_report(args))
+    elif args.command == "import-map":
+        runner = _run_import_map_rename if args.import_map_command == "rename" else _run_import_map_list
+        sys.exit(asyncio.run(runner(args)))
 
 
 if __name__ == "__main__":

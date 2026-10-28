@@ -338,11 +338,17 @@ class TestFullBundle:
         ]
         assert imported.notes["records_with_source_data_kept_only_in_the_bundle"] == ["issues: 1"]
 
-    async def test_the_identifier_map_is_scoped_by_the_bundles_source(self, db_session, imported):
+    async def test_bundle_rows_are_scoped_by_the_manifest_source(self, db_session, imported):
+        """Keyed as an import straight from that system would be, so the two can meet."""
         scopes = set(
             (await db_session.execute(select(ImportIdMapping.source_system, ImportIdMapping.source_instance))).all()
         )
-        assert scopes == {("bundle", "sample:tracker.example.com")}
+        assert scopes == {("sample", "tracker.example.com")}
+        assert (imported.source_system, imported.source_instance) == ("sample", "tracker.example.com")
+
+    async def test_the_import_account_is_named_after_the_manifests_system(self, db_session, imported):
+        accounts = set((await db_session.execute(select(User.login).where(User.login.like("%-import")))).scalars())
+        assert accounts == {"sample-import"}
 
 
 class TestAdministrators:
@@ -377,7 +383,7 @@ class TestRerun:
         assert second.skipped[EntityType.ISSUE] == 3
         (warning,) = second.warnings
         assert warning.message.startswith("This source was imported into this database before")
-        assert warning.context["source"] == "bundle:sample:tracker.example.com"
+        assert warning.context["source"] == "sample:tracker.example.com"
 
     async def test_rerunning_leaves_text_and_timestamps_as_they_were(self, db_session, build_bundle_import):
         await build_bundle_import(FULL).run()
