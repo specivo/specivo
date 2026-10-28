@@ -47,6 +47,7 @@ from specivo.importers.core.ir import (
     IRWikiPage,
     IRWikiRedirect,
 )
+from specivo.importers.core.links_file import default_links_path
 from specivo.importers.core.placeholders import REFERENCE_STYLE_PLACEHOLDERS
 from specivo.importers.core.source import BaseSourceAdapter
 
@@ -95,11 +96,14 @@ class BundleSourceAdapter(BaseSourceAdapter):
         source_instance: str | None = None,
         limits: BundleLimits | None = None,
         files_path: str | Path | None = None,
+        links_file: str | Path | None = None,
     ) -> None:
         self.path = Path(path)
         self.limits = limits or BundleLimits()
         # Stored files from a directory of their own instead of the bundle's files/.
         self.files_path = Path(files_path) if files_path is not None else None
+        # Where text waiting for a later bundle's records is kept (see links_path).
+        self.links_file = Path(links_file) if links_file is not None else None
         system, instance = _source_from_manifest(self.path, self.limits)
         self._id_map_system = system
         super().__init__(source_instance or instance)
@@ -111,6 +115,16 @@ class BundleSourceAdapter(BaseSourceAdapter):
     def id_map_system(self) -> str:
         """The system the manifest names, which the identifier map is keyed by."""
         return self._id_map_system
+
+    @property
+    def links_path(self) -> Path:
+        """The links file: ``--links-file``, or one named after the scope next to the bundle.
+
+        See :mod:`specivo.importers.load.pending_links`.
+        """
+        if self.links_file is not None:
+            return self.links_file
+        return default_links_path(self.path.absolute().parent, self.id_map_system, self.source_instance)
 
     # ------------------------------------------------------------------
     # Command line
@@ -131,6 +145,17 @@ class BundleSourceAdapter(BaseSourceAdapter):
                 "Read the stored attachment files (files/<sha256>) from this directory instead of the bundle's own "
                 "files/, which is then ignored. For large migrations: copy the files over on their own (rsync "
                 "resumes and skips what is there) and keep the bundle small. Works with a zip too."
+            ),
+        )
+        group.add_argument(
+            "--links-file",
+            metavar="PATH",
+            help=(
+                "The links file: a small SQLite file remembering text this import writes as plain text because it "
+                "names records not imported yet, so a later bundle of the same source can turn it into links. "
+                "Default: specivo-links.<system>.<instance>.sqlite next to the bundle. Give the same file to every "
+                "import of the source, on a mounted folder when imports run in Docker. A throwaway: delete it "
+                "after cut-over, and those references stay plain text."
             ),
         )
         limits = parser.add_argument_group(
@@ -204,11 +229,13 @@ class BundleSourceAdapter(BaseSourceAdapter):
             max_json_bytes=args.max_json_size,
         )
         files_path = getattr(args, "files_path", None)
+        links_file = getattr(args, "links_file", None)
         return cls(
             args.path,
             source_instance=args.source_instance,
             limits=limits,
             files_path=Path(files_path) if files_path else None,
+            links_file=Path(links_file) if links_file else None,
         )
 
     # ------------------------------------------------------------------

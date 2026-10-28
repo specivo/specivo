@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import zipfile
 from datetime import UTC, date, datetime
@@ -22,9 +23,13 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select
 
+from specivo.cli.import_data import parse_args, run_validation
 from specivo.importers.bundle import BundleInvalidError
 from specivo.importers.core.ir import EntityType
+from specivo.importers.core.links_file import LinksStore, PendingText, text_sha256
 from specivo.importers.core.pipeline import PhaseFailedError
+from specivo.importers.core.source import build_source_registry
+from specivo.importers.load.pending_links import resolve_links_file
 from specivo.models.attachment import Attachment
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
@@ -430,7 +435,7 @@ class TestRerun:
 
     async def test_a_placeholder_whose_record_is_not_imported_becomes_its_label(self, db_session, build_bundle_import):
         """Importing only the API project writes its references into the website as their labels,
-        as plain text; importing the website later leaves that text as it is."""
+        as plain text; importing the website later turns them into links."""
         first = await build_bundle_import(FULL, project="p-api").run()
         rate_limits = await _issue(db_session, "Rate limit headers are missing")
         stamped = rate_limits.updated_at
@@ -446,8 +451,14 @@ class TestRerun:
         await build_bundle_import(FULL, continue_import=True).run()
 
         await db_session.refresh(rate_limits)
-        assert rate_limits.description == expected
+        home = await _page(db_session, "Home")
+        assert rate_limits.description == (
+            "Found while fixing [the login bug](/issue/BUNDLEWEB-1/); "
+            f"background in [the runbook](/projects/BUNDLEWEB/wiki/{home.slug}/).\n\n"
+            "```\n{{issue:web-1}} stays as written in code\n```"
+        )
         assert rate_limits.updated_at == stamped
+        assert not build_bundle_import.links_path(FULL).exists()
 
     async def test_a_different_instance_is_a_different_import(self, db_session, build_bundle_import, tmp_path):
         """Same system, other installation: nothing is mistaken for already imported."""
@@ -549,6 +560,289 @@ class TestIssueReferencesAcrossBundles:
         assert added.description == "Follows web-1."
         (left,) = [w for w in second.warnings if w.message.startswith(PLACEHOLDERS_LEFT)]
         assert left.context["examples"] == "issue:web-1"
+
+
+# How the summary reports texts from earlier imports that this run linked, and those it left alone.
+LINKED_NOTE = "Text from earlier imports now linked"
+EDITED_TEXT = "Texts edited since an earlier import were left as they are"
+LINKS_UNREADABLE = "The links file could not be read"
+LINKS_UNWRITABLE = "The links file cannot be written"
+
+
+def _pending(path: Path) -> LinksStore:
+    """The links file at *path*, read-only."""
+    return LinksStore.open(path, "sample", "tracker.example.com", writable=False)
+
+
+class TestLinksFile:
+    """Per-project exports in any order: text written as plain text is linked once its records arrive."""
+
+    def _b(
+        self,
+        root: Path,
+        description: str = "Follows {{issue:web-1|the login bug}}.",
+        *,
+        instance: str = "tracker.example.com",
+        journals: list | None = None,
+        wiki_pages: list | None = None,
+    ) -> Path:
+        records: dict = {
+            "projects": [project("p-b", identifier="bundleb", modules=["issue_tracking", "wiki"])],
+            "issues": [issue("b-1", "p-b", description=description, updated_at="2024-03-02T08:00:00Z")],
+        }
+        if journals:
+            records["journals"] = journals
+        if wiki_pages:
+            records["wiki_pages"] = wiki_pages
+        return write_bundle(root, manifest_data=manifest(source={"system": "sample", "instance": instance}), **records)
+
+    async def test_a_later_import_links_what_an_earlier_one_wrote_as_text(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        b = self._b(tmp_path / "b")
+        await build_bundle_import(b).run()
+        later = await _issue(db_session, "Issue b-1")
+        assert later.description == "Follows the login bug."
+        links = build_bundle_import.links_path(b)
+        store = _pending(links)
+        assert store.get("issue", later.id, "description").refs == (("issue", "web-1"),)
+        store.commit()
+
+        second = await build_bundle_import(FULL, continue_import=True).run()
+
+        await db_session.refresh(later)
+        assert later.description == "Follows [the login bug](/issue/BUNDLEWEB-1/)."
+        assert later.updated_at == datetime(2024, 3, 2, 8, 0, tzinfo=UTC)
+        # The description recorded when the issue was created is linked as well.
+        history = (
+            await db_session.execute(
+                select(JournalDetail.new_value)
+                .join(Journal, Journal.id == JournalDetail.journal_id)
+                .where(Journal.issue_id == later.id, JournalDetail.prop_key == "description")
+            )
+        ).scalar_one()
+        assert history == later.description
+        (linked,) = second.notes[LINKED_NOTE]
+        assert linked.startswith("2 text(s), e.g. ")
+        assert f"issue {later.id}" in linked
+        assert not links.exists()
+
+    async def test_an_edited_text_is_left_alone_and_reported(self, db_session, build_bundle_import, tmp_path):
+        b = self._b(tmp_path / "b")
+        await build_bundle_import(b).run()
+        later = await _issue(db_session, "Issue b-1")
+        later.description = "Rewritten by hand."
+        await db_session.commit()
+
+        second = await build_bundle_import(FULL, continue_import=True).run()
+
+        await db_session.refresh(later)
+        assert later.description == "Rewritten by hand."
+        (edited,) = [w for w in second.warnings if w.message.startswith(EDITED_TEXT)]
+        assert edited.context == {"count": 1, "examples": f"issue {later.id}"}
+        # The edited text is forgotten; the history entry, not edited, was linked, so nothing is left.
+        assert not build_bundle_import.links_path(b).exists()
+
+    async def test_only_the_references_that_resolve_are_linked(self, db_session, build_bundle_import, tmp_path):
+        b = self._b(tmp_path / "b", "{{issue:web-1}} and {{issue:gone-9}}")
+        await build_bundle_import(b).run()
+
+        await build_bundle_import(FULL, continue_import=True).run()
+
+        later = await _issue(db_session, "Issue b-1")
+        assert later.description == "BUNDLEWEB-1 and gone-9"
+        store = _pending(build_bundle_import.links_path(b))
+        waiting = store.get("issue", later.id, "description")
+        assert waiting.refs == (("issue", "gone-9"),)
+        assert waiting.written_sha256 == text_sha256(later.description)
+        assert waiting.source_text == "{{issue:web-1}} and {{issue:gone-9}}"
+        store.commit()
+
+    async def test_a_reference_in_another_scope_does_not_resolve(self, db_session, build_bundle_import, tmp_path):
+        b = self._b(tmp_path / "b", instance="other.example.com")
+        await build_bundle_import(b).run()
+        other_links = build_bundle_import.links_path(b, instance="other.example.com")
+        before = other_links.read_bytes()
+
+        await build_bundle_import(FULL).run()
+
+        later = await _issue(db_session, "Issue b-1")
+        assert later.description == "Follows the login bug."
+        assert other_links.read_bytes() == before
+        assert not build_bundle_import.links_path(FULL).exists()
+
+    async def test_wiki_versions_and_journal_notes_are_linked_too(self, db_session, build_bundle_import, tmp_path):
+        b = self._b(
+            tmp_path / "b",
+            "No references here.",
+            journals=[{"source_ref": "bj-1", "issue_ref": "b-1", "notes": "Duplicate of {{issue:web-1}}."}],
+            wiki_pages=[
+                {
+                    "source_ref": "bw-1",
+                    "project_ref": "p-b",
+                    "title": "Notes",
+                    "versions": [
+                        {"source_ref": "bwv-1", "version": 1, "text": "Draft, see {{issue:web-1}}."},
+                        {"source_ref": "bwv-2", "version": 2, "text": "Fixed by {{issue:web-1|the login fix}}."},
+                    ],
+                }
+            ],
+        )
+        await build_bundle_import(b).run()
+        note = (await db_session.execute(select(Journal).where(Journal.notes.contains("Duplicate")))).scalar_one()
+        assert note.notes == "Duplicate of web-1."
+        note_stamp = note.updated_at
+        page = await _page(db_session, "Notes")
+        versions = (
+            (
+                await db_session.execute(
+                    select(WikiContent).where(WikiContent.page_id == page.id).order_by(WikiContent.version)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert [v.text for v in versions] == ["Draft, see web-1.", "Fixed by the login fix."]
+        stamps = [v.updated_at for v in versions]
+
+        await build_bundle_import(FULL, continue_import=True).run()
+
+        await db_session.refresh(note)
+        assert note.notes == "Duplicate of BUNDLEWEB-1."
+        assert note.updated_at == note_stamp
+        for version in versions:
+            await db_session.refresh(version)
+        assert [v.text for v in versions] == [
+            "Draft, see BUNDLEWEB-1.",
+            "Fixed by [the login fix](/issue/BUNDLEWEB-1/).",
+        ]
+        assert [v.updated_at for v in versions] == stamps
+        assert not build_bundle_import.links_path(b).exists()
+
+    async def test_a_dry_run_reports_what_would_be_linked_and_writes_nothing(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        b = self._b(tmp_path / "b")
+        await build_bundle_import(b).run()
+        links = build_bundle_import.links_path(b)
+        before = links.read_bytes()
+
+        rehearsal = await build_bundle_import(FULL, continue_import=True, dry_run=True).run()
+
+        assert rehearsal.notes[LINKED_NOTE][0].startswith("2 text(s)")
+        await db_session.rollback()
+        later = await _issue(db_session, "Issue b-1")
+        assert later.description == "Follows the login bug."
+        assert links.read_bytes() == before
+
+    async def test_a_corrupt_file_is_reported_and_the_import_goes_on(self, db_session, build_bundle_import, tmp_path):
+        b = self._b(tmp_path / "b")
+        links = build_bundle_import.links_path(b)
+        links.write_bytes(b"not a database " * 100)
+
+        summary = await build_bundle_import(b).run()
+
+        (unreadable,) = [w for w in summary.warnings if w.message.startswith(LINKS_UNREADABLE)]
+        assert unreadable.context["path"] == str(links)
+        assert (await _issue(db_session, "Issue b-1")).description == "Follows the login bug."
+        assert links.read_bytes() == b"not a database " * 100
+
+    async def test_a_file_of_another_scope_is_refused(self, db_session, build_bundle_import, tmp_path):
+        foreign = tmp_path / "foreign.sqlite"
+        store = LinksStore.open(foreign, "sample", "other.example.com", writable=True)
+        store.put(PendingText("issue", 1, "description", "{{issue:x}}", text_sha256("x"), (("issue", "x"),)))
+        store.commit()
+
+        with pytest.raises(PhaseFailedError, match=r"belongs to the import of sample @ other\.example\.com"):
+            await build_bundle_import(self._b(tmp_path / "b"), links_file=foreign).run()
+
+        await db_session.rollback()
+        assert await _count(db_session, Issue) == 0
+
+    @pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root ignores permissions")
+    async def test_a_read_only_location_is_reported_and_the_import_succeeds(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        folder = tmp_path / "read-only"
+        folder.mkdir()
+        folder.chmod(0o555)
+        try:
+            summary = await build_bundle_import(self._b(tmp_path / "b"), links_file=folder / "links.sqlite").run()
+        finally:
+            folder.chmod(0o755)
+
+        (unwritable,) = [w for w in summary.warnings if w.message.startswith(LINKS_UNWRITABLE)]
+        assert "--links-file" in unwritable.message
+        assert (await _issue(db_session, "Issue b-1")).description == "Follows the login bug."
+        assert list(folder.iterdir()) == []
+
+    async def test_a_failure_before_the_commit_leaves_the_file_as_it_was(
+        self, db_session, build_bundle_import, tmp_path, monkeypatch
+    ):
+        b = self._b(tmp_path / "b")
+        await build_bundle_import(b).run()
+        links = build_bundle_import.links_path(b)
+        before = links.read_bytes()
+
+        async def broken(ctx):
+            raise RuntimeError("link graph failed")
+
+        monkeypatch.setattr("specivo.importers.load.registry.rebuild_wiki_link_graph", broken)
+        with pytest.raises(RuntimeError, match="link graph failed"):
+            await build_bundle_import(FULL, continue_import=True).run()
+
+        assert links.read_bytes() == before
+        assert not links.with_name(links.name + "-journal").exists()
+
+    async def test_validate_ignores_the_links_file(self, build_bundle_import, tmp_path):
+        b = self._b(tmp_path / "b")
+        links = build_bundle_import.links_path(b)
+        links.write_bytes(b"garbage")
+        args, adapter_cls = parse_args(["--source", "bundle", "--path", str(b), "--validate"], build_source_registry())
+        assert await run_validation(args, adapter_cls.from_args(args)) == 0
+        assert links.read_bytes() == b"garbage"
+
+
+class TestResolvePendingCommand:
+    """``admin import-map resolve-pending``: the resolve step on demand, against a links file."""
+
+    async def _waiting(self, db_session, build_bundle_import, tmp_path) -> Path:
+        """B loaded first, then A loaded with a links file of its own, so B's file still waits."""
+        b = TestLinksFile()._b(tmp_path / "b")
+        await build_bundle_import(b).run()
+        await build_bundle_import(FULL, continue_import=True, links_file=tmp_path / "a-links.sqlite").run()
+        return build_bundle_import.links_path(b)
+
+    async def test_nothing_waiting_is_a_no_op(self, db_session, tmp_path):
+        outcome = await resolve_links_file(db_session, tmp_path / "missing.sqlite", dry_run=False)
+        assert outcome.scope is None
+        assert (outcome.linked, outcome.edited, outcome.waiting) == ([], [], 0)
+        assert not (tmp_path / "missing.sqlite").exists()
+
+    async def test_a_dry_run_reports_without_writing(self, db_session, build_bundle_import, tmp_path):
+        links = await self._waiting(db_session, build_bundle_import, tmp_path)
+        before = links.read_bytes()
+        later = await _issue(db_session, "Issue b-1")
+
+        outcome = await resolve_links_file(db_session, links, dry_run=True)
+
+        assert outcome.scope == ("sample", "tracker.example.com")
+        assert len(outcome.linked) == 2
+        assert outcome.waiting == 0
+        await db_session.refresh(later)
+        assert later.description == "Follows the login bug."
+        assert links.read_bytes() == before
+
+    async def test_with_yes_it_links_and_removes_the_emptied_file(self, db_session, build_bundle_import, tmp_path):
+        links = await self._waiting(db_session, build_bundle_import, tmp_path)
+
+        outcome = await resolve_links_file(db_session, links, dry_run=False)
+
+        later = await _issue(db_session, "Issue b-1")
+        assert later.description == "Follows [the login bug](/issue/BUNDLEWEB-1/)."
+        assert later.updated_at == datetime(2024, 3, 2, 8, 0, tzinfo=UTC)
+        assert ("issue", later.id) in outcome.linked
+        assert not links.exists()
 
 
 def _data_only_zip(source: Path, target: Path) -> Path:

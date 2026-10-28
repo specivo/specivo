@@ -31,7 +31,10 @@ guessed, and anything that could not be carried across.
 
 Running inside the container means the source has to be reachable from there:
 its database over the network, its files or export mounted in. A read-only
-mount is enough; nothing here writes to the source.
+mount is enough; nothing here writes to the source. A bundle import does keep
+a small links file next to the bundle (``--links-file`` moves it), for text a
+later bundle of the same source can link; without a writable place for it the
+import still runs, and says what it cannot do.
 """
 
 from __future__ import annotations
