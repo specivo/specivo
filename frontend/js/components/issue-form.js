@@ -100,6 +100,31 @@ export function issueForm(initial) {
                 return null;
             },
 
+            /* Upload the chosen files to issue *issueId*, recorded in one history
+               entry: *journalId* (the edit they came with) or the first file's. */
+            async _uploadFiles(issueId, journalId) {
+                var uploadJournalId = journalId || null;
+                for (var i = 0; i < this.files.length; i++) {
+                    var formData = new FormData();
+                    formData.append('file', this.files[i]);
+                    formData.append('container_type', 'Issue');
+                    formData.append('container_id', issueId);
+                    if (uploadJournalId) {
+                        formData.append('journal_id', uploadJournalId);
+                    }
+                    try {
+                        var upRes = await spFetch('/api/v1/attachments/', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        if (upRes.ok) {
+                            var upData = await upRes.json();
+                            if (upData.journal_id) uploadJournalId = upData.journal_id;
+                        }
+                    } catch (_e) { /* best-effort */ }
+                }
+            },
+
             async submitForm(continueCreating) {
                 this.submitting = true;
                 var metadataVal = this._getMetadataFromRenderer();
@@ -135,6 +160,9 @@ export function issueForm(initial) {
                             body: JSON.stringify(payload)
                         });
                         if (res.ok) {
+                            /* Files chosen in the form are recorded with the edit */
+                            var updated = await res.json();
+                            await this._uploadFiles(updated.id, updated.journal_id);
                             try {
                                 await spFetch('/api/v1/issues/' + this.displayKey + '/tags/', {
                                     method: 'PUT',
@@ -156,19 +184,8 @@ export function issueForm(initial) {
                             return;
                         }
 
-                        /* Upload attachments */
-                        for (var i = 0; i < this.files.length; i++) {
-                            var formData = new FormData();
-                            formData.append('file', this.files[i]);
-                            formData.append('container_type', 'Issue');
-                            formData.append('container_id', data.id);
-                            try {
-                                await spFetch('/api/v1/attachments/', {
-                                    method: 'POST',
-                                    body: formData
-                                });
-                            } catch (_e) { /* best-effort */ }
-                        }
+                        /* Upload attachments, recorded in one history entry */
+                        await this._uploadFiles(data.id, null);
 
                         /* Apply pending tags */
                         if (tagNames.length) {

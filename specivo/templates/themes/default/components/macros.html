@@ -189,3 +189,21 @@
   {% endif %}
 </div>
 {% endmacro %}
+
+{# --- Version sort options ---
+   The <option>s of a version-list sort select (roadmap, project versions).
+   Values match version_service.VERSION_SORT_OPTIONS.
+   Usage: <select ...>{{ version_sort_options(version_sort) }}</select>
+#}
+{% macro version_sort_options(current) %}
+{% for value, label in [
+  ("due:asc", _("Due date (soonest first)")),
+  ("due:desc", _("Due date (latest first)")),
+  ("version:asc", _("Version number (lowest first)")),
+  ("version:desc", _("Version number (highest first)")),
+  ("status:asc", _("Status (open first)")),
+  ("status:desc", _("Status (closed first)")),
+] %}
+<option value="{{ value }}"{{ ' selected' if value == current else '' }}>{{ label }}</option>
+{% endfor %}
+{% endmacro %}

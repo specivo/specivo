@@ -9,8 +9,9 @@ root, and neither is required to start — sensible defaults apply until you ove
 
 ## `.env` vs `.env.local`
 
-- **`.env`** holds non-secret settings: ports, the image version, the data directory, registration
-  mode. It is safe to commit to your own infrastructure repo.
+- **`.env`** holds settings: ports, the image version, the data directory, registration mode. The
+  one `configure.py` writes also holds the database URL and password, so treat a generated `.env`
+  as a secret too.
 - **`.env.local`** holds secrets — most importantly `SECRET_KEY`. Keep it out of version control.
 
 Start from the example file:
@@ -24,6 +25,14 @@ Or let the helper generate both files (including a strong `SECRET_KEY`):
 ```bash
 make configure          # or: python scripts/configure.py
 ```
+
+!!! note "Run `configure.py` and Docker Compose as the same user"
+    `configure.py` creates `.env` and `.env.local` readable and writable by their owner only
+    (mode `0600`): `.env` gets the database password and `.env.local` the `SECRET_KEY`. Docker
+    Compose reads both files as the user who runs it, so run `configure.py` and `docker compose`
+    (or `make up`) as the same user, or both with `sudo`. If you created the files as one user and
+    start the stack as another, `docker compose` cannot read them; change their owner with
+    `sudo chown <user> .env .env.local` rather than widening the mode.
 
 After changing either file, apply it with:
 
@@ -219,15 +228,16 @@ The other SSO variables are listed in [Single sign-on](single-sign-on/index.md#s
 ## Imported passwords
 
 These settings matter only if you import accounts from another system and let
-them keep their passwords. See [Migrating from Redmine](migrating-from-redmine.md#keeping-peoples-passwords)
-and [Writing a password hasher plugin](password-hasher-plugins.md).
+them keep their passwords. A bundle can carry the old password hashes (see
+[Importing from another tracker](importing.md)). See also
+[Writing a password hasher plugin](password-hasher-plugins.md).
 
 | Variable | Purpose / default |
 |---|---|
 | `LEGACY_PASSWORD_ALGORITHMS` | Imported password formats allowed to sign in, e.g. `["redmine_sha1"]`. Default `[]`: none. |
 | `LEGACY_PASSWORD_HASHES_EXPIRE_AT` | After this moment no imported password works and those people use password recovery, e.g. `2027-03-31T00:00:00Z`. Default unset. |
 | `PASSWORD_HASHERS` | Extra hasher classes by dotted path, e.g. `["acme_hashers.AcmeTrackerMd5"]`. |
-| `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers and [import sources](import-source-plugins.md). |
+| `INSTALLED_PLUGINS` | Plugins by dotted path; a plugin can provide password hashers. |
 
 ## Semantic search model
 

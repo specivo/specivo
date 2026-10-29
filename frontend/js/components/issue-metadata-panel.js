@@ -36,7 +36,9 @@ export function issueMetadataPanel(initial) {
                     } else {
                         placeholder = prop.description || '';
                     }
-                    var label = key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+                    // The field's name is its schema's title; without one, the key reads as a name.
+                    var title = typeof prop.title === 'string' ? prop.title.trim() : '';
+                    var label = title || key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
                     fields.push({ key: key, label: label, inputType: inputType, typeLabel: typeLabel, options: options, placeholder: placeholder, min: min, max: max });
 
                     // Initialize metadata value if not set
@@ -55,6 +57,9 @@ export function issueMetadataPanel(initial) {
             return { fields: fields, schemaNames: unique };
         }
 
+        // {key: {id: name}}: the people and versions user and version fields hold, named
+        // for this reader by the server; an id without a name is shown as stored.
+        var valueNames = initial.names || {};
         var metadataObj = JSON.parse(JSON.stringify(initial.metadata || {}));
         var resolved = resolveFieldsFromSchemas(initial.schemas || [], metadataObj);
 
@@ -88,6 +93,12 @@ export function issueMetadataPanel(initial) {
                     .replace('%(total)s', this.totalCount);
             },
 
+            valueText(key, value) {
+                var names = valueNames[key] || {};
+                var name = names[String(value)];
+                return name !== undefined ? name : String(value);
+            },
+
             metadataSearchUrl(slug, value, isArray) {
                 return '/search/?scope=issues&mf=' + encodeURIComponent(slug) +
                     '&mv=' + encodeURIComponent(value) + '&ma=' + (isArray ? '1' : '0');
@@ -106,7 +117,7 @@ export function issueMetadataPanel(initial) {
                         // Each array element renders as its own clickable tag-link.
                         cls = 'sp-ms-tag';
                         for (var j = 0; j < v.length; j++) {
-                            values.push({ text: String(v[j]), href: this.metadataSearchUrl(f.key, v[j], true) });
+                            values.push({ text: this.valueText(f.key, v[j]), href: this.metadataSearchUrl(f.key, v[j], true) });
                         }
                     } else if (typeof v === 'boolean') {
                         values.push({ text: v ? i18n.yes : i18n.no, href: null });
@@ -114,7 +125,7 @@ export function issueMetadataPanel(initial) {
                         cls = 'sp-ms-enum';
                         values.push({ text: String(v), href: this.metadataSearchUrl(f.key, v, false) });
                     } else {
-                        values.push({ text: String(v), href: this.metadataSearchUrl(f.key, v, false) });
+                        values.push({ text: this.valueText(f.key, v), href: this.metadataSearchUrl(f.key, v, false) });
                     }
                     chips.push({ key: f.key, label: f.label, values: values, chipClass: cls });
                 }

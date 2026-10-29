@@ -6904,3 +6904,84 @@ msgstr "通过单点登录登录的账户已关闭 API 密钥。在此期间，�
 #, python-format
 msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
 msgstr "您通过身份提供商（%(providers)s）登录。此账户没有密码，因此这里没有可更改的内容。请在您的身份提供商处管理密码。"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (soonest first)"
+msgstr "截止日期（最近的在前）"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (latest first)"
+msgstr "截止日期（最晚的在前）"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (lowest first)"
+msgstr "版本号（从低到高）"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (highest first)"
+msgstr "版本号（从高到低）"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (open first)"
+msgstr "状态（未关闭的在前）"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (closed first)"
+msgstr "状态（已关闭的在前）"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#: specivo/templates/themes/default/pages/projects/settings.html
+msgid "Sort versions"
+msgstr "版本排序"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Hide completed versions (%(count)s)"
+msgstr "隐藏已完成的版本（%(count)s）"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Show completed versions (%(count)s)"
+msgstr "显示已完成的版本（%(count)s）"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "No open versions. All versions of this project are completed."
+msgstr "没有未关闭的版本。此项目的所有版本均已完成。"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "Completed versions"
+msgstr "已完成的版本"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr "已添加文件 %(name)s"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr "已删除文件 %(name)s"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr "已添加文件"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr "已删除文件"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "未找到代理会话"
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr "该历史记录不属于此工作项。"
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to add files here."
+msgstr "你没有在此添加文件的权限。"
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr "你没有修改此文件的权限。"

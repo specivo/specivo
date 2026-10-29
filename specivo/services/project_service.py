@@ -25,8 +25,14 @@ from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
 from specivo.services.anonymous_user_service import refuse_anonymous_user
+from specivo.services.api_key_scope import is_global_admin, project_in_scope, scope_clause
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
-from specivo.services.permission_service import anonymous_role, member_principal_clause
+from specivo.services.permission_service import (
+    Permission,
+    anonymous_role,
+    member_principal_clause,
+    projects_granting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +151,9 @@ class ProjectService:
     async def _get_by_key(self, session: AsyncSession, key: str) -> Project | None:
         """Look up a project by key, falling back to retired key aliases.
 
-        Uses a single query with LEFT JOIN to avoid two round-trips.
+        Uses a single query with LEFT JOIN to avoid two round-trips. A
+        project outside the authenticating API key's project limit is not
+        found (``specivo.services.api_key_scope``).
         """
         upper_key = key.upper()
         stmt = (
@@ -155,7 +163,10 @@ class ProjectService:
             .limit(1)
         )
         result = await session.execute(stmt)
-        return result.scalar_one_or_none()
+        project = result.scalar_one_or_none()
+        if project is not None and not project_in_scope(project.id):
+            return None
+        return project
 
     # -----------------------------------------------------------------------
     # Core CRUD
@@ -273,7 +284,12 @@ class ProjectService:
 
         Reaching a project grants nothing by itself: what can be read there is
         decided by ``check_permission`` and issue visibility.
+
+        A project outside the authenticating API key's project limit is not
+        found, for admins too.
         """
+        if not project_in_scope(project.id):
+            raise NotFoundError(f"Project '{project.key}' not found")
         if user.is_admin:
             return
         if user.is_anonymous:
@@ -353,8 +369,17 @@ class ProjectService:
         public, active projects opted in to anonymous reading, and nothing
         while the instance switch is off. Signed-in users match public
         projects and projects they hold a membership on, directly or through
-        a user group.
+        a user group. Everyone is narrowed to the authenticating API key's
+        project limit (``specivo.services.api_key_scope``).
         """
+        clause = await self._accessible_projects_clause(session, user)
+        limit = scope_clause(Project.id)
+        if limit is None:
+            return clause
+        return limit if clause is None else and_(clause, limit)
+
+    async def _accessible_projects_clause(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """``accessible_projects_clause`` before the API key project limit is applied."""
         if user.is_admin:
             return None
         if user.is_anonymous:
@@ -375,7 +400,7 @@ class ProjectService:
 
     async def list_all_admin(self, session: AsyncSession, user: User) -> list[Project]:
         """List all projects (including archived). Admin use only."""
-        if not user.is_admin:
+        if not is_global_admin(user):
             raise AppError(code="forbidden", message="Admin access required", status_code=403)
         stmt = select(Project).order_by(Project.status, Project.name)
         return list((await session.execute(stmt)).scalars().all())
@@ -942,14 +967,18 @@ class ProjectService:
         self,
         session: AsyncSession,
         project_ids: list[int],
+        *,
+        reader: User,
     ) -> dict:
-        """Batch-load stats for a set of project IDs.
+        """Batch-load stats for a set of project IDs, as seen by *reader*.
 
         Returns a dict keyed by project_id with:
-        - open_count, closed_count (issue stats)
+        - open_count, closed_count (issue stats) — only the issues *reader*
+          may see (``IssueService.visible_issues_clause``)
         - member_count — distinct **people** with access, direct or via a group
         - group_count — how many of the memberships are held by a group
-        - wiki_page_count
+        - wiki_page_count — 0 where *reader* may not read the wiki (``view_wiki``);
+          pages in the trash are not counted
         - modules (dict of module_name -> bool)
         - members (list of dicts with user_id, display_name, avatar_url)
 
@@ -988,6 +1017,11 @@ class ProjectService:
             .where(Issue.project_id.in_(project_ids))
             .group_by(Issue.project_id)
         )
+        from specivo.services.issue_service import IssueService
+
+        visibility = await IssueService().visible_issues_clause(session, reader)
+        if visibility is not None:
+            issue_stmt = issue_stmt.where(visibility)
         issue_rows = (await session.execute(issue_stmt)).all()
         for row in issue_rows:
             done = row.done_count or 0
@@ -1058,11 +1092,13 @@ class ProjectService:
         for group_row in (await session.execute(group_stmt)).all():
             stats[group_row.project_id]["group_count"] = group_row.group_count
 
-        # --- Wiki page counts ---
+        # --- Wiki page counts, where *reader* may read the wiki ---
+        listed = (await session.execute(select(Project).where(Project.id.in_(project_ids)))).scalars().all()
+        wiki_readable = await projects_granting(session, reader, listed, Permission.VIEW_WIKI)
         wiki_stmt = (
             select(Wiki.project_id, func.count(WikiPage.id).label("page_count"))
             .join(WikiPage, Wiki.id == WikiPage.wiki_id)
-            .where(Wiki.project_id.in_(project_ids))
+            .where(Wiki.project_id.in_(sorted(wiki_readable)), WikiPage.deleted_at.is_(None))
             .group_by(Wiki.project_id)
         )
         wiki_rows = (await session.execute(wiki_stmt)).all()

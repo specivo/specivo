@@ -16,7 +16,6 @@ __pycache__
 .pytest_cache
 .ruff_cache
 .claude
-.redmine-fixture
 nginx/
 scripts/configure.py
 # Frontend: dependencies are installed and bundles built inside the image

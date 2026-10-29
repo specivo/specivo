@@ -6,12 +6,11 @@ from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
-from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.services.activity_lookups import activity_lookup_maps
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
@@ -143,27 +142,18 @@ async def issue_activity_partial(
         for jid, groups in reactions_by_journal_raw.items()
     }
 
-    # Build lookup maps for human-readable activity details
-    statuses = (await db.execute(select(IssueStatus).order_by(IssueStatus.position))).scalars().all()
-    trackers = (await db.execute(select(Tracker).order_by(Tracker.position))).scalars().all()
-    priorities = (
-        (await db.execute(select(IssuePriority).where(IssuePriority.active.is_(True)).order_by(IssuePriority.position)))
-        .scalars()
-        .all()
-    )
-
     # Resolve project for member list
     project = await _project_svc.get_by_key(db, issue.project_key)
     members = await _project_svc.list_members(db, project)
 
-    lookup_maps: dict[str, dict[str, str]] = {
-        "status_id": {str(s.id): s.name for s in statuses},
-        "tracker_id": {str(t.id): t.name for t in trackers},
-        "priority_id": {str(p.id): p.name for p in priorities},
-        "assigned_to_id": {
-            str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members
-        },
-    }
+    # Names for the ids the field changes hold, as the issue page builds them.
+    lookup_maps = await activity_lookup_maps(
+        db,
+        user,
+        all_journals,
+        members=members,
+        sprint_id=issue.sprint_id,
+    )
 
     templates = get_templates()
     return templates.TemplateResponse(

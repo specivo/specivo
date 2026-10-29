@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/public_access.schema.json",
+  "title": "Import bundle v1: public_access.json",
+  "description": "What people without a membership could read in the source, already in Specivo's terms.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [],
+  "properties": {
+    "anonymous_allowed": {
+      "type": "boolean",
+      "description": "Whether the source served visitors without an account at all."
+    },
+    "anonymous_source_setting": {
+      "type": "string",
+      "description": "The source setting that decided it, for the report."
+    },
+    "anonymous_permissions": {
+      "type": "object",
+      "description": "Project ref to what a visitor could read there.",
+      "propertyNames": {
+        "$ref": "common.schema.json#/$defs/sourceRef"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "view_issues",
+            "view_wiki"
+          ]
+        }
+      }
+    },
+    "non_member_source_name": {
+      "type": "string",
+      "description": "The source's name for its signed-in non-member role."
+    },
+    "non_member_permissions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "What that role grants on a public project, in Specivo's permission names."
+    },
+    "not_carried_over": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Source permissions with no place in Specivo, one line each."
+    }
+  }
+}

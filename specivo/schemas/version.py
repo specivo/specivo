@@ -10,6 +10,9 @@ from pydantic import BaseModel, Field
 _STATUS = Literal["open", "locked", "closed"]
 _SHARING = Literal["none", "descendants", "hierarchy", "tree", "system"]
 
+#: Version list sort, ``"<field>:<direction>"``; see ``version_service.order_versions``.
+VersionSort = Literal["version:asc", "version:desc", "due:asc", "due:desc", "status:asc", "status:desc"]
+
 
 class VersionCreate(BaseModel):
     name: str = Field(min_length=1, max_length=255)

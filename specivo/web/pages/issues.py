@@ -14,6 +14,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
+from specivo.services.activity_lookups import activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
 from specivo.services.issue_service import IssueService
@@ -24,6 +25,7 @@ from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
+from specivo.services.version_service import order_versions
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
     get_current_user_optional,
@@ -279,8 +281,8 @@ async def issue_create_form(
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
-    versions_result = await db.execute(select(Version).where(Version.project_id == project.id).order_by(Version.name))
-    versions = list(versions_result.scalars().all())
+    versions_result = await db.execute(select(Version).where(Version.project_id == project.id))
+    versions = order_versions(versions_result.scalars().all())
 
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
@@ -449,10 +451,6 @@ async def issue_detail(
         reactions_by_journal: dict = {}
         metadata_schemas_data: list = []
         move_targets: list = []
-        # An empty set means "link nothing". Auto-linking a KEY-123 token tells
-        # the reader the issue exists, which for a private one is a disclosure
-        # the page must not make; the text itself is unchanged.
-        known_issue_refs: set[str] = set()
     else:
         # Load emoji reactions for all journals (paginated subset)
         journal_ids = [j.id for j in journals]
@@ -473,89 +471,30 @@ async def issue_detail(
         visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
         move_targets = [p for p in visible_projects if p.id != issue.project_id]
 
-        # Resolve which KEY-123 references in the rendered text actually exist (or
-        # previously existed) so the markdown filter only auto-links real issues.
-        known_issue_refs = await _issue_svc.resolve_known_issue_refs(
-            db, issue.description, *[j.notes for j in all_journals]
-        )
+    # Resolve which KEY-123 references in the rendered text are issues the
+    # reader may see (anonymous visitors by the anonymous rules), so the
+    # markdown filter links only those; any other renders like an unknown key.
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(
+        db, user, issue.description, *[j.notes for j in all_journals]
+    )
 
     # Bare filenames in the description and comments resolve against this
     # issue's own attachments that the reader may open (none for anonymous).
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
-    # Build lookup maps for human-readable activity details.
-    # Collect all sprint/version IDs referenced in journal details so we can
-    # bulk-load names instead of showing raw IDs.
-    referenced_sprint_ids: set[int] = set()
-    referenced_version_ids: set[int] = set()
-    for j in all_journals:
-        for d in j.details:
-            if d.prop_key == "sprint_id":
-                for v in (d.old_value, d.new_value):
-                    if v is not None:
-                        try:
-                            referenced_sprint_ids.add(int(v))
-                        except (ValueError, TypeError):
-                            pass
-            elif d.prop_key == "fixed_version_id":
-                for v in (d.old_value, d.new_value):
-                    if v is not None:
-                        try:
-                            referenced_version_ids.add(int(v))
-                        except (ValueError, TypeError):
-                            pass
-    if issue.sprint_id is not None:
-        referenced_sprint_ids.add(issue.sprint_id)
+    # Names for the ids the activity feed's field changes hold.
+    lookup_maps = await activity_lookup_maps(
+        db,
+        user,
+        all_journals,
+        members=members,
+        sprint_id=issue.sprint_id,
+    )
 
-    sprint_lookup: dict[str, str] = {}
-    if referenced_sprint_ids:
-        sprint_rows = (await db.execute(
-            select(Sprint.id, Sprint.name).where(Sprint.id.in_(referenced_sprint_ids))
-        )).all()
-        sprint_lookup = {str(r.id): r.name for r in sprint_rows}
-
-    version_lookup: dict[str, str] = {}
-    if referenced_version_ids:
-        version_rows = (await db.execute(
-            select(Version.id, Version.name).where(Version.id.in_(referenced_version_ids))
-        )).all()
-        version_lookup = {str(r.id): r.name for r in version_rows}
-
-    if anonymous:
-        # The signed-in map is built from the member list, which names people
-        # by login. An anonymous visitor gets display names, and only for the
-        # people the activity feed actually mentions.
-        from specivo.models.user import User as UserModel
-
-        referenced_user_ids = {
-            int(value)
-            for j in all_journals
-            for d in j.details
-            if d.prop_key == "assigned_to_id"
-            for value in (d.old_value, d.new_value)
-            if value is not None and str(value).isdigit()
-        }
-        assignee_lookup: dict[str, str] = {}
-        if referenced_user_ids:
-            assignee_rows = (
-                await db.execute(
-                    select(UserModel.id, UserModel.display_name).where(UserModel.id.in_(referenced_user_ids))
-                )
-            ).all()
-            assignee_lookup = {str(r.id): r.display_name for r in assignee_rows}
-    else:
-        assignee_lookup = {
-            str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members
-        }
-
-    lookup_maps: dict[str, dict[str, str]] = {
-        "status_id": {str(s.id): s.name for s in lookups["statuses"]},
-        "tracker_id": {str(t.id): t.name for t in lookups["trackers"]},
-        "priority_id": {str(p.id): p.name for p in lookups["priorities"]},
-        "assigned_to_id": assignee_lookup,
-        "sprint_id": sprint_lookup,
-        "fixed_version_id": version_lookup,
-    }
+    # The people and versions the issue's user and version fields hold, named as history names them.
+    value_names = (
+        {} if anonymous else await metadata_value_names(db, user, issue_schemas, issue.issue_metadata, members=members)
+    )
 
     # Derive from the already-loaded watchers list (list[User])
     is_watching = any(w.id == user.id for w in watchers)
@@ -590,6 +529,7 @@ async def issue_detail(
             "can_log_time": can_log_time,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
+            "metadata_value_names": value_names,
             # Computed metadata is derived from the project's configuration,
             # which is not part of what an anonymous visitor may read.
             "issue_metadata": {} if anonymous else merge_computed(issue.issue_metadata, project.settings),
@@ -626,8 +566,8 @@ async def issue_edit_form(
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
-    versions_result = await db.execute(select(Version).where(Version.project_id == project.id).order_by(Version.name))
-    versions = list(versions_result.scalars().all())
+    versions_result = await db.execute(select(Version).where(Version.project_id == project.id))
+    versions = order_versions(versions_result.scalars().all())
 
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
@@ -789,7 +729,7 @@ async def issue_description_diff(
     selected_num = selected_version["num"] if selected_version else "?"
     prev_num = selected_num - 1 if selected_num != "?" and selected_num > 1 else None
 
-    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, old_text, new_text)
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, user, old_text, new_text)
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
     templates = get_templates()

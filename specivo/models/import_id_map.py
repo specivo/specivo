@@ -4,7 +4,8 @@ Written by :class:`specivo.importers.core.id_map.ImportIdMap` during an import
 and read by every loader before it creates anything, which is what lets an
 interrupted import be re-run safely.
 
-Rows are immutable once written, so there is no ``updated_at``.
+Rows are not updated once written, so there is no ``updated_at``; the one
+exception is ``admin import-map rename``, which moves a whole scope to a new key.
 """
 
 from __future__ import annotations
@@ -45,7 +46,7 @@ class ImportIdMapping(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Groups the rows written by one invocation. Reporting and audit only.
     import_run_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
-    # e.g. "redmine"; later "rt", "jira".
+    # e.g. "redmine" for rows a direct import wrote; a bundle names its own.
     source_system: Mapped[str] = mapped_column(String(30), nullable=False)
     # Distinguishes two installations of the same system, e.g. a host name.
     source_instance: Mapped[str] = mapped_column(String(255), nullable=False)

@@ -2,13 +2,13 @@
 
 Nearly a direct mapping, with two things to get right.
 
-Redmine stores hours as a float with far more precision than anyone entered —
+A source can store hours as a float with far more precision than anyone entered —
 a value typed as 7.5 can come back as 7.499999999999999 — while Specivo stores
 two decimal places. Values are rounded, and a rounding that discards precision
 the source really held is reported, because on a billable instance that is
 somebody's invoice. Float artefacts are not reported: nobody typed them.
 
-Redmine also records both whose time an entry is and who logged it. Specivo
+A source can also record both whose time an entry is and who logged it. Specivo
 keeps only the former, so an entry logged by a manager on someone else's behalf
 keeps the person it belongs to.
 """
@@ -35,8 +35,8 @@ _CENT = Decimal("0.01")
 
 # Rounding to two places can never move a value by more than half a cent, so a
 # threshold in cents would never fire. What distinguishes a value somebody
-# actually typed from a float artefact is the size of the difference: Redmine
-# returns 7.5 as 7.499999999999999, which is off by about 1e-15, while a third
+# actually typed from a float artefact is the size of the difference: a float
+# source returns 7.5 as 7.499999999999999, which is off by about 1e-15, while a third
 # decimal place that was really recorded is off by thousandths.
 _FLOAT_NOISE = Decimal("1e-9")
 
@@ -83,7 +83,7 @@ async def _create_entry(ctx: PhaseContext, project_id: int, ir: IRTimeEntry) -> 
     user = await _resolve_user(ctx, ir.user_ref)
     issue_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.issue_ref)
     if ir.issue_ref and issue_id is None:
-        # Redmine allows time against an issue in another project; keep the
+        # A source can allow time against an issue in another project; keep the
         # entry on the project rather than dropping it.
         ctx.warn("Time entry's issue was not imported; kept against the project", entry=ir.source_ref)
 

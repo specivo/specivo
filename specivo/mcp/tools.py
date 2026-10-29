@@ -19,8 +19,16 @@ from sqlalchemy.orm import selectinload
 
 from specivo.core.config import get_settings
 from specivo.core.constants import MCP_SEARCH_MAX_LIMIT, SEARCH_SNIPPET_MAX_CHARS
-from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
+from specivo.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnauthorizedError,
+    ValidationError,
+)
 from specivo.core.utils import utcnow
+from specivo.models.issue import Issue
+from specivo.models.journal import ATTACHMENT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
 from specivo.models.security_audit import SecurityAuditLog
@@ -28,12 +36,14 @@ from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
 from specivo.schemas.sprint import SprintCreate, SprintUpdate
-from specivo.schemas.tag import TagCreate, TagUpdate
+from specivo.schemas.tag import MAX_TAG_NAMES, TAG_NAME_MAX, TagCreate, TagUpdate, normalize_tag_names
 from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
+from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.computed_metadata_service import load_project_settings, merge_computed
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
+from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.recurrence import expand_occurrences
@@ -213,6 +223,28 @@ async def _list_issues(
     return "\n".join(lines)
 
 
+async def _metadata_field_lines(session: AsyncSession, user: User, issue: Issue, metadata: dict) -> list[str]:
+    """The issue's metadata fields by name, a person or version a field holds by name when *user* may see it.
+
+    Named as the issue page names them (:mod:`specivo.services.activity_lookups`), people by display name.
+    """
+    schemas = await issue_schemas(session, {issue.project_id})
+    applicable = [s for s in schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
+    labels = field_labels(schemas)
+    names = await metadata_value_names(session, user, applicable, metadata, people_by_login=False)
+
+    def shown(key: str, value: object) -> str:
+        known = names.get(key, {})
+        values = value if isinstance(value, list) else [value]
+        texts = [f"{known[str(v)]} (id {v})" if str(v) in known else str(v) for v in values]
+        return ", ".join(texts) if isinstance(value, list) else texts[0]
+
+    lines = ["Metadata fields:"]
+    for key, value in metadata.items():
+        lines.append(f"  {labels.get(key) or humanise(key)} ({key}): {shown(key, value)}")
+    return lines
+
+
 async def _show_issue(
     session: AsyncSession,
     user: User,
@@ -247,6 +279,7 @@ async def _show_issue(
     )
     if effective_metadata:
         lines.append(f"Metadata: {effective_metadata}")
+        lines.extend(await _metadata_field_lines(session, user, issue, effective_metadata))
     tags = await _tag_svc.tags_for_issue(session, issue.id)
     if tags:
         lines.append("Tags: " + ", ".join(t.name for t in tags))
@@ -475,7 +508,13 @@ async def _search(
 
     project_id: int | None = None
     if project_key:
-        project = await _project_svc.get_by_key(session, project_key)
+        # A private project the caller is not a member of, or one outside the
+        # API key's limit, is "not found" exactly like a missing key.
+        try:
+            project = await _project_svc.get_readable_by_key(session, project_key, user)
+        except (PermissionDeniedError, UnauthorizedError):
+            # Any other refusal reads as a missing key too, word for word.
+            raise NotFoundError(f"Project '{project_key}' not found") from None
         project_id = project.id
 
     if mode == "hybrid":
@@ -698,11 +737,14 @@ async def _list_comments(
     limit: int = 10,
     offset: int = 0,
     order: str = "desc",
+    include_changes: bool = False,
 ) -> str:
     """Return a paginated, formatted list of comments for an issue.
 
     Only journals with a non-empty ``notes`` body are returned; pure
-    field-change journals are excluded.
+    field-change journals are excluded, unless *include_changes*: then every
+    entry is listed with its field changes, named and left out as the issue
+    page does for the same user (see :mod:`specivo.services.activity_lookups`).
     """
     # Validate inputs up front — fail fast before DB work.
     if not isinstance(limit, int) or limit < 1 or limit > 50:
@@ -716,10 +758,14 @@ async def _list_comments(
     # Permission check BEFORE any data is returned.
     await _require_permission(session, user, issue.project_id, "view_issues")
 
-    comments, total = await _journal_svc.list_comments(session, issue.id, limit=limit, offset=offset, order=order)
+    comments, total = await _journal_svc.list_comments(
+        session, issue.id, limit=limit, offset=offset, order=order, include_changes=include_changes
+    )
+    names = await activity_lookup_maps(session, user, comments, people_by_login=False) if include_changes else None
 
     end = offset + len(comments)
-    header = f"Comments for {issue.display_key} ({total} total, showing {offset}..{end}):"
+    what = "History" if include_changes else "Comments"
+    header = f"{what} for {issue.display_key} ({total} total, showing {offset}..{end}):"
     lines: list[str] = [header, ""]
 
     if not comments:
@@ -728,9 +774,13 @@ async def _list_comments(
         for j in comments:
             author = j.user.display_name if j.user else "(unknown)"
             lines.append(f"[#{j.id}] {author}  {j.created_at}")
+            if names is not None:
+                shown = [d for d in j.details if not names.hides(d, anonymous=user.is_anonymous)]
+                lines.extend(f"  * {_change_line(d, names)}" for d in shown)
             body = j.notes or ""
-            for body_line in body.splitlines() or [""]:
-                lines.append(f"  {body_line}")
+            if body or names is None:
+                for body_line in body.splitlines() or [""]:
+                    lines.append(f"  {body_line}")
             lines.append("")
 
     if end < total:
@@ -744,6 +794,30 @@ async def _list_comments(
         {"issue_ref": issue_ref, "limit": limit, "offset": offset, "order": order},
     )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _change_line(detail: JournalDetail, names: ActivityLookups) -> str:
+    """One field change as text: a value naming a record shows its name and id, when the user may see it."""
+    if detail.property == "relation":
+        verb = "added" if detail.new_value and not detail.old_value else "removed"
+        return f"relation {detail.prop_key} {verb}: {detail.new_value or detail.old_value}"
+    if detail.property == ATTACHMENT_DETAIL:
+        removed = detail.old_value is not None and detail.new_value is None
+        name = names.attachment_name(detail)
+        verb = "deleted" if removed else "added"
+        return f"file {name} {verb}" if name else f"file {verb}"
+    if detail.prop_key in ("description", "issue_metadata"):
+        return f"{detail.prop_key} updated"
+
+    def shown(value: str | None) -> str:
+        if value is None or value == "":
+            return "(none)"
+        name = names.name(detail, value)
+        return f"{name} (id {value})" if name is not None else value
+
+    field_name = names.field_label(detail)
+    label = detail.prop_key if field_name is None else f"{field_name} ({detail.prop_key}, custom field)"
+    return f"{label}: {shown(detail.old_value)} -> {shown(detail.new_value)}"
 
 
 # ---------------------------------------------------------------------------
@@ -1204,7 +1278,9 @@ async def _list_metadata_schemas(
             desc = field_def.get("description", "")
             enum = field_def.get("enum")
             extra = f"  values: {enum}" if enum else ""
-            lines.append(f"    {field_name}: {ftype}  {desc}{extra}")
+            label = field_def.get("title")
+            title = f' "{label}"' if isinstance(label, str) and label else ""
+            lines.append(f"    {field_name}{title}: {ftype}  {desc}{extra}")
         lines.append("")
 
     return "\n".join(lines)
@@ -2164,6 +2240,7 @@ async def _list_sprints(session: AsyncSession, user: User, project_key: str) -> 
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     sprints = await _sprint_svc.list_for_project(session, project.id)
+    velocity = await _sprint_svc.velocity_for(session, sprints, user)
     lines = [f"Sprints for {project.key} ({len(sprints)} total):", ""]
     for s in sprints:
         dates = ""
@@ -2172,8 +2249,9 @@ async def _list_sprints(session: AsyncSession, user: User, project_key: str) -> 
         elif s.start_date:
             dates = f"  {s.start_date} → ?"
         vel = ""
-        if s.velocity_snapshot:
-            vel = f" | velocity: {s.velocity_snapshot.get('completed_issues', '?')} completed"
+        snap = velocity.get(s.id)
+        if snap:
+            vel = f" | velocity: {snap['completed_issues']} completed"
         lines.append(f"  [{s.id}] {s.name} ({s.status}){dates}{vel}")
     if not sprints:
         lines.append("  (none)")
@@ -2280,7 +2358,7 @@ async def _complete_sprint(
         raise NotFoundError(message="Sprint not found in this project")
     sprint = await _sprint_svc.complete_sprint(session, sprint, move_incomplete_to_sprint_id)
     await session.flush()
-    vel = sprint.velocity_snapshot or {}
+    vel = (await _sprint_svc.velocity_for(session, [sprint], user))[sprint.id] or {}
     await _log_tool(
         session,
         user,
@@ -2322,6 +2400,7 @@ async def _list_sprint_issues(
         issues, total = await _sprint_svc.backlog_issues(
             session,
             project.id,
+            user,
             offset=offset,
             limit=limit,
         )
@@ -2332,8 +2411,11 @@ async def _list_sprint_issues(
         if sprint.project_id != project.id:
             raise NotFoundError(message="Sprint not found in this project")
 
-        # Query issues for this sprint
+        # Query the issues of this sprint the caller may see
         base_where = [Issue.project_id == project.id, Issue.sprint_id == sprint_id]
+        visibility = await _issue_svc.project_visible_issues_clause(session, user, project)
+        if visibility is not None:
+            base_where.append(visibility)
 
         count_result = await session.execute(select(func.count(Issue.id)).where(*base_where))
         total = count_result.scalar_one()
@@ -2433,6 +2515,10 @@ async def _list_version_issues(
             raise NotFoundError(message="Version not found in this project")
         base_where = [Issue.project_id == project.id, Issue.fixed_version_id == version_id]
         header_prefix = f'Issues in version {version.id} "{version.name}"'
+    # Only the issues the caller may see, as in the issue list
+    visibility = await _issue_svc.project_visible_issues_clause(session, user, project)
+    if visibility is not None:
+        base_where.append(visibility)
 
     count_result = await session.execute(select(func.count(Issue.id)).where(*base_where))
     total = count_result.scalar_one()
@@ -2651,6 +2737,15 @@ async def _tag(
         names = [str(v) for v in value]
     else:
         names = [str(value)]
+
+    # The same bounds as the REST tag schemas: a capped list of stripped,
+    # de-duplicated names, none longer than the tag name column.
+    if len(names) > MAX_TAG_NAMES:
+        return f"Error: at most {MAX_TAG_NAMES} tag names per call"
+    names = [n.strip() for n in names]
+    if any(len(n) > TAG_NAME_MAX for n in names):
+        return f"Error: tag names must be at most {TAG_NAME_MAX} characters"
+    names = normalize_tag_names(names)
 
     if op == "set":
         if kind == "issue":

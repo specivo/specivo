@@ -69,7 +69,7 @@ async def preview_markdown(
             details={"max_length": MAX_MARKDOWN_CHARS},
         )
 
-    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, data.text)
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, current_user, data.text)
     project_key, attachment_map = await _preview_attachment_context(db, data, current_user)
     html = render_wiki_markdown(
         data.text,

@@ -6795,6 +6795,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html
 msgid "No accounts are connected."
+msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/login.html:98
 msgid "Administrators can sign in with a local account."
@@ -6909,4 +6910,85 @@ msgstr ""
 #: specivo/templates/themes/default/pages/auth/_sso_password_notice.html
 #, python-format
 msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (soonest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (latest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (lowest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (highest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (open first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (closed first)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#: specivo/templates/themes/default/pages/projects/settings.html
+msgid "Sort versions"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Hide completed versions (%(count)s)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Show completed versions (%(count)s)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "No open versions. All versions of this project are completed."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "Completed versions"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr ""
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr ""
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr ""
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to add files here."
+msgstr ""
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
 msgstr ""

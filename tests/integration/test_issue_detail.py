@@ -13,7 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.attachment import Attachment
-from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.models.journal import Journal, JournalDetail
+from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.project import EnabledModule, Project
 from specivo.models.relation import IssueRelation
 from specivo.models.time_entry import TimeEntryActivity
@@ -23,7 +24,8 @@ from specivo.services.journal_service import JournalService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.time_entry import TimeEntryActivityFactory, TimeEntryFactory
-from tests.factories.user import AdminUserFactory
+from tests.factories.user import AdminUserFactory, UserFactory
+from tests.factories.version import VersionFactory
 
 # ---------------------------------------------------------------------------
 # Module-level service singletons
@@ -733,3 +735,57 @@ async def test_detail_page_relations_tab_content(
     )
     assert resp.status_code == 200, resp.text
     assert _issue.display_key in resp.text
+
+
+@pytest.mark.integration
+async def test_activity_names_categories_projects_and_former_assignees(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+    _project: Project,
+    _issue: object,
+) -> None:
+    """Imported history names these by id; the page and the paging partial show their names.
+
+    A value that is not an id (the source's text for a record that was not
+    imported) is shown as stored.
+    """
+    other = ProjectFactory.build(key="DETOLD", identifier="detail-old", name="Detail Old Home")
+    former = UserFactory.build(login="detail_former", email="detail_former@example.org", display_name="Former")
+    db_session.add_all([other, former])
+    await db_session.flush()
+    category = IssueCategory(project_id=_project.id, name="Detail Backend")
+    version = VersionFactory.build(project_id=_project.id, name="Detail 2.0")
+    db_session.add_all([category, version])
+    await db_session.flush()
+    journal = Journal(issue_id=_issue.id, project_id=_project.id, user_id=former.id, sequence=50)
+    db_session.add(journal)
+    await db_session.flush()
+    changes = [
+        ("category_id", None, str(category.id)),
+        ("project_id", str(other.id), str(_project.id)),
+        ("assigned_to_id", str(former.id), None),
+        ("fixed_version_id", "Sprint 4", str(version.id)),
+        ("parent_id", None, "DET-9"),
+    ]
+    db_session.add_all(
+        JournalDetail(journal_id=journal.id, property="attr", prop_key=key, old_value=old, new_value=new)
+        for key, old, new in changes
+    )
+    await db_session.commit()
+
+    token = admin_client.state.token
+    for url in (f"/issue/{_issue.display_key}/", f"/partials/issues/{_issue.display_key}/activity/"):
+        resp = await admin_client.get(url, cookies={"access_token": token})
+        assert resp.status_code == 200, resp.text
+        text = " ".join(resp.text.split())
+        for old, new in (
+            ("(none)", "Detail Backend"),
+            ("Detail Old Home", _project.name),
+            ("detail_former", "(none)"),
+            ("Sprint 4", "Detail 2.0"),
+            ("(none)", "DET-9"),
+        ):
+            expected = (
+                f'changed from <span class="sp-change-old">{old}</span> to <span class="sp-change-new">{new}</span>'
+            )
+            assert expected in text, (url, expected)

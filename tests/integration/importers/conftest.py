@@ -1,11 +1,7 @@
-"""Fixtures for importer tests that run against a real Redmine.
+"""Fixtures for importer tests that load an import bundle.
 
-These read the Redmine fixture started by ``make redmine-fixture-up`` and write
-into the ordinary rollback-isolated test session, so a full import can be
-exercised without leaving anything behind.
-
-A run is built the way ``python -m specivo.cli.import_data --source redmine``
-builds it: the command line is parsed with the registry's ``redmine`` source,
+A run is built the way ``python -m specivo.cli.import_data --source bundle``
+builds it: the command line is parsed with the registry's ``bundle`` source,
 the adapter comes from its ``from_args`` and the pipeline from the command's
 own ``build_pipeline``. Only the session factory differs.
 
@@ -18,70 +14,14 @@ identifier mapping and the skip-what-exists behaviour are unaffected.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import pytest
-import pytest_asyncio
-from sqlalchemy import text
 
 from specivo.cli.import_data import build_pipeline, parse_args
 from specivo.importers.core.pipeline import ImportPipeline
 from specivo.importers.core.progress import NullProgressReporter
 from specivo.importers.core.source import build_source_registry
-from specivo.importers.redmine import RedmineSourceAdapter
-
-# Where the fixture publishes each profile. Overridable so the same tests can
-# run against a Redmine somewhere else.
-PROFILES = {
-    "pg": {
-        "url": os.environ.get("REDMINE_FIXTURE_PG_URL", "postgresql://redmine:redmine@127.0.0.1:5444/redmine"),
-        "files": os.environ.get("REDMINE_FIXTURE_PG_FILES", ".redmine-fixture/files-pg"),
-    },
-    "mysql": {
-        "url": os.environ.get("REDMINE_FIXTURE_MYSQL_URL", "mysql://redmine:redmine@127.0.0.1:3307/redmine"),
-        "files": os.environ.get("REDMINE_FIXTURE_MYSQL_FILES", ".redmine-fixture/files-mysql"),
-    },
-}
-
-# The seed creates this account first, so its presence means the fixture has
-# content rather than just a schema.
-SEED_MARKER_LOGIN = "fixture_admin"
-
-
-@pytest.fixture(params=["pg", "mysql"])
-def redmine_profile(request) -> dict[str, str]:
-    """Return the connection details for one fixture profile.
-
-    Each profile is skipped independently: running only the PostgreSQL one is
-    the normal case, and the MySQL one is there to prove the dialect layer.
-    """
-    return PROFILES[request.param]
-
-
-@pytest_asyncio.fixture
-async def redmine_adapter(redmine_profile):
-    """A live adapter, skipping when that profile is not up or not seeded."""
-    adapter = RedmineSourceAdapter(
-        source_db_url=redmine_profile["url"],
-        source_files_dir=Path(redmine_profile["files"]).resolve(),
-        source_instance="pytest-fixture",
-    )
-    try:
-        await adapter.connect()
-    except Exception as exc:  # noqa: BLE001 - any connection failure means "not running"
-        pytest.skip(f"Redmine fixture not reachable: {exc}")
-
-    async with adapter.engine.connect() as conn:
-        seeded = (
-            await conn.execute(text("SELECT count(*) FROM users WHERE login = :login"), {"login": SEED_MARKER_LOGIN})
-        ).scalar_one()
-    if not seeded:
-        await adapter.close()
-        pytest.skip("Redmine fixture is running but not seeded (make redmine-fixture-seed)")
-
-    yield adapter
-    await adapter.close()
 
 
 class _SharedSession:
@@ -97,18 +37,9 @@ class _SharedSession:
         return None
 
 
-def _argv(profile: dict[str, str], **option_kwargs) -> list[str]:
-    """Translate the tests' option keywords into the import command's flags."""
-    argv = [
-        "--source",
-        "redmine",
-        "--source-db-url",
-        profile["url"],
-        "--source-files-dir",
-        str(Path(profile["files"]).resolve()),
-        "--source-instance",
-        "pytest-fixture",
-    ]
+def _flags(**option_kwargs) -> list[str]:
+    """Translate run-option keywords (``dry_run=True``) into the command's generic flags."""
+    argv: list[str] = []
     for name, value in option_kwargs.items():
         flag = "--" + name.replace("_", "-")
         if name == "resume_run_id":
@@ -121,25 +52,33 @@ def _argv(profile: dict[str, str], **option_kwargs) -> list[str]:
 
 
 @pytest.fixture
-def build_import(db_session, redmine_profile, redmine_adapter, tmp_path, monkeypatch):
-    """Return a factory building a wired pipeline against the live fixture.
+def build_bundle_import(db_session, tmp_path, monkeypatch):
+    """Return a factory building a wired pipeline that loads a bundle.
 
-    ``redmine_adapter`` is requested only so an unreachable or unseeded
-    fixture skips the test; each run gets its own adapter from the command
-    line, as the command does.
-
-    Attachment storage is redirected to a temporary directory, so a run that
-    copies files leaves them there rather than in the instance's own storage.
+    Built the way ``--source bundle --path PATH`` builds it, against the
+    test's session, with attachment storage in a temporary directory. The
+    links file a bundle would get next to it goes to a temporary directory
+    too (``links_path(bundle)`` names it), so a load of the fixture bundle
+    never writes into the source tree.
     """
+    import specivo.importers.bundle.adapter as bundle_adapter
     import specivo.services.attachment_service as attachment_service
+    from specivo.importers.core.links_file import default_links_path
 
-    storage = tmp_path / "attachments"
+    storage = tmp_path / "bundle-attachments"
     storage.mkdir()
     monkeypatch.setattr(attachment_service, "_upload_dir", storage)
+    links_dir = tmp_path / "bundle-links"
+    links_dir.mkdir()
+    monkeypatch.setattr(
+        bundle_adapter,
+        "default_links_path",
+        lambda _directory, system, instance: default_links_path(links_dir, system, instance),
+    )
 
-    def _build(**option_kwargs) -> ImportPipeline:
-        args, adapter_cls = parse_args(_argv(redmine_profile, **option_kwargs), build_source_registry())
-        assert adapter_cls is RedmineSourceAdapter
+    def _build(path: Path, **option_kwargs) -> ImportPipeline:
+        argv = ["--source", "bundle", "--path", str(path), *_flags(**option_kwargs)]
+        args, adapter_cls = parse_args(argv, build_source_registry())
         return build_pipeline(
             args,
             adapter_cls.from_args(args),
@@ -147,5 +86,9 @@ def build_import(db_session, redmine_profile, redmine_adapter, tmp_path, monkeyp
             reporter=NullProgressReporter(),
         )
 
+    def _links_path(_bundle: Path, instance: str = "tracker.example.com", system: str = "sample") -> Path:
+        return default_links_path(links_dir, system, instance)
+
     _build.storage = storage  # type: ignore[attr-defined]
+    _build.links_path = _links_path  # type: ignore[attr-defined]
     return _build

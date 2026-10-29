@@ -2,7 +2,7 @@
 
 Exercises the wired pipeline rather than one loader: that the phases are all
 registered, that a dry run writes nothing while still doing the work, that a
-stopped run resumes, and that references are rewritten once every issue exists.
+stopped run resumes, and that placeholders are expanded once every issue exists.
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _adapter() -> RunAdapter:
                 priority_ref="4",
                 subject="First",
                 author_ref="7",
-                description="Caused by #101.",
+                description="Caused by {{issue:101}}.",
             ),
             IRIssue(
                 source_ref="101",
@@ -154,12 +154,12 @@ class TestFullRun:
         assert summary.created[EntityType.WIKI_PAGE] == 1
         assert summary.created[EntityType.USER] == 1
 
-    async def test_references_are_rewritten_after_every_issue_exists(self, db_session, run_pipeline):
+    async def test_placeholders_are_expanded_after_every_issue_exists(self, db_session, run_pipeline):
         """The reference points at an issue created after the one naming it."""
         await run_pipeline(_adapter()).run()
 
         description = (await db_session.execute(select(Issue.description).where(Issue.subject == "First"))).scalar_one()
-        assert "#101" not in description
+        assert "{{issue:101}}" not in description
         assert "RUNTEST-" in description
 
     async def test_a_second_run_creates_nothing(self, db_session, run_pipeline):

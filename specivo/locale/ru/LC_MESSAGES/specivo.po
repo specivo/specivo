@@ -7154,3 +7154,84 @@ msgstr "Ключи API отключены для учётных записей, 
 #, python-format
 msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
 msgstr "Вы входите через своего поставщика удостоверений (%(providers)s). У этой учётной записи нет пароля, поэтому менять здесь нечего. Управляйте паролем у своего поставщика удостоверений."
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (soonest first)"
+msgstr "Срок (сначала ближайшие)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (latest first)"
+msgstr "Срок (сначала поздние)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (lowest first)"
+msgstr "Номер версии (по возрастанию)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (highest first)"
+msgstr "Номер версии (по убыванию)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (open first)"
+msgstr "Статус (сначала открытые)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (closed first)"
+msgstr "Статус (сначала закрытые)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#: specivo/templates/themes/default/pages/projects/settings.html
+msgid "Sort versions"
+msgstr "Сортировка версий"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Hide completed versions (%(count)s)"
+msgstr "Скрыть завершённые версии (%(count)s)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Show completed versions (%(count)s)"
+msgstr "Показать завершённые версии (%(count)s)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "No open versions. All versions of this project are completed."
+msgstr "Нет открытых версий. Все версии этого проекта завершены."
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "Completed versions"
+msgstr "Завершённые версии"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr "Файл %(name)s добавлен"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr "Файл %(name)s удалён"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr "Файл добавлен"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr "Файл удалён"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "Сессия агента не найдена"
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr "Эта запись истории не относится к этой задаче."
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to add files here."
+msgstr "У вас нет права добавлять сюда файлы."
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr "У вас нет права изменять этот файл."

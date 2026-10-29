@@ -23,17 +23,21 @@ from specivo.schemas.issue import (
     IssueMove,
     IssueOut,
     IssueUpdate,
+    IssueUpdateOut,
     IssueWithChildren,
+    MetadataFieldOut,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
+from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
+from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
 from specivo.services.notification_service import NotificationService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
@@ -218,7 +222,7 @@ async def list_issues(
 
     # If a saved filter is specified, load it and use its definition as defaults
     if saved_filter_id is not None:
-        sf = await _saved_filter_service.get_by_id(db, saved_filter_id)
+        sf = await _saved_filter_service.get_visible(db, saved_filter_id, project.id, current_user)
         fd = sf.filter_definition
         if status_filter == "open" and "status" in fd:
             status_filter = fd["status"]
@@ -418,8 +422,14 @@ async def get_issue(
             user_result = await db.execute(select(User).where(User.id.in_(resolved_by_ids)))
             for u in user_result.scalars().all():
                 resolved_by_map[u.id] = u
+        names = await _journal_names(db, current_user, raw_journals)
         journals_out = [
-            _journal_out(j, resolved_by_user=resolved_by_map.get(j.resolved_by_id) if j.resolved_by_id else None)
+            _journal_out(
+                j,
+                names,
+                anonymous=anonymous,
+                resolved_by_user=resolved_by_map.get(j.resolved_by_id) if j.resolved_by_id else None,
+            )
             for j in raw_journals
         ]
 
@@ -457,6 +467,7 @@ async def get_issue(
 
     return IssueWithChildren(
         **out.model_dump(),
+        metadata_fields=await _metadata_fields(db, current_user, issue, out.metadata),
         children=children,
         journals=journals_out,
         watchers=watchers_out,
@@ -464,17 +475,39 @@ async def get_issue(
     )
 
 
-@router.patch("/issues/{issue_ref}/", response_model=IssueOut)
+async def _metadata_fields(db: AsyncSession, user: User, issue: Issue, metadata: dict) -> list[MetadataFieldOut]:
+    """The issue's metadata fields with their names, and the people and versions they hold named for *user*.
+
+    Named as the issue page names them (see :func:`metadata_value_names`),
+    with display names, the API's convention for people.
+    """
+    if not metadata:
+        return []
+    schemas = await issue_schemas(db, {issue.project_id})
+    applicable = [s for s in schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
+    labels = field_labels(schemas)
+    names = await metadata_value_names(db, user, applicable, metadata, people_by_login=False)
+    return [
+        MetadataFieldOut(key=key, name=labels.get(key) or humanise(key), value=value, value_names=names.get(key, {}))
+        for key, value in metadata.items()
+    ]
+
+
+@router.patch("/issues/{issue_ref}/", response_model=IssueUpdateOut)
 async def update_issue(
     issue_ref: str,
     data: IssueUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> IssueOut:
+) -> IssueUpdateOut:
     """Partial update of an issue.
 
     ``lock_version`` in the request body must match the current DB value
     or the request is rejected with 409 Conflict.
+
+    The response is the updated issue plus ``journal_id``: the history entry
+    the edit created, or null when it changed nothing. Pass it as
+    ``journal_id`` to ``POST /attachments/`` to record files with the edit.
     """
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, "edit_issues", db):
@@ -484,7 +517,7 @@ async def update_issue(
         if not await check_permission(current_user, issue.project_id, "set_issues_private", db):
             raise PermissionDeniedError("You do not have permission to change issue privacy")
     old_assignee_id = issue.assigned_to_id
-    issue = await _service.update(db, issue, data, current_user)
+    issue, journal = await _service.update_with_journal(db, issue, data, current_user)
 
     # --- Notifications (from API layer, keeping services decoupled) ---
     if data.assigned_to_id is not None and data.assigned_to_id != old_assignee_id:
@@ -506,7 +539,8 @@ async def update_issue(
     # Reload with relationships
     issue = await _service.get_with_relations(db, issue.id)
     await db.commit()  # commit before response to avoid reload race condition
-    return _issue_out(issue, computed_values(await load_project_settings(db, issue.project_id)))
+    out = _issue_out(issue, computed_values(await load_project_settings(db, issue.project_id)))
+    return IssueUpdateOut(**out.model_dump(), journal_id=journal.id if journal is not None else None)
 
 
 @router.post("/issues/{issue_ref}/move/", response_model=IssueOut)
@@ -599,8 +633,25 @@ async def get_allowed_statuses(
 # ---------------------------------------------------------------------------
 
 
-def _journal_out(j: Journal, resolved_by_user: User | None = None) -> JournalOut:
-    """Build a JournalOut from a Journal with eagerly-loaded relationships."""
+async def _journal_names(db: AsyncSession, user: User, journals: list[Journal]) -> ActivityLookups:
+    """Names for the ids the journals' field changes hold, as the issue page gives them to *user*.
+
+    An API key limited to some projects is shown names only from those
+    (``specivo.services.api_key_scope``).
+    """
+    return await activity_lookup_maps(db, user, journals, people_by_login=False)
+
+
+def _journal_out(
+    j: Journal, names: ActivityLookups, *, anonymous: bool = False, resolved_by_user: User | None = None
+) -> JournalOut:
+    """Build a JournalOut from a Journal with eagerly-loaded relationships.
+
+    Field changes are named, and left out, as the issue page does for the
+    same reader (see :mod:`specivo.services.activity_lookups`): a parent
+    change naming an issue the caller may not see is not returned, nor, for
+    a caller without an account, any relation or parent change.
+    """
     resolved_by = None
     if j.resolved_by_id is not None and resolved_by_user is not None:
         resolved_by = IdName(id=resolved_by_user.id, name=resolved_by_user.display_name)
@@ -618,8 +669,12 @@ def _journal_out(j: Journal, resolved_by_user: User | None = None) -> JournalOut
                 prop_key=d.prop_key,
                 old_value=d.old_value,
                 new_value=d.new_value,
+                old_name=names.name(d, d.old_value),
+                new_name=names.name(d, d.new_value),
+                field_name=names.field_label(d),
             )
             for d in j.details
+            if not names.hides(d, anonymous=anonymous)
         ],
         reply_to_id=j.reply_to_id,
         is_resolved=j.is_resolved,
@@ -688,7 +743,7 @@ async def add_comment(
     )
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _journal_out(journal)
+    return _journal_out(journal, await _journal_names(db, current_user, [journal]))
 
 
 @router.post(
@@ -731,7 +786,7 @@ async def resolve_thread(
     journal = result.scalar_one()
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _journal_out(journal, resolved_by_user=current_user)
+    return _journal_out(journal, await _journal_names(db, current_user, [journal]), resolved_by_user=current_user)
 
 
 @router.post(

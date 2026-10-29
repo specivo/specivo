@@ -26,6 +26,7 @@ from specivo.models.time_entry import ActiveTimer, TimeEntry
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
+from specivo.services.api_key_scope import project_in_scope, scope_clause
 from specivo.services.computed_metadata_service import load_project_settings, strip_computed
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
 from specivo.services.markdown_budget import check_markdown_length
@@ -274,8 +275,11 @@ class IssueService:
         visibility among *user*'s roles there (``_get_best_visibility``)
         turned into ``_visibility_clause``. It does not restrict
         ``Issue.project_id`` itself; callers add that. Returns None for
-        admins, who are not filtered.
+        admins, who are not filtered. A project outside the authenticating API
+        key's project limit shows nothing.
         """
+        if not project_in_scope(project.id):
+            return false()
         if user.is_admin:
             return None
         visibility = await self._get_best_visibility(session, user, project)
@@ -296,8 +300,18 @@ class IssueService:
         - a public, active project opted in to anonymous ``view_issues``,
           without a membership, while the instance switch is on: "default".
 
-        Returns None for admins, who are not filtered.
+        Returns None for admins, who are not filtered. Everyone is narrowed to
+        the authenticating API key's project limit
+        (``specivo.services.api_key_scope``).
         """
+        clause = await self._visible_issues_clause(session, user)
+        limit = scope_clause(Issue.project_id)
+        if limit is None:
+            return clause
+        return limit if clause is None else and_(clause, limit)
+
+    async def _visible_issues_clause(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """``visible_issues_clause`` before the API key project limit is applied."""
         if user.is_admin:
             return None
 
@@ -362,6 +376,8 @@ class IssueService:
 
     async def _check_visible(self, session: AsyncSession, issue: Issue, user: User) -> bool:
         """Return whether *user* may see *issue*. Callers raise ``NotFoundError`` when not."""
+        if not project_in_scope(issue.project_id):
+            return False
         if user.is_admin:
             return True
 
@@ -487,7 +503,8 @@ class IssueService:
         if data.parent_id is not None:
             parent_result = await session.execute(select(Issue).where(Issue.id == data.parent_id))
             parent = parent_result.scalar_one_or_none()
-            if parent is None:
+            # A parent outside the API key's project limit is not found.
+            if parent is None or not project_in_scope(parent.project_id):
                 raise NotFoundError(f"Parent issue {data.parent_id} not found")
             # Validate parent before creating the child
             # (issue not yet created — depth check only against parent's ancestors)
@@ -622,7 +639,9 @@ class IssueService:
         issue = result.scalar_one_or_none()
         if issue is None:
             raise NotFoundError(f"Issue {issue_id} not found")
-        if user is not None and not await self._check_visible(session, issue, user):
+        if not project_in_scope(issue.project_id) or (
+            user is not None and not await self._check_visible(session, issue, user)
+        ):
             raise NotFoundError(f"Issue {issue_id} not found")
         return issue
 
@@ -650,7 +669,9 @@ class IssueService:
         issue = result.scalar_one_or_none()
         if issue is None:
             raise NotFoundError(f"Issue {issue_id} not found")
-        if user is not None and not await self._check_visible(session, issue, user):
+        if not project_in_scope(issue.project_id) or (
+            user is not None and not await self._check_visible(session, issue, user)
+        ):
             raise NotFoundError(f"Issue {issue_id} not found")
         return issue
 
@@ -741,13 +762,18 @@ class IssueService:
                 break
         return pairs
 
-    async def resolve_known_issue_refs(self, session: AsyncSession, *texts: str | None) -> set[str]:
-        """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue.
+    async def resolve_known_issue_refs(self, session: AsyncSession, user: User, *texts: str | None) -> set[str]:
+        """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue *user* may see.
 
         A reference is "known" when it matches a current issue
         ``(project_key, sequence_number)`` or a previous reference recorded in
-        ``issue_ref_aliases`` (i.e. the issue was moved). Used to validate
-        autolinks before rendering so non-existent refs are not linked.
+        ``issue_ref_aliases`` (i.e. the issue was moved), and that issue is
+        visible to *user* by the same rules as the issue list
+        (``visible_issues_clause``: private issues, other projects, the
+        anonymous rules and the API key project limit included). Used to
+        validate autolinks before rendering, so a ref the reader cannot see
+        renders exactly like one that does not exist: linking it would tell
+        the reader the issue exists.
 
         The number of refs resolved per call is capped (``MAX_AUTOLINK_REFS``)
         to keep the lookup bounded regardless of input size; refs beyond the cap
@@ -757,20 +783,23 @@ class IssueService:
         if not pairs:
             return set()
 
+        visibility = await self.visible_issues_clause(session, user)
+
         known: set[str] = set()
-        rows = await session.execute(
-            select(Issue.project_key, Issue.sequence_number).where(
-                tuple_(Issue.project_key, Issue.sequence_number).in_(pairs)
-            )
+        current = select(Issue.project_key, Issue.sequence_number).where(
+            tuple_(Issue.project_key, Issue.sequence_number).in_(pairs)
         )
-        for key, num in rows:
+        if visibility is not None:
+            current = current.where(visibility)
+        for key, num in await session.execute(current):
             known.add(f"{key}-{num}")
 
-        alias_rows = await session.execute(
-            select(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).where(
-                tuple_(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).in_(pairs)
-            )
+        aliases = select(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).where(
+            tuple_(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).in_(pairs)
         )
+        if visibility is not None:
+            aliases = aliases.join(Issue, Issue.id == IssueRefAlias.issue_id).where(visibility)
+        alias_rows = await session.execute(aliases)
         for key, num in alias_rows:
             known.add(f"{key}-{num}")
 
@@ -785,7 +814,23 @@ class IssueService:
         notes: str | None = None,
         api_key_id: int | None = None,
     ) -> Issue:
+        """Apply a partial update to an issue; see :meth:`update_with_journal`."""
+        updated, _journal = await self.update_with_journal(session, issue, data, user, notes, api_key_id)
+        return updated
+
+    async def update_with_journal(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        data: IssueUpdate,
+        user: User,
+        notes: str | None = None,
+        api_key_id: int | None = None,
+    ) -> tuple[Issue, Journal | None]:
         """Apply a partial update to an issue with optimistic locking.
+
+        Returns the issue and the history entry the update created, or None
+        when it changed nothing and carried no notes.
 
         ``data.lock_version`` must match the current ``issue.lock_version``
         in the database; otherwise ``ConflictError`` (409) is raised with the
@@ -872,7 +917,8 @@ class IssueService:
             if target_parent_id is not None:
                 parent_result = await session.execute(select(Issue).where(Issue.id == target_parent_id))
                 new_parent = parent_result.scalar_one_or_none()
-                if new_parent is None:
+                # A parent outside the API key's project limit is not found.
+                if new_parent is None or not project_in_scope(new_parent.project_id):
                     raise NotFoundError(f"Parent issue {target_parent_id} not found")
                 await self._nested_set.validate_parent(session, issue, new_parent)
 
@@ -902,7 +948,7 @@ class IssueService:
         new_attrs: dict = {attr: getattr(issue, attr) for attr, _ in _JOURNALIZED_ATTRS}
 
         # Record journal entry (returns None when nothing changed and no notes)
-        await self._journal_service.record_change(
+        journal = await self._journal_service.record_change(
             session=session,
             issue=issue,
             user=user,
@@ -924,7 +970,7 @@ class IssueService:
             issue.display_key,
             user.id,
         )
-        return issue
+        return issue, journal
 
     async def move(
         self,
@@ -1133,6 +1179,9 @@ class IssueService:
         # ------------------------------------------------------------------
         # Visibility filter
         # ------------------------------------------------------------------
+        key_limit = scope_clause(Issue.project_id)
+        if key_limit is not None:
+            stmt = stmt.where(key_limit)
         if not user.is_admin:
             if project_id is not None:
                 project = await session.get(Project, project_id)

@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_SEARCH_OFFSET
 from specivo.core.database import get_db
-from specivo.core.exceptions import AnonymousAccessDeniedError, ValidationError
+from specivo.core.exceptions import (
+    AnonymousAccessDeniedError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnauthorizedError,
+    ValidationError,
+)
 from specivo.core.rate_limit import enforce_rate_limit
 from specivo.core.security import (
     ANONYMOUS_SEARCH_MAX_LIMIT,
@@ -24,6 +30,7 @@ from specivo.core.security import (
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.search import SearchFilters, SearchResponse
+from specivo.services.api_key_scope import scope_clause
 from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import SecurityAuditService
@@ -70,6 +77,20 @@ async def _anonymous_search_budget(
     """
     if user.is_anonymous:
         await enforce_rate_limit(request, response, "anon_search", *ANONYMOUS_SEARCH_RATE_LIMIT)
+
+
+async def _can_reach(db: AsyncSession, project: Project, user: User) -> bool:
+    """Whether a signed-in *user* may reach *project* (membership, public flag, key limit).
+
+    Every refusal ``require_project_access`` can give (not found, forbidden,
+    unauthorized) is folded into False, so the caller answers each one the
+    way it answers a key that names no project.
+    """
+    try:
+        await _project_service.require_project_access(db, project, user)
+    except (NotFoundError, PermissionDeniedError, UnauthorizedError):
+        return False
+    return True
 
 
 def _clean_tag_names(tag: list[str]) -> list[str]:
@@ -154,9 +175,15 @@ async def search(
             # error for the missing one, and the difference is the disclosure.
             project_ids = [(await _project_service.get_readable_by_key(db, key.upper(), user)).id for key in keys]
         elif keys:
-            stmt = select(Project.id).where(Project.key.in_(keys))
-            result = await db.execute(stmt)
-            project_ids = [row[0] for row in result.all()]
+            stmt = select(Project).where(Project.key.in_(keys))
+            # A project outside the API key's limit reads as one that does not exist.
+            key_limit = scope_clause(Project.id)
+            if key_limit is not None:
+                stmt = stmt.where(key_limit)
+            projects = (await db.execute(stmt)).scalars().all()
+            # Keep only projects the caller may reach; a private project they
+            # are not a member of counts as missing, never as "no results".
+            project_ids = [p.id for p in projects if await _can_reach(db, p, user)]
             if not project_ids:
                 raise ValidationError(
                     message="None of the specified project keys were found",
@@ -166,15 +193,19 @@ async def search(
         if anonymous:
             project_id = (await _project_service.get_readable_by_key(db, project_key.upper(), user)).id
         else:
-            stmt = select(Project.id).where(Project.key == project_key)
-            result = await db.execute(stmt)
-            pid = result.scalar_one_or_none()
-            if pid is None:
+            stmt = select(Project).where(Project.key == project_key)
+            key_limit = scope_clause(Project.id)
+            if key_limit is not None:
+                stmt = stmt.where(key_limit)
+            target = (await db.execute(stmt)).scalar_one_or_none()
+            # A project the caller may not reach gets the same answer as one
+            # that does not exist, so the filter cannot probe for private keys.
+            if target is None or not await _can_reach(db, target, user):
                 raise ValidationError(
                     message=f"Project with key '{project_key}' not found",
                     field="project_key",
                 )
-            project_id = pid
+            project_id = target.id
 
     # Build metadata filters
     parsed_metadata: dict | None = None

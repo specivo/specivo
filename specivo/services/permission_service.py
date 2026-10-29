@@ -72,6 +72,7 @@ from specivo.models.role import (
 )
 from specivo.models.user import User
 from specivo.models.user_group import UserGroupMember
+from specivo.services.api_key_scope import admin_reaches, is_limited_key, project_in_scope
 
 logger = logging.getLogger(__name__)
 
@@ -329,8 +330,12 @@ async def anonymous_role(session: AsyncSession, project: Project) -> ResolvedRol
 async def get_user_roles(session: AsyncSession, user: User, project: Project) -> list[ResolvedRole]:
     """Return the roles *user* holds in *project*, following the rules in the module docstring.
 
-    Admins are resolved like anyone else; callers short-circuit them.
+    Admins are resolved like anyone else; callers short-circuit them. A
+    project outside the authenticating API key's project limit yields no
+    roles (``specivo.services.api_key_scope``).
     """
+    if not project_in_scope(project.id):
+        return []
     if user.is_anonymous:
         anonymous = await anonymous_role(session, project)
         return [anonymous] if anonymous is not None else []
@@ -381,6 +386,8 @@ async def time_entries_visibility(session: AsyncSession, user: User, project: Pr
     that grant ``view_time_entries``; the anonymous user never holds it
     (``ANONYMOUS_PERMISSION_CEILING``).
     """
+    if not project_in_scope(project.id):
+        return None
     if user.is_admin:
         return TIME_ENTRIES_VISIBILITY_ALL
     if user.is_anonymous:
@@ -397,8 +404,11 @@ async def sees_all_users(session: AsyncSession, user: User) -> bool:
     Follows Redmine: when the user's memberships (their own and their groups')
     carry roles, any of those roles with ``users_visibility = 'all'`` is
     enough; a user without any membership role falls back to the Non member
-    role. The anonymous user never sees all users. Admins always do.
+    role. The anonymous user never sees all users. Admins always do. A
+    project-limited API key never does: it sees the members of its projects.
     """
+    if is_limited_key():
+        return False
     if user.is_admin:
         return True
     if user.is_anonymous:
@@ -465,7 +475,6 @@ async def check_permission(
     project_id: int | None,
     permission: str | Permission,
     session: AsyncSession,
-    api_key_scopes: dict | None = None,
     request: Request | None = None,
 ) -> bool:
     """Return ``True`` if *user* holds *permission* in the project.
@@ -473,33 +482,25 @@ async def check_permission(
     Resolution order:
     1. The anonymous user is denied anything outside
        ``ANONYMOUS_PERMISSION_CEILING``, before anything else is consulted.
-    2. Admins always have all permissions.
-    3. API key scope check — if the key has scoped ``projects``, the
-       project must be in the allowed list.
+    2. A project outside the authenticating API key's project limit is
+       denied, admin or not; so is a project-less (global) permission
+       (``specivo.services.api_key_scope``).
+    3. Admins always have all permissions.
     4. Any role from ``get_user_roles`` granting *permission* or ``"*"``.
-
-    ``api_key_scopes`` is the ``scopes`` JSONB from the authenticating API key
-    (``None`` when authenticated via JWT or when the key has no scope restrictions).
     """
     if user.is_anonymous and permission not in ANONYMOUS_PERMISSION_CEILING:
         return False
 
-    if user.is_admin:
+    if not project_in_scope(project_id):
+        return False
+
+    if admin_reaches(user, project_id):
         return True
 
     if project_id is None:
         return False
 
     project = await session.get(Project, project_id)
-
-    # API key scope enforcement: check that the project is in the allowed list
-    if api_key_scopes and api_key_scopes.get("projects"):
-        allowed_projects = api_key_scopes["projects"]
-        # Scopes may contain project keys (strings) or project IDs (ints)
-        if project_id not in allowed_projects and str(project_id) not in [str(p) for p in allowed_projects]:
-            if project is None or project.key not in allowed_projects:
-                return False
-
     if project is None:
         return False
 
@@ -534,4 +535,65 @@ async def check_permission(
         except Exception:
             logger.warning("Security audit logging failed", exc_info=True)
 
+    return granted
+
+
+async def projects_granting(
+    session: AsyncSession,
+    user: User,
+    projects: Iterable[Project],
+    permission: str | Permission,
+) -> set[int]:
+    """Return the ids of *projects* in which ``check_permission`` would grant *permission* to *user*.
+
+    The set-based form of ``check_permission`` for listings that would
+    otherwise check project by project: the same rules (anonymous ceiling,
+    API key project limit, admin bypass, membership roles, else the Non member
+    and anonymous roles of a public project) in one membership query.
+    """
+    projects = list(projects)
+    if user.is_anonymous and permission not in ANONYMOUS_PERMISSION_CEILING:
+        return set()
+    reachable = [p for p in projects if project_in_scope(p.id)]
+    if user.is_admin:
+        return {p.id for p in reachable if admin_reaches(user, p.id)}
+    if not reachable:
+        return set()
+
+    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+
+    switch_on = await is_anonymous_access_enabled(session)
+
+    def anonymous_grants(project: Project) -> bool:
+        return (
+            switch_on
+            and project.is_public
+            and project.status == PROJECT_STATUS_ACTIVE
+            and str(permission) in (frozenset(project.anonymous_permissions or ()) & _CEILING_VALUES)
+        )
+
+    if user.is_anonymous:
+        return {p.id for p in reachable if anonymous_grants(p)}
+
+    rows = await session.execute(
+        select(Member.project_id, Role.permissions)
+        .select_from(Member)
+        .outerjoin(MemberRole, MemberRole.member_id == Member.id)
+        .outerjoin(Role, Role.id == MemberRole.role_id)
+        .where(Member.project_id.in_([p.id for p in reachable]), member_principal_clause(user.id))
+    )
+    members: set[int] = set()
+    granted: set[int] = set()
+    for project_id, permissions in rows:
+        members.add(project_id)
+        if permissions is not None and role_grants(permissions, permission):
+            granted.add(project_id)
+
+    non_member = await get_non_member_role(session)
+    non_member_grants = non_member is not None and non_member.grants(permission)
+    for project in reachable:
+        if project.id in members or not project.is_public:
+            continue
+        if non_member_grants or anonymous_grants(project):
+            granted.add(project.id)
     return granted

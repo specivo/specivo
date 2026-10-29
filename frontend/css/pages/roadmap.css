@@ -28,3 +28,8 @@
 .version-issues tr:hover { background: var(--sp-bg-input); }
 .issue-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); font-weight: 500; color: var(--sp-text-link); white-space: nowrap; }
 
+.version-badge.locked { background: var(--sp-warning-subtle); color: var(--sp-warning); }
+.sp-roadmap-controls { align-items: center; flex-wrap: wrap; }
+.sp-roadmap-controls .filter-tabs { margin-bottom: 0; }
+.sp-roadmap-list { display: flex; flex-direction: column; gap: var(--sp-space-lg); }
+.sp-roadmap-section-title { font-family: var(--sp-font-display); font-size: var(--sp-font-size-md); font-weight: 600; color: var(--sp-text-secondary); margin: var(--sp-space-2xl) 0 var(--sp-space-md); }

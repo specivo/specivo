@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,7 +15,7 @@ from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import Journal, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, Journal, JournalDetail
 from specivo.models.user import User
 from specivo.services.markdown_budget import check_markdown_length
 
@@ -87,18 +88,28 @@ def _truncate_for_storage(value: str | None) -> str | None:
 class JournalService:
     """Service layer for creating and listing journals."""
 
-    async def _next_sequence(self, session: AsyncSession, issue_id: int) -> int:
-        """Return the next sequence number for this issue's journals.
+    async def _lock_issue(self, session: AsyncSession, issue_id: int) -> None:
+        """Take the per-issue journal lock until the surrounding transaction ends.
 
-        Uses a PostgreSQL advisory lock keyed on ``issue_id`` to prevent
-        race conditions when multiple transactions create journals for the
-        same issue concurrently.  The lock is released automatically when
-        the surrounding transaction commits or rolls back.
+        A PostgreSQL advisory lock keyed on ``issue_id``: whoever holds it is
+        the only transaction adding journals to the issue, so reading the
+        latest entry and writing the next one cannot interleave with another
+        writer. It is reentrant within a transaction.
         """
         await session.execute(
             text("SELECT pg_advisory_xact_lock(:issue_id)"),
             {"issue_id": issue_id},
         )
+
+    async def _next_sequence(self, session: AsyncSession, issue_id: int) -> int:
+        """Return the next sequence number for this issue's journals.
+
+        Takes the per-issue lock (``_lock_issue``) to prevent race conditions
+        when multiple transactions create journals for the same issue
+        concurrently. The lock is released automatically when the surrounding
+        transaction commits or rolls back.
+        """
+        await self._lock_issue(session, issue_id)
         result = await session.execute(
             select(func.coalesce(func.max(Journal.sequence), 0)).where(Journal.issue_id == issue_id)
         )
@@ -233,6 +244,110 @@ class JournalService:
             issue.display_key,
             relation_type,
             other_issue_key,
+        )
+        return journal
+
+    async def record_attachment_added(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        user: User,
+        attachment_id: int,
+        filename: str,
+        journal: Journal | None = None,
+    ) -> Journal:
+        """Record that a file was attached to *issue*, in *journal* or a new one.
+
+        Pass *journal* to record the file with the edit or comment it came
+        with, or with the earlier files of the same upload batch; see
+        :meth:`upload_journal`. The detail keeps the id as ``prop_key`` and
+        the file name as ``new_value``, like :meth:`record_attachment_removed`.
+        """
+        if journal is None:
+            journal = Journal(
+                issue_id=issue.id,
+                wiki_page_id=None,
+                project_id=issue.project_id,
+                user_id=user.id,
+                notes=None,
+                is_private=False,
+                sequence=await self._next_sequence(session, issue.id),
+            )
+            session.add(journal)
+            await session.flush()
+
+        session.add(
+            JournalDetail(
+                journal_id=journal.id,
+                property=ATTACHMENT_DETAIL,
+                prop_key=str(attachment_id),
+                old_value=None,
+                new_value=filename,
+            )
+        )
+        return journal
+
+    async def upload_journal(self, session: AsyncSession, issue: Issue, user: User, journal_id: int) -> Journal | None:
+        """Return the journal of *issue* an upload by *user* may join, or None for a new one.
+
+        *journal_id* names the entry the upload came with: the edit or comment
+        it was sent with, or the journal the first file of the batch was
+        recorded in. It must be *user*'s own entry on *issue*
+        (``ValidationError`` otherwise, so history cannot be credited to
+        somebody else or moved to another issue).
+
+        The upload gets an entry of its own instead (None) when the named one
+        is private, since the file is visible to every reader of the issue and
+        its history entry must be too, and once anything else has been
+        recorded after it, rather than being dated back.
+
+        The per-issue journal lock is taken first and held to the end of the
+        transaction, so no other entry can be added between this check and
+        the upload's detail being written.
+        """
+        await self._lock_issue(session, issue.id)
+        journal = await session.get(Journal, journal_id, populate_existing=True)
+        if journal is None or journal.issue_id != issue.id or journal.user_id != user.id:
+            raise ValidationError(_("The history entry does not belong to this issue."), field="journal_id")
+        if journal.is_private:
+            return None
+        latest = await session.scalar(select(func.max(Journal.sequence)).where(Journal.issue_id == issue.id))
+        return journal if journal.sequence == latest else None
+
+    async def record_attachment_removed(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        user: User,
+        attachment_id: int,
+        filename: str,
+    ) -> Journal:
+        """Record that a file was removed from *issue*.
+
+        The attachment row goes with the file, so the detail keeps the file
+        name (``old_value``) for history to show; ``prop_key`` keeps the id.
+        """
+        sequence = await self._next_sequence(session, issue.id)
+        journal = Journal(
+            issue_id=issue.id,
+            wiki_page_id=None,
+            project_id=issue.project_id,
+            user_id=user.id,
+            notes=None,
+            is_private=False,
+            sequence=sequence,
+        )
+        session.add(journal)
+        await session.flush()
+
+        session.add(
+            JournalDetail(
+                journal_id=journal.id,
+                property=ATTACHMENT_DETAIL,
+                prop_key=str(attachment_id),
+                old_value=filename,
+                new_value=None,
+            )
         )
         return journal
 
@@ -409,23 +524,23 @@ class JournalService:
         limit: int = 10,
         offset: int = 0,
         order: str = "desc",
+        include_changes: bool = False,
     ) -> tuple[list[Journal], int]:
         """Return a page of comment journals for an issue plus total count.
 
         Filters to journals with a non-empty ``notes`` body (real comments,
-        not pure field-change entries). Eagerly loads the author.
+        not pure field-change entries), or with *include_changes* to every
+        entry that is not private, field changes included. Eagerly loads the
+        author, and the field changes with *include_changes*.
 
         ``order`` must be ``"asc"`` or ``"desc"`` (by ``created_at``).
         """
         if order not in ("asc", "desc"):
             raise ValidationError("order must be 'asc' or 'desc'")
 
-        base_where = (
-            Journal.issue_id == issue_id,
-            Journal.notes.is_not(None),
-            func.length(func.trim(Journal.notes)) > 0,
-            Journal.is_private.is_(False),
-        )
+        base_where: tuple[Any, ...] = (Journal.issue_id == issue_id, Journal.is_private.is_(False))
+        if not include_changes:
+            base_where += (Journal.notes.is_not(None), func.length(func.trim(Journal.notes)) > 0)
 
         total_stmt = select(func.count(Journal.id)).where(*base_where)
         total = int((await session.execute(total_stmt)).scalar_one())
@@ -434,7 +549,7 @@ class JournalService:
         stmt = (
             select(Journal)
             .where(*base_where)
-            .options(joinedload(Journal.user))
+            .options(joinedload(Journal.user), *([selectinload(Journal.details)] if include_changes else []))
             .order_by(order_col, Journal.id.asc() if order == "asc" else Journal.id.desc())
             .offset(offset)
             .limit(limit)

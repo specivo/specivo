@@ -47,6 +47,7 @@ from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.models.project import Project
 from specivo.models.setting import Setting
 from specivo.models.user import User
+from specivo.services.api_key_scope import is_global_admin
 from specivo.services.permission_service import ANONYMOUS_PERMISSION_CEILING
 from specivo.services.security_audit_service import SecurityAuditService
 from specivo.services.settings_service import SettingsService
@@ -107,7 +108,7 @@ async def set_anonymous_permissions(
     a project that is not public. A request that changes nothing writes no
     audit entry.
     """
-    if not actor.is_admin:
+    if not is_global_admin(actor):
         raise PermissionDeniedError("Only instance administrators can change anonymous access")
 
     new = normalize_anonymous_permissions(permissions)
@@ -343,7 +344,7 @@ async def set_anonymous_access_enabled(
     cannot change between them. Every change is audited with the old and new
     value, the opted-in project keys and, when turning on, the confirmed keys.
     """
-    if not actor.is_admin:
+    if not is_global_admin(actor):
         raise PermissionDeniedError("Only instance administrators can change anonymous access")
 
     await lock_anonymous_access(session)

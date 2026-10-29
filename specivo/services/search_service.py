@@ -47,6 +47,7 @@ from specivo.schemas.search import (
     SearchResultType,
     SearchSourceType,
 )
+from specivo.services.api_key_scope import scope_project_ids
 from specivo.services.permission_service import Permission
 from specivo.services.wiki_utils import WIKI_LINK_RE
 
@@ -742,6 +743,8 @@ class SearchService:
         project and metadata filters as full-text results, so a reference
         the user cannot see resolves to nothing.
         """
+        # Narrow to the authenticating API key's project limit, if any.
+        project_id, project_ids = scope_project_ids(project_id, project_ids)
         refs = [(key, int(num)) for key, _, num in (ident.rpartition("-") for ident in identifiers)]
         refs = [(key, num) for key, num in refs if num <= _PG_INT_MAX]
         if not refs:
@@ -862,6 +865,8 @@ class SearchService:
             Tuple of (results, total count for current scope, per-type counts dict).
             The type_counts dict has keys: issues, wiki, comments, attachments, all.
         """
+        # Narrow to the authenticating API key's project limit, if any.
+        project_id, project_ids = scope_project_ids(project_id, project_ids)
         parts: list[str] = []
         # Per-type count SQL fragments, keyed by type name.
         # Always populated for all 4 types (regardless of scope) so that
@@ -1151,6 +1156,8 @@ class SearchService:
         Returns the same ``(results, total, type_counts)`` shape as
         :meth:`search` (only the ``issues`` scope is meaningful here).
         """
+        # Narrow to the authenticating API key's project limit, if any.
+        project_id, project_ids = scope_project_ids(project_id, project_ids)
         params: dict[str, Any] = await self._visibility_params(session, user)
 
         cte_prefix = self._visibility_cte_sql(user)
@@ -1243,6 +1250,8 @@ class SearchService:
         uses the same CTE clauses as :meth:`search`, so the tag predicate only
         narrows the already-visible set.
         """
+        # Narrow to the authenticating API key's project limit, if any.
+        project_id, project_ids = scope_project_ids(project_id, project_ids)
         params: dict[str, Any] = await self._visibility_params(session, user)
 
         cte_prefix = self._visibility_cte_sql(user)
@@ -1418,6 +1427,8 @@ class SearchService:
         directly and ranked first (unless *resolve_identifiers* is False), even
         when no embedding model is configured.
         """
+        # Narrow to the authenticating API key's project limit, if any.
+        project_id, project_ids = scope_project_ids(project_id, project_ids)
         from specivo.services.embedding_service import EmbeddingService
 
         pinned: list[SearchResult] = []
@@ -1697,7 +1708,10 @@ class SearchService:
                     id=m["id"],
                     title=m["title"] or "",
                     subtitle=m["subtitle"],
-                    snippet=m["snippet"],
+                    # Raw stored content, rendered with ``| safe`` on the search
+                    # page: escape it as the keyword path does. Hybrid search
+                    # reuses these results, so this covers both modes.
+                    snippet=_clean_snippet(m["snippet"]),
                     score=float(m["score"]) if m["score"] is not None else 0.0,
                     project_key=m["project_key"] or "",
                 )
@@ -1754,6 +1768,8 @@ class SearchService:
             Tuple of (results, total, type_counts). The type_counts are derived
             from the FTS count query (accurate per-type totals from the DB).
         """
+        # Narrow to the authenticating API key's project limit, if any.
+        project_id, project_ids = scope_project_ids(project_id, project_ids)
         pinned: list[SearchResult] = []
         identifiers = extract_identifiers(query)
         if identifiers and scope in ("all", "issues"):

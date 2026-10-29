@@ -220,6 +220,38 @@ class TestTagEntityTool:
         got = await _tag(db_session, admin, ref, "get")
         assert "docs" in got
 
+    @pytest.mark.parametrize("op", ["add", "set", "remove"])
+    async def test_too_many_names_is_a_tool_error(self, db_session, admin, issue, op):
+        from specivo.mcp.tools import _tag
+
+        result = await _tag(db_session, admin, issue.display_key, op, [f"t{i}" for i in range(101)])
+        assert result == "Error: at most 100 tag names per call"
+        assert await _tag(db_session, admin, issue.display_key, "get") == f"{issue.display_key}: (no tags)"
+
+    @pytest.mark.parametrize("op", ["add", "set"])
+    async def test_over_long_name_is_a_tool_error(self, db_session, admin, issue, op):
+        from specivo.mcp.tools import _tag
+
+        result = await _tag(db_session, admin, issue.display_key, op, ["fine", "z" * 65])
+        assert result == "Error: tag names must be at most 64 characters"
+        assert await _tag(db_session, admin, issue.display_key, "get") == f"{issue.display_key}: (no tags)"
+
+    async def test_names_are_stripped_and_deduplicated(self, db_session, admin, issue):
+        from specivo.mcp.tools import _tag
+
+        result = await _tag(
+            db_session, admin, issue.display_key, "add", ["  " + "x" * 64 + "  ", " Ops ", "ops", "OPS", "   "]
+        )
+        assert not result.startswith("Error:")
+        got = await _tag(db_session, admin, issue.display_key, "get")
+        assert sorted(got.split(": ", 1)[1].split(", ")) == sorted(["Ops", "x" * 64])
+
+    async def test_only_blank_names_is_still_a_missing_value(self, db_session, admin, issue):
+        from specivo.mcp.tools import _tag
+
+        result = await _tag(db_session, admin, issue.display_key, "add", ["  ", ""])
+        assert result == "Error: value (tag name) is required for add/remove"
+
     async def test_invalid_op_returns_error(self, db_session, admin, issue):
         from specivo.mcp.tools import _tag
 

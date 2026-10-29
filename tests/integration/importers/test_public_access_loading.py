@@ -1,9 +1,8 @@
-"""Loading roles and public access from IR, without a Redmine fixture.
+"""Loading roles and public access from IR written by hand.
 
-The fixture-backed tests in ``test_import_redmine_public_access.py`` skip when
-the fixture is down, so the load-layer rules that keep an import from opening
-an instance, and the builtin-role handling, are pinned here against IR written
-by hand.
+Pins the load-layer rules that keep an import from opening an instance, and the
+builtin-role handling, without a bundle. The bundle tests cover the same path
+end to end.
 """
 
 from __future__ import annotations
@@ -36,6 +35,7 @@ from specivo.services.anonymous_access_service import (
     ImportedAnonymousPermissionsResult,
     apply_imported_anonymous_permissions,
     is_anonymous_access_enabled,
+    lock_anonymous_access,
 )
 from specivo.services.security_audit_service import AuditEvent
 from tests.factories.project import ProjectFactory
@@ -159,8 +159,7 @@ class TestApplyImportedAnonymousPermissions:
     """The service the loader calls, which alone decides whether an opt-in is written."""
 
     async def test_refuses_while_the_switch_is_on(self, db_session, imported_projects):
-        db_session.add(Setting(key=ANONYMOUS_ACCESS_SETTING_KEY, value="true"))
-        await db_session.flush()
+        await _turn_switch_on(db_session)
         actor = await _actor(db_session)
 
         result = await apply_imported_anonymous_permissions(db_session, imported_projects["1"], ["view_issues"], actor)
@@ -195,6 +194,18 @@ class TestApplyImportedAnonymousPermissions:
             is ImportedAnonymousPermissionsResult.NOTHING_TO_GRANT
         )
         assert public.anonymous_permissions == ["view_issues"]
+
+
+async def _turn_switch_on(db_session) -> None:
+    """Write the instance switch row directly, taking its lock first as the service does.
+
+    The test transaction holds both until it rolls back. Writing the row
+    before the advisory lock would take them in the opposite order to every
+    other writer, and two xdist workers doing so deadlock.
+    """
+    await lock_anonymous_access(db_session)
+    db_session.add(Setting(key=ANONYMOUS_ACCESS_SETTING_KEY, value="true"))
+    await db_session.flush()
 
 
 async def _actor(db_session) -> User:
@@ -262,8 +273,7 @@ class TestPublicAccess:
         assert second.summary.skipped[EntityType.ANONYMOUS_ACCESS] == 2
 
     async def test_nothing_is_applied_while_the_switch_is_on(self, db_session, imported_projects):
-        db_session.add(Setting(key=ANONYMOUS_ACCESS_SETTING_KEY, value="true"))
-        await db_session.flush()
+        await _turn_switch_on(db_session)
 
         ctx = await _run(db_session, imported_projects, _access())
 
@@ -288,8 +298,7 @@ class TestPublicAccess:
             return False
 
         monkeypatch.setattr(loader, "is_anonymous_access_enabled", _looks_off)
-        db_session.add(Setting(key=ANONYMOUS_ACCESS_SETTING_KEY, value="true"))
-        await db_session.flush()
+        await _turn_switch_on(db_session)
 
         ctx = await _run(db_session, imported_projects, _access())
 

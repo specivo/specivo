@@ -15,9 +15,10 @@ from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
+from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
-from specivo.services.sprint_service import SprintService
+from specivo.services.sprint_service import SprintService, count_done
 from specivo.web.deps import get_current_user_optional, get_templates
 
 if TYPE_CHECKING:
@@ -27,6 +28,7 @@ router = APIRouter(tags=["web-sprints"], include_in_schema=False)
 
 _project_svc = ProjectService()
 _sprint_svc = SprintService()
+_issue_svc = IssueService()
 
 
 @router.get("/projects/{project_key}/sprints/", response_class=HTMLResponse)
@@ -54,19 +56,22 @@ async def sprints_list(
     planned_sprints = [s for s in all_sprints if s.status == "planned"]
     completed_sprints = [s for s in all_sprints if s.status == "completed"]
 
+    # Velocity snapshots as this reader may see them (hidden issues left out)
+    velocity = await _sprint_svc.velocity_for(db, completed_sprints, user)
+
     # Get issue counts per sprint
     sprint_issue_counts: dict[int, dict] = {}
     for sprint in all_sprints:
-        total = await _sprint_svc.sprint_issue_count(db, sprint.id)
+        total = await _sprint_svc.sprint_issue_count(db, sprint.id, user)
         # For completed sprints, use velocity_snapshot
-        if sprint.status == "completed" and sprint.velocity_snapshot:
-            completed = sprint.velocity_snapshot.get("completed_issues", 0)
-            committed = sprint.velocity_snapshot.get("total_issues", total)
+        snap = velocity.get(sprint.id)
+        if sprint.status == "completed" and snap:
+            completed = snap["completed_issues"]
+            committed = snap["total_issues"]
         else:
             # For active/planned, count done issues
-            board = await _sprint_svc.board_data(db, sprint)
-            done_statuses = {"Resolved", "Closed"}
-            completed = sum(len(issues) for name, issues in board.items() if name in done_statuses)
+            board = await _sprint_svc.board_data(db, sprint, user)
+            completed = count_done(board)
             committed = total
         sprint_issue_counts[sprint.id] = {
             "total": committed,
@@ -75,10 +80,7 @@ async def sprints_list(
         }
 
     # Compute average velocity from completed sprints
-    velocities = []
-    for s in completed_sprints:
-        if s.velocity_snapshot:
-            velocities.append(s.velocity_snapshot.get("completed_issues", 0))
+    velocities = [v["completed_issues"] for v in velocity.values() if v is not None]
     avg_velocity = round(sum(velocities) / len(velocities), 1) if velocities else 0
 
     can_manage = user.is_admin or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
@@ -144,7 +146,7 @@ async def sprint_backlog(
     # Get issue counts per sprint
     sprint_issue_counts: dict[int, int] = {}
     for s in sprints:
-        sprint_issue_counts[s.id] = await _sprint_svc.sprint_issue_count(db, s.id)
+        sprint_issue_counts[s.id] = await _sprint_svc.sprint_issue_count(db, s.id, user)
 
     # Active sprint stats: completed count and days left
     completed_count = 0
@@ -161,6 +163,9 @@ async def sprint_backlog(
                 IssueStatus.category.in_(("done", "closed")),
             )
         )
+        visibility = await _issue_svc.visible_issues_clause(db, user)
+        if visibility is not None:
+            stmt = stmt.where(visibility)
         result = await db.execute(stmt)
         completed_count = result.scalar_one()
         # Days left
@@ -172,7 +177,9 @@ async def sprint_backlog(
     members = await _project_svc.list_members(db, project)
 
     # Load backlog issues (sprint_id IS NULL) with pagination
-    backlog_issues, backlog_total = await _sprint_svc.backlog_issues(db, project.id, offset=offset, limit=limit)
+    backlog_issues, backlog_total = await _sprint_svc.backlog_issues(
+        db, project.id, user, offset=offset, limit=limit
+    )
 
     # Collect all sprints available for the sprint picker (active + planned)
     all_available_sprints = []
@@ -181,15 +188,16 @@ async def sprint_backlog(
     all_available_sprints.extend(planned_sprints)
 
     # Velocity data for completed sprints
+    velocity = await _sprint_svc.velocity_for(db, completed_sprints, user)
     completed_sprints_with_velocity = [
         {
             "name": s.name,
-            "total_issues": (s.velocity_snapshot or {}).get("total_issues", 0),
-            "completed_issues": (s.velocity_snapshot or {}).get("completed_issues", 0),
+            "total_issues": (velocity.get(s.id) or {}).get("total_issues", 0),
+            "completed_issues": (velocity.get(s.id) or {}).get("completed_issues", 0),
         }
         for s in completed_sprints
     ]
-    average_velocity = await _sprint_svc.average_velocity(db, project.id)
+    average_velocity = await _sprint_svc.average_velocity(db, project.id, user)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -256,7 +264,7 @@ async def sprint_board(
     )
 
     # Load board data grouped by status name
-    board = await _sprint_svc.board_data(db, sprint)
+    board = await _sprint_svc.board_data(db, sprint, user)
 
     # Parse per-column offsets from query params (col_<status_id>_offset=N)
     col_offsets: dict[int, int] = {}
@@ -291,6 +299,7 @@ async def sprint_board(
             "sprint": sprint,
             "statuses": list(statuses),
             "board": board,
+            "done_count": count_done(board),
             "other_sprints": other_sprints,
             "board_per_col": board_per_col,
             "col_offsets": col_offsets,
@@ -346,6 +355,9 @@ async def sprint_edit(
         )
         .order_by(Issue.id.asc())
     )
+    visibility = await _issue_svc.visible_issues_clause(db, user)
+    if visibility is not None:
+        stmt = stmt.where(visibility)
     result = await db.execute(stmt)
     issues_in_sprint = list(result.scalars().all())
 
@@ -369,6 +381,7 @@ async def sprint_edit(
             "issues_in_sprint": issues_in_sprint,
             "completed_issue_count": completed_issue_count,
             "total_issue_count": total_issue_count,
+            "velocity": (await _sprint_svc.velocity_for(db, [sprint], user))[sprint.id],
             "members": members,
         },
     )
@@ -404,8 +417,9 @@ async def sprint_analytics(
     total_duration_days = 0
     sprints_with_duration = 0
 
+    velocity = await _sprint_svc.velocity_for(db, completed_sprints, user)
     for sprint in completed_sprints:
-        snap = sprint.velocity_snapshot or {}
+        snap = velocity.get(sprint.id) or {}
         committed = snap.get("total_issues", 0)
         completed = snap.get("completed_issues", 0)
 
@@ -434,11 +448,8 @@ async def sprint_analytics(
 
     # Add active sprint with current progress
     for sprint in active_sprints:
-        board = await _sprint_svc.board_data(db, sprint)
-        done_statuses = {"Resolved", "Closed"}
-        completed = sum(
-            len(issues) for name, issues in board.items() if name in done_statuses
-        )
+        board = await _sprint_svc.board_data(db, sprint, user)
+        completed = count_done(board)
         committed = sum(len(issues) for issues in board.values())
 
         duration = 0
@@ -540,6 +551,9 @@ async def sprint_detail(
         )
         .order_by(Issue.id.asc())
     )
+    visibility = await _issue_svc.visible_issues_clause(db, user)
+    if visibility is not None:
+        issue_stmt = issue_stmt.where(visibility)
     issues_in_sprint = list((await db.execute(issue_stmt)).scalars().all())
 
     total_issues = len(issues_in_sprint)
@@ -561,7 +575,7 @@ async def sprint_detail(
         days_left = max(0, (sprint.end_date - date.today()).days)
 
     # Average velocity across prior completed sprints in this project, for context.
-    avg_velocity = await _sprint_svc.average_velocity(db, project.id)
+    avg_velocity = await _sprint_svc.average_velocity(db, project.id, user)
 
     # Group issues by status category for the issue list (To Do / In Progress / Done).
     grouped: dict[str, list[Issue]] = {"todo": [], "active": [], "done": []}

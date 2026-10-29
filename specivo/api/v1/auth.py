@@ -24,7 +24,7 @@ from specivo.core.constants import API_KEY_PREFIX
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import rate_limit
-from specivo.core.security import get_current_user
+from specivo.core.security import get_account_user
 from specivo.models.user import User
 from specivo.schemas.auth import (
     ChangePasswordRequest,
@@ -270,7 +270,7 @@ async def logout(
 )
 async def logout_all(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
 ) -> JSONResponse:
     """Revoke all sessions for the currently authenticated user."""
     count = await _service.logout_all(session=db, user_id=current_user.id)
@@ -291,7 +291,7 @@ async def logout_all(
 )
 async def list_sessions(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
 ) -> list[SessionOut]:
     """Return active (non-expired) refresh tokens for the current user."""
     sessions = await _service.list_sessions(session=db, user_id=current_user.id)
@@ -314,7 +314,7 @@ async def list_sessions(
 async def revoke_session(
     session_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
 ) -> Response:
     """Revoke a single session owned by the current user."""
     await _service.revoke_session(session=db, user_id=current_user.id, token_id=session_id)
@@ -447,7 +447,7 @@ async def change_password(
     body: ChangePasswordRequest,
     request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
     _rl: Annotated[None, Depends(_change_password_rate_limit)],
     refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
     access_token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE)] = None,

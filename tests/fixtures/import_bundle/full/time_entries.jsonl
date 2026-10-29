@@ -1,0 +1,2 @@
+{"source_ref": "t-1", "project_ref": "p-web", "issue_ref": "web-1", "user_ref": "u-alice", "activity_ref": "eng", "hours": "1.5", "spent_on": "2024-02-06", "comments": "Debugging", "created_at": "2024-02-06T18:00:00Z"}
+{"source_ref": "t-2", "project_ref": "p-api", "user_ref": "u-bob", "activity_ref": "eng", "hours": 0.75, "spent_on": "2024-02-07"}

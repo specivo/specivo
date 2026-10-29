@@ -22,6 +22,7 @@ from specivo.schemas.project import (
     ProjectOut,
     ProjectUpdate,
 )
+from specivo.services.api_key_scope import is_global_admin
 from specivo.services.computed_metadata_service import computed_values
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
@@ -185,7 +186,7 @@ async def create_project(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ProjectOut:
-    if not current_user.is_admin:
+    if not is_global_admin(current_user):
         raise PermissionDeniedError("Only admins can create projects")
 
     project = await _service.create(db, data, current_user)

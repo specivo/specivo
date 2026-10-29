@@ -195,7 +195,7 @@ the app user's home (`/home/specivo/.local/state/specivo/`, mode 0700).
   but on an upgrade the old `celery-worker`, `celery-embeddings` and `celery-beat` containers can
   still be running at that moment. Stop them first (see [Upgrade](#upgrade)).
 - **Host directories you mount yourself** (another data path, extra theme or error-page
-  directories, a Redmine `files` directory for the importer) must be readable by `10001`, and
+  directories, a directory of attachment files for `import_data --files-path`) must be readable by `10001`, and
   writable where the app writes to them. Give such a directory to the app user on the host:
 
   ```bash
@@ -492,7 +492,7 @@ make reset-password login=admin password=newpassword
 ```
 
 Accounts imported with their old passwords can be inspected and retired with the same command
-(see [Migrating from Redmine](https://specivo.io/docs/specivo/install/migrating-from-redmine/)):
+(see [Imported passwords](https://specivo.io/docs/specivo/install/configuration/#imported-passwords)):
 
 ```bash
 # Registered password hashers, whether each is enabled, and how many accounts use it

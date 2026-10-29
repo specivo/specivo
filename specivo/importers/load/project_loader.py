@@ -1,12 +1,12 @@
-"""Load projects and everything scoped to one: versions, categories,
+"""Load projects and everything scoped to one: versions, categories, sprints,
 memberships and custom-field schemas.
 
 Most of this is a direct mapping. Three things are not.
 
-**Projects need a key that Redmine never had.** Specivo identifies an issue as
-``ACME-15``; Redmine identifies it as ``#15`` and has no per-project prefix at
-all. A key is derived from the project identifier, which is the closest thing
-Redmine has to a short name, and the operator can override any of them. It is
+**Projects need a key that a source may never have had.** Specivo identifies an
+issue as ``ACME-15``; a source can identify it as ``#15`` with no per-project
+prefix at all. A key is derived from the project identifier, which is the
+closest thing such a source has to a short name, and the operator can override any of them. It is
 the one mapping worth reviewing before a large import, so every derived key is
 reported.
 
@@ -16,8 +16,8 @@ membership row held by the group the users phase created. Permission resolution
 unions a user's own roles with those of every group they are in, so the people
 in it get the access without a grant of their own.
 
-**Custom fields become metadata schemas per project.** A Redmine custom field
-is instance-wide; a Specivo metadata schema belongs to a project and optionally
+**Custom fields become metadata schemas per project.** A source's custom field
+can be instance-wide; a Specivo metadata schema belongs to a project and optionally
 a tracker. Fields are therefore grouped by the scope they apply to, so a project
 gets one schema per tracker that has fields rather than one schema per field.
 """
@@ -28,20 +28,31 @@ import logging
 import re
 from typing import Any, Literal, cast
 
-from sqlalchemy import select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_PROJECT_DEPTH
 from specivo.importers.core.backdate import backdate
-from specivo.importers.core.ir import EntityType, IRCustomField, IRMembership, IRProject, PrincipalKind
+from specivo.importers.core.ir import (
+    REFERENCE_FIELD_FORMATS,
+    EntityType,
+    IRCustomField,
+    IRMembership,
+    IRProject,
+    IRSprint,
+    PrincipalKind,
+)
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import ensure_import_account
-from specivo.models.lookups import IssueCategory
+from specivo.models.issue import Issue
+from specivo.models.lookups import IssueCategory, IssueStatus
 from specivo.models.project import Project
+from specivo.models.sprint import Sprint
 from specivo.models.version import Version
 from specivo.schemas.metadata_schema import MetadataSchemaCreate
 from specivo.schemas.project import ProjectCreate
 from specivo.schemas.version import VersionCreate
+from specivo.services.metadata_fields import REF_KEYWORD
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.project_service import Principal, ProjectService
 from specivo.services.version_service import VersionService
@@ -50,13 +61,12 @@ logger = logging.getLogger(__name__)
 
 VersionStatus = Literal["open", "locked", "closed"]
 VersionSharing = Literal["none", "descendants", "hierarchy", "tree", "system"]
+SprintStatus = Literal["planned", "active", "completed"]
+_SPRINT_STATUSES: tuple[SprintStatus, ...] = ("planned", "active", "completed")
 
 # Report sections.
 NOTE_PROJECT_KEYS = "project_keys_assigned"
 NOTE_MODULES_DROPPED = "project_modules_without_an_equivalent"
-
-# Where the derived custom-field keys are parked for the issue phase.
-CUSTOM_FIELD_KEYS_STATE_KEY = "custom_field_keys"
 
 # Versions are created open and their real status applied once every issue
 # that targets them exists. See restore_version_statuses.
@@ -248,7 +258,7 @@ async def _identifier_taken(session: AsyncSession, identifier: str) -> bool:
 async def _unique_key(ctx: PhaseContext, ir: IRProject, identifier: str) -> str:
     """Return the issue-key prefix for a project.
 
-    Redmine has no such concept, so it is derived from the identifier unless the
+    A source may have no such concept, so it is derived from the identifier unless the
     operator supplied one. Every result is reported, because this is the mapping
     people most often want to correct.
     """
@@ -282,12 +292,12 @@ async def _key_taken(session: AsyncSession, key: str) -> bool:
 
 
 # --------------------------------------------------------------------------
-# Versions and categories
+# Versions, categories and sprints
 # --------------------------------------------------------------------------
 
 
 async def load_project_lookups(ctx: PhaseContext) -> None:
-    """Create each project's versions and issue categories."""
+    """Create each project's versions, issue categories and sprints."""
     for project_ref in ctx.project_refs:
         project = await _project_for(ctx, project_ref)
         if project is None:
@@ -346,6 +356,95 @@ async def load_project_lookups(ctx: PhaseContext) -> None:
             ctx.summary.record_created(EntityType.CATEGORY)
             ctx.tick()
 
+        async for sprint_ir in ctx.adapter.extract_sprints(project_ref):
+            if await ctx.id_map.get(ctx.session, EntityType.SPRINT, sprint_ir.source_ref):
+                ctx.summary.record_skipped(EntityType.SPRINT)
+                continue
+            await _create_sprint(ctx, project, sprint_ir)
+
+
+async def _create_sprint(ctx: PhaseContext, project: Project, ir: IRSprint) -> None:
+    """Create one sprint with the status it had.
+
+    Sprints are created directly, not through the sprint service, whose
+    transitions (start, complete) stamp today's date and move issues: an
+    imported sprint is history, already started or completed. Specivo allows
+    one active sprint per project, so a second one (a source with parallel
+    sprints) is created planned and reported. A completed sprint without an
+    end date ends on the day it was completed; its velocity is recorded once
+    its issues are in (see :func:`record_sprint_velocity`).
+    """
+    status: SprintStatus = cast(SprintStatus, ir.status) if ir.status in _SPRINT_STATUSES else "planned"
+    if status != ir.status:
+        ctx.warn("Sprint has an unrecognised status; imported as planned", sprint=ir.name, status=ir.status)
+    if status == "active" and await _has_active_sprint(ctx.session, project.id):
+        ctx.warn(
+            "Specivo has one active sprint per project; another active sprint was imported as planned",
+            project=project.key,
+            sprint=ir.name,
+        )
+        status = "planned"
+    end_date = ir.end_date
+    if end_date is None and status == "completed" and ir.completed_at is not None:
+        end_date = ir.completed_at.date()
+    sprint = Sprint(
+        project_id=project.id,
+        name=ir.name[:255],
+        goal=ir.goal,
+        status=status,
+        start_date=ir.start_date,
+        end_date=end_date,
+    )
+    ctx.session.add(sprint)
+    await ctx.session.flush()
+    await backdate(ctx.session, Sprint, sprint.id, created_at=ir.created_at, updated_at=ir.updated_at)
+    await ctx.id_map.put(ctx.session, EntityType.SPRINT, ir.source_ref, "sprints", sprint.id)
+    ctx.summary.record_created(EntityType.SPRINT)
+    ctx.tick()
+
+
+async def _has_active_sprint(session: AsyncSession, project_id: int) -> bool:
+    stmt = select(Sprint.id).where(Sprint.project_id == project_id, Sprint.status == "active").limit(1)
+    return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+
+async def record_sprint_velocity(ctx: PhaseContext) -> None:
+    """Record the velocity of each completed sprint the source brought, once its issues are in.
+
+    Specivo records a sprint's velocity (its issues, and how many of them are
+    done or closed) when the sprint is completed. An imported sprint was
+    completed in the source, so its velocity is counted from the issues the
+    import put in it, with the moment it was completed. A sprint that already
+    has one (an earlier run recorded it) is left alone.
+    """
+    for project_ref in ctx.project_refs:
+        async for ir in ctx.adapter.extract_sprints(project_ref):
+            sprint_id = await ctx.id_map.get(ctx.session, EntityType.SPRINT, ir.source_ref)
+            sprint = await ctx.session.get(Sprint, sprint_id) if sprint_id is not None else None
+            if sprint is None or sprint.status != "completed" or sprint.velocity_snapshot is not None:
+                continue
+            total, completed = (
+                await ctx.session.execute(
+                    select(
+                        func.count(Issue.id),
+                        func.count(Issue.id).filter(IssueStatus.category.in_(("done", "closed"))),
+                    )
+                    .join(IssueStatus, IssueStatus.id == Issue.status_id)
+                    .where(Issue.sprint_id == sprint.id)
+                )
+            ).one()
+            snapshot: dict[str, Any] = {"total_issues": total, "completed_issues": completed}
+            if ir.completed_at is not None:
+                snapshot["completed_at"] = ir.completed_at.isoformat()
+            await ctx.session.execute(
+                update(Sprint)
+                .where(Sprint.id == sprint.id)
+                # Recording what the source had is not an edit; keep its timestamp.
+                .values(velocity_snapshot=snapshot, updated_at=Sprint.updated_at)
+                .execution_options(synchronize_session="fetch")
+            )
+            ctx.tick()
+
 
 # Both systems use the same vocabulary here, so an unrecognised value means the
 # source data is odd rather than that the mapping is missing. Falling back to
@@ -387,6 +486,11 @@ async def load_memberships(ctx: PhaseContext) -> None:
             continue
 
         async for ir in ctx.adapter.extract_memberships(project_ref):
+            # A grant is applied once: a re-run must not hand back a role an
+            # administrator has since taken away.
+            if await ctx.id_map.get(ctx.session, EntityType.MEMBERSHIP, ir.source_ref):
+                ctx.summary.record_skipped(EntityType.MEMBERSHIP)
+                continue
             role_ids = [
                 role_id
                 for role_id in [
@@ -402,7 +506,8 @@ async def load_memberships(ctx: PhaseContext) -> None:
             if principal is None:
                 continue
 
-            await _project_service.add_member(ctx.session, project, principal, role_ids)
+            member = await _project_service.add_member(ctx.session, project, principal, role_ids)
+            await ctx.id_map.put(ctx.session, EntityType.MEMBERSHIP, ir.source_ref, "members", member.id)
             ctx.summary.record_created(EntityType.MEMBERSHIP)
             ctx.tick()
 
@@ -435,14 +540,13 @@ async def _principal_for(ctx: PhaseContext, ir: IRMembership, project_key: str) 
 
 
 async def load_custom_field_schemas(ctx: PhaseContext) -> None:
-    """Turn Redmine custom fields into per-project metadata schemas.
+    """Turn the source's custom fields into per-project metadata schemas.
 
     A field applying to several trackers produces one schema per tracker, since
     a schema carries a single tracker. A field with no tracker link becomes a
     project-wide schema, so its historical values still validate.
     """
     fields = [field async for field in ctx.adapter.extract_custom_fields()]
-    ctx.state[CUSTOM_FIELD_KEYS_STATE_KEY] = {field.source_ref: field for field in fields}
     if not fields:
         return
 
@@ -483,7 +587,7 @@ async def _create_schema(
     if tracker_ref and tracker_id is None:
         ctx.warn("Custom fields reference a tracker that was not imported; scoped project-wide instead")
 
-    properties = {field.key: field.json_schema for field in fields}
+    properties = {field.key: _property(field) for field in fields}
     required = sorted({field.key for field in fields if field.is_required})
     definition: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
@@ -504,6 +608,19 @@ async def _create_schema(
     await ctx.id_map.put(ctx.session, EntityType.CUSTOM_FIELD, source_id, "metadata_schemas", schema.id)
     ctx.summary.record_created(EntityType.CUSTOM_FIELD)
     ctx.tick()
+
+
+def _property(field: IRCustomField) -> dict[str, Any]:
+    """A field's JSON Schema property: what one value must match, its name as ``title``, and what it names.
+
+    The name is what the issue page, history, the API and MCP show for the
+    field. A field whose values name people or versions is marked so they are
+    shown by name (see :mod:`specivo.services.metadata_fields`).
+    """
+    prop: dict[str, Any] = {**field.json_schema, "title": field.name}
+    if field.field_format in REFERENCE_FIELD_FORMATS:
+        prop[REF_KEYWORD] = field.field_format
+    return prop
 
 
 async def _tracker_name(ctx: PhaseContext, tracker_id: int) -> str:
@@ -527,12 +644,15 @@ async def restore_version_statuses(ctx: PhaseContext) -> None:
         return
 
     for version_id, status in intended.items():
-        version = await ctx.session.get(Version, version_id)
-        if version is None:
-            continue
-        version.status = status
-        ctx.tick()
-    await ctx.session.flush()
+        result = await ctx.session.execute(
+            update(Version)
+            .where(Version.id == version_id)
+            # Restoring the source's status is not an edit; keep its timestamp.
+            .values(status=status, updated_at=Version.updated_at)
+            .execution_options(synchronize_session="fetch")
+        )
+        if result.rowcount:  # type: ignore[attr-defined]
+            ctx.tick()
 
 
 async def _project_for(ctx: PhaseContext, project_ref: str) -> Project | None:

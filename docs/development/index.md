@@ -6,8 +6,8 @@ Anything here is repo-only. The published user guide is `docs/guide/`, which is
 built into the site at specivo.io; this directory is not part of that build and
 is read on GitHub.
 
-- [The Redmine importer](redmine-importer.md) — how the migration framework is
-  put together, how to add another source, and how to run its Redmine fixture.
+- [The import framework](import-framework.md) — how a bundle is loaded: the
+  phase pipeline, the identifier map and the test layout.
 - [Security scanning with Trivy](security-scanning.md) — what CI scans, how to
   run the same scans locally, and what to do when the release gate fails.
 

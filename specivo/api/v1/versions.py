@@ -10,7 +10,7 @@ from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.schemas.version import RoadmapEntry, VersionCreate, VersionOut, VersionUpdate
+from specivo.schemas.version import RoadmapEntry, VersionCreate, VersionOut, VersionSort, VersionUpdate
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.version_service import VersionService
@@ -18,6 +18,12 @@ from specivo.services.version_service import VersionService
 router = APIRouter(tags=["versions"])
 _project_service = ProjectService()
 _version_service = VersionService()
+
+_SORT_HELP = (
+    "Order as '<field>:<direction>': version (natural name, 0.2.0 < 0.10.0), due "
+    "(due date, undated last) or status. Default 'due:asc': open and locked versions "
+    "by due date, then closed versions."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -70,11 +76,12 @@ def _version_out(version, project_key: str) -> VersionOut:
 )
 async def list_versions(
     project_key: str,
+    sort: VersionSort | None = Query(default=None, description=_SORT_HELP),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[VersionOut]:
     project = await _get_project(project_key, current_user, db)
-    versions = await _version_service.list_for_project(db, project.id)
+    versions = await _version_service.list_for_project(db, project.id, sort)
     return [_version_out(v, project.key) for v in versions]
 
 
@@ -194,8 +201,9 @@ async def delete_version(
 )
 async def get_roadmap(
     project_key: str,
+    sort: VersionSort | None = Query(default=None, description=_SORT_HELP),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[RoadmapEntry]:
     project = await _get_project(project_key, current_user, db)
-    return await _version_service.roadmap(db, project)
+    return await _version_service.roadmap(db, project, current_user, sort)

@@ -124,7 +124,6 @@
       {% endfor %}
     </div>
   </div>
-  {% set done_count = (board.get('Resolved', []) | length) + (board.get('Closed', []) | length) %}
   <span class="board-progress-text">{% trans done=done_count, total=total_issues %}%(done)s of %(total)s done{% endtrans %}</span>
 </div>
 

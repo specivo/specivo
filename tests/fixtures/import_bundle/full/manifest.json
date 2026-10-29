@@ -1,0 +1,17 @@
+{
+  "format": "specivo-import-bundle",
+  "format_version": "1.0",
+  "source": {"system": "sample", "instance": "tracker.example.com", "version": "4.2"},
+  "generator": {"name": "hand-written", "version": "1"},
+  "exported_at": "2024-03-01T09:30:00Z",
+  "counts": {
+    "trackers": 2, "statuses": 3, "priorities": 2, "activities": 1, "roles": 2,
+    "users": 3, "groups": 1, "projects": 2, "memberships": 3, "versions": 1, "categories": 1, "sprints": 2,
+    "custom_fields": 2, "issues": 3, "journals": 3, "relations": 1, "wiki_pages": 2, "wiki_versions": 3,
+    "wiki_redirects": 1, "watchers": 2, "attachments": 3, "time_entries": 2
+  },
+  "not_carried_over": [
+    {"what": "Sprint boards have no equivalent", "count": 2},
+    {"what": "Attachment on a forum post", "entity_type": "attachment", "source_ref": "a-forum"}
+  ]
+}

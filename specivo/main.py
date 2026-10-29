@@ -30,6 +30,7 @@ from specivo.core.exceptions import (
 from specivo.core.logging import setup_logging
 from specivo.core.middleware import (
     AnonymousResponseHeadersMiddleware,
+    ApiKeyScopeMiddleware,
     AuditBatchMiddleware,
     CSRFMiddleware,
     LocaleMiddleware,
@@ -200,6 +201,10 @@ def create_app() -> FastAPI:
     # Markdown render budget — CPU time shared by every Markdown field
     # rendered for one request.
     application.add_middleware(MarkdownRenderBudgetMiddleware)
+
+    # API key project limit — reset around every request so the limit set by
+    # authentication never outlives it.
+    application.add_middleware(ApiKeyScopeMiddleware)
 
     # Trusted hosts — reject requests with unexpected Host headers in production
     if settings.allowed_hosts != ["*"]:

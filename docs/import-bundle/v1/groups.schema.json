@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/groups.schema.json",
+  "title": "Import bundle v1: groups.jsonl",
+  "description": "One group of users per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "name"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "member_refs": {
+      "$ref": "common.schema.json#/$defs/refList"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

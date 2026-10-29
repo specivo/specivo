@@ -1,7 +1,7 @@
 """Intermediate representation (IR) shared by every import source.
 
 The IR is the seam that keeps source adapters and loaders independent. An
-adapter reads its own database (Redmine today, RT or Jira later) and emits
+adapter reads its own source (a bundle today) and emits
 these dataclasses; loaders consume them and never learn where they came from.
 
 Two rules make that separation work:
@@ -12,8 +12,8 @@ Two rules make that separation work:
    translate refs to Specivo ids through the id map, so the IR never holds a
    Specivo id.
 2. **Field names describe Specivo concepts, not source concepts.** Where the
-   two disagree the adapter does the translation (for example Redmine's binary
-   ``is_closed`` becomes the four-way :attr:`IRStatus.category`).
+   two disagree the adapter does the translation (for example a binary
+   "is closed" flag becomes the four-way :attr:`IRStatus.category`).
 
 Streams are flat rather than deeply nested: issues, journals, relations,
 watchers and attachments are separate extraction streams so each import phase
@@ -50,6 +50,7 @@ class EntityType(StrEnum):
     PROJECT = "project"
     VERSION = "version"
     CATEGORY = "category"
+    SPRINT = "sprint"
     CUSTOM_FIELD = "custom_field"
     ISSUE = "issue"
     JOURNAL = "journal"
@@ -100,7 +101,7 @@ class PrincipalKind(StrEnum):
 
 @dataclass(slots=True)
 class IRTracker:
-    """Issue type (Redmine tracker, Jira issue type)."""
+    """Issue type (a tracker, an issue type)."""
 
     source_ref: str
     name: str
@@ -340,6 +341,28 @@ class IRCategory:
 
 
 @dataclass(slots=True)
+class IRSprint:
+    """A time-boxed iteration of a project.
+
+    ``status`` is Specivo's: ``planned``, ``active`` or ``completed``.
+    ``completed_at`` is when a completed sprint was completed; Specivo keeps it
+    with the sprint's velocity snapshot, and uses its date as the end date of
+    a sprint that has none.
+    """
+
+    source_ref: str
+    project_ref: str
+    name: str
+    goal: str | None = None
+    status: str = "planned"
+    start_date: date | None = None
+    end_date: date | None = None
+    completed_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(slots=True)
 class IRCustomField:
     """A custom field definition, translated to a JSON Schema fragment.
 
@@ -380,8 +403,9 @@ class IRCustomValue:
 class IRIssue:
     """An issue. ``description`` is already converted to Markdown.
 
-    Cross-issue references such as Redmine's ``#123`` are left verbatim; the
-    pipeline rewrites them to Specivo display keys once every issue exists.
+    Cross-issue references are placeholders (see
+    :mod:`specivo.importers.core.placeholders`) that the pipeline expands to
+    Specivo display keys once every issue exists.
     """
 
     source_ref: str
@@ -396,12 +420,17 @@ class IRIssue:
     parent_ref: str | None = None
     category_ref: str | None = None
     fixed_version_ref: str | None = None
+    # A sprint of the issue's own project.
+    sprint_ref: str | None = None
     start_date: date | None = None
     due_date: date | None = None
     estimated_hours: Decimal | None = None
+    remaining_estimate: Decimal | None = None
     done_ratio: int = 0
     is_private: bool = False
     custom_values: list[IRCustomValue] = field(default_factory=list)
+    # Tag names, created in the issue's project as needed.
+    tags: list[str] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     closed_at: datetime | None = None
@@ -413,12 +442,45 @@ class IRJournalDetail:
 
     ``property`` is ``attr``, ``cf``, ``attachment`` or ``relation`` — the same
     vocabulary Specivo's ``journal_details`` table uses.
+
+    For an attribute that names a record (see :data:`REFERENCE_ATTRIBUTES`),
+    and for a custom field whose values do (see :data:`REFERENCE_FIELD_FORMATS`),
+    ``old_ref`` and ``new_ref`` are the source refs of the records, which the
+    loader turns into Specivo ids; ``old_value`` and ``new_value`` are then
+    only the text to show when a ref names nothing that was imported. A
+    ``cf`` detail's ``prop_key`` is the custom field's ``source_ref``.
     """
 
     property: str
     prop_key: str
     old_value: str | None = None
     new_value: str | None = None
+    old_ref: str | None = None
+    new_ref: str | None = None
+
+
+# Issue attributes whose history values name a record, and the entity type of
+# that record. Their journal details carry refs, translated on load.
+REFERENCE_ATTRIBUTES: dict[str, EntityType] = {
+    "project_id": EntityType.PROJECT,
+    "tracker_id": EntityType.TRACKER,
+    "status_id": EntityType.STATUS,
+    "priority_id": EntityType.PRIORITY,
+    "assigned_to_id": EntityType.USER,
+    "category_id": EntityType.CATEGORY,
+    "fixed_version_id": EntityType.VERSION,
+    "sprint_id": EntityType.SPRINT,
+    "parent_id": EntityType.ISSUE,
+}
+
+# Custom field formats whose values name a record, and the entity type of that
+# record. A change of such a field carries refs as an attribute's does, one
+# value a side: a multiple field's change is a detail per value removed (only
+# ``old_ref``) or added (only ``new_ref``).
+REFERENCE_FIELD_FORMATS: dict[str, EntityType] = {
+    "user": EntityType.USER,
+    "version": EntityType.VERSION,
+}
 
 
 @dataclass(slots=True)
@@ -511,6 +573,19 @@ class IRWikiPage:
     parent_ref: str | None = None
     protected: bool = False
     versions: list[IRWikiVersion] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class IRWikiRedirect:
+    """A title a wiki page used to have, so links to it keep working.
+
+    Both titles are page titles as written, not slugs; the loader slugifies
+    them. ``redirects_to`` names the page's current title.
+    """
+
+    project_ref: str
+    title: str
+    redirects_to: str
 
 
 # --------------------------------------------------------------------------

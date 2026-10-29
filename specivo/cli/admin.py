@@ -1,4 +1,4 @@
-"""Admin user management: create and reset password.
+"""Admin user management, password hashers and the import identifier map.
 
 Usage::
 
@@ -22,6 +22,18 @@ Usage::
     # Expire them now: each has to set a new password through recovery
     uv run python -m specivo.cli.admin legacy-passwords expire --yes
 
+    # Imports in the identifier map: one scope per source system and instance
+    uv run python -m specivo.cli.admin import-map list
+    # Move a scope to the key the next import will use (a dry run without --yes)
+    uv run python -m specivo.cli.admin import-map rename --system redmine \
+        --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com --yes
+    # Text, relations and parents an import could not link yet, waiting in its links file
+    uv run python -m specivo.cli.admin import-map pending --links-file /import/specivo-links.redmine.t.sqlite
+    # Link what can be linked now (a dry run without --yes)
+    uv run python -m specivo.cli.admin import-map resolve-pending --links-file /import/... --yes
+    # After cut-over: forget a scope's rows (a dry run without --yes); no delta import after that
+    uv run python -m specivo.cli.admin import-map purge --system redmine --instance tracker.example.com --yes
+
 The ``create`` subcommand is idempotent: existing admins are skipped,
 non-admin users are promoted.  When no CLI args are given it reads the
 bootstrap file and deletes it after success: ``/app/data/state/bootstrap.json``,
@@ -36,16 +48,20 @@ import asyncio
 import getpass
 import json
 import logging
+import os
 import secrets
 import sys
 from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from specivo.core.config import get_settings
 from specivo.core.utils import utcnow
+from specivo.importers.core.id_map import IdMapScope, ScopeRenameError, list_scopes, purge_scope, rename_scope
+from specivo.importers.core.links_file import LinksFileError, LinksStore, read_scope
+from specivo.importers.load.pending_links import LinksOutcome, resolve_links_file
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import RESERVED_LOGIN_PREFIX, is_reserved_login
 from specivo.services.auth_utils import hash_password, legacy_hashes_expired
@@ -389,9 +405,315 @@ async def _run_legacy_expire(args: argparse.Namespace) -> int:
     return 0
 
 
-def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+def format_scopes(scopes: list[IdMapScope]) -> str:
+    """Return the ``import-map list`` table: one block per scope, its rows counted per entity type."""
+    if not scopes:
+        return "The identifier map is empty: nothing has been imported into this database."
+    lines: list[str] = []
+    for scope in scopes:
+        last = scope.last_imported_at.isoformat(timespec="seconds") if scope.last_imported_at else "unknown"
+        lines.append(f"{scope.source_system} @ {scope.source_instance}")
+        lines.append(f"  {scope.total} row(s) from {scope.runs} run(s), last written {last}")
+        width = max(len(name) for name in scope.counts)
+        lines.extend(f"  {name:<{width}}  {count}" for name, count in sorted(scope.counts.items()))
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
+
+def _session_factory() -> tuple[async_sessionmaker[AsyncSession], AsyncEngine]:
+    engine = create_async_engine(get_settings().database_url, echo=False)
+    return async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False), engine
+
+
+async def _run_import_map_list(args: argparse.Namespace) -> int:
+    factory, engine = _session_factory()
+    try:
+        async with factory() as session:
+            scopes = await list_scopes(session)
+    finally:
+        await engine.dispose()
+    print(format_scopes(scopes))
+    return 0
+
+
+def rename_targets(args: argparse.Namespace) -> tuple[str, str, str, str]:
+    """Return ``(from_system, from_instance, to_system, to_instance)`` from the ``import-map rename`` options.
+
+    ``--system`` gives both systems; ``--from-system``/``--to-system`` set one
+    side each. An instance left out stays as it is.
+    """
+    from_system = args.from_system or args.system
+    to_system = args.to_system or args.system or from_system
+    if not from_system:
+        raise ScopeRenameError("Give the scope's system with --system (or --from-system)")
+    if args.from_instance is None:
+        raise ScopeRenameError("Give the scope's current instance with --from")
+    to_instance = args.from_instance if args.to_instance is None else args.to_instance
+    return from_system, args.from_instance, to_system, to_instance
+
+
+async def _run_import_map_rename(args: argparse.Namespace) -> int:
+    try:
+        from_system, from_instance, to_system, to_instance = rename_targets(args)
+    except ScopeRenameError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    dry_run = args.dry_run or not args.yes
+    factory, engine = _session_factory()
+    try:
+        async with factory() as session:
+            try:
+                moved = await rename_scope(
+                    session,
+                    from_system=from_system,
+                    from_instance=from_instance,
+                    to_system=to_system,
+                    to_instance=to_instance,
+                    dry_run=dry_run,
+                )
+            except ScopeRenameError as exc:
+                await session.rollback()
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+            await session.commit()
+    finally:
+        await engine.dispose()
+    move = f"{from_system} @ {from_instance} to {to_system} @ {to_instance}"
+    if dry_run:
+        print(f"{moved} row(s) would move from {move}. Nothing was changed; re-run with --yes to move them.")
+    else:
+        print(f"Moved {moved} row(s) from {move}.")
+    return 0
+
+
+def format_pending(
+    path: Path,
+    scope: tuple[str, str] | None,
+    texts: int,
+    by_kind: dict[str, int],
+    links: dict[str, int] | None = None,
+) -> str:
+    """Return the ``import-map pending`` listing.
+
+    The file's scope; its texts, with the records waited for per kind; and the
+    relations and issue parents waiting for an issue.
+    """
+    links = links or {}
+    if scope is None or not (texts or links):
+        return (
+            f"Nothing is waiting in {path}: no imported text, relation or parent names a record that has not been "
+            "imported."
+        )
+    lines: list[str] = []
+    if texts:
+        lines.append(f"{scope[0]} @ {scope[1]}: {texts} text(s) wait for records not imported yet")
+        width = max(len(kind) for kind in by_kind)
+        lines.extend(f"  {kind:<{width}}  {count}" for kind, count in sorted(by_kind.items()))
+    if links:
+        parts = []
+        if links.get("relation"):
+            parts.append(f"{links['relation']} relation(s)")
+        if links.get("parent"):
+            parts.append(f"{links['parent']} issue parent(s)")
+        lines.append(f"{scope[0]} @ {scope[1]}: {' and '.join(parts)} wait for issues not imported yet")
+    return "\n".join(lines)
+
+
+def _edited(outcome: LinksOutcome) -> str:
+    examples = ", ".join(f"{entity} {row_id}" for entity, row_id in outcome.edited[:5])
+    suffix = f" ({examples})" if examples else ""
+    return f"{len(outcome.edited)} left alone because they were edited after import{suffix}"
+
+
+def format_resolve(outcome: LinksOutcome, *, dry_run: bool) -> str:
+    """Return what ``import-map resolve-pending`` did, or would do."""
+    if outcome.scope is None:
+        return f"Nothing is waiting in {outcome.path}."
+    ignored = ""
+    if outcome.untrusted or outcome.foreign:
+        ignored = (
+            f" Ignored{' and removed' if not dry_run else ''}: {outcome.untrusted} row(s) this installation did not "
+            f"write, {outcome.foreign} naming records this source did not import."
+        )
+    links = ""
+    if outcome.relations_linked or outcome.parents_linked or outcome.link_problems or outcome.links_waiting:
+        refused = len(outcome.link_problems)
+        if dry_run:
+            links = (
+                f" {outcome.relations_linked} relation(s) would be made and {outcome.parents_linked} parent(s) set; "
+                f"{refused} refused or left alone; {outcome.links_waiting} still waiting."
+            )
+        else:
+            links = (
+                f" Made {outcome.relations_linked} relation(s) and set {outcome.parents_linked} parent(s); "
+                f"{refused} refused or left alone; {outcome.links_waiting} still waiting."
+            )
+    if dry_run:
+        summary = (
+            f"{len(outcome.linked)} text(s) would be linked, {_edited(outcome)}, {outcome.waiting} still waiting."
+            f"{links} Nothing was changed; re-run with --yes to write them.{ignored}"
+        )
+    else:
+        summary = (
+            f"Linked {len(outcome.linked)} text(s); {_edited(outcome)}; {outcome.waiting} still waiting."
+            f"{links}{ignored}"
+        )
+    return "\n".join([summary, *(f"  {line}" for line in outcome.link_problems)])
+
+
+def format_purge(system: str, instance: str, count: int, *, dry_run: bool) -> str:
+    """Return what ``import-map purge`` did, or would do."""
+    if not count:
+        return f"The scope {system} @ {instance} has no rows; nothing to purge."
+    if dry_run:
+        return (
+            f"{count} row(s) of {system} @ {instance} would be deleted. "
+            "Nothing was changed; re-run with --yes to delete them."
+        )
+    return (
+        f"Deleted {count} row(s) of {system} @ {instance}. A later import of this source can no longer tell what "
+        "is already here."
+    )
+
+
+async def _run_import_map_pending(args: argparse.Namespace) -> int:
+    path = Path(args.links_file)
+    if not os.path.lexists(path):
+        print(format_pending(path, None, 0, {}))
+        return 0
+    try:
+        scope = read_scope(path)
+        if scope is None:
+            print(format_pending(path, None, 0, {}))
+            return 0
+        store = LinksStore.open(path, *scope, writable=False)
+    except LinksFileError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    try:
+        print(format_pending(path, scope, store.count_texts(), store.counts_by_kind(), store.waiting_links()))
+    finally:
+        store.rollback()
+    return 0
+
+
+async def _run_import_map_resolve_pending(args: argparse.Namespace) -> int:
+    dry_run = not args.yes
+    factory, engine = _session_factory()
+    try:
+        async with factory() as session:
+            try:
+                outcome = await resolve_links_file(session, Path(args.links_file), dry_run=dry_run)
+            except LinksFileError as exc:
+                await session.rollback()
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
+    finally:
+        await engine.dispose()
+    print(format_resolve(outcome, dry_run=dry_run))
+    return 0
+
+
+async def _run_import_map_purge(args: argparse.Namespace) -> int:
+    dry_run = not args.yes
+    factory, engine = _session_factory()
+    try:
+        async with factory() as session:
+            count = await purge_scope(session, args.system, args.instance, dry_run=dry_run)
+            await session.commit()
+    finally:
+        await engine.dispose()
+    print(format_purge(args.system, args.instance, count, dry_run=dry_run))
+    return 0
+
+
+_IMPORT_MAP_RUNNERS = {
+    "list": _run_import_map_list,
+    "rename": _run_import_map_rename,
+    "pending": _run_import_map_pending,
+    "resolve-pending": _run_import_map_resolve_pending,
+    "purge": _run_import_map_purge,
+}
+
+
+def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    import_map = sub.add_parser(
+        "import-map",
+        help="Inspect and rename the scopes of the import identifier map",
+        description=(
+            "Every import records which source record became which Specivo row, under a scope: the source "
+            "system and instance. A later import with the same scope skips what is already there."
+        ),
+    )
+    import_map_sub = import_map.add_subparsers(dest="import_map_command", required=True)
+    import_map_sub.add_parser(
+        "list", help="List the scopes: system, instance, rows per entity type, runs and when the last one wrote"
+    )
+    rename = import_map_sub.add_parser(
+        "rename",
+        help="Move a scope to a new system and/or instance, so the next import under that key finds its rows",
+        description=(
+            "Move every row of one scope to another in one transaction. Use it when the next import will be keyed "
+            "differently from an earlier one: a direct Redmine import was keyed by its masked database URL, a "
+            "bundle by the instance its manifest names. Refused when the target scope already holds rows. "
+            "Without --yes it is a dry run: it checks and counts, and changes nothing."
+        ),
+    )
+    rename.add_argument("--system", help="The source system on both sides, e.g. redmine")
+    rename.add_argument("--from-system", help="The scope's current system, when it changes (e.g. bundle)")
+    rename.add_argument("--to-system", help="The new system, when it changes")
+    rename.add_argument(
+        "--from", "--from-instance", dest="from_instance", metavar="INSTANCE", help="The scope's current instance"
+    )
+    rename.add_argument(
+        "--to", "--to-instance", dest="to_instance", metavar="INSTANCE", help="The new instance (default: unchanged)"
+    )
+    rename.add_argument("--dry-run", action="store_true", help="Only check and count (the default without --yes)")
+    rename.add_argument("--yes", action="store_true", help="Actually move the rows")
+
+    links_help = "The links file the imports of the source keep (by default next to the bundles)"
+    pending = import_map_sub.add_parser(
+        "pending",
+        help="Count the texts, relations and parents waiting in a links file for records not imported yet",
+        description=(
+            "An import writes a reference to a record it did not import as plain text, and keeps the text in its "
+            "links file so a later import of the same source can turn it into a link; a relation or an issue "
+            "parent naming an issue it did not import waits there too. This lists the file's scope, how many "
+            "texts wait and for how many records of each kind, and how many relations and parents wait. Reads only."
+        ),
+    )
+    pending.add_argument("--links-file", required=True, metavar="PATH", help=links_help)
+    resolve = import_map_sub.add_parser(
+        "resolve-pending",
+        help="Link the texts, relations and parents in a links file whose records have been imported since",
+        description=(
+            "What every import of a bundle does, on demand: each waiting parent whose issue is now in the "
+            "identifier map is set (unless the issue has another parent by now), each waiting relation whose two "
+            "issues are is made, with the checks any relation gets, and each waiting text whose records are is "
+            "expanded again, keeping its updated_at; a text edited since it was imported is left alone and "
+            "dropped from the file. The file is rewritten, or deleted when nothing is left. Without --yes it is a "
+            "dry run: it reports, and changes nothing."
+        ),
+    )
+    resolve.add_argument("--links-file", required=True, metavar="PATH", help=links_help)
+    resolve.add_argument("--yes", action="store_true", help="Actually write the links")
+    purge = import_map_sub.add_parser(
+        "purge",
+        help="Delete one scope's rows after cut-over; delta imports of that source are impossible afterwards",
+        description=(
+            "Delete every identifier-map row of one scope, once its source is retired and will not be imported "
+            "again. The imported records stay. WARNING: the rows are how a later import recognises what is already "
+            "here, so after a purge delta imports of that source are impossible: a later import would create "
+            "everything again. Delete the scope's links file too. Without --yes it is a dry run: it counts, and "
+            "changes nothing."
+        ),
+    )
+    purge.add_argument("--system", required=True, help="The scope's source system, e.g. redmine")
+    purge.add_argument("--instance", required=True, help="The scope's instance")
+    purge.add_argument("--yes", action="store_true", help="Actually delete the rows")
+
+
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Specivo admin management")
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -427,7 +749,14 @@ def main() -> None:
     legacy_expire.add_argument("--algorithm", help="Only expire hashes under this algorithm id")
     legacy_expire.add_argument("--yes", action="store_true", help="Actually do it (otherwise only count)")
 
-    args = parser.parse_args()
+    _add_import_map_commands(sub)
+    return parser
+
+
+def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
+
+    args = build_parser().parse_args()
 
     # Load plugins as the web app does, so plugin-provided hashers are listed.
     from specivo.core.plugin_manager import bootstrap
@@ -446,6 +775,8 @@ def main() -> None:
         if args.legacy_command == "expire":
             sys.exit(asyncio.run(_run_legacy_expire(args)))
         asyncio.run(_run_legacy_report(args))
+    elif args.command == "import-map":
+        sys.exit(asyncio.run(_IMPORT_MAP_RUNNERS[args.import_map_command](args)))
 
 
 if __name__ == "__main__":

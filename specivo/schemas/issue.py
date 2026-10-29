@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -169,14 +170,41 @@ class IssueOut(BaseModel):
     updated_at: datetime
 
 
+class IssueUpdateOut(IssueOut):
+    """An updated issue, with the history entry the update created.
+
+    ``journal_id`` is null when the update changed nothing. Pass it to
+    ``POST /attachments/`` as ``journal_id`` to record files with the edit.
+    """
+
+    journal_id: int | None = None
+
+
 class IssueListResponse(PaginatedResponse[IssueOut]):
     """Paginated issue list response."""
 
     pass
 
 
+class MetadataFieldOut(BaseModel):
+    """One field of an issue's metadata, as people read it.
+
+    ``name`` is the field's name: the title its metadata schema gives it, else
+    the key humanised. For a field whose values are ids of people or versions,
+    ``value_names`` maps each id (as text) the caller may see to its name; an
+    id missing from it is shown as stored.
+    """
+
+    key: str
+    name: str
+    value: Any = None
+    value_names: dict[str, str] = Field(default_factory=dict)
+
+
 class IssueWithChildren(IssueOut):
-    """IssueOut extended with optional included relations."""
+    """IssueOut extended with optional included relations, and the metadata fields named."""
+
+    metadata_fields: list[MetadataFieldOut] = Field(default_factory=list)
 
     children: list[IssueOut] = Field(default_factory=list)
     journals: list | None = Field(default=None)

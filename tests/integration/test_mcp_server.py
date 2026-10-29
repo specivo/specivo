@@ -581,6 +581,22 @@ class TestMcpSearch:
         with pytest.raises(ValidationError):
             await _search(db_session, admin, query="banana", mode="bogus")
 
+    async def test_search_private_project_reads_as_missing(self, db_session: AsyncSession, project: Project):
+        """A non-member naming a private project gets the same refusal as a missing key."""
+        from specivo.core.exceptions import NotFoundError
+        from specivo.mcp.tools import _search
+
+        outsider = UserFactory.build(login="mcp_outsider", status="active")
+        db_session.add(outsider)
+        await db_session.commit()
+        await db_session.refresh(outsider)
+
+        with pytest.raises(NotFoundError) as missing:
+            await _search(db_session, outsider, query="banana", project_key="NOPE", mode="keyword")
+        with pytest.raises(NotFoundError) as private:
+            await _search(db_session, outsider, query="banana", project_key=project.key, mode="keyword")
+        assert type(private.value) is type(missing.value)
+
 
 class TestMcpWiki:
     async def test_read_wiki(self, db_session: AsyncSession, admin: User, project: Project):

@@ -1,0 +1,55 @@
+# Disposable OpenID Connect identity provider (Keycloak) for the SSO tests.
+#
+# Test fixture, not part of running Specivo. Every credential in this file and
+# in the seeds next to it (tests/fixtures/sso/) is a fixed, public test value; nothing
+# here protects anything. All state lives in RAM and is gone after a down.
+#
+#   make sso-idp-up              # start Keycloak
+#   make test-sso-idp            # pytest -m 'sso_idp and not e2e'
+#   make test-e2e-sso            # sso-idp-up + the Playwright SSO tests
+#   make sso-idp-down            # stop everything, discard volumes
+#
+# Keycloak:  issuer http://localhost:8033/realms/specivo-test
+#            admin console http://localhost:8033/admin/ (admin / admin-test-only)
+#
+# Specivo must run with SSO_ALLOW_INSECURE_HTTP=true to accept these http
+# issuer. That is a test-only setting.
+
+name: specivo-sso-test
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.5
+    command: ["start-dev", "--import-realm", "--health-enabled=true"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-test-only
+      # A fixed front-end URL keeps the issuer identical whichever host name a
+      # client used to reach the container.
+      KC_HOSTNAME: http://localhost:${SSO_KEYCLOAK_PORT:-8033}
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_LOG_LEVEL: warn,org.keycloak.exportimport:info
+    ports:
+      - "127.0.0.1:${SSO_KEYCLOAK_PORT:-8033}:8080"
+    # Back-channel logout calls the E2E server on the host (port 9944).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    tmpfs:
+      # The H2 dev database; the image runs as uid 1000.
+      - /opt/keycloak/data:uid=1000,gid=0,mode=0770
+    volumes:
+      - ./keycloak/specivo-test-realm.json:/opt/keycloak/data/import/specivo-test-realm.json:ro
+    healthcheck:
+      # The image has no curl/wget. The management port (9000) is not published.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"UP"' <&3
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 10s
+

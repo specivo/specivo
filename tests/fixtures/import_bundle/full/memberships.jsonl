@@ -1,0 +1,3 @@
+{"source_ref": "m-1", "project_ref": "p-web", "principal_kind": "user", "principal_ref": "u-alice", "role_refs": ["maintainer"]}
+{"source_ref": "m-2", "project_ref": "p-web", "principal_kind": "group", "principal_ref": "g-core", "role_refs": ["contributor"]}
+{"source_ref": "m-3", "project_ref": "p-api", "principal_kind": "user", "principal_ref": "u-carol", "role_refs": ["contributor"]}

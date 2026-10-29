@@ -153,9 +153,8 @@ class TestConverter:
     def test_passthrough_satisfies_the_protocol(self):
         assert isinstance(PassthroughConverter(), ContentConverter)
 
-    def test_context_defaults_to_textile(self):
+    def test_context_defaults_to_no_attachments(self):
         ctx = ConversionContext()
-        assert ctx.source_format == "textile"
         assert ctx.attachment_filenames == frozenset()
 
 

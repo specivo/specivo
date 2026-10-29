@@ -64,7 +64,7 @@ async def get_saved_filter(
     """Get a single saved filter by ID."""
     project = await _project_service.get_by_key(db, project_key.upper())
     await _project_service.require_project_access(db, project, current_user)
-    sf = await _service.get_by_id(db, filter_id)
+    sf = await _service.get_visible(db, filter_id, project.id, current_user)
     return SavedFilterOut.model_validate(sf)
 
 
@@ -82,7 +82,7 @@ async def update_saved_filter(
     """Update a saved filter. Owner or admin only."""
     project = await _project_service.get_by_key(db, project_key.upper())
     await _project_service.require_project_access(db, project, current_user)
-    sf = await _service.get_by_id(db, filter_id)
+    sf = await _service.get_visible(db, filter_id, project.id, current_user)
     sf = await _service.update(db, sf, data, current_user)
     return SavedFilterOut.model_validate(sf)
 
@@ -100,5 +100,5 @@ async def delete_saved_filter(
     """Delete a saved filter. Owner or admin only."""
     project = await _project_service.get_by_key(db, project_key.upper())
     await _project_service.require_project_access(db, project, current_user)
-    sf = await _service.get_by_id(db, filter_id)
+    sf = await _service.get_visible(db, filter_id, project.id, current_user)
     await _service.delete(db, sf, current_user)

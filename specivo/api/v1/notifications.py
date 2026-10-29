@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
+from specivo.core.exceptions import NotFoundError
 from specivo.core.security import get_current_user
 from specivo.models.notification import NotificationPreference
 from specivo.models.user import User
@@ -18,6 +19,7 @@ from specivo.schemas.notification import (
     NotificationPreferenceUpdate,
     UnreadCountOut,
 )
+from specivo.services.api_key_scope import project_in_scope, scope_clause
 from specivo.services.notification_service import NotificationService
 
 router = APIRouter(tags=["notifications"])
@@ -39,6 +41,10 @@ async def list_notification_preferences(
     Optionally filter by project_key.
     """
     stmt = select(NotificationPreference).where(NotificationPreference.user_id == current_user.id)
+    # A project-limited API key reads the preferences of its projects only.
+    limit = scope_clause(NotificationPreference.project_id)
+    if limit is not None:
+        stmt = stmt.where(limit)
 
     if project_key is not None:
         from specivo.models.project import Project
@@ -79,8 +85,11 @@ async def update_notification_preference(
 ) -> NotificationPreferenceOut:
     """Create or update a notification preference for the current user.
 
-    Upserts based on (user_id, project_id, event_type).
+    Upserts based on (user_id, project_id, event_type). A project-limited API
+    key may set preferences for its projects only, not the global ones.
     """
+    if not project_in_scope(data.project_id):
+        raise NotFoundError("Project not found")
     stmt = select(NotificationPreference).where(
         NotificationPreference.user_id == current_user.id,
         NotificationPreference.event_type == data.event_type,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import Request, UploadFile
@@ -15,6 +16,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from specivo.core.config import get_settings
 from specivo.core.exceptions import NotFoundError
 from specivo.models.attachment import Attachment
+from specivo.models.journal import Journal
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
@@ -76,6 +78,14 @@ ALLOWED_CONTENT_TYPES: frozenset[str] = frozenset(
 
 
 _audit = SecurityAuditService()
+
+
+@dataclass(frozen=True)
+class AttachmentUpload:
+    """An uploaded file, and the issue history entry that records it (None off an issue)."""
+
+    attachment: Attachment
+    journal: Journal | None
 
 
 class AttachmentService:
@@ -192,12 +202,35 @@ class AttachmentService:
         author: User,
         description: str | None = None,
         request: Request | None = None,
-    ) -> Attachment:
-        """Save file to disk and create a DB record.
+        journal_id: int | None = None,
+    ) -> AttachmentUpload:
+        """Save file to disk, create a DB record, and record it in the issue's history.
 
-        Raises ``ValueError`` for invalid file size or content type.
-        The file is deleted from disk if the DB insert fails (atomic cleanup).
+        A file attached to an issue is recorded as an ``attachment`` detail:
+        in *journal_id* when the upload came with that edit or comment, or
+        joins the batch whose first file was recorded there (see
+        ``JournalService.upload_journal``), otherwise in a new entry. Files
+        attached to other containers (wiki pages, comments) are not recorded.
+        Imports go through :meth:`upload_from_path`, which records nothing:
+        imported history carries its own attachment details.
+
+        Raises ``ValueError`` for invalid file size or content type, and
+        ``ValidationError`` for a *journal_id* that is not *author*'s entry on
+        the issue. The file is deleted from disk if the DB insert fails
+        (atomic cleanup).
         """
+        from specivo.models.issue import Issue
+        from specivo.services.journal_service import JournalService
+
+        journals = JournalService()
+        issue: Issue | None = None
+        history: Journal | None = None
+        if container_type == "Issue":
+            issue = await session.get(Issue, container_id)
+            if issue is not None and journal_id is not None:
+                # Checked before any file is written.
+                history = await journals.upload_journal(session, issue, author, journal_id)
+
         # Read the file content
         content = await file.read()
         filesize = len(content)
@@ -258,6 +291,12 @@ class AttachmentService:
                 pass
             raise
 
+        if issue is not None:
+            history = await journals.record_attachment_added(
+                session, issue, author, attachment.id, original_filename, history
+            )
+            await session.flush()
+
         logger.info(
             "Uploaded attachment %d (%s, %d bytes) to %s/%d by user %d",
             attachment.id,
@@ -291,7 +330,7 @@ class AttachmentService:
         except Exception:
             logger.debug("Audit logging skipped for attachment %d upload", attachment.id)
 
-        return attachment
+        return AttachmentUpload(attachment=attachment, journal=history)
 
     async def download(self, attachment_id: int, session: AsyncSession) -> tuple[Path, str]:
         """Return ``(file_path, content_type)`` for streaming response.
@@ -320,6 +359,8 @@ class AttachmentService:
         """Delete the DB record and the file on disk.
 
         The search index entry goes with the row (see ``search_index_service``).
+        A file removed from an issue by *user* is recorded in the issue's
+        history, under its name.
         """
         file_path = self._file_path(attachment.disk_filename)
         att_id = attachment.id
@@ -329,6 +370,16 @@ class AttachmentService:
 
         await session.delete(attachment)
         await session.flush()
+
+        if att_container_type == "Issue" and user is not None:
+            # The row is gone, so the issue's history keeps the file's name.
+            from specivo.models.issue import Issue
+            from specivo.services.journal_service import JournalService
+
+            issue = await session.get(Issue, att_container_id)
+            if issue is not None:
+                await JournalService().record_attachment_removed(session, issue, user, att_id, att_filename)
+                await session.flush()
 
         # Remove from disk (best-effort — DB row is already gone)
         try:
@@ -589,15 +640,18 @@ class AttachmentService:
         - ``WikiPage``: *user* holds ``view_wiki`` in the page's project.
 
         Admins may open everything, the anonymous user nothing. A missing
-        container or an unknown type answers False.
+        container or an unknown type answers False. With a project-limited API
+        key, an admin's reach stops at the key's projects
+        (``specivo.services.api_key_scope``).
         """
         from specivo.models.issue import Issue
         from specivo.models.journal import Journal
         from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.api_key_scope import is_global_admin
         from specivo.services.issue_service import IssueService
         from specivo.services.permission_service import Permission, check_permission
 
-        if user.is_admin:
+        if is_global_admin(user):
             return True
         if user.is_anonymous:
             return False
@@ -618,7 +672,7 @@ class AttachmentService:
             row = (
                 await session.execute(select(Journal.issue_id, Journal.is_private).where(Journal.id == container_id))
             ).one_or_none()
-            if row is None or row.issue_id is None or row.is_private:
+            if row is None or row.issue_id is None or (row.is_private and not user.is_admin):
                 return False
             issue_id = row.issue_id
         elif container_type == "Issue":
@@ -637,6 +691,105 @@ class AttachmentService:
         if visibility is not None:
             stmt = stmt.where(visibility)
         return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+    async def can_attach_to_container(
+        self,
+        session: AsyncSession,
+        user: User,
+        container_type: str,
+        container_id: int,
+    ) -> bool:
+        """Return whether *user* may add files to a container they can already open.
+
+        Core has no separate attachment permission, so adding a file takes the
+        right to change the container:
+
+        - ``Issue``: ``edit_issues`` or ``add_issue_notes`` (a file is sent
+          with an edit or a comment), or ``add_issues`` on an issue *user*
+          created, so a new issue's files can follow it in.
+        - ``WikiPage``: ``manage_wiki``, the permission that edits pages.
+        - ``Journal``: ``edit_notes``, or ``edit_own_notes`` on *user*'s own
+          comment.
+
+        Callers check :meth:`can_view_container` first and answer 404 when it
+        fails, so a hidden container is not disclosed. Admins pass (within an
+        API key's project limit); the anonymous user never does, since none of
+        these permissions is under its ceiling.
+        """
+        from specivo.models.issue import Issue
+        from specivo.models.journal import Journal
+        from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.permission_service import Permission, check_permission
+
+        async def holds(project_id: int, permission: Permission) -> bool:
+            return await check_permission(user, project_id, permission, session)
+
+        if container_type == "WikiPage":
+            project_id = (
+                await session.execute(
+                    select(Wiki.project_id)
+                    .join(WikiPage, WikiPage.wiki_id == Wiki.id)
+                    .where(WikiPage.id == container_id)
+                )
+            ).scalar_one_or_none()
+            return project_id is not None and await holds(project_id, Permission.MANAGE_WIKI)
+
+        if container_type == "Journal":
+            journal = (
+                await session.execute(
+                    select(Journal.user_id, Issue.project_id)
+                    .join(Issue, Issue.id == Journal.issue_id)
+                    .where(Journal.id == container_id)
+                )
+            ).one_or_none()
+            if journal is None:
+                return False
+            if await holds(journal.project_id, Permission.EDIT_NOTES):
+                return True
+            return journal.user_id == user.id and await holds(journal.project_id, Permission.EDIT_OWN_NOTES)
+
+        if container_type == "Issue":
+            issue = (
+                await session.execute(select(Issue.project_id, Issue.author_id).where(Issue.id == container_id))
+            ).one_or_none()
+            if issue is None:
+                return False
+            for permission in (Permission.EDIT_ISSUES, Permission.ADD_ISSUE_NOTES):
+                if await holds(issue.project_id, permission):
+                    return True
+            return issue.author_id == user.id and await holds(issue.project_id, Permission.ADD_ISSUES)
+
+        return False
+
+    async def can_change_attachment(self, session: AsyncSession, user: User, attachment: Attachment) -> bool:
+        """Return whether *user* may delete *attachment* or edit its description and metadata.
+
+        The upload rules (:meth:`can_attach_to_container`) apply: the file's
+        author may change it while they still hold the right to add files to
+        its container. Anyone else's file takes the right to manage the
+        container's files: ``edit_issues`` on an issue, ``manage_wiki`` on a
+        wiki page, ``edit_notes`` on a comment. Administrators pass, within an
+        API key's project limit.
+
+        Callers check :meth:`get_visible` first, which answers 404 for a file
+        *user* may not open.
+        """
+        if user.is_anonymous:
+            return False
+        if attachment.author_id == user.id:
+            return await self.can_attach_to_container(session, user, attachment.container_type, attachment.container_id)
+
+        from specivo.services.permission_service import Permission, check_permission
+
+        project_id = await self._resolve_project_id(session, attachment.container_type, attachment.container_id)
+        if project_id is None:
+            return False
+        manage = {
+            "Issue": Permission.EDIT_ISSUES,
+            "WikiPage": Permission.MANAGE_WIKI,
+            "Journal": Permission.EDIT_NOTES,
+        }.get(attachment.container_type)
+        return manage is not None and await check_permission(user, project_id, manage, session)
 
     async def get_visible(self, session: AsyncSession, attachment_id: int, user: User) -> Attachment:
         """Fetch an attachment *user* may open, eagerly loading author.

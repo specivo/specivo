@@ -7,7 +7,7 @@ one version to the next as somebody edits it, and seeding a history that
 already exists is not that. Each revision keeps its own author, comment and
 date, so the page history reads the way it did in the source.
 
-Redirects are imported too. Redmine records one whenever a page is renamed and
+Redirects are imported too. A source can record one whenever a page is renamed and
 Specivo has the same table, so a link written against a page's old name keeps
 working after the migration.
 """
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.ir import EntityType, IRWikiPage
@@ -44,10 +44,28 @@ async def load_wiki_pages(ctx: PhaseContext) -> None:
             continue
 
         async for ir in ctx.adapter.extract_wiki_pages(project_ref):
-            if await ctx.id_map.get(ctx.session, EntityType.WIKI_PAGE, ir.source_ref):
+            page_id = await ctx.id_map.get(ctx.session, EntityType.WIKI_PAGE, ir.source_ref)
+            if page_id:
                 ctx.summary.record_skipped(EntityType.WIKI_PAGE)
+                await _add_new_revisions(ctx, page_id, ir)
                 continue
             await _create_page(ctx, project_id, ir)
+
+
+async def _add_new_revisions(ctx: PhaseContext, page_id: int, ir: IRWikiPage) -> None:
+    """Append the revisions an earlier import of this page did not have, after the ones it has.
+
+    A later export of the same source (a delta run) carries the page's whole
+    history again; what was imported before is in the identifier map and is
+    skipped, and a revision made since then becomes the page's newest version.
+    """
+    page = await ctx.session.get(WikiPage, page_id)
+    if page is None:
+        return
+    last = (
+        await ctx.session.execute(select(func.max(WikiContent.version)).where(WikiContent.page_id == page_id))
+    ).scalar_one()
+    await _replay_revisions(ctx, page, ir.versions or [], next_version=(last or 0) + 1)
 
 
 async def _create_page(ctx: PhaseContext, project_id: int, ir: IRWikiPage) -> WikiPage | None:
@@ -98,14 +116,14 @@ async def _create_page(ctx: PhaseContext, project_id: int, ir: IRWikiPage) -> Wi
     return page
 
 
-async def _replay_revisions(ctx: PhaseContext, page: WikiPage, revisions: list) -> None:
-    """Insert revisions 2..N directly, each keeping its own author and date.
+async def _replay_revisions(ctx: PhaseContext, page: WikiPage, revisions: list, next_version: int = 2) -> None:
+    """Insert revisions directly from *next_version* on, each keeping its own author and date.
 
-    Version numbers are renumbered consecutively rather than copied. Redmine
+    Version numbers are renumbered consecutively rather than copied. A source
     can leave gaps when a revision is deleted, and Specivo's history reads by
-    position, so a gap would look like a missing revision.
+    position, so a gap would look like a missing revision. A revision already
+    imported is skipped and takes no number.
     """
-    next_version = 2
     for revision in revisions:
         if await ctx.id_map.get(ctx.session, EntityType.WIKI_VERSION, revision.source_ref):
             ctx.summary.record_skipped(EntityType.WIKI_VERSION)
@@ -177,8 +195,8 @@ async def load_wiki_redirects(ctx: PhaseContext) -> None:
         if wiki is None:
             continue
 
-        async for title, target in reader(project_ref):
-            slug_from, slug_to = slugify(title), slugify(target)
+        async for redirect in reader(project_ref):
+            slug_from, slug_to = slugify(redirect.title), slugify(redirect.redirects_to)
             if not slug_from or not slug_to or slug_from == slug_to:
                 continue
 

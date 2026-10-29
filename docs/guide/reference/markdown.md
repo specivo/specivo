@@ -109,6 +109,10 @@ resolves). A token that looks like a key but doesn't match a real issue — a ve
 `API-2`, a part number, a typo'd key — stays as plain text instead of becoming a dead link. That keeps
 references trustworthy: if it's a link, there's a real issue on the other end.
 
+The same goes for issues you may not see. A key that names a private issue, or one hidden from you by
+your role, is not linked for you and reads as plain text, so a reference never reveals that the issue
+exists. Keys inside code (a code block or `` `inline code` ``) or a raw HTML block are left as written.
+
 ## Wiki cross-links
 
 Inside the wiki, link to another page in the same project with double brackets:
@@ -118,7 +122,8 @@ See [[Release Process]] for the steps.
 ```
 
 You can link by title (`[[Release Process]]`) or by slug (`[[release-process]]`) — slugs are normalized, so
-`[[My Page]]`, `[[my-page]]`, and `[[My_Page]]` all resolve to the same page. See
+`[[My Page]]`, `[[my-page]]`, and `[[My_Page]]` all resolve to the same page. Double brackets inside
+code (a code block or `` `inline code` ``) or inside a raw HTML block are shown as written, not linked. See
 [Linking & history](../wiki/history-linking.md) for more.
 
 ## Size and complexity limits

@@ -8,18 +8,15 @@ Extraction methods return async iterators so a large instance streams rather
 than materialising. Implementations should page their queries (keyset
 pagination on the source primary key) instead of reading a whole table.
 
-Adapters are found through :class:`SourceAdapterRegistry`. The built-in Redmine
-adapter is always there; a plugin adds its own with ``get_import_sources()``,
-and :func:`specivo.core.plugin_manager.bootstrap` builds the registry from
-both, refusing a duplicate or reserved name.
+Adapters are found through :class:`SourceAdapterRegistry`. ``bundle`` is the
+only source: an importer for another tracker is a separate tool that reads that
+tracker and writes an import bundle (``docs/import-bundle/v1.md``).
 """
 
 from __future__ import annotations
 
 import argparse
-import re
-from collections.abc import AsyncIterator, Iterable, Mapping
-from dataclasses import dataclass
+from collections.abc import AsyncIterator, Mapping
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, ClassVar, Protocol, runtime_checkable
@@ -36,6 +33,7 @@ from specivo.importers.core.ir import (
     IRMembership,
     IRProject,
     IRRelation,
+    IRSprint,
     IRTimeEntry,
     IRUser,
     IRVersion,
@@ -118,6 +116,8 @@ class SourceAdapter(Protocol):
 
     def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]: ...
 
+    def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]: ...
+
     def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
         """Yield issues parents-first within the project."""
         ...
@@ -179,6 +179,15 @@ class BaseSourceAdapter:
         # different instance names; a single one can use the system name.
         self.source_instance = source_instance or self.source_system
 
+    @property
+    def id_map_system(self) -> str:
+        """The system the identifier map is keyed by: this source's own name.
+
+        A source that carries another system's data, as a bundle does,
+        overrides it with that system's name.
+        """
+        return self.source_system
+
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Add no options. Override to add the source's own."""
@@ -222,6 +231,9 @@ class BaseSourceAdapter:
     def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]:
         return _empty()
 
+    def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]:
+        return _empty()
+
     def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
         return _empty()
 
@@ -252,28 +264,19 @@ class BaseSourceAdapter:
         raise ValueError(f"The {self.source_system} source does not provide attachment files")
 
 
+def id_map_system(adapter: object) -> str:
+    """Return the system *adapter*'s rows go under in the identifier map.
+
+    Its ``id_map_system`` when it has one, else its ``source_system``: an
+    adapter written to the protocol alone need not know about the former.
+    """
+    system = getattr(adapter, "id_map_system", None)
+    return system if isinstance(system, str) and system else str(adapter.source_system)  # type: ignore[attr-defined]
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
-
-# The name is typed on the command line and stored in import_id_map.source_system
-# (30 characters), and becomes part of the import account's login.
-SOURCE_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{1,29}$")
-
-# Names only a built-in adapter may use, so a plugin cannot take over the
-# identifier map of an import that already ran.
-RESERVED_SOURCE_NAMES: frozenset[str] = frozenset({"redmine"})
-
-ORIGIN_CORE = "core"
-
-
-def plugin_origin(plugin_name: str) -> str:
-    """Return the origin label for a source contributed by *plugin_name*."""
-    return f"plugin:{plugin_name}"
-
-
-class SourceRegistrationError(ValueError):
-    """An import source has an invalid, reserved or duplicate name."""
 
 
 class UnknownSourceError(KeyError):
@@ -283,46 +286,18 @@ class UnknownSourceError(KeyError):
         return str(self.args[0]) if self.args else super().__str__()
 
 
-@dataclass(frozen=True, slots=True)
-class RegisteredSource:
-    """An adapter class together with where it was registered from."""
-
-    factory: type[Any]
-    origin: str
-
-    @property
-    def description(self) -> str:
-        return str(getattr(self.factory, "description", "") or "")
-
-
 class SourceAdapterRegistry:
-    """Maps a source-system name to the adapter class that handles it.
+    """Maps a source name to the adapter class that handles it.
 
-    Built once per process by :func:`build_source_registry`. Registering a name
-    twice is an error rather than an override, so two plugins cannot silently
-    fight over a source.
+    Built once per process by :func:`build_source_registry`.
     """
 
     def __init__(self) -> None:
-        self._entries: dict[str, RegisteredSource] = {}
+        self._entries: dict[str, type[Any]] = {}
 
-    def register(self, name: str, factory: type[Any], origin: str = ORIGIN_CORE) -> None:
-        """Register *factory* under *name*.
-
-        Raises :class:`SourceRegistrationError` for a malformed name, a reserved
-        one claimed by anything but core, or a name that is already taken.
-        """
-        if not isinstance(name, str) or not SOURCE_NAME_PATTERN.match(name):
-            raise SourceRegistrationError(
-                f"Invalid import source name {name!r} from {origin}: must match {SOURCE_NAME_PATTERN.pattern}"
-            )
-        if name in RESERVED_SOURCE_NAMES and origin != ORIGIN_CORE:
-            raise SourceRegistrationError(f"Import source name '{name}' from {origin} is reserved for the built-in one")
-        if name in self._entries:
-            raise SourceRegistrationError(
-                f"Import source '{name}' is registered twice (by {self._entries[name].origin} and by {origin})"
-            )
-        self._entries[name] = RegisteredSource(factory, origin)
+    def register(self, name: str, factory: type[Any]) -> None:
+        """Register *factory* under *name*."""
+        self._entries[name] = factory
 
     def get(self, name: str) -> type[Any]:
         """Return the adapter class registered for *name*.
@@ -331,76 +306,36 @@ class SourceAdapterRegistry:
         is unregistered.
         """
         try:
-            return self._entries[name].factory
+            return self._entries[name]
         except KeyError:
             known = ", ".join(self.names()) or "none"
             raise UnknownSourceError(f"Unknown import source '{name}'. Registered sources: {known}") from None
 
-    def entries(self) -> Mapping[str, RegisteredSource]:
-        """Return every registration by name (read-only)."""
-        return MappingProxyType(self._entries)
+    def descriptions(self) -> Mapping[str, str]:
+        """Return each source's one-line description by name (read-only)."""
+        return MappingProxyType(
+            {name: str(getattr(factory, "description", "") or "") for name, factory in self._entries.items()}
+        )
 
     def names(self) -> list[str]:
         """Return every registered source name, sorted."""
         return sorted(self._entries)
 
 
-def builtin_sources() -> list[type[Any]]:
-    """Return the adapter classes shipped with Specivo."""
-    from specivo.importers.redmine.adapter import RedmineSourceAdapter
+def build_source_registry() -> SourceAdapterRegistry:
+    """Build the registry. ``bundle`` is the only source: importers write bundles."""
+    from specivo.importers.bundle.adapter import BundleSourceAdapter
 
-    return [RedmineSourceAdapter]
-
-
-def _check_source_shape(source: object, origin: str) -> tuple[str, type[Any]]:
-    """Return ``(name, class)`` for *source*, or explain why it is not an adapter class."""
-    if not isinstance(source, type):
-        raise SourceRegistrationError(f"{origin} provided {source!r}, which is not an adapter class")
-    name = getattr(source, "source_system", None)
-    missing = [attr for attr in ("add_arguments", "from_args") if not callable(getattr(source, attr, None))]
-    if not isinstance(name, str):
-        missing.insert(0, "source_system")
-    if missing or not isinstance(name, str):
-        raise SourceRegistrationError(
-            f"{origin} provided {source.__name__}, which is not an import source (missing {', '.join(missing)}). "
-            "Subclass BaseSourceAdapter."
-        )
-    return name, source
-
-
-def build_source_registry(plugin_sources: Iterable[tuple[str, Iterable[object]]] = ()) -> SourceAdapterRegistry:
-    """Build the registry: the built-in adapters, then each plugin's.
-
-    *plugin_sources* is ``(plugin_name, adapter_classes)`` per plugin. Raises
-    :class:`SourceRegistrationError` on an invalid, reserved or duplicate name.
-    """
     registry = SourceAdapterRegistry()
-    for builtin in builtin_sources():
-        name, factory = _check_source_shape(builtin, ORIGIN_CORE)
-        registry.register(name, factory, ORIGIN_CORE)
-    for plugin_name, sources in plugin_sources:
-        origin = plugin_origin(plugin_name)
-        for source in sources:
-            name, factory = _check_source_shape(source, origin)
-            registry.register(name, factory, origin)
+    registry.register(BundleSourceAdapter.source_system, BundleSourceAdapter)
     return registry
 
 
 _registry: SourceAdapterRegistry | None = None
 
 
-def install_source_registry(registry: SourceAdapterRegistry) -> None:
-    """Make *registry* the process-wide one. Called by the bootstrap."""
-    global _registry  # noqa: PLW0603
-    _registry = registry
-
-
 def get_source_registry() -> SourceAdapterRegistry:
-    """Return the process-wide registry.
-
-    A process that never ran the bootstrap (a script, a unit test) gets the
-    built-in sources only, built on first use.
-    """
+    """Return the process-wide registry, built on first use."""
     global _registry  # noqa: PLW0603
     if _registry is None:
         _registry = build_source_registry()

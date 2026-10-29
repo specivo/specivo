@@ -10,9 +10,13 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import NotFoundError
+from specivo.core.i18n import gettext as _
 from specivo.models.agent_cost import AgentTokenLog, ModelCostConfig
 from specivo.models.agent_session import AgentSession
+from specivo.models.project import Project
+from specivo.models.user import User
 from specivo.schemas.agent_cost import AgentTokenLogCreate, ModelCostConfigCreate
+from specivo.services.issue_service import IssueService
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +64,19 @@ class AgentCostService:
         self,
         session: AsyncSession,
         data: AgentTokenLogCreate,
+        user: User,
     ) -> AgentTokenLog:
-        """Log token usage and calculate cost from ModelCostConfig."""
+        """Log token usage on one of *user*'s agent sessions and calculate its cost from ModelCostConfig.
+
+        Only the account a session belongs to may log to it, administrators
+        included. Any other session id, and one that does not exist, is
+        answered with ``NotFoundError`` so the endpoint cannot be used to
+        probe for sessions or to charge tokens to somebody else's.
+        """
+        owner_id = await session.scalar(select(AgentSession.user_id).where(AgentSession.id == data.session_id))
+        if owner_id is None or owner_id != user.id:
+            raise NotFoundError(_("Agent session not found"))
+
         # Look up cost config
         result = await session.execute(select(ModelCostConfig).where(ModelCostConfig.model_name == data.model_name))
         config = result.scalar_one_or_none()
@@ -112,11 +127,17 @@ class AgentCostService:
     async def get_cost_summary(
         self,
         session: AsyncSession,
-        project_id: int,
+        project: Project,
+        reader: User,
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> list[dict]:
-        """Get aggregated costs by model for a project."""
+        """Get aggregated costs by model over the issues of *project* that *reader* may see.
+
+        Sessions on issues hidden from *reader* (private issues, or the whole
+        project for a key limited to other projects) are left out, so the
+        totals never reveal work the reader cannot see.
+        """
         from specivo.models.issue import Issue
 
         query = (
@@ -128,9 +149,12 @@ class AgentCostService:
             )
             .join(AgentSession, AgentTokenLog.session_id == AgentSession.id)
             .join(Issue, AgentSession.issue_id == Issue.id)
-            .where(Issue.project_id == project_id)
+            .where(Issue.project_id == project.id)
             .group_by(AgentTokenLog.model_name)
         )
+        visibility = await IssueService().project_visible_issues_clause(session, reader, project)
+        if visibility is not None:
+            query = query.where(visibility)
 
         if date_from is not None:
             query = query.where(func.date(AgentTokenLog.created_at) >= date_from)

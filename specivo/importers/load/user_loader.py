@@ -5,7 +5,7 @@ Three things happen here that are worth knowing about.
 **Passwords survive only when asked to.** With ``--import-passwords``, an
 account whose source credential uses an algorithm listed in
 ``LEGACY_PASSWORD_ALGORITHMS`` keeps its password: the credential's raw source
-columns go through the legacy hasher's ``from_source`` (for Redmine, the SHA1
+columns go through the legacy hasher's ``from_source`` (for ``redmine_sha1``, the SHA1
 digest wrapped in bcrypt), and the first sign-in replaces it with a native
 hash. Everybody else — no flag, no credential (an LDAP account, a blank hash),
 or an administrator, who always has to choose a new one — gets a random
@@ -14,14 +14,14 @@ account is eventually given by somebody else is not the one it keeps. The
 report lists which accounts kept their password and which are waiting for one.
 
 **Identity has to be squeezed into narrower columns.** Specivo requires an email
-and enforces case-insensitive uniqueness on both login and email, while Redmine
-allows an account with no address at all. Anything that would collide or fail is
+and enforces case-insensitive uniqueness on both login and email, while a source
+can allow an account with no address at all. Anything that would collide or fail is
 adjusted rather than dropped, and the adjustment is reported.
 
 **Groups become groups.** A Specivo ``UserGroup`` holds project roles the same
 way a user does, so a source group is imported as one, with its members, and the
 memberships phase grants roles to the group itself. Group names are unique
-case-insensitively in Specivo and are not in Redmine, so a name that is already
+case-insensitively in Specivo and may not be in the source, so a name that is already
 taken is suffixed rather than merged onto whatever holds it.
 """
 
@@ -60,6 +60,9 @@ NOTE_SYNTHETIC_EMAIL = "accounts_given_a_placeholder_email"
 NOTE_PASSWORD_KEPT = "accounts_that_keep_their_existing_password"
 NOTE_ADMIN_PASSWORD_RESET = "administrators_asked_to_set_a_new_password"
 NOTE_EXTERNAL_AUTH = "accounts_that_signed_in_through_an_external_directory"
+NOTE_ADMINS_GRANTED = "accounts_imported_as_administrators"
+NOTE_ADMINS_NOT_GRANTED = "source_administrators_imported_without_administrator_rights"
+NOTE_NOT_ACTIVE = "accounts_imported_locked_or_not_active"
 
 # Identifier under which the fallback author account is mapped, so a resumed
 # run finds the one it made rather than creating another.
@@ -80,7 +83,7 @@ _user_group_service = UserGroupService()
 async def ensure_import_account(ctx: PhaseContext) -> User:
     """Return the service account that owns anything with no resolvable author.
 
-    Redmine allows a row whose author was deleted, and Specivo requires one, so
+    A source can keep a row whose author was deleted, and Specivo requires one, so
     the import needs an account to attribute those to. Marked as a service
     account so it is not mistaken for a person, and reused across runs.
 
@@ -103,13 +106,25 @@ async def ensure_import_account(ctx: PhaseContext) -> User:
             ctx.state[IMPORT_ACCOUNT_STATE_KEY] = account.id
             return account
 
-    login = f"{ctx.adapter.source_system}-import"
-    existing = await _find_user_by_login(ctx.session, login)
+    # Named after the system the identifier map is keyed by, so a later bundle
+    # of the same source reuses the account an earlier import created.
+    system = ctx.id_map.source_system
+    wanted = f"{system}-import"
+    login, existing = await _import_account_login(ctx.session, wanted)
+    if login != wanted:
+        # A bundle names its own system, so the login it leads to may belong to
+        # someone: a person, or a service account with another job. Neither is
+        # ever made the author of imported records.
+        ctx.warn(
+            f"The login {wanted!r} belongs to an account the import did not create, so it was left alone; "
+            "records without an author belong to another import account",
+            account=login,
+        )
     if existing is None:
         existing = User(
             login=login,
-            email=f"{login}@{_PLACEHOLDER_EMAIL_DOMAIN}",
-            display_name=f"{ctx.adapter.source_system.title()} Import",
+            email=_import_account_email(login),
+            display_name=f"{system.replace('_', ' ').title()} Import",
             password_hash=_unusable_password(),
             status="active",
             is_admin=False,
@@ -182,7 +197,7 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
         display_name=(ir.display_name or login)[:_MAX_DISPLAY_NAME],
         password_hash=kept_hash or _unusable_password(),
         status=ir.status,
-        is_admin=ir.is_admin,
+        is_admin=ir.is_admin and ctx.options.import_admins,
         is_service_account=False,
         # Without a kept password nobody holds this one, so the first password
         # the account actually has will have been chosen by somebody else.
@@ -205,8 +220,7 @@ async def load_user(ctx: PhaseContext, ir: IRUser) -> User:
         ctx.summary.add_note(NOTE_PASSWORD_KEPT, login)
     else:
         ctx.summary.add_note(NOTE_PASSWORD_SET_AT_FIRST_SIGN_IN, login)
-    if ir.external_auth:
-        ctx.summary.add_note(NOTE_EXTERNAL_AUTH, login)
+    _report_account(ctx, ir, login)
     if synthesised:
         ctx.summary.add_note(NOTE_SYNTHETIC_EMAIL, f"{login} ({email})")
     ctx.tick()
@@ -267,6 +281,25 @@ async def load_group(ctx: PhaseContext, ir: IRGroup) -> UserGroup | None:
     return group
 
 
+def _report_account(ctx: PhaseContext, ir: IRUser, login: str) -> None:
+    """List the accounts an administrator should look at after the import.
+
+    Administrators come first: the source's administrators only become
+    Specivo administrators when the operator asked for it with
+    ``--import-admins``, because the import source decides who they are, and
+    a bundle can be written by anyone.
+    """
+    if ir.is_admin:
+        if ctx.options.import_admins:
+            ctx.summary.add_note(NOTE_ADMINS_GRANTED, login)
+        else:
+            ctx.summary.add_note(NOTE_ADMINS_NOT_GRANTED, f"{login} (re-run with --import-admins to keep the rights)")
+    if ir.external_auth:
+        ctx.summary.add_note(NOTE_EXTERNAL_AUTH, login)
+    if ir.status != "active":
+        ctx.summary.add_note(NOTE_NOT_ACTIVE, f"{login} ({ir.status})")
+
+
 def _imported_password(ctx: PhaseContext, ir: IRUser, login: str) -> str | None:
     """Return the stored value that keeps the account's source password, or ``None``.
 
@@ -322,6 +355,34 @@ def _supported_language(language: str | None) -> str:
     return settings.default_language
 
 
+def _import_account_email(login: str) -> str:
+    """The placeholder address an import account is created with, which also marks it as one."""
+    return f"{login}@{_PLACEHOLDER_EMAIL_DOMAIN}"
+
+
+def _is_import_account(user: User) -> bool:
+    """Whether *user* is an account an import created for itself, and so may be reused."""
+    return bool(user.is_service_account) and (user.email or "").lower() == _import_account_email(user.login).lower()
+
+
+async def _import_account_login(session: AsyncSession, wanted: str) -> tuple[str, User | None]:
+    """Return the login to use for the import account, and the account if it already exists.
+
+    *wanted* when it is free or already an import account; otherwise the first
+    of ``<wanted>-2``, ``<wanted>-3``, ... that is.
+    """
+    for attempt in range(1, 1000):
+        login = wanted if attempt == 1 else f"{wanted}-{attempt}"
+        found = await _find_user_by_login(session, login)
+        if found is not None:
+            if _is_import_account(found):
+                return login, found
+            continue
+        if not await _exists(session, User.login, login):
+            return login, None
+    raise PhaseFailedError(f"No free login for the import account starting with {wanted!r}")
+
+
 async def _find_user_by_login(session: AsyncSession, login: str) -> User | None:
     stmt = select(User).where(func.lower(User.login) == login.lower(), real_users_clause()).limit(1)
     return (await session.execute(stmt)).scalar_one_or_none()
@@ -363,7 +424,7 @@ async def _group_name_taken(session: AsyncSession, name: str) -> bool:
 async def _unique_group_name(ctx: PhaseContext, ir: IRGroup) -> str:
     """Return a group name that fits the column and is not already taken.
 
-    ``user_groups`` is unique on the lowercased name and Redmine is not, so two
+    ``user_groups`` is unique on the lowercased name and the source's may not be, so two
     source groups differing only in case, and a source group whose name matches
     one this instance already has, both land on the same row otherwise.
 
@@ -392,7 +453,7 @@ async def _unique_group_name(ctx: PhaseContext, ir: IRGroup) -> str:
 async def _unique_email(ctx: PhaseContext, ir: IRUser, login: str) -> tuple[str, bool]:
     """Return an address for the account and whether it had to be invented.
 
-    Specivo requires an address and Redmine does not always have one. A
+    Specivo requires an address and a source does not always have one. A
     placeholder under the reserved ``.invalid`` domain keeps the account
     importable while guaranteeing no mail is ever sent to a real inbox.
     """

@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/time_entries.schema.json",
+  "title": "Import bundle v1: time_entries.jsonl",
+  "description": "One time log entry per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "project_ref",
+    "hours",
+    "spent_on"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "hours": {
+      "$ref": "common.schema.json#/$defs/decimal"
+    },
+    "spent_on": {
+      "$ref": "common.schema.json#/$defs/date"
+    },
+    "issue_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "user_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "activity_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef"
+    },
+    "comments": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

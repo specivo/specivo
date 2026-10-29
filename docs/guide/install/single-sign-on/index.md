@@ -5,8 +5,7 @@ description: Let people sign in to Specivo through your OpenID Connect identity 
 # Single sign-on
 
 Single sign-on (SSO) lets people sign in to Specivo with the account they already have at your
-identity provider (IdP), such as Keycloak, authentik or Microsoft Entra ID. It is included in the
-Community edition.
+identity provider (IdP), such as Keycloak, authentik or Microsoft Entra ID.
 
 This page explains how it works and what every setting does. For the steps at a specific provider,
 use its page:

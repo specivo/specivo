@@ -14,6 +14,7 @@ from specivo.core.exceptions import NotFoundError, PermissionDeniedError, Valida
 from specivo.models.issue import Issue
 from specivo.models.relation import IssueRelation
 from specivo.models.user import User
+from specivo.services.api_key_scope import is_global_admin
 from specivo.services.nested_set_service import NestedSetService
 
 logger = logging.getLogger(__name__)
@@ -252,7 +253,7 @@ class RelationService:
         )
         relations = list(result.scalars().all())
 
-        if relations and not user.is_admin:
+        if relations and not is_global_admin(user):
             from specivo.services.issue_service import IssueService
 
             def counterpart(relation: IssueRelation) -> int:

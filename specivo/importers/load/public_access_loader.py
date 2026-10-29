@@ -1,6 +1,6 @@
 """Carry the source's non-member and anonymous access over, without opening anything.
 
-Redmine decides what people without a membership may see with two builtin
+A source can decide what people without a membership may see with two builtin
 roles that apply instance-wide, behind a "sign-in required" setting. Specivo
 decides it per project: a seeded read-only Non member role for signed-in
 non-members, and a project's ``anonymous_permissions`` for visitors without an
@@ -61,7 +61,11 @@ async def load_public_access(ctx: PhaseContext) -> None:
     reader = getattr(ctx.adapter, "extract_public_access", None)
     if not callable(reader):
         return
-    access: IRPublicAccess = await reader()
+    # None: the source can say nothing about it (a bundle without
+    # public_access.json), which is not the same as saying nobody had access.
+    access: IRPublicAccess | None = await reader()
+    if access is None:
+        return
 
     await _report_non_member_role(ctx, access)
     for line in access.not_carried_over:

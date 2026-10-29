@@ -1,5 +1,5 @@
 ---
-description: Connect an AI client to the Specivo MCP server — get the server URL and an mcp-scoped key, then add the SSE or Codex configuration.
+description: Connect an AI client to the Specivo MCP server — get the server URL and an API key, then add the SSE or Codex configuration.
 ---
 
 # Connecting an AI client
@@ -11,7 +11,7 @@ SSE for Claude Code, Cursor, Windsurf, and Cline, and Streamable HTTP for the Co
 
 1. **Know your server URL.** Replace `your-specivo-host` in the snippets below with your actual
    Specivo host (for example, `specivo.example.com`).
-2. **Get an `mcp`-scoped key.** Create one under **Your profile → API keys** if you haven't already.
+2. **Get an API key.** Create one under **Your profile → API keys** if you haven't already.
    See [API keys & scopes](api-keys.md). Each snippet uses the placeholder `spv_your_api_key_here` —
    substitute your real `spv_…` key.
 
@@ -70,5 +70,5 @@ account the agent is acting as.
 
 !!! warning "MCP request returns a permission error"
     If the agent connects but a tool call is refused, the key's account most likely lacks the
-    required role on that project, or the key is missing the **`mcp`** scope. Check both on the
-    [API keys](api-keys.md) page and the project's member list.
+    required role on that project, or the key is limited to other projects. Check the project's
+    member list and the key's [project limit](api-keys.md#limit-a-key-to-some-projects).

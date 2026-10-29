@@ -22,7 +22,7 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_update_issue": "Update issue fields; lock_version handled automatically",
     "specivo_edit_description": "Search-and-replace in issue description (token-efficient)",
     "specivo_add_comment": "Add a journal comment to an issue",
-    "specivo_list_comments": "List comments on an issue, paginated (limit, offset, order)",
+    "specivo_list_comments": "List comments on an issue, paginated; include_changes=true adds named field changes",
     "specivo_search": "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'",
     "specivo_list_wiki_pages": "List wiki pages for a project",
     "specivo_read_wiki": "Read a wiki page by slug",

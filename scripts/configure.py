@@ -64,6 +64,22 @@ def ask_password(prompt: str, min_length: int = 8) -> str:
         return pw
 
 
+def write_private(path: Path, content: str) -> None:
+    """Write *content* to *path* so that only its owner can read it.
+
+    These files hold the database password, ``SECRET_KEY`` and the first
+    admin's password. The file is created with mode 0600 instead of being
+    narrowed after the write, so the secrets are never readable by other
+    users, not even briefly; an existing file is narrowed before it is
+    rewritten. Windows has no such mode bits and keeps its default ACL.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        if os.name != "nt":
+            os.fchmod(fh.fileno(), 0o600)
+        fh.write(content)
+
+
 def create_data_dirs(data_dir: Path) -> None:
     """Create the data directory structure."""
     dirs = [
@@ -199,7 +215,7 @@ CAPTCHA_ENABLED=false
 CORS_ORIGINS={cors_origins}
 {smtp_lines}"""
 
-    env_path.write_text(env_content.strip() + "\n")
+    write_private(env_path, env_content.strip() + "\n")
     print(f"\n  Written: {env_path}")
 
     # ---- Write .env.local ----
@@ -208,7 +224,7 @@ CORS_ORIGINS={cors_origins}
 
 SECRET_KEY={secret_key}
 """
-    env_local_path.write_text(env_local_content)
+    write_private(env_local_path, env_local_content)
     print(f"  Written: {env_local_path}")
 
     # ---- Write bootstrap file ----
@@ -219,10 +235,7 @@ SECRET_KEY={secret_key}
         "email": admin_email,
         "password": admin_password,
     }
-    bootstrap_path.write_text(json.dumps(bootstrap_data, indent=2) + "\n")
-    # Restrict permissions (non-Windows)
-    if os.name != "nt":
-        bootstrap_path.chmod(0o600)
+    write_private(bootstrap_path, json.dumps(bootstrap_data, indent=2) + "\n")
     print(f"  Written: {bootstrap_path} (will be deleted after first start)")
 
     # ---- Summary ----

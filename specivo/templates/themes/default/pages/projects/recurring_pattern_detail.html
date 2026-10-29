@@ -220,8 +220,8 @@
           <tbody>
             {% for issue in instances %}
             <tr>
-              <td><a class="issue-key" href="/issues/{{ issue.id }}/">#{{ issue.id }}</a></td>
-              <td><div class="issue-subject"><a href="/issues/{{ issue.id }}/">{{ issue.subject }}</a></div></td>
+              <td><a class="issue-key" href="/issue/{{ issue.display_key }}/">{{ issue.display_key }}</a></td>
+              <td><div class="issue-subject"><a href="/issue/{{ issue.display_key }}/">{{ issue.subject }}</a></div></td>
               <td>
                 {% if issue.status %}<span class="badge-status">{{ issue.status.name }}</span>{% endif %}
               </td>

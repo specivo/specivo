@@ -19,6 +19,8 @@ from specivo.importers.core.ir import (
     EntityType,
     IRAttachment,
     IRIssue,
+    IRJournalDetail,
+    IRJournalEntry,
     IRLookups,
     IRPriority,
     IRProject,
@@ -34,12 +36,13 @@ from specivo.importers.load.attachment_loader import (
     load_issue_attachments,
     load_wiki_attachments,
 )
-from specivo.importers.load.issue_loader import load_issues
+from specivo.importers.load.issue_loader import load_issues, load_journals
 from specivo.importers.load.lookup_loader import load_lookups
 from specivo.importers.load.project_loader import load_projects
 from specivo.importers.load.user_loader import load_users
 from specivo.importers.load.wiki_loader import load_wiki_pages
 from specivo.models.attachment import Attachment
+from specivo.models.journal import ATTACHMENT_DETAIL, Journal, JournalDetail
 from specivo.models.user import User
 from tests.services.conftest import FakeAdapter
 
@@ -149,6 +152,36 @@ class TestIssueAttachments:
         assert attachment.description == "The log"
         assert (attachment_dir / attachment.disk_filename).read_bytes() == SAMPLE
 
+    async def test_an_imported_file_is_recorded_once_by_its_imported_history(
+        self, db_session, loaded, files_dir, attachment_dir
+    ):
+        """Copying the file in records nothing; the source's own history entry is the one record."""
+        added = IRJournalEntry(
+            source_ref="500",
+            issue_ref="100",
+            user_ref="7",
+            notes=None,
+            created_at=datetime(2020, 6, 1, 12, 0, tzinfo=UTC),
+            details=[IRJournalDetail(property="attachment", prop_key="800", new_value="server.log")],
+        )
+        ctx = await loaded(_adapter(files_dir, attachments=[_attachment()], journals=[added]))
+        await load_issue_attachments(ctx)
+
+        issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
+        assert (await db_session.execute(select(func.count()).where(Journal.issue_id == issue_id))).scalar_one() == 0
+
+        await load_journals(ctx)
+
+        attachment_id = await ctx.id_map.get(db_session, EntityType.ATTACHMENT, "800")
+        details = (
+            await db_session.execute(
+                select(JournalDetail.prop_key, JournalDetail.old_value, JournalDetail.new_value)
+                .join(Journal, Journal.id == JournalDetail.journal_id)
+                .where(Journal.issue_id == issue_id, JournalDetail.property == ATTACHMENT_DETAIL)
+            )
+        ).all()
+        assert [tuple(d) for d in details] == [(str(attachment_id), None, "server.log")]
+
     async def test_hash_and_size_come_from_the_bytes(self, db_session, loaded, files_dir, attachment_dir):
         """The source's own digest and size are not trusted."""
         ctx = await loaded(_adapter(files_dir, attachments=[_attachment(filesize=999)]))
@@ -245,6 +278,25 @@ class TestContentTypes:
         attachment_id = await ctx.id_map.get(db_session, EntityType.ATTACHMENT, "800")
         assert attachment_id is not None
         assert ctx.summary.notes[NOTE_UNUSUAL_TYPES]
+
+    @pytest.mark.parametrize("declared", ["text/html", "image/svg+xml"])
+    async def test_a_type_a_browser_would_run_script_in_is_stored_as_a_download(
+        self, db_session, loaded, files_dir, attachment_dir, declared
+    ):
+        """The source's declared type is not trusted with rendering: such a file is only downloaded."""
+        ctx = await loaded(_adapter(files_dir, attachments=[_attachment(content_type=declared)]))
+        await load_issue_attachments(ctx)
+
+        attachment_id = await ctx.id_map.get(db_session, EntityType.ATTACHMENT, "800")
+        assert (await db_session.get(Attachment, attachment_id)).content_type == "application/octet-stream"
+        (line,) = ctx.summary.notes[NOTE_UNUSUAL_TYPES]
+        assert f"({declared}, stored as application/octet-stream)" in line
+
+    async def test_an_accepted_type_is_kept(self, db_session, loaded, files_dir, attachment_dir):
+        ctx = await loaded(_adapter(files_dir, attachments=[_attachment(content_type="text/plain")]))
+        await load_issue_attachments(ctx)
+        attachment_id = await ctx.id_map.get(db_session, EntityType.ATTACHMENT, "800")
+        assert (await db_session.get(Attachment, attachment_id)).content_type == "text/plain"
 
     async def test_an_accepted_type_is_not_listed(self, db_session, loaded, files_dir, attachment_dir):
         ctx = await loaded(_adapter(files_dir, attachments=[_attachment()]))

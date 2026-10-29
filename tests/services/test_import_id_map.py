@@ -15,7 +15,14 @@ import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from specivo.importers.core.id_map import ImportIdMap, MissingMappingError
+from specivo.importers.core.id_map import (
+    ImportIdMap,
+    MissingMappingError,
+    ScopeRenameError,
+    list_scopes,
+    purge_scope,
+    rename_scope,
+)
 from specivo.importers.core.ir import EntityType
 from specivo.models.import_id_map import ImportIdMapping
 
@@ -186,3 +193,155 @@ class TestRequire:
             await id_map.require(db_session, EntityType.PROJECT, "404")
         assert "project" in str(exc.value)
         assert "404" in str(exc.value)
+
+
+async def _scope_rows(session, system: str, instance: str) -> list[tuple[str, str, int]]:
+    stmt = (
+        select(ImportIdMapping.entity_type, ImportIdMapping.source_id, ImportIdMapping.target_id)
+        .where(ImportIdMapping.source_system == system, ImportIdMapping.source_instance == instance)
+        .order_by(ImportIdMapping.entity_type, ImportIdMapping.source_id)
+    )
+    return [tuple(row) for row in (await session.execute(stmt)).all()]
+
+
+class TestScopes:
+    async def test_list_scopes_counts_rows_per_entity_type(self, db_session):
+        first, second = uuid.uuid4(), uuid.uuid4()
+        old = ImportIdMap("scopetest", "postgresql://redmine:***@db/redmine", first)
+        await old.put(db_session, EntityType.ISSUE, "1", "issues", 10)
+        await old.put(db_session, EntityType.ISSUE, "2", "issues", 11)
+        await ImportIdMap("scopetest", "postgresql://redmine:***@db/redmine", second).put(
+            db_session, EntityType.USER, "5", "users", 3
+        )
+        await ImportIdMap("scopetest", "tracker.example.org", first).put(
+            db_session, EntityType.PROJECT, "1", "projects", 4
+        )
+
+        scopes = {(s.source_system, s.source_instance): s for s in await list_scopes(db_session)}
+        old_scope = scopes[("scopetest", "postgresql://redmine:***@db/redmine")]
+        assert old_scope.counts == {"issue": 2, "user": 1}
+        assert old_scope.total == 3
+        assert old_scope.runs == 2
+        assert old_scope.last_imported_at is not None
+        assert scopes[("scopetest", "tracker.example.org")].counts == {"project": 1}
+
+
+async def test_rename_scope_moves_rows_and_refuses_a_busy_target(db_session):
+    """The way an operator moves a direct import's scope to the one its bundles will use."""
+    old = ImportIdMap("redmine", "postgresql://redmine:***@db/redmine", uuid.uuid4())
+    await old.put(db_session, EntityType.ISSUE, "1", "issues", 10)
+    await old.put(db_session, EntityType.USER, "5", "users", 3)
+    busy = ImportIdMap("redmine", "busy.example.org", uuid.uuid4())
+    await busy.put(db_session, EntityType.ISSUE, "9", "issues", 20)
+    moving = await _scope_rows(db_session, "redmine", old.source_instance)
+
+    # A dry run counts and checks, and changes nothing.
+    assert (
+        await rename_scope(
+            db_session,
+            from_system="redmine",
+            from_instance=old.source_instance,
+            to_system="redmine",
+            to_instance="tracker.example.org",
+            dry_run=True,
+        )
+        == 2
+    )
+    assert await _scope_rows(db_session, "redmine", old.source_instance) == moving
+
+    # A target that already holds rows is refused, and nothing moves.
+    with pytest.raises(ScopeRenameError, match="already holds 1"):
+        await rename_scope(
+            db_session,
+            from_system="redmine",
+            from_instance=old.source_instance,
+            to_system="redmine",
+            to_instance="busy.example.org",
+        )
+    assert await _scope_rows(db_session, "redmine", old.source_instance) == moving
+
+    moved = await rename_scope(
+        db_session,
+        from_system="redmine",
+        from_instance=old.source_instance,
+        to_system="redmine",
+        to_instance="tracker.example.org",
+    )
+
+    assert moved == 2
+    assert await _scope_rows(db_session, "redmine", old.source_instance) == []
+    assert await _scope_rows(db_session, "redmine", "tracker.example.org") == moving
+    # The renamed scope is what a later run sees.
+    later = ImportIdMap("redmine", "tracker.example.org", uuid.uuid4())
+    assert await later.get(db_session, EntityType.ISSUE, "1") == 10
+
+
+class TestRenameScope:
+    async def test_the_system_can_change_too(self, db_session):
+        """A bundle loaded before bundles were keyed by their manifest sat under ``bundle``."""
+        old = ImportIdMap("bundle", "redmine:tracker.example.org", uuid.uuid4())
+        await old.put(db_session, EntityType.ISSUE, "1", "issues", 10)
+
+        moved = await rename_scope(
+            db_session,
+            from_system="bundle",
+            from_instance="redmine:tracker.example.org",
+            to_system="redmine",
+            to_instance="tracker.example.org",
+        )
+
+        assert moved == 1
+        assert await _scope_rows(db_session, "redmine", "tracker.example.org") == [("issue", "1", 10)]
+
+    async def test_an_empty_source_scope_is_refused(self, db_session):
+        with pytest.raises(ScopeRenameError, match="no rows"):
+            await rename_scope(
+                db_session,
+                from_system="redmine",
+                from_instance="nowhere.example.org",
+                to_system="redmine",
+                to_instance="tracker.example.org",
+            )
+
+    async def test_renaming_a_scope_to_itself_is_refused(self, db_session):
+        with pytest.raises(ScopeRenameError, match="same"):
+            await rename_scope(
+                db_session,
+                from_system="redmine",
+                from_instance="a",
+                to_system="redmine",
+                to_instance="a",
+            )
+
+    @pytest.mark.parametrize(
+        ("system", "instance"),
+        [("", "x"), ("Redmine", "x"), ("r" * 31, "x"), ("redmine", ""), ("redmine", "x" * 256)],
+    )
+    async def test_a_target_that_does_not_fit_the_columns_is_refused(self, db_session, system, instance):
+        old = ImportIdMap("redmine", "old.example.org", uuid.uuid4())
+        await old.put(db_session, EntityType.ISSUE, "1", "issues", 10)
+        with pytest.raises(ScopeRenameError):
+            await rename_scope(
+                db_session,
+                from_system="redmine",
+                from_instance="old.example.org",
+                to_system=system,
+                to_instance=instance,
+            )
+
+
+async def test_purge_scope_deletes_one_scope_and_a_dry_run_only_counts(db_session):
+    """After cut-over: the scope's rows go, every other scope's stay."""
+    done = ImportIdMap("redmine", "tracker.example.org", uuid.uuid4())
+    await done.put(db_session, EntityType.ISSUE, "1", "issues", 10)
+    await done.put(db_session, EntityType.USER, "5", "users", 3)
+    other = ImportIdMap("redmine", "other.example.org", uuid.uuid4())
+    await other.put(db_session, EntityType.ISSUE, "1", "issues", 20)
+
+    assert await purge_scope(db_session, "redmine", "tracker.example.org", dry_run=True) == 2
+    assert len(await _scope_rows(db_session, "redmine", "tracker.example.org")) == 2
+
+    assert await purge_scope(db_session, "redmine", "tracker.example.org") == 2
+    assert await _scope_rows(db_session, "redmine", "tracker.example.org") == []
+    assert len(await _scope_rows(db_session, "redmine", "other.example.org")) == 1
+    assert await purge_scope(db_session, "redmine", "tracker.example.org") == 0

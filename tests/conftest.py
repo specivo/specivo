@@ -16,7 +16,6 @@ in their respective repos.
 """
 
 import os
-import socket
 import urllib.request
 
 import pytest
@@ -43,23 +42,7 @@ from specivo.testing.sso import sso_login, sso_provider  # noqa: F401
 
 _INSTALLED_PLUGINS = os.environ.get("INSTALLED_PLUGINS", "[]")
 
-# The Redmine fixture is started on demand and is not part of a normal test run.
-# Its database port is probed at collection time so importer tests skip rather
-# than fail when it is not up.
-_REDMINE_FIXTURE_HOST = os.environ.get("REDMINE_FIXTURE_HOST", "127.0.0.1")
-_REDMINE_FIXTURE_PORT = int(os.environ.get("REDMINE_FIXTURE_PG_PORT", "5444"))
-
-
-def _fixture_is_running(host: str, port: int, timeout: float = 0.5) -> bool:
-    """Whether something is listening, without importing a database driver."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
-
-
-# The disposable OIDC IdP (docker-compose.sso-test.yml) is also started on
+# The disposable OIDC IdP (tests/fixtures/sso/docker-compose.yml) is also started on
 # demand. Its discovery document is fetched once at collection time, and only
 # when an ``sso_idp`` test was collected.
 _SSO_TEST_ISSUER = os.environ.get("SSO_TEST_ISSUER", "http://localhost:8033/realms/specivo-test")
@@ -78,23 +61,14 @@ def _issuer_is_up(issuer: str, timeout: float = 1.0) -> bool:
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Skip tests whose dependencies are absent.
 
-    ``pro`` and ``enterprise`` need their plugins; ``redmine`` needs the
-    importer's Redmine fixture and ``sso_idp`` the disposable IdP, both of
-    which are started on demand.
+    ``pro`` and ``enterprise`` need their plugins and ``sso_idp`` the
+    disposable IdP, which is started on demand.
     """
     has_pro = "specivo_pro" in _INSTALLED_PLUGINS
     has_enterprise = "specivo_enterprise" in _INSTALLED_PLUGINS
 
     skip_pro = pytest.mark.skip(reason="requires specivo-pro plugin (not installed)")
     skip_ent = pytest.mark.skip(reason="requires specivo-enterprise plugin (not installed)")
-
-    has_redmine_fixture = any(item.get_closest_marker("redmine") for item in items) and _fixture_is_running(
-        _REDMINE_FIXTURE_HOST, _REDMINE_FIXTURE_PORT
-    )
-    skip_redmine = pytest.mark.skip(
-        reason=f"Redmine fixture is not running on {_REDMINE_FIXTURE_HOST}:{_REDMINE_FIXTURE_PORT} "
-        "(start it with: make redmine-fixture-up && make redmine-fixture-seed)"
-    )
 
     has_sso_idp = any(item.get_closest_marker("sso_idp") for item in items) and _issuer_is_up(_SSO_TEST_ISSUER)
     skip_sso_idp = pytest.mark.skip(
@@ -105,8 +79,6 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
             item.add_marker(skip_pro)
         if not has_enterprise and item.get_closest_marker("enterprise"):
             item.add_marker(skip_ent)
-        if not has_redmine_fixture and item.get_closest_marker("redmine"):
-            item.add_marker(skip_redmine)
         if not has_sso_idp and item.get_closest_marker("sso_idp"):
             item.add_marker(skip_sso_idp)
 

@@ -13,7 +13,7 @@ know the shape of what's possible.
 
 | Area | What the agent can do |
 |---|---|
-| **Issues & comments** | List, read, create, and update issues; edit descriptions and core fields; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history. |
+| **Issues & comments** | List, read, create, and update issues; edit descriptions and core fields; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history, or the whole change history with the names of the statuses, people and versions a change refers to. |
 | **Search** | Search across issues, wiki, and more using Specivo's hybrid (keyword + meaning) search. |
 | **Wiki** | List, read, create, edit, and append to wiki pages, including section-level reads and edits, and history/restore. |
 | **Metadata & schemas** | Read and set [issue metadata](../metadata/values.md) values, and list the available metadata schemas. |
@@ -57,8 +57,25 @@ can't upload binary files. To attach a file, use Specivo's REST API with `curl`,
 ```bash
 curl -X POST https://your-specivo-host/api/v1/attachments/ \
   -H "Authorization: Bearer spv_your_api_key_here" \
-  -F "file=@./diagram.png"
+  -F "file=@./diagram.png" \
+  -F "container_type=Issue" \
+  -F "container_id=123"
 ```
+
+`container_type` is `Issue`, `WikiPage` or `Journal` (a comment), and `container_id` is its numeric
+id. Adding a file takes the right to change what it is attached to:
+
+| Attached to | Permission needed |
+|---|---|
+| An issue | **Edit issues** or **Add comments**; or **Create issues** on an issue the account created |
+| A wiki page | **Manage wiki pages** |
+| A comment | **Edit any comments**, or **Edit own comments** on the account's own comment |
+
+A file on an issue is recorded in the issue's history ("File diagram.png added"). To record it with
+the edit or comment it belongs to, add `-F "journal_id=…"`: the `journal_id` returned by
+`PATCH /api/v1/issues/{ref}/` (null when the edit changed nothing) or the `id` of the comment from
+`POST /api/v1/issues/{ref}/journals/`. Each upload's response carries `journal_id` too, so further
+files of the same batch can join the same entry.
 
 !!! note "REST API basics"
     REST authentication is **only** the `Authorization: Bearer spv_…` header, and every API URL

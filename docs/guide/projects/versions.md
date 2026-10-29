@@ -42,6 +42,30 @@ done versus still open. It's the at-a-glance answer to "what's left before we sh
 
 ![The project roadmap](../assets/img/roadmap.webp)
 
+### Order and completed versions
+
+By default the roadmap lists the versions still in play — **open** and **locked** — soonest target
+date first; versions without a target date come after the dated ones. **Closed** versions are
+hidden: click **Show completed versions** to list them in their own section below the active
+ones, and **Hide completed versions** to tuck them away again.
+
+Use the sort menu at the top of the roadmap to order versions by:
+
+- **Due date** — soonest or latest first (undated versions always last)
+- **Version number** — lowest or highest first
+- **Status** — open first, or closed first
+
+Version numbers sort the way people read them, not letter by letter: `0.2.0` comes before
+`0.10.0`, and `Sprint 9` before `Sprint 10`. Names are still free text, so `Q3 launch` or
+`v1.2-rc1` work too.
+
+Specivo remembers your choice. The same sort applies to the versions list in the project's
+settings, and changing it in either place changes both. It is a personal setting — other people
+keep their own order.
+
+Progress on the roadmap, on a version's page and in the project settings counts only the issues you are
+allowed to see, so a private issue never shows up in a number you could not click through to.
+
 Click a version to see the issues assigned to it, grouped by status, so you can drill from the
 high-level plan straight into the work.
 

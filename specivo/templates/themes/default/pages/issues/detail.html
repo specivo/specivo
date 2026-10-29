@@ -113,7 +113,7 @@
 
     {# Metadata panel -- collapsible, between description and activity #}
     {% if metadata_schemas_data is defined and metadata_schemas_data and (issue_metadata or metadata_schemas_data) %}
-    <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
+    <div class="sp-metadata-panel" x-data='issueMetadataPanel({ schemas: {{ metadata_schemas_data | tojson }}, metadata: {{ issue_metadata | tojson }}, names: {{ (metadata_value_names if metadata_value_names is defined else {}) | tojson }}, issueRef: "{{ issue.display_key }}", projectKey: "{{ project.key }}", lockVersion: {{ issue.lock_version }}, i18n: {{ {
       "tagsPlaceholder": _("Type and press Enter..."),
       "addMore": _("Add more..."),
       "yes": _("Yes"),
@@ -173,6 +173,8 @@
               {# Number #}
               <template x-if="field.inputType === 'number'">
                 <input type="number" class="modal-input" :min="field.min" :max="field.max" x-model.number="metadata[field.key]" @change="dirty = true">
+                {# A user or version field holds an id: say whom or what it names. #}
+                <div class="form-hint" x-show="valueText(field.key, metadata[field.key]) !== String(metadata[field.key])" x-text="valueText(field.key, metadata[field.key])"></div>
               </template>
 
               {# Date #}
@@ -205,7 +207,7 @@
                   <div class="sp-meta-tags">
                     <template x-for="(tag, i) in (metadata[field.key] || [])" :key="i">
                       <span class="sp-meta-tag">
-                        <span x-text="tag"></span>
+                        <span x-text="valueText(field.key, tag)"></span>
                         <span class="sp-meta-tag-remove" @click.stop="metadata[field.key].splice(i, 1); dirty = true">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                         </span>

@@ -101,10 +101,6 @@ class PluginManager:
         """Return ``(plugin_name, hashers)`` from each plugin's ``get_password_hashers()``."""
         return [(plugin.name, list(plugin.get_password_hashers())) for plugin in self._plugins]
 
-    def collect_import_sources(self) -> list[tuple[str, list[Any]]]:
-        """Return ``(plugin_name, adapter_classes)`` from each plugin's ``get_import_sources()``."""
-        return [(plugin.name, list(plugin.get_import_sources())) for plugin in self._plugins]
-
 
 def _register_core_services(pm: PluginManager) -> None:
     """Register core services first, so that plugins can override them."""
@@ -125,17 +121,15 @@ def bootstrap(settings: Settings | None = None) -> PluginManager:
     Loads ``INSTALLED_PLUGINS``, registers their services and features, and
     builds and installs the password hasher registry from the built-in
     hashers, every plugin's ``get_password_hashers()`` and the
-    ``PASSWORD_HASHERS`` setting, and the import source registry from the
-    built-in adapters and every plugin's ``get_import_sources()``. Returns the plugin manager; anything specific
+    ``PASSWORD_HASHERS`` setting. Returns the plugin manager; anything specific
     to the web app (routers, static files, templates) is left to the caller.
 
     Raises ``ImportError`` for a plugin that cannot be imported and
     ``PasswordHasherError`` for a hasher with an invalid, reserved or
     duplicate id, so a misconfigured process fails at start rather than at the
-    first sign-in. Likewise ``SourceRegistrationError`` for an import source.
+    first sign-in.
     """
     from specivo.core.config import get_settings
-    from specivo.importers.core.source import build_source_registry, install_source_registry
     from specivo.services.password_hashers import build_password_hasher_registry, install_password_hasher_registry
 
     settings = settings or get_settings()
@@ -151,7 +145,6 @@ def bootstrap(settings: Settings | None = None) -> PluginManager:
         setting_paths=settings.password_hashers,
     )
     install_password_hasher_registry(registry)
-    install_source_registry(build_source_registry(pm.collect_import_sources()))
 
     unknown = sorted(set(settings.legacy_password_algorithms) - set(registry.legacy()))
     if unknown:

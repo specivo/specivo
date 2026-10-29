@@ -12,6 +12,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.models.member import Member
 from specivo.models.project import Project
 from specivo.services.api_key_service import ApiKeyService
 from tests.factories.project import ProjectFactory
@@ -139,6 +140,9 @@ class TestListSessions:
         user = await _make_service_account(db_session, login="agent_list_user", status="active")
         await _make_admin(db_session, login="admin_list_user", status="active")
         project = await _make_project(db_session, key="LIST", identifier="list-proj")
+        # A project lists the sessions of its members' accounts.
+        db_session.add(Member(user_id=user.id, project_id=project.id))
+        await db_session.commit()
 
         service = ApiKeyService()
         _key, raw_key = await service.create_key(session=db_session, user_id=user.id, name="list-key")

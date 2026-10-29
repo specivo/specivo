@@ -76,7 +76,8 @@ RENDER_BUDGET_US = 750_000
 MAX_NESTING_DEPTH = 50
 
 # Microseconds per occurrence.
-_US_PER_BRACKET = 40.0  # ``[``: link, image, wiki link or issue reference
+_US_PER_BRACKET = 40.0  # ``[``: link, image or wiki link
+_US_PER_ISSUE_REF = 40.0  # ``KEY-123`` the issue-ref inline pattern links
 _US_PER_TAG = 35.0  # ``<`` starting a tag, comment or autolink
 _US_PER_ESCAPE = 30.0  # ``\``
 _US_PER_ENTITY = 25.0  # ``&``
@@ -101,7 +102,11 @@ _TAG_TOKEN_RE = re.compile(r"<[A-Za-z/!?]|>")
 _BACKTICK_RUN_RE = re.compile(r"`+")
 _EMPHASIS_RUN_RE = re.compile(r"[*_]+")
 _HASH_RUN_RE = re.compile(r"#+")
-_CONTAINER_MARKER_RE = re.compile(r"[ \t]*(?:>|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t]))")
+# Leading blanks are skipped by ``_BLANKS_RE`` first, not by a ``[ \t]*``
+# prefix here: a marker never starts with a blank, so this is the same match,
+# and no pattern pairs an unbounded blank run with a suffix that can fail.
+_BLANKS_RE = re.compile(r"[ \t]*")
+_CONTAINER_MARKER_RE = re.compile(r">|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t])")
 _SETEXT_UNDERLINE_RE = re.compile(r" {0,3}(?:=+|-+)[ \t]*$")
 _NON_WORD_RE = re.compile(r"\W+")
 
@@ -126,23 +131,24 @@ def check_markdown_length(text: str | None, field: str) -> None:
         )
 
 
-def render_hazard(text: str, original_length: int | None = None) -> str | None:
+def render_hazard(text: str, issue_refs: int = 0) -> str | None:
     """Return why *text* should not be rendered as Markdown, or None if it may be.
 
     The reasons are ``"size"`` (longer than :data:`MAX_MARKDOWN_CHARS`),
     ``"nesting"`` (deeper than :data:`MAX_NESTING_DEPTH`) and ``"cost"`` (an
     estimated render time over :data:`RENDER_BUDGET_US`). Runs in linear time.
 
-    *original_length* is the length of what the author wrote, when *text* is
-    that after wiki-link and issue-ref substitution (which lengthens it); the
-    size limit applies to the author's text.
+    *text* is what the author wrote: wiki links and issue refs are linked
+    inside the parser, never by rewriting it first. *issue_refs* is the number
+    of ``KEY-123`` refs the render will link, each of which becomes a link
+    element; a ``[[Page]]`` link is costed by its brackets.
     """
-    if (len(text) if original_length is None else original_length) > MAX_MARKDOWN_CHARS:
+    if len(text) > MAX_MARKDOWN_CHARS:
         return "size"
     lines_cost, depth = _line_costs(text)
     if depth > MAX_NESTING_DEPTH:
         return "nesting"
-    if lines_cost + _inline_costs(text) > RENDER_BUDGET_US:
+    if lines_cost + _inline_costs(text) + issue_refs * _US_PER_ISSUE_REF > RENDER_BUDGET_US:
         return "cost"
     return None
 
@@ -316,7 +322,8 @@ def _nesting_depth(line: str) -> int:
     depth = (indent + 3 * line.count("\t", 0, indent)) // 4
     pos = 0
     while depth <= MAX_NESTING_DEPTH:
-        m = _CONTAINER_MARKER_RE.match(line, pos)
+        blanks = _BLANKS_RE.match(line, pos)
+        m = _CONTAINER_MARKER_RE.match(line, blanks.end() if blanks else pos)
         if m is None:
             break
         depth += 1

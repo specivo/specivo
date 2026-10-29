@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/macros.html" import version_sort_options %}
 
 {% block title %}{% trans %}Settings{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -275,7 +276,7 @@
   </div>
 
   <!-- Versions tab -->
-  <div x-show="tab === 'versions'" x-data='projectVersions({ versions: {{ versions_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_versions | tojson }}, i18n: {{ {
+  <div x-show="tab === 'versions'" x-data='projectVersions({ versions: {{ versions_data | tojson }}, projectKey: {{ project.key | tojson }}, canManage: {{ can_manage_versions | tojson }}, sort: {{ version_sort | tojson }}, i18n: {{ {
     "versionCreated": _('Version "%(name)s" created.'),
     "versionUpdated": _('Version "%(name)s" updated.'),
     "versionDeleted": _('Version "%(name)s" deleted.'),
@@ -307,10 +308,16 @@
           <span class="sp-listcard-title">{% trans %}Versions{% endtrans %}</span>
           <span class="sp-text-muted-xs-ml-sm" x-text="'(' + versions.length + ')'"></span>
         </div>
-        <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
-          {% trans %}New version{% endtrans %}
-        </button>
+        <div class="sp-version-list-actions">
+          <select class="filter-select" aria-label="{{ _('Sort versions') }}" x-model="sort" @change="changeSort()"
+                  x-show="versions.length > 1" data-testid="versions-sort">
+            {{ version_sort_options(version_sort) }}
+          </select>
+          <button class="sp-btn sp-btn-primary" @click="openCreate()" x-show="canManage">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+            {% trans %}New version{% endtrans %}
+          </button>
+        </div>
       </div>
 
       <!-- Empty state -->

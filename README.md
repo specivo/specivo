@@ -53,7 +53,7 @@ Step-by-step self-hosting guide: [Self-host Specivo with Docker](https://specivo
 
 **AI is optional.** Works fine without it. Enable semantic search when you want it, with the multilingual-e5-small model (runs on your CPU, about 100 languages, downloaded once with `make download-model`).
 
-**Single sign-on** — OpenID Connect with Keycloak, authentik, Microsoft Entra ID or any OIDC provider, included in the open-source edition. Several providers at once, accounts created on first sign-in, group and admin mapping, sign-out at the provider and back-channel logout, with a break-glass way back in.
+**Single sign-on** — OpenID Connect with Keycloak, authentik, Microsoft Entra ID or any OIDC provider. Several providers at once, accounts created on first sign-in, group and admin mapping, sign-out at the provider and back-channel logout, with a break-glass way back in.
 
 **i18n** — ships with English, Russian, Chinese, French, Spanish and Thai. Per-user language and workspace default. Extensible via `.po` files.
 

@@ -1,3 +1,5 @@
+import { safeNextPath } from '../lib/safe-url';
+
 export function loginForm() {
         return {
             login: '',
@@ -25,16 +27,9 @@ export function loginForm() {
 
             // Where to go once signed in. The server already validated the
             // ``next`` it rendered, but this runs the same check again rather
-            // than trusting an attribute: a single leading slash and nothing
-            // that a browser would resolve as another origin.
+            // than trusting an attribute (see lib/safe-url.js).
             safeNext(value) {
-                if (!value || value.charAt(0) !== '/') {
-                    return '';
-                }
-                if (value.charAt(1) === '/' || value.charAt(1) === '\\') {
-                    return '';
-                }
-                return value;
+                return safeNextPath(value);
             },
 
             get buttonText() {

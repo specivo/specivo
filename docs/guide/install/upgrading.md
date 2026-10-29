@@ -68,6 +68,37 @@ docker compose up -d
 - Read the release notes for the version you are moving to before you pull.
 - After upgrading, do a quick smoke test: sign in, open an issue, run a search.
 
+## Upgrading to 0.11.0
+
+Version 0.11.0 moves the Redmine import out of Specivo. Specivo now only loads import bundles;
+migration tools write them. Nothing changes for an instance that never ran the direct import.
+
+### The direct Redmine import is removed
+
+`import_data --source redmine`, `make import-redmine` and the `importers` extra are gone, and so is
+the import-source plugin hook. To move from another tracker, see [Importing from another tracker](importing.md); for Redmine use the
+[Redmine migration tool](https://github.com/specivo/redmine-migration-tool/blob/main/docs/migrating-from-redmine.md), which writes a bundle that
+`python -m specivo.cli.import_data --source bundle` loads. Update scripts and scheduled jobs that used the old
+options.
+
+### Re-key an earlier direct import before loading a bundle
+
+If you imported with the old direct import, its rows are keyed by the masked database URL, while a
+bundle is keyed by the instance its manifest names. Move them to the bundle's key first, so the
+bundle adds to the earlier import instead of duplicating it:
+
+```bash
+# Move the scope (leave out --yes first for a dry run that checks and counts)
+python -m specivo.cli.admin import-map rename --system redmine \
+    --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com --yes
+# Then load the tool's bundle as a continuation of that import
+python -m specivo.cli.import_data --source bundle --path /data/exports/redmine --continue-import
+```
+
+Run `import-map list` to see the current key. The
+[bundle format](https://github.com/specivo/specivo/blob/main/docs/import-bundle/v1.md) describes
+`source.system` and `source.instance`.
+
 ## Upgrading to 0.10.0
 
 Version 0.10.0 adds single sign-on and three migrations (0041 to 0043), which the entrypoint applies
@@ -168,7 +199,7 @@ skip directories that already belong to the app.
   `sudo chown -R 10001:10001 attachments avatars models state logs/app`.
   Without that the api logs a warning at start and uploads fail.
 - Other host directories mounted into the app containers (custom theme or error-page folders, a
-  Redmine `files` directory for the importer) must be readable by UID `10001`.
+  directory holding files for an import) must be readable by UID `10001`.
 - To run with no root step at all, set `user: "10001:10001"` on `init-data`, `api` and the Celery
   services in `docker-compose.override.yml`; `init-data` then changes nothing. The image also
   works with a read-only root filesystem (`read_only: true` plus a `tmpfs` for `/tmp`).
@@ -304,12 +335,9 @@ The web search page clamps the offset rather than failing.
 
 ### Import command renamed
 
-`python -m specivo.cli.import_redmine` is now `python -m specivo.cli.import_data --source redmine`,
-with the same options. `make import-redmine` still works and runs the new command. Update any
-script or scheduled job that calls the old module by name. `--list-sources` shows which sources
-are installed, which can include ones added by a plugin. See
-[Migrating from Redmine](migrating-from-redmine.md) and
-[Writing an import source plugin](import-source-plugins.md).
+`python -m specivo.cli.import_redmine` became `python -m specivo.cli.import_data`. Update any script
+or scheduled job that calls the old module by name. As of 0.11.0 the direct Redmine import is gone;
+see [Upgrading to 0.11.0](#upgrading-to-0110).
 
 The Redmine import also carries over anonymous and non-member access, a role's visibility settings
 and a tracker's private default. It never turns the instance-wide anonymous access switch on.

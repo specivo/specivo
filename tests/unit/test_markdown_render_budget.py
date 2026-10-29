@@ -31,6 +31,7 @@ from specivo.services.markdown_budget import (
     RenderDeadline,
     RenderDeadlineError,
     _backtick_scan_chars,
+    _nesting_depth,
     charge_render,
     check_markdown_length,
     end_request_budget,
@@ -47,9 +48,9 @@ from specivo.services.markdown_service import (
     _MD_EXTENSION_CONFIGS,
     _MD_EXTENSIONS,
     _sanitize_html,
+    count_issue_ref_candidates,
     render_plain_markdown,
     render_wiki_markdown,
-    substitute_links,
 )
 from specivo.services.search_service import _clean_snippet
 from specivo.services.wiki_link_service import WikiLinkService
@@ -103,7 +104,7 @@ def unguarded(text: str) -> str:
 @pytest.mark.parametrize("name", list(PATHOLOGICAL))
 def test_pre_scan_rejects_pathological_input(name):
     text = PATHOLOGICAL[name]
-    assert render_hazard(substitute_links(text, "ACME"), len(text)) is not None
+    assert render_hazard(text, count_issue_ref_candidates(text)) is not None
 
 
 @pytest.mark.parametrize("name", list(PATHOLOGICAL))
@@ -340,8 +341,10 @@ def test_text_with_a_few_unclosed_openers_renders():
 def test_size_limit_applies_to_the_original_text():
     assert render_hazard("a" * MAX_MARKDOWN_CHARS) is None
     assert render_hazard("a" * (MAX_MARKDOWN_CHARS + 1)) == "size"
-    # Substitution may lengthen the text; the author's length is what counts.
-    assert render_hazard("a" * (MAX_MARKDOWN_CHARS + 1), original_length=MAX_MARKDOWN_CHARS) is None
+    # Wiki links are made inside the parser, so a text of them at the limit
+    # is not pushed over it by a rewrite.
+    links = "[[Page]] " * (MAX_MARKDOWN_CHARS // len("[[Page]] "))
+    assert render_hazard(links) != "size"
 
 
 @pytest.mark.parametrize(
@@ -352,6 +355,31 @@ def test_nesting_limit(prefix, depth):
     levels = MAX_NESTING_DEPTH // depth
     assert render_hazard(prefix * levels + "a") is None
     assert render_hazard(prefix * (levels + 1) + "a") == "nesting"
+
+
+@pytest.mark.parametrize(
+    ("line", "depth"),
+    [
+        ("a", 0),
+        ("> a", 1),
+        ("  >  > a", 2),
+        ("\t- a", 2),
+        ("-a", 0),
+        ("1. > - a", 3),
+        ("1234567890. a", 0),
+        ("> \t \t", 1),
+        (" \t \t", 2),
+    ],
+)
+def test_nesting_depth_counts_markers_after_blanks(line, depth):
+    assert _nesting_depth(line) == depth
+
+
+@pytest.mark.parametrize("line", ["\t" * 50_000 + "x", " " * 50_000 + "x", "> " + "\t" * 50_000 + "x"])
+def test_nesting_depth_is_linear_in_a_blank_run(line):
+    """A long run of blanks before a non-marker is scanned once, not once per position."""
+    quarter = line[:2] + line[2 : len(line) // 4] + "x"
+    assert scaling_ratio(_nesting_depth, quarter, line) < LINEAR_RATIO_LIMIT
 
 
 def test_cost_budget_boundary(monkeypatch):

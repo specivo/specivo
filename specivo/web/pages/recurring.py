@@ -29,6 +29,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.recurrence import expand_occurrences
@@ -45,6 +46,7 @@ router = APIRouter(tags=["web-recurring"], include_in_schema=False)
 
 _project_svc = ProjectService()
 _pattern_svc = RecurringPatternService()
+_issue_svc = IssueService()
 _settings_svc = SettingsService()
 
 
@@ -327,6 +329,10 @@ async def recurring_detail(
         )
         .order_by(Issue.original_occurrence_at.desc().nullslast())
     )
+    # Only the instances the reader may see, as in the issue list.
+    visibility = await _issue_svc.visible_issues_clause(db, user)
+    if visibility is not None:
+        instance_stmt = instance_stmt.where(visibility)
     instances = list((await db.execute(instance_stmt)).scalars().all())
 
     members = await _project_svc.list_members(db, project)

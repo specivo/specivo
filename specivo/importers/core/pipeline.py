@@ -37,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.progress import NullProgressReporter, ProgressReporter
-from specivo.importers.core.source import SourceAdapter
+from specivo.importers.core.source import SourceAdapter, id_map_system
 
 logger = logging.getLogger(__name__)
 
@@ -58,11 +58,11 @@ class ImportPhase(StrEnum):
     CUSTOM_FIELD_SCHEMAS = "custom_field_schemas"
     ISSUES = "issues"
     WATCHERS = "watchers"
-    CUSTOM_FIELD_VALUES = "custom_field_values"
+    # Before the journals: history names the files it added and removed.
+    ISSUE_ATTACHMENTS = "issue_attachments"
     JOURNALS = "journals"
     RELATIONS = "relations"
-    ISSUE_ATTACHMENTS = "issue_attachments"
-    ISSUE_REF_REWRITE = "issue_ref_rewrite"
+    VERSION_STATUSES = "version_statuses"
     WIKI_PAGES = "wiki_pages"
     WIKI_ATTACHMENTS = "wiki_attachments"
     TIME_ENTRIES = "time_entries"
@@ -78,8 +78,7 @@ class ImportOptions:
     """Operator-supplied settings for one import run.
 
     Most fields come straight from the generic flags of the import command.
-    Options only one source understands (Redmine's status and custom-field
-    maps, say) belong to that source's adapter, not here.
+    Options only one source understands (its own file locations, say) belong to that source's adapter, not here.
     """
 
     source_instance: str
@@ -96,6 +95,12 @@ class ImportOptions:
     # Carry source passwords over (opt-in). Takes effect only for algorithms
     # also listed in LEGACY_PASSWORD_ALGORITHMS, and never for administrators.
     import_passwords: bool = False
+    # Make the source's administrators Specivo administrators (opt-in). Without
+    # it they are imported as ordinary accounts and listed in the summary.
+    import_admins: bool = False
+    # Add to an earlier import of the same scope. Needed only by a source whose
+    # scope comes from its data (a bundle); a resumed run implies it.
+    continue_import: bool = False
 
 
 @dataclass(slots=True)
@@ -226,6 +231,17 @@ class PhaseContext:
     id_map: ImportIdMap
     project_refs: list[str] = field(default_factory=list)
     state: dict[str, Any] = field(default_factory=dict)
+    phase_end_hooks: list[Callable[[bool], None]] = field(default_factory=list)
+
+    def at_phase_end(self, hook: Callable[[bool], None]) -> None:
+        """Call *hook* once the phase's transaction has ended.
+
+        It is passed ``True`` when the transaction committed, and ``False`` when
+        it was rolled back: the phase failed, or the run is a dry run. For work
+        outside the database (a file) that must only become permanent once the
+        rows it describes are. A hook must not raise.
+        """
+        self.phase_end_hooks.append(hook)
 
     def warn(self, message: str, **context: Any) -> None:
         """Record a warning on both the reporter and the summary.
@@ -241,6 +257,14 @@ class PhaseContext:
     def tick(self, count: int = 1) -> None:
         """Report *count* processed items for the current phase."""
         self.reporter.item_done(str(self.phase), count)
+
+
+def _end_phase(hooks: list[Callable[[bool], None]], *, committed: bool) -> None:
+    for hook in hooks:
+        try:
+            hook(committed)
+        except Exception:  # pragma: no cover - hooks report their own failures
+            logger.exception("A phase-end hook failed")
 
 
 class PhaseFailedError(RuntimeError):
@@ -285,9 +309,11 @@ class ImportPipeline:
         The adapter is connected before the first phase and closed afterwards,
         including when a phase raises.
         """
+        # Usually the source's own name; a bundle names the system it came from.
+        system = id_map_system(self._adapter)
         summary = ImportSummary(
             run_id=self._options.resume_run_id or uuid.uuid4(),
-            source_system=self._adapter.source_system,
+            source_system=system,
             source_instance=self._options.source_instance,
             dry_run=self._options.dry_run,
         )
@@ -296,7 +322,7 @@ class ImportPipeline:
         # sessions, and its identity is what makes a resumed run recognise the
         # rows an earlier attempt wrote.
         id_map = ImportIdMap(
-            source_system=self._adapter.source_system,
+            source_system=system,
             source_instance=self._options.source_instance,
             run_id=summary.run_id,
         )
@@ -331,24 +357,32 @@ class ImportPipeline:
                 continue
 
             self._reporter.phase_started(str(phase))
-            async with self._phase_session(shared) as session:
-                context = PhaseContext(
-                    phase=phase,
-                    session=session,
-                    adapter=self._adapter,
-                    options=self._options,
-                    summary=summary,
-                    reporter=self._reporter,
-                    id_map=id_map,
-                    project_refs=project_refs,
-                    state=state,
-                )
-                for handler in handlers:
-                    await handler(context)
-                # A handler may narrow or discover the project scope (the
-                # projects phase does), so carry its view into later phases.
-                project_refs = context.project_refs
-                state = context.state
+            hooks: list[Callable[[bool], None]] = []
+            try:
+                async with self._phase_session(shared) as session:
+                    context = PhaseContext(
+                        phase=phase,
+                        session=session,
+                        adapter=self._adapter,
+                        options=self._options,
+                        summary=summary,
+                        reporter=self._reporter,
+                        id_map=id_map,
+                        project_refs=project_refs,
+                        state=state,
+                        phase_end_hooks=hooks,
+                    )
+                    for handler in handlers:
+                        await handler(context)
+                    # A handler may narrow or discover the project scope (the
+                    # projects phase does), so carry its view into later phases.
+                    project_refs = context.project_refs
+                    state = context.state
+            except BaseException:
+                _end_phase(hooks, committed=False)
+                raise
+            # A shared session (a dry run) is rolled back at the end, never committed.
+            _end_phase(hooks, committed=shared is None)
 
             summary.phases_run.append(str(phase))
             self._reporter.phase_done(str(phase))

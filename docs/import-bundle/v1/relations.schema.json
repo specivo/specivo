@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/relations.schema.json",
+  "title": "Import bundle v1: relations.jsonl",
+  "description": "One relation between two issues per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "from_ref",
+    "to_ref",
+    "relation_type"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "from_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "to_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "relation_type": {
+      "type": "string",
+      "enum": [
+        "relates",
+        "duplicates",
+        "blocks",
+        "precedes",
+        "copied_to"
+      ],
+      "description": "Canonical forms only; write the reverse forms with the ends swapped."
+    },
+    "delay": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "description": "Days between the end of from and the start of to, for precedes."
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

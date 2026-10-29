@@ -6,6 +6,10 @@ debug), the `Permission` enum, and project membership becoming principal-shaped;
 xdist distribution mode in §16.
 **Revised:** 2026-10-26 — recorded role visibility settings and the time tracking permissions,
 the password hasher and import source plugin hooks, and that the plugin contract lists them.
+**Revised:** 2026-10-28 — removed the import source plugin hook and the `redmine` test marker with
+the direct Redmine import (imports now go through bundles, see `docs/import-bundle/v1.md`); recorded the `sso_idp`
+marker.
+**Revised:** 2026-10-29 — recorded how an API key's project limit is enforced (§7).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -267,6 +271,8 @@ Implemented in `specivo.core.security`:
 
 **Cookie settings:** httpOnly, SameSite=Lax, Secure when not debug. Refresh token scoped to `/api/v1/auth` path.
 
+**Project-limited API keys.** A key whose `scopes` holds `{"projects": [...]}` (keys or ids) reaches only those projects, for REST, the web layer and MCP alike. Authentication resolves the limit to project ids once (`activate_api_key_scope`, called by `authenticate_request` and by the MCP tool session helper) and holds it in a context variable for the rest of the request or tool call; `ApiKeyScopeMiddleware` and the MCP helper reset it afterwards. Access decisions read it from there rather than taking it as an argument, so a call site cannot forget it: `get_user_roles` returns no roles outside the limit, `check_permission` denies outside it (and denies project-less permissions) before the admin bypass, `ProjectService.get_by_key` / `require_project_access` answer 404, and the SQL builders (`accessible_projects_clause`, `visible_issues_clause`, `visible_entries_clause_any`, the search services' project filter) narrow to it. An admin shortcut that grants a whole project uses `admin_reaches(user, project_id)`; one that grants the whole instance uses `is_global_admin(user)`, which is false for a limited key, so the admin API, project creation and similar refuse it. Account-wide routes (API keys, sessions, password) depend on `get_account_user`, which refuses a limited key with 403. Whether a key can be limited is decided at creation (`api_key_scopes` feature); a stored limit is always enforced. See `specivo/services/api_key_scope.py`.
+
 ### 8. Middleware Stack
 
 All middleware uses **raw ASGI** (not `BaseHTTPMiddleware`) to avoid event loop issues with asyncpg in tests. Stack order (outermost first, as registered in `create_app()`):
@@ -319,11 +325,10 @@ class PluginConfig(Protocol):
     def get_static_assets(self) -> dict[str, list[str]]: ...
     def get_locale_dirs(self) -> list[tuple[Path, str]]: ...
     def get_password_hashers(self) -> list: ...
-    def get_import_sources(self) -> list: ...
     def on_startup(self, app: Any) -> None: ...
 ```
 
-`BasePluginConfig(ABC)` provides no-op defaults for all hooks. Plugins are specified as dotted paths in `settings.installed_plugins` and loaded via `importlib.import_module`. `get_password_hashers` returns legacy password hashers (`WrappedLegacyHasher` subclasses from `specivo.services.password_hashers`); registering one does not enable it, since only algorithms listed in `LEGACY_PASSWORD_ALGORITHMS` ever verify a sign-in. `get_import_sources` returns `BaseSourceAdapter` subclasses, each registered under its `source_system` and run with `python -m specivo.cli.import_data --source NAME`; `bootstrap()` refuses an invalid, duplicate or reserved (`redmine`) name at startup.
+`BasePluginConfig(ABC)` provides no-op defaults for all hooks. Plugins are specified as dotted paths in `settings.installed_plugins` and loaded via `importlib.import_module`. `get_password_hashers` returns legacy password hashers (`WrappedLegacyHasher` subclasses from `specivo.services.password_hashers`); registering one does not enable it, since only algorithms listed in `LEGACY_PASSWORD_ALGORITHMS` ever verify a sign-in.
 
 **Feature registry** (`specivo.core.features`): plugins register feature flags (e.g., `"security_audit_log"`). Application code checks `has_feature("feature_name")` before enabling optional behavior. Templates access it via Jinja2 global `{% if has_feature("feature_name") %}`.
 
@@ -422,7 +427,7 @@ Template rendering uses `Jinja2Templates` with a `ChoiceLoader` for theme suppor
 - `pro` / `enterprise` -- auto-skipped when the corresponding plugin is not installed.
 - `serial` -- cannot run under pytest-xdist (shared state like Redis rate limits, MCP globals).
 - `e2e` -- browser tests requiring a running server.
-- `redmine` -- importer tests against the on-demand Redmine fixture; skipped when it is not up.
+- `sso_idp` -- single sign-on tests against the on-demand identity provider (`make sso-idp-up`); skipped when it is not up.
 
 **Client fixtures** in `specivo.testing.conftest_base`:
 - `client` -- unauthenticated HTTPX `AsyncClient`.

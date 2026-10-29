@@ -21,6 +21,7 @@ from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
 from specivo.models.role import Role
 from specivo.models.user import User
+from specivo.services.search_service import SearchService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, AdminUserFactory, UserFactory
@@ -204,20 +205,28 @@ async def test_semantic_search_count_respects_visibility(
     outsider_token = await _login(client, outsider_user.login)
     client.headers["Authorization"] = f"Bearer {outsider_token}"
 
-    data = await _search(
-        client,
-        "quantum computing consensus",
-        mode="semantic",
-        project_key=private_project.key,
+    # The API refuses the private project filter outright, like a missing key.
+    resp = await client.get(
+        SEARCH_URL,
+        params={"q": "quantum computing consensus", "mode": "semantic", "project_key": private_project.key},
+    )
+    assert resp.status_code == 422, resp.text
+
+    # The service, scoped to the private project so seed data from public
+    # projects is excluded, still has to count only what the outsider can see.
+    items, total_count = await SearchService().semantic_search(
+        session=db_session,
+        query="quantum computing consensus",
+        user=outsider_user,
+        project_id=private_project.id,
     )
 
     # The critical assertion: total_count must be 0 for a non-member
-    # (scoped to the private project so seed data from public projects is excluded)
-    assert data["total_count"] == 0, (
-        f"Expected total_count=0 for non-member, got {data['total_count']}. "
+    assert total_count == 0, (
+        f"Expected total_count=0 for non-member, got {total_count}. "
         "The semantic search count query is not applying visibility filters."
     )
-    assert len(data["items"]) == 0
+    assert len(items) == 0
 
 
 @pytest.mark.asyncio

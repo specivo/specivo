@@ -58,15 +58,25 @@ class SavedFilterService:
         )
         return list(result.scalars().all())
 
-    async def get_by_id(
+    async def get_visible(
         self,
         session: AsyncSession,
         filter_id: int,
+        project_id: int,
+        user: User,
     ) -> SavedFilter:
-        """Return a saved filter by ID or raise NotFoundError."""
-        result = await session.execute(select(SavedFilter).where(SavedFilter.id == filter_id))
+        """Return saved filter *filter_id* of *project_id* if *user* may read it, else raise NotFoundError.
+
+        Readable are the filters :meth:`list_for_project` lists: the user's
+        own and the public ones (admins read every filter). A filter of
+        another project, or someone else's private one, is not found, so ids
+        cannot be probed through a project the caller can reach.
+        """
+        result = await session.execute(
+            select(SavedFilter).where(SavedFilter.id == filter_id, SavedFilter.project_id == project_id)
+        )
         saved_filter = result.scalar_one_or_none()
-        if saved_filter is None:
+        if saved_filter is None or not (saved_filter.user_id == user.id or saved_filter.is_public or user.is_admin):
             raise NotFoundError(f"Saved filter {filter_id} not found")
         return saved_filter
 

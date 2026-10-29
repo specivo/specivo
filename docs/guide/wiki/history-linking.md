@@ -48,6 +48,10 @@ See the [[Release Process]] page before you deploy.
 `[[release-process]]`, or `[[Release_Process]]` — they all point to the same page. You can link by the
 page's title or by its slug.
 
+Double brackets inside code (a code block or `` `inline code` ``) or inside a raw HTML block are shown as
+you wrote them, not linked, and they do not count as links in a page's backlinks or broken-link list. That
+lets you document the `[[...]]` syntax itself without creating dead links.
+
 !!! tip "Build a web, not a pile"
     Cross-linking is what turns a folder of pages into a knowledge base. Link from an overview page down
     to its details, and from detail pages back up — readers (and AI agents) follow the trail instead of

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
+from specivo.core.i18n import gettext as _
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.attachment import AttachmentOut, AttachmentUpdateSchema
@@ -60,6 +61,7 @@ async def upload_attachment(
     container_type: str = Form(...),
     container_id: int = Form(...),
     description: str | None = Form(default=None),
+    journal_id: int | None = Form(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentOut:
@@ -67,6 +69,17 @@ async def upload_attachment(
 
     ``container_type``: ``"Issue"``, ``"WikiPage"``, or ``"Journal"``
     ``container_id``: the ID of the target entity
+
+    The container must be one you may open (404 otherwise) and change
+    (403 otherwise): ``edit_issues`` or ``add_issue_notes`` on an issue, or
+    ``add_issues`` on one you created; ``manage_wiki`` on a wiki page;
+    ``edit_notes``, or ``edit_own_notes`` on your own comment.
+
+    A file attached to an issue is recorded in the issue's history. Pass
+    ``journal_id`` to record it with your own edit or comment it came with
+    (the comment's id), or with the earlier files of the same batch (the
+    ``journal_id`` the first upload returned). Without it, or once another
+    entry has been recorded since, the file gets an entry of its own.
     """
     if container_type not in _ALLOWED_CONTAINER_TYPES:
         allowed = ", ".join(sorted(_ALLOWED_CONTAINER_TYPES))
@@ -77,9 +90,11 @@ async def upload_attachment(
         )
 
     await _check_container_access(db, current_user, container_type, container_id)
+    if not await _service.can_attach_to_container(db, current_user, container_type, container_id):
+        raise PermissionDeniedError(_("You do not have permission to add files here."))
 
     try:
-        attachment = await _service.upload(
+        uploaded = await _service.upload(
             session=db,
             container_type=container_type,
             container_id=container_id,
@@ -87,6 +102,7 @@ async def upload_attachment(
             author=current_user,
             description=description,
             request=request,
+            journal_id=journal_id,
         )
     except ValueError as exc:
         raise AppError(
@@ -96,7 +112,9 @@ async def upload_attachment(
         ) from exc
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _attachment_out(attachment, author_name=current_user.display_name)
+    out = _attachment_out(uploaded.attachment, author_name=current_user.display_name)
+    out.journal_id = uploaded.journal.id if uploaded.journal is not None else None
+    return out
 
 
 @router.get("/attachments/{attachment_id}/", response_model=AttachmentOut)
@@ -140,11 +158,17 @@ async def delete_attachment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete an attachment (author or admin only)."""
-    attachment = await _service.get_visible(db, attachment_id, current_user)
+    """Delete an attachment.
 
-    if not current_user.is_admin and attachment.author_id != current_user.id:
-        raise PermissionDeniedError("You can only delete your own attachments (or be an admin)")
+    The file must be one you may open (404 otherwise) and change (403
+    otherwise): your own file while you may still add files to its container,
+    or anyone's with ``edit_issues`` on an issue, ``manage_wiki`` on a wiki
+    page, or ``edit_notes`` on a comment. Removing a file from an issue is
+    recorded in the issue's history.
+    """
+    attachment = await _service.get_visible(db, attachment_id, current_user)
+    if not await _service.can_change_attachment(db, current_user, attachment):
+        raise PermissionDeniedError(_("You do not have permission to change this file."))
 
     await _service.delete(db, attachment, user=current_user, request=request)
 
@@ -157,16 +181,17 @@ async def update_attachment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentOut:
-    """Update an attachment's description and/or metadata (author or admin only).
+    """Update an attachment's description and/or metadata.
+
+    Takes the same rights as deleting it (see ``DELETE /attachments/{id}/``).
 
     Re-indexes the attachment for search and logs the change to the audit trail.
     When ``metadata`` is provided, it is validated via ``AttachmentMetadata``
     Pydantic model and stored as JSONB.
     """
     attachment = await _service.get_visible(db, attachment_id, current_user)
-
-    if not current_user.is_admin and attachment.author_id != current_user.id:
-        raise PermissionDeniedError("You can only update your own attachments (or be an admin)")
+    if not await _service.can_change_attachment(db, current_user, attachment):
+        raise PermissionDeniedError(_("You do not have permission to change this file."))
 
     # Capture author name before flush expires the eagerly-loaded relationship
     author_name = attachment.author.display_name

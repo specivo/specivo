@@ -168,6 +168,18 @@ class Journal(Base, TimestampMixin):
         return f"<Journal id={self.id} issue_id={self.issue_id} sequence={self.sequence} user_id={self.user_id}>"
 
 
+# ``JournalDetail.property`` of a custom field change whose values are the ids
+# of people / of versions, so history can name them.
+CF_USER = "cf_user"
+CF_VERSION = "cf_version"
+# ``JournalDetail.property`` of a file attached to or removed from the issue.
+# ``prop_key`` is the attachment's id (empty when it is not known, as for a
+# file an import names but did not bring over); the file name is the new
+# value when the file was added, the old value when it was removed, kept so
+# history can name a file that is gone.
+ATTACHMENT_DETAIL = "attachment"
+
+
 class JournalDetail(Base):
     """One field change within a journal entry.
 
@@ -177,9 +189,14 @@ class JournalDetail(Base):
 
     ``property`` values:
     - ``"attr"``       — standard issue field (status_id, subject, description, …)
-    - ``"cf"``         — custom field (future)
-    - ``"attachment"`` — file attached or removed
+    - ``"cf"``         — imported custom field; ``prop_key`` is the metadata key, values are text
+    - ``"cf_user"``    — imported custom field naming a person: values are user ids
+    - ``"cf_version"`` — imported custom field naming a version: values are version ids
+    - ``"attachment"`` — file attached or removed (see :data:`ATTACHMENT_DETAIL`)
     - ``"relation"``   — issue relation added or removed
+
+    A ``cf_user`` / ``cf_version`` value that is not an id is the source's text
+    for a record that was not imported, shown as stored.
     """
 
     __tablename__ = "journal_details"

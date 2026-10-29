@@ -5,13 +5,17 @@ from __future__ import annotations
 import logging
 import re
 from datetime import UTC
+from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
 from specivo.core.utils import utcnow
 from specivo.models.agent_session import AgentSession
+
+if TYPE_CHECKING:
+    from specivo.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -122,17 +126,44 @@ class AgentSessionService:
         self,
         session: AsyncSession,
         project_id: int,
+        user: User,
         limit: int = 25,
     ) -> list[AgentSession]:
-        """List recent agent sessions for a project.
+        """List the recent agent sessions of a project that *user* may see.
 
-        Joins through api_keys -> users -> members to find sessions
-        associated with the project. For simplicity, returns all recent
-        sessions (agent sessions are not directly project-scoped; they
-        are scoped by API key which may have project-scoped access).
+        A session is the project's when its account is a member of the
+        project (directly or through a group). A session tied to an issue is
+        listed only when that issue is in the project and *user* may see it,
+        as in the issue list, so the list reveals nothing about other
+        projects or hidden issues.
         """
-        # For now, return recent sessions. Project scoping can be refined
-        # when API key scopes enforce project-level access.
-        stmt = select(AgentSession).order_by(AgentSession.last_activity_at.desc()).limit(limit)
+        from specivo.models.issue import Issue
+        from specivo.models.member import Member
+        from specivo.models.user_group import UserGroupMember
+        from specivo.services.issue_service import IssueService
+
+        account_groups = select(UserGroupMember.group_id).where(UserGroupMember.user_id == AgentSession.user_id)
+        account_is_member = (
+            select(Member.id)
+            .where(
+                Member.project_id == project_id,
+                or_(Member.user_id == AgentSession.user_id, Member.group_id.in_(account_groups)),
+            )
+            .exists()
+        )
+        visible_issues = select(Issue.id).where(Issue.project_id == project_id)
+        visibility = await IssueService().visible_issues_clause(session, user)
+        if visibility is not None:
+            visible_issues = visible_issues.where(visibility)
+
+        stmt = (
+            select(AgentSession)
+            .where(
+                account_is_member,
+                or_(AgentSession.issue_id.is_(None), AgentSession.issue_id.in_(visible_issues)),
+            )
+            .order_by(AgentSession.last_activity_at.desc())
+            .limit(limit)
+        )
         result = await session.execute(stmt)
         return list(result.scalars().all())

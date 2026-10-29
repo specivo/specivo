@@ -25,11 +25,14 @@
 
       {# Field changes #}
       {% if j.details %}
-      {# Relation changes name another issue by key, and the issue they name
-         may be one this reader cannot see — the relations list drops those,
-         and the feed must not put them back. For a visitor without an account
-         the whole row is left out rather than shown without its link. #}
-      {% for d in j.details if not (anonymous and d.property == 'relation') %}
+      {# Relation and parent changes name another issue by key, and the issue
+         they name may be one this reader cannot see — the relations list drops
+         those, and the feed must not put them back (see
+         ActivityLookups.hides). Without the lookups, every relation and
+         parent change is left out. #}
+      {% set names = lookup_maps if lookup_maps is defined and lookup_maps is not none else none %}
+      {% for d in j.details if not (names.hides(d, anonymous=anonymous) if names is not none
+           else (d.prop_key == 'parent_id' or d.property == 'relation' or (anonymous and d.property == 'attachment'))) %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}
@@ -39,6 +42,15 @@
         {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
         {% elif d.old_value and not d.new_value %}
         {% trans %}Removed{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.old_value }}</a>
+        {% endif %}
+        {% elif d.property == 'attachment' %}
+        {# A file attached or removed, by its name (ActivityLookups.attachment_name). #}
+        {% set file_name = names.attachment_name(d) if names is not none else (d.new_value or d.old_value) %}
+        {% set removed = d.old_value is not none and d.new_value is none %}
+        {% if file_name %}
+        {% if removed %}{% trans name=file_name %}File %(name)s deleted{% endtrans %}{% else %}{% trans name=file_name %}File %(name)s added{% endtrans %}{% endif %}
+        {% else %}
+        {% if removed %}{% trans %}File deleted{% endtrans %}{% else %}{% trans %}File added{% endtrans %}{% endif %}
         {% endif %}
         {% elif d.prop_key == 'description' %}
         <strong class="sp-change-label">{% trans %}Description{% endtrans %}</strong> {% trans %}updated{% endtrans %}
@@ -51,7 +63,7 @@
         {% for md in diffs %}
         <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
           <strong class="sp-change-label">{% trans %}Issue Metadata{% endtrans %}</strong>
-          <code style="font-size:var(--sp-font-size-xs);">{{ md.key }}</code>
+          <code style="font-size:var(--sp-font-size-xs);">{{ names.metadata_label(md.key) if names is not none else md.key }}</code>
           {% if md.old and md.new %}
           {% trans %}changed from{% endtrans %} <span class="sp-change-old sp-change-wrap">{{ md.old }}</span>
           {% trans %}to{% endtrans %} <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
@@ -63,10 +75,15 @@
         </div>
         {% endfor %}
         {% else %}
+        {% if d.property == 'attr' %}
         {% set field_label = d.prop_key | replace('_id', '') | replace('_', ' ') | title %}
-        {% set old_resolved = lookup_maps.get(d.prop_key, {}).get(d.old_value|string) if lookup_maps is defined and d.old_value is not none else none %}
+        {% else %}
+        {# An imported custom field, by its name: its schema's title, else its key. #}
+        {% set field_label = names.field_label(d) if names is not none else d.prop_key | replace('_', ' ') | title %}
+        {% endif %}
+        {% set old_resolved = names.name(d, d.old_value) if names is not none else none %}
         {% set old_name = old_resolved if old_resolved is not none else d.old_value %}
-        {% set new_resolved = lookup_maps.get(d.prop_key, {}).get(d.new_value|string) if lookup_maps is defined and d.new_value is not none else none %}
+        {% set new_resolved = names.name(d, d.new_value) if names is not none else none %}
         {% set new_name = new_resolved if new_resolved is not none else d.new_value %}
         <strong class="sp-change-label">{{ field_label }}</strong>
         {% trans %}changed from{% endtrans %} <span class="sp-change-old">{{ old_name if old_name is not none and old_name != 'None' else _('(none)') }}</span>

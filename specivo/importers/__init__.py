@@ -8,10 +8,10 @@ write path:
   the phase pipeline.
 * ``load`` — loaders that turn IR objects into Specivo rows. They consume IR
   only and know nothing about any source system.
-* ``redmine`` — the first source adapter: reads a Redmine database and its
-  ``files/`` directory and emits IR.
+* ``bundle`` — the IR as a documented file format (``docs/import-bundle/v1.md``)
+  and the adapter that reads it. Importers outside Specivo write bundles.
 
-Adding another source (RT, Jira) means writing a new adapter package that
-implements ``SourceAdapter`` and emits the same IR. No change to ``core`` or
-``load`` is required.
+There is one source, ``bundle``. An importer for another tracker is a separate
+tool that reads that tracker and writes a bundle; nothing in ``core`` or
+``load`` changes for it.
 """

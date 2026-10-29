@@ -37,7 +37,8 @@ from specivo.core.config import get_settings
 from specivo.core.constants import JWT_ALGORITHM
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import Journal
+from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
+from specivo.models.member import Member
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.services.anonymous_access_service import (
@@ -56,6 +57,7 @@ from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
+from tests.factories.version import VersionFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -569,6 +571,110 @@ async def test_a_private_issue_is_absent_from_children_and_relations(client: Asy
     assert live.private_child.display_key not in resp.text
     # The relation exists, but naming its target would disclose the key.
     assert live.private_issue.display_key not in resp.text
+
+
+async def test_imported_history_names_no_private_issue_or_project(
+    client: AsyncClient, db_session: AsyncSession, live: World
+) -> None:
+    """Imported history records parent changes by key and moves by project id."""
+    journal = Journal(
+        issue_id=live.public_issue.id,
+        project_id=live.both.id,
+        user_id=live.member.id,
+        sequence=99,
+    )
+    db_session.add(journal)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            JournalDetail(
+                journal_id=journal.id,
+                property="attr",
+                prop_key="parent_id",
+                old_value=live.private_issue.display_key,
+            ),
+            JournalDetail(
+                journal_id=journal.id, property="attr", prop_key="project_id", old_value=str(live.private.id)
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    db_session.add(
+        JournalDetail(
+            journal_id=journal.id,
+            property="attr",
+            prop_key="parent_id",
+            new_value=live.public_child.display_key,
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.get(_pages(live)["issue"])
+    assert resp.status_code == 200
+    assert live.private_issue.display_key not in resp.text
+    assert live.private.name not in resp.text
+    # No parent change at all, even one naming an issue the visitor may open.
+    assert 'sp-change-label">Parent<' not in resp.text
+
+
+async def test_imported_custom_field_history_names_no_private_version(
+    client: AsyncClient, db_session: AsyncSession, live: World
+) -> None:
+    """A version of a project the visitor cannot open goes unnamed."""
+    secret = VersionFactory.build(project_id=live.private.id, name="Anon secret release", sharing="system")
+    db_session.add(secret)
+    journal = Journal(issue_id=live.public_issue.id, project_id=live.both.id, user_id=live.member.id, sequence=98)
+    db_session.add(journal)
+    await db_session.flush()
+    db_session.add(
+        JournalDetail(journal_id=journal.id, property=CF_VERSION, prop_key="found_in", new_value=str(secret.id))
+    )
+    await db_session.commit()
+
+    resp = await client.get(_pages(live)["issue"])
+    assert resp.status_code == 200
+    text = " ".join(resp.text.split())
+    assert "Anon secret release" not in text
+    assert f'<span class="sp-change-new">{secret.id}</span>' in text
+
+
+@pytest.mark.parametrize("prop,prop_key", [("attr", "assigned_to_id"), (CF_USER, "reviewer")])
+async def test_history_names_only_people_the_visitor_may_see(
+    client: AsyncClient, db_session: AsyncSession, live: World, prop: str, prop_key: str
+) -> None:
+    """A member of a project the visitor can open is named, by display name; anyone else is not.
+
+    The anonymous user sees the members of the projects it can open, as the
+    users-visibility rule says; a person known only to a private project, or
+    to none, keeps their name to themselves.
+    """
+    visible = UserFactory.build(login="anonweb_visible", display_name="Anonweb Visible", status="active")
+    outsider = UserFactory.build(login="anonweb_outsider", display_name="Anonweb Outsider", status="active")
+    loner = UserFactory.build(login="anonweb_loner", display_name="Anonweb Loner", status="active")
+    db_session.add_all([visible, outsider, loner])
+    await db_session.flush()
+    db_session.add_all(
+        [Member(user_id=visible.id, project_id=live.both.id), Member(user_id=outsider.id, project_id=live.private.id)]
+    )
+    journal = Journal(issue_id=live.public_issue.id, project_id=live.both.id, user_id=live.member.id, sequence=97)
+    db_session.add(journal)
+    await db_session.flush()
+    db_session.add_all(
+        JournalDetail(journal_id=journal.id, property=prop, prop_key=prop_key, old_value=str(old), new_value=str(new))
+        for old, new in ((outsider.id, visible.id), (loner.id, visible.id))
+    )
+    await db_session.commit()
+
+    resp = await client.get(_pages(live)["issue"])
+    assert resp.status_code == 200
+    text = " ".join(resp.text.split())
+    assert f'<span class="sp-change-new">{visible.display_name}</span>' in text
+    assert "anonweb_visible" not in text
+    for hidden in (outsider, loner):
+        assert hidden.display_name not in text
+        assert hidden.login not in text
+        assert f'<span class="sp-change-old">{hidden.id}</span>' in text
 
 
 async def test_a_private_journal_never_renders(client: AsyncClient, live: World) -> None:

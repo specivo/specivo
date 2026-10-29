@@ -13,6 +13,7 @@ from specivo.core.config import get_settings
 from specivo.core.database import get_db
 from specivo.models.user import User
 from specivo.models.user import User as UserModel
+from specivo.services.api_key_scope import is_global_admin
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.settings_service import SettingsService
 from specivo.services.version_service import VersionService
@@ -45,7 +46,7 @@ async def require_admin(
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
         raise HTTPException(status_code=307, headers={"Location": "/login/"})
-    if not user_obj.is_admin:
+    if not isinstance(user_obj, User) or not is_global_admin(user_obj):
         raise HTTPException(status_code=403, detail="Admin access required")
     return user_obj  # type: ignore[return-value]
 
@@ -301,7 +302,7 @@ async def admin_projects(
     # Load all projects including archived (status 9)
     all_projects = await svc.list_all_admin(db, user)
     project_ids = [p.id for p in all_projects]
-    stats = await svc.load_project_stats(db, project_ids) if project_ids else {}
+    stats = await svc.load_project_stats(db, project_ids, reader=user) if project_ids else {}
 
     # Serialize for Alpine.js
     projects_data = []

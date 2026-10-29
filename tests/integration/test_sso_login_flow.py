@@ -284,6 +284,34 @@ async def test_open_redirect_in_next_is_refused(
     assert response.headers["location"] == "/"
 
 
+@pytest.mark.parametrize("hostile", ["https://evil.example.com/", "//evil.example.com/", "/\t/evil.example.com"])
+async def test_callback_rechecks_the_stored_next(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_provider: SsoProvider,
+    sso_login: SsoLoginDriver,
+    mock_idp: MockIdP,
+    hostile: str,
+) -> None:
+    """A transaction record holding an off-site ``next`` still lands on the dashboard."""
+    await _member(db_session, sso_provider, mock_idp)
+    started = await sso_login.start(client, next_path="/projects/ACME/")
+    callback_url = mock_idp.authorize(started.authorize_url)
+
+    r = await _redis()
+    try:
+        key = tx_key(_params(started.authorize_url)["state"])
+        record = json.loads(await r.get(key))
+        record["next"] = hostile
+        await r.set(key, json.dumps(record), keepttl=True)
+    finally:
+        await r.aclose()
+
+    response = await sso_login.callback(client, callback_url, tx_cookie=started.tx_cookie)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/"
+
+
 async def test_session_cap_follows_the_provider(
     client: AsyncClient,
     db_session: AsyncSession,

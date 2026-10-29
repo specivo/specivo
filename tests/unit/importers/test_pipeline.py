@@ -92,7 +92,9 @@ class TestPhaseOrder:
         assert index[ImportPhase.PROJECT_LOOKUPS] < index[ImportPhase.ISSUES]
         assert index[ImportPhase.ISSUES] < index[ImportPhase.JOURNALS]
         assert index[ImportPhase.ISSUES] < index[ImportPhase.RELATIONS]
-        assert index[ImportPhase.ISSUE_ATTACHMENTS] < index[ImportPhase.ISSUE_REF_REWRITE]
+        assert index[ImportPhase.ISSUE_ATTACHMENTS] < index[ImportPhase.VERSION_STATUSES]
+        assert index[ImportPhase.ISSUES] < index[ImportPhase.ISSUE_ATTACHMENTS]
+        assert index[ImportPhase.ISSUE_ATTACHMENTS] < index[ImportPhase.JOURNALS]
         assert index[ImportPhase.WIKI_PAGES] < index[ImportPhase.WIKI_LINK_GRAPH]
         assert index[ImportPhase.SEARCH_BACKFILL] == len(PHASE_ORDER) - 1
 
@@ -100,7 +102,7 @@ class TestPhaseOrder:
         """Cross-project relations need the full issue map, not one project's."""
         index = {phase: position for position, phase in enumerate(PHASE_ORDER)}
         assert index[ImportPhase.RELATIONS] > index[ImportPhase.ISSUES]
-        assert index[ImportPhase.ISSUE_REF_REWRITE] > index[ImportPhase.RELATIONS]
+        assert index[ImportPhase.VERSION_STATUSES] > index[ImportPhase.RELATIONS]
 
 
 @async_test
@@ -313,6 +315,30 @@ class TestTransactions:
 
         assert factory.sessions[0].rollbacks == 1
         assert factory.sessions[0].commits == 0
+
+    @pytest.mark.parametrize(
+        ("dry_run", "fails", "expected"),
+        [(False, False, [1, True]), (False, True, [0, False]), (True, False, [0, False])],
+    )
+    async def test_a_phase_end_hook_learns_whether_the_phase_committed(self, dry_run, fails, expected):
+        """Work outside the database (the links file) is made permanent only after the commit."""
+        adapter, factory = FakeAdapter(), FakeSessionFactory()
+        pipeline = _pipeline(factory, adapter, dry_run=dry_run)
+        seen: list = []
+
+        async def handler(ctx):
+            ctx.at_phase_end(lambda committed: seen.extend([ctx.session.commits, committed]))
+            if fails:
+                raise PhaseFailedError("no")
+
+        pipeline.register(ImportPhase.USERS, handler)
+        if fails:
+            with pytest.raises(PhaseFailedError):
+                await pipeline.run()
+        else:
+            await pipeline.run()
+
+        assert seen == expected
 
 
 @async_test

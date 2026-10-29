@@ -4,7 +4,7 @@ Every project and issue points at these, so they land first.
 
 The recurring decision is what to do when the source has a lookup whose name a
 Specivo installation already uses. A fresh Specivo is seeded with New, In
-Progress, Bug, Feature and so on, and so is nearly every Redmine, so collisions
+Progress, Bug, Feature and so on, and so is nearly every tracker, so collisions
 are the norm rather than the exception. Three different answers, each forced by
 what the schema allows:
 
@@ -18,7 +18,7 @@ what the schema allows:
 * **Builtin roles** are never created. The source's non-member role is mapped
   onto the one Specivo seeds, and its anonymous role onto nothing: Specivo
   expresses anonymous access per project instead (see ``public_access_loader``).
-* **Roles** are additionally never created with permissions. Redmine's
+* **Roles** are additionally never created with permissions. A source's
   permission vocabulary is its own, so an unmatched role arrives empty and is
   listed for an administrator to fill in — an empty role grants nothing, which
   is the safe direction to be wrong in.
