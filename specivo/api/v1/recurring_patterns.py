@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.core.utils import utcnow
@@ -111,7 +111,7 @@ def _pattern_out(pattern: RecurringPattern, project_key: str) -> RecurringPatter
 async def list_recurring_patterns(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[RecurringPatternOut]:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
@@ -128,7 +128,7 @@ async def create_recurring_pattern(
     project_key: str,
     data: RecurringPatternCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> RecurringPatternOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
@@ -144,7 +144,7 @@ async def get_recurring_pattern(
     project_key: str,
     pattern_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> RecurringPatternOut:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
@@ -161,7 +161,7 @@ async def update_recurring_pattern(
     pattern_id: int,
     data: RecurringPatternUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> RecurringPatternOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
@@ -181,7 +181,7 @@ async def delete_recurring_pattern(
     project_key: str,
     pattern_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
@@ -211,7 +211,7 @@ async def preview_occurrences(
         ),
     ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> OccurrencePreview:
     """Preview upcoming occurrences without materialising any issues.
 
@@ -255,7 +255,7 @@ async def skip_occurrence(
     pattern_id: int,
     body: SkipOccurrenceRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> RecurrenceExceptionOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
@@ -273,7 +273,7 @@ async def override_occurrence(
     pattern_id: int,
     body: OverrideOccurrenceRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> RecurrenceExceptionOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_recurring_tasks(project, current_user, db)
@@ -294,7 +294,7 @@ async def split_recurring_pattern(
     pattern_id: int,
     body: SplitFromRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> RecurringPatternOut:
     """Split a series this-and-future: terminate the old one, create a new one.
 

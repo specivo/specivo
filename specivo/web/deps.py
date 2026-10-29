@@ -10,12 +10,12 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, Request, Response
+from fastapi import Request, Response
 from fastapi.templating import Jinja2Templates
 from jinja2 import ChoiceLoader, FileSystemLoader, pass_context
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.middleware import ANONYMOUS_READER_STATE_KEY
 from specivo.models.user import User
 
@@ -502,7 +502,7 @@ def redirect_if_password_change_required(request: Request, user: object) -> None
 
 async def require_user(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> User:
     """Dependency: return the authenticated user or redirect to login.
 
@@ -719,7 +719,7 @@ def refuse_anonymous_web(request: Request) -> Response:
 async def get_web_reader(
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> AsyncGenerator[object | None, None]:
     """Dependency: the signed-in user, the anonymous principal, or nothing.
 

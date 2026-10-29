@@ -5,13 +5,13 @@ from __future__ import annotations
 import datetime
 from typing import cast
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import ColumnElement, and_, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.i18n import format_date
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
@@ -45,7 +45,7 @@ def _visible(clause: ColumnElement[bool] | None) -> ColumnElement[bool]:
 @router.get("/", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the main dashboard page."""
     user_obj = await get_current_user_optional(request, db)
@@ -491,7 +491,7 @@ async def dashboard(
 @router.get("/my/notifications/", response_class=HTMLResponse)
 async def notifications_page(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     unread_only: bool = Query(False),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),

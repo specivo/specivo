@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.user import User
 from specivo.schemas.agent_cost import ModelCostConfigCreate, ModelCostConfigOut
 from specivo.services.agent_cost_service import AgentCostService
@@ -24,7 +24,7 @@ _service = AgentCostService()
 async def create_model_cost(
     data: ModelCostConfigCreate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ModelCostConfigOut:
     config = await _service.create_model_cost(db, data)
     return ModelCostConfigOut.model_validate(config)
@@ -33,7 +33,7 @@ async def create_model_cost(
 @router.get("/admin/model-costs/", response_model=list[ModelCostConfigOut])
 async def list_model_costs(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[ModelCostConfigOut]:
     configs = await _service.list_model_costs(db)
     return [ModelCostConfigOut.model_validate(c) for c in configs]
@@ -46,7 +46,7 @@ async def list_model_costs(
 async def delete_model_cost(
     config_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     await _service.delete_model_cost(db, config_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

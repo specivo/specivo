@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
@@ -67,7 +67,7 @@ _VIEW_RATES_DENIED = "You do not have permission to view billing rates in this p
 async def log_tokens(
     data: AgentTokenLogCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AgentTokenLogOut:
     log = await _cost_service.log_tokens(db, data, current_user)
     return AgentTokenLogOut.model_validate(log)
@@ -87,7 +87,7 @@ async def get_cost_summary(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[CostSummaryItem]:
     """Agent costs by model over the issues of the project the caller may see."""
     project = await _project_service.get_by_key(db, project_key)
@@ -104,7 +104,7 @@ async def get_cost_per_issue(
     project_key: str,
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> IssueCostOut:
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
     costs = await _cost_service.get_cost_per_issue(db, issue.id)
@@ -126,7 +126,7 @@ async def create_billing_rate(
     data: BillingRateCreate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> BillingRateOut:
     project = await _require_project_permission(
         db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
@@ -143,7 +143,7 @@ async def list_billing_rates(
     project_key: str,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[BillingRateOut]:
     project = await _require_project_permission(
         db, project_key, current_user, Permission.VIEW_TIME_ENTRIES, request, _VIEW_RATES_DENIED
@@ -162,7 +162,7 @@ async def update_billing_rate(
     data: BillingRateUpdate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> BillingRateOut:
     project = await _require_project_permission(
         db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
@@ -180,7 +180,7 @@ async def delete_billing_rate(
     rate_id: int,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     project = await _require_project_permission(
         db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
@@ -204,7 +204,7 @@ async def get_billing_report(
     date_from: date = Query(...),
     date_to: date = Query(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> BillingReportOut:
     """Billable time in the period at the effective rates; requires ``view_time_entries`` (403 without it)."""
     project = await _project_service.get_by_key(db, project_key)

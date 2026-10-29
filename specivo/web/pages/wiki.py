@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
@@ -44,8 +44,8 @@ def _wiki_tags_to_dicts(tags: list) -> list[dict]:
 async def wiki_index(
     project_key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki home page, or redirect to it after auto-creation.
 
@@ -88,7 +88,7 @@ async def wiki_index(
 async def wiki_all_pages(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page listing all pages."""
     user_obj = await get_current_user_optional(request, db)
@@ -131,7 +131,7 @@ async def wiki_new(
     project_key: str,
     request: Request,
     parent: int | None = Query(None),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page creation form."""
     user_obj = await get_current_user_optional(request, db)
@@ -186,7 +186,7 @@ async def wiki_new(
 async def wiki_trash(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki trash (deleted pages) view."""
     user_obj = await get_current_user_optional(request, db)
@@ -224,7 +224,7 @@ async def wiki_delete(
     project_key: str,
     slug: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Handle wiki page deletion (form POST)."""
     user_obj = await get_current_user_optional(request, db)
@@ -258,7 +258,7 @@ async def wiki_restore(
     project_key: str,
     page_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a soft-deleted wiki page."""
     user_obj = await get_current_user_optional(request, db)
@@ -288,8 +288,8 @@ async def wiki_show(
     project_key: str,
     slug: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a wiki page with its content.
 
@@ -421,7 +421,7 @@ async def wiki_edit(
     project_key: str,
     slug: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page edit form."""
     user_obj = await get_current_user_optional(request, db)
@@ -485,7 +485,7 @@ async def wiki_diff(
     project_key: str,
     slug: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     from_version: int = 1,
     to_version: int = 2,
 ) -> Response:
@@ -552,7 +552,7 @@ async def wiki_history(
     project_key: str,
     slug: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the wiki page history (all versions)."""
     user_obj = await get_current_user_optional(request, db)

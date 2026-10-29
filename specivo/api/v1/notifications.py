@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.core.security import get_current_user
 from specivo.models.notification import NotificationPreference
@@ -34,7 +34,7 @@ _notification_service = NotificationService()
 async def list_notification_preferences(
     project_key: str | None = Query(default=None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[NotificationPreferenceOut]:
     """List the current user's notification preferences.
 
@@ -81,7 +81,7 @@ async def list_notification_preferences(
 async def update_notification_preference(
     data: NotificationPreferenceUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> NotificationPreferenceOut:
     """Create or update a notification preference for the current user.
 
@@ -141,7 +141,7 @@ async def list_notifications(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> NotificationListOut:
     """List the current user's in-app notifications (newest first)."""
     items, total = await _notification_service.list_notifications(
@@ -181,7 +181,7 @@ async def list_notifications(
 )
 async def get_unread_count(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UnreadCountOut:
     """Return the number of unread notifications for the current user."""
     count = await _notification_service.get_unread_count(db, current_user.id)
@@ -195,7 +195,7 @@ async def get_unread_count(
 async def mark_notification_read(
     notification_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> NotificationOut:
     """Mark a single notification as read."""
     notif = await _notification_service.mark_read(db, notification_id, current_user.id)
@@ -223,7 +223,7 @@ async def mark_notification_read(
 )
 async def mark_all_notifications_read(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MarkAllReadOut:
     """Mark all of the current user's notifications as read."""
     count = await _notification_service.mark_all_read(db, current_user.id)

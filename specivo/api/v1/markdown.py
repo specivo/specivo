@@ -13,7 +13,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
@@ -40,7 +40,7 @@ router = APIRouter(tags=["markdown"])
 async def preview_markdown(
     data: MarkdownPreviewRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     _rl: None = Depends(  # noqa: B008
         rate_limit("markdown_preview", max_requests=60, window_seconds=60)
     ),

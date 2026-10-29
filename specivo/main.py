@@ -7,7 +7,7 @@ import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
@@ -19,7 +19,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from specivo.api.v1.router import api_router
 from specivo.core.config import get_settings
-from specivo.core.database import get_db, get_engine
+from specivo.core.database import DB_SESSION, get_engine
 from specivo.core.exceptions import (
     AppError,
     app_error_handler,
@@ -413,13 +413,13 @@ def create_app() -> FastAPI:
         return bool(user.is_admin)
 
     @application.get(_openapi_url, include_in_schema=False)
-    async def openapi_schema(request: Request, db: AsyncSession = Depends(get_db)):
+    async def openapi_schema(request: Request, db: AsyncSession = DB_SESSION):
         if not await _require_admin(request, db):
             raise HTTPException(status_code=404)
         return application.openapi()
 
     @application.get(_docs_url, include_in_schema=False, response_class=HTMLResponse)
-    async def swagger_ui(request: Request, db: AsyncSession = Depends(get_db)):
+    async def swagger_ui(request: Request, db: AsyncSession = DB_SESSION):
         if not await _require_admin(request, db):
             raise HTTPException(status_code=404)
         return get_swagger_ui_html(
@@ -428,7 +428,7 @@ def create_app() -> FastAPI:
         )
 
     @application.get(_redoc_url, include_in_schema=False, response_class=HTMLResponse)
-    async def redoc_ui(request: Request, db: AsyncSession = Depends(get_db)):
+    async def redoc_ui(request: Request, db: AsyncSession = DB_SESSION):
         if not await _require_admin(request, db):
             raise HTTPException(status_code=404)
         return get_redoc_html(

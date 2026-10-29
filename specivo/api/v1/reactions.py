@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
@@ -29,7 +29,7 @@ async def add_reaction(
     journal_id: int,
     data: AddReactionRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ReactionOut:
     """Add an emoji reaction to a journal entry."""
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
@@ -61,7 +61,7 @@ async def remove_reaction(
     journal_id: int,
     emoji: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Remove an emoji reaction from a journal entry."""
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)
@@ -84,7 +84,7 @@ async def list_reactions(
     issue_ref: str,
     journal_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[ReactionGroupOut]:
     """List reactions on a journal entry, grouped by emoji."""
     issue = await _issue_service.get_by_display_key(db, issue_ref, user=current_user)

@@ -24,7 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
-from specivo.core.database import get_db
+from specivo.core.database import DbSession
 from specivo.core.exceptions import NotFoundError
 from specivo.core.i18n import gettext as _
 from specivo.models.sso import SsoProvider
@@ -97,7 +97,7 @@ def _redirect(path: str, **query: str) -> RedirectResponse:
 @router.post("/my/identities/{identity_id}/unlink/", response_model=None)
 async def unlink_own_identity(
     identity_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     user: Annotated[User, Depends(require_user)],
 ) -> RedirectResponse:
     """Disconnect one of the signed-in user's identities and end its sessions."""
@@ -116,7 +116,7 @@ async def admin_unlink_identity(
     request: Request,
     user_id: int,
     identity_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     admin: Annotated[User, Depends(require_admin)],
 ) -> RedirectResponse:
     """Disconnect an identity from any user (always allowed for an admin) and end its sessions."""

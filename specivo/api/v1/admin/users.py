@@ -11,7 +11,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import refuse_api_key, require_admin_api, require_admin_session_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, ConflictError, NotFoundError
 from specivo.core.utils import utcnow
 from specivo.models.user import User
@@ -78,7 +78,7 @@ def _forced_change_for(
 @router.get("/admin/users/", response_model=list[UserOut])
 async def list_users(
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     q: str = Query("", max_length=100),
     status: str = Query("", max_length=20),
     offset: int = Query(0, ge=0),
@@ -101,7 +101,7 @@ async def create_user(
     data: UserCreate,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserOut:
     """Create a new user (admin only).
 
@@ -180,7 +180,7 @@ async def reset_password(
     body: ResetPasswordRequest,
     request: Request,
     admin: Annotated[User, Depends(require_admin_session_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     """Reset a user's password (admin only)."""
     from specivo.core.config import get_settings
@@ -250,7 +250,7 @@ async def lock_user(
     user_id: int,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     body: LockUserRequest | None = None,
 ) -> UserOut:
     """Lock a user account (admin only). Cannot lock yourself."""
@@ -287,7 +287,7 @@ async def unlock_user(
     user_id: int,
     request: Request,
     admin: Annotated[User, Depends(require_admin_session_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserOut:
     """Unlock a user account (admin only). Cannot unlock yourself."""
     if user_id == admin.id:
@@ -339,7 +339,7 @@ async def deactivate_user(
     user_id: int,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserDeactivatedOut:
     """Deactivate the account, for every kind of user (password, SSO, service account).
 
@@ -374,7 +374,7 @@ async def reactivate_user(
     user_id: int,
     request: Request,
     admin: Annotated[User, Depends(require_admin_session_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserReactivatedOut:
     """Let a deactivated account sign in again.
 
@@ -417,7 +417,7 @@ _api_key_svc = ApiKeyService()
 async def list_user_api_keys(
     user_id: int,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> list[ApiKeyOut]:
     """Return all API keys for the specified user."""
     target = await _get_user_or_404(db, user_id)
@@ -437,7 +437,7 @@ async def create_user_api_key(
     body: ApiKeyCreate,
     request: Request,
     admin: Annotated[User, Depends(require_admin_session_api)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> ApiKeyCreated:
     """Create an API key for the specified user. The raw key is returned ONCE."""
     target = await _get_user_or_404(db, user_id)
@@ -487,7 +487,7 @@ async def delete_user_api_key(
     key_id: int,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Permanently revoke and delete an API key for the specified user."""
     target = await _get_user_or_404(db, user_id)
@@ -527,7 +527,7 @@ _identity_svc = IdentityService()
 async def list_user_identities(
     user_id: int,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> list[UserIdentityOut]:
     """Return the identity provider accounts the user can sign in with."""
     target = await _get_user_or_404(db, user_id)
@@ -544,7 +544,7 @@ async def delete_user_identity(
     user_id: int,
     identity_id: int,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Disconnect the identity and revoke every session signed in through it.
 

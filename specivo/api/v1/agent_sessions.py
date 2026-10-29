@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.agent_session import AgentSessionOut
@@ -22,7 +22,7 @@ async def list_agent_sessions(
     project_key: str,
     limit: int = Query(25, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[AgentSessionOut]:
     """List recent agent sessions for a project."""
     project = await _project_service.get_by_key(db, project_key)

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.project import (
@@ -33,7 +33,7 @@ async def rename_project(
     data: ProjectRenameRequest,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectRenameOut:
     """Rename a project key and/or identifier. Superadmin only.
 
@@ -87,7 +87,7 @@ async def rename_project(
 async def archive_project(
     key: str,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
     """Archive a project. Superadmin only."""
     project = await _service.get_by_key(db, key.upper())
@@ -102,7 +102,7 @@ async def archive_project(
 async def unarchive_project(
     key: str,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
     """Unarchive a project (restore to active). Superadmin only."""
     project = await _service.get_by_key(db, key.upper())
@@ -125,7 +125,7 @@ def _anonymous_permissions_out(project: Project) -> ProjectAnonymousPermissionsO
 async def get_anonymous_permissions(
     key: str,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectAnonymousPermissionsOut:
     """Return what anonymous visitors may read in a project. Superadmin only."""
     project = await _service.get_by_key(db, key.upper())
@@ -138,7 +138,7 @@ async def update_anonymous_permissions(
     data: ProjectAnonymousPermissionsUpdate,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectAnonymousPermissionsOut:
     """Replace what anonymous visitors may read in a project. Superadmin only.
 

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_SEARCH_OFFSET
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import (
     AnonymousAccessDeniedError,
     NotFoundError,
@@ -61,7 +61,7 @@ _ANONYMOUS_SEARCH_MAX_OFFSET = ANONYMOUS_SEARCH_MAX_OFFSET
 async def _anonymous_search_budget(
     request: Request,
     response: Response,
-    user: User = Depends(get_reader),
+    user: User = Depends(get_reader, scope="function"),
 ) -> None:
     """Meter anonymous searches against their own per-IP bucket.
 
@@ -136,9 +136,9 @@ async def search(
     updated_before: datetime | None = Query(None, description="Issues updated before"),
     metadata: str | None = Query(None, description="JSONB containment filter (JSON string)"),
     tag: list[str] = Query(default=[], description="Real-tag name(s) to filter by (AND logic)"),  # noqa: B006
-    user: User = Depends(get_reader),
+    user: User = Depends(get_reader, scope="function"),
     _budget: None = Depends(_anonymous_search_budget),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SearchResponse:
     """Search across issues and wiki pages.
 

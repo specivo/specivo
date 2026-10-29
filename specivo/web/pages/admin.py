@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.user import User
 from specivo.models.user import User as UserModel
 from specivo.services.api_key_scope import is_global_admin
@@ -35,7 +35,7 @@ _api_key_svc = ApiKeyService()
 
 async def require_admin(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> User:
     """Dependency: return the admin user or abort with redirect/403.
 
@@ -79,7 +79,7 @@ async def require_admin_session(
 async def admin_dashboard(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the admin dashboard."""
     stats = await _settings_svc.get_dashboard_stats(db)
@@ -100,7 +100,7 @@ async def admin_dashboard(
 async def admin_users(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the admin users page."""
     from specivo.models.role import Role
@@ -147,7 +147,7 @@ async def admin_user_detail(
     request: Request,
     user_id: int,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     account: str = "",
 ) -> Response:
     """Render the admin user detail page: account, status, connected SSO accounts, API keys.
@@ -252,7 +252,7 @@ def _user_page_redirect(user_id: int, account: str) -> RedirectResponse:
 async def admin_deactivate_user(
     user_id: int,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> RedirectResponse:
     """Deactivate an account from its admin page: every session and API key ends."""
     from specivo.services.user_service import LastActiveAdminError, UserService
@@ -272,7 +272,7 @@ async def admin_deactivate_user(
 async def admin_reactivate_user(
     user_id: int,
     user: Annotated[User, Depends(require_admin_session)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> RedirectResponse:
     """Reactivate an account from its admin page; its API keys stay inactive."""
     from specivo.services.user_service import UserService
@@ -292,7 +292,7 @@ async def admin_reactivate_user(
 async def admin_projects(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the admin projects management page."""
     from specivo.core.constants import DEFAULT_PROJECT_COLORS
@@ -362,7 +362,7 @@ GROUP_LIST_CAP = 500
 async def admin_groups(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the admin user groups page."""
     from specivo.services.user_group_service import UserGroupService
@@ -400,7 +400,7 @@ async def admin_group_detail(
     request: Request,
     group_id: int,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render one group: the users in it, and the projects it grants access to."""
     from fastapi import HTTPException
@@ -445,7 +445,7 @@ async def admin_group_detail(
 async def admin_versions(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the admin versions page -- all versions across all projects."""
     versions_data = await _version_svc.list_all(db)
@@ -480,7 +480,7 @@ async def admin_versions(
 async def admin_workflows(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the workflow management page."""
     from specivo.models.lookups import IssueStatus, Tracker
@@ -514,7 +514,7 @@ async def admin_workflows(
 async def admin_roles(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the roles page: each role's user and time entry visibility."""
     from specivo.models.role import Role
@@ -532,7 +532,7 @@ async def admin_roles(
 async def admin_role_update(
     role_id: int,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     users_visibility: str = Form(""),
     time_entries_visibility: str = Form(""),
 ) -> Response:
@@ -560,7 +560,7 @@ async def admin_role_update(
 async def admin_trackers(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the trackers page: each tracker's private-by-default flag."""
     from specivo.models.lookups import Tracker
@@ -578,7 +578,7 @@ async def admin_trackers(
 async def admin_tracker_update(
     tracker_id: int,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     private_by_default: str = Form(""),
 ) -> Response:
     """Save a tracker's ``private_by_default``; an unticked checkbox sends nothing, meaning off."""
@@ -606,7 +606,7 @@ async def admin_tracker_update(
 async def admin_settings(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the settings management page."""
     from zoneinfo import available_timezones
@@ -680,7 +680,7 @@ async def admin_settings(
 async def admin_settings_defaults(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     default_language: str = Form(""),
     default_timezone: str = Form(""),
     fts_language: str = Form(""),
@@ -746,7 +746,7 @@ def _render_anonymous_access_confirm(
 async def admin_settings_anonymous_access(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     enabled: str = Form(""),
     confirm: str = Form(""),
     confirmed_projects: list[str] = Form(default=[]),  # noqa: B008
@@ -785,7 +785,7 @@ async def admin_settings_anonymous_access(
 async def admin_settings_anonymous_access_confirm(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Ask the administrator to confirm turning anonymous access on, naming the opted-in projects."""
     from specivo.services.anonymous_access_service import (
@@ -860,7 +860,7 @@ async def admin_email(
 async def admin_agent_groups(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the agent groups management page."""
     from specivo.services.group_policy_service import GroupPolicyService
@@ -883,7 +883,7 @@ async def admin_agent_groups(
 async def admin_kill_switch(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the kill switch page."""
     from specivo.services.kill_switch_service import KillSwitchService
@@ -906,7 +906,7 @@ async def admin_kill_switch(
 async def admin_metadata_presets(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the admin metadata presets page."""
     from specivo.schemas.metadata_schema import MetadataPresetOut

@@ -11,11 +11,11 @@ import hashlib
 import hmac
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError
 from specivo.hooks.refs import link_commit_to_issues
 from specivo.models.setting import Setting
@@ -57,7 +57,7 @@ async def _validate_github_signature(request: Request, body: bytes, db: AsyncSes
 @router.post("/github/push/")
 async def github_push(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     """Receive GitHub push webhook.
 

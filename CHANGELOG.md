@@ -40,6 +40,7 @@ Each release also has a blog post with the details.
 - Fixed agent token logs accepting another user's session
 - Fixed recurring pattern pages linking generated issues to a missing page
 - Fixed search pagination links breaking when the query contains `&`, `#` or `+`
+- Fixed a request's changes being committed after its response was sent, so an immediate follow-up request could still read the old data; a failed commit now returns an error instead of a success
 
 ### Security
 - Fixed an API key limited to some projects being able to create an unlimited key for itself

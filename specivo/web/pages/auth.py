@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.utils import utcnow
 from specivo.models.user import User
 from specivo.web.deps import (
@@ -31,7 +31,7 @@ router = APIRouter(tags=["web-auth"], include_in_schema=False)
 @router.get("/login/", response_model=None)
 async def login_page(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     reset: str = Query(""),  # noqa: B008
     next_url: str = Query("", alias="next"),  # noqa: B008
     sso_error: str = Query(""),  # noqa: B008
@@ -118,7 +118,7 @@ async def login_page(
 @router.get("/logout/", response_model=None)
 async def logout_confirm_page(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> HTMLResponse | RedirectResponse:
     """Ask before signing out; a GET never signs anybody out.
 
@@ -138,7 +138,7 @@ async def logout_confirm_page(
 @router.post("/logout/")
 async def logout(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> RedirectResponse:
     """Revoke this browser's session on the server, clear its cookies, sign out at the IdP.
 
@@ -193,7 +193,7 @@ async def _token_owner_is_sso_only(db: AsyncSession, user_id: int) -> bool:
 @router.get("/reset-password/", response_class=HTMLResponse)
 async def reset_password_form(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     token: str = Query(""),  # noqa: B008
 ) -> HTMLResponse:
     """Render the reset password form.
@@ -236,7 +236,7 @@ async def reset_password_form(
 async def profile_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     sso_linked: str = Query(""),  # noqa: B008
     sso_unlinked: str = Query(""),  # noqa: B008
     sso_error: str = Query(""),  # noqa: B008
@@ -262,7 +262,7 @@ async def profile_page(
 async def update_profile(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     display_name: str = Form(""),
 ) -> Response:
     """Update user profile (display name)."""
@@ -278,7 +278,7 @@ async def update_profile(
 async def preferences_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the user preferences page."""
     from specivo.core.config import get_settings
@@ -324,7 +324,7 @@ async def _sso_only_providers(db: AsyncSession, user: User) -> list[str]:
 async def change_password_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the standalone password-change page.
 
@@ -363,7 +363,7 @@ async def change_password_page(
 async def update_preferences(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     avatar_color: str = Form(""),
     language: str = Form(""),
     timezone: str = Form(""),
@@ -395,7 +395,7 @@ async def update_preferences(
 async def upload_avatar(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     file: UploadFile = File(...),
 ) -> Response:
     """Upload a user avatar photo."""
@@ -412,7 +412,7 @@ async def upload_avatar(
 async def delete_avatar(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Remove the user avatar photo."""
     from specivo.services.profile_service import ProfileService
@@ -426,7 +426,7 @@ async def delete_avatar(
 async def api_keys_page(
     request: Request,
     user: Annotated[User, Depends(require_user)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the API keys management page (requires auth).
 

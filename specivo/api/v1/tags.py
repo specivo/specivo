@@ -11,7 +11,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
@@ -105,7 +105,7 @@ async def _log_tag(
 async def list_tags(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[TagWithUsageOut]:
     project = await _get_project(project_key, current_user, db)
     rows = await _tag_service.list_with_usage(db, project.id)
@@ -129,7 +129,7 @@ async def search_tags(
     q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
     """Autocomplete tags. Requires project access only."""
     project = await _get_project(project_key, current_user, db)
@@ -142,7 +142,7 @@ async def search_tags_global(
     q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
     """Cross-project tag autocomplete, deduplicated by name.
 
@@ -162,7 +162,7 @@ async def create_tag(
     data: TagCreate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TagOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage(project, current_user, db)
@@ -185,7 +185,7 @@ async def update_tag(
     data: TagUpdate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TagOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage(project, current_user, db)
@@ -204,7 +204,7 @@ async def delete_tag(
     tag_id: int,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     project = await _get_project(project_key, current_user, db)
     await _require_manage(project, current_user, db)
@@ -232,7 +232,7 @@ async def _resolve_issue(issue_ref: str, user: User, db: AsyncSession):
 async def list_issue_tags(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[TagOut]:
     issue, project = await _resolve_issue(issue_ref, current_user, db)
     tags = await _tag_service.tags_for_issue(db, issue.id)
@@ -245,7 +245,7 @@ async def set_issue_tags(
     data: EntityTagsSet,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[TagOut]:
     issue, project = await _resolve_issue(issue_ref, current_user, db)
     diff = await _tag_service.set_issue_tags(db, project, issue.id, data.names, current_user)
@@ -283,7 +283,7 @@ async def add_issue_tag(
     data: EntityTagAdd,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TagOut:
     issue, project = await _resolve_issue(issue_ref, current_user, db)
     tag, created = await _tag_service.add_to_issue(db, project, issue.id, data.name, current_user)
@@ -309,7 +309,7 @@ async def remove_issue_tag(
     tag_id: int,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     issue, project = await _resolve_issue(issue_ref, current_user, db)
     removed = await _tag_service.remove_from_issue(db, issue.id, tag_id)
@@ -335,7 +335,7 @@ async def list_wiki_tags(
     project_key: str,
     slug: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[TagOut]:
     project = await _get_project(project_key, current_user, db)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
@@ -350,7 +350,7 @@ async def set_wiki_tags(
     data: EntityTagsSet,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[TagOut]:
     project = await _get_project(project_key, current_user, db)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
@@ -390,7 +390,7 @@ async def add_wiki_tag(
     data: EntityTagAdd,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TagOut:
     project = await _get_project(project_key, current_user, db)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
@@ -418,7 +418,7 @@ async def remove_wiki_tag(
     tag_id: int,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     project = await _get_project(project_key, current_user, db)
     page, _ = await _wiki_service.get_page(db, project.id, slug)
@@ -446,7 +446,7 @@ async def bulk_tag_issues(
     data: BulkTagRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     """Apply/remove tags across many issues. Requires the bulk_operations feature."""
     from specivo.core.features import has_feature

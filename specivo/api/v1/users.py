@@ -7,7 +7,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import ACTIVITY_PER_PAGE_OPTIONS
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import ValidationError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
@@ -27,7 +27,7 @@ router = APIRouter(tags=["users"])
 async def user_autocomplete(
     q: str = Query(min_length=1, max_length=100, description="Search prefix for login or display_name"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[UserAutocompleteOut]:
     """Search users by login or display name for @mention and member pickers.
 
@@ -73,7 +73,7 @@ async def user_autocomplete(
 async def update_activity_per_page(
     per_page: int = Query(...),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     _rl: None = Depends(rate_limit("preference_update", max_requests=30, window_seconds=60)),
 ) -> dict:
     """Save the user's activity items-per-page preference."""
@@ -91,7 +91,7 @@ async def update_activity_per_page(
 async def update_version_sort(
     sort: str = Query(..., description="'<field>:<direction>', e.g. 'due:asc' or 'version:desc'"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     _rl: None = Depends(rate_limit("preference_update", max_requests=30, window_seconds=60)),
 ) -> dict:
     """Save how the user sorts version lists (roadmap and project versions)."""

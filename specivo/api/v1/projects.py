@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.security import get_current_user, get_reader
 from specivo.models.user import User
@@ -152,8 +152,8 @@ def _anonymous_project_out(project) -> ProjectOut:
 async def list_projects(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    current_user: User = Depends(get_reader),
-    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_reader, scope="function"),
+    db: AsyncSession = DB_SESSION,
 ) -> PaginatedResponse[ProjectOut]:
     """List the projects the caller may reach.
 
@@ -184,7 +184,7 @@ async def list_projects(
 async def create_project(
     data: ProjectCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
     if not is_global_admin(current_user):
         raise PermissionDeniedError("Only admins can create projects")
@@ -200,7 +200,7 @@ async def create_project(
 async def get_project(
     key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
     project = await _service.get_by_key(db, key.upper())
     await _require_project_access(project, current_user, db)
@@ -216,7 +216,7 @@ async def update_project(
     data: ProjectUpdate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
     project = await _service.get_by_key(db, key.upper())
     await _require_manage(project, current_user, db)
@@ -232,7 +232,7 @@ async def update_project(
 async def delete_project(
     key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     project = await _service.get_by_key(db, key.upper())
     await _require_manage(project, current_user, db)
@@ -327,7 +327,7 @@ async def _principal_label(db: AsyncSession, principal: Principal) -> str:
 async def list_members(
     key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[MemberOut]:
     """List every membership on the project — users first, then user groups."""
     project = await _service.get_by_key(db, key.upper())
@@ -343,7 +343,7 @@ async def add_member(
     data: MemberAdd,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MemberOut:
     """Add a user or a user group to the project with the given roles."""
     project = await _service.get_by_key(db, key.upper())
@@ -374,7 +374,7 @@ async def remove_member(
     principal_id: int,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Remove a membership. *principal_type* is ``user`` or ``group``."""
     principal = Principal.parse(principal_type, principal_id)
@@ -397,7 +397,7 @@ async def update_member_roles(
     data: MemberUpdateRoles,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MemberOut:
     """Replace all roles held by one membership. ``user`` or ``group``."""
     principal = Principal.parse(principal_type, principal_id)
@@ -430,7 +430,7 @@ async def update_member_roles(
 async def get_modules(
     key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ModulesOut:
     project = await _service.get_by_key(db, key.upper())
     await _require_project_access(project, current_user, db)
@@ -443,7 +443,7 @@ async def update_modules(
     key: str,
     data: ModuleToggle,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ModulesOut:
     project = await _service.get_by_key(db, key.upper())
     await _require_manage(project, current_user, db)

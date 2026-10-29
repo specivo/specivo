@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user
@@ -29,7 +29,7 @@ _journal_service = JournalService()
 async def list_relations(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[RelationOut]:
     """List all relations for an issue.
 
@@ -51,7 +51,7 @@ async def create_relation(
     issue_ref: str,
     data: RelationCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> RelationOut:
     """Create a relation from the given issue to ``issue_to_key``.
 
@@ -112,7 +112,7 @@ async def create_relation(
 async def delete_relation(
     relation_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     _rl: None = Depends(rate_limit("relation_delete", max_requests=30, window_seconds=60)),
 ) -> None:
     """Delete a relation by its ID.
