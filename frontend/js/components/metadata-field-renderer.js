@@ -48,7 +48,8 @@ export function metadataFieldRenderer(initial) {
                             placeholder = prop.description || '';
                         }
 
-                        var label = key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+                        var title = typeof prop.title === 'string' ? prop.title.trim() : '';
+                        var label = title || key.replace(/_/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
                         fields.push({ key: key, label: label, inputType: inputType, typeLabel: typeLabel, options: options, placeholder: placeholder, min: min, max: max });
 
                         // Initialize metadata value if not set

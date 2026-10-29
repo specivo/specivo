@@ -39,6 +39,7 @@ from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.lookups import IssueCategory, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
+from specivo.models.metadata_schema import MetadataSchema
 from specivo.models.project import Project
 from specivo.models.relation import IssueRelation
 from specivo.models.role import Role
@@ -647,6 +648,43 @@ class TestSprintsAndTags:
             await _count(db_session, Tag),
             await _count(db_session, TagLink),
         ) == before
+
+
+class TestCustomFieldNames:
+    async def test_an_imported_field_is_named_as_in_the_source(
+        self, db_session, admin_client, build_bundle_import, tmp_path
+    ):
+        fields = [
+            {"source_ref": "cf-risk", "name": "ระดับความเสี่ยง", "key": "risk", "field_format": "string",
+             "json_schema": {"type": "string"}, "is_for_all": True},
+            {"source_ref": "cf-qa", "name": "QA owner", "key": "qa_owner", "field_format": "user",
+             "json_schema": {"type": "integer"}, "is_for_all": True},
+        ]  # fmt: skip
+        values = [
+            {"field_ref": "cf-risk", "key": "risk", "value": "ต่ำ"},
+            {"field_ref": "cf-qa", "key": "qa_owner", "value": "u1", "value_kind": "user_ref"},
+        ]
+        history = {
+            "source_ref": "j1",
+            "issue_ref": "i1",
+            "details": [{"property": "cf", "prop_key": "cf-risk", "old_value": "สูง", "new_value": "ต่ำ"}],
+        }
+        root = write_bundle(
+            tmp_path / "b",
+            users=[user("u1")],
+            projects=[project("p1", identifier="cfnames")],
+            custom_fields=fields,
+            issues=[issue("i1", custom_values=values)],
+            journals=[history],
+        )
+        await build_bundle_import(root).run()
+
+        schema = (await db_session.execute(select(MetadataSchema))).scalar_one()
+        props = schema.schema_definition["properties"]
+        assert props["risk"] == {"type": "string", "title": "ระดับความเสี่ยง"}
+        assert props["qa_owner"] == {"type": "integer", "title": "QA owner", "x-specivo-ref": "user"}
+        text = " ".join((await admin_client.get("/issue/CFNAMES-1/")).text.split())
+        assert '<strong class="sp-change-label">ระดับความเสี่ยง</strong>' in text
 
 
 class TestAdministrators:

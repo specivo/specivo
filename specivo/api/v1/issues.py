@@ -25,17 +25,19 @@ from specivo.schemas.issue import (
     IssueUpdate,
     IssueUpdateOut,
     IssueWithChildren,
+    MetadataFieldOut,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
-from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps
+from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
+from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
 from specivo.services.notification_service import NotificationService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
@@ -465,11 +467,30 @@ async def get_issue(
 
     return IssueWithChildren(
         **out.model_dump(),
+        metadata_fields=await _metadata_fields(db, current_user, issue, out.metadata),
         children=children,
         journals=journals_out,
         watchers=watchers_out,
         attachments=attachments_out,
     )
+
+
+async def _metadata_fields(db: AsyncSession, user: User, issue: Issue, metadata: dict) -> list[MetadataFieldOut]:
+    """The issue's metadata fields with their names, and the people and versions they hold named for *user*.
+
+    Named as the issue page names them (see :func:`metadata_value_names`),
+    with display names, the API's convention for people.
+    """
+    if not metadata:
+        return []
+    schemas = await issue_schemas(db, {issue.project_id})
+    applicable = [s for s in schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
+    labels = field_labels(schemas)
+    names = await metadata_value_names(db, user, applicable, metadata, people_by_login=False)
+    return [
+        MetadataFieldOut(key=key, name=labels.get(key) or humanise(key), value=value, value_names=names.get(key, {}))
+        for key, value in metadata.items()
+    ]
 
 
 @router.patch("/issues/{issue_ref}/", response_model=IssueUpdateOut)
@@ -650,6 +671,7 @@ def _journal_out(
                 new_value=d.new_value,
                 old_name=names.name(d, d.old_value),
                 new_name=names.name(d, d.new_value),
+                field_name=names.field_label(d),
             )
             for d in j.details
             if not names.hides(d, anonymous=anonymous)

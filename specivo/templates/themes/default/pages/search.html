@@ -143,7 +143,7 @@
     {% trans %}Applied metadata filter{% endtrans %}
   </button>
   <div x-show="open" x-cloak>
-    <textarea class="search-applied-text" readonly rows="2">{{ mf }} = {{ mv }}</textarea>
+    <textarea class="search-applied-text" readonly rows="2">{{ mf_label }} = {{ mv_label }}</textarea>
   </div>
 </div>
 {% endif %}
@@ -157,7 +157,7 @@
   {% set tag_list = tags | map(attribute='name') | join(', ') %}
   {% trans count=total, tags=tag_list %}%(count)s result tagged %(tags)s{% pluralize %}%(count)s results tagged %(tags)s{% endtrans %}
   {% else %}
-  {% trans count=total, field=mf, value=mv %}%(count)s issue where %(field)s = %(value)s{% pluralize %}%(count)s issues where %(field)s = %(value)s{% endtrans %}
+  {% trans count=total, field=mf_label, value=mv_label %}%(count)s issue where %(field)s = %(value)s{% pluralize %}%(count)s issues where %(field)s = %(value)s{% endtrans %}
   {% endif %}
 </div>
 
@@ -325,7 +325,7 @@
   {% set tag_list = tags | map(attribute='name') | join(', ') %}
   {% trans tags=tag_list %}No issues or wiki pages found tagged %(tags)s.{% endtrans %}
   {% else %}
-  {% trans field=mf, value=mv %}No issues found where %(field)s = %(value)s.{% endtrans %}
+  {% trans field=mf_label, value=mv_label %}No issues found where %(field)s = %(value)s.{% endtrans %}
   {% endif %}
 </div>
 {% endif %}
