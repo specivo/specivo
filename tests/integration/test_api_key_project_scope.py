@@ -13,6 +13,7 @@ feature's state.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date
 
@@ -525,3 +526,72 @@ async def test_scope_project_ids_narrowing():
         assert scope_project_ids(3, None) == (None, [])
         assert scope_project_ids(None, [2, 3]) == (None, [2])
     assert current_project_scope() is None
+
+
+def _refusal(resp, key: str) -> tuple[int, str]:
+    """Status and body of a search refusal, with the echoed key masked."""
+    return resp.status_code, json.dumps(resp.json(), sort_keys=True).replace(key, "<KEY>")
+
+
+async def test_search_refuses_every_unreachable_project_like_a_missing_one(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """Missing, private-without-membership and outside-the-limit read the same; anonymous is refused uniformly."""
+    w = await build_world(db_session, client, "KSU")
+    _b_only_key, b_only_raw = await ApiKeyService().create_key(
+        session=db_session, user_id=w.b_only_user.id, name="ksu-bonly"
+    )
+    await db_session.commit()
+    a_key, b_key = w.a.key, w.b.key
+
+    async def ask(raw: str | None, **params) -> object:
+        if raw is None:
+            client.headers.pop("Authorization", None)
+        else:
+            _auth(client, raw)
+        return await client.get("/api/v1/search/", params={"q": "quokka", **params})
+
+    # project_key: one 422, one code, one field, one body.
+    missing = _refusal(await ask(b_only_raw, project_key="KSUNONE"), "KSUNONE")
+    private = _refusal(await ask(b_only_raw, project_key=a_key), a_key)
+    outside = _refusal(await ask(w.limited_raw, project_key=b_key), b_key)
+    assert missing[0] == 422
+    assert missing == private == outside
+    assert json.loads(missing[1])["errors"][0]["field"] == "project_key"
+
+    # project_keys: the same when no named project is reachable.
+    multi = [
+        _refusal(await ask(b_only_raw, project_keys="KSUNONE"), "KSUNONE"),
+        _refusal(await ask(b_only_raw, project_keys=a_key), a_key),
+        _refusal(await ask(w.limited_raw, project_keys=b_key), b_key),
+    ]
+    assert multi[0][0] == 422
+    assert multi[0] == multi[1] == multi[2]
+
+    # Anonymous: the refusal does not depend on the key at all.
+    anon_private = await ask(None, project_key=a_key)
+    anon_missing = await ask(None, project_key="KSUNONE")
+    assert anon_private.status_code == anon_missing.status_code
+    assert anon_private.json() == anon_missing.json()
+    assert a_key not in anon_private.text
+
+
+async def test_search_folds_a_forbidden_refusal_into_not_found(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+):
+    """A 403-style refusal from the access check reads as a missing key, not as a 403."""
+    from specivo.api.v1 import search as search_api
+    from specivo.core.exceptions import PermissionDeniedError
+
+    w = await build_world(db_session, client, "KSF")
+    a_key = w.a.key
+
+    async def forbid(_db, _project, _user):
+        raise PermissionDeniedError("You may not search this project")
+
+    monkeypatch.setattr(search_api._project_service, "require_project_access", forbid)
+    _auth(client, w.open_raw)
+    forbidden = await client.get("/api/v1/search/", params={"q": "quokka", "project_key": a_key})
+    missing = await client.get("/api/v1/search/", params={"q": "quokka", "project_key": "KSFNONE"})
+    assert _refusal(forbidden, a_key) == _refusal(missing, "KSFNONE")
+    assert forbidden.status_code == 422

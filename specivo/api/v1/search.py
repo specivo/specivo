@@ -12,7 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_SEARCH_OFFSET
 from specivo.core.database import get_db
-from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, ValidationError
+from specivo.core.exceptions import (
+    AnonymousAccessDeniedError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnauthorizedError,
+    ValidationError,
+)
 from specivo.core.rate_limit import enforce_rate_limit
 from specivo.core.security import (
     ANONYMOUS_SEARCH_MAX_LIMIT,
@@ -74,10 +80,15 @@ async def _anonymous_search_budget(
 
 
 async def _can_reach(db: AsyncSession, project: Project, user: User) -> bool:
-    """Whether a signed-in *user* may reach *project* (membership, public flag, key limit)."""
+    """Whether a signed-in *user* may reach *project* (membership, public flag, key limit).
+
+    Every refusal ``require_project_access`` can give (not found, forbidden,
+    unauthorized) is folded into False, so the caller answers each one the
+    way it answers a key that names no project.
+    """
     try:
         await _project_service.require_project_access(db, project, user)
-    except NotFoundError:
+    except (NotFoundError, PermissionDeniedError, UnauthorizedError):
         return False
     return True
 
