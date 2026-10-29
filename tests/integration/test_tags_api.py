@@ -401,3 +401,85 @@ class TestGlobalTagAutocomplete:
 
         resp = await client.get("/api/v1/tags/search/", headers=_auth(admin_token), params={"limit": 1})
         assert len(resp.json()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tag input limits (bounded get-or-create fan-out)
+# ---------------------------------------------------------------------------
+
+
+class TestTagInputLimits:
+    async def test_reject_oversized_tag_name(self, client, issue, member_token):
+        resp = await client.put(
+            f"/api/v1/issues/{issue.display_key}/tags/",
+            headers=_auth(member_token),
+            json={"names": ["x" * 65]},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_name_at_the_limit_after_stripping_is_accepted(self, client, issue, member_token):
+        resp = await client.put(
+            f"/api/v1/issues/{issue.display_key}/tags/",
+            headers=_auth(member_token),
+            json={"names": ["  " + "x" * 64 + "  "]},
+        )
+        assert resp.status_code == 200, resp.text
+        assert [t["name"] for t in resp.json()] == ["x" * 64]
+
+    async def test_reject_too_many_tags(self, client, issue, member_token):
+        resp = await client.put(
+            f"/api/v1/issues/{issue.display_key}/tags/",
+            headers=_auth(member_token),
+            json={"names": [f"t{i}" for i in range(101)]},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_reject_too_many_wiki_tags(self, client, project, wiki_page, member_token):
+        resp = await client.put(
+            f"/api/v1/projects/{project.key}/wiki/{wiki_page.slug}/tags/",
+            headers=_auth(member_token),
+            json={"names": [f"t{i}" for i in range(101)]},
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_blank_names_dropped(self, client, issue, member_token):
+        resp = await client.put(
+            f"/api/v1/issues/{issue.display_key}/tags/",
+            headers=_auth(member_token),
+            json={"names": ["keep", "  ", ""]},
+        )
+        assert resp.status_code == 200, resp.text
+        assert {t["name"] for t in resp.json()} == {"keep"}
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"issue_ids": list(range(1, 1002)), "add": ["release"]},
+            {"issue_ids": [1], "add": [f"t{i}" for i in range(101)]},
+            {"issue_ids": [1], "remove": list(range(1, 102))},
+            {"issue_ids": [1], "add": ["y" * 65]},
+        ],
+        ids=["too-many-issues", "too-many-adds", "too-many-removes", "name-too-long"],
+    )
+    async def test_bulk_rejects_oversized_input(self, client, project, admin_token, payload):
+        resp = await client.post(
+            f"/api/v1/projects/{project.key}/issues/bulk-tags/",
+            headers=_auth(admin_token),
+            json=payload,
+        )
+        assert resp.status_code == 422, resp.text
+
+    async def test_bulk_normalises_names_and_ids(self, client, project, issue, admin_token):
+        from specivo.core.features import get_feature_registry
+
+        get_feature_registry().register("bulk_operations", "tests")
+        resp = await client.post(
+            f"/api/v1/projects/{project.key}/issues/bulk-tags/",
+            headers=_auth(admin_token),
+            json={"issue_ids": [issue.id, issue.id], "add": [" release ", "Release", "  "]},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json() == {"issues": 1, "links_added": 1, "links_removed": 0}
+
+        resp = await client.get(f"/api/v1/issues/{issue.display_key}/tags/", headers=_auth(admin_token))
+        assert [t["name"] for t in resp.json()] == ["release"]

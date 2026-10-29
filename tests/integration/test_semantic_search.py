@@ -456,3 +456,120 @@ async def test_search_mode_semantic(
     data = resp.json()
     # Semantic search should return results (mock embeddings are hash-based)
     assert isinstance(data["items"], list)
+
+
+# ---------------------------------------------------------------------------
+# Snippet escaping and project access
+# ---------------------------------------------------------------------------
+
+_XSS_PROBE = "<script>alert('xss')</script> dangerous semantic content here"
+
+
+async def _embed_project(db: AsyncSession, project: Project) -> None:
+    """Run the embedding the issue create only queued."""
+    sources = (await db.execute(select(SearchSource).where(SearchSource.project_id == project.id))).scalars().all()
+    await EmbeddingService().embed_pending(db, [(s.source_type, s.entity_id) for s in sources])
+    await db.commit()
+
+
+@pytest.mark.asyncio
+async def test_semantic_snippet_is_html_escaped(
+    authed_client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssuePriority],
+    mock_model: EmbeddingModel,
+):
+    """Semantic snippets are HTML-escaped: the search page renders them with ``| safe``."""
+    tracker, _, _ = lookups
+    await _create_issue(authed_client, project.key, tracker.id, "XSS probe issue", description=_XSS_PROBE)
+    await _embed_project(db_session, project)
+
+    resp = await authed_client.get(SEARCH_URL, params={"q": "dangerous semantic content", "mode": "semantic"})
+    assert resp.status_code == 200, resp.text
+    blob = " ".join(item.get("snippet") or "" for item in resp.json()["items"])
+    assert "&lt;script&gt;" in blob
+    assert "<script>" not in blob
+
+
+@pytest.mark.asyncio
+async def test_hybrid_snippet_from_semantic_side_is_escaped(
+    authed_client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssuePriority],
+    mock_model: EmbeddingModel,
+):
+    """A hybrid hit that only the semantic side found is escaped too."""
+    tracker, _, _ = lookups
+    await _create_issue(authed_client, project.key, tracker.id, "XSS probe issue", description=_XSS_PROBE)
+    await _embed_project(db_session, project)
+
+    # No keyword in common with the issue, so the full-text side finds nothing.
+    resp = await authed_client.get(SEARCH_URL, params={"q": "zebra quartz", "mode": "hybrid"})
+    assert resp.status_code == 200, resp.text
+    blob = " ".join(item.get("snippet") or "" for item in resp.json()["items"])
+    assert "&lt;script&gt;" in blob
+    assert "<script>" not in blob
+
+
+@pytest.mark.asyncio
+async def test_web_search_page_escapes_semantic_snippet(
+    authed_client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssuePriority],
+    mock_model: EmbeddingModel,
+):
+    """The web search page (hybrid by default) never renders stored markup."""
+    tracker, _, _ = lookups
+    await _create_issue(authed_client, project.key, tracker.id, "XSS probe issue", description=_XSS_PROBE)
+    await _embed_project(db_session, project)
+
+    token = authed_client.headers["Authorization"].removeprefix("Bearer ")
+    resp = await authed_client.get("/search/", params={"q": "zebra quartz"}, cookies={"access_token": token})
+    assert resp.status_code == 200, resp.text
+    assert "&lt;script&gt;alert(" in resp.text
+    assert "<script>alert(" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_inaccessible_project_key(
+    authed_client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """A private project the caller is not a member of is refused like a missing one."""
+    await _make_project(db_session, key="OTHR", identifier="other-private")
+
+    private = await authed_client.get(SEARCH_URL, params={"q": "anything", "project_key": "OTHR"})
+    missing = await authed_client.get(SEARCH_URL, params={"q": "anything", "project_key": "NOPE"})
+    assert private.status_code == missing.status_code == 422, private.text
+    assert private.json()["errors"][0]["code"] == missing.json()["errors"][0]["code"]
+    assert private.json()["errors"][0]["field"] == missing.json()["errors"][0]["field"] == "project_key"
+
+
+@pytest.mark.asyncio
+async def test_search_multi_project_filters_inaccessible(
+    authed_client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssuePriority],
+    mock_model: EmbeddingModel,
+):
+    """project_keys keeps only reachable projects, and refuses a list of only private ones."""
+    tracker, _, _ = lookups
+    await _create_issue(authed_client, project.key, tracker.id, "Multiproj accessible content")
+    await _make_project(db_session, key="OTH2", identifier="other-private-2")
+
+    resp = await authed_client.get(
+        SEARCH_URL,
+        params={"q": "Multiproj accessible content", "project_keys": f"{project.key},OTH2", "mode": "keyword"},
+    )
+    assert resp.status_code == 200, resp.text
+    items = resp.json()["items"]
+    assert items
+    assert {item["project_key"] for item in items} == {project.key}
+
+    resp = await authed_client.get(SEARCH_URL, params={"q": "anything", "project_keys": "OTH2"})
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["errors"][0]["field"] == "project_keys"

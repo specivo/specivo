@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_SEARCH_OFFSET
 from specivo.core.database import get_db
-from specivo.core.exceptions import AnonymousAccessDeniedError, ValidationError
+from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, ValidationError
 from specivo.core.rate_limit import enforce_rate_limit
 from specivo.core.security import (
     ANONYMOUS_SEARCH_MAX_LIMIT,
@@ -71,6 +71,15 @@ async def _anonymous_search_budget(
     """
     if user.is_anonymous:
         await enforce_rate_limit(request, response, "anon_search", *ANONYMOUS_SEARCH_RATE_LIMIT)
+
+
+async def _can_reach(db: AsyncSession, project: Project, user: User) -> bool:
+    """Whether a signed-in *user* may reach *project* (membership, public flag, key limit)."""
+    try:
+        await _project_service.require_project_access(db, project, user)
+    except NotFoundError:
+        return False
+    return True
 
 
 def _clean_tag_names(tag: list[str]) -> list[str]:
@@ -155,13 +164,15 @@ async def search(
             # error for the missing one, and the difference is the disclosure.
             project_ids = [(await _project_service.get_readable_by_key(db, key.upper(), user)).id for key in keys]
         elif keys:
-            stmt = select(Project.id).where(Project.key.in_(keys))
+            stmt = select(Project).where(Project.key.in_(keys))
             # A project outside the API key's limit reads as one that does not exist.
             key_limit = scope_clause(Project.id)
             if key_limit is not None:
                 stmt = stmt.where(key_limit)
-            result = await db.execute(stmt)
-            project_ids = [row[0] for row in result.all()]
+            projects = (await db.execute(stmt)).scalars().all()
+            # Keep only projects the caller may reach; a private project they
+            # are not a member of counts as missing, never as "no results".
+            project_ids = [p.id for p in projects if await _can_reach(db, p, user)]
             if not project_ids:
                 raise ValidationError(
                     message="None of the specified project keys were found",
@@ -171,18 +182,19 @@ async def search(
         if anonymous:
             project_id = (await _project_service.get_readable_by_key(db, project_key.upper(), user)).id
         else:
-            stmt = select(Project.id).where(Project.key == project_key)
+            stmt = select(Project).where(Project.key == project_key)
             key_limit = scope_clause(Project.id)
             if key_limit is not None:
                 stmt = stmt.where(key_limit)
-            result = await db.execute(stmt)
-            pid = result.scalar_one_or_none()
-            if pid is None:
+            target = (await db.execute(stmt)).scalar_one_or_none()
+            # A project the caller may not reach gets the same answer as one
+            # that does not exist, so the filter cannot probe for private keys.
+            if target is None or not await _can_reach(db, target, user):
                 raise ValidationError(
                     message=f"Project with key '{project_key}' not found",
                     field="project_key",
                 )
-            project_id = pid
+            project_id = target.id
 
     # Build metadata filters
     parsed_metadata: dict | None = None

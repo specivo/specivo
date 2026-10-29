@@ -502,7 +502,9 @@ async def _search(
 
     project_id: int | None = None
     if project_key:
-        project = await _project_svc.get_by_key(session, project_key)
+        # A private project the caller is not a member of, or one outside the
+        # API key's limit, is "not found" exactly like a missing key.
+        project = await _project_svc.get_readable_by_key(session, project_key, user)
         project_id = project.id
 
     if mode == "hybrid":
