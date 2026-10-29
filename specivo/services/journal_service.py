@@ -15,7 +15,7 @@ from specivo.core.exceptions import NotFoundError, ValidationError
 from specivo.core.i18n import gettext as _
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import Journal, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, Journal, JournalDetail
 from specivo.models.user import User
 from specivo.services.markdown_budget import check_markdown_length
 
@@ -234,6 +234,43 @@ class JournalService:
             issue.display_key,
             relation_type,
             other_issue_key,
+        )
+        return journal
+
+    async def record_attachment_removed(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        user: User,
+        attachment_id: int,
+        filename: str,
+    ) -> Journal:
+        """Record that a file was removed from *issue*.
+
+        The attachment row goes with the file, so the detail keeps the file
+        name (``old_value``) for history to show; ``prop_key`` keeps the id.
+        """
+        sequence = await self._next_sequence(session, issue.id)
+        journal = Journal(
+            issue_id=issue.id,
+            wiki_page_id=None,
+            project_id=issue.project_id,
+            user_id=user.id,
+            notes=None,
+            is_private=False,
+            sequence=sequence,
+        )
+        session.add(journal)
+        await session.flush()
+
+        session.add(
+            JournalDetail(
+                journal_id=journal.id,
+                property=ATTACHMENT_DETAIL,
+                prop_key=str(attachment_id),
+                old_value=filename,
+                new_value=None,
+            )
         )
         return journal
 

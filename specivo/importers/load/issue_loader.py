@@ -48,7 +48,7 @@ from specivo.importers.core.ir import (
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
-from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.project import Project
 from specivo.models.watcher import Watcher
 from specivo.schemas.issue import IssueCreate
@@ -358,6 +358,8 @@ async def _create_journal(
         if entity is not None:
             old_value = await _reference_value(ctx, entity, detail.old_ref, old_value, unresolved)
             new_value = await _reference_value(ctx, entity, detail.new_ref, new_value, unresolved)
+        elif prop == ATTACHMENT_DETAIL:
+            prop_key = await _attachment_key(ctx, prop_key, unresolved)
         ctx.session.add(
             JournalDetail(
                 journal_id=journal.id,
@@ -420,6 +422,24 @@ async def _reference_value(
     if text is None or not text.strip():
         return None
     return f'"{text}"' if text.isdigit() else text
+
+
+async def _attachment_key(ctx: PhaseContext, ref: str, unresolved: list[str]) -> str:
+    """Return what an attachment change's ``prop_key`` (the file's ``source_ref``) is stored as.
+
+    Specivo's history keeps the attachment's id, by which the issue page names
+    the file as it was imported (renamed, say, when the issue holds two files
+    of one name). A ref naming no imported file (history names files deleted
+    since) is never stored as it is, as it would be read as the id of an
+    unrelated Specivo file: the key is left empty and the file named by the
+    detail's value, the source's file name.
+    """
+    target_id = await ctx.id_map.get(ctx.session, EntityType.ATTACHMENT, ref) if ref else None
+    if target_id is not None:
+        return str(target_id)
+    if ref:
+        unresolved.append(f"{EntityType.ATTACHMENT}:{ref}")
+    return ""
 
 
 async def _highest_sequence(session: AsyncSession, issue_id: int) -> int:

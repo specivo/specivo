@@ -6959,3 +6959,21 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr ""

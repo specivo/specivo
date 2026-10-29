@@ -7201,3 +7201,21 @@ msgstr "Нет открытых версий. Все версии этого п�
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr "Завершённые версии"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr "Файл %(name)s добавлен"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr "Файл %(name)s удалён"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr "Файл добавлен"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr "Файл удалён"

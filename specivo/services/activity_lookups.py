@@ -12,6 +12,11 @@ record that was not imported) has no entry, and the feed shows it as stored.
 Imported custom field changes whose values name a person or a version
 (``cf_user`` / ``cf_version`` details) are named by the same maps, and by the
 same rules, as an assignee or a target version.
+
+A file attached or removed (an ``attachment`` detail) is named by its
+attachment's file name when the reader may open that file, and otherwise by
+the name the detail stored (the file may be gone). A visitor without an
+account, who is shown no files, is shown no such change.
 """
 
 from __future__ import annotations
@@ -20,11 +25,12 @@ import re
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from sqlalchemy import ColumnElement, select, tuple_
+from sqlalchemy import ColumnElement, and_, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.models.attachment import Attachment
 from specivo.models.issue import Issue, IssueRefAlias
-from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.sprint import Sprint
@@ -55,6 +61,8 @@ _ISSUE_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)-(\d+)$")
 
 # The lookup map holding the parent and relation keys the feed leaves out, as ``{key: ""}``.
 HIDDEN_PARENTS = "parent_id_hidden"
+# The lookup map naming the files attachment changes name, ``{attachment id: file name}``.
+ATTACHMENTS = "attachment"
 
 # Attributes whose values are ids the feed names.
 _NAMED_ATTRIBUTES = frozenset(_LOADED_ATTRIBUTES)
@@ -82,14 +90,30 @@ class ActivityLookups(dict[str, dict[str, str]]):
     """``{map: {id as text: name}}``, and how a field change reads through it."""
 
     def name(self, detail: JournalDetail, value: str | None) -> str | None:
-        """Return the name for one of *detail*'s values, or ``None`` to show the value as stored."""
+        """Return the name for one of *detail*'s values, or ``None`` to show the value as stored.
+
+        An attachment change's value is the file name it stored; it is named
+        by the file's current name when the reader may open the file, else as
+        stored.
+        """
+        if detail.property == ATTACHMENT_DETAIL:
+            if value is None:
+                return None
+            return self.get(ATTACHMENTS, {}).get(detail.prop_key) or value
         key = lookup_key(detail.property, detail.prop_key)
         if key is None or value is None:
             return None
         return self.get(key, {}).get(str(value))
 
+    def attachment_name(self, detail: JournalDetail) -> str | None:
+        """Return the file name of an attachment change, or ``None`` when it has none to show."""
+        return self.name(detail, detail.new_value) or self.name(detail, detail.old_value)
+
     def hides(self, detail: JournalDetail, *, anonymous: bool) -> bool:
         """Whether the feed leaves *detail* out for this reader.
+
+        A visitor without an account may open no file, and is shown no file
+        attached or removed either.
 
         A relation or parent change names another issue by key, and a visitor
         without an account is shown none of them. For anyone else such a change
@@ -97,6 +121,8 @@ class ActivityLookups(dict[str, dict[str, str]]):
         :func:`_hidden_parents`), as the relations list leaves out a relation to
         an issue the reader cannot see; without that list, every one is.
         """
+        if detail.property == ATTACHMENT_DETAIL:
+            return anonymous
         if not names_an_issue(detail):
             return False
         if anonymous:
@@ -163,6 +189,7 @@ async def activity_lookup_maps(
             "category_id": await _names(db, readable, IssueCategory, referenced["category_id"]),
             "project_id": await _projects(db, readable, referenced["project_id"]),
             HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
+            ATTACHMENTS: await _attachments(db, user, journals),
         }
     )
 
@@ -269,6 +296,42 @@ async def _resolve_issue_keys(db: AsyncSession, keys: set[tuple[str, int]]) -> d
             for row in rows.all():
                 resolved[wanted[(int(row.project_id), int(row.sequence_number))]] = int(row.id)
     return resolved
+
+
+async def _attachments(db: AsyncSession, user: User, journals: Iterable[Journal]) -> dict[str, str]:
+    """Name the files the journals' attachment changes name, those *user* may open.
+
+    A file is named when it is attached to an issue *user* may see, or to a
+    comment on one that is not a private note (admins see those too), as the
+    attachment list and downloads decide. Anyone else's file, and a file that
+    is gone, is named by what the change stored.
+    """
+    ids = {
+        int(detail.prop_key)
+        for journal in journals
+        for detail in journal.details
+        if detail.property == ATTACHMENT_DETAIL and detail.prop_key.isdigit()
+    }
+    if not ids or user.is_anonymous:
+        return {}
+
+    from specivo.services.issue_service import IssueService
+
+    issue_ids = select(Issue.id)
+    clause = await IssueService().visible_issues_clause(db, user)
+    if clause is not None:
+        issue_ids = issue_ids.where(clause)
+    journal_ids = select(Journal.id).where(Journal.issue_id.in_(issue_ids))
+    if not user.is_admin:
+        journal_ids = journal_ids.where(Journal.is_private.is_(False))
+    stmt = select(Attachment.id, Attachment.filename).where(
+        Attachment.id.in_(ids),
+        or_(
+            and_(Attachment.container_type == "Issue", Attachment.container_id.in_(issue_ids)),
+            and_(Attachment.container_type == "Journal", Attachment.container_id.in_(journal_ids)),
+        ),
+    )
+    return {str(row.id): row.filename for row in (await db.execute(stmt)).all()}
 
 
 async def _projects(db: AsyncSession, readable: ColumnElement[bool] | None, ids: set[int]) -> dict[str, str]:

@@ -19,6 +19,11 @@ class JournalDetailOut(BaseModel):
     by the issue page's rules; it is null for a plain value, and for an id the
     caller is not shown (show the value as stored). Imported history can hold
     the source's text instead of an id, for a record that was not imported.
+
+    An ``attachment`` change (a file added or removed) has the attachment's
+    id as ``prop_key`` and the file name as ``new_value`` (added) or
+    ``old_value`` (removed); ``new_name`` / ``old_name`` give the file's name,
+    its current one when the caller may open it, else the stored one.
     """
 
     model_config = {"from_attributes": True}

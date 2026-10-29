@@ -93,6 +93,8 @@ class TestPhaseOrder:
         assert index[ImportPhase.ISSUES] < index[ImportPhase.JOURNALS]
         assert index[ImportPhase.ISSUES] < index[ImportPhase.RELATIONS]
         assert index[ImportPhase.ISSUE_ATTACHMENTS] < index[ImportPhase.VERSION_STATUSES]
+        assert index[ImportPhase.ISSUES] < index[ImportPhase.ISSUE_ATTACHMENTS]
+        assert index[ImportPhase.ISSUE_ATTACHMENTS] < index[ImportPhase.JOURNALS]
         assert index[ImportPhase.WIKI_PAGES] < index[ImportPhase.WIKI_LINK_GRAPH]
         assert index[ImportPhase.SEARCH_BACKFILL] == len(PHASE_ORDER) - 1
 

@@ -6951,3 +6951,21 @@ msgstr "没有未关闭的版本。此项目的所有版本均已完成。"
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr "已完成的版本"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr "已添加文件 %(name)s"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr "已删除文件 %(name)s"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr "已添加文件"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr "已删除文件"

@@ -58,9 +58,10 @@ class ImportPhase(StrEnum):
     CUSTOM_FIELD_SCHEMAS = "custom_field_schemas"
     ISSUES = "issues"
     WATCHERS = "watchers"
+    # Before the journals: history names the files it added and removed.
+    ISSUE_ATTACHMENTS = "issue_attachments"
     JOURNALS = "journals"
     RELATIONS = "relations"
-    ISSUE_ATTACHMENTS = "issue_attachments"
     VERSION_STATUSES = "version_statuses"
     WIKI_PAGES = "wiki_pages"
     WIKI_ATTACHMENTS = "wiki_attachments"
