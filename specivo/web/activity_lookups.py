@@ -14,9 +14,10 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssueCategory
 from specivo.models.project import Project
@@ -30,6 +31,9 @@ from specivo.services.project_service import ProjectService
 _LOADED_ATTRIBUTES = ("sprint_id", "fixed_version_id", "category_id", "project_id", "assigned_to_id")
 
 _project_svc = ProjectService()
+
+# The lookup map holding the parent keys the feed leaves out, as ``{key: ""}``.
+HIDDEN_PARENTS = "parent_id_hidden"
 
 
 def referenced_ids(journals: Iterable[Journal]) -> dict[str, set[int]]:
@@ -60,9 +64,11 @@ async def activity_lookup_maps(
     """Return ``{attribute: {id as text: name}}`` for the activity feed of *journals*.
 
     Statuses, trackers and priorities come from the lists given; versions,
-    sprints and categories are loaded for the ids the history names. A project
-    (imported history records moves between projects) is named only when
-    *user* may open it, and a former assignee who is no longer a member only
+    sprints and categories are loaded for the ids the history names, and named
+    only when *user* may open their project; so is a project (imported history
+    records moves between projects). A parent change naming an issue *user*
+    may not see is listed under :data:`HIDDEN_PARENTS` for the feed to leave
+    out. A former assignee who is no longer a member only
     when *user* may see them. Signed-in readers see people by login, an
     anonymous visitor by display name.
     """
@@ -75,18 +81,61 @@ async def activity_lookup_maps(
         "tracker_id": {str(t.id): t.name for t in trackers},
         "priority_id": {str(p.id): p.name for p in priorities},
         "assigned_to_id": await _people(db, user, referenced["assigned_to_id"], members),
-        "sprint_id": await _names(db, Sprint, referenced["sprint_id"]),
-        "fixed_version_id": await _names(db, Version, referenced["fixed_version_id"]),
-        "category_id": await _names(db, IssueCategory, referenced["category_id"]),
+        "sprint_id": await _names(db, user, Sprint, referenced["sprint_id"]),
+        "fixed_version_id": await _names(db, user, Version, referenced["fixed_version_id"]),
+        "category_id": await _names(db, user, IssueCategory, referenced["category_id"]),
         "project_id": await _projects(db, user, referenced["project_id"]),
+        HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
     }
 
 
-async def _names(db: AsyncSession, model: Any, ids: set[int]) -> dict[str, str]:
+async def _names(db: AsyncSession, user: User, model: Any, ids: set[int]) -> dict[str, str]:
+    """Name the records of *model* (each belongs to a project) whose project *user* may open.
+
+    The rule version sharing follows too: sharing decides which projects a
+    version reaches, never that a reader sees one whose own project they
+    cannot open. An id left out shows as stored.
+    """
     if not ids:
         return {}
-    rows = (await db.execute(select(model.id, model.name).where(model.id.in_(ids)))).all()
-    return {str(row.id): row.name for row in rows}
+    stmt = select(model.id, model.name).join(Project, Project.id == model.project_id).where(model.id.in_(ids))
+    accessible = await _project_svc.accessible_projects_clause(db, user)
+    if accessible is not None:
+        stmt = stmt.where(accessible)
+    return {str(row.id): row.name for row in (await db.execute(stmt)).all()}
+
+
+async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journal]) -> dict[str, str]:
+    """Return the parent changes' issue keys that name an issue *user* may not see.
+
+    History keeps a parent by display key. The feed leaves such a change out
+    entirely, as the relations list leaves out a relation to an issue the
+    reader cannot see, so the key is never disclosed. A value naming no
+    Specivo issue (the source's text for a parent that was not imported) is
+    no disclosure and stays.
+    """
+    keys: dict[tuple[str, int], str] = {}
+    for journal in journals:
+        for detail in journal.details:
+            if detail.property != "attr" or detail.prop_key != "parent_id":
+                continue
+            for value in (detail.old_value, detail.new_value):
+                project_key, _, number = (value or "").rpartition("-")
+                if project_key and number.isdigit():
+                    keys[(project_key, int(number))] = str(value)
+    if not keys or user.is_admin:
+        return {}
+    from specivo.services.issue_service import IssueService
+
+    named = or_(*(and_(Issue.project_key == key, Issue.sequence_number == number) for key, number in keys))
+    existing = select(Issue.project_key, Issue.sequence_number).where(named)
+    visible = existing
+    clause = await IssueService().visible_issues_clause(db, user)
+    if clause is not None:
+        visible = existing.where(clause)
+    found = {(row.project_key, row.sequence_number) for row in (await db.execute(existing)).all()}
+    seen = {(row.project_key, row.sequence_number) for row in (await db.execute(visible)).all()}
+    return {keys[key]: "" for key in found - seen}
 
 
 async def _projects(db: AsyncSession, user: User, ids: set[int]) -> dict[str, str]:
