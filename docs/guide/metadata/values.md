@@ -13,6 +13,14 @@ metadata.
 Open any issue. Metadata fields appear in their own section on the issue detail page, alongside the core
 fields. Fields that haven't been filled in yet show as empty.
 
+Each field is labelled with its **name**. A field defined with a title in its schema shows that title, in
+any language, on the issue page, in the issue's history, in search filters, in the REST API and over MCP.
+A field without a title is labelled with its key made readable (`story_points` reads "Story Points"). Fields
+brought in by an [import](../install/importing.md) keep the name they had in the old system.
+
+A field that holds a **person** or a **version** shows that person's or version's name rather than an
+internal id, as long as you are allowed to see them; otherwise it shows the stored value.
+
 ## Setting a value
 
 Edit the issue and set each field according to its type:
