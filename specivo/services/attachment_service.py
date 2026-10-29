@@ -761,6 +761,36 @@ class AttachmentService:
 
         return False
 
+    async def can_change_attachment(self, session: AsyncSession, user: User, attachment: Attachment) -> bool:
+        """Return whether *user* may delete *attachment* or edit its description and metadata.
+
+        The upload rules (:meth:`can_attach_to_container`) apply: the file's
+        author may change it while they still hold the right to add files to
+        its container. Anyone else's file takes the right to manage the
+        container's files: ``edit_issues`` on an issue, ``manage_wiki`` on a
+        wiki page, ``edit_notes`` on a comment. Administrators pass, within an
+        API key's project limit.
+
+        Callers check :meth:`get_visible` first, which answers 404 for a file
+        *user* may not open.
+        """
+        if user.is_anonymous:
+            return False
+        if attachment.author_id == user.id:
+            return await self.can_attach_to_container(session, user, attachment.container_type, attachment.container_id)
+
+        from specivo.services.permission_service import Permission, check_permission
+
+        project_id = await self._resolve_project_id(session, attachment.container_type, attachment.container_id)
+        if project_id is None:
+            return False
+        manage = {
+            "Issue": Permission.EDIT_ISSUES,
+            "WikiPage": Permission.MANAGE_WIKI,
+            "Journal": Permission.EDIT_NOTES,
+        }.get(attachment.container_type)
+        return manage is not None and await check_permission(user, project_id, manage, session)
+
     async def get_visible(self, session: AsyncSession, attachment_id: int, user: User) -> Attachment:
         """Fetch an attachment *user* may open, eagerly loading author.
 

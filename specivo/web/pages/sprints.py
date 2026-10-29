@@ -18,7 +18,7 @@ from specivo.models.lookups import IssueStatus
 from specivo.services.issue_service import IssueService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
-from specivo.services.sprint_service import SprintService
+from specivo.services.sprint_service import SprintService, count_done
 from specivo.web.deps import get_current_user_optional, get_templates
 
 if TYPE_CHECKING:
@@ -71,8 +71,7 @@ async def sprints_list(
         else:
             # For active/planned, count done issues
             board = await _sprint_svc.board_data(db, sprint, user)
-            done_statuses = {"Resolved", "Closed"}
-            completed = sum(len(issues) for name, issues in board.items() if name in done_statuses)
+            completed = count_done(board)
             committed = total
         sprint_issue_counts[sprint.id] = {
             "total": committed,
@@ -300,6 +299,7 @@ async def sprint_board(
             "sprint": sprint,
             "statuses": list(statuses),
             "board": board,
+            "done_count": count_done(board),
             "other_sprints": other_sprints,
             "board_per_col": board_per_col,
             "col_offsets": col_offsets,
@@ -449,10 +449,7 @@ async def sprint_analytics(
     # Add active sprint with current progress
     for sprint in active_sprints:
         board = await _sprint_svc.board_data(db, sprint, user)
-        done_statuses = {"Resolved", "Closed"}
-        completed = sum(
-            len(issues) for name, issues in board.items() if name in done_statuses
-        )
+        completed = count_done(board)
         committed = sum(len(issues) for issues in board.values())
 
         duration = 0

@@ -7286,3 +7286,7 @@ msgstr "La entrada del historial no pertenece a esta incidencia."
 #: specivo/api/v1/attachments.py
 msgid "You do not have permission to add files here."
 msgstr "No tienes permiso para añadir archivos aquí."
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr "No tienes permiso para modificar este archivo."
