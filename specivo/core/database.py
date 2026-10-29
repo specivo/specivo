@@ -2,7 +2,9 @@
 
 import logging
 from collections.abc import AsyncGenerator
+from typing import Annotated, Any
 
+from fastapi import Depends
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
@@ -79,22 +81,32 @@ def set_engine(engine: AsyncEngine) -> None:
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency: yields a transactional async DB session.
+    """Yield a transactional async DB session; commit on clean exit.
 
-    Commits on clean exit, rolls back on any exception. The session is
-    always closed, even if commit/rollback raises.
+    Commits when the handler returns normally, rolls back on any exception,
+    and always closes the session, even if commit/rollback raises.
+
+    **Never depend on this with a bare** ``Depends(get_db)``. Use
+    :data:`DbSession` (or :data:`DB_SESSION` where a default value is needed).
+    Both declare ``scope="function"``, so FastAPI runs the code after
+    ``yield`` -- the commit -- once the endpoint has returned and its response
+    has been serialized, but *before* the response is sent. With the default
+    request scope the commit ran after the response had gone out, so a client
+    that wrote and then read straight away (a browser reload, an API client,
+    an MCP agent) could read stale data. ``tests/integration/
+    test_commit_before_response.py`` checks every route for this.
+
+    Consequences of the function scope:
+
+    - the session is closed by the time a ``StreamingResponse`` body or a
+      background task runs, so neither may use it; open a session of their
+      own from :func:`get_session_factory` instead;
+    - a yield dependency that takes the session (``get_reader``,
+      ``get_web_reader``) must itself be declared with ``scope="function"``
+      -- FastAPI refuses to start otherwise.
 
     For multi-step transactions that need savepoints, use
     ``session.begin_nested()`` inside the endpoint.
-
-    .. note:: **Browser-UI reload race condition**
-
-       Endpoints whose HTML/Alpine.js responses trigger
-       ``location.reload()`` should call ``await db.commit()`` explicitly
-       before returning.  Otherwise the reload request may arrive before
-       this dependency's post-yield commit completes, and the user won't
-       see their changes.  The duplicate commit is safe — committing an
-       already-committed session is a no-op.
     """
     factory = get_session_factory()
     async with factory() as session:
@@ -104,3 +116,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+
+DB_SESSION: Any = Depends(get_db, scope="function")
+"""The session dependency as a default value: ``db: AsyncSession = DB_SESSION``.
+
+Used where ``db`` follows parameters that have defaults, so the
+:data:`DbSession` annotation (a parameter without a default) cannot be used.
+"""
+
+DbSession = Annotated[AsyncSession, DB_SESSION]
+"""The request's DB session, committed before the response is sent."""

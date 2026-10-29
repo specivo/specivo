@@ -12,7 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
@@ -61,7 +61,7 @@ async def create_metadata_schema(
     data: MetadataSchemaCreate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MetadataSchemaOut:
     """Create a metadata schema for a project (manage_project permission)."""
     project = await _require_project_manage(project_key, current_user, db)
@@ -95,7 +95,7 @@ async def create_metadata_schema(
 async def list_metadata_schemas(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[MetadataSchemaOut]:
     """List all metadata schemas for a project (manage_project permission)."""
     project = await _require_project_manage(project_key, current_user, db)
@@ -111,7 +111,7 @@ async def get_metadata_schema(
     project_key: str,
     schema_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MetadataSchemaOut:
     """Get a single metadata schema by ID (manage_project permission)."""
     project = await _require_project_manage(project_key, current_user, db)
@@ -129,7 +129,7 @@ async def update_metadata_schema(
     data: MetadataSchemaUpdate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MetadataSchemaOut:
     """Update a metadata schema (manage_project permission)."""
     project = await _require_project_manage(project_key, current_user, db)
@@ -166,7 +166,7 @@ async def get_metadata_schema_usage(
     project_key: str,
     schema_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MetadataSchemaUsageOut:
     """Return usage count for a metadata schema (manage_project permission)."""
     project = await _require_project_manage(project_key, current_user, db)
@@ -184,7 +184,7 @@ async def delete_metadata_schema(
     schema_id: int,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete a metadata schema (manage_project permission). Rejects if in use."""
     project = await _require_project_manage(project_key, current_user, db)

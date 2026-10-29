@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api, require_admin_session_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.user import User
 from specivo.schemas.credential import (
     CredentialAuditLogOut,
@@ -35,7 +35,7 @@ _service = CredentialBrokerService()
 async def register_system(
     data: ExternalSystemCreate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ExternalSystemOut:
     """Register a new external system (admin only)."""
     system = await _service.register_system(db, system_type=data.system_type, name=data.name, config=data.config)
@@ -48,7 +48,7 @@ async def register_system(
 )
 async def list_systems(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[ExternalSystemOut]:
     """List all external systems (admin only)."""
     systems = await _service.list_systems(db)
@@ -62,7 +62,7 @@ async def list_systems(
 async def delete_system(
     system_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete an external system (admin only)."""
     await _service.delete_system(db, system_id=system_id)
@@ -81,7 +81,7 @@ async def delete_system(
 async def issue_credential(
     data: CredentialIssueRequest,
     current_user: User = Depends(require_admin_session_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> CredentialIssueResponse:
     """Issue a temporary credential to an agent (admin only)."""
     cred, raw_token = await _service.issue_credential(
@@ -104,7 +104,7 @@ async def issue_credential(
 async def revoke_credential(
     credential_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> IssuedCredentialOut:
     """Revoke a credential (admin only)."""
     await _service.revoke_credential(db, credential_id=credential_id, actor_user_id=current_user.id)
@@ -122,7 +122,7 @@ async def revoke_credential(
 async def list_active_credentials(
     system_id: int | None = None,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[IssuedCredentialOut]:
     """List active (non-expired, non-revoked) credentials (admin only)."""
     creds = await _service.list_active_credentials(db, system_id=system_id)
@@ -137,7 +137,7 @@ async def list_audit_logs(
     system_id: int | None = None,
     agent_user_id: int | None = None,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[CredentialAuditLogOut]:
     """List credential audit log entries (admin only)."""
     logs = await _service.list_audit_logs(db, system_id=system_id, agent_user_id=agent_user_id)

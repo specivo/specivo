@@ -17,7 +17,7 @@ from pydantic import ValidationError as PydanticValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup
@@ -41,7 +41,7 @@ async def _user_groups(db: AsyncSession) -> list[dict[str, object]]:
 async def admin_sso_providers(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """List the configured identity providers."""
     providers, _total = await _service.list_providers(db)
@@ -76,7 +76,7 @@ def _render_form(request: Request, user: User, provider: dict[str, object] | Non
 async def admin_sso_provider_new(
     request: Request,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the empty provider form."""
     return _render_form(request, user, None, await _user_groups(db), [])
@@ -87,7 +87,7 @@ async def admin_sso_provider_detail(
     request: Request,
     provider_id: int,
     user: Annotated[User, Depends(require_admin)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render one provider's form, its URLs to copy, and its group mappings."""
     try:
@@ -109,7 +109,7 @@ async def admin_sso_provider_detail(
 async def admin_settings_authentication(
     request: Request,
     user: Annotated[User, Depends(require_admin_session)],
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     hide_local_login: str = Form(""),
     local_login_admins_only: str = Form(""),
     auto_redirect_provider: str = Form(""),

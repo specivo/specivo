@@ -17,14 +17,14 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import available_timezones
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.config import get_settings
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
@@ -144,7 +144,7 @@ def _pattern_summary(pattern: RecurringPattern) -> dict[str, Any]:
 async def recurring_list(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the recurring-patterns management list for a project."""
     user_obj = await get_current_user_optional(request, db)
@@ -187,7 +187,7 @@ async def recurring_list(
 async def recurring_create_form(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the dedicated create-pattern form page."""
     user_obj = await get_current_user_optional(request, db)
@@ -231,7 +231,7 @@ async def recurring_edit_form(
     project_key: str,
     pattern_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the dedicated edit-pattern form page (carries lock_version)."""
     user_obj = await get_current_user_optional(request, db)
@@ -282,7 +282,7 @@ async def recurring_detail(
     project_key: str,
     pattern_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a single recurring pattern: schedule, upcoming occurrences, instances."""
     user_obj = await get_current_user_optional(request, db)

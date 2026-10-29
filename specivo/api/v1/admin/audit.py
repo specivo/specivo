@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.user import User
 from specivo.schemas.security_audit import AuditLogListResponse, AuditLogOut
 from specivo.services.security_audit_service import SecurityAuditService
@@ -27,7 +27,7 @@ async def list_audit_logs(
     offset: int = Query(0, ge=0, description="Pagination offset"),
     limit: int = Query(25, ge=1, le=100, description="Pagination limit"),
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AuditLogListResponse:
     """List security audit log entries. Admin-only."""
     items, total_count = await _service.list_events(

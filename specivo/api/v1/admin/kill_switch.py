@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api, require_admin_session_api
 from specivo.core.config import get_settings
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
@@ -23,7 +23,7 @@ router = APIRouter(tags=["admin"])
 _service = KillSwitchService()
 
 
-async def _resolve_kill_actor(request: Request, db: AsyncSession = Depends(get_db)) -> str:
+async def _resolve_kill_actor(request: Request, db: AsyncSession = DB_SESSION) -> str:
     """Resolve who triggered the kill: admin user login or 'kill_token'.
 
     Accepts either:
@@ -76,7 +76,7 @@ async def kill_agent(
     user_id: int,
     data: KillRequest,
     triggered_by: str = Depends(_resolve_kill_actor),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> KillEventOut:
     """Kill a single agent — deactivate API keys, revoke credentials."""
     event = await _service.kill_agent(db, user_id, triggered_by, data.reason)
@@ -92,7 +92,7 @@ async def kill_system(
     system_id: int,
     data: KillRequest,
     triggered_by: str = Depends(_resolve_kill_actor),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> KillEventOut:
     """Kill an external system — revoke all credentials for it."""
     event = await _service.kill_system(db, system_id, triggered_by, data.reason)
@@ -107,7 +107,7 @@ async def kill_system(
 async def kill_all(
     data: KillRequest,
     triggered_by: str = Depends(_resolve_kill_actor),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> KillEventOut:
     """Kill all agents — deactivate ALL service account API keys."""
     event = await _service.kill_all(db, triggered_by, data.reason)
@@ -127,7 +127,7 @@ async def kill_all(
 async def unkill_agent(
     user_id: int,
     current_user: User = Depends(require_admin_session_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     """Reactivate a killed agent — re-enable API keys (admin only)."""
     count = await _service.unkill_agent(db, user_id)
@@ -146,7 +146,7 @@ async def unkill_agent(
 )
 async def list_kill_events(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[KillEventOut]:
     """List all kill events, newest first (admin only)."""
     events = await _service.list_kill_events(db)

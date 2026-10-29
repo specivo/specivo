@@ -14,9 +14,8 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DbSession
 from specivo.core.security import get_account_user
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut, ApiKeyPatch
@@ -37,7 +36,7 @@ _service = ApiKeyService()
     summary="List API keys for the authenticated user",
 )
 async def list_api_keys(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> list[ApiKeyOut]:
     """Return all API keys for the current user (no raw key or hash)."""
@@ -59,7 +58,7 @@ async def list_api_keys(
 )
 async def create_api_key(
     body: ApiKeyCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> ApiKeyCreated:
     """Create an API key. The raw_key in the response is shown ONCE and not stored."""
@@ -95,7 +94,7 @@ async def create_api_key(
 async def patch_api_key(
     key_id: int,
     body: ApiKeyPatch,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> ApiKeyOut:
     """Set is_active on an API key. Raises 404 if key not found or not owned by user."""
@@ -120,7 +119,7 @@ async def patch_api_key(
 )
 async def delete_api_key(
     key_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> Response:
     """Permanently delete an API key. Raises 404 if key not found or not owned by user."""

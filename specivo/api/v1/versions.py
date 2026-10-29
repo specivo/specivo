@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
@@ -78,7 +78,7 @@ async def list_versions(
     project_key: str,
     sort: VersionSort | None = Query(default=None, description=_SORT_HELP),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[VersionOut]:
     project = await _get_project(project_key, current_user, db)
     versions = await _version_service.list_for_project(db, project.id, sort)
@@ -94,7 +94,7 @@ async def create_version(
     project_key: str,
     data: VersionCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> VersionOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_versions(project, current_user, db)
@@ -110,7 +110,7 @@ async def search_versions(
     q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
     """Autocomplete search for versions.
 
@@ -148,7 +148,7 @@ async def get_version(
     project_key: str,
     version_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> VersionOut:
     project = await _get_project(project_key, current_user, db)
     version = await _version_service.get_by_id(db, version_id)
@@ -166,7 +166,7 @@ async def update_version(
     version_id: int,
     data: VersionUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> VersionOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_versions(project, current_user, db)
@@ -185,7 +185,7 @@ async def delete_version(
     project_key: str,
     version_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_versions(project, current_user, db)
@@ -203,7 +203,7 @@ async def get_roadmap(
     project_key: str,
     sort: VersionSort | None = Query(default=None, description=_SORT_HELP),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[RoadmapEntry]:
     project = await _get_project(project_key, current_user, db)
     return await _version_service.roadmap(db, project, current_user, sort)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.saved_filter import SavedFilterCreate, SavedFilterOut, SavedFilterUpdate
@@ -26,7 +26,7 @@ async def create_saved_filter(
     project_key: str,
     data: SavedFilterCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SavedFilterOut:
     """Create a new saved filter in the given project."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -42,7 +42,7 @@ async def create_saved_filter(
 async def list_saved_filters(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[SavedFilterOut]:
     """List saved filters for a project (own private + all public)."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -59,7 +59,7 @@ async def get_saved_filter(
     project_key: str,
     filter_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SavedFilterOut:
     """Get a single saved filter by ID."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -77,7 +77,7 @@ async def update_saved_filter(
     filter_id: int,
     data: SavedFilterUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SavedFilterOut:
     """Update a saved filter. Owner or admin only."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -95,7 +95,7 @@ async def delete_saved_filter(
     project_key: str,
     filter_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete a saved filter. Owner or admin only."""
     project = await _project_service.get_by_key(db, project_key.upper())

@@ -20,7 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
 from specivo.core.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.models.user import User
 from specivo.schemas.common import PaginatedResponse
@@ -60,7 +60,7 @@ async def _login_of(db: AsyncSession, user_id: int) -> str | None:
 @router.get("/admin/groups/", response_model=PaginatedResponse[UserGroupListItem])
 async def list_groups(
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     q: str = Query("", max_length=100, description="Case-insensitive substring match on the group name."),
     offset: int = Query(0, ge=0),
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
@@ -80,7 +80,7 @@ async def create_group(
     data: UserGroupCreate,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserGroupOut:
     """Create a user group. A name already taken (ignoring case) returns 409."""
     group = await _service.create(db, name=data.name, description=data.description)
@@ -102,7 +102,7 @@ async def create_group(
 async def get_group(
     group_id: int,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserGroupDetailOut:
     """Return a group with the projects it holds membership on and the roles it grants there.
 
@@ -131,7 +131,7 @@ async def update_group(
     data: UserGroupUpdate,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserGroupOut:
     """Rename a group and/or edit its description.
 
@@ -189,7 +189,7 @@ async def delete_group(
     group_id: int,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Delete a group, revoking every access it granted.
 
@@ -232,7 +232,7 @@ async def delete_group(
 async def list_group_users(
     group_id: int,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     offset: int = Query(0, ge=0),
     limit: int = Query(DEFAULT_PAGE_LIMIT, ge=1, le=MAX_PAGE_LIMIT),
 ) -> PaginatedResponse[UserGroupUserOut]:
@@ -256,7 +256,7 @@ async def add_group_user(
     data: UserGroupUserAdd,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> UserGroupUserOut:
     """Put a user into a group.
 
@@ -298,7 +298,7 @@ async def remove_group_user(
     user_id: int,
     request: Request,
     admin: Annotated[User, Depends(require_admin_api)],
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Take a user out of a group. A user who is not in it returns 404."""
     group = await _service.get(db, group_id)

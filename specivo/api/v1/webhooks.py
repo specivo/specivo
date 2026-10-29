@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
@@ -48,7 +48,7 @@ async def _require_project_member(user: User, project_id: int, db: AsyncSession)
 async def list_webhooks(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[WebhookOut]:
     """List all outgoing webhooks for a project."""
     project = await _project_service.get_by_key(db, project_key)
@@ -62,7 +62,7 @@ async def register_webhook(
     project_key: str,
     data: WebhookCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WebhookOut:
     """Register a new outgoing webhook for a project."""
     project = await _project_service.get_by_key(db, project_key)
@@ -83,7 +83,7 @@ async def update_webhook(
     webhook_id: int,
     data: WebhookUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WebhookOut:
     """Update an outgoing webhook."""
     project = await _project_service.get_by_key(db, project_key)
@@ -98,7 +98,7 @@ async def delete_webhook(
     project_key: str,
     webhook_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete an outgoing webhook."""
     project = await _project_service.get_by_key(db, project_key)

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_current_user, get_reader
@@ -126,7 +126,7 @@ async def issue_autocomplete(
     q: str = Query(..., min_length=2, max_length=100),
     limit: int = Query(8, ge=1, le=25),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
     """Lightweight issue autocomplete — searches by key and subject via SQL ILIKE.
 
@@ -151,7 +151,7 @@ async def create_issue(
     data: IssueCreate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> IssueOut:
     """Create a new issue in the given project."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -161,10 +161,9 @@ async def create_issue(
     # Override project_key in body to match path param
     data = data.model_copy(update={"project_key": project.key})
     issue = await _service.create(db, project, data, current_user)
-    # Commit before responding so the new issue is immediately visible to
-    # follow-up requests (e.g. a PATCH right after create). Without this the
-    # get_db dependency commits only after the response is sent, so a fast
-    # follow-up request on a fresh session can 404 on the just-created issue.
+    # The session dependency already commits before the response is sent;
+    # committing here as well is harmless and keeps the reload below on
+    # committed data.
     await db.commit()
     # Reload with relationships for response
     issue = await _service.get_with_relations(db, issue.id)
@@ -202,8 +201,8 @@ async def list_issues(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=200),
     saved_filter_id: int | None = Query(default=None),
-    current_user: User = Depends(get_reader),
-    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_reader, scope="function"),
+    db: AsyncSession = DB_SESSION,
 ) -> IssueListResponse:
     """List issues for a project with optional filtering, sorting, and pagination."""
     project = await _project_service.get_readable_by_key(db, project_key.upper(), current_user)
@@ -306,7 +305,7 @@ async def list_issues(
 async def bulk_update_issues(
     data: BulkUpdateRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> BulkResult:
     """Bulk update multiple issues. Returns per-issue success/failure."""
     return await _bulk_service.bulk_update(db, data.issue_ids, data.updates, current_user)
@@ -316,7 +315,7 @@ async def bulk_update_issues(
 async def bulk_delete_issues(
     data: BulkDeleteRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> BulkResult:
     """Bulk delete multiple issues. Returns per-issue success/failure."""
     return await _bulk_service.bulk_delete(db, data.issue_ids, current_user)
@@ -338,8 +337,8 @@ async def get_issue(
     issue_ref: str,
     request: Request,
     include: str | None = Query(default=None),
-    current_user: User = Depends(get_reader),
-    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_reader, scope="function"),
+    db: AsyncSession = DB_SESSION,
 ) -> IssueWithChildren:
     """Get an issue by display key (e.g. ACME-42) or internal numeric ID.
 
@@ -498,7 +497,7 @@ async def update_issue(
     issue_ref: str,
     data: IssueUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> IssueUpdateOut:
     """Partial update of an issue.
 
@@ -548,7 +547,7 @@ async def move_issue(
     issue_ref: str,
     data: IssueMove,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> IssueOut:
     """Move an issue to another project.
 
@@ -575,7 +574,7 @@ async def move_issue(
 async def delete_issue(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete an issue permanently."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
@@ -597,7 +596,7 @@ async def delete_issue(
 async def get_allowed_statuses(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AllowedStatusesOut:
     """Return the list of status IDs the current user can transition this issue to."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
@@ -701,7 +700,7 @@ async def add_comment(
     issue_ref: str,
     data: AddCommentRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> JournalOut:
     """Add a comment to an issue."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
@@ -756,7 +755,7 @@ async def resolve_thread(
     journal_id: int,
     data: ResolveThreadRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     _rl: None = Depends(rate_limit("resolve_toggle", max_requests=30, window_seconds=60)),
 ) -> JournalOut:
     """Mark a journal thread as resolved."""
@@ -798,7 +797,7 @@ async def unresolve_thread(
     issue_ref: str,
     journal_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     _rl: None = Depends(rate_limit("resolve_toggle", max_requests=30, window_seconds=60)),
 ) -> None:
     """Clear resolution on a journal thread."""
@@ -833,7 +832,7 @@ async def unresolve_thread(
 async def watch_issue(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     """Subscribe the current user to an issue."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
@@ -850,7 +849,7 @@ async def watch_issue(
 async def unwatch_issue(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Unsubscribe the current user from an issue."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
@@ -866,7 +865,7 @@ async def unwatch_issue(
 async def list_watchers(
     issue_ref: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[WatcherOut]:
     """List users watching an issue."""
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
@@ -897,7 +896,7 @@ async def toggle_reaction(
     journal_id: int,
     emoji: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     _rl: None = Depends(rate_limit("reaction_toggle", max_requests=60, window_seconds=60)),
 ) -> dict:
     """Toggle an emoji reaction on a journal entry."""

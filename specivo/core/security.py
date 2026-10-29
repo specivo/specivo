@@ -54,7 +54,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.client_ip import get_client_ip
 from specivo.core.config import get_settings
 from specivo.core.constants import API_KEY_PREFIX, JWT_ALGORITHM
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AnonymousAccessDeniedError, AppError
 from specivo.core.middleware import ANONYMOUS_READER_STATE_KEY
 from specivo.core.rate_limit import enforce_rate_limit
@@ -435,7 +435,7 @@ async def try_silent_refresh(request: Request, db: AsyncSession) -> User | None:
 
 async def get_current_user(
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> User:
     """FastAPI dependency: resolve the current user from JWT or API key.
 
@@ -694,7 +694,7 @@ async def anonymous_read_scope(
 async def get_reader(
     request: Request,
     response: Response,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AsyncGenerator[User, None]:
     """FastAPI dependency: the signed-in user, or the anonymous principal.
 

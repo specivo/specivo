@@ -12,7 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError
 from specivo.models.search import EmbeddingModel
 from specivo.models.user import User
@@ -46,7 +46,7 @@ class EmbeddingModelOut(BaseModel):
 @router.get("/admin/embedding-models/", response_model=list[EmbeddingModelOut])
 async def list_embedding_models(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[EmbeddingModel]:
     """List all registered embedding models (admin only)."""
     result = await db.execute(select(EmbeddingModel).order_by(EmbeddingModel.id))
@@ -57,7 +57,7 @@ async def list_embedding_models(
 async def delete_embedding_model(
     model_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Delete an embedding model (admin only)."""
     result = await db.execute(select(EmbeddingModel).where(EmbeddingModel.id == model_id))
@@ -76,7 +76,7 @@ async def backfill_model(
         False, description="Recompute the embedding of every chunk, not only of chunks that have none."
     ),
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     """Embed existing chunks with this model in the background (admin only).
 
