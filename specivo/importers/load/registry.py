@@ -25,6 +25,7 @@ from specivo.importers.load.project_loader import (
     load_memberships,
     load_project_lookups,
     load_projects,
+    record_sprint_velocity,
     restore_version_statuses,
 )
 from specivo.importers.load.public_access_loader import load_public_access
@@ -127,6 +128,12 @@ async def _memberships(ctx: PhaseContext) -> None:
     await load_public_access(ctx)
 
 
+async def _version_and_sprint_statuses(ctx: PhaseContext) -> None:
+    """Once every issue is in: give versions their real status, and completed sprints their velocity."""
+    await restore_version_statuses(ctx)
+    await record_sprint_velocity(ctx)
+
+
 async def _link_graph(ctx: PhaseContext) -> None:
     """Expand reference placeholders, then rebuild the wiki link graph.
 
@@ -163,7 +170,7 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.JOURNALS: load_journals,
             ImportPhase.RELATIONS: load_issue_links,
             ImportPhase.ISSUE_ATTACHMENTS: load_issue_attachments,
-            ImportPhase.VERSION_STATUSES: restore_version_statuses,
+            ImportPhase.VERSION_STATUSES: _version_and_sprint_statuses,
             ImportPhase.WIKI_PAGES: _wiki,
             ImportPhase.WIKI_ATTACHMENTS: load_wiki_attachments,
             ImportPhase.TIME_ENTRIES: load_time_entries,

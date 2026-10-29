@@ -50,9 +50,11 @@ from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.project import Project
+from specivo.models.sprint import Sprint
 from specivo.models.watcher import Watcher
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
+from specivo.services.tag_service import TagService
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +69,7 @@ _MAX_EXAMPLES = 10
 _CF_REFERENCE_PROPERTIES = {EntityType.USER: CF_USER, EntityType.VERSION: CF_VERSION}
 
 _issue_service = IssueService()
+_tag_service = TagService()
 
 
 def converter_for(ctx: PhaseContext) -> tuple[ContentConverter, ConversionContext]:
@@ -191,6 +194,8 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
         # as the source left it. Flushed before the timestamps are restored.
         issue.remaining_estimate = ir.remaining_estimate
         await ctx.session.flush()
+    await _set_sprint(ctx, issue, ir)
+    await _set_tags(ctx, project, issue, ir)
 
     await backdate(
         ctx.session,
@@ -215,6 +220,37 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
     ctx.summary.record_created(EntityType.ISSUE)
     ctx.tick()
     return issue
+
+
+async def _set_sprint(ctx: PhaseContext, issue: Issue, ir: IRIssue) -> None:
+    """Put the issue in its sprint, set directly rather than through ``IssueCreate``.
+
+    The service accepts only a planned or active sprint, as anyone filing an
+    issue today would pick; an imported issue may sit in a completed one.
+    The sprint must be one of the issue's own project, as the service requires.
+    """
+    if ir.sprint_ref is None:
+        return
+    sprint_id = await ctx.id_map.get(ctx.session, EntityType.SPRINT, ir.sprint_ref)
+    sprint = await ctx.session.get(Sprint, sprint_id) if sprint_id is not None else None
+    if sprint is None or sprint.project_id != issue.project_id:
+        ctx.warn("Issue's sprint was not imported in its project; left out of a sprint", issue=ir.source_ref)
+        return
+    issue.sprint_id = sprint.id
+    await ctx.session.flush()
+
+
+async def _set_tags(ctx: PhaseContext, project: Project, issue: Issue, ir: IRIssue) -> None:
+    """Tag the issue, creating each tag in its project the first time it is named.
+
+    Tag names are unique per project ignoring case, so names differing only in
+    case are one tag, spelled as first named.
+    """
+    if not ir.tags:
+        return
+    account = await ensure_import_account(ctx)
+    for name in dict.fromkeys(tag.strip() for tag in ir.tags if tag.strip()):
+        await _tag_service.add_to_issue(ctx.session, project, issue.id, name[:64], account)
 
 
 async def _metadata(ctx: PhaseContext, ir: IRIssue) -> dict[str, Any]:

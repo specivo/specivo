@@ -10,6 +10,7 @@ import json
 import os
 import stat
 import zipfile
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -450,6 +451,92 @@ class TestReferences:
         }
         root = write_bundle(tmp_path / "b", projects=[project("p1")], wiki_pages=[page])
         assert _codes(await _validate(root)) == [("wiki_pages.jsonl", 1, "schema")]
+
+
+def _sprint(ref: str = "s1", project_ref: str = "p1", **fields) -> dict:
+    return {"source_ref": ref, "project_ref": project_ref, "name": f"Sprint {ref}", **fields}
+
+
+class TestSprintsAndTags:
+    async def test_a_sprint_and_an_issue_in_it(self, tmp_path):
+        sprint = _sprint(
+            status="completed",
+            goal="Ship the login fix",
+            start_date="2024-01-29",
+            end_date="2024-02-12",
+            completed_at="2024-02-12T04:00:00Z",
+        )
+        root = write_bundle(
+            tmp_path / "b",
+            manifest_data=manifest(counts={"sprints": 1, "issues": 1}),
+            projects=[project("p1")],
+            sprints=[sprint],
+            issues=[issue("i1", sprint_ref="s1", tags=["login", "Safari"])],
+        )
+        report = await _validate(root)
+        assert report.problems == []
+        assert report.records["sprints"] == 1
+
+    async def test_an_unknown_sprint_status_is_a_schema_error(self, tmp_path):
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], sprints=[_sprint(status="closed")])
+        assert _codes(await _validate(root)) == [("sprints.jsonl", 1, "schema")]
+
+    async def test_a_sprint_names_its_project(self, tmp_path):
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], sprints=[_sprint(project_ref="p9")])
+        assert _codes(await _validate(root)) == [("sprints.jsonl", 1, "unresolved_ref")]
+
+    async def test_an_issue_naming_no_sprint_of_the_bundle(self, tmp_path):
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], issues=[issue("i1", sprint_ref="s9")])
+        assert _codes(await _validate(root)) == [("issues.jsonl", 1, "unresolved_ref")]
+
+    async def test_an_issue_cannot_sit_in_another_projects_sprint(self, tmp_path):
+        root = write_bundle(
+            tmp_path / "b",
+            projects=[project("p1"), project("p2")],
+            sprints=[_sprint("s2", "p2")],
+            issues=[issue("i1", sprint_ref="s2")],
+        )
+        report = await _validate(root)
+        assert _codes(report) == [("issues.jsonl", 1, "invalid_ref")]
+        assert "belongs to project 'p2'" in report.problems[0].message
+
+    @pytest.mark.parametrize("tag", ["", "   ", "x" * 65])
+    async def test_a_tag_is_one_to_64_characters_with_some_text(self, tmp_path, tag):
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], issues=[issue("i1", tags=[tag])])
+        assert set(_codes(await _validate(root))) == {("issues.jsonl", 1, "schema")}
+
+    async def test_sprint_history_names_sprints_by_ref(self, tmp_path):
+        """A sprint change names sprints by ref, as a version change does; they need not be in the bundle."""
+        journal = {
+            "source_ref": "j1",
+            "issue_ref": "i1",
+            "details": [{"property": "attr", "prop_key": "sprint_id", "old_ref": "gone", "old_value": "Sprint 0",
+                         "new_ref": "s1", "new_value": "Sprint s1"}],
+        }  # fmt: skip
+        root = write_bundle(
+            tmp_path / "b",
+            projects=[project("p1")],
+            sprints=[_sprint()],
+            issues=[issue("i1", sprint_ref="s1")],
+            journals=[journal],
+        )
+        assert (await _validate(root)).problems == []
+
+    async def test_the_adapter_reads_a_projects_sprints(self, tmp_path):
+        root = write_bundle(
+            tmp_path / "b",
+            projects=[project("p1"), project("p2")],
+            sprints=[_sprint("s1", start_date="2024-01-29"), _sprint("s2", "p2"), _sprint("s3")],
+        )
+        adapter = BundleSourceAdapter(root)
+        await adapter.connect()
+        try:
+            sprints = [s async for s in adapter.extract_sprints("p1")]
+        finally:
+            await adapter.close()
+        assert [s.source_ref for s in sprints] == ["s1", "s3"]
+        assert sprints[0].start_date == date(2024, 1, 29)
+        assert sprints[0].status == "planned"
 
 
 class TestFiles:

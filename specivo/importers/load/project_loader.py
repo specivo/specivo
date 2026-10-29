@@ -1,4 +1,4 @@
-"""Load projects and everything scoped to one: versions, categories,
+"""Load projects and everything scoped to one: versions, categories, sprints,
 memberships and custom-field schemas.
 
 Most of this is a direct mapping. Three things are not.
@@ -28,16 +28,18 @@ import logging
 import re
 from typing import Any, Literal, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_PROJECT_DEPTH
 from specivo.importers.core.backdate import backdate
-from specivo.importers.core.ir import EntityType, IRCustomField, IRMembership, IRProject, PrincipalKind
+from specivo.importers.core.ir import EntityType, IRCustomField, IRMembership, IRProject, IRSprint, PrincipalKind
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import ensure_import_account
-from specivo.models.lookups import IssueCategory
+from specivo.models.issue import Issue
+from specivo.models.lookups import IssueCategory, IssueStatus
 from specivo.models.project import Project
+from specivo.models.sprint import Sprint
 from specivo.models.version import Version
 from specivo.schemas.metadata_schema import MetadataSchemaCreate
 from specivo.schemas.project import ProjectCreate
@@ -50,6 +52,8 @@ logger = logging.getLogger(__name__)
 
 VersionStatus = Literal["open", "locked", "closed"]
 VersionSharing = Literal["none", "descendants", "hierarchy", "tree", "system"]
+SprintStatus = Literal["planned", "active", "completed"]
+_SPRINT_STATUSES: tuple[SprintStatus, ...] = ("planned", "active", "completed")
 
 # Report sections.
 NOTE_PROJECT_KEYS = "project_keys_assigned"
@@ -279,12 +283,12 @@ async def _key_taken(session: AsyncSession, key: str) -> bool:
 
 
 # --------------------------------------------------------------------------
-# Versions and categories
+# Versions, categories and sprints
 # --------------------------------------------------------------------------
 
 
 async def load_project_lookups(ctx: PhaseContext) -> None:
-    """Create each project's versions and issue categories."""
+    """Create each project's versions, issue categories and sprints."""
     for project_ref in ctx.project_refs:
         project = await _project_for(ctx, project_ref)
         if project is None:
@@ -341,6 +345,95 @@ async def load_project_lookups(ctx: PhaseContext) -> None:
                 ctx.session, EntityType.CATEGORY, category_ir.source_ref, "issue_categories", category.id
             )
             ctx.summary.record_created(EntityType.CATEGORY)
+            ctx.tick()
+
+        async for sprint_ir in ctx.adapter.extract_sprints(project_ref):
+            if await ctx.id_map.get(ctx.session, EntityType.SPRINT, sprint_ir.source_ref):
+                ctx.summary.record_skipped(EntityType.SPRINT)
+                continue
+            await _create_sprint(ctx, project, sprint_ir)
+
+
+async def _create_sprint(ctx: PhaseContext, project: Project, ir: IRSprint) -> None:
+    """Create one sprint with the status it had.
+
+    Sprints are created directly, not through the sprint service, whose
+    transitions (start, complete) stamp today's date and move issues: an
+    imported sprint is history, already started or completed. Specivo allows
+    one active sprint per project, so a second one (a source with parallel
+    sprints) is created planned and reported. A completed sprint without an
+    end date ends on the day it was completed; its velocity is recorded once
+    its issues are in (see :func:`record_sprint_velocity`).
+    """
+    status: SprintStatus = cast(SprintStatus, ir.status) if ir.status in _SPRINT_STATUSES else "planned"
+    if status != ir.status:
+        ctx.warn("Sprint has an unrecognised status; imported as planned", sprint=ir.name, status=ir.status)
+    if status == "active" and await _has_active_sprint(ctx.session, project.id):
+        ctx.warn(
+            "Specivo has one active sprint per project; another active sprint was imported as planned",
+            project=project.key,
+            sprint=ir.name,
+        )
+        status = "planned"
+    end_date = ir.end_date
+    if end_date is None and status == "completed" and ir.completed_at is not None:
+        end_date = ir.completed_at.date()
+    sprint = Sprint(
+        project_id=project.id,
+        name=ir.name[:255],
+        goal=ir.goal,
+        status=status,
+        start_date=ir.start_date,
+        end_date=end_date,
+    )
+    ctx.session.add(sprint)
+    await ctx.session.flush()
+    await backdate(ctx.session, Sprint, sprint.id, created_at=ir.created_at, updated_at=ir.updated_at)
+    await ctx.id_map.put(ctx.session, EntityType.SPRINT, ir.source_ref, "sprints", sprint.id)
+    ctx.summary.record_created(EntityType.SPRINT)
+    ctx.tick()
+
+
+async def _has_active_sprint(session: AsyncSession, project_id: int) -> bool:
+    stmt = select(Sprint.id).where(Sprint.project_id == project_id, Sprint.status == "active").limit(1)
+    return (await session.execute(stmt)).scalar_one_or_none() is not None
+
+
+async def record_sprint_velocity(ctx: PhaseContext) -> None:
+    """Record the velocity of each completed sprint the source brought, once its issues are in.
+
+    Specivo records a sprint's velocity (its issues, and how many of them are
+    done or closed) when the sprint is completed. An imported sprint was
+    completed in the source, so its velocity is counted from the issues the
+    import put in it, with the moment it was completed. A sprint that already
+    has one (an earlier run recorded it) is left alone.
+    """
+    for project_ref in ctx.project_refs:
+        async for ir in ctx.adapter.extract_sprints(project_ref):
+            sprint_id = await ctx.id_map.get(ctx.session, EntityType.SPRINT, ir.source_ref)
+            sprint = await ctx.session.get(Sprint, sprint_id) if sprint_id is not None else None
+            if sprint is None or sprint.status != "completed" or sprint.velocity_snapshot is not None:
+                continue
+            total, completed = (
+                await ctx.session.execute(
+                    select(
+                        func.count(Issue.id),
+                        func.count(Issue.id).filter(IssueStatus.category.in_(("done", "closed"))),
+                    )
+                    .join(IssueStatus, IssueStatus.id == Issue.status_id)
+                    .where(Issue.sprint_id == sprint.id)
+                )
+            ).one()
+            snapshot: dict[str, Any] = {"total_issues": total, "completed_issues": completed}
+            if ir.completed_at is not None:
+                snapshot["completed_at"] = ir.completed_at.isoformat()
+            await ctx.session.execute(
+                update(Sprint)
+                .where(Sprint.id == sprint.id)
+                # Recording what the source had is not an edit; keep its timestamp.
+                .values(velocity_snapshot=snapshot, updated_at=Sprint.updated_at)
+                .execution_options(synchronize_session="fetch")
+            )
             ctx.tick()
 
 

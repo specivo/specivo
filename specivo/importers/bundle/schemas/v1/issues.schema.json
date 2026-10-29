@@ -50,6 +50,10 @@
     "fixed_version_ref": {
       "$ref": "common.schema.json#/$defs/optionalRef"
     },
+    "sprint_ref": {
+      "$ref": "common.schema.json#/$defs/optionalRef",
+      "description": "The sprint the issue is in, a sprint of the issue's own project."
+    },
     "start_date": {
       "$ref": "common.schema.json#/$defs/optionalDate"
     },
@@ -75,6 +79,16 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/customValue"
+      }
+    },
+    "tags": {
+      "type": "array",
+      "description": "Tag names, created in the issue's project as needed.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "\\S"
       }
     },
     "created_at": {

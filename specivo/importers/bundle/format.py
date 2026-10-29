@@ -22,6 +22,7 @@ from specivo.importers.core.ir import (
     IRMembership,
     IRProject,
     IRRelation,
+    IRSprint,
     IRTimeEntry,
     IRUser,
     IRVersion,
@@ -87,6 +88,7 @@ PROJECTS = RecordFile("projects.jsonl", IRProject, EntityType.PROJECT)
 MEMBERSHIPS = RecordFile("memberships.jsonl", IRMembership, EntityType.MEMBERSHIP)
 VERSIONS = RecordFile("versions.jsonl", IRVersion, EntityType.VERSION)
 CATEGORIES = RecordFile("categories.jsonl", IRCategory, EntityType.CATEGORY)
+SPRINTS = RecordFile("sprints.jsonl", IRSprint, EntityType.SPRINT)
 CUSTOM_FIELDS = RecordFile("custom_fields.jsonl", IRCustomField, EntityType.CUSTOM_FIELD)
 ISSUES = RecordFile("issues.jsonl", IRIssue, EntityType.ISSUE)
 JOURNALS = RecordFile("journals.jsonl", IRJournalEntry, EntityType.JOURNAL)
@@ -107,6 +109,7 @@ RECORD_FILES: tuple[RecordFile, ...] = (
     MEMBERSHIPS,
     VERSIONS,
     CATEGORIES,
+    SPRINTS,
     CUSTOM_FIELDS,
     ISSUES,
     JOURNALS,

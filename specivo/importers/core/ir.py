@@ -50,6 +50,7 @@ class EntityType(StrEnum):
     PROJECT = "project"
     VERSION = "version"
     CATEGORY = "category"
+    SPRINT = "sprint"
     CUSTOM_FIELD = "custom_field"
     ISSUE = "issue"
     JOURNAL = "journal"
@@ -340,6 +341,28 @@ class IRCategory:
 
 
 @dataclass(slots=True)
+class IRSprint:
+    """A time-boxed iteration of a project.
+
+    ``status`` is Specivo's: ``planned``, ``active`` or ``completed``.
+    ``completed_at`` is when a completed sprint was completed; Specivo keeps it
+    with the sprint's velocity snapshot, and uses its date as the end date of
+    a sprint that has none.
+    """
+
+    source_ref: str
+    project_ref: str
+    name: str
+    goal: str | None = None
+    status: str = "planned"
+    start_date: date | None = None
+    end_date: date | None = None
+    completed_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+@dataclass(slots=True)
 class IRCustomField:
     """A custom field definition, translated to a JSON Schema fragment.
 
@@ -397,6 +420,8 @@ class IRIssue:
     parent_ref: str | None = None
     category_ref: str | None = None
     fixed_version_ref: str | None = None
+    # A sprint of the issue's own project.
+    sprint_ref: str | None = None
     start_date: date | None = None
     due_date: date | None = None
     estimated_hours: Decimal | None = None
@@ -404,6 +429,8 @@ class IRIssue:
     done_ratio: int = 0
     is_private: bool = False
     custom_values: list[IRCustomValue] = field(default_factory=list)
+    # Tag names, created in the issue's project as needed.
+    tags: list[str] = field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
     closed_at: datetime | None = None
@@ -442,6 +469,7 @@ REFERENCE_ATTRIBUTES: dict[str, EntityType] = {
     "assigned_to_id": EntityType.USER,
     "category_id": EntityType.CATEGORY,
     "fixed_version_id": EntityType.VERSION,
+    "sprint_id": EntityType.SPRINT,
     "parent_id": EntityType.ISSUE,
 }
 
