@@ -18,7 +18,9 @@ replaces each placeholder with the Specivo form:
 Only those four kinds are recognised; any other ``{{...}}`` is ordinary text.
 A placeholder whose record was not imported becomes its label, or else its
 ref, as plain text: a reader never sees the placeholder syntax.
-Text inside fenced code blocks is left alone, so a code sample can show a placeholder without it being expanded.
+Text inside fenced code blocks is left alone, so a code sample can show a
+placeholder without it being expanded. Fences pair the way CommonMark pairs
+them (see :func:`_fenced_blocks`); inline code spans are not code here.
 """
 
 from __future__ import annotations
@@ -56,8 +58,9 @@ LABELLED_KINDS = frozenset({PlaceholderKind.ISSUE, PlaceholderKind.WIKI})
 # braces and the bar, so the grammar needs no escaping.
 PLACEHOLDER_RE = re.compile(r"\{\{(issue|user|attachment|wiki):([^\s{}|]+)(?:\|([^{}\n]*))?\}\}")
 
-# Splits text on fenced code blocks, keeping the fences so they can be rejoined.
-_FENCE_RE = re.compile(r"(```.*?```|~~~.*?~~~)", re.DOTALL)
+# A line that may open or close a fenced code block: up to three spaces, a run
+# of three or more backticks or tildes, then the rest of the line.
+_FENCE_LINE_RE = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,12 +76,41 @@ class Placeholder:
         return PLACEHOLDER_ENTITY_TYPES[self.kind]
 
 
-def _outside_code(text: str) -> Iterator[tuple[int, str]]:
-    """Yield ``(index, part)`` for each part of *text* that is not a fenced block."""
-    for index, part in enumerate(_FENCE_RE.split(text)):
-        # Odd positions are the fenced blocks themselves.
-        if index % 2 == 0:
-            yield index, part
+def _fenced_blocks(text: str) -> Iterator[tuple[int, int]]:
+    """Yield the ``(start, end)`` offsets of each fenced code block in *text*.
+
+    Fences pair as in CommonMark: a fence is a whole line of three or more
+    backticks or tildes, indented by at most three spaces (a backtick fence's
+    info string holds no backtick). The block ends at a line of the same
+    character, at least as long, with nothing after it but spaces and tabs,
+    or else at the end of the text. A block starts at the beginning of its
+    opening line and ends after its closing line.
+    """
+    opening = ""
+    block_start = offset = 0
+    for line in text.split("\n"):
+        line_end = offset + len(line)
+        match = _FENCE_LINE_RE.fullmatch(line.rstrip("\r"))
+        if match is not None:
+            run, rest = match.groups()
+            if not opening:
+                if not (run[0] == "`" and "`" in rest):
+                    opening, block_start = run, offset
+            elif run[0] == opening[0] and len(run) >= len(opening) and not rest.strip(" \t"):
+                yield block_start, line_end
+                opening = ""
+        offset = line_end + 1
+    if opening:
+        yield block_start, len(text)
+
+
+def _outside_code(text: str) -> Iterator[tuple[int, int]]:
+    """Yield the ``(start, end)`` offsets of each stretch of *text* outside fenced code blocks."""
+    position = 0
+    for start, end in _fenced_blocks(text):
+        yield position, start
+        position = end
+    yield position, len(text)
 
 
 def _placeholder(match: re.Match[str]) -> Placeholder:
@@ -90,8 +122,8 @@ def find_placeholders(text: str | None) -> Iterator[Placeholder]:
     """Yield every placeholder in *text*, outside fenced code blocks."""
     if not text or "{{" not in text:
         return
-    for _, part in _outside_code(text):
-        for match in PLACEHOLDER_RE.finditer(part):
+    for start, end in _outside_code(text):
+        for match in PLACEHOLDER_RE.finditer(text, start, end):
             yield _placeholder(match)
 
 
@@ -114,7 +146,10 @@ def expand_placeholders(text: str, resolve: Callable[[Placeholder], str | None])
             return placeholder.label or placeholder.ref
         return expanded
 
-    parts = _FENCE_RE.split(text)
-    for index, part in _outside_code(text):
-        parts[index] = PLACEHOLDER_RE.sub(replace, part)
+    parts: list[str] = []
+    previous = 0
+    for start, end in _outside_code(text):
+        parts.append(text[previous:start])
+        parts.append(PLACEHOLDER_RE.sub(replace, text[start:end]))
+        previous = end
     return "".join(parts), unresolved
