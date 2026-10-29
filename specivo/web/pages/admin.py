@@ -302,7 +302,7 @@ async def admin_projects(
     # Load all projects including archived (status 9)
     all_projects = await svc.list_all_admin(db, user)
     project_ids = [p.id for p in all_projects]
-    stats = await svc.load_project_stats(db, project_ids) if project_ids else {}
+    stats = await svc.load_project_stats(db, project_ids, reader=user) if project_ids else {}
 
     # Serialize for Alpine.js
     projects_data = []

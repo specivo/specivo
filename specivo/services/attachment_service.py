@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from fastapi import Request, UploadFile
@@ -15,6 +16,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from specivo.core.config import get_settings
 from specivo.core.exceptions import NotFoundError
 from specivo.models.attachment import Attachment
+from specivo.models.journal import Journal
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
@@ -76,6 +78,14 @@ ALLOWED_CONTENT_TYPES: frozenset[str] = frozenset(
 
 
 _audit = SecurityAuditService()
+
+
+@dataclass(frozen=True)
+class AttachmentUpload:
+    """An uploaded file, and the issue history entry that records it (None off an issue)."""
+
+    attachment: Attachment
+    journal: Journal | None
 
 
 class AttachmentService:
@@ -192,12 +202,35 @@ class AttachmentService:
         author: User,
         description: str | None = None,
         request: Request | None = None,
-    ) -> Attachment:
-        """Save file to disk and create a DB record.
+        journal_id: int | None = None,
+    ) -> AttachmentUpload:
+        """Save file to disk, create a DB record, and record it in the issue's history.
 
-        Raises ``ValueError`` for invalid file size or content type.
-        The file is deleted from disk if the DB insert fails (atomic cleanup).
+        A file attached to an issue is recorded as an ``attachment`` detail:
+        in *journal_id* when the upload came with that edit or comment, or
+        joins the batch whose first file was recorded there (see
+        ``JournalService.upload_journal``), otherwise in a new entry. Files
+        attached to other containers (wiki pages, comments) are not recorded.
+        Imports go through :meth:`upload_from_path`, which records nothing:
+        imported history carries its own attachment details.
+
+        Raises ``ValueError`` for invalid file size or content type, and
+        ``ValidationError`` for a *journal_id* that is not *author*'s entry on
+        the issue. The file is deleted from disk if the DB insert fails
+        (atomic cleanup).
         """
+        from specivo.models.issue import Issue
+        from specivo.services.journal_service import JournalService
+
+        journals = JournalService()
+        issue: Issue | None = None
+        history: Journal | None = None
+        if container_type == "Issue":
+            issue = await session.get(Issue, container_id)
+            if issue is not None and journal_id is not None:
+                # Checked before any file is written.
+                history = await journals.upload_journal(session, issue, author, journal_id)
+
         # Read the file content
         content = await file.read()
         filesize = len(content)
@@ -258,6 +291,12 @@ class AttachmentService:
                 pass
             raise
 
+        if issue is not None:
+            history = await journals.record_attachment_added(
+                session, issue, author, attachment.id, original_filename, history
+            )
+            await session.flush()
+
         logger.info(
             "Uploaded attachment %d (%s, %d bytes) to %s/%d by user %d",
             attachment.id,
@@ -291,7 +330,7 @@ class AttachmentService:
         except Exception:
             logger.debug("Audit logging skipped for attachment %d upload", attachment.id)
 
-        return attachment
+        return AttachmentUpload(attachment=attachment, journal=history)
 
     async def download(self, attachment_id: int, session: AsyncSession) -> tuple[Path, str]:
         """Return ``(file_path, content_type)`` for streaming response.

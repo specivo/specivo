@@ -260,13 +260,21 @@ async def test_deleting_a_file_records_it_under_its_name(admin_client: AsyncClie
             select(JournalDetail.prop_key, JournalDetail.old_value, JournalDetail.new_value)
             .join(Journal, Journal.id == JournalDetail.journal_id)
             .where(Journal.issue_id == issue.id, JournalDetail.property == ATTACHMENT_DETAIL)
+            .order_by(JournalDetail.id)
         )
     ).all()
-    assert [tuple(row) for row in rows] == [(str(attachment_id), "quarterly report.txt", None)]
+    # The upload is recorded too (see test_attachment_upload_history).
+    assert [tuple(row) for row in rows] == [
+        (str(attachment_id), None, "quarterly report.txt"),
+        (str(attachment_id), "quarterly report.txt", None),
+    ]
 
     history = await admin_client.get(f"/api/v1/issues/{issue.display_key}/?include=journals")
     details = [d for j in history.json()["journals"] for d in j["details"] if d["property"] == "attachment"]
-    assert [(d["old_name"], d["new_name"]) for d in details] == [("quarterly report.txt", None)]
+    assert sorted((d["old_name"] or "", d["new_name"] or "") for d in details) == [
+        ("", "quarterly report.txt"),
+        ("quarterly report.txt", ""),
+    ]
 
     page = await admin_client.get(f"/issue/{issue.display_key}/")
     assert "File quarterly report.txt deleted" in " ".join(page.text.split())

@@ -18,6 +18,7 @@ from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.schemas.version import RoadmapEntry, VersionCreate, VersionOut, VersionSort, VersionUpdate
+from specivo.services.issue_service import IssueService
 from specivo.services.markdown_budget import check_markdown_length
 
 logger = logging.getLogger(__name__)
@@ -318,9 +319,16 @@ class VersionService:
         self,
         session: AsyncSession,
         project: Project,
+        reader: User,
         sort: str | None = None,
     ) -> list[RoadmapEntry]:
         """Return roadmap data for *project*: versions with open/closed issue counts.
+
+        Counts cover only the issues *reader* may see
+        (``IssueService.visible_issues_clause``, which also applies an API
+        key's project limit), so progress never reveals hidden issues. The
+        clause is cross-project because a shared version can hold issues of
+        other projects.
 
         Only versions belonging to the project are included. Version sharing
         is not shown on the roadmap; ``visible_versions`` is the reader-aware
@@ -352,6 +360,9 @@ class VersionService:
             .where(Issue.fixed_version_id.in_(version_ids))
             .group_by(Issue.fixed_version_id)
         )
+        visibility = await IssueService().visible_issues_clause(session, reader)
+        if visibility is not None:
+            stmt = stmt.where(visibility)
 
         rows = (await session.execute(stmt)).all()
         counts: dict[int, dict] = {

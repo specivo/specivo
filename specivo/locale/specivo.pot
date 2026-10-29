@@ -6795,6 +6795,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html
 msgid "No accounts are connected."
+msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/login.html:98
 msgid "Administrators can sign in with a local account."
@@ -6978,4 +6979,8 @@ msgstr ""
 
 #: specivo/services/agent_cost_service.py
 msgid "Agent session not found"
+msgstr ""
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
 msgstr ""

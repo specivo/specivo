@@ -7107,3 +7107,7 @@ msgstr "ลบไฟล์แล้ว"
 #: specivo/services/agent_cost_service.py
 msgid "Agent session not found"
 msgstr "ไม่พบเซสชันของเอเจนต์"
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr "รายการประวัตินี้ไม่ได้อยู่ในงานนี้"

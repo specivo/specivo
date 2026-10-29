@@ -17,6 +17,7 @@ from specivo.models.project import Project
 from specivo.models.version import Version
 from specivo.services.version_service import VersionService
 from tests.factories.project import ProjectFactory
+from tests.factories.user import AdminUserFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.service]
 
@@ -75,7 +76,10 @@ async def test_list_for_project_default_order(db_session: AsyncSession):
 )
 async def test_roadmap_sort_options(db_session: AsyncSession, sort: str, expected: list[str]):
     project = await _project(db_session, "VORDB")
-    entries = await _svc.roadmap(db_session, project, sort)
+    admin = AdminUserFactory.build(login="vordb_admin", status="active")
+    db_session.add(admin)
+    await db_session.flush()
+    entries = await _svc.roadmap(db_session, project, admin, sort)
     assert [e.version.name for e in entries] == expected
 
 

@@ -141,7 +141,7 @@ async def get_burndown(
     sprint = await _sprint_service.get_by_id(db, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
-    data = await _sprint_service.burndown_data(db, sprint)
+    data = await _sprint_service.burndown_data(db, sprint, current_user)
     return BurndownOut(
         total_estimated_hours=data["total_estimated_hours"],
         completed_hours=data["completed_hours"],

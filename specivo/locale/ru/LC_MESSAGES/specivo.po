@@ -7223,3 +7223,7 @@ msgstr "Файл удалён"
 #: specivo/services/agent_cost_service.py
 msgid "Agent session not found"
 msgstr "Сессия агента не найдена"
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr "Эта запись истории не относится к этой задаче."

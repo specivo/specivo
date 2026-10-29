@@ -109,3 +109,34 @@ def test_expected_native_translations():
             assert gettext("Save") == word
         finally:
             deactivate()
+
+
+def _catalog_files() -> list:
+    from pathlib import Path
+
+    import specivo
+
+    locale_dir = Path(specivo.__file__).parent / "locale"
+    return [locale_dir / "specivo.pot", *sorted(locale_dir.glob("*/LC_MESSAGES/*.po"))]
+
+
+@pytest.mark.parametrize("path", _catalog_files(), ids=lambda p: "/".join(p.parts[-3:]))
+def test_catalogs_are_well_formed(path):
+    """Every catalog parses strictly, and passes ``msgfmt --check`` where gettext is installed.
+
+    An entry missing its ``msgstr`` makes ``msgfmt`` refuse the whole file.
+    """
+    import shutil
+    import subprocess
+
+    from babel.messages.pofile import read_po
+
+    with path.open("rb") as fh:
+        read_po(fh, abort_invalid=True)
+
+    msgfmt = shutil.which("msgfmt")
+    if msgfmt is not None:
+        result = subprocess.run(
+            [msgfmt, "--check", "-o", "/dev/null", str(path)], capture_output=True, text=True, check=False
+        )
+        assert result.returncode == 0, result.stderr

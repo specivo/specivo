@@ -7278,3 +7278,7 @@ msgstr "Archivo eliminado"
 #: specivo/services/agent_cost_service.py
 msgid "Agent session not found"
 msgstr "Sesión de agente no encontrada"
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr "La entrada del historial no pertenece a esta incidencia."

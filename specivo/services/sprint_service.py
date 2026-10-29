@@ -361,31 +361,35 @@ class SprintService:
         self,
         session: AsyncSession,
         sprint: Sprint,
+        reader: User,
     ) -> dict:
-        """Build burndown chart data for *sprint*.
+        """Build burndown chart data for *sprint* over the issues *reader* may see.
 
         Returns a dict with:
-        - ``total_estimated_hours`` — sum of estimated_hours for all sprint issues
-        - ``completed_hours`` — sum of estimated_hours for done/closed issues
+        - ``total_estimated_hours`` — sum of estimated_hours for the visible sprint issues
+        - ``completed_hours`` — sum of estimated_hours for the visible done/closed ones
         - ``data_points`` — list of dicts with ``date``, ``remaining``, ``ideal``
+
+        Hidden issues (private ones, or every issue for a key limited to other
+        projects) are left out of both sums, so the chart cannot reveal them.
         """
-        # Fetch issues with their status loaded
+        from specivo.models.lookups import IssueStatus
+
+        hours = func.coalesce(Issue.estimated_hours, 0)
         stmt = (
-            select(Issue)
+            select(
+                func.coalesce(func.sum(hours), 0),
+                func.coalesce(func.sum(hours).filter(IssueStatus.category.in_(("done", "closed"))), 0),
+            )
+            .join(IssueStatus, IssueStatus.id == Issue.status_id)
             .where(Issue.sprint_id == sprint.id)
-            .options(selectinload(Issue.status))
         )
-        result = await session.execute(stmt)
-        issues = list(result.scalars().all())
-
-        total_estimated = Decimal(0)
-        completed_hours = Decimal(0)
-
-        for issue in issues:
-            hours = issue.estimated_hours or Decimal(0)
-            total_estimated += hours
-            if issue.status.category in ("done", "closed"):
-                completed_hours += hours
+        visibility = await _visibility(session, reader)
+        if visibility is not None:
+            stmt = stmt.where(visibility)
+        total_row, completed_row = (await session.execute(stmt)).one()
+        total_estimated = Decimal(total_row)
+        completed_hours = Decimal(completed_row)
 
         remaining = total_estimated - completed_hours
 
