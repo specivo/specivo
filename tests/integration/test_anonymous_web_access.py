@@ -598,10 +598,22 @@ async def test_imported_history_names_no_private_issue_or_project(
     )
     await db_session.commit()
 
+    db_session.add(
+        JournalDetail(
+            journal_id=journal.id,
+            property="attr",
+            prop_key="parent_id",
+            new_value=live.public_child.display_key,
+        )
+    )
+    await db_session.commit()
+
     resp = await client.get(_pages(live)["issue"])
     assert resp.status_code == 200
     assert live.private_issue.display_key not in resp.text
     assert live.private.name not in resp.text
+    # No parent change at all, even one naming an issue the visitor may open.
+    assert 'sp-change-label">Parent<' not in resp.text
 
 
 async def test_a_private_journal_never_renders(client: AsyncClient, live: World) -> None:

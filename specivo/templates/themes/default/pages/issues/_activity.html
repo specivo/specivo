@@ -28,11 +28,14 @@
       {# Relation changes name another issue by key, and the issue they name
          may be one this reader cannot see — the relations list drops those,
          and the feed must not put them back. For a visitor without an account
-         the whole row is left out rather than shown without its link. A
-         parent change (imported history has them) names the parent by key:
-         one naming an issue this reader cannot see is left out for anyone. #}
-      {% set hidden_parents = lookup_maps.get('parent_id_hidden', {}) if lookup_maps is defined else {} %}
-      {% for d in j.details if not (anonymous and d.property == 'relation') and not (d.prop_key == 'parent_id' and (d.old_value in hidden_parents or d.new_value in hidden_parents)) %}
+         the whole row is left out rather than shown without its link, and so
+         is every parent change (imported history has them), which names the
+         parent by key. For anyone else a parent change is left out when its
+         key does not resolve to an issue they may see; without that list,
+         every parent change is. #}
+      {% set hidden_parents = lookup_maps.get('parent_id_hidden') if lookup_maps is defined and lookup_maps else none %}
+      {% for d in j.details if not (anonymous and (d.property == 'relation' or d.prop_key == 'parent_id'))
+           and not (d.prop_key == 'parent_id' and (hidden_parents is none or d.old_value in hidden_parents or d.new_value in hidden_parents)) %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}

@@ -13,11 +13,11 @@ import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.models.issue import Issue
+from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.lookups import IssueCategory
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import EnabledModule, Project
+from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
 from specivo.models.role import Role
 from specivo.models.sprint import Sprint
 from specivo.models.user import User
@@ -90,6 +90,14 @@ async def history(db_session: AsyncSession, auth_client: AsyncClient) -> dict:
     issue = await _issue(db_session, mine, lookups, reader, 1)
     own_parent = await _issue(db_session, mine, lookups, reader, 2)
     their_parent = await _issue(db_session, theirs, lookups, reader, 1)
+    # Keys history may hold from before a move and before a project key rename,
+    # each still leading (through its alias) to an issue the reader cannot see.
+    moved = await _issue(db_session, theirs, lookups, reader, 2)
+    db_session.add(IssueRefAlias(issue_id=moved.id, old_project_key="VISA", old_sequence_number=9))
+    renamed = await _issue(db_session, theirs, lookups, reader, 3)
+    db_session.add(ProjectKeyAlias(old_key="VISOLD", project_id=theirs.id, renamed_by_id=reader.id))
+    # An own issue reached through an alias is still shown.
+    db_session.add(IssueRefAlias(issue_id=own_parent.id, old_project_key="VISGONE", old_sequence_number=4))
     journal = Journal(issue_id=issue.id, project_id=mine.id, user_id=reader.id, sequence=1)
     db_session.add(journal)
     await db_session.flush()
@@ -99,8 +107,13 @@ async def history(db_session: AsyncSession, auth_client: AsyncClient) -> dict:
         ("sprint_id", None, str(records["their_sprint"].id)),
         ("parent_id", own_parent.display_key, None),
         ("parent_id", None, their_parent.display_key),
-        # The source's text for a parent that was not imported names no Specivo issue.
+        ("parent_id", "VISA-9", None),
+        ("parent_id", f"VISOLD-{renamed.sequence_number}", None),
+        ("parent_id", "VISGONE-4", None),
+        # A key naming no issue at all: hidden all the same, failing closed.
         ("parent_id", None, "JIRA-77"),
+        # The source's text for a parent that was not imported, which is no key.
+        ("parent_id", None, "#77"),
     ]
     db_session.add_all(
         JournalDetail(journal_id=journal.id, property="attr", prop_key=key, old_value=old, new_value=new)
@@ -122,7 +135,10 @@ async def test_history_names_no_record_of_a_project_the_reader_cannot_open(
 
     for secret in ("Vis secret release", "Vis secret area", "Vis secret sprint", history["their_parent"].display_key):
         assert secret not in text, secret
+    for hidden in ("VISA-9", "VISOLD-3", "JIRA-77"):
+        assert hidden not in text, hidden
     # What the reader may see is still named.
     assert '<span class="sp-change-new">Vis own release</span>' in text
     assert f'<span class="sp-change-old">{history["own_parent"].display_key}</span>' in text
-    assert '<span class="sp-change-new">JIRA-77</span>' in text
+    assert '<span class="sp-change-old">VISGONE-4</span>' in text
+    assert '<span class="sp-change-new">#77</span>' in text
