@@ -7,6 +7,12 @@ on:
     branches: [main]
   workflow_call:
 
+# Every job only checks out code and uploads artifacts, which needs no more
+# than read access. When release.yml calls this workflow, it runs with these
+# permissions too, never with the release job's write access.
+permissions:
+  contents: read
+
 jobs:
   # Build check for the esbuild bundles. They are generated, never committed:
   # the test jobs below build their own copy, and the release image builds them

@@ -86,6 +86,10 @@ jobs:
   build-and-push:
     needs: [ci, scan-image]
     runs-on: ubuntu-latest
+    # The image goes to Docker Hub with the Docker Hub secrets, not to GHCR,
+    # so the GitHub token only needs to read the repository.
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
 
