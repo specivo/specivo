@@ -6912,3 +6912,50 @@ msgstr ""
 #, python-format
 msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
 msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (soonest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (latest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (lowest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (highest first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (open first)"
+msgstr ""
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (closed first)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#: specivo/templates/themes/default/pages/projects/settings.html
+msgid "Sort versions"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Hide completed versions (%(count)s)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Show completed versions (%(count)s)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "No open versions. All versions of this project are completed."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "Completed versions"
+msgstr ""

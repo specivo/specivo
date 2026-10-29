@@ -7202,3 +7202,50 @@ msgstr "Les clés API sont désactivées pour les comptes qui se connectent par 
 #, python-format
 msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
 msgstr "Vous vous connectez via votre fournisseur d'identité (%(providers)s). Ce compte n'a pas de mot de passe, il n'y a donc rien à modifier ici. Gérez votre mot de passe chez votre fournisseur d'identité."
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (soonest first)"
+msgstr "Date d'échéance (la plus proche d'abord)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (latest first)"
+msgstr "Date d'échéance (la plus lointaine d'abord)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (lowest first)"
+msgstr "Numéro de version (le plus petit d'abord)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (highest first)"
+msgstr "Numéro de version (le plus grand d'abord)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (open first)"
+msgstr "Statut (ouvertes d'abord)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (closed first)"
+msgstr "Statut (fermées d'abord)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#: specivo/templates/themes/default/pages/projects/settings.html
+msgid "Sort versions"
+msgstr "Trier les versions"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Hide completed versions (%(count)s)"
+msgstr "Masquer les versions terminées (%(count)s)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Show completed versions (%(count)s)"
+msgstr "Afficher les versions terminées (%(count)s)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "No open versions. All versions of this project are completed."
+msgstr "Aucune version ouverte. Toutes les versions de ce projet sont terminées."
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "Completed versions"
+msgstr "Versions terminées"
