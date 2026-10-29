@@ -50,7 +50,6 @@ from specivo.services.markdown_service import (
     count_issue_ref_candidates,
     render_plain_markdown,
     render_wiki_markdown,
-    substitute_links,
 )
 from specivo.services.search_service import _clean_snippet
 from specivo.services.wiki_link_service import WikiLinkService
@@ -104,8 +103,7 @@ def unguarded(text: str) -> str:
 @pytest.mark.parametrize("name", list(PATHOLOGICAL))
 def test_pre_scan_rejects_pathological_input(name):
     text = PATHOLOGICAL[name]
-    source = substitute_links(text, "ACME")
-    assert render_hazard(source, len(text), count_issue_ref_candidates(source)) is not None
+    assert render_hazard(text, count_issue_ref_candidates(text)) is not None
 
 
 @pytest.mark.parametrize("name", list(PATHOLOGICAL))
@@ -342,8 +340,10 @@ def test_text_with_a_few_unclosed_openers_renders():
 def test_size_limit_applies_to_the_original_text():
     assert render_hazard("a" * MAX_MARKDOWN_CHARS) is None
     assert render_hazard("a" * (MAX_MARKDOWN_CHARS + 1)) == "size"
-    # Substitution may lengthen the text; the author's length is what counts.
-    assert render_hazard("a" * (MAX_MARKDOWN_CHARS + 1), original_length=MAX_MARKDOWN_CHARS) is None
+    # Wiki links are made inside the parser, so a text of them at the limit
+    # is not pushed over it by a rewrite.
+    links = "[[Page]] " * (MAX_MARKDOWN_CHARS // len("[[Page]] "))
+    assert render_hazard(links) != "size"
 
 
 @pytest.mark.parametrize(
