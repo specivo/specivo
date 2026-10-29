@@ -19,7 +19,13 @@ from sqlalchemy.orm import selectinload
 
 from specivo.core.config import get_settings
 from specivo.core.constants import MCP_SEARCH_MAX_LIMIT, SEARCH_SNIPPET_MAX_CHARS
-from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
+from specivo.core.exceptions import (
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnauthorizedError,
+    ValidationError,
+)
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, JournalDetail
@@ -30,7 +36,7 @@ from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
 from specivo.schemas.sprint import SprintCreate, SprintUpdate
-from specivo.schemas.tag import TagCreate, TagUpdate
+from specivo.schemas.tag import MAX_TAG_NAMES, TAG_NAME_MAX, TagCreate, TagUpdate, normalize_tag_names
 from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
@@ -504,7 +510,11 @@ async def _search(
     if project_key:
         # A private project the caller is not a member of, or one outside the
         # API key's limit, is "not found" exactly like a missing key.
-        project = await _project_svc.get_readable_by_key(session, project_key, user)
+        try:
+            project = await _project_svc.get_readable_by_key(session, project_key, user)
+        except (PermissionDeniedError, UnauthorizedError):
+            # Any other refusal reads as a missing key too, word for word.
+            raise NotFoundError(f"Project '{project_key}' not found") from None
         project_id = project.id
 
     if mode == "hybrid":
@@ -2727,6 +2737,15 @@ async def _tag(
         names = [str(v) for v in value]
     else:
         names = [str(value)]
+
+    # The same bounds as the REST tag schemas: a capped list of stripped,
+    # de-duplicated names, none longer than the tag name column.
+    if len(names) > MAX_TAG_NAMES:
+        return f"Error: at most {MAX_TAG_NAMES} tag names per call"
+    names = [n.strip() for n in names]
+    if any(len(n) > TAG_NAME_MAX for n in names):
+        return f"Error: tag names must be at most {TAG_NAME_MAX} characters"
+    names = normalize_tag_names(names)
 
     if op == "set":
         if kind == "issue":

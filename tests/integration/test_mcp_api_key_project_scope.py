@@ -152,3 +152,34 @@ async def test_an_admin_key_limited_to_a_project_stops_at_it(
     projects = await server.specivo_list_projects()
     assert b_key not in projects and c_key not in projects
     assert "alpha quokka" in await server.specivo_show_issue(issue_ref=w.a_issue["key"])
+
+
+async def test_search_refuses_every_unreachable_project_like_a_missing_one(
+    use_test_session, client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Missing, private-without-membership, outside-the-limit and forbidden all give one tool error."""
+    from specivo.core.exceptions import PermissionDeniedError
+    from specivo.mcp import tools
+    from specivo.services.api_key_service import ApiKeyService
+
+    w = await _world(db_session, client, "KMU")
+    _key, b_only_raw = await ApiKeyService().create_key(session=db_session, user_id=w.b_only_user.id, name="kmu-bonly")
+    await db_session.commit()
+    # Plain strings: a refused call rolls back and expires the ORM rows.
+    a_key, b_key = w.a.key, w.b.key
+
+    async def refusal(raw: str, project_key: str) -> str:
+        _as(raw)
+        message = await _refused(server.specivo_search(query="quokka", project_key=project_key, mode="keyword"))
+        return message.replace(project_key, "<KEY>")
+
+    missing = await refusal(b_only_raw, "KMUNONE")
+    assert "not found" in missing
+    assert await refusal(b_only_raw, a_key) == missing  # private, not a member
+    assert await refusal(w.limited_raw, b_key) == missing  # outside the key's limit
+
+    async def forbid(_session, _project, _user):
+        raise PermissionDeniedError("You may not search this project")
+
+    monkeypatch.setattr(tools._project_svc, "require_project_access", forbid)
+    assert await refusal(w.limited_raw, a_key) == missing
