@@ -7231,3 +7231,7 @@ msgstr "Эта запись истории не относится к этой �
 #: specivo/api/v1/attachments.py
 msgid "You do not have permission to add files here."
 msgstr "У вас нет права добавлять сюда файлы."
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr "У вас нет права изменять этот файл."

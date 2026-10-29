@@ -6981,3 +6981,7 @@ msgstr "该历史记录不属于此工作项。"
 #: specivo/api/v1/attachments.py
 msgid "You do not have permission to add files here."
 msgstr "你没有在此添加文件的权限。"
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr "你没有修改此文件的权限。"

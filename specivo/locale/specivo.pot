@@ -6988,3 +6988,7 @@ msgstr ""
 #: specivo/api/v1/attachments.py
 msgid "You do not have permission to add files here."
 msgstr ""
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr ""

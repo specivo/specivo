@@ -7279,3 +7279,7 @@ msgstr "Cette entrée d'historique n'appartient pas à ce ticket."
 #: specivo/api/v1/attachments.py
 msgid "You do not have permission to add files here."
 msgstr "Vous n'avez pas l'autorisation d'ajouter des fichiers ici."
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr "Vous n'avez pas l'autorisation de modifier ce fichier."
