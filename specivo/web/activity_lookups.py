@@ -252,11 +252,16 @@ async def _projects(db: AsyncSession, user: User, ids: set[int]) -> dict[str, st
 async def _people(db: AsyncSession, user: User, ids: set[int], members: Sequence[dict[str, Any]]) -> dict[str, str]:
     if user.is_anonymous:
         # The member list names people by login. An anonymous visitor gets
-        # display names, and only for the people the feed actually mentions.
+        # display names, only for the people the feed actually mentions, and
+        # only for those the anonymous user may see: members of the projects
+        # it can open. Anyone else shows as stored.
         if not ids:
             return {}
-        rows = (await db.execute(select(User.id, User.display_name).where(User.id.in_(ids)))).all()
-        return {str(row.id): row.display_name for row in rows}
+        stmt = select(User.id, User.display_name).where(User.id.in_(ids))
+        visible = await visible_users_clause(db, user)
+        if visible is not None:
+            stmt = stmt.where(visible)
+        return {str(row.id): row.display_name for row in (await db.execute(stmt)).all()}
 
     people = {str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members}
     # History can name people who are no longer members (imported history
