@@ -288,9 +288,12 @@ class TestFullBundle:
         )
         # Refs become the Specivo ids the issue page names records by.
         triage = (await db_session.execute(select(IssueStatus).where(IssueStatus.name == "Triage"))).scalar_one()
+        bob = (await db_session.execute(select(User).where(User.login == "bundle_bob"))).scalar_one()
         assert [(d.property, d.prop_key, d.old_value, d.new_value) for d in details] == [
             ("attr", "status_id", str(triage.id), str(issue.status_id)),
             ("attr", "fixed_version_id", None, str(issue.fixed_version_id)),
+            # A user field, under its key; a value with no ref is the source's text.
+            ("cf_user", "reviewer", "Former colleague", str(bob.id)),
         ]
 
     async def test_the_issue_page_names_what_history_changed(self, admin_client, imported):
@@ -300,6 +303,7 @@ class TestFullBundle:
         text = " ".join(response.text.split())
         assert f'<strong class="sp-change-label">Status</strong> {_change("Triage", "In Review")}' in text
         assert f'<strong class="sp-change-label">Fixed Version</strong> {_change("(none)", "1.0")}' in text
+        assert f'<strong class="sp-change-label">Reviewer</strong> {_change("Former colleague", "bundle_bob")}' in text
 
     async def test_a_relation_across_projects(self, db_session, imported):
         relation = (await db_session.execute(select(IssueRelation))).scalar_one()

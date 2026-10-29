@@ -13,7 +13,7 @@ produce the right diff. The rows are built directly instead — still ORM
 objects, still in the phase transaction — and numbered in the order the changes
 happened.
 
-Three things are deliberately deferred to a later pass:
+Two things are deliberately deferred to a later pass:
 
 * Issue references inside descriptions and comments stay as the source wrote
   them until every issue exists, because a reference can point at an issue in a
@@ -21,8 +21,6 @@ Three things are deliberately deferred to a later pass:
 * A parent this run did not create before the child (one later in load order,
   or one of another bundle of the source) is set in the relations phase, once
   every issue of the run exists (see :mod:`~specivo.importers.load.issue_links`).
-* Custom-field values that name a user or a version are stored as source ids
-  and rewritten once those exist.
 """
 
 from __future__ import annotations
@@ -37,11 +35,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.converter import ContentConverter, ConversionContext
-from specivo.importers.core.ir import REFERENCE_ATTRIBUTES, EntityType, IRIssue, IRJournalEntry, ValueKind
+from specivo.importers.core.ir import (
+    REFERENCE_ATTRIBUTES,
+    REFERENCE_FIELD_FORMATS,
+    EntityType,
+    IRCustomField,
+    IRIssue,
+    IRJournalDetail,
+    IRJournalEntry,
+    ValueKind,
+)
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
-from specivo.models.journal import Journal, JournalDetail
+from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.project import Project
 from specivo.models.watcher import Watcher
 from specivo.schemas.issue import IssueCreate
@@ -56,6 +63,8 @@ CONVERSION_CONTEXT_STATE_KEY = "conversion_context"
 CREATED_ISSUES_STATE_KEY = "issues_created"
 # Unresolved history refs named in the warning about them.
 _MAX_EXAMPLES = 10
+# What a custom field change whose values name a record is stored as.
+_CF_REFERENCE_PROPERTIES = {EntityType.USER: CF_USER, EntityType.VERSION: CF_VERSION}
 
 _issue_service = IssueService()
 
@@ -292,13 +301,14 @@ async def load_journals(ctx: PhaseContext) -> None:
     await ensure_import_account(ctx)
 
     unresolved: list[str] = []
+    fields = {field.source_ref: field async for field in ctx.adapter.extract_custom_fields()}
     for project_ref in ctx.project_refs:
         sequences: dict[int, int] = {}
         async for ir in ctx.adapter.extract_journals(project_ref):
             if await ctx.id_map.get(ctx.session, EntityType.JOURNAL, ir.source_ref):
                 ctx.summary.record_skipped(EntityType.JOURNAL)
                 continue
-            await _create_journal(ctx, ir, sequences, unresolved)
+            await _create_journal(ctx, ir, sequences, unresolved, fields)
     if unresolved:
         # One warning however many: history routinely names deleted versions and the like.
         ctx.warn(
@@ -310,7 +320,11 @@ async def load_journals(ctx: PhaseContext) -> None:
 
 
 async def _create_journal(
-    ctx: PhaseContext, ir: IRJournalEntry, sequences: dict[int, int], unresolved: list[str]
+    ctx: PhaseContext,
+    ir: IRJournalEntry,
+    sequences: dict[int, int],
+    unresolved: list[str],
+    fields: dict[str, IRCustomField],
 ) -> None:
     """Create one journal entry with its field changes."""
     issue_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.issue_ref)
@@ -339,16 +353,16 @@ async def _create_journal(
     await ctx.session.flush()
 
     for detail in ir.details:
+        prop, prop_key, entity = _detail_kind(detail, fields)
         old_value, new_value = detail.old_value, detail.new_value
-        entity = REFERENCE_ATTRIBUTES.get(detail.prop_key) if detail.property == "attr" else None
         if entity is not None:
             old_value = await _reference_value(ctx, entity, detail.old_ref, old_value, unresolved)
             new_value = await _reference_value(ctx, entity, detail.new_ref, new_value, unresolved)
         ctx.session.add(
             JournalDetail(
                 journal_id=journal.id,
-                property=detail.property[:30],
-                prop_key=detail.prop_key[:255],
+                property=prop[:30],
+                prop_key=prop_key[:255],
                 old_value=old_value,
                 new_value=new_value,
             )
@@ -359,6 +373,27 @@ async def _create_journal(
     await ctx.id_map.put(ctx.session, EntityType.JOURNAL, ir.source_ref, "journals", journal.id)
     ctx.summary.record_created(EntityType.JOURNAL)
     ctx.tick()
+
+
+def _detail_kind(detail: IRJournalDetail, fields: dict[str, IRCustomField]) -> tuple[str, str, EntityType | None]:
+    """Return a detail's ``property`` and ``prop_key`` as Specivo stores them, and what its values name.
+
+    An attribute is stored as the bundle names it. A custom field change is
+    stored under the field's metadata key, the name its values have on the
+    issue, and a field whose values name a person or a version as
+    :data:`~specivo.models.journal.CF_USER` / ``CF_VERSION``, so history can
+    name them. A field the bundle does not define keeps its ref, and its
+    values are text.
+    """
+    if detail.property == "attr":
+        return detail.property, detail.prop_key, REFERENCE_ATTRIBUTES.get(detail.prop_key)
+    field = fields.get(detail.prop_key) if detail.property == "cf" else None
+    if field is None:
+        return detail.property, detail.prop_key, None
+    entity = REFERENCE_FIELD_FORMATS.get(field.field_format)
+    if entity is None:
+        return detail.property, field.key, None
+    return _CF_REFERENCE_PROPERTIES[entity], field.key, entity
 
 
 async def _reference_value(

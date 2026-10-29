@@ -168,6 +168,12 @@ class Journal(Base, TimestampMixin):
         return f"<Journal id={self.id} issue_id={self.issue_id} sequence={self.sequence} user_id={self.user_id}>"
 
 
+# ``JournalDetail.property`` of a custom field change whose values are the ids
+# of people / of versions, so history can name them.
+CF_USER = "cf_user"
+CF_VERSION = "cf_version"
+
+
 class JournalDetail(Base):
     """One field change within a journal entry.
 
@@ -177,9 +183,14 @@ class JournalDetail(Base):
 
     ``property`` values:
     - ``"attr"``       — standard issue field (status_id, subject, description, …)
-    - ``"cf"``         — custom field (future)
+    - ``"cf"``         — imported custom field; ``prop_key`` is the metadata key, values are text
+    - ``"cf_user"``    — imported custom field naming a person: values are user ids
+    - ``"cf_version"`` — imported custom field naming a version: values are version ids
     - ``"attachment"`` — file attached or removed
     - ``"relation"``   — issue relation added or removed
+
+    A ``cf_user`` / ``cf_version`` value that is not an id is the source's text
+    for a record that was not imported, shown as stored.
     """
 
     __tablename__ = "journal_details"
