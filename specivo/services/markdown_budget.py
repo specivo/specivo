@@ -102,7 +102,11 @@ _TAG_TOKEN_RE = re.compile(r"<[A-Za-z/!?]|>")
 _BACKTICK_RUN_RE = re.compile(r"`+")
 _EMPHASIS_RUN_RE = re.compile(r"[*_]+")
 _HASH_RUN_RE = re.compile(r"#+")
-_CONTAINER_MARKER_RE = re.compile(r"[ \t]*(?:>|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t]))")
+# Leading blanks are skipped by ``_BLANKS_RE`` first, not by a ``[ \t]*``
+# prefix here: a marker never starts with a blank, so this is the same match,
+# and no pattern pairs an unbounded blank run with a suffix that can fail.
+_BLANKS_RE = re.compile(r"[ \t]*")
+_CONTAINER_MARKER_RE = re.compile(r">|[-*+](?=[ \t])|\d{1,9}[.)](?=[ \t])")
 _SETEXT_UNDERLINE_RE = re.compile(r" {0,3}(?:=+|-+)[ \t]*$")
 _NON_WORD_RE = re.compile(r"\W+")
 
@@ -318,7 +322,8 @@ def _nesting_depth(line: str) -> int:
     depth = (indent + 3 * line.count("\t", 0, indent)) // 4
     pos = 0
     while depth <= MAX_NESTING_DEPTH:
-        m = _CONTAINER_MARKER_RE.match(line, pos)
+        blanks = _BLANKS_RE.match(line, pos)
+        m = _CONTAINER_MARKER_RE.match(line, blanks.end() if blanks else pos)
         if m is None:
             break
         depth += 1

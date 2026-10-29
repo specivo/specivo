@@ -31,6 +31,7 @@ from specivo.services.markdown_budget import (
     RenderDeadline,
     RenderDeadlineError,
     _backtick_scan_chars,
+    _nesting_depth,
     charge_render,
     check_markdown_length,
     end_request_budget,
@@ -354,6 +355,31 @@ def test_nesting_limit(prefix, depth):
     levels = MAX_NESTING_DEPTH // depth
     assert render_hazard(prefix * levels + "a") is None
     assert render_hazard(prefix * (levels + 1) + "a") == "nesting"
+
+
+@pytest.mark.parametrize(
+    ("line", "depth"),
+    [
+        ("a", 0),
+        ("> a", 1),
+        ("  >  > a", 2),
+        ("\t- a", 2),
+        ("-a", 0),
+        ("1. > - a", 3),
+        ("1234567890. a", 0),
+        ("> \t \t", 1),
+        (" \t \t", 2),
+    ],
+)
+def test_nesting_depth_counts_markers_after_blanks(line, depth):
+    assert _nesting_depth(line) == depth
+
+
+@pytest.mark.parametrize("line", ["\t" * 50_000 + "x", " " * 50_000 + "x", "> " + "\t" * 50_000 + "x"])
+def test_nesting_depth_is_linear_in_a_blank_run(line):
+    """A long run of blanks before a non-marker is scanned once, not once per position."""
+    quarter = line[:2] + line[2 : len(line) // 4] + "x"
+    assert scaling_ratio(_nesting_depth, quarter, line) < LINEAR_RATIO_LIMIT
 
 
 def test_cost_budget_boundary(monkeypatch):
