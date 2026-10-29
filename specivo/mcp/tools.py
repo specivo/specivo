@@ -21,6 +21,7 @@ from specivo.core.config import get_settings
 from specivo.core.constants import MCP_SEARCH_MAX_LIMIT, SEARCH_SNIPPET_MAX_CHARS
 from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
+from specivo.models.journal import JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
 from specivo.models.security_audit import SecurityAuditLog
@@ -31,6 +32,7 @@ from specivo.schemas.sprint import SprintCreate, SprintUpdate
 from specivo.schemas.tag import TagCreate, TagUpdate
 from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
+from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps
 from specivo.services.computed_metadata_service import load_project_settings, merge_computed
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
@@ -698,11 +700,14 @@ async def _list_comments(
     limit: int = 10,
     offset: int = 0,
     order: str = "desc",
+    include_changes: bool = False,
 ) -> str:
     """Return a paginated, formatted list of comments for an issue.
 
     Only journals with a non-empty ``notes`` body are returned; pure
-    field-change journals are excluded.
+    field-change journals are excluded, unless *include_changes*: then every
+    entry is listed with its field changes, named and left out as the issue
+    page does for the same user (see :mod:`specivo.services.activity_lookups`).
     """
     # Validate inputs up front — fail fast before DB work.
     if not isinstance(limit, int) or limit < 1 or limit > 50:
@@ -716,10 +721,14 @@ async def _list_comments(
     # Permission check BEFORE any data is returned.
     await _require_permission(session, user, issue.project_id, "view_issues")
 
-    comments, total = await _journal_svc.list_comments(session, issue.id, limit=limit, offset=offset, order=order)
+    comments, total = await _journal_svc.list_comments(
+        session, issue.id, limit=limit, offset=offset, order=order, include_changes=include_changes
+    )
+    names = await activity_lookup_maps(session, user, comments, people_by_login=False) if include_changes else None
 
     end = offset + len(comments)
-    header = f"Comments for {issue.display_key} ({total} total, showing {offset}..{end}):"
+    what = "History" if include_changes else "Comments"
+    header = f"{what} for {issue.display_key} ({total} total, showing {offset}..{end}):"
     lines: list[str] = [header, ""]
 
     if not comments:
@@ -728,9 +737,13 @@ async def _list_comments(
         for j in comments:
             author = j.user.display_name if j.user else "(unknown)"
             lines.append(f"[#{j.id}] {author}  {j.created_at}")
+            if names is not None:
+                shown = [d for d in j.details if not names.hides(d, anonymous=user.is_anonymous)]
+                lines.extend(f"  * {_change_line(d, names)}" for d in shown)
             body = j.notes or ""
-            for body_line in body.splitlines() or [""]:
-                lines.append(f"  {body_line}")
+            if body or names is None:
+                for body_line in body.splitlines() or [""]:
+                    lines.append(f"  {body_line}")
             lines.append("")
 
     if end < total:
@@ -744,6 +757,24 @@ async def _list_comments(
         {"issue_ref": issue_ref, "limit": limit, "offset": offset, "order": order},
     )
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _change_line(detail: JournalDetail, names: ActivityLookups) -> str:
+    """One field change as text: a value naming a record shows its name and id, when the user may see it."""
+    if detail.property == "relation":
+        verb = "added" if detail.new_value and not detail.old_value else "removed"
+        return f"relation {detail.prop_key} {verb}: {detail.new_value or detail.old_value}"
+    if detail.prop_key in ("description", "issue_metadata"):
+        return f"{detail.prop_key} updated"
+
+    def shown(value: str | None) -> str:
+        if value is None or value == "":
+            return "(none)"
+        name = names.name(detail, value)
+        return f"{name} (id {value})" if name is not None else value
+
+    label = detail.prop_key if detail.property == "attr" else f"{detail.prop_key} (custom field)"
+    return f"{label}: {shown(detail.old_value)} -> {shown(detail.new_value)}"
 
 
 # ---------------------------------------------------------------------------

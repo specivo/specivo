@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -409,23 +410,23 @@ class JournalService:
         limit: int = 10,
         offset: int = 0,
         order: str = "desc",
+        include_changes: bool = False,
     ) -> tuple[list[Journal], int]:
         """Return a page of comment journals for an issue plus total count.
 
         Filters to journals with a non-empty ``notes`` body (real comments,
-        not pure field-change entries). Eagerly loads the author.
+        not pure field-change entries), or with *include_changes* to every
+        entry that is not private, field changes included. Eagerly loads the
+        author, and the field changes with *include_changes*.
 
         ``order`` must be ``"asc"`` or ``"desc"`` (by ``created_at``).
         """
         if order not in ("asc", "desc"):
             raise ValidationError("order must be 'asc' or 'desc'")
 
-        base_where = (
-            Journal.issue_id == issue_id,
-            Journal.notes.is_not(None),
-            func.length(func.trim(Journal.notes)) > 0,
-            Journal.is_private.is_(False),
-        )
+        base_where: tuple[Any, ...] = (Journal.issue_id == issue_id, Journal.is_private.is_(False))
+        if not include_changes:
+            base_where += (Journal.notes.is_not(None), func.length(func.trim(Journal.notes)) > 0)
 
         total_stmt = select(func.count(Journal.id)).where(*base_where)
         total = int((await session.execute(total_stmt)).scalar_one())
@@ -434,7 +435,7 @@ class JournalService:
         stmt = (
             select(Journal)
             .where(*base_where)
-            .options(joinedload(Journal.user))
+            .options(joinedload(Journal.user), *([selectinload(Journal.details)] if include_changes else []))
             .order_by(order_col, Journal.id.asc() if order == "asc" else Journal.id.desc())
             .offset(offset)
             .limit(limit)

@@ -71,3 +71,9 @@ target. The move is also available to [AI agents](../ai-agents/index.md) over th
 Editing the core fields of an issue — status, assignee, priority, dates, % done, and so on — is logged
 in the issue's **history**, with who changed what and when. Nothing is silently overwritten, so you can
 always see how an issue got to where it is.
+
+The history shows a changed status, assignee, version or category by name. A record you may not see —
+a version of a project you cannot open, a person outside the projects you can reach — shows as its id
+instead, and a change of parent to an issue you cannot see is left out. The REST API
+(`GET /api/v1/issues/{ref}/?include=journals`, each change's `old_name` / `new_name`) and the
+`specivo_list_comments` MCP tool (`include_changes=true`) follow the same rules.
