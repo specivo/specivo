@@ -445,6 +445,20 @@ async def get_current_user(
     return await authenticate_request(request, db)
 
 
+async def get_account_user(current_user: User = Depends(get_current_user)) -> User:  # noqa: B008
+    """FastAPI dependency: the current user, for account-wide operations.
+
+    Refuses (403) an API key limited to some projects: managing API keys,
+    sessions or the password reaches beyond any project, and a limited key
+    must not be able to mint itself an unlimited one
+    (``specivo.services.api_key_scope``).
+    """
+    from specivo.services.api_key_scope import require_unlimited_key
+
+    require_unlimited_key()
+    return current_user
+
+
 async def authenticate_request(
     request: Request,
     db: AsyncSession,
@@ -514,8 +528,12 @@ async def authenticate_request(
         if user.is_anonymous:
             raise AppError(code="api_key_invalid", message="Invalid API key", status_code=401)
 
-        # Store API key scopes on request.state for downstream permission checks
-        request.state.api_key_scopes = api_key.scopes
+        # A project-limited key reaches only its projects for the rest of the
+        # request: every access decision reads the limit from the context
+        # (specivo.services.api_key_scope); ApiKeyScopeMiddleware drops it.
+        from specivo.services.api_key_scope import activate_api_key_scope
+
+        await activate_api_key_scope(db, api_key)
         request.state.api_key_id = api_key.id
 
         # Auto-create/update agent session for API key usage

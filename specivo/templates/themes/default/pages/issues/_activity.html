@@ -28,11 +28,11 @@
       {# Relation and parent changes name another issue by key, and the issue
          they name may be one this reader cannot see — the relations list drops
          those, and the feed must not put them back (see
-         ActivityLookups.hides). Without the lookups, every parent change is
-         left out, and a visitor without an account sees no relation change. #}
+         ActivityLookups.hides). Without the lookups, every relation and
+         parent change is left out. #}
       {% set names = lookup_maps if lookup_maps is defined and lookup_maps is not none else none %}
       {% for d in j.details if not (names.hides(d, anonymous=anonymous) if names is not none
-           else (d.prop_key == 'parent_id' or (anonymous and d.property == 'relation'))) %}
+           else (d.prop_key == 'parent_id' or d.property == 'relation')) %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}

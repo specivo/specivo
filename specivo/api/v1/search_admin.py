@@ -19,6 +19,7 @@ from specivo.core.exceptions import PermissionDeniedError, ValidationError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
+from specivo.services.api_key_scope import is_global_admin
 from specivo.services.permission_service import check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.settings_service import SettingsService
@@ -52,7 +53,7 @@ class ProjectLanguageIn(BaseModel):
 
 
 def _require_admin(user: User) -> None:
-    if not user.is_admin:
+    if not is_global_admin(user):
         raise PermissionDeniedError("Administrator access required")
 
 

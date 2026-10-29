@@ -14,6 +14,7 @@ from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.kill_switch import KillEventOut, KillRequest
+from specivo.services.api_key_scope import is_global_admin
 from specivo.services.kill_switch_service import KillSwitchService
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ async def _resolve_kill_actor(request: Request, db: AsyncSession = Depends(get_d
             status_code=401,
         )
 
-    if not user.is_admin:
+    if not is_global_admin(user):
         raise PermissionDeniedError("Admin access required")
 
     return f"admin:{user.login}"

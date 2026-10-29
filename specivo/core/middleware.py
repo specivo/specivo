@@ -457,6 +457,33 @@ class RequestIDMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+class ApiKeyScopeMiddleware:
+    """Give each request a fresh API key project limit and drop it afterwards.
+
+    Authentication sets the limit of a project-limited key for the rest of
+    the request (``specivo.services.api_key_scope``); this middleware starts
+    every HTTP request and WebSocket connection without one and restores the
+    previous value when it ends, so a limit never leaks into whatever runs
+    next in the same task.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] not in ("http", "websocket"):
+            await self.app(scope, receive, send)
+            return
+
+        from specivo.services.api_key_scope import end_scope_context, start_scope_context
+
+        token = start_scope_context()
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            end_scope_context(token)
+
+
 class MarkdownRenderBudgetMiddleware:
     """Give each HTTP request its own budget of CPU time for rendering Markdown.
 

@@ -17,10 +17,10 @@ same rules, as an assignee or a target version.
 from __future__ import annotations
 
 import re
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, or_, select, tuple_
+from sqlalchemy import ColumnElement, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.issue import Issue, IssueRefAlias
@@ -30,6 +30,7 @@ from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.sprint import Sprint
 from specivo.models.user import User
 from specivo.models.version import Version
+from specivo.services.api_key_scope import is_global_admin
 from specivo.services.permission_service import visible_users_clause
 from specivo.services.project_service import ProjectService
 
@@ -52,7 +53,7 @@ _project_svc = ProjectService()
 # A value that reads as an issue's display key, ``KEY-N``.
 _ISSUE_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)-(\d+)$")
 
-# The lookup map holding the parent keys the feed leaves out, as ``{key: ""}``.
+# The lookup map holding the parent and relation keys the feed leaves out, as ``{key: ""}``.
 HIDDEN_PARENTS = "parent_id_hidden"
 
 # Attributes whose values are ids the feed names.
@@ -72,6 +73,11 @@ def is_parent_change(detail: JournalDetail) -> bool:
     return detail.property == "attr" and detail.prop_key == "parent_id"
 
 
+def names_an_issue(detail: JournalDetail) -> bool:
+    """Whether *detail* names another issue by key: a parent or a relation change."""
+    return detail.property == "relation" or is_parent_change(detail)
+
+
 class ActivityLookups(dict[str, dict[str, str]]):
     """``{map: {id as text: name}}``, and how a field change reads through it."""
 
@@ -85,15 +91,16 @@ class ActivityLookups(dict[str, dict[str, str]]):
     def hides(self, detail: JournalDetail, *, anonymous: bool) -> bool:
         """Whether the feed leaves *detail* out for this reader.
 
-        A relation change names another issue by key, and a visitor without an
-        account is shown none of them, nor any parent change. For anyone else a
-        parent change is left out when its key does not resolve to an issue they
-        may see (see :func:`_hidden_parents`); without that list, every one is.
+        A relation or parent change names another issue by key, and a visitor
+        without an account is shown none of them. For anyone else such a change
+        is left out when its key does not resolve to an issue they may see (see
+        :func:`_hidden_parents`), as the relations list leaves out a relation to
+        an issue the reader cannot see; without that list, every one is.
         """
-        if anonymous and (detail.property == "relation" or is_parent_change(detail)):
-            return True
-        if not is_parent_change(detail):
+        if not names_an_issue(detail):
             return False
+        if anonymous:
+            return True
         hidden = self.get(HIDDEN_PARENTS)
         return hidden is None or detail.old_value in hidden or detail.new_value in hidden
 
@@ -121,7 +128,6 @@ async def activity_lookup_maps(
     members: Sequence[dict[str, Any]] = (),
     sprint_id: int | None = None,
     people_by_login: bool = True,
-    project_scope: Collection[str | int] | None = None,
 ) -> ActivityLookups:
     """Return ``{map: {id as text: name}}`` for the activity feed of *journals*.
 
@@ -136,13 +142,15 @@ async def activity_lookup_maps(
     when *user* may see them. Signed-in readers see people by login, an
     anonymous visitor by display name; with *people_by_login* off (the API's
     convention), everyone by display name. *members*, the issue's project's
-    members, are named without a further check. *project_scope* (the
-    projects an API key is limited to, by key or id) narrows what is named
-    and which parents are shown to those projects. People and versions an
+    members, are named without a further check. People and versions an
     imported custom field change names are named by the same rules.
+
+    The project limit of the authenticating API key applies through the
+    access rules themselves (``specivo.services.api_key_scope``): records,
+    parents and people outside the key's projects are not named.
     """
     referenced = referenced_ids(journals)
-    readable = await _readable_projects(db, user, project_scope)
+    readable = await _project_svc.accessible_projects_clause(db, user)
     if sprint_id is not None:
         referenced["sprint_id"].add(sprint_id)
 
@@ -154,7 +162,7 @@ async def activity_lookup_maps(
             "fixed_version_id": await _names(db, readable, Version, referenced["fixed_version_id"]),
             "category_id": await _names(db, readable, IssueCategory, referenced["category_id"]),
             "project_id": await _projects(db, readable, referenced["project_id"]),
-            HIDDEN_PARENTS: await _hidden_parents(db, user, journals, readable if project_scope else None),
+            HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
         }
     )
 
@@ -165,21 +173,6 @@ async def _global_names(db: AsyncSession, model: Any, ids: set[int]) -> dict[str
         return {}
     rows = (await db.execute(select(model.id, model.name).where(model.id.in_(ids)))).all()
     return {str(row.id): row.name for row in rows}
-
-
-async def _readable_projects(
-    db: AsyncSession, user: User, scope: Collection[str | int] | None
-) -> ColumnElement[bool] | None:
-    """Return a predicate over ``projects`` selecting those *user* may open (within *scope*), or None for all."""
-    clauses = []
-    accessible = await _project_svc.accessible_projects_clause(db, user)
-    if accessible is not None:
-        clauses.append(accessible)
-    if scope:
-        ids = {int(item) for item in scope if isinstance(item, int) or str(item).isdigit()}
-        keys = {str(item) for item in scope if not (isinstance(item, int) or str(item).isdigit())}
-        clauses.append(or_(Project.id.in_(ids), Project.key.in_(keys)))
-    return and_(*clauses) if clauses else None
 
 
 async def _names(db: AsyncSession, readable: ColumnElement[bool] | None, model: Any, ids: set[int]) -> dict[str, str]:
@@ -197,10 +190,8 @@ async def _names(db: AsyncSession, readable: ColumnElement[bool] | None, model: 
     return {str(row.id): row.name for row in (await db.execute(stmt)).all()}
 
 
-async def _hidden_parents(
-    db: AsyncSession, user: User, journals: Iterable[Journal], scope: ColumnElement[bool] | None = None
-) -> dict[str, str]:
-    """Return the parent changes' values that look like an issue key *user* may not be shown.
+async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journal]) -> dict[str, str]:
+    """Return the parent and relation changes' values that look like an issue key *user* may not be shown.
 
     History keeps a parent by display key, and the page links any key it
     shows, resolving it as the app resolves references: the current key, then
@@ -210,19 +201,19 @@ async def _hidden_parents(
     feed leaves the change out entirely, as the relations list leaves out a
     relation to an issue the reader cannot see. Fails closed: a key naming no
     issue at all is hidden too. A value that is no key (``#123``) stays.
-    Admins see every issue, so nothing is hidden from them, unless *scope*
-    (a predicate over ``projects``) limits the projects shown.
+    Admins see every issue, so nothing is hidden from them, unless an API
+    key's project limit narrows what they see.
     """
     keys: dict[tuple[str, int], set[str]] = {}
     for journal in journals:
         for detail in journal.details:
-            if not is_parent_change(detail):
+            if not names_an_issue(detail):
                 continue
             for value in (detail.old_value, detail.new_value):
                 match = _ISSUE_KEY.match(value or "")
                 if match:
                     keys.setdefault((match[1].upper(), int(match[2])), set()).add(str(value))
-    if not keys or (user.is_admin and scope is None):
+    if not keys or is_global_admin(user):
         return {}
 
     resolved = await _resolve_issue_keys(db, set(keys))
@@ -234,8 +225,6 @@ async def _hidden_parents(
         clause = await IssueService().visible_issues_clause(db, user)
         if clause is not None:
             stmt = stmt.where(clause)
-        if scope is not None:
-            stmt = stmt.where(Issue.project_id.in_(select(Project.id).where(scope)))
         visible = set((await db.execute(stmt)).scalars())
     return {value: "" for key, values in keys.items() if resolved.get(key) not in visible for value in values}
 
