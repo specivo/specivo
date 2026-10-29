@@ -76,7 +76,7 @@ migration tools write them. Nothing changes for an instance that never ran the d
 ### The direct Redmine import is removed
 
 `import_data --source redmine`, `make import-redmine` and the `importers` extra are gone, and so is
-the import-source plugin hook. To move from Redmine, use the
+the import-source plugin hook. To move from another tracker, see [Importing from another tracker](importing.md); for Redmine use the
 [Redmine migration tool](https://github.com/specivo/redmine-migration-tool/blob/main/docs/migrating-from-redmine.md), which writes a bundle that
 `python -m specivo.cli.import_data --source bundle` loads. Update scripts and scheduled jobs that used the old
 options.

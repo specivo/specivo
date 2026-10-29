@@ -106,7 +106,7 @@ services:
 Then register it in `.env`, using either of these:
 
 ```bash
-# As a plugin (it can ship other hooks too, such as an import source):
+# As a plugin:
 INSTALLED_PLUGINS=["acme_hashers.Plugin"]
 
 # Or just the hasher class, without the Plugin wrapper:
