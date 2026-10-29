@@ -3,6 +3,53 @@
 All notable changes to Specivo are documented here, one line per change.
 Each release also has a blog post with the details.
 
+## [0.11.0] - 2026-10-29
+
+### Added
+- Added import bundles (format 1.0): migration tools export a bundle, and `specivo import` validates, dry-runs and loads it
+- Added project-by-project imports: relations, issue parents and text references between bundles resolve through a links file once the other side is loaded
+- Added `admin import-map pending`, `resolve-pending` and `purge` to inspect and finish references still waiting in a links file
+- Added sprints, labels as tags, remaining estimates and custom field names to what a bundle can carry
+- Added the standalone Jira migration tool (Cloud and Data Center) with its own documentation at specivo.io/docs/jira-migration-tool
+- Added version sorting by version number, due date or status on the roadmap and the Versions settings tab, remembered per user, with a "Show completed versions" toggle
+- Added file uploads and deletions to issue history as "File X added/deleted"
+- Added `old_name`, `new_name` and `field_name` to journal details in the REST API, and `include_changes` to the MCP `specivo_list_comments` tool
+- Added a `journal_id` to the response of `PATCH /issues/{ref}/` so uploads can join the edit's history entry
+
+### Changed
+- Removed the built-in Redmine importer, the `importers` extra and `make import-redmine`; use the standalone Redmine migration tool, which writes a bundle
+- Changed API keys limited to some projects to apply that limit everywhere, REST and MCP; outside it a project reads as not found, and account and instance-wide actions are refused
+- Changed adding a file to require the right to change the issue, wiki page or comment, and deleting someone else's file to require the right to manage that container's files
+- Changed billing rates to require manage-project to change and view-time-entries to list
+- Changed issue history to show names instead of ids for statuses, versions, categories, assignees, parents and custom fields, by what the reader may see
+- Changed custom fields to show by their defined name everywhere, and user and version values by name
+- Changed sprint "done" counts to use status categories instead of status names
+- Changed `configure.py` to create `.env` and `.env.local` readable only by their owner; run it and `docker compose` as the same user
+- Changed versions to sort by version number, so 0.2.0 comes before 0.10.0
+- Removed the `mcp` key scope from the guide; core never enforced it
+
+### Fixed
+- Fixed private issues showing in sprint and version lists, MCP version and sprint issue lists, dashboard counts, velocity and autolinks for people who cannot see them
+- Fixed history names, parent keys and relation changes revealing issues, projects and people the reader cannot see
+- Fixed search revealing whether a private project exists, and semantic search snippets being shown without escaping
+- Fixed redirects after sign-in, SSO and page-size changes so they always stay on this site
+- Fixed `[[wiki links]]` and issue keys being rewritten inside code and raw HTML
+- Fixed attachment history showing an id instead of the file name
+- Fixed files dropped on the issue edit form being discarded on save
+- Fixed bulk tag requests accepting unlimited names and issue ids, and a repeated issue id causing a server error
+- Fixed agent token logs accepting another user's session
+- Fixed recurring pattern pages linking generated issues to a missing page
+- Fixed search pagination links breaking when the query contains `&`, `#` or `+`
+
+### Security
+- Fixed an API key limited to some projects being able to create an unlimited key for itself
+- Fixed anonymous visitors seeing the names of users outside the projects they can open
+- Fixed saved filters being readable by id from another project
+
+### Internal
+- Moved the SSO test identity provider compose file to `tests/fixtures/sso/`; CI workflows now run with a read-only token
+- No database migrations in this release; imports keep their pending references in a links file (format 2)
+
 ## [0.10.0] - 2026-10-28
 
 ### Added
