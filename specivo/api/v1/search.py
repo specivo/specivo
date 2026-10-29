@@ -24,6 +24,7 @@ from specivo.core.security import (
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.search import SearchFilters, SearchResponse
+from specivo.services.api_key_scope import scope_clause
 from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
 from specivo.services.security_audit_service import SecurityAuditService
@@ -155,6 +156,10 @@ async def search(
             project_ids = [(await _project_service.get_readable_by_key(db, key.upper(), user)).id for key in keys]
         elif keys:
             stmt = select(Project.id).where(Project.key.in_(keys))
+            # A project outside the API key's limit reads as one that does not exist.
+            key_limit = scope_clause(Project.id)
+            if key_limit is not None:
+                stmt = stmt.where(key_limit)
             result = await db.execute(stmt)
             project_ids = [row[0] for row in result.all()]
             if not project_ids:
@@ -167,6 +172,9 @@ async def search(
             project_id = (await _project_service.get_readable_by_key(db, project_key.upper(), user)).id
         else:
             stmt = select(Project.id).where(Project.key == project_key)
+            key_limit = scope_clause(Project.id)
+            if key_limit is not None:
+                stmt = stmt.where(key_limit)
             result = await db.execute(stmt)
             pid = result.scalar_one_or_none()
             if pid is None:

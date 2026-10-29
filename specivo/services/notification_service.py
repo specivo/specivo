@@ -6,8 +6,9 @@ import logging
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
-from sqlalchemy import func, select, update
+from sqlalchemy import and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.notification_templates import (
     ASSIGNMENT_IN_APP_TITLE,
@@ -19,11 +20,24 @@ from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.notification import Notification, NotificationPreference
 from specivo.models.user import User
+from specivo.services.api_key_scope import scope_clause
 from specivo.services.channels.base import NotificationPayload
 from specivo.services.channels.registry import get_all_channels
 from specivo.services.watcher_service import WatcherService
 
 logger = logging.getLogger(__name__)
+
+
+def _inbox_clause(user_id: int) -> ColumnElement[bool]:
+    """Select *user_id*'s in-app notifications the current call may read.
+
+    A project-limited API key reads only the notifications of its projects
+    (``specivo.services.api_key_scope``); project-less ones are outside it.
+    """
+    own: ColumnElement[bool] = Notification.user_id == user_id
+    limit = scope_clause(Notification.project_id)
+    return own if limit is None else and_(own, limit)
+
 
 _EMAIL_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "_shared"
 _email_env = Environment(
@@ -194,8 +208,12 @@ class NotificationService:
         offset: int = 0,
         limit: int = 25,
     ) -> tuple[list[Notification], int]:
-        """List notifications for a user, newest first."""
-        base = select(Notification).where(Notification.user_id == user_id)
+        """List notifications for a user, newest first.
+
+        Like every inbox read here, narrowed to the authenticating API key's
+        project limit (``_inbox_clause``).
+        """
+        base = select(Notification).where(_inbox_clause(user_id))
         if unread_only:
             base = base.where(Notification.is_read.is_(False))
 
@@ -218,7 +236,7 @@ class NotificationService:
     async def get_unread_count(self, session: AsyncSession, user_id: int) -> int:
         """Count unread notifications for a user."""
         stmt = select(func.count()).where(
-            Notification.user_id == user_id,
+            _inbox_clause(user_id),
             Notification.is_read.is_(False),
         )
         return (await session.execute(stmt)).scalar_one()
@@ -233,7 +251,7 @@ class NotificationService:
         result = await session.execute(
             select(Notification).where(
                 Notification.id == notification_id,
-                Notification.user_id == user_id,
+                _inbox_clause(user_id),
             )
         )
         notif = result.scalar_one_or_none()
@@ -252,7 +270,7 @@ class NotificationService:
         stmt = (
             update(Notification)
             .where(
-                Notification.user_id == user_id,
+                _inbox_clause(user_id),
                 Notification.is_read.is_(False),
             )
             .values(is_read=True, read_at=now)

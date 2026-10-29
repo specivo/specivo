@@ -1,5 +1,7 @@
 """API key management endpoints.
 
+A key limited to some projects cannot manage keys (``get_account_user``).
+
 Endpoints:
     GET    /my/api-keys          - List API keys for the authenticated user
     POST   /my/api-keys          - Create a new API key (raw key shown once)
@@ -15,7 +17,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
-from specivo.core.security import get_current_user
+from specivo.core.security import get_account_user
 from specivo.models.user import User
 from specivo.schemas.auth import ApiKeyCreate, ApiKeyCreated, ApiKeyOut, ApiKeyPatch
 from specivo.services.api_key_service import ApiKeyService
@@ -36,7 +38,7 @@ _service = ApiKeyService()
 )
 async def list_api_keys(
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
 ) -> list[ApiKeyOut]:
     """Return all API keys for the current user (no raw key or hash)."""
     keys = await _service.list_keys(session=db, user_id=current_user.id)
@@ -58,7 +60,7 @@ async def list_api_keys(
 async def create_api_key(
     body: ApiKeyCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
 ) -> ApiKeyCreated:
     """Create an API key. The raw_key in the response is shown ONCE and not stored."""
     key, raw_key = await _service.create_key(
@@ -94,7 +96,7 @@ async def patch_api_key(
     key_id: int,
     body: ApiKeyPatch,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
 ) -> ApiKeyOut:
     """Set is_active on an API key. Raises 404 if key not found or not owned by user."""
     key = await _service.update_key(
@@ -119,7 +121,7 @@ async def patch_api_key(
 async def delete_api_key(
     key_id: int,
     db: Annotated[AsyncSession, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_account_user)],
 ) -> Response:
     """Permanently delete an API key. Raises 404 if key not found or not owned by user."""
     await _service.delete(session=db, user_id=current_user.id, key_id=key_id)

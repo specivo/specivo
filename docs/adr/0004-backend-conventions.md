@@ -9,6 +9,7 @@ the password hasher and import source plugin hooks, and that the plugin contract
 **Revised:** 2026-10-28 — removed the import source plugin hook and the `redmine` test marker with
 the direct Redmine import (imports now go through bundles, see `docs/import-bundle/v1.md`); recorded the `sso_idp`
 marker.
+**Revised:** 2026-10-29 — recorded how an API key's project limit is enforced (§7).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -269,6 +270,8 @@ Implemented in `specivo.core.security`:
 **Session-only admin routes.** An admin route that hands out a way to sign in or to act as someone (set a password, create any account other than a service account, unlock/reactivate an account, mint or re-enable API keys or credentials for another user, change the SSO configuration) depends on `require_admin_session_api` (`specivo/api/v1/admin/__init__.py`) instead of `require_admin_api`: API-key auth (`request.state.api_key_id` set) gets 403 `api_key_not_allowed`. The matching web forms use `require_admin_session` (`specivo/web/pages/admin.py`), because the web layer also accepts a Bearer key and a request without a session cookie is not CSRF-checked. Taking access away (lock, deactivate, revoke) and ordinary administration stay key-accessible. `tests/integration/test_admin_api_key_gates.py` lists the gated routes; add a new credential-minting route there.
 
 **Cookie settings:** httpOnly, SameSite=Lax, Secure when not debug. Refresh token scoped to `/api/v1/auth` path.
+
+**Project-limited API keys.** A key whose `scopes` holds `{"projects": [...]}` (keys or ids) reaches only those projects, for REST, the web layer and MCP alike. Authentication resolves the limit to project ids once (`activate_api_key_scope`, called by `authenticate_request` and by the MCP tool session helper) and holds it in a context variable for the rest of the request or tool call; `ApiKeyScopeMiddleware` and the MCP helper reset it afterwards. Access decisions read it from there rather than taking it as an argument, so a call site cannot forget it: `get_user_roles` returns no roles outside the limit, `check_permission` denies outside it (and denies project-less permissions) before the admin bypass, `ProjectService.get_by_key` / `require_project_access` answer 404, and the SQL builders (`accessible_projects_clause`, `visible_issues_clause`, `visible_entries_clause_any`, the search services' project filter) narrow to it. An admin shortcut that grants a whole project uses `admin_reaches(user, project_id)`; one that grants the whole instance uses `is_global_admin(user)`, which is false for a limited key, so the admin API, project creation and similar refuse it. Account-wide routes (API keys, sessions, password) depend on `get_account_user`, which refuses a limited key with 403. Whether a key can be limited is decided at creation (`api_key_scopes` feature); a stored limit is always enforced. See `specivo/services/api_key_scope.py`.
 
 ### 8. Middleware Stack
 

@@ -30,6 +30,24 @@ Scopes limit what a key can be used for. To connect an AI client over MCP, the k
 A key never grants *more* than its owner already has. The agent acts as the user the key belongs to,
 so it inherits exactly that user's project roles and permissions — no project membership, no access.
 
+## Limit a key to some projects
+
+Where API key scopes are available, a key can also be limited to some projects. Give it the scopes
+`{"projects": ["ACME", "OPS"]}` when you create it (`POST /api/v1/my/api-keys/`); projects are named
+by key or by id. The key then reaches only those projects, over the REST API, the web pages and MCP
+alike, even when its owner can see more:
+
+- everything in another project behaves as if it did not exist: reading or listing it, searching
+  it, and writing to it all answer **not found**, and lists, search results, relations, history
+  entries and people pickers leave it out;
+- a key of an administrator keeps its administrator rights inside its projects only, and cannot
+  use instance-wide administration (`403`);
+- a limited key cannot manage API keys, sessions or the password of its owner (`403`), so it
+  cannot create itself an unlimited key.
+
+The limit is fixed when the key is created. Where API key scopes are not available, the scopes are
+ignored and the key reaches whatever its owner can; a key created with a limit keeps it.
+
 ## Use a dedicated service account
 
 Issuing an agent a key from your own personal account works, but it mixes the agent's actions in

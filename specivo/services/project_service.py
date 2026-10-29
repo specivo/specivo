@@ -25,6 +25,7 @@ from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
 from specivo.services.anonymous_user_service import refuse_anonymous_user
+from specivo.services.api_key_scope import is_global_admin, project_in_scope, scope_clause
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
 from specivo.services.permission_service import anonymous_role, member_principal_clause
 
@@ -145,7 +146,9 @@ class ProjectService:
     async def _get_by_key(self, session: AsyncSession, key: str) -> Project | None:
         """Look up a project by key, falling back to retired key aliases.
 
-        Uses a single query with LEFT JOIN to avoid two round-trips.
+        Uses a single query with LEFT JOIN to avoid two round-trips. A
+        project outside the authenticating API key's project limit is not
+        found (``specivo.services.api_key_scope``).
         """
         upper_key = key.upper()
         stmt = (
@@ -155,7 +158,10 @@ class ProjectService:
             .limit(1)
         )
         result = await session.execute(stmt)
-        return result.scalar_one_or_none()
+        project = result.scalar_one_or_none()
+        if project is not None and not project_in_scope(project.id):
+            return None
+        return project
 
     # -----------------------------------------------------------------------
     # Core CRUD
@@ -273,7 +279,12 @@ class ProjectService:
 
         Reaching a project grants nothing by itself: what can be read there is
         decided by ``check_permission`` and issue visibility.
+
+        A project outside the authenticating API key's project limit is not
+        found, for admins too.
         """
+        if not project_in_scope(project.id):
+            raise NotFoundError(f"Project '{project.key}' not found")
         if user.is_admin:
             return
         if user.is_anonymous:
@@ -353,8 +364,17 @@ class ProjectService:
         public, active projects opted in to anonymous reading, and nothing
         while the instance switch is off. Signed-in users match public
         projects and projects they hold a membership on, directly or through
-        a user group.
+        a user group. Everyone is narrowed to the authenticating API key's
+        project limit (``specivo.services.api_key_scope``).
         """
+        clause = await self._accessible_projects_clause(session, user)
+        limit = scope_clause(Project.id)
+        if limit is None:
+            return clause
+        return limit if clause is None else and_(clause, limit)
+
+    async def _accessible_projects_clause(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """``accessible_projects_clause`` before the API key project limit is applied."""
         if user.is_admin:
             return None
         if user.is_anonymous:
@@ -375,7 +395,7 @@ class ProjectService:
 
     async def list_all_admin(self, session: AsyncSession, user: User) -> list[Project]:
         """List all projects (including archived). Admin use only."""
-        if not user.is_admin:
+        if not is_global_admin(user):
             raise AppError(code="forbidden", message="Admin access required", status_code=403)
         stmt = select(Project).order_by(Project.status, Project.name)
         return list((await session.execute(stmt)).scalars().all())

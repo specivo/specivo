@@ -7,11 +7,16 @@ from fastapi import Depends, Request
 from specivo.core.exceptions import AppError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
+from specivo.services.api_key_scope import is_global_admin
 
 
 def require_admin_api(current_user: User = Depends(get_current_user)) -> User:  # noqa: B008
-    """Dependency: raise 403 if the current user is not an admin."""
-    if not current_user.is_admin:
+    """Dependency: raise 403 if the current user is not an admin.
+
+    An admin authenticated with a project-limited API key is refused: the
+    admin API reaches the whole instance (``specivo.services.api_key_scope``).
+    """
+    if not is_global_admin(current_user):
         raise PermissionDeniedError("Admin access required")
     return current_user
 

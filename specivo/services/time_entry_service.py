@@ -36,6 +36,7 @@ from specivo.models.role import TIME_ENTRIES_VISIBILITY_ALL, TIME_ENTRIES_VISIBI
 from specivo.models.time_entry import ActiveTimer, TimeEntry, TimeEntryActivity
 from specivo.models.user import User
 from specivo.schemas.time_entry import TimeEntryCreate, TimeEntryUpdate
+from specivo.services.api_key_scope import admin_reaches, project_in_scope, scope_clause
 
 logger = logging.getLogger(__name__)
 
@@ -111,8 +112,17 @@ class TimeEntryService:
         membership roles; a public project without a membership follows the
         Non member role the same way. Any other project shows nothing. It is
         an allow-list by project, but callers should still limit the query to
-        projects the user can reach.
+        projects the user can reach. Everyone is narrowed to the
+        authenticating API key's project limit (``specivo.services.api_key_scope``).
         """
+        clause = await self._visible_entries_clause_any(session, user)
+        limit = scope_clause(TimeEntry.project_id)
+        if limit is None:
+            return clause
+        return limit if clause is None else and_(clause, limit)
+
+    async def _visible_entries_clause_any(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+        """``visible_entries_clause_any`` before the API key project limit is applied."""
         if user.is_admin:
             return None
         if user.is_anonymous:
@@ -231,7 +241,7 @@ class TimeEntryService:
         """
         from specivo.services.permission_service import Permission, check_permission
 
-        if user.is_admin:
+        if admin_reaches(user, entry.project_id):
             return True
         if await check_permission(user, entry.project_id, Permission.MANAGE_TIME_ENTRIES, session):
             return True
@@ -424,7 +434,17 @@ class TimeEntryService:
     # -------------------------------------------------------------------
 
     async def get_current_timer(self, session: AsyncSession, user: User) -> ActiveTimer | None:
-        """Get the current active timer for the user."""
+        """Get the current active timer for the user.
+
+        A timer running in a project outside the authenticating API key's
+        project limit is not reported.
+        """
+        timer = await self._get_timer_row(session, user)
+        if timer is not None and not project_in_scope(timer.project_id):
+            return None
+        return timer
+
+    async def _get_timer_row(self, session: AsyncSession, user: User) -> ActiveTimer | None:
         stmt = select(ActiveTimer).where(ActiveTimer.user_id == user.id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
@@ -450,7 +470,12 @@ class TimeEntryService:
             raise NotFoundError(f"Project {project_id} not found")
         await self.require_can_log(session, user, project, issue_id, request=request)
 
-        existing = await self.get_current_timer(session, user)
+        existing = await self._get_timer_row(session, user)
+        if existing is not None and not project_in_scope(existing.project_id):
+            # Neither stop nor discard a timer this key cannot reach.
+            raise PermissionDeniedError(
+                "A timer is already running in a project this API key cannot reach; stop it there first."
+            )
         if existing is not None:
             if await self._timer_still_allowed(session, user, existing):
                 await self._stop_timer_internal(session, user, existing)

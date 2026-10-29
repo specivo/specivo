@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.exceptions import NotFoundError
 from specivo.models.issue import Issue
 from specivo.models.user import User
 from specivo.schemas.bulk import BulkResult, BulkResultItem
@@ -50,6 +50,18 @@ class BulkService:
 
     _issue_service = IssueService()
 
+    async def _load_visible(self, session: AsyncSession, issue_id: int, user: User) -> Issue | None:
+        """Return issue *issue_id* if *user* may see it, else None.
+
+        An issue the caller cannot see (another project's private issue, or
+        one outside the API key's project limit) is reported as not found,
+        never by its key, so ids cannot be probed.
+        """
+        try:
+            return await self._issue_service.get_by_id(session, issue_id, user=user)
+        except NotFoundError:
+            return None
+
     async def bulk_update(
         self,
         session: AsyncSession,
@@ -68,8 +80,7 @@ class BulkService:
         for issue_id in issue_ids:
             try:
                 # Load issue
-                result = await session.execute(select(Issue).where(Issue.id == issue_id))
-                issue = result.scalar_one_or_none()
+                issue = await self._load_visible(session, issue_id, user)
                 if issue is None:
                     failed.append(
                         BulkResultItem(
@@ -159,8 +170,7 @@ class BulkService:
 
         for issue_id in issue_ids:
             try:
-                result = await session.execute(select(Issue).where(Issue.id == issue_id))
-                issue = result.scalar_one_or_none()
+                issue = await self._load_visible(session, issue_id, user)
                 if issue is None:
                     failed.append(
                         BulkResultItem(

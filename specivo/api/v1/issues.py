@@ -219,7 +219,7 @@ async def list_issues(
 
     # If a saved filter is specified, load it and use its definition as defaults
     if saved_filter_id is not None:
-        sf = await _saved_filter_service.get_by_id(db, saved_filter_id)
+        sf = await _saved_filter_service.get_visible(db, saved_filter_id, project.id, current_user)
         fd = sf.filter_definition
         if status_filter == "open" and "status" in fd:
             status_filter = fd["status"]
@@ -419,7 +419,7 @@ async def get_issue(
             user_result = await db.execute(select(User).where(User.id.in_(resolved_by_ids)))
             for u in user_result.scalars().all():
                 resolved_by_map[u.id] = u
-        names = await _journal_names(db, current_user, raw_journals, request)
+        names = await _journal_names(db, current_user, raw_journals)
         journals_out = [
             _journal_out(
                 j,
@@ -606,15 +606,13 @@ async def get_allowed_statuses(
 # ---------------------------------------------------------------------------
 
 
-async def _journal_names(db: AsyncSession, user: User, journals: list[Journal], request: Request) -> ActivityLookups:
+async def _journal_names(db: AsyncSession, user: User, journals: list[Journal]) -> ActivityLookups:
     """Names for the ids the journals' field changes hold, as the issue page gives them to *user*.
 
-    An API key limited to some projects is shown names only from those.
+    An API key limited to some projects is shown names only from those
+    (``specivo.services.api_key_scope``).
     """
-    scopes = getattr(request.state, "api_key_scopes", None) or {}
-    return await activity_lookup_maps(
-        db, user, journals, people_by_login=False, project_scope=scopes.get("projects") or None
-    )
+    return await activity_lookup_maps(db, user, journals, people_by_login=False)
 
 
 def _journal_out(
@@ -674,7 +672,6 @@ def _journal_out(
 async def add_comment(
     issue_ref: str,
     data: AddCommentRequest,
-    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> JournalOut:
@@ -718,7 +715,7 @@ async def add_comment(
     )
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _journal_out(journal, await _journal_names(db, current_user, [journal], request))
+    return _journal_out(journal, await _journal_names(db, current_user, [journal]))
 
 
 @router.post(
@@ -730,7 +727,6 @@ async def resolve_thread(
     issue_ref: str,
     journal_id: int,
     data: ResolveThreadRequest,
-    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _rl: None = Depends(rate_limit("resolve_toggle", max_requests=30, window_seconds=60)),
@@ -762,9 +758,7 @@ async def resolve_thread(
     journal = result.scalar_one()
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _journal_out(
-        journal, await _journal_names(db, current_user, [journal], request), resolved_by_user=current_user
-    )
+    return _journal_out(journal, await _journal_names(db, current_user, [journal]), resolved_by_user=current_user)
 
 
 @router.post(

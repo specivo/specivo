@@ -589,15 +589,18 @@ class AttachmentService:
         - ``WikiPage``: *user* holds ``view_wiki`` in the page's project.
 
         Admins may open everything, the anonymous user nothing. A missing
-        container or an unknown type answers False.
+        container or an unknown type answers False. With a project-limited API
+        key, an admin's reach stops at the key's projects
+        (``specivo.services.api_key_scope``).
         """
         from specivo.models.issue import Issue
         from specivo.models.journal import Journal
         from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.api_key_scope import is_global_admin
         from specivo.services.issue_service import IssueService
         from specivo.services.permission_service import Permission, check_permission
 
-        if user.is_admin:
+        if is_global_admin(user):
             return True
         if user.is_anonymous:
             return False
@@ -618,7 +621,7 @@ class AttachmentService:
             row = (
                 await session.execute(select(Journal.issue_id, Journal.is_private).where(Journal.id == container_id))
             ).one_or_none()
-            if row is None or row.issue_id is None or row.is_private:
+            if row is None or row.issue_id is None or (row.is_private and not user.is_admin):
                 return False
             issue_id = row.issue_id
         elif container_type == "Issue":

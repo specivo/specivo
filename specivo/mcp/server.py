@@ -82,6 +82,7 @@ from specivo.mcp.tools import (
     _whoami,
 )
 from specivo.services.agent_session_service import AgentSessionService
+from specivo.services.api_key_scope import activate_api_key_scope, end_scope_context, start_scope_context
 
 logger = logging.getLogger(__name__)
 
@@ -118,19 +119,27 @@ async def _get_session_and_user() -> AsyncGenerator[tuple, None]:
     """
     factory = get_session_factory()
     # Roles are cached in session.info, so each tool call's new session starts clean.
-    async with factory() as session:
-        try:
-            user, api_key = await authenticate_mcp_tool(session)
-            # Track agent session
+    # The key's project limit holds for this tool call only: every access
+    # decision reads it from the context (specivo.services.api_key_scope),
+    # and it is dropped again when the call ends.
+    scope_token = start_scope_context()
+    try:
+        async with factory() as session:
             try:
-                await _agent_session_svc.get_or_create_session(session, api_key.id, user.id, user_agent=None)
-            except Exception:
-                logger.debug("AgentSession tracking failed", exc_info=True)
-            yield session, user
-            await session.commit()
-        except Exception as exc:
-            await session.rollback()
-            raise _to_tool_error(exc) from exc
+                user, api_key = await authenticate_mcp_tool(session)
+                await activate_api_key_scope(session, api_key)
+                # Track agent session
+                try:
+                    await _agent_session_svc.get_or_create_session(session, api_key.id, user.id, user_agent=None)
+                except Exception:
+                    logger.debug("AgentSession tracking failed", exc_info=True)
+                yield session, user
+                await session.commit()
+            except Exception as exc:
+                await session.rollback()
+                raise _to_tool_error(exc) from exc
+    finally:
+        end_scope_context(scope_token)
 
 
 _INTERNAL_TOOL_ERROR = "Internal error while executing tool"
