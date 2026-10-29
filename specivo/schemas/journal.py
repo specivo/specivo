@@ -24,6 +24,11 @@ class JournalDetailOut(BaseModel):
     id as ``prop_key`` and the file name as ``new_value`` (added) or
     ``old_value`` (removed); ``new_name`` / ``old_name`` give the file's name,
     its current one when the caller may open it, else the stored one.
+
+    A custom field change (``cf``, ``cf_user``, ``cf_version``) has the
+    field's metadata key as ``prop_key`` and its name as ``field_name``: the
+    title its metadata schema gives it, else the key humanised. Null for a
+    change of anything else.
     """
 
     model_config = {"from_attributes": True}
@@ -35,6 +40,7 @@ class JournalDetailOut(BaseModel):
     new_value: str | None
     old_name: str | None = None
     new_name: str | None = None
+    field_name: str | None = None
 
 
 class JournalOut(BaseModel):

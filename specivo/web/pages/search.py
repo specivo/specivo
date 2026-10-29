@@ -123,6 +123,9 @@ async def search_page(
         # Drop unusable filter inputs so the template doesn't show a stale chip.
         mf_clean = mv_clean = ""
 
+    # The filter reads by the field's name, and a person or version it holds by theirs.
+    mf_label, mv_label = await _metadata_filter_labels(db, user, project_id, mf_clean, mv_clean)
+
     # Build the real-tag filter from repeated `tag=` params (also tolerate a
     # comma-separated value). Names are stripped, length-capped, deduplicated
     # case-insensitively, and clamped to a sane maximum.
@@ -222,6 +225,8 @@ async def search_page(
             "project_key": project_key,
             "mf": mf_clean,
             "mv": mv_clean,
+            "mf_label": mf_label,
+            "mv_label": mv_label,
             "ma": ma,
             "tags": [{"name": n} for n in tag_clean],
             "results": results,
@@ -231,3 +236,37 @@ async def search_page(
             "type_counts": type_counts,
         },
     )
+
+
+async def _metadata_filter_labels(
+    db: AsyncSession, user: User, project_id: int | None, key: str, value: str
+) -> tuple[str, str]:
+    """The name of the metadata field *key* filters by, and of the person or version *value* names.
+
+    From the issue metadata schemas of the projects searched (*project_id*, or
+    every project *user* may open). A value of a user or version field is
+    named when *user* may see what it names; anything else reads as given.
+    """
+    if not key:
+        return key, value
+    from sqlalchemy import select
+
+    from specivo.models.metadata_schema import MetadataSchema
+    from specivo.models.project import Project
+    from specivo.services.activity_lookups import metadata_value_names
+    from specivo.services.metadata_fields import field_labels, humanise
+
+    stmt = (
+        select(MetadataSchema)
+        .join(Project, Project.id == MetadataSchema.project_id)
+        .where(MetadataSchema.content_type == "issue")
+    )
+    if project_id is not None:
+        stmt = stmt.where(MetadataSchema.project_id == project_id)
+    readable = await _project_svc.accessible_projects_clause(db, user)
+    if readable is not None:
+        stmt = stmt.where(readable)
+    schemas = list((await db.execute(stmt)).scalars().all())
+    label = field_labels(schemas).get(key) or humanise(key)
+    named = await metadata_value_names(db, user, schemas, {key: int(value) if value.isdigit() else value})
+    return label, named.get(key, {}).get(value, value)

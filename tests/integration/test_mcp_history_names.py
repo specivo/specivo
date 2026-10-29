@@ -25,7 +25,8 @@ async def test_history_names_only_what_the_user_may_see(db_session: AsyncSession
     own = world["own_version"]
     assert f"fixed_version_id: {world['their_version'].id} -> {own.name} (id {own.id})" in text
     assert f"assigned_to_id: {world['stranger'].id} -> JDM Reader (id {reader.id})" in text
-    assert f"reviewer (custom field): {world['stranger'].id} -> JDM Reader (id {reader.id})" in text
+    # A custom field by its name (its key humanised, the schema giving no title), and its key.
+    assert f"Reviewer (reviewer, custom field): {world['stranger'].id} -> JDM Reader (id {reader.id})" in text
     assert f"parent_id: {world['own_parent'].display_key} -> (none)" in text
     for secret in (world["their_version"].name, "JDM Stranger", world["their_parent"].display_key):
         assert secret not in text

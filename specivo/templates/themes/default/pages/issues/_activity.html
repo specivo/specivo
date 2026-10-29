@@ -63,7 +63,7 @@
         {% for md in diffs %}
         <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
           <strong class="sp-change-label">{% trans %}Issue Metadata{% endtrans %}</strong>
-          <code style="font-size:var(--sp-font-size-xs);">{{ md.key }}</code>
+          <code style="font-size:var(--sp-font-size-xs);">{{ names.metadata_label(md.key) if names is not none else md.key }}</code>
           {% if md.old and md.new %}
           {% trans %}changed from{% endtrans %} <span class="sp-change-old sp-change-wrap">{{ md.old }}</span>
           {% trans %}to{% endtrans %} <span class="sp-change-new sp-change-wrap">{{ md.new }}</span>
@@ -78,8 +78,8 @@
         {% if d.property == 'attr' %}
         {% set field_label = d.prop_key | replace('_id', '') | replace('_', ' ') | title %}
         {% else %}
-        {# An imported custom field, by its metadata key. #}
-        {% set field_label = d.prop_key | replace('_', ' ') | title %}
+        {# An imported custom field, by its name: its schema's title, else its key. #}
+        {% set field_label = names.field_label(d) if names is not none else d.prop_key | replace('_', ' ') | title %}
         {% endif %}
         {% set old_resolved = names.name(d, d.old_value) if names is not none else none %}
         {% set old_name = old_resolved if old_resolved is not none else d.old_value %}

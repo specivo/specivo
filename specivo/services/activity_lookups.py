@@ -13,6 +13,12 @@ Imported custom field changes whose values name a person or a version
 (``cf_user`` / ``cf_version`` details) are named by the same maps, and by the
 same rules, as an assignee or a target version.
 
+A custom field change is labelled by the field's name, the ``title`` its
+metadata schema gives it, or else its key humanised (see
+:mod:`specivo.services.metadata_fields`); so is a key of the issue's metadata.
+The values an issue's user and version fields hold are named by the same maps
+and rules as history names them (:func:`metadata_value_names`).
+
 A file attached or removed (an ``attachment`` detail) is named by its
 attachment's file name when the reader may open that file, and otherwise by
 the name the detail stored (the file may be gone). A visitor without an
@@ -37,6 +43,8 @@ from specivo.models.sprint import Sprint
 from specivo.models.user import User
 from specivo.models.version import Version
 from specivo.services.api_key_scope import is_global_admin
+from specivo.services.metadata_fields import field_labels, field_refs, humanise, issue_schemas
+from specivo.services.metadata_fields import referenced_ids as metadata_ids
 from specivo.services.permission_service import visible_users_clause
 from specivo.services.project_service import ProjectService
 
@@ -63,6 +71,10 @@ _ISSUE_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)-(\d+)$")
 HIDDEN_PARENTS = "parent_id_hidden"
 # The lookup map naming the files attachment changes name, ``{attachment id: file name}``.
 ATTACHMENTS = "attachment"
+# The lookup map naming the custom fields of the issues' projects, ``{metadata key: field name}``.
+FIELD_LABELS = "custom_field_labels"
+# Custom field changes, whose ``prop_key`` is the field's metadata key.
+_CUSTOM_FIELD_PROPERTIES = frozenset({"cf", CF_USER, CF_VERSION})
 
 # Attributes whose values are ids the feed names.
 _NAMED_ATTRIBUTES = frozenset(_LOADED_ATTRIBUTES)
@@ -104,6 +116,16 @@ class ActivityLookups(dict[str, dict[str, str]]):
         if key is None or value is None:
             return None
         return self.get(key, {}).get(str(value))
+
+    def field_label(self, detail: JournalDetail) -> str | None:
+        """The name of the custom field a change is about, or ``None`` for a change of anything else."""
+        if detail.property not in _CUSTOM_FIELD_PROPERTIES:
+            return None
+        return self.metadata_label(detail.prop_key)
+
+    def metadata_label(self, key: str) -> str:
+        """The name of the metadata field *key*: its schema's title, else the key humanised."""
+        return self.get(FIELD_LABELS, {}).get(key) or humanise(key)
 
     def attachment_name(self, detail: JournalDetail) -> str | None:
         """Return the file name of an attachment change, or ``None`` when it has none to show."""
@@ -190,8 +212,42 @@ async def activity_lookup_maps(
             "project_id": await _projects(db, readable, referenced["project_id"]),
             HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
             ATTACHMENTS: await _attachments(db, user, journals),
+            FIELD_LABELS: field_labels(await issue_schemas(db, {j.project_id for j in journals if j.project_id})),
         }
     )
+
+
+async def metadata_value_names(
+    db: AsyncSession,
+    user: User,
+    schemas: Iterable[Any],
+    metadata: dict[str, Any] | None,
+    *,
+    members: Sequence[dict[str, Any]] = (),
+    people_by_login: bool = True,
+) -> dict[str, dict[str, str]]:
+    """Name the people and versions an issue's user and version fields hold: ``{key: {id as text: name}}``.
+
+    By the rules the history names them by (:func:`activity_lookup_maps`): a
+    member of the issue's project by login, anyone else only when *user* may
+    see them; a version only when *user* may open its project. An id left out
+    shows as stored.
+    """
+    refs = field_refs(schemas)
+    ids = metadata_ids(metadata, refs)
+    if not ids["user"] and not ids["version"]:
+        return {}
+    people = await _people(db, user, ids["user"], members, by_login=people_by_login) if ids["user"] else {}
+    readable = await _project_svc.accessible_projects_clause(db, user)
+    versions = await _names(db, readable, Version, ids["version"])
+    named: dict[str, dict[str, str]] = {}
+    for key, kind in refs.items():
+        found = people if kind == "user" else versions
+        single = metadata_ids({key: (metadata or {}).get(key)}, {key: kind})[kind]
+        names = {str(i): found[str(i)] for i in single if str(i) in found}
+        if names:
+            named[key] = names
+    return named
 
 
 async def _global_names(db: AsyncSession, model: Any, ids: set[int]) -> dict[str, str]:

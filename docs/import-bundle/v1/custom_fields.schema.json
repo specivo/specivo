@@ -17,7 +17,8 @@
     },
     "name": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "The field's name as the source shows it; Specivo shows the field by it."
     },
     "key": {
       "type": "string",

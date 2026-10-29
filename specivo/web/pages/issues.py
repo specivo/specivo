@@ -14,7 +14,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
-from specivo.services.activity_lookups import activity_lookup_maps
+from specivo.services.activity_lookups import activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
 from specivo.services.issue_service import IssueService
@@ -491,6 +491,11 @@ async def issue_detail(
         sprint_id=issue.sprint_id,
     )
 
+    # The people and versions the issue's user and version fields hold, named as history names them.
+    value_names = (
+        {} if anonymous else await metadata_value_names(db, user, issue_schemas, issue.issue_metadata, members=members)
+    )
+
     # Derive from the already-loaded watchers list (list[User])
     is_watching = any(w.id == user.id for w in watchers)
 
@@ -524,6 +529,7 @@ async def issue_detail(
             "can_log_time": can_log_time,
             "issue_tags": issue_tags,
             "metadata_schemas_data": metadata_schemas_data,
+            "metadata_value_names": value_names,
             # Computed metadata is derived from the project's configuration,
             # which is not part of what an anonymous visitor may read.
             "issue_metadata": {} if anonymous else merge_computed(issue.issue_metadata, project.settings),

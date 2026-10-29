@@ -33,7 +33,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_PROJECT_DEPTH
 from specivo.importers.core.backdate import backdate
-from specivo.importers.core.ir import EntityType, IRCustomField, IRMembership, IRProject, IRSprint, PrincipalKind
+from specivo.importers.core.ir import (
+    REFERENCE_FIELD_FORMATS,
+    EntityType,
+    IRCustomField,
+    IRMembership,
+    IRProject,
+    IRSprint,
+    PrincipalKind,
+)
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
@@ -44,6 +52,7 @@ from specivo.models.version import Version
 from specivo.schemas.metadata_schema import MetadataSchemaCreate
 from specivo.schemas.project import ProjectCreate
 from specivo.schemas.version import VersionCreate
+from specivo.services.metadata_fields import REF_KEYWORD
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.project_service import Principal, ProjectService
 from specivo.services.version_service import VersionService
@@ -578,7 +587,7 @@ async def _create_schema(
     if tracker_ref and tracker_id is None:
         ctx.warn("Custom fields reference a tracker that was not imported; scoped project-wide instead")
 
-    properties = {field.key: field.json_schema for field in fields}
+    properties = {field.key: _property(field) for field in fields}
     required = sorted({field.key for field in fields if field.is_required})
     definition: dict[str, Any] = {"type": "object", "properties": properties}
     if required:
@@ -599,6 +608,19 @@ async def _create_schema(
     await ctx.id_map.put(ctx.session, EntityType.CUSTOM_FIELD, source_id, "metadata_schemas", schema.id)
     ctx.summary.record_created(EntityType.CUSTOM_FIELD)
     ctx.tick()
+
+
+def _property(field: IRCustomField) -> dict[str, Any]:
+    """A field's JSON Schema property: what one value must match, its name as ``title``, and what it names.
+
+    The name is what the issue page, history, the API and MCP show for the
+    field. A field whose values name people or versions is marked so they are
+    shown by name (see :mod:`specivo.services.metadata_fields`).
+    """
+    prop: dict[str, Any] = {**field.json_schema, "title": field.name}
+    if field.field_format in REFERENCE_FIELD_FORMATS:
+        prop[REF_KEYWORD] = field.field_format
+    return prop
 
 
 async def _tracker_name(ctx: PhaseContext, tracker_id: int) -> str:

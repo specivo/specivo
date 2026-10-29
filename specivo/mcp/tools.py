@@ -21,6 +21,7 @@ from specivo.core.config import get_settings
 from specivo.core.constants import MCP_SEARCH_MAX_LIMIT, SEARCH_SNIPPET_MAX_CHARS
 from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
+from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
@@ -32,10 +33,11 @@ from specivo.schemas.sprint import SprintCreate, SprintUpdate
 from specivo.schemas.tag import TagCreate, TagUpdate
 from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
-from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps
+from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.computed_metadata_service import load_project_settings, merge_computed
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
+from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.recurrence import expand_occurrences
@@ -215,6 +217,28 @@ async def _list_issues(
     return "\n".join(lines)
 
 
+async def _metadata_field_lines(session: AsyncSession, user: User, issue: Issue, metadata: dict) -> list[str]:
+    """The issue's metadata fields by name, a person or version a field holds by name when *user* may see it.
+
+    Named as the issue page names them (:mod:`specivo.services.activity_lookups`), people by display name.
+    """
+    schemas = await issue_schemas(session, {issue.project_id})
+    applicable = [s for s in schemas if s.tracker_id is None or s.tracker_id == issue.tracker_id]
+    labels = field_labels(schemas)
+    names = await metadata_value_names(session, user, applicable, metadata, people_by_login=False)
+
+    def shown(key: str, value: object) -> str:
+        known = names.get(key, {})
+        values = value if isinstance(value, list) else [value]
+        texts = [f"{known[str(v)]} (id {v})" if str(v) in known else str(v) for v in values]
+        return ", ".join(texts) if isinstance(value, list) else texts[0]
+
+    lines = ["Metadata fields:"]
+    for key, value in metadata.items():
+        lines.append(f"  {labels.get(key) or humanise(key)} ({key}): {shown(key, value)}")
+    return lines
+
+
 async def _show_issue(
     session: AsyncSession,
     user: User,
@@ -249,6 +273,7 @@ async def _show_issue(
     )
     if effective_metadata:
         lines.append(f"Metadata: {effective_metadata}")
+        lines.extend(await _metadata_field_lines(session, user, issue, effective_metadata))
     tags = await _tag_svc.tags_for_issue(session, issue.id)
     if tags:
         lines.append("Tags: " + ", ".join(t.name for t in tags))
@@ -778,7 +803,8 @@ def _change_line(detail: JournalDetail, names: ActivityLookups) -> str:
         name = names.name(detail, value)
         return f"{name} (id {value})" if name is not None else value
 
-    label = detail.prop_key if detail.property == "attr" else f"{detail.prop_key} (custom field)"
+    field_name = names.field_label(detail)
+    label = detail.prop_key if field_name is None else f"{field_name} ({detail.prop_key}, custom field)"
     return f"{label}: {shown(detail.old_value)} -> {shown(detail.new_value)}"
 
 
@@ -1240,7 +1266,9 @@ async def _list_metadata_schemas(
             desc = field_def.get("description", "")
             enum = field_def.get("enum")
             extra = f"  values: {enum}" if enum else ""
-            lines.append(f"    {field_name}: {ftype}  {desc}{extra}")
+            label = field_def.get("title")
+            title = f' "{label}"' if isinstance(label, str) and label else ""
+            lines.append(f"    {field_name}{title}: {ftype}  {desc}{extra}")
         lines.append("")
 
     return "\n".join(lines)
