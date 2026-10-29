@@ -365,6 +365,15 @@ async def dashboard(
                 ).all()
                 wiki_title_map = {r.id: (r.title, r.project_key) for r in wp_rows}
 
+            # A status change counts as "resolved" when the new status is in the
+            # done or closed category, whatever it is called or numbered.
+            done_status_ids = {
+                str(sid)
+                for sid in (
+                    await db.execute(select(IssueStatus.id).where(IssueStatus.category.in_(["done", "closed"])))
+                ).scalars()
+            }
+
             for j in journals:
                 actor = sa_user_names.get(j.user_id, "agent")
                 entry: dict = {"ts": j.created_at, "actor": actor}
@@ -381,7 +390,7 @@ async def dashboard(
                         (d for d in j.details if d.prop_key == "status_id"),
                         None,
                     )
-                    if status_detail and status_detail.new_value in ("3", "5"):
+                    if status_detail and status_detail.new_value in done_status_ids:
                         entry.update(
                             type="resolved",
                             issue_key=issue_key,
