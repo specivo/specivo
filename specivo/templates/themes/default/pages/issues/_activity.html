@@ -25,17 +25,14 @@
 
       {# Field changes #}
       {% if j.details %}
-      {# Relation changes name another issue by key, and the issue they name
-         may be one this reader cannot see — the relations list drops those,
-         and the feed must not put them back. For a visitor without an account
-         the whole row is left out rather than shown without its link, and so
-         is every parent change (imported history has them), which names the
-         parent by key. For anyone else a parent change is left out when its
-         key does not resolve to an issue they may see; without that list,
-         every parent change is. #}
-      {% set hidden_parents = lookup_maps.get('parent_id_hidden') if lookup_maps is defined and lookup_maps else none %}
-      {% for d in j.details if not (anonymous and (d.property == 'relation' or d.prop_key == 'parent_id'))
-           and not (d.prop_key == 'parent_id' and (hidden_parents is none or d.old_value in hidden_parents or d.new_value in hidden_parents)) %}
+      {# Relation and parent changes name another issue by key, and the issue
+         they name may be one this reader cannot see — the relations list drops
+         those, and the feed must not put them back (see
+         ActivityLookups.hides). Without the lookups, every parent change is
+         left out, and a visitor without an account sees no relation change. #}
+      {% set names = lookup_maps if lookup_maps is defined and lookup_maps is not none else none %}
+      {% for d in j.details if not (names.hides(d, anonymous=anonymous) if names is not none
+           else (d.prop_key == 'parent_id' or (anonymous and d.property == 'relation'))) %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}
@@ -69,10 +66,15 @@
         </div>
         {% endfor %}
         {% else %}
+        {% if d.property == 'attr' %}
         {% set field_label = d.prop_key | replace('_id', '') | replace('_', ' ') | title %}
-        {% set old_resolved = lookup_maps.get(d.prop_key, {}).get(d.old_value|string) if lookup_maps is defined and d.old_value is not none else none %}
+        {% else %}
+        {# An imported custom field, by its metadata key. #}
+        {% set field_label = d.prop_key | replace('_', ' ') | title %}
+        {% endif %}
+        {% set old_resolved = names.name(d, d.old_value) if names is not none else none %}
         {% set old_name = old_resolved if old_resolved is not none else d.old_value %}
-        {% set new_resolved = lookup_maps.get(d.prop_key, {}).get(d.new_value|string) if lookup_maps is defined and d.new_value is not none else none %}
+        {% set new_resolved = names.name(d, d.new_value) if names is not none else none %}
         {% set new_name = new_resolved if new_resolved is not none else d.new_value %}
         <strong class="sp-change-label">{{ field_label }}</strong>
         {% trans %}changed from{% endtrans %} <span class="sp-change-old">{{ old_name if old_name is not none and old_name != 'None' else _('(none)') }}</span>

@@ -7,6 +7,10 @@ build the same maps here, so a change reads the same on either.
 
 A value that is not an id (imported history keeps the source's text for a
 record that was not imported) has no entry, and the feed shows it as stored.
+
+Imported custom field changes whose values name a person or a version
+(``cf_user`` / ``cf_version`` details) are named by the same maps, and by the
+same rules, as an assignee or a target version.
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.issue import Issue, IssueRefAlias
-from specivo.models.journal import Journal
+from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.lookups import IssueCategory
 from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.sprint import Sprint
@@ -39,13 +43,56 @@ _ISSUE_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)-(\d+)$")
 # The lookup map holding the parent keys the feed leaves out, as ``{key: ""}``.
 HIDDEN_PARENTS = "parent_id_hidden"
 
+# Attributes whose values are ids the feed names.
+_NAMED_ATTRIBUTES = frozenset({"status_id", "tracker_id", "priority_id", *_LOADED_ATTRIBUTES})
+# Custom field changes whose values are ids, and the attribute whose map names them.
+_NAMED_CUSTOM_FIELDS = {CF_USER: "assigned_to_id", CF_VERSION: "fixed_version_id"}
+
+
+def lookup_key(prop: str, prop_key: str) -> str | None:
+    """Return the map naming a field change's values, or ``None`` when they are not ids."""
+    if prop == "attr":
+        return prop_key if prop_key in _NAMED_ATTRIBUTES else None
+    return _NAMED_CUSTOM_FIELDS.get(prop)
+
+
+def is_parent_change(detail: JournalDetail) -> bool:
+    return detail.property == "attr" and detail.prop_key == "parent_id"
+
+
+class ActivityLookups(dict[str, dict[str, str]]):
+    """``{map: {id as text: name}}``, and how a field change reads through it."""
+
+    def name(self, detail: JournalDetail, value: str | None) -> str | None:
+        """Return the name for one of *detail*'s values, or ``None`` to show the value as stored."""
+        key = lookup_key(detail.property, detail.prop_key)
+        if key is None or value is None:
+            return None
+        return self.get(key, {}).get(str(value))
+
+    def hides(self, detail: JournalDetail, *, anonymous: bool) -> bool:
+        """Whether the feed leaves *detail* out for this reader.
+
+        A relation change names another issue by key, and a visitor without an
+        account is shown none of them, nor any parent change. For anyone else a
+        parent change is left out when its key does not resolve to an issue they
+        may see (see :func:`_hidden_parents`); without that list, every one is.
+        """
+        if anonymous and (detail.property == "relation" or is_parent_change(detail)):
+            return True
+        if not is_parent_change(detail):
+            return False
+        hidden = self.get(HIDDEN_PARENTS)
+        return hidden is None or detail.old_value in hidden or detail.new_value in hidden
+
 
 def referenced_ids(journals: Iterable[Journal]) -> dict[str, set[int]]:
-    """Return the ids the journals' field changes name, by attribute, ignoring values that are not ids."""
+    """Return the ids the journals' field changes name, by lookup map, ignoring values that are not ids."""
     referenced: dict[str, set[int]] = {key: set() for key in _LOADED_ATTRIBUTES}
     for journal in journals:
         for detail in journal.details:
-            ids = referenced.get(detail.prop_key)
+            key = lookup_key(detail.property, detail.prop_key)
+            ids = referenced.get(key) if key is not None else None
             if ids is None:
                 continue
             for value in (detail.old_value, detail.new_value):
@@ -64,8 +111,8 @@ async def activity_lookup_maps(
     priorities: Sequence[Any],
     members: Sequence[dict[str, Any]],
     sprint_id: int | None = None,
-) -> dict[str, dict[str, str]]:
-    """Return ``{attribute: {id as text: name}}`` for the activity feed of *journals*.
+) -> ActivityLookups:
+    """Return ``{map: {id as text: name}}`` for the activity feed of *journals*.
 
     Statuses, trackers and priorities come from the lists given; versions,
     sprints and categories are loaded for the ids the history names, and named
@@ -74,23 +121,26 @@ async def activity_lookup_maps(
     may not see is listed under :data:`HIDDEN_PARENTS` for the feed to leave
     out. A former assignee who is no longer a member only
     when *user* may see them. Signed-in readers see people by login, an
-    anonymous visitor by display name.
+    anonymous visitor by display name. People and versions an imported custom
+    field change names are named by the same rules.
     """
     referenced = referenced_ids(journals)
     if sprint_id is not None:
         referenced["sprint_id"].add(sprint_id)
 
-    return {
-        "status_id": {str(s.id): s.name for s in statuses},
-        "tracker_id": {str(t.id): t.name for t in trackers},
-        "priority_id": {str(p.id): p.name for p in priorities},
-        "assigned_to_id": await _people(db, user, referenced["assigned_to_id"], members),
-        "sprint_id": await _names(db, user, Sprint, referenced["sprint_id"]),
-        "fixed_version_id": await _names(db, user, Version, referenced["fixed_version_id"]),
-        "category_id": await _names(db, user, IssueCategory, referenced["category_id"]),
-        "project_id": await _projects(db, user, referenced["project_id"]),
-        HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
-    }
+    return ActivityLookups(
+        {
+            "status_id": {str(s.id): s.name for s in statuses},
+            "tracker_id": {str(t.id): t.name for t in trackers},
+            "priority_id": {str(p.id): p.name for p in priorities},
+            "assigned_to_id": await _people(db, user, referenced["assigned_to_id"], members),
+            "sprint_id": await _names(db, user, Sprint, referenced["sprint_id"]),
+            "fixed_version_id": await _names(db, user, Version, referenced["fixed_version_id"]),
+            "category_id": await _names(db, user, IssueCategory, referenced["category_id"]),
+            "project_id": await _projects(db, user, referenced["project_id"]),
+            HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
+        }
+    )
 
 
 async def _names(db: AsyncSession, user: User, model: Any, ids: set[int]) -> dict[str, str]:
@@ -125,7 +175,7 @@ async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journ
     keys: dict[tuple[str, int], set[str]] = {}
     for journal in journals:
         for detail in journal.details:
-            if detail.property != "attr" or detail.prop_key != "parent_id":
+            if not is_parent_change(detail):
                 continue
             for value in (detail.old_value, detail.new_value):
                 match = _ISSUE_KEY.match(value or "")

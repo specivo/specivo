@@ -37,7 +37,7 @@ from specivo.core.config import get_settings
 from specivo.core.constants import JWT_ALGORITHM
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import Journal, JournalDetail
+from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.services.anonymous_access_service import (
@@ -56,6 +56,7 @@ from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import AdminUserFactory, UserFactory
+from tests.factories.version import VersionFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
 
@@ -614,6 +615,32 @@ async def test_imported_history_names_no_private_issue_or_project(
     assert live.private.name not in resp.text
     # No parent change at all, even one naming an issue the visitor may open.
     assert 'sp-change-label">Parent<' not in resp.text
+
+
+async def test_imported_custom_field_history_follows_the_anonymous_rules(
+    client: AsyncClient, db_session: AsyncSession, live: World
+) -> None:
+    """A version of a private project goes unnamed; a person is named by display name, never login."""
+    secret = VersionFactory.build(project_id=live.private.id, name="Anon secret release", sharing="system")
+    db_session.add(secret)
+    journal = Journal(issue_id=live.public_issue.id, project_id=live.both.id, user_id=live.member.id, sequence=98)
+    db_session.add(journal)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            JournalDetail(journal_id=journal.id, property=CF_VERSION, prop_key="found_in", new_value=str(secret.id)),
+            JournalDetail(journal_id=journal.id, property=CF_USER, prop_key="reviewer", new_value=str(live.member.id)),
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(_pages(live)["issue"])
+    assert resp.status_code == 200
+    text = " ".join(resp.text.split())
+    assert "Anon secret release" not in text
+    assert f'<span class="sp-change-new">{secret.id}</span>' in text
+    assert f'<span class="sp-change-new">{live.member.display_name}</span>' in text
+    assert f'<span class="sp-change-new">{live.member.login}</span>' not in text
 
 
 async def test_a_private_journal_never_renders(client: AsyncClient, live: World) -> None:

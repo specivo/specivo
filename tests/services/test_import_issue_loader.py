@@ -553,6 +553,99 @@ class TestJournals:
             ("12", "3", "4"),
         ]
 
+    def _fields(self) -> list[IRCustomField]:
+        return [
+            IRCustomField(source_ref="20", name="Severity", key="severity", field_format="list"),
+            IRCustomField(
+                source_ref="21", name="Reviewer", key="reviewer", field_format="user", json_schema={"type": "integer"}
+            ),
+            IRCustomField(
+                source_ref="22",
+                name="Found in",
+                key="found_in",
+                field_format="version",
+                multiple=True,
+                json_schema={"type": "array", "items": {"type": "integer"}},
+            ),
+        ]
+
+    async def test_a_custom_field_change_is_stored_under_the_fields_key(self, db_session, loaded):
+        journal = self._journal(
+            notes=None,
+            details=[IRJournalDetail(property="cf", prop_key="20", old_value="Low", new_value="High")],
+        )
+        ctx = await loaded(_adapter(issues=[_issue()], journals=[journal], custom_fields=self._fields()))
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        details = await self._details(db_session, ctx)
+        assert [(d.property, d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("cf", "severity", "Low", "High")
+        ]
+
+    async def test_custom_field_refs_become_specivo_ids(self, db_session, loaded):
+        """A user or version field's history names its records as an attribute's does."""
+        journal = self._journal(
+            notes=None,
+            details=[
+                IRJournalDetail(property="cf", prop_key="21", new_ref="7", new_value="Alex"),
+                # A multiple field: one detail per value removed or added.
+                IRJournalDetail(property="cf", prop_key="22", old_ref="v1", old_value="2.0"),
+                IRJournalDetail(property="cf", prop_key="22", new_ref="v2", new_value="2.1"),
+            ],
+        )
+        adapter = _adapter(
+            issues=[_issue()],
+            journals=[journal],
+            custom_fields=self._fields(),
+            versions=[
+                IRVersion(source_ref="v1", project_ref="1", name="2.0"),
+                IRVersion(source_ref="v2", project_ref="1", name="2.1"),
+            ],
+        )
+        ctx = await loaded(adapter)
+        await load_project_lookups(ctx)
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        user = str(await ctx.id_map.get(db_session, EntityType.USER, "7"))
+        versions = {ref: str(await ctx.id_map.get(db_session, EntityType.VERSION, ref)) for ref in ("v1", "v2")}
+        details = await self._details(db_session, ctx)
+        assert [(d.property, d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("cf_user", "reviewer", None, user),
+            ("cf_version", "found_in", versions["v1"], None),
+            ("cf_version", "found_in", None, versions["v2"]),
+        ]
+        assert not [w for w in ctx.summary.warnings if "History values" in w.message]
+
+    async def test_an_unresolved_custom_field_ref_shows_the_source_text(self, db_session, loaded):
+        """A person or version that did not come across is never stored by its source id."""
+        journal = self._journal(
+            notes=None,
+            details=[
+                IRJournalDetail(property="cf", prop_key="21", old_ref="88", old_value="Former colleague", new_ref="7"),
+                IRJournalDetail(property="cf", prop_key="22", new_ref="v9", new_value="2024"),
+                IRJournalDetail(property="cf", prop_key="22", old_ref="v8"),
+                # Written without refs, a user field's raw value is the source's id: quoted, never read as one.
+                IRJournalDetail(property="cf", prop_key="21", old_value="7"),
+            ],
+        )
+        ctx = await loaded(_adapter(issues=[_issue()], journals=[journal], custom_fields=self._fields()))
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        user = str(await ctx.id_map.get(db_session, EntityType.USER, "7"))
+        details = await self._details(db_session, ctx)
+        assert [(d.property, d.old_value, d.new_value) for d in details] == [
+            ("cf_user", "Former colleague", user),
+            ("cf_version", None, '"2024"'),
+            ("cf_version", None, None),
+            ("cf_user", '"7"', None),
+        ]
+        warning = next(w for w in ctx.summary.warnings if "History values name records" in w.message)
+        assert warning.context["count"] == 3
+        assert "user:88" in warning.context["examples"]
+
     async def test_entry_can_carry_both_a_note_and_changes(self, db_session, loaded):
         journal = self._journal(
             details=[IRJournalDetail(property="attr", prop_key="done_ratio", old_value="0", new_value="50")]

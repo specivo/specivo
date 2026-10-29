@@ -417,9 +417,11 @@ class IRJournalDetail:
     vocabulary Specivo's ``journal_details`` table uses.
 
     For an attribute that names a record (see :data:`REFERENCE_ATTRIBUTES`),
+    and for a custom field whose values do (see :data:`REFERENCE_FIELD_FORMATS`),
     ``old_ref`` and ``new_ref`` are the source refs of the records, which the
     loader turns into Specivo ids; ``old_value`` and ``new_value`` are then
-    only the text to show when a ref names nothing that was imported.
+    only the text to show when a ref names nothing that was imported. A
+    ``cf`` detail's ``prop_key`` is the custom field's ``source_ref``.
     """
 
     property: str
@@ -441,6 +443,15 @@ REFERENCE_ATTRIBUTES: dict[str, EntityType] = {
     "category_id": EntityType.CATEGORY,
     "fixed_version_id": EntityType.VERSION,
     "parent_id": EntityType.ISSUE,
+}
+
+# Custom field formats whose values name a record, and the entity type of that
+# record. A change of such a field carries refs as an attribute's does, one
+# value a side: a multiple field's change is a detail per value removed (only
+# ``old_ref``) or added (only ``new_ref``).
+REFERENCE_FIELD_FORMATS: dict[str, EntityType] = {
+    "user": EntityType.USER,
+    "version": EntityType.VERSION,
 }
 
 

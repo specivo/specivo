@@ -78,7 +78,14 @@ from specivo.importers.bundle.format import (
 )
 from specivo.importers.bundle.limits import BundleLimits, format_size
 from specivo.importers.bundle.report import ProblemCode, ValidationReport
-from specivo.importers.core.ir import REFERENCE_ATTRIBUTES, ContainerKind, EntityType, PrincipalKind, ValueKind
+from specivo.importers.core.ir import (
+    REFERENCE_ATTRIBUTES,
+    REFERENCE_FIELD_FORMATS,
+    ContainerKind,
+    EntityType,
+    PrincipalKind,
+    ValueKind,
+)
 from specivo.importers.core.placeholders import LABELLED_KINDS, PlaceholderKind, find_placeholders
 
 _HASH_CHUNK = 1024 * 1024
@@ -821,7 +828,7 @@ class _Scanner:
             self.journal_keys.setdefault(project_ref, []).append((key, line, offset))
 
     def _check_detail_refs(self, line: int, detail: dict[str, Any]) -> None:
-        """Refs belong only to a change of an attribute that names a record.
+        """Refs belong only to a change of an attribute, or a custom field, that names a record.
 
         They are not looked up in the bundle: history may name a record the
         source no longer has, and the load shows the detail's text for it.
@@ -830,10 +837,15 @@ class _Scanner:
             return
         if detail["property"] == "attr" and detail["prop_key"] in REFERENCE_ATTRIBUTES:
             return
+        if detail["property"] == "cf":
+            definition = self.custom_fields.get(detail["prop_key"])
+            if definition is not None and definition[1] in REFERENCE_FIELD_FORMATS:
+                return
         self.report.error(
             ProblemCode.INVALID_REF,
             JOURNALS.name,
-            f"details: old_ref and new_ref are only for a change of {', '.join(REFERENCE_ATTRIBUTES)}, "
+            f"details: old_ref and new_ref are only for a change of {', '.join(REFERENCE_ATTRIBUTES)} "
+            f"or of a custom field of the bundle with field_format {' or '.join(REFERENCE_FIELD_FORMATS)}, "
             f"not {detail['property']} {detail['prop_key']!r}",
             line=line,
         )

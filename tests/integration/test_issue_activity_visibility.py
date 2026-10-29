@@ -14,7 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.issue import Issue, IssueRefAlias
-from specivo.models.journal import Journal, JournalDetail
+from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
 from specivo.models.lookups import IssueCategory
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
@@ -24,6 +24,7 @@ from specivo.models.user import User
 from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
+from tests.factories.user import UserFactory
 from tests.factories.version import VersionFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
@@ -69,7 +70,10 @@ async def history(db_session: AsyncSession, auth_client: AsyncClient) -> dict:
     lookups = (tracker, status, priority)
 
     mine, theirs = await _project(db_session, "VISA"), await _project(db_session, "VISB")
-    role = Role(name="VisReader", permissions=["view_issues"], builtin=0)
+    # Sees the people of the projects it can open, not everyone.
+    role = Role(
+        name="VisReader", permissions=["view_issues"], builtin=0, users_visibility="members_of_visible_projects"
+    )
     db_session.add(role)
     await db_session.flush()
     member = Member(user_id=reader.id, project_id=mine.id)
@@ -119,8 +123,34 @@ async def history(db_session: AsyncSession, auth_client: AsyncClient) -> dict:
         JournalDetail(journal_id=journal.id, property="attr", prop_key=key, old_value=old, new_value=new)
         for key, old, new in changes
     )
+
+    # Imported custom fields naming a version and a person, by the same rules.
+    stranger = UserFactory.build(login="vis_stranger", display_name="Vis Stranger")
+    db_session.add(stranger)
+    await db_session.flush()
+    their_member = Member(user_id=stranger.id, project_id=theirs.id)
+    db_session.add(their_member)
+    await db_session.flush()
+    db_session.add(MemberRole(member_id=their_member.id, role_id=role.id))
+    cf_changes = [
+        (CF_VERSION, "found_in", str(records["their_version"].id), str(records["own_version"].id)),
+        (CF_USER, "reviewer", str(stranger.id), str(reader.id)),
+        # The source's text for a person who did not come across.
+        (CF_USER, "reviewer", None, "Former colleague"),
+    ]
+    db_session.add_all(
+        JournalDetail(journal_id=journal.id, property=prop, prop_key=key, old_value=old, new_value=new)
+        for prop, key, old, new in cf_changes
+    )
     await db_session.commit()
-    return {"issue": issue, "own_parent": own_parent, "their_parent": their_parent, **records}
+    return {
+        "issue": issue,
+        "own_parent": own_parent,
+        "their_parent": their_parent,
+        "stranger": stranger,
+        "reader": reader,
+        **records,
+    }
 
 
 @pytest.mark.parametrize("partial", [False, True], ids=["page", "partial"])
@@ -142,3 +172,28 @@ async def test_history_names_no_record_of_a_project_the_reader_cannot_open(
     assert f'<span class="sp-change-old">{history["own_parent"].display_key}</span>' in text
     assert '<span class="sp-change-old">VISGONE-4</span>' in text
     assert '<span class="sp-change-new">#77</span>' in text
+
+
+@pytest.mark.parametrize("partial", [False, True], ids=["page", "partial"])
+async def test_custom_field_history_names_only_what_the_reader_may_see(
+    auth_client: AsyncClient, history: dict, partial: bool
+) -> None:
+    key = history["issue"].display_key
+    url = f"/partials/issues/{key}/activity/" if partial else f"/issue/{key}/"
+    resp = await auth_client.get(url)
+    assert resp.status_code == 200, resp.text
+    text = " ".join(resp.text.split())
+
+    assert "Vis secret release" not in text
+    assert "vis_stranger" not in text and "Vis Stranger" not in text
+    assert (
+        '<strong class="sp-change-label">Found In</strong> changed from '
+        f'<span class="sp-change-old">{history["their_version"].id}</span> to '
+        '<span class="sp-change-new">Vis own release</span>'
+    ) in text
+    assert (
+        '<strong class="sp-change-label">Reviewer</strong> changed from '
+        f'<span class="sp-change-old">{history["stranger"].id}</span> to '
+        f'<span class="sp-change-new">{history["reader"].login}</span>'
+    ) in text
+    assert '<span class="sp-change-new">Former colleague</span>' in text

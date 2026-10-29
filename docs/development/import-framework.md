@@ -161,6 +161,13 @@ it is only digits, and the phase warns once with the count. History refs are
 resolved once, not kept waiting in the links file: a parent from a bundle
 loaded later shows as its text.
 
+Custom field changes (`cf`) are stored under the field's metadata key rather
+than its ref. A field whose `field_format` is `user` or `version`
+(`REFERENCE_FIELD_FORMATS`) carries refs the same way, one value a side, and
+is stored with `property` `cf_user` / `cf_version` (`specivo/models/journal.py`),
+which tells the page that its values are ids to name, under the same rules as
+an assignee or a target version.
+
 ## The id map and idempotency
 
 `ImportIdMap` (`specivo/importers/core/id_map.py`) wraps the `import_id_map`
