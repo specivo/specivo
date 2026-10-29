@@ -6795,6 +6795,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html
 msgid "No accounts are connected."
+msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/login.html:98
 msgid "Administrators can sign in with a local account."
