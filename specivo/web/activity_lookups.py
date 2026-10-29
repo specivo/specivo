@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
-from specivo.models.lookups import IssueCategory
+from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.sprint import Sprint
 from specivo.models.user import User
@@ -33,7 +33,18 @@ from specivo.services.permission_service import visible_users_clause
 from specivo.services.project_service import ProjectService
 
 # Attributes whose names are looked up from the ids the history holds.
-_LOADED_ATTRIBUTES = ("sprint_id", "fixed_version_id", "category_id", "project_id", "assigned_to_id")
+_LOADED_ATTRIBUTES = (
+    "status_id",
+    "tracker_id",
+    "priority_id",
+    "sprint_id",
+    "fixed_version_id",
+    "category_id",
+    "project_id",
+    "assigned_to_id",
+)
+# Records any reader may see named, whatever project the issue is in.
+_GLOBAL_LOOKUPS: dict[str, Any] = {"status_id": IssueStatus, "tracker_id": Tracker, "priority_id": IssuePriority}
 
 _project_svc = ProjectService()
 
@@ -44,7 +55,7 @@ _ISSUE_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)-(\d+)$")
 HIDDEN_PARENTS = "parent_id_hidden"
 
 # Attributes whose values are ids the feed names.
-_NAMED_ATTRIBUTES = frozenset({"status_id", "tracker_id", "priority_id", *_LOADED_ATTRIBUTES})
+_NAMED_ATTRIBUTES = frozenset(_LOADED_ATTRIBUTES)
 # Custom field changes whose values are ids, and the attribute whose map names them.
 _NAMED_CUSTOM_FIELDS = {CF_USER: "assigned_to_id", CF_VERSION: "fixed_version_id"}
 
@@ -106,16 +117,15 @@ async def activity_lookup_maps(
     user: User,
     journals: Iterable[Journal],
     *,
-    statuses: Sequence[Any],
-    trackers: Sequence[Any],
-    priorities: Sequence[Any],
     members: Sequence[dict[str, Any]],
     sprint_id: int | None = None,
 ) -> ActivityLookups:
     """Return ``{map: {id as text: name}}`` for the activity feed of *journals*.
 
-    Statuses, trackers and priorities come from the lists given; versions,
-    sprints and categories are loaded for the ids the history names, and named
+    Every name is loaded for the ids the history names, from the database, so
+    a record another worker created or renamed reads as it is now. Statuses,
+    trackers and priorities (inactive ones too) are named for any reader;
+    versions, sprints and categories are named
     only when *user* may open their project; so is a project (imported history
     records moves between projects). A parent change naming an issue *user*
     may not see is listed under :data:`HIDDEN_PARENTS` for the feed to leave
@@ -130,9 +140,7 @@ async def activity_lookup_maps(
 
     return ActivityLookups(
         {
-            "status_id": {str(s.id): s.name for s in statuses},
-            "tracker_id": {str(t.id): t.name for t in trackers},
-            "priority_id": {str(p.id): p.name for p in priorities},
+            **{key: await _global_names(db, model, referenced[key]) for key, model in _GLOBAL_LOOKUPS.items()},
             "assigned_to_id": await _people(db, user, referenced["assigned_to_id"], members),
             "sprint_id": await _names(db, user, Sprint, referenced["sprint_id"]),
             "fixed_version_id": await _names(db, user, Version, referenced["fixed_version_id"]),
@@ -141,6 +149,14 @@ async def activity_lookup_maps(
             HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
         }
     )
+
+
+async def _global_names(db: AsyncSession, model: Any, ids: set[int]) -> dict[str, str]:
+    """Name the records of *model* (a status, tracker or priority) the history names."""
+    if not ids:
+        return {}
+    rows = (await db.execute(select(model.id, model.name).where(model.id.in_(ids)))).all()
+    return {str(row.id): row.name for row in rows}
 
 
 async def _names(db: AsyncSession, user: User, model: Any, ids: set[int]) -> dict[str, str]:

@@ -26,7 +26,6 @@ import pytest
 from sqlalchemy import func, select
 
 from specivo.cli.import_data import parse_args, run_validation
-from specivo.core.lookup_cache import invalidate_lookups
 from specivo.importers.bundle import BundleInvalidError
 from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import EntityType
@@ -297,7 +296,6 @@ class TestFullBundle:
         ]
 
     async def test_the_issue_page_names_what_history_changed(self, admin_client, imported):
-        invalidate_lookups()  # the statuses the run created are not in this process's cache yet
         response = await admin_client.get("/issue/BUNDLEWEB-1/")
         assert response.status_code == 200
         text = " ".join(response.text.split())
@@ -435,7 +433,6 @@ class TestHistoryRefs:
         (warning,) = [w for w in summary.warnings if w.message.startswith("History values name records")]
         assert warning.context["count"] == 2
 
-        invalidate_lookups()  # the statuses the run created are not in this process's cache yet
         text = " ".join((await admin_client.get("/issue/HISTREFS-1/")).text.split())
         assert _change("Sprint 4", "(none)") in text
         assert _change("(none)", "Open") in text
