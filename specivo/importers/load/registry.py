@@ -12,10 +12,10 @@ from __future__ import annotations
 
 from specivo.importers.core.pipeline import ImportPhase, ImportPipeline, PhaseContext, PhaseFailedError
 from specivo.importers.load.attachment_loader import load_issue_attachments, load_wiki_attachments
+from specivo.importers.load.issue_links import load_issue_links
 from specivo.importers.load.issue_loader import (
     load_issues,
     load_journals,
-    load_relations,
     load_watchers,
 )
 from specivo.importers.load.lookup_loader import load_lookups
@@ -161,7 +161,7 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.ISSUES: load_issues,
             ImportPhase.WATCHERS: load_watchers,
             ImportPhase.JOURNALS: load_journals,
-            ImportPhase.RELATIONS: load_relations,
+            ImportPhase.RELATIONS: load_issue_links,
             ImportPhase.ISSUE_ATTACHMENTS: load_issue_attachments,
             ImportPhase.VERSION_STATUSES: restore_version_statuses,
             ImportPhase.WIKI_PAGES: _wiki,

@@ -92,6 +92,21 @@ class TestTheValidatorsAgree:
                 ],
             },
             {"projects": [project("p1")], "issues": [issue("i1", description="{{issue:a-7}} {{issue:a-8|older}}")]},
+            {"projects": [project("p1")], "issues": [issue("i1", parent_ref="a-7"), issue("i2", parent_ref="i1")]},
+            {
+                "projects": [project("p1")],
+                "issues": [issue("i1", parent_ref="a-9\n")],
+                "relations": [
+                    {"source_ref": "r1", "from_ref": "i1", "to_ref": "a-7", "relation_type": "blocks"},
+                    {"source_ref": "r2", "from_ref": "a-8", "to_ref": "i1", "relation_type": "relates"},
+                    {"source_ref": "r3", "from_ref": "a-8", "to_ref": "a-7", "relation_type": "relates"},
+                    {"source_ref": "r4", "from_ref": "a-6", "to_ref": "a-6", "relation_type": "relates"},
+                ],
+            },
+            {
+                "projects": [project("p1"), project("p2")],
+                "issues": [issue("i1", "p1", parent_ref="i2"), issue("i2", "p2", parent_ref="i1")],
+            },
         ],
         ids=[
             "unresolved",
@@ -104,6 +119,9 @@ class TestTheValidatorsAgree:
             "newline-ref",
             "description-change",
             "issue-outside-bundle",
+            "parent-outside-bundle",
+            "relations-outside-bundle",
+            "cycle-across-projects",
         ],
     )
     async def test_on_a_bundle_with_a_mistake(self, tmp_path, records):

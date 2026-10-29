@@ -5,7 +5,9 @@ with a later bundle. The placeholder rewrite writes those references as plain
 text and returns the texts concerned; this module keeps them in the run's links
 file (:mod:`specivo.importers.core.links_file`) and, on every later import of
 the same source, re-expands the ones whose records have arrived, unless
-somebody edited them in the meantime.
+somebody edited them in the meantime. Relations and parents waiting in the
+same file are made by :mod:`specivo.importers.load.issue_links`, which opens
+the file through :func:`open_for_phase` too.
 
 The file sits next to the bundle by default
 (``specivo-links.<system>.<instance>.sqlite``), or wherever ``--links-file``
@@ -34,7 +36,6 @@ from specivo.importers.core.links_file import (
     LinksFileMismatchError,
     LinksFileUnreadableError,
     LinksStore,
-    PendingText,
     check_scope,
     is_writable,
     read_scope,
@@ -50,8 +51,10 @@ from specivo.models.wiki import WikiContent, WikiPage
 
 logger = logging.getLogger(__name__)
 
-# Set by the bootstrap check when the file cannot be read, so the run leaves it alone.
+# Set when the file cannot be read or written, so the rest of the run leaves it alone.
 _UNREADABLE = "links_file_unreadable"
+# Set once the run has said the file cannot be written, so it says so once.
+_UNWRITABLE_REPORTED = "links_file_unwritable_reported"
 # Rows named in a summary line about linked or edited texts.
 _MAX_EXAMPLES = 5
 
@@ -63,6 +66,24 @@ def links_path(ctx: PhaseContext) -> Path | None:
     """Return the run's links file, or ``None`` for a source that keeps none."""
     path = getattr(ctx.adapter, "links_path", None)
     return Path(path) if path is not None else None
+
+
+def usable(ctx: PhaseContext) -> bool:
+    """Whether the run may use its links file: the bootstrap check did not find it unreadable."""
+    return not ctx.state.get(_UNREADABLE)
+
+
+def open_for_phase(ctx: PhaseContext, path: Path, *, has_new: bool) -> LinksStore | None:
+    """Open the links file for the current phase, committed only once the phase's transaction has.
+
+    *has_new* says the phase has rows to add, so a location that cannot be
+    written is worth a warning even in a dry run. Returns ``None``, having
+    said why, when the file cannot be used.
+    """
+    store = _open(ctx, path, has_new=has_new)
+    if store is not None:
+        ctx.at_phase_end(lambda committed: _finish(ctx, store, committed))
+    return store
 
 
 def check_links_file(ctx: PhaseContext) -> None:
@@ -92,27 +113,27 @@ async def link_placeholders(ctx: PhaseContext) -> None:
     resolver = PlaceholderResolver(ctx.session, ctx.id_map)
     pending = await rewrite_placeholders(ctx, resolver)
     path = links_path(ctx)
-    if path is None or ctx.state.get(_UNREADABLE):
+    if path is None or not usable(ctx):
         return
     if not os.path.lexists(path) and not pending:
         return
 
-    store = _open(ctx, path, pending)
+    store = open_for_phase(ctx, path, has_new=bool(pending))
     if store is None:
         return
-    ctx.at_phase_end(lambda committed: _finish(ctx, store, committed))
     result = await resolve_pending(ctx.session, ctx.id_map, store, resolver)
     for text in pending:
         store.put(text)
     _report(ctx, result, store, path)
 
 
-def _open(ctx: PhaseContext, path: Path, pending: list[PendingText]) -> LinksStore | None:
+def _open(ctx: PhaseContext, path: Path, *, has_new: bool) -> LinksStore | None:
     """Open the links file for this run, or say why not and return ``None``."""
     writable = is_writable(path)
-    if not writable and (pending or not ctx.options.dry_run):
+    if not writable and (has_new or not ctx.options.dry_run):
         _warn_unwritable(ctx, path)
         if not ctx.options.dry_run:
+            ctx.state[_UNREADABLE] = True
             return None
     try:
         # A dry run works on a copy: it reports what would be linked and writes nothing.
@@ -122,6 +143,7 @@ def _open(ctx: PhaseContext, path: Path, pending: list[PendingText]) -> LinksSto
     except LinksFileMismatchError as exc:
         raise PhaseFailedError(f"{exc}. Nothing was imported.") from exc
     except LinksFileUnreadableError as exc:
+        ctx.state[_UNREADABLE] = True
         ctx.warn(
             "The links file could not be read, so references earlier imports wrote as plain text are not linked by "
             "this one, and this one's are not kept. Delete it, or give another path with --links-file",
@@ -129,11 +151,15 @@ def _open(ctx: PhaseContext, path: Path, pending: list[PendingText]) -> LinksSto
             reason=str(exc),
         )
     except (sqlite3.Error, OSError) as exc:
+        ctx.state[_UNREADABLE] = True
         _warn_unwritable(ctx, path, reason=str(exc))
     return None
 
 
 def _warn_unwritable(ctx: PhaseContext, path: Path, reason: str | None = None) -> None:
+    if ctx.state.get(_UNWRITABLE_REPORTED):
+        return
+    ctx.state[_UNWRITABLE_REPORTED] = True
     context = {"path": str(path)}
     if reason:
         context["reason"] = reason
@@ -172,7 +198,7 @@ def _report(ctx: PhaseContext, result: ResolveResult, store: LinksStore, path: P
             count=len(result.edited),
             examples=_examples(result.edited),
         )
-    waiting = store.count()
+    waiting = store.count_texts()
     if waiting:
         ctx.summary.add_note(WAITING_NOTE, f"{waiting} text(s), kept in {path}")
 
@@ -214,16 +240,24 @@ class LinksOutcome:
     waiting: int = 0
     untrusted: int = 0
     foreign: int = 0
+    relations_linked: int = 0
+    parents_linked: int = 0
+    links_waiting: int = 0
+    # Relations and parents refused or left alone, one line each.
+    link_problems: list[str] = field(default_factory=list)
 
 
 async def resolve_links_file(session: AsyncSession, path: Path, *, dry_run: bool) -> LinksOutcome:
     """Run the resolve step against the links file at *path*, outside an import.
 
-    The scope comes from the file. A dry run does the work inside a savepoint
-    it rolls back, and on a copy of the file. Otherwise the session is
-    committed and then the file. Raises :class:`LinksFileError` for a file that
-    cannot be used.
+    Waiting parents are set first, then waiting relations made, then texts
+    linked, as an import does. The scope comes from the file. A dry run does
+    the work inside a savepoint it rolls back, and on a copy of the file.
+    Otherwise the session is committed and then the file. Raises
+    :class:`LinksFileError` for a file that cannot be used.
     """
+    from specivo.importers.load.issue_links import LinkResult, resolve_waiting_links
+
     if not os.path.lexists(path):
         return LinksOutcome(path, None)
     scope = read_scope(path)
@@ -232,23 +266,39 @@ async def resolve_links_file(session: AsyncSession, path: Path, *, dry_run: bool
     store = LinksStore.open(path, *scope, writable=not dry_run)
     try:
         id_map = ImportIdMap(scope[0], scope[1], uuid.uuid4())
+        links = LinkResult()
         if dry_run:
             savepoint = await session.begin_nested()
             try:
+                links = await resolve_waiting_links(session, id_map, store)
                 result = await resolve_pending(session, id_map, store)
             finally:
                 await savepoint.rollback()
+            waiting_links = sum(store.waiting_links().values())
             store.rollback()
         else:
+            links = await resolve_waiting_links(session, id_map, store)
             result = await resolve_pending(session, id_map, store)
             await _refresh_derived(session, result.linked)
             await session.commit()
+            waiting_links = sum(store.waiting_links().values())
             store.commit()
     except BaseException:
         store.rollback()
         raise
     return LinksOutcome(
-        path, scope, result.linked, result.edited, result.gone, result.waiting, result.untrusted, result.foreign
+        path,
+        scope,
+        result.linked,
+        result.edited,
+        result.gone,
+        result.waiting,
+        result.untrusted + links.untrusted,
+        result.foreign + links.foreign,
+        relations_linked=links.relations_linked,
+        parents_linked=links.parents_linked,
+        links_waiting=waiting_links,
+        link_problems=[problem.line() for problem in links.problems],
     )
 
 
@@ -304,5 +354,7 @@ __all__ = [
     "check_links_file",
     "link_placeholders",
     "links_path",
+    "open_for_phase",
     "resolve_links_file",
+    "usable",
 ]

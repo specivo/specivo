@@ -7,9 +7,11 @@ adapter streams from comes out of it for free.
 
 **What is checked.** Each record against its JSON Schema; ``source_ref``
 uniqueness per entity type; every reference to another record, including the
-placeholders in text (an issue placeholder may name an issue outside the
-bundle, a warning); stored files exist and hash to their names; parent
-chains have no cycles; the manifest's counts match the files.
+placeholders in text; stored files exist and hash to their names; parent
+chains have no cycles; the manifest's counts match the files. Three kinds of
+issue reference may name an issue outside the bundle, which only warns: an
+issue placeholder, an issue's ``parent_ref`` and one end of a relation (not
+both: a bundle carries the relations that touch its own issues).
 
 **What is kept in memory.** Never a whole JSON-lines file: each record (one
 line, at most ``max_line_bytes``) is parsed, checked and dropped. The three
@@ -85,8 +87,27 @@ _MAX_MESSAGE = 300
 _EARLIEST = datetime.min.replace(tzinfo=UTC)
 # Read size when skipping the rest of an over-long line.
 _SKIP_CHUNK = 1024 * 1024
-# Refs named in the warning about issue placeholders outside the bundle.
+# Refs named in a warning about issue references outside the bundle.
 _MAX_OUTSIDE_EXAMPLES = 5
+
+# The issue references that may name an issue outside the bundle, in the order
+# their warnings are given, with what the warning says about each.
+OUTSIDE_PARENT = "parent_ref"
+OUTSIDE_RELATION = "relation end"
+OUTSIDE_PLACEHOLDER = "issue placeholder"
+_OUTSIDE_WARNINGS = {
+    OUTSIDE_PARENT: (
+        "loading looks them up in earlier imports of the same source and keeps any it cannot find in the links "
+        "file until a later import brings them"
+    ),
+    OUTSIDE_RELATION: (
+        "loading looks them up in earlier imports of the same source and keeps any relation it cannot make yet in "
+        "the links file until a later import brings the issue"
+    ),
+    OUTSIDE_PLACEHOLDER: (
+        "loading looks them up in earlier imports of the same source and writes any it cannot find as plain text"
+    ),
+}
 
 
 # --------------------------------------------------------------------------
@@ -268,9 +289,9 @@ class _Pending:
     field: str
     entity_type: EntityType
     ref: str
-    # An issue placeholder may name an issue of an earlier bundle of the same
-    # source, which only the load can look up.
-    outside_ok: bool = False
+    # Set for an issue reference that may name an issue of another bundle of
+    # the same source, which only the load can look up: which kind it is.
+    outside: str | None = None
 
 
 class _Scanner:
@@ -283,8 +304,8 @@ class _Scanner:
         self.refs: dict[EntityType, dict[str, int | None]] = {}
         self.done: set[EntityType] = set()
         self.pending: list[_Pending] = []
-        # Issue placeholders naming no issue in the bundle: (line, ref) by file.
-        self.outside: dict[str, list[tuple[int | None, str]]] = {}
+        # Issue references naming no issue in the bundle: (line, ref) by file and kind.
+        self.outside: dict[tuple[str, str], list[tuple[int | None, str]]] = {}
         # Unknown properties are errors, unless the bundle is a newer minor
         # version: it may add optional fields this reader does not know.
         self.tolerate_unknown = False
@@ -569,12 +590,16 @@ class _Scanner:
         entity_type: EntityType,
         ref: Any,
         *,
-        outside_ok: bool = False,
+        outside: str | None = None,
     ) -> None:
-        """Check that *ref* names a record, now or once its file has been read."""
+        """Check that *ref* names a record, now or once its file has been read.
+
+        With *outside* (the kind of reference) it may instead name a record of
+        another bundle, which is only a warning.
+        """
         if ref is None:
             return
-        pending = _Pending(file, line, field_name, entity_type, str(ref), outside_ok)
+        pending = _Pending(file, line, field_name, entity_type, str(ref), outside)
         if entity_type in self.done:
             self._resolve(pending)
         else:
@@ -583,11 +608,17 @@ class _Scanner:
     def _resolve(self, pending: _Pending) -> None:
         if self._known(pending.entity_type, pending.ref):
             return
-        if pending.outside_ok:
-            self.outside.setdefault(pending.file, []).append((pending.line, pending.ref))
-            return
         where: dict[str, Any] = {"line": pending.line} if pending.line is not None else {"pointer": pending.field}
         label = pending.field if pending.line is not None else pending.field.rsplit("/", 1)[-1]
+        if pending.outside is not None:
+            if pending.ref.endswith("\n"):
+                # No issue anywhere has this ref: the schema cannot refuse a final newline.
+                self.report.error(
+                    ProblemCode.SCHEMA, pending.file, f"{label} {pending.ref!r} ends in a newline", **where
+                )
+                return
+            self.outside.setdefault((pending.file, pending.outside), []).append((pending.line, pending.ref))
+            return
         self.report.error(
             ProblemCode.UNRESOLVED_REF,
             pending.file,
@@ -619,11 +650,11 @@ class _Scanner:
                 where,
                 placeholder.entity_type,
                 placeholder.ref,
-                outside_ok=placeholder.kind is PlaceholderKind.ISSUE,
+                outside=OUTSIDE_PLACEHOLDER if placeholder.kind is PlaceholderKind.ISSUE else None,
             )
 
     def _report_outside_issues(self) -> None:
-        """Warn, once per file, about issue placeholders naming no issue in the bundle.
+        """Warn, once per file and kind of reference, about issue references naming no issue in the bundle.
 
         They are not errors: the bundle may be one part of a source exported in
         parts, and the load looks them up in the identifier map of the same
@@ -631,19 +662,21 @@ class _Scanner:
         resolve.
         """
         for record_file in RECORD_FILES:
-            found = self.outside.get(record_file.name)
-            if not found:
-                continue
-            examples: dict[str, int | None] = {}
-            for line, ref in sorted(found, key=lambda item: item[0] or 0):
-                examples.setdefault(ref, line)
-            shown = ", ".join(f"{ref!r} (line {line})" for ref, line in list(examples.items())[:_MAX_OUTSIDE_EXAMPLES])
-            self.report.warning(
-                ProblemCode.EXTERNAL_REF,
-                record_file.name,
-                f"{len(found)} issue placeholder(s) name no issue in this bundle, e.g. {shown}; loading looks "
-                "them up in earlier imports of the same source and writes any it cannot find as plain text",
-            )
+            for kind, outcome in _OUTSIDE_WARNINGS.items():
+                found = self.outside.get((record_file.name, kind))
+                if not found:
+                    continue
+                examples: dict[str, int | None] = {}
+                for line, ref in sorted(found, key=lambda item: item[0] or 0):
+                    examples.setdefault(ref, line)
+                shown = ", ".join(
+                    f"{ref!r} (line {line})" for ref, line in list(examples.items())[:_MAX_OUTSIDE_EXAMPLES]
+                )
+                self.report.warning(
+                    ProblemCode.EXTERNAL_REF,
+                    record_file.name,
+                    f"{len(found)} {kind}(s) name no issue in this bundle, e.g. {shown}; {outcome}",
+                )
 
     # -- per-file checks ---------------------------------------------------
     #
@@ -714,7 +747,7 @@ class _Scanner:
         self._ref(name, line, "status_ref", EntityType.STATUS, record["status_ref"])
         self._ref(name, line, "priority_ref", EntityType.PRIORITY, record["priority_ref"])
         self._ref(name, line, "author_ref", EntityType.USER, record.get("author_ref"))
-        self._ref(name, line, "parent_ref", EntityType.ISSUE, record.get("parent_ref"))
+        self._ref(name, line, "parent_ref", EntityType.ISSUE, record.get("parent_ref"), outside=OUTSIDE_PARENT)
         self._ref(name, line, "category_ref", EntityType.CATEGORY, record.get("category_ref"))
         self._ref(name, line, "fixed_version_ref", EntityType.VERSION, record.get("fixed_version_ref"))
 
@@ -787,10 +820,29 @@ class _Scanner:
             self.journal_keys.setdefault(project_ref, []).append((key, line, offset))
 
     def _check_relations(self, line: int, offset: int, record: dict[str, Any]) -> None:
-        project_ref = self._issue_scope(RELATIONS, line, "from_ref", record["from_ref"])
-        self._issue_scope(RELATIONS, line, "to_ref", record["to_ref"])
-        if record["from_ref"] == record["to_ref"]:
-            self.report.error(ProblemCode.INVALID_REF, RELATIONS.name, "An issue cannot relate to itself", line=line)
+        """Check a relation; one end may be an issue of another bundle, not both.
+
+        Issues are all read by now, so which ends are in the bundle is known.
+        The relation loads with the project of its ``from`` issue, or of its
+        ``to`` issue when ``from`` is outside the bundle.
+        """
+        name = RELATIONS.name
+        from_ref, to_ref = record["from_ref"], record["to_ref"]
+        if from_ref == to_ref:
+            self.report.error(ProblemCode.INVALID_REF, name, "An issue cannot relate to itself", line=line)
+            return
+        if not self._known(EntityType.ISSUE, from_ref) and not self._known(EntityType.ISSUE, to_ref):
+            self.report.error(
+                ProblemCode.INVALID_REF,
+                name,
+                f"Neither from_ref {from_ref!r} nor to_ref {to_ref!r} names an issue in this bundle: a bundle carries "
+                "only relations that touch its own issues",
+                line=line,
+            )
+            return
+        self._ref(name, line, "from_ref", EntityType.ISSUE, from_ref, outside=OUTSIDE_RELATION)
+        self._ref(name, line, "to_ref", EntityType.ISSUE, to_ref, outside=OUTSIDE_RELATION)
+        project_ref = self.issue_project.get(from_ref) or self.issue_project.get(to_ref)
         if project_ref is not None:
             self._in_project(RELATIONS, project_ref, offset)
 
@@ -913,7 +965,8 @@ class _Scanner:
         self._report_cycles(PROJECTS, cyclic)
         self.index.projects = [self.project_offsets[ref] for ref in order + cyclic]
 
-        self._order_tree(ISSUES, self.issue_nodes)
+        self._order_tree(ISSUES, self.issue_nodes, report=False)
+        self._report_cycles(ISSUES, self._issue_cycles())
         self._order_tree(WIKI_PAGES, self.page_nodes)
         self._check_page_parents()
 
@@ -926,12 +979,20 @@ class _Scanner:
         self._report_unreferenced_files()
         self._check_counts()
 
-    def _order_tree(self, record_file: RecordFile, nodes: dict[str, dict[str, tuple[str | None, int]]]) -> None:
+    def _order_tree(
+        self, record_file: RecordFile, nodes: dict[str, dict[str, tuple[str | None, int]]], *, report: bool = True
+    ) -> None:
         ordered = self.index.by_project.setdefault(record_file.name, {})
         for project_ref, members in nodes.items():
             order, cyclic = order_parents_first({ref: parent for ref, (parent, _) in members.items()})
-            self._report_cycles(record_file, cyclic)
+            if report:
+                self._report_cycles(record_file, cyclic)
             ordered[project_ref] = [members[ref][1] for ref in order + cyclic]
+
+    def _issue_cycles(self) -> list[str]:
+        """Return the issues on, or under, a parent loop, across projects: an issue's parent may be in another."""
+        parents = {ref: parent for members in self.issue_nodes.values() for ref, (parent, _) in members.items()}
+        return order_parents_first(parents)[1]
 
     def _report_cycles(self, record_file: RecordFile, cyclic: list[str]) -> None:
         if cyclic:

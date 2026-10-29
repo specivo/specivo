@@ -27,7 +27,7 @@ specivo/importers/
     pipeline.py        ImportPhase (18 phases), ImportPipeline, ImportOptions, ImportSummary, PhaseContext
     id_map.py          ImportIdMap over the import_id_map table
     placeholders.py     the {{issue:ref}} placeholder syntax a bundle's text uses
-    links_file.py        the SQLite links file that carries unresolved placeholders to a later bundle
+    links_file.py        the SQLite links file that carries unresolved placeholders, relations and parents to a later bundle
     backdate.py         restores original created_at/updated_at after a service creates a row
     progress.py         ProgressReporter protocol, CliProgressReporter, NullProgressReporter
   bundle/
@@ -39,12 +39,13 @@ specivo/importers/
     lookup_loader.py     statuses, trackers, priorities, activities, roles
     user_loader.py        users, the import service account, user groups
     project_loader.py     projects, versions, categories, memberships, custom-field schemas
-    issue_loader.py        issues, journals, relations, watchers
+    issue_loader.py        issues, journals, watchers
+    issue_links.py         relations and deferred parents, also across bundles
     wiki_loader.py          wiki pages, revisions, watchers, redirects
     attachment_loader.py    file copy for issues and wiki pages
     time_entry_loader.py     logged time
     placeholder_rewrite.py    placeholder -> link expansion, once every record exists
-    pending_links.py          placeholders waiting for a later bundle
+    pending_links.py          placeholders waiting for a later bundle; opens the links file for a phase
     search_index.py           wiki link graph rebuild + search backfill, run once at the end
 specivo/cli/import_data.py           the command (--source bundle)
 specivo/models/import_id_map.py       the id-map ORM model
@@ -114,10 +115,10 @@ not register the wiki phases.
 | 5 | `PROJECT_LOOKUPS` | Versions and categories, which belong to a project that now exists. |
 | 6 | `MEMBERSHIPS` | Needs users and groups (3) and projects (5); a group's grant is one membership row held by the group. |
 | 7 | `CUSTOM_FIELD_SCHEMAS` | Needs trackers (2) and projects (4) to scope a schema to. |
-| 8 | `ISSUES` | Needs trackers, statuses, priorities, categories, versions, and other issues (for parents) — the latest possible point before journals need issues to exist. |
+| 8 | `ISSUES` | Needs trackers, statuses, priorities, categories, versions, and other issues (for parents) — the latest possible point before journals need issues to exist. A parent this run already created is set as the child is created; any other parent waits for `RELATIONS`. |
 | 9 | `WATCHERS` | Issue watchers — needs issues (8) and users (3). |
 | 10 | `JOURNALS` | History — needs every issue in the *project* to exist, since a journal can reference any of them. |
-| 11 | `RELATIONS` | Needs every issue in the *run*, not just one project — a relation can cross projects, and the far end may belong to a project imported later. |
+| 11 | `RELATIONS` | Needs every issue in the *run*, not just one project — a relation or a parent can cross projects, and the far end may belong to a project imported later, or to another bundle. Sets the parents `ISSUES` deferred and those earlier runs left in the links file, then makes the run's relations and the waiting ones; parents first, so a relation is checked against the final hierarchy. |
 | 12 | `ISSUE_ATTACHMENTS` | Needs issues (8). |
 | 13 | `VERSION_STATUSES` | Restores locked/closed version status — a locked version cannot take an issue, so it needs every issue in the run to exist first. |
 | 14 | `WIKI_PAGES` | Independent of issues; runs after them mainly so issue-side failures are known before the (often larger) wiki history is replayed. |
@@ -165,6 +166,37 @@ must resolve, where a missing mapping means a phase ran out of order rather
 than that the source data was sparse. Optional references use `get` and
 handle `None` themselves (falling back to the import service account, leaving
 a field unset, or warning and skipping, depending on the field).
+
+## Links between bundles
+
+A source exported in parts links issues across them: a placeholder, a parent,
+a relation. Validation lets these three name an issue outside the bundle (an
+`external_ref` warning); every other reference must resolve inside it. On
+load, each is looked up in the identifier map of the scope, which holds every
+earlier import of the source. What does not resolve yet is kept in the links
+file (`core/links_file.py`), next to the bundles, and every later load of the
+scope (and `admin import-map resolve-pending`) retries it:
+
+- **Texts** are rewritten in `WIKI_LINK_GRAPH` (`placeholder_rewrite.py`,
+  `pending_links.py`); an edited text is never overwritten (hash check).
+- **Parents and relations** are made in `RELATIONS` (`issue_links.py`), with
+  the same checks as anywhere else (`NestedSetService.validate_parent` plus a
+  depth check that counts the child's own sub-tasks, `RelationService.create`);
+  a refusal is a warning and drops the waiting row. A relation is keyed by its
+  `source_ref` in the id map, so one carried by two bundles is made once. A
+  waiting parent is applied only to an issue with no parent. The deferred
+  parents of this run are found again from the bundle and
+  `ImportIdMap.written_by_run`, not from memory, so a resumed run (same run id)
+  finds them too.
+
+Each phase that uses the file opens it in one SQLite transaction and commits it
+from an `at_phase_end` hook, after the phase's database transaction has
+committed; so the file never describes rows that were rolled back. Waiting
+parents and relations are idempotent (a mapped relation or an already-set
+parent is simply dropped), so a file that lags behind the database heals on
+the next load. Every row is HMAC-signed with a key derived from `SECRET_KEY`;
+the file is refused if it is a symbolic link or of another format version
+(currently 2) or scope, and deleted when nothing waits.
 
 ## The transaction model
 

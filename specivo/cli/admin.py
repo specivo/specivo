@@ -27,7 +27,7 @@ Usage::
     # Move a scope to the key the next import will use (a dry run without --yes)
     uv run python -m specivo.cli.admin import-map rename --system redmine \
         --from 'postgresql://redmine:***@db.internal/redmine' --to tracker.example.com --yes
-    # Text an import wrote as plain text, waiting in its links file for records not imported yet
+    # Text, relations and parents an import could not link yet, waiting in its links file
     uv run python -m specivo.cli.admin import-map pending --links-file /import/specivo-links.redmine.t.sqlite
     # Link what can be linked now (a dry run without --yes)
     uv run python -m specivo.cli.admin import-map resolve-pending --links-file /import/... --yes
@@ -486,13 +486,36 @@ async def _run_import_map_rename(args: argparse.Namespace) -> int:
     return 0
 
 
-def format_pending(path: Path, scope: tuple[str, str] | None, texts: int, by_kind: dict[str, int]) -> str:
-    """Return the ``import-map pending`` listing: the file's scope, its texts, and records waited for per kind."""
-    if scope is None or not texts:
-        return f"Nothing is waiting in {path}: no imported text names a record that has not been imported."
-    lines = [f"{scope[0]} @ {scope[1]}: {texts} text(s) wait for records not imported yet"]
-    width = max(len(kind) for kind in by_kind)
-    lines.extend(f"  {kind:<{width}}  {count}" for kind, count in sorted(by_kind.items()))
+def format_pending(
+    path: Path,
+    scope: tuple[str, str] | None,
+    texts: int,
+    by_kind: dict[str, int],
+    links: dict[str, int] | None = None,
+) -> str:
+    """Return the ``import-map pending`` listing.
+
+    The file's scope; its texts, with the records waited for per kind; and the
+    relations and issue parents waiting for an issue.
+    """
+    links = links or {}
+    if scope is None or not (texts or links):
+        return (
+            f"Nothing is waiting in {path}: no imported text, relation or parent names a record that has not been "
+            "imported."
+        )
+    lines: list[str] = []
+    if texts:
+        lines.append(f"{scope[0]} @ {scope[1]}: {texts} text(s) wait for records not imported yet")
+        width = max(len(kind) for kind in by_kind)
+        lines.extend(f"  {kind:<{width}}  {count}" for kind, count in sorted(by_kind.items()))
+    if links:
+        parts = []
+        if links.get("relation"):
+            parts.append(f"{links['relation']} relation(s)")
+        if links.get("parent"):
+            parts.append(f"{links['parent']} issue parent(s)")
+        lines.append(f"{scope[0]} @ {scope[1]}: {' and '.join(parts)} wait for issues not imported yet")
     return "\n".join(lines)
 
 
@@ -512,12 +535,30 @@ def format_resolve(outcome: LinksOutcome, *, dry_run: bool) -> str:
             f" Ignored{' and removed' if not dry_run else ''}: {outcome.untrusted} row(s) this installation did not "
             f"write, {outcome.foreign} naming records this source did not import."
         )
+    links = ""
+    if outcome.relations_linked or outcome.parents_linked or outcome.link_problems or outcome.links_waiting:
+        refused = len(outcome.link_problems)
+        if dry_run:
+            links = (
+                f" {outcome.relations_linked} relation(s) would be made and {outcome.parents_linked} parent(s) set; "
+                f"{refused} refused or left alone; {outcome.links_waiting} still waiting."
+            )
+        else:
+            links = (
+                f" Made {outcome.relations_linked} relation(s) and set {outcome.parents_linked} parent(s); "
+                f"{refused} refused or left alone; {outcome.links_waiting} still waiting."
+            )
     if dry_run:
-        return (
-            f"{len(outcome.linked)} text(s) would be linked, {_edited(outcome)}, {outcome.waiting} still waiting. "
-            f"Nothing was changed; re-run with --yes to write them.{ignored}"
+        summary = (
+            f"{len(outcome.linked)} text(s) would be linked, {_edited(outcome)}, {outcome.waiting} still waiting."
+            f"{links} Nothing was changed; re-run with --yes to write them.{ignored}"
         )
-    return f"Linked {len(outcome.linked)} text(s); {_edited(outcome)}; {outcome.waiting} still waiting.{ignored}"
+    else:
+        summary = (
+            f"Linked {len(outcome.linked)} text(s); {_edited(outcome)}; {outcome.waiting} still waiting."
+            f"{links}{ignored}"
+        )
+    return "\n".join([summary, *(f"  {line}" for line in outcome.link_problems)])
 
 
 def format_purge(system: str, instance: str, count: int, *, dry_run: bool) -> str:
@@ -550,7 +591,7 @@ async def _run_import_map_pending(args: argparse.Namespace) -> int:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     try:
-        print(format_pending(path, scope, store.count(), store.counts_by_kind()))
+        print(format_pending(path, scope, store.count_texts(), store.counts_by_kind(), store.waiting_links()))
     finally:
         store.rollback()
     return 0
@@ -633,22 +674,25 @@ def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:  # type: 
     links_help = "The links file the imports of the source keep (by default next to the bundles)"
     pending = import_map_sub.add_parser(
         "pending",
-        help="Count the imported texts waiting in a links file for records not imported yet",
+        help="Count the texts, relations and parents waiting in a links file for records not imported yet",
         description=(
             "An import writes a reference to a record it did not import as plain text, and keeps the text in its "
-            "links file so a later import of the same source can turn it into a link. This lists the file's "
-            "scope, how many texts wait, and how many records of each kind they wait for. Reads only."
+            "links file so a later import of the same source can turn it into a link; a relation or an issue "
+            "parent naming an issue it did not import waits there too. This lists the file's scope, how many "
+            "texts wait and for how many records of each kind, and how many relations and parents wait. Reads only."
         ),
     )
     pending.add_argument("--links-file", required=True, metavar="PATH", help=links_help)
     resolve = import_map_sub.add_parser(
         "resolve-pending",
-        help="Link the texts in a links file whose records have been imported since",
+        help="Link the texts, relations and parents in a links file whose records have been imported since",
         description=(
-            "What every import of a bundle does at its end, on demand: each waiting text whose records are now in "
-            "the identifier map is expanded again, keeping its updated_at; a text edited since it was imported is "
-            "left alone and dropped from the file. The file is rewritten, or deleted when nothing is left. "
-            "Without --yes it is a dry run: it reports, and changes nothing."
+            "What every import of a bundle does, on demand: each waiting parent whose issue is now in the "
+            "identifier map is set (unless the issue has another parent by now), each waiting relation whose two "
+            "issues are is made, with the checks any relation gets, and each waiting text whose records are is "
+            "expanded again, keeping its updated_at; a text edited since it was imported is left alone and "
+            "dropped from the file. The file is rewritten, or deleted when nothing is left. Without --yes it is a "
+            "dry run: it reports, and changes nothing."
         ),
     )
     resolve.add_argument("--links-file", required=True, metavar="PATH", help=links_help)

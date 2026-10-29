@@ -383,7 +383,10 @@ class BundleSourceAdapter(BaseSourceAdapter):
         return self._scoped(bundle_format.JOURNALS, project_ref, IRJournalEntry)
 
     def extract_relations(self, project_ref: str) -> AsyncIterator[IRRelation]:
-        """Yield the relations whose ``from`` issue is in the project."""
+        """Yield the relations whose ``from`` issue is in the project.
+
+        A relation whose ``from`` issue is outside the bundle comes with its ``to`` issue's project.
+        """
         return self._scoped(bundle_format.RELATIONS, project_ref, IRRelation)
 
     def extract_watchers(self, project_ref: str) -> AsyncIterator[IRWatcher]:

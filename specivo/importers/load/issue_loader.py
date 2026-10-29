@@ -13,11 +13,14 @@ produce the right diff. The rows are built directly instead — still ORM
 objects, still in the phase transaction — and numbered in the order the changes
 happened.
 
-Two things are deliberately deferred to a later pass:
+Three things are deliberately deferred to a later pass:
 
 * Issue references inside descriptions and comments stay as the source wrote
   them until every issue exists, because a reference can point at an issue in a
   project imported later.
+* A parent this run did not create before the child (one later in load order,
+  or one of another bundle of the source) is set in the relations phase, once
+  every issue of the run exists (see :mod:`~specivo.importers.load.issue_links`).
 * Custom-field values that name a user or a version are stored as source ids
   and rewritten once those exist.
 """
@@ -34,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.converter import ContentConverter, ConversionContext
-from specivo.importers.core.ir import EntityType, IRIssue, IRJournalEntry, IRRelation, ValueKind
+from specivo.importers.core.ir import EntityType, IRIssue, IRJournalEntry, ValueKind
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
@@ -43,16 +46,16 @@ from specivo.models.project import Project
 from specivo.models.watcher import Watcher
 from specivo.schemas.issue import IssueCreate
 from specivo.services.issue_service import IssueService
-from specivo.services.relation_service import RelationService
 
 logger = logging.getLogger(__name__)
 
 # Where the converter is parked so every phase converts markup the same way.
 CONVERTER_STATE_KEY = "converter"
 CONVERSION_CONTEXT_STATE_KEY = "conversion_context"
+# The issues this run created, by source ref: a child is created under one of these at once.
+CREATED_ISSUES_STATE_KEY = "issues_created"
 
 _issue_service = IssueService()
-_relation_service = RelationService()
 
 
 def converter_for(ctx: PhaseContext) -> tuple[ContentConverter, ConversionContext]:
@@ -130,9 +133,13 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
         # A source can assign an issue to a group, which Specivo cannot express.
         ctx.warn("Issue is assigned to someone who was not imported; left unassigned", issue=ir.source_ref)
 
-    parent_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.parent_ref)
-    if ir.parent_ref and parent_id is None:
-        ctx.warn("Issue's parent was not imported; imported as a top-level issue", issue=ir.source_ref)
+    # A parent this run created is set now, as the issue is created. Any other
+    # (later in load order, or from another bundle of the source) is set in the
+    # relations phase, or kept waiting in the links file.
+    created: set[str] = ctx.state.setdefault(CREATED_ISSUES_STATE_KEY, set())
+    parent_id = None
+    if ir.parent_ref is not None and ir.parent_ref in created:
+        parent_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.parent_ref)
 
     metadata = await _metadata(ctx, ir)
 
@@ -187,6 +194,7 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
         )
 
     await ctx.id_map.put(ctx.session, EntityType.ISSUE, ir.source_ref, "issues", issue.id)
+    created.add(ir.source_ref)
     ctx.summary.record_created(EntityType.ISSUE)
     ctx.tick()
     return issue
@@ -337,57 +345,6 @@ async def _highest_sequence(session: AsyncSession, issue_id: int) -> int:
     """
     stmt = select(func.coalesce(func.max(Journal.sequence), 0)).where(Journal.issue_id == issue_id)
     return (await session.execute(stmt)).scalar_one()
-
-
-# --------------------------------------------------------------------------
-# Relations
-# --------------------------------------------------------------------------
-
-
-async def load_relations(ctx: PhaseContext) -> None:
-    """Link issues, once every issue in the run exists.
-
-    Relations run late because one can cross projects, and the issue at the
-    other end may belong to a project imported after this one.
-    """
-    for project_ref in ctx.project_refs:
-        async for ir in ctx.adapter.extract_relations(project_ref):
-            if await ctx.id_map.get(ctx.session, EntityType.RELATION, ir.source_ref):
-                ctx.summary.record_skipped(EntityType.RELATION)
-                continue
-            await _create_relation(ctx, ir)
-
-
-async def _create_relation(ctx: PhaseContext, ir: IRRelation) -> None:
-    """Create one relation, letting the service normalise and validate it."""
-    from_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.from_ref)
-    to_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.to_ref)
-    if from_id is None or to_id is None:
-        ctx.warn("Relation points at an issue that was not imported; skipped", relation=ir.source_ref)
-        return
-
-    issue_from = await ctx.session.get(Issue, from_id)
-    issue_to = await ctx.session.get(Issue, to_id)
-    if issue_from is None or issue_to is None:
-        return
-
-    try:
-        relation = await _relation_service.create(ctx.session, issue_from, issue_to, ir.relation_type, delay=ir.delay)
-    except AppError as exc:
-        # Specivo validates more strictly than a source may — it refuses a relation
-        # between an issue and its own descendant, for one. A relation the
-        # source allowed is reported rather than ending the import.
-        ctx.warn(
-            "Relation was rejected and skipped",
-            relation=ir.source_ref,
-            type=ir.relation_type,
-            reason=str(exc),
-        )
-        return
-
-    await ctx.id_map.put(ctx.session, EntityType.RELATION, ir.source_ref, "issue_relations", relation.id)
-    ctx.summary.record_created(EntityType.RELATION)
-    ctx.tick()
 
 
 async def _project_for(ctx: PhaseContext, project_ref: str) -> Project | None:

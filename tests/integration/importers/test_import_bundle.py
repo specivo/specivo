@@ -870,6 +870,287 @@ class TestLinksFile:
         assert links.read_bytes() == b"garbage"
 
 
+# How the summary reports relations and parents across bundles.
+LINKS_WAITING = "Relations and parents naming an issue that was not imported"
+LINKS_WAITING_NOTE = "Relations and parents waiting for issues a later import may bring"
+RELATION_REFUSED = "Relation was rejected and skipped"
+OTHER_PARENT = "Issue already has a different parent; the one the source names was not set"
+
+
+def _part(root: Path, project_ref: str, identifier: str, issues: list, relations: list | None = None) -> Path:
+    """One project of the source, as a bundle of its own."""
+    records: dict = {"projects": [project(project_ref, identifier=identifier)], "issues": issues}
+    if relations:
+        records["relations"] = relations
+    return write_bundle(root, **records)
+
+
+def _rel(source_ref: str, from_ref: str, relation_type: str, to_ref: str) -> dict:
+    return {"source_ref": source_ref, "from_ref": from_ref, "to_ref": to_ref, "relation_type": relation_type}
+
+
+async def _relations(session) -> list[tuple[str, str, str]]:
+    """Every relation as ``(from subject, type, to subject)``, a ``relates`` one with its ends sorted."""
+    subjects = dict((await session.execute(select(Issue.id, Issue.subject))).all())
+    found = []
+    for relation in (await session.execute(select(IssueRelation))).scalars():
+        ends = (subjects[relation.issue_from_id], subjects[relation.issue_to_id])
+        if relation.relation_type == "relates":
+            ends = tuple(sorted(ends))
+        found.append((ends[0], relation.relation_type, ends[1]))
+    return sorted(found)
+
+
+async def _parent_subject(session, subject: str) -> str | None:
+    child = await _issue(session, subject)
+    await session.refresh(child)
+    if child.parent_id is None:
+        return None
+    return (await session.get(Issue, child.parent_id)).subject
+
+
+class TestRelationsAndParentsAcrossBundles:
+    """A source exported one project at a time: links between the projects arrive whichever part comes first.
+
+    Part A carries a-1 and a-2 and two relations to part B's issues; part B carries b-1 and b-2, whose
+    parent is a-2, and one of A's two relations, as a tool writes a link between projects into both.
+    """
+
+    def _a(self, root: Path, **changes) -> Path:
+        relations = changes.pop(
+            "relations", [_rel("r-x", "a-1", "blocks", "b-1"), _rel("r-a", "a-1", "relates", "b-2")]
+        )
+        return _part(root, "p-a", "parta", [issue("a-1", "p-a"), issue("a-2", "p-a")], relations)
+
+    def _b(self, root: Path, **changes) -> Path:
+        issues = changes.pop("issues", [issue("b-1", "p-b"), issue("b-2", "p-b", parent_ref="a-2")])
+        relations = changes.pop("relations", [_rel("r-x", "a-1", "blocks", "b-1")])
+        return _part(root, "p-b", "partb", issues, relations)
+
+    EXPECTED = [("Issue a-1", "blocks", "Issue b-1"), ("Issue a-1", "relates", "Issue b-2")]
+
+    async def _assert_linked(self, session, build_bundle_import, *bundles: Path) -> None:
+        assert await _relations(session) == self.EXPECTED
+        assert await _parent_subject(session, "Issue b-2") == "Issue a-2"
+        for bundle in bundles:
+            assert not build_bundle_import.links_path(bundle).exists()
+
+    async def test_a_then_b(self, db_session, build_bundle_import, tmp_path):
+        a, b = self._a(tmp_path / "a"), self._b(tmp_path / "b")
+
+        first = await build_bundle_import(a).run()
+
+        assert await _relations(db_session) == []
+        store = _pending(build_bundle_import.links_path(a))
+        assert [(r.source_ref, r.from_ref, r.relation_type, r.to_ref) for r in store.relations()] == [
+            ("r-a", "a-1", "relates", "b-2"),
+            ("r-x", "a-1", "blocks", "b-1"),
+        ]
+        assert store.parents() == []
+        store.rollback()
+        (waiting,) = [w for w in first.warnings if w.message.startswith(LINKS_WAITING)]
+        assert (waiting.context["relations"], waiting.context["parents"]) == (2, 0)
+        assert first.notes[LINKS_WAITING_NOTE] == [f"2 relation(s), kept in {build_bundle_import.links_path(a)}"]
+
+        second = await build_bundle_import(b, continue_import=True).run()
+
+        await self._assert_linked(db_session, build_bundle_import, a)
+        assert second.created[EntityType.RELATION] == 2
+        assert not [w for w in second.warnings if w.message.startswith(LINKS_WAITING)]
+
+    async def test_b_then_a(self, db_session, build_bundle_import, tmp_path):
+        a, b = self._a(tmp_path / "a"), self._b(tmp_path / "b")
+
+        first = await build_bundle_import(b).run()
+
+        assert await _parent_subject(db_session, "Issue b-2") is None
+        store = _pending(build_bundle_import.links_path(b))
+        assert [(p.child_ref, p.parent_ref) for p in store.parents()] == [("b-2", "a-2")]
+        assert [r.source_ref for r in store.relations()] == ["r-x"]
+        store.rollback()
+        (waiting,) = [w for w in first.warnings if w.message.startswith(LINKS_WAITING)]
+        assert (waiting.context["relations"], waiting.context["parents"]) == (1, 1)
+
+        await build_bundle_import(a, continue_import=True).run()
+
+        await self._assert_linked(db_session, build_bundle_import, b)
+
+    async def test_a_relation_carried_by_both_parts_is_made_once(self, db_session, build_bundle_import, tmp_path):
+        a, b = self._a(tmp_path / "a"), self._b(tmp_path / "b")
+        await build_bundle_import(a).run()
+        await build_bundle_import(b, continue_import=True).run()
+
+        blocks = [r for r in await _relations(db_session) if r[1] == "blocks"]
+        assert blocks == [("Issue a-1", "blocks", "Issue b-1")]
+        mapped = (
+            await db_session.execute(
+                select(ImportIdMapping.source_id).where(ImportIdMapping.entity_type == str(EntityType.RELATION))
+            )
+        ).scalars()
+        assert sorted(mapped) == ["r-a", "r-x"]
+
+    @pytest.mark.parametrize("order", ["ab", "ba"])
+    async def test_loading_the_parts_again_creates_nothing(self, db_session, build_bundle_import, tmp_path, order):
+        parts = {"a": self._a(tmp_path / "a"), "b": self._b(tmp_path / "b")}
+        for name in order:
+            await build_bundle_import(parts[name], continue_import=name != order[0]).run()
+        before = await _counts(db_session)
+
+        for name in order + order:
+            summary = await build_bundle_import(parts[name], continue_import=True).run()
+            assert sum(summary.created.values()) == 0
+            assert not [w for w in summary.warnings if w.message.startswith(LINKS_WAITING)]
+
+        assert await _counts(db_session) == before
+        await self._assert_linked(db_session, build_bundle_import, *parts.values())
+
+    async def test_a_parent_in_a_later_project_of_the_same_bundle(self, db_session, build_bundle_import, tmp_path):
+        bundle = write_bundle(
+            tmp_path / "one",
+            projects=[project("p1", identifier="first"), project("p2", identifier="second")],
+            issues=[issue("i1", "p1", parent_ref="i2"), issue("i2", "p2")],
+            relations=[_rel("r1", "i1", "relates", "i2")],
+        )
+
+        summary = await build_bundle_import(bundle).run()
+
+        assert await _parent_subject(db_session, "Issue i1") == "Issue i2"
+        # The relation is refused once the hierarchy is in: Specivo relates no issue to its parent.
+        (refused,) = [w for w in summary.warnings if w.message.startswith(RELATION_REFUSED)]
+        assert refused.context["relation"] == "r1"
+        assert not build_bundle_import.links_path(bundle).exists()
+
+    async def test_a_relation_to_the_issues_own_descendant_is_reported_not_made(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        """A's relation waits for b-1; B makes b-1 a child of a-1, so the relation is refused, with a warning."""
+        a = self._a(tmp_path / "a", relations=[_rel("r-d", "a-1", "relates", "b-1")])
+        b = self._b(tmp_path / "b", issues=[issue("b-1", "p-b", parent_ref="a-1")], relations=[])
+        await build_bundle_import(a).run()
+
+        second = await build_bundle_import(b, continue_import=True).run()
+
+        assert await _parent_subject(db_session, "Issue b-1") == "Issue a-1"
+        assert await _relations(db_session) == []
+        (refused,) = [w for w in second.warnings if w.message.startswith(RELATION_REFUSED)]
+        assert refused.context["relation"] == "r-d"
+        assert "descendant" in refused.context["reason"]
+        assert not build_bundle_import.links_path(a).exists()
+
+    async def test_a_parent_given_by_hand_meanwhile_is_kept(self, db_session, build_bundle_import, tmp_path):
+        from specivo.services.nested_set_service import NestedSetService
+
+        b = self._b(tmp_path / "b", issues=[issue("b-1", "p-b"), issue("b-2", "p-b", parent_ref="a-2")], relations=[])
+        await build_bundle_import(b).run()
+        b_1, b_2 = await _issue(db_session, "Issue b-1"), await _issue(db_session, "Issue b-2")
+        await NestedSetService().move_to_parent(db_session, b_2, b_1)
+        await db_session.commit()
+
+        second = await build_bundle_import(self._a(tmp_path / "a", relations=[]), continue_import=True).run()
+
+        assert await _parent_subject(db_session, "Issue b-2") == "Issue b-1"
+        (kept,) = [w for w in second.warnings if w.message.startswith(OTHER_PARENT)]
+        assert kept.context["issue"] == "b-2"
+        assert not build_bundle_import.links_path(b).exists()
+
+    async def test_a_parent_from_an_earlier_part_keeps_both_issues_timestamps(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        a = _part(tmp_path / "a", "p-a", "parta", [issue("a-2", "p-a", updated_at="2024-01-05T10:00:00Z")])
+        b = self._b(
+            tmp_path / "b",
+            issues=[issue("b-2", "p-b", parent_ref="a-2", updated_at="2024-02-05T10:00:00Z")],
+            relations=[],
+        )
+        await build_bundle_import(a).run()
+
+        await build_bundle_import(b, continue_import=True).run()
+
+        assert await _parent_subject(db_session, "Issue b-2") == "Issue a-2"
+        assert (await _issue(db_session, "Issue a-2")).updated_at == datetime(2024, 1, 5, 10, tzinfo=UTC)
+        assert (await _issue(db_session, "Issue b-2")).updated_at == datetime(2024, 2, 5, 10, tzinfo=UTC)
+
+    async def test_a_tampered_relation_row_is_refused(self, db_session, build_bundle_import, tmp_path):
+        a = self._a(tmp_path / "a")
+        await build_bundle_import(a).run()
+        links = build_bundle_import.links_path(a)
+        conn = sqlite3.connect(links)
+        conn.execute(
+            "UPDATE pending_relation SET to_ref = 'b-1', relation_type = 'duplicates' WHERE source_ref = 'r-a'"
+        )
+        conn.commit()
+        conn.close()
+
+        summary = await build_bundle_import(self._b(tmp_path / "b"), continue_import=True).run()
+
+        assert await _relations(db_session) == [("Issue a-1", "blocks", "Issue b-1")]
+        (untrusted,) = [w for w in summary.warnings if w.message.startswith(LINKS_UNTRUSTED)]
+        assert untrusted.context["count"] == 1
+        assert not links.exists()
+
+    async def test_a_dry_run_reports_and_writes_nothing(self, db_session, build_bundle_import, tmp_path):
+        a = self._a(tmp_path / "a")
+        await build_bundle_import(a).run()
+        links = build_bundle_import.links_path(a)
+        before = links.read_bytes()
+
+        summary = await build_bundle_import(self._b(tmp_path / "b"), continue_import=True, dry_run=True).run()
+
+        assert summary.created[EntityType.RELATION] == 2
+        await db_session.rollback()
+        assert await _relations(db_session) == []
+        assert links.read_bytes() == before
+
+
+class TestPendingLinksCommands:
+    """``admin import-map pending`` and ``resolve-pending`` cover waiting relations and parents."""
+
+    async def _waiting(self, db_session, build_bundle_import, tmp_path) -> Path:
+        """A loaded first; B loaded with a links file of its own, so A's file still waits."""
+        parts = TestRelationsAndParentsAcrossBundles()
+        a = parts._a(tmp_path / "a")
+        await build_bundle_import(a).run()
+        await build_bundle_import(
+            parts._b(tmp_path / "b"), continue_import=True, links_file=tmp_path / "b.sqlite"
+        ).run()
+        return build_bundle_import.links_path(a)
+
+    async def test_pending_counts_them(self, db_session, build_bundle_import, tmp_path, capsys):
+        from argparse import Namespace
+
+        from specivo.cli.admin import _run_import_map_pending
+
+        links = await self._waiting(db_session, build_bundle_import, tmp_path)
+
+        assert await _run_import_map_pending(Namespace(links_file=str(links))) == 0
+
+        assert capsys.readouterr().out.splitlines() == [
+            "sample @ tracker.example.com: 2 relation(s) wait for issues not imported yet",
+        ]
+
+    async def test_a_dry_run_of_resolve_pending_writes_nothing(self, db_session, build_bundle_import, tmp_path):
+        links = await self._waiting(db_session, build_bundle_import, tmp_path)
+        before = links.read_bytes()
+
+        outcome = await resolve_links_file(db_session, links, dry_run=True)
+
+        # r-x was made by B; r-a can be made now.
+        assert (outcome.relations_linked, outcome.parents_linked, outcome.links_waiting) == (1, 0, 0)
+        assert await _relations(db_session) == [("Issue a-1", "blocks", "Issue b-1")]
+        assert links.read_bytes() == before
+
+    async def test_resolve_pending_makes_them_and_removes_the_file(self, db_session, build_bundle_import, tmp_path):
+        links = await self._waiting(db_session, build_bundle_import, tmp_path)
+
+        outcome = await resolve_links_file(db_session, links, dry_run=False)
+
+        assert (outcome.relations_linked, outcome.links_waiting) == (1, 0)
+        assert await _relations(db_session) == TestRelationsAndParentsAcrossBundles.EXPECTED
+        assert not links.exists()
+        again = await resolve_links_file(db_session, links, dry_run=False)
+        assert again.scope is None
+
+
 class TestResolvePendingCommand:
     """``admin import-map resolve-pending``: the resolve step on demand, against a links file."""
 
