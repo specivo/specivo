@@ -6,12 +6,10 @@ from typing import TYPE_CHECKING, cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
-from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
@@ -149,20 +147,10 @@ async def issue_activity_partial(
     members = await _project_svc.list_members(db, project)
 
     # Names for the ids the field changes hold, as the issue page builds them.
-    statuses = (await db.execute(select(IssueStatus).order_by(IssueStatus.position))).scalars().all()
-    trackers = (await db.execute(select(Tracker).order_by(Tracker.position))).scalars().all()
-    priorities = (
-        (await db.execute(select(IssuePriority).where(IssuePriority.active.is_(True)).order_by(IssuePriority.position)))
-        .scalars()
-        .all()
-    )
     lookup_maps = await activity_lookup_maps(
         db,
         user,
         all_journals,
-        statuses=statuses,
-        trackers=trackers,
-        priorities=priorities,
         members=members,
         sprint_id=issue.sprint_id,
     )

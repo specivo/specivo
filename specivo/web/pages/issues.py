@@ -489,9 +489,6 @@ async def issue_detail(
         db,
         user,
         all_journals,
-        statuses=lookups["statuses"],
-        trackers=lookups["trackers"],
-        priorities=lookups["priorities"],
         members=members,
         sprint_id=issue.sprint_id,
     )
