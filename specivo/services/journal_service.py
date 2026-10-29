@@ -237,6 +237,64 @@ class JournalService:
         )
         return journal
 
+    async def record_attachment_added(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        user: User,
+        attachment_id: int,
+        filename: str,
+        journal: Journal | None = None,
+    ) -> Journal:
+        """Record that a file was attached to *issue*, in *journal* or a new one.
+
+        Pass *journal* to record the file with the edit or comment it came
+        with, or with the earlier files of the same upload batch; see
+        :meth:`upload_journal`. The detail keeps the id as ``prop_key`` and
+        the file name as ``new_value``, like :meth:`record_attachment_removed`.
+        """
+        if journal is None:
+            journal = Journal(
+                issue_id=issue.id,
+                wiki_page_id=None,
+                project_id=issue.project_id,
+                user_id=user.id,
+                notes=None,
+                is_private=False,
+                sequence=await self._next_sequence(session, issue.id),
+            )
+            session.add(journal)
+            await session.flush()
+
+        session.add(
+            JournalDetail(
+                journal_id=journal.id,
+                property=ATTACHMENT_DETAIL,
+                prop_key=str(attachment_id),
+                old_value=None,
+                new_value=filename,
+            )
+        )
+        return journal
+
+    async def upload_journal(self, session: AsyncSession, issue: Issue, user: User, journal_id: int) -> Journal | None:
+        """Return the journal of *issue* an upload by *user* may join, or None for a new one.
+
+        *journal_id* names the entry the upload came with: the edit or comment
+        it was sent with, or the journal the first file of the batch was
+        recorded in. It must be *user*'s own entry on *issue*
+        (``ValidationError`` otherwise, so history cannot be credited to
+        somebody else or moved to another issue). An upload joins it only
+        while it is still the issue's latest entry; once anything else has
+        been recorded, the upload gets an entry of its own rather than being
+        dated back.
+        """
+        journal = await session.get(Journal, journal_id)
+        if journal is None or journal.issue_id != issue.id or journal.user_id != user.id:
+            raise ValidationError(_("The history entry does not belong to this issue."), field="journal_id")
+        latest = await session.scalar(select(func.max(Journal.sequence)).where(Journal.issue_id == issue.id))
+        return journal if journal.sequence == latest else None
+
     async def record_attachment_removed(
         self,
         session: AsyncSession,

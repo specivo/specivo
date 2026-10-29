@@ -38,7 +38,7 @@ from tests.factories.lookups import (
     TrackerFactory,
 )
 from tests.factories.project import ProjectFactory
-from tests.factories.user import UserFactory
+from tests.factories.user import AdminUserFactory, UserFactory
 
 # ---------------------------------------------------------------------------
 # Module-level singleton
@@ -161,6 +161,15 @@ async def actor(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+async def admin(db_session: AsyncSession) -> User:
+    """A reader who sees every issue, so the burndown sums cover them all."""
+    user = AdminUserFactory.build(login="vb_admin", status="active")
+    db_session.add(user)
+    await db_session.commit()
+    return user
+
+
+@pytest.fixture
 async def lookups(
     db_session: AsyncSession,
 ) -> tuple[Tracker, IssueStatus, IssueStatus, IssuePriority]:
@@ -268,6 +277,7 @@ async def test_burndown_data_active_sprint(
     db_session: AsyncSession,
     project: Project,
     actor: User,
+    admin: User,
     lookups: tuple[Tracker, IssueStatus, IssueStatus, IssuePriority],
 ):
     """Active sprint with estimated_hours on issues. Verify burndown structure."""
@@ -300,7 +310,7 @@ async def test_burndown_data_active_sprint(
         estimated_hours=Decimal("3"),
     )
 
-    result = await _svc.burndown_data(db_session, sprint)
+    result = await _svc.burndown_data(db_session, sprint, admin)
 
     assert isinstance(result, dict)
     assert result["total_estimated_hours"] == Decimal("16")
@@ -325,6 +335,7 @@ async def test_burndown_data_no_estimates(
     db_session: AsyncSession,
     project: Project,
     actor: User,
+    admin: User,
     lookups: tuple[Tracker, IssueStatus, IssueStatus, IssuePriority],
 ):
     """Active sprint where issues have no estimated_hours. Totals should be 0."""
@@ -343,7 +354,7 @@ async def test_burndown_data_no_estimates(
         tracker=tracker, status=status_open, priority=priority,
     )
 
-    result = await _svc.burndown_data(db_session, sprint)
+    result = await _svc.burndown_data(db_session, sprint, admin)
 
     assert result["total_estimated_hours"] == Decimal("0")
     assert result["completed_hours"] == Decimal("0")

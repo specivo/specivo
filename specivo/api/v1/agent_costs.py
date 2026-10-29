@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.database import get_db
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
+from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.schemas.agent_cost import (
     AgentTokenLogCreate,
@@ -33,6 +34,24 @@ _cost_service = AgentCostService()
 _billing_service = BillingRateService()
 _project_service = ProjectService()
 _issue_service = IssueService()
+
+
+async def _require_project_permission(
+    db: AsyncSession, project_key: str, user: User, permission: Permission, request: Request, message: str
+) -> Project:
+    """Return the project *user* may open and holds *permission* in; 404 or 403 otherwise."""
+    project = await _project_service.get_by_key(db, project_key)
+    await _project_service.require_project_access(db, project, user)
+    if not await check_permission(user, project.id, permission, db, request=request):
+        raise PermissionDeniedError(message)
+    return project
+
+
+# Billing rates are project settings: there is no separate billing permission,
+# so changing them takes ``manage_project``. Reading them takes
+# ``view_time_entries``, like the billing report that applies them.
+_MANAGE_RATES_DENIED = "You do not have permission to manage billing rates in this project"
+_VIEW_RATES_DENIED = "You do not have permission to view billing rates in this project"
 
 
 # ---------------------------------------------------------------------------
@@ -70,9 +89,10 @@ async def get_cost_summary(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[CostSummaryItem]:
+    """Agent costs by model over the issues of the project the caller may see."""
     project = await _project_service.get_by_key(db, project_key)
     await _project_service.require_project_access(db, project, current_user)
-    items = await _cost_service.get_cost_summary(db, project.id, date_from, date_to)
+    items = await _cost_service.get_cost_summary(db, project, current_user, date_from, date_to)
     return [CostSummaryItem(**item) for item in items]
 
 
@@ -104,11 +124,13 @@ async def get_cost_per_issue(
 async def create_billing_rate(
     project_key: str,
     data: BillingRateCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> BillingRateOut:
-    project = await _project_service.get_by_key(db, project_key)
-    await _project_service.require_project_access(db, project, current_user)
+    project = await _require_project_permission(
+        db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
+    )
     rate = await _billing_service.create_rate(db, project.id, data)
     return BillingRateOut.model_validate(rate)
 
@@ -119,11 +141,13 @@ async def create_billing_rate(
 )
 async def list_billing_rates(
     project_key: str,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[BillingRateOut]:
-    project = await _project_service.get_by_key(db, project_key)
-    await _project_service.require_project_access(db, project, current_user)
+    project = await _require_project_permission(
+        db, project_key, current_user, Permission.VIEW_TIME_ENTRIES, request, _VIEW_RATES_DENIED
+    )
     rates = await _billing_service.list_rates(db, project.id)
     return [BillingRateOut.model_validate(r) for r in rates]
 
@@ -136,11 +160,13 @@ async def update_billing_rate(
     project_key: str,
     rate_id: int,
     data: BillingRateUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> BillingRateOut:
-    project = await _project_service.get_by_key(db, project_key)
-    await _project_service.require_project_access(db, project, current_user)
+    project = await _require_project_permission(
+        db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
+    )
     rate = await _billing_service.update_rate(db, rate_id, project.id, data)
     return BillingRateOut.model_validate(rate)
 
@@ -152,11 +178,13 @@ async def update_billing_rate(
 async def delete_billing_rate(
     project_key: str,
     rate_id: int,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
-    project = await _project_service.get_by_key(db, project_key)
-    await _project_service.require_project_access(db, project, current_user)
+    project = await _require_project_permission(
+        db, project_key, current_user, Permission.MANAGE_PROJECT, request, _MANAGE_RATES_DENIED
+    )
     await _billing_service.delete_rate(db, rate_id, project.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

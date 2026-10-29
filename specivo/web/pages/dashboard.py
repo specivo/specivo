@@ -7,7 +7,7 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, and_, func, or_, select, true
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -24,6 +24,7 @@ from specivo.models.version import Version
 from specivo.models.wiki import Wiki, WikiContent, WikiPage
 from specivo.services.issue_service import IssueService
 from specivo.services.notification_service import NotificationService
+from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.time_entry_service import TimeEntryService
 from specivo.web.deps import get_current_user_optional, get_templates
@@ -34,6 +35,11 @@ _project_svc = ProjectService()
 _issue_svc = IssueService()
 _notif_svc = NotificationService()
 _time_svc = TimeEntryService()
+
+
+def _visible(clause: ColumnElement[bool] | None) -> ColumnElement[bool]:
+    """Return *clause*, or an always-true predicate when there is none (admins)."""
+    return true() if clause is None else clause
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -56,6 +62,10 @@ async def dashboard(
     # Derive the set of project IDs the user is allowed to see.
     # All downstream queries are scoped through this set.
     visible_pids = {p.id for p in projects}
+    # Every issue count and listing below covers only the issues the reader
+    # may see, and wiki entries only the projects whose wiki they may read.
+    issue_visibility = await _issue_svc.visible_issues_clause(db, user)
+    wiki_pids = {pid for pid in visible_pids if await check_permission(user, pid, Permission.VIEW_WIKI, db)}
 
     # ------------------------------------------------------------------
     # My open issues (assigned to user, not closed), sorted by updated_at.
@@ -69,6 +79,7 @@ async def dashboard(
             Issue.assigned_to_id == user.id,
             IssueStatus.category != "closed",
             Issue.project_id.in_(visible_pids),
+            _visible(issue_visibility),
         )
         count_stmt = (
             select(func.count())
@@ -117,7 +128,7 @@ async def dashboard(
                 func.count(Issue.id).filter(Issue.status_id.in_(done_sub)).label("closed_count"),
             )
             .join(Project, Project.id == Version.project_id)
-            .outerjoin(Issue, Issue.fixed_version_id == Version.id)
+            .outerjoin(Issue, and_(Issue.fixed_version_id == Version.id, _visible(issue_visibility)))
             .where(Version.project_id.in_(visible_pids))
             .group_by(Version.id, Project.key)
             .order_by(
@@ -170,7 +181,7 @@ async def dashboard(
                 func.count(Issue.id).filter(Issue.status_id.in_(done_sub)).label("closed_count"),
             )
             .join(Project, Project.id == Sprint.project_id)
-            .outerjoin(Issue, Issue.sprint_id == Sprint.id)
+            .outerjoin(Issue, and_(Issue.sprint_id == Sprint.id, _visible(issue_visibility)))
             .where(Sprint.project_id.in_(visible_pids), Sprint.status == "active")
             .group_by(Sprint.id, Project.key, Project.name)
             .order_by(Sprint.start_date.asc().nullslast())
@@ -206,13 +217,14 @@ async def dashboard(
     # Project stats (open issue counts per project)
     # ------------------------------------------------------------------
     all_project_ids = list(visible_pids)
-    project_stats = await _project_svc.load_project_stats(db, all_project_ids) if all_project_ids else {}
+    project_stats = await _project_svc.load_project_stats(db, all_project_ids, reader=user) if all_project_ids else {}
 
     # ------------------------------------------------------------------
-    # Recent wiki pages (3 most recently updated, scoped to visible projects)
+    # Recent wiki pages (3 most recently updated, in the projects whose
+    # wiki the reader may read)
     # ------------------------------------------------------------------
     recent_wiki_pages: list[dict] = []
-    if visible_pids:
+    if wiki_pids:
         wiki_stmt = (
             select(
                 WikiPage.title,
@@ -237,7 +249,7 @@ async def dashboard(
                 ),
             )
             .outerjoin(User, WikiContent.author_id == User.id)
-            .where(WikiPage.deleted_at.is_(None), Wiki.project_id.in_(visible_pids))
+            .where(WikiPage.deleted_at.is_(None), Wiki.project_id.in_(wiki_pids))
             .order_by(WikiPage.updated_at.desc())
             .limit(3)
         )
@@ -271,6 +283,7 @@ async def dashboard(
                 Issue.project_id.in_(visible_pids),
                 IssueStatus.category.in_(["done", "closed"]),
                 Issue.updated_at >= week_start,
+                _visible(issue_visibility),
             )
         )
         resolved_this_week = (await db.execute(resolved_stmt)).scalar() or 0
@@ -282,6 +295,7 @@ async def dashboard(
                 Issue.assigned_to_id == user.id,
                 Issue.project_id.in_(visible_pids),
                 Issue.status_id == 4,
+                _visible(issue_visibility),
             )
         )
         feedback_count = (await db.execute(feedback_stmt)).scalar() or 0
@@ -310,10 +324,15 @@ async def dashboard(
                 .where(
                     Journal.user_id.in_(sa_user_ids),
                     Journal.project_id.in_(visible_pids),
+                    # A wiki edit only where the reader may read the wiki.
+                    or_(Journal.wiki_page_id.is_(None), Journal.project_id.in_(wiki_pids)),
                 )
                 .order_by(Journal.created_at.desc(), Journal.id.desc())
                 .limit(20)
             )
+            # Private notes are shown to administrators only, as on the issue page.
+            if not user.is_admin:
+                journal_stmt = journal_stmt.where(Journal.is_private.is_(False))
             journals = list((await db.execute(journal_stmt)).scalars().all())
 
             # Batch-load issue display keys for journal entries
@@ -321,7 +340,6 @@ async def dashboard(
             issue_key_map: dict[int, str] = {}
             issue_subject_map: dict[int, str] = {}
             # Only issues the reader may see; journals on any other are left out.
-            issue_visibility = await _issue_svc.visible_issues_clause(db, user)
             if journal_issue_ids:
                 ik_stmt = select(Issue.id, Issue.project_key, Issue.sequence_number, Issue.subject).where(
                     Issue.id.in_(journal_issue_ids)

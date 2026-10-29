@@ -7271,3 +7271,7 @@ msgstr "Fichier supprimé"
 #: specivo/services/agent_cost_service.py
 msgid "Agent session not found"
 msgstr "Session d'agent introuvable"
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr "Cette entrée d'historique n'appartient pas à ce ticket."

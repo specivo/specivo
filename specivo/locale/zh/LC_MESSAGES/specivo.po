@@ -6973,3 +6973,7 @@ msgstr "已删除文件"
 #: specivo/services/agent_cost_service.py
 msgid "Agent session not found"
 msgstr "未找到代理会话"
+
+#: specivo/services/journal_service.py
+msgid "The history entry does not belong to this issue."
+msgstr "该历史记录不属于此工作项。"

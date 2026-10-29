@@ -60,6 +60,7 @@ async def upload_attachment(
     container_type: str = Form(...),
     container_id: int = Form(...),
     description: str | None = Form(default=None),
+    journal_id: int | None = Form(default=None),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentOut:
@@ -67,6 +68,12 @@ async def upload_attachment(
 
     ``container_type``: ``"Issue"``, ``"WikiPage"``, or ``"Journal"``
     ``container_id``: the ID of the target entity
+
+    A file attached to an issue is recorded in the issue's history. Pass
+    ``journal_id`` to record it with your own edit or comment it came with
+    (the comment's id), or with the earlier files of the same batch (the
+    ``journal_id`` the first upload returned). Without it, or once another
+    entry has been recorded since, the file gets an entry of its own.
     """
     if container_type not in _ALLOWED_CONTAINER_TYPES:
         allowed = ", ".join(sorted(_ALLOWED_CONTAINER_TYPES))
@@ -79,7 +86,7 @@ async def upload_attachment(
     await _check_container_access(db, current_user, container_type, container_id)
 
     try:
-        attachment = await _service.upload(
+        uploaded = await _service.upload(
             session=db,
             container_type=container_type,
             container_id=container_id,
@@ -87,6 +94,7 @@ async def upload_attachment(
             author=current_user,
             description=description,
             request=request,
+            journal_id=journal_id,
         )
     except ValueError as exc:
         raise AppError(
@@ -96,7 +104,9 @@ async def upload_attachment(
         ) from exc
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _attachment_out(attachment, author_name=current_user.display_name)
+    out = _attachment_out(uploaded.attachment, author_name=current_user.display_name)
+    out.journal_id = uploaded.journal.id if uploaded.journal is not None else None
+    return out
 
 
 @router.get("/attachments/{attachment_id}/", response_model=AttachmentOut)
