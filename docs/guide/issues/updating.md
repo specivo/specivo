@@ -72,8 +72,19 @@ Editing the core fields of an issue — status, assignee, priority, dates, % don
 in the issue's **history**, with who changed what and when. Nothing is silently overwritten, so you can
 always see how an issue got to where it is.
 
-The history shows a changed status, assignee, version or category by name. A record you may not see —
-a version of a project you cannot open, a person outside the projects you can reach — shows as its id
-instead, and a change of parent to an issue you cannot see is left out. The REST API
-(`GET /api/v1/issues/{ref}/?include=journals`, each change's `old_name` / `new_name`) and the
-`specivo_list_comments` MCP tool (`include_changes=true`) follow the same rules.
+The history shows a changed status, assignee, version or category by name, and a changed
+[custom field](../metadata/values.md) under the field's own name. Uploading or deleting a file is
+recorded too, as **File report.pdf added** or **File report.pdf deleted** (see
+[Attachments](attachments.md#files-in-an-issues-history)).
+
+What you see depends on what you may see:
+
+- A version, category or sprint of a project you cannot open, or a person outside the projects you can
+  reach, shows as its id instead of its name.
+- A change of parent, or of a relation, that names an issue you cannot see is left out of the history.
+  Visitors who are not signed in see no parent, relation or file changes at all.
+
+The REST API (`GET /api/v1/issues/{ref}/?include=journals`) returns the same history. Each change has
+`old_name` and `new_name` next to its raw values, and a custom field change has a `field_name`. The
+`specivo_list_comments` MCP tool returns the whole change history, with the same names, when you pass
+`include_changes=true`. Both follow the visibility rules above.

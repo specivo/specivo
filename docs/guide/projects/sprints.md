@@ -31,6 +31,20 @@ work. You **plan** a sprint, **start** it, and **complete** it.
    team's velocity** — a record of how much work was finished — so you have a baseline for planning
    the next one.
 
+### What counts as done
+
+Specivo decides whether an issue is done by its status's **category** (done or closed), never by the
+status's name. The sprint list, the board's progress line, the burndown, the analytics page and the
+velocity snapshot all use the same rule. If your team renames **Resolved** to **Shipped**, nothing changes,
+and an in-progress status that happens to be called "Resolved" is not counted as done.
+
+### Velocity and private issues
+
+The velocity of a completed sprint, and the counts on the sprint pages, cover only the issues **you** may
+see. Two people reading the same completed sprint can therefore see different numbers when some of its
+issues are [private](../issues/creating.md#private-by-default) or hidden by their role. The REST API and
+MCP return the counts, never the ids of the issues behind them.
+
 ## The backlog
 
 The **backlog** is the pool of issues that aren't yet committed to a sprint. This is where you plan:

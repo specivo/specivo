@@ -14,6 +14,33 @@ files, spreadsheets, anything that helps explain or document the work.
 Use the attachment area on the issue (or wiki page, or comment) to upload a file. Specivo keeps each
 file's original filename, size, and type so it downloads back exactly as you uploaded it.
 
+## Who can add and remove files
+
+Attaching a file counts as changing the thing it is attached to, so it takes the right to change it:
+
+| Attached to | You need |
+|---|---|
+| An issue | **Edit issues** or **Add comments** in the project. The person who created an issue can also add files to it with **Create issues**. |
+| A wiki page | **Manage wiki pages** |
+| A comment | **Edit any comments**, or **Edit own comments** for your own comment |
+
+Removing a file, or editing its description, follows the same rule:
+
+- you can change **your own** file for as long as you could still add a file to the same place;
+- to change **someone else's** file you need the right to manage that place's files: **Edit issues** on an
+  issue, **Manage wiki pages** on a wiki page, **Edit any comments** on a comment.
+
+Administrators can do both. If you can open a file but not change it, the change is refused; if you cannot
+open it at all, it looks like it does not exist.
+
+## Files in an issue's history
+
+When a file is added to or removed from an issue, the issue's [history](updating.md#everything-is-recorded) records it as
+**File report.pdf added** or **File report.pdf deleted**, with who did it and when. A file added in the same
+save as an edit or a comment is shown with that entry; otherwise it gets an entry of its own. Files on wiki
+pages and comments do not appear in the issue's history. Files that come in through an import do not add
+entries of their own either: the imported history already holds them.
+
 ## Add a description
 
 Each attachment has an optional **description** field. It's worth filling in: descriptions are

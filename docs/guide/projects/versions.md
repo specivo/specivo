@@ -63,6 +63,9 @@ Specivo remembers your choice. The same sort applies to the versions list in the
 settings, and changing it in either place changes both. It is a personal setting — other people
 keep their own order.
 
+Progress on the roadmap, on a version's page and in the project settings counts only the issues you are
+allowed to see, so a private issue never shows up in a number you could not click through to.
+
 Click a version to see the issues assigned to it, grouped by status, so you can drill from the
 high-level plan straight into the work.
 

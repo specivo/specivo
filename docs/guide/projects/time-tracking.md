@@ -24,6 +24,10 @@ you can still edit or delete your own entries, as long as you have *Log time* in
 can do everything. Buttons you can't use (*Log Time*, the log-time form on an issue, edit controls)
 are hidden.
 
+Project **billing rates**, used by the billable-time report, are managed through the REST API. Creating,
+changing or deleting a rate takes the **Manage project settings** permission, and listing the rates takes
+**View time entries**. There is no separate billing permission.
+
 A running timer is checked again when you stop it: if you have lost the right to log time on its
 project or issue in the meantime, the timer is discarded and no time is written.
 

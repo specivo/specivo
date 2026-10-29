@@ -19,6 +19,13 @@ A schema applies in one of two ways:
 so a single **Bug** issue might show its team's standard fields *and* the bug-specific fields together. Each
 schema contributes its own fields; they don't interfere with one another.
 
+## Field names
+
+Each field in a schema can carry a **title**, the name people see: in the metadata panel on the issue page,
+in the issue's history, in search filters, in the REST API and over MCP. Without a title, Specivo shows the
+field's key made readable. Titles can use any script. A field can also be marked as holding a person or a
+version, in which case its values are shown by that person's or version's name.
+
 ## Who manages schemas
 
 Schemas are defined and enabled by **Managers** in **Admin → Metadata presets**
