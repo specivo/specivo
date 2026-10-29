@@ -7256,3 +7256,21 @@ msgstr "No hay versiones abiertas. Todas las versiones de este proyecto están c
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr "Versiones completadas"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr "Archivo %(name)s añadido"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr "Archivo %(name)s eliminado"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr "Archivo añadido"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr "Archivo eliminado"

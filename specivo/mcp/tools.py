@@ -21,7 +21,7 @@ from specivo.core.config import get_settings
 from specivo.core.constants import MCP_SEARCH_MAX_LIMIT, SEARCH_SNIPPET_MAX_CHARS
 from specivo.core.exceptions import ConflictError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
-from specivo.models.journal import JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
 from specivo.models.security_audit import SecurityAuditLog
@@ -764,6 +764,11 @@ def _change_line(detail: JournalDetail, names: ActivityLookups) -> str:
     if detail.property == "relation":
         verb = "added" if detail.new_value and not detail.old_value else "removed"
         return f"relation {detail.prop_key} {verb}: {detail.new_value or detail.old_value}"
+    if detail.property == ATTACHMENT_DETAIL:
+        removed = detail.old_value is not None and detail.new_value is None
+        name = names.attachment_name(detail)
+        verb = "deleted" if removed else "added"
+        return f"file {name} {verb}" if name else f"file {verb}"
     if detail.prop_key in ("description", "issue_metadata"):
         return f"{detail.prop_key} updated"
 

@@ -7085,3 +7085,21 @@ msgstr "ไม่มีเวอร์ชันที่เปิดอยู่
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr "เวอร์ชันที่เสร็จแล้ว"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s added"
+msgstr "เพิ่มไฟล์ %(name)s แล้ว"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+#, python-format
+msgid "File %(name)s deleted"
+msgstr "ลบไฟล์ %(name)s แล้ว"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File added"
+msgstr "เพิ่มไฟล์แล้ว"
+
+#: specivo/templates/themes/default/pages/issues/_activity.html
+msgid "File deleted"
+msgstr "ลบไฟล์แล้ว"

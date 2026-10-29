@@ -320,6 +320,8 @@ class AttachmentService:
         """Delete the DB record and the file on disk.
 
         The search index entry goes with the row (see ``search_index_service``).
+        A file removed from an issue by *user* is recorded in the issue's
+        history, under its name.
         """
         file_path = self._file_path(attachment.disk_filename)
         att_id = attachment.id
@@ -329,6 +331,16 @@ class AttachmentService:
 
         await session.delete(attachment)
         await session.flush()
+
+        if att_container_type == "Issue" and user is not None:
+            # The row is gone, so the issue's history keeps the file's name.
+            from specivo.models.issue import Issue
+            from specivo.services.journal_service import JournalService
+
+            issue = await session.get(Issue, att_container_id)
+            if issue is not None:
+                await JournalService().record_attachment_removed(session, issue, user, att_id, att_filename)
+                await session.flush()
 
         # Remove from disk (best-effort — DB row is already gone)
         try:

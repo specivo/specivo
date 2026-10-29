@@ -517,6 +517,31 @@ class TestJournals:
         assert warning.context["count"] == 4
         assert "version:10001" in warning.context["examples"]
 
+    async def test_an_attachment_change_names_the_imported_file_by_its_specivo_id(self, db_session, loaded):
+        """The page names the file as imported; a file that never came across keeps its name only."""
+        journal = self._journal(
+            notes=None,
+            details=[
+                IRJournalDetail(property="attachment", prop_key="a1", new_value="diagram.png"),
+                IRJournalDetail(property="attachment", prop_key="a9", old_value="removed.pdf"),
+            ],
+        )
+        ctx = await loaded(_adapter(issues=[_issue()], journals=[journal]))
+        await load_issues(ctx)
+        # Attachments are loaded before history; the map is all the journal phase reads.
+        await ctx.id_map.put(db_session, EntityType.ATTACHMENT, "a1", "attachments", 4242)
+        await load_journals(ctx)
+
+        details = await self._details(db_session, ctx)
+        assert [(d.property, d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("attachment", "4242", None, "diagram.png"),
+            # Never the source's ref, which would read as an unrelated Specivo file's id.
+            ("attachment", "", "removed.pdf", None),
+        ]
+        warning = next(w for w in ctx.summary.warnings if "History values name records" in w.message)
+        assert warning.context["count"] == 1
+        assert "attachment:a9" in warning.context["examples"]
+
     async def test_a_ref_imported_by_an_earlier_run_resolves(self, db_session, loaded):
         """The identifier map holds every earlier import of the source, as for placeholders."""
         first = await loaded(_adapter(issues=[_issue("100")]))

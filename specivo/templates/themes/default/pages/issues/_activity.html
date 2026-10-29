@@ -32,7 +32,7 @@
          parent change is left out. #}
       {% set names = lookup_maps if lookup_maps is defined and lookup_maps is not none else none %}
       {% for d in j.details if not (names.hides(d, anonymous=anonymous) if names is not none
-           else (d.prop_key == 'parent_id' or d.property == 'relation')) %}
+           else (d.prop_key == 'parent_id' or d.property == 'relation' or (anonymous and d.property == 'attachment'))) %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}
@@ -42,6 +42,15 @@
         {% trans %}Added{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.new_value }}/" style="color:var(--sp-accent);">{{ d.new_value }}</a>
         {% elif d.old_value and not d.new_value %}
         {% trans %}Removed{% endtrans %} <strong>{{ d.prop_key }}</strong> {% trans %}relation to{% endtrans %} <a href="/issue/{{ d.old_value }}/" style="color:var(--sp-accent);">{{ d.old_value }}</a>
+        {% endif %}
+        {% elif d.property == 'attachment' %}
+        {# A file attached or removed, by its name (ActivityLookups.attachment_name). #}
+        {% set file_name = names.attachment_name(d) if names is not none else (d.new_value or d.old_value) %}
+        {% set removed = d.old_value is not none and d.new_value is none %}
+        {% if file_name %}
+        {% if removed %}{% trans name=file_name %}File %(name)s deleted{% endtrans %}{% else %}{% trans name=file_name %}File %(name)s added{% endtrans %}{% endif %}
+        {% else %}
+        {% if removed %}{% trans %}File deleted{% endtrans %}{% else %}{% trans %}File added{% endtrans %}{% endif %}
         {% endif %}
         {% elif d.prop_key == 'description' %}
         <strong class="sp-change-label">{% trans %}Description{% endtrans %}</strong> {% trans %}updated{% endtrans %}
