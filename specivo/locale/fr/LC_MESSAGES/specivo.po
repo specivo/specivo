@@ -7267,3 +7267,7 @@ msgstr "Fichier ajouté"
 #: specivo/templates/themes/default/pages/issues/_activity.html
 msgid "File deleted"
 msgstr "Fichier supprimé"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "Session d'agent introuvable"

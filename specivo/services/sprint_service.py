@@ -6,6 +6,7 @@ import logging
 from collections import defaultdict
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +18,26 @@ from specivo.models.project import Project
 from specivo.models.sprint import Sprint
 from specivo.schemas.sprint import SprintCreate, SprintUpdate
 
+if TYPE_CHECKING:
+    from sqlalchemy.sql import Select
+    from sqlalchemy.sql.elements import ColumnElement
+
+    from specivo.models.user import User
+
 logger = logging.getLogger(__name__)
+
+
+async def _visibility(session: AsyncSession, user: User) -> ColumnElement[bool] | None:
+    """Return the predicate selecting the issues *user* may see (``IssueService.visible_issues_clause``)."""
+    from specivo.services.issue_service import IssueService
+
+    return await IssueService().visible_issues_clause(session, user)
+
+
+async def _visible_to(session: AsyncSession, user: User, stmt: Select[Any]) -> Select[Any]:
+    """Narrow an issue query *stmt* to the issues *user* may see."""
+    visibility = await _visibility(session, user)
+    return stmt if visibility is None else stmt.where(visibility)
 
 
 class SprintService:
@@ -235,8 +255,9 @@ class SprintService:
         self,
         session: AsyncSession,
         sprint: Sprint,
+        user: User,
     ) -> dict[str, list[Issue]]:
-        """Return issues in the sprint grouped by status name."""
+        """Return the issues in the sprint that *user* may see, grouped by status name."""
         stmt = (
             select(Issue)
             .where(Issue.sprint_id == sprint.id)
@@ -247,6 +268,7 @@ class SprintService:
                 selectinload(Issue.assigned_to),
             )
         )
+        stmt = await _visible_to(session, user, stmt)
         result = await session.execute(stmt)
         issues = list(result.scalars().all())
 
@@ -259,14 +281,19 @@ class SprintService:
         self,
         session: AsyncSession,
         project_id: int,
+        user: User,
         offset: int = 0,
         limit: int = 25,
     ) -> tuple[list[Issue], int]:
-        """Return issues with sprint_id IS NULL for the project.
+        """Return the issues of the project with sprint_id IS NULL that *user* may see.
 
-        Returns (items, total_count) for pagination.
+        Returns (items, total_count) for pagination; the count covers the
+        visible issues only.
         """
         base_where = [Issue.project_id == project_id, Issue.sprint_id.is_(None)]
+        visibility = await _visibility(session, user)
+        if visibility is not None:
+            base_where.append(visibility)
 
         count_result = await session.execute(
             select(func.count(Issue.id)).where(*base_where)
@@ -293,13 +320,12 @@ class SprintService:
         self,
         session: AsyncSession,
         sprint_id: int,
+        user: User,
     ) -> int:
-        """Return the number of issues assigned to a sprint."""
-        from sqlalchemy import func
-
-        stmt = select(func.count()).where(Issue.sprint_id == sprint_id)
-        result = await session.execute(stmt)
-        return result.scalar_one()
+        """Return the number of issues assigned to a sprint that *user* may see."""
+        stmt = await _visible_to(session, user, select(func.count(Issue.id)).where(Issue.sprint_id == sprint_id))
+        count: int = (await session.execute(stmt)).scalar_one()
+        return count
 
     # ------------------------------------------------------------------
     # Velocity & burndown

@@ -320,14 +320,15 @@ async def dashboard(
             journal_issue_ids = [j.issue_id for j in journals if j.issue_id]
             issue_key_map: dict[int, str] = {}
             issue_subject_map: dict[int, str] = {}
+            # Only issues the reader may see; journals on any other are left out.
+            issue_visibility = await _issue_svc.visible_issues_clause(db, user)
             if journal_issue_ids:
-                ik_rows = (
-                    await db.execute(
-                        select(Issue.id, Issue.project_key, Issue.sequence_number, Issue.subject).where(
-                            Issue.id.in_(journal_issue_ids)
-                        )
-                    )
-                ).all()
+                ik_stmt = select(Issue.id, Issue.project_key, Issue.sequence_number, Issue.subject).where(
+                    Issue.id.in_(journal_issue_ids)
+                )
+                if issue_visibility is not None:
+                    ik_stmt = ik_stmt.where(issue_visibility)
+                ik_rows = (await db.execute(ik_stmt)).all()
                 for r in ik_rows:
                     issue_key_map[r.id] = f"{r.project_key}-{r.sequence_number}"
                     issue_subject_map[r.id] = r.subject
@@ -352,7 +353,9 @@ async def dashboard(
 
                 # Determine activity type from journal details
                 if j.issue_id:
-                    issue_key = issue_key_map.get(j.issue_id, "")
+                    if j.issue_id not in issue_key_map:
+                        continue
+                    issue_key = issue_key_map[j.issue_id]
                     issue_subject = issue_subject_map.get(j.issue_id, "")
 
                     # Check for status change to resolved/closed
@@ -405,13 +408,13 @@ async def dashboard(
             # Batch-load issue keys for time entries
             te_issue_ids = [te.issue_id for te in time_entries if te.issue_id]
             if te_issue_ids:
-                te_ik_rows = (
-                    await db.execute(
-                        select(Issue.id, Issue.project_key, Issue.sequence_number).where(Issue.id.in_(te_issue_ids))
-                    )
-                ).all()
-                for r in te_ik_rows:
-                    issue_key_map[r.id] = f"{r.project_key}-{r.sequence_number}"
+                te_ik_stmt = select(Issue.id, Issue.project_key, Issue.sequence_number).where(
+                    Issue.id.in_(te_issue_ids)
+                )
+                if issue_visibility is not None:
+                    te_ik_stmt = te_ik_stmt.where(issue_visibility)
+                for te_row in (await db.execute(te_ik_stmt)).all():
+                    issue_key_map[te_row.id] = f"{te_row.project_key}-{te_row.sequence_number}"
 
             for te in time_entries:
                 actor = sa_user_names.get(te.user_id, "agent")

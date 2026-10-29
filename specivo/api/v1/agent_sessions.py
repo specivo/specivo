@@ -27,5 +27,5 @@ async def list_agent_sessions(
     """List recent agent sessions for a project."""
     project = await _project_service.get_by_key(db, project_key)
     await _project_service.require_project_access(db, project, current_user)
-    sessions = await _session_service.list_for_project(db, project.id, limit=limit)
+    sessions = await _session_service.list_for_project(db, project.id, current_user, limit=limit)
     return [AgentSessionOut.model_validate(s) for s in sessions]

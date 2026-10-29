@@ -7103,3 +7103,7 @@ msgstr "เพิ่มไฟล์แล้ว"
 #: specivo/templates/themes/default/pages/issues/_activity.html
 msgid "File deleted"
 msgstr "ลบไฟล์แล้ว"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "ไม่พบเซสชันของเอเจนต์"

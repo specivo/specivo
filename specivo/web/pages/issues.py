@@ -451,10 +451,6 @@ async def issue_detail(
         reactions_by_journal: dict = {}
         metadata_schemas_data: list = []
         move_targets: list = []
-        # An empty set means "link nothing". Auto-linking a KEY-123 token tells
-        # the reader the issue exists, which for a private one is a disclosure
-        # the page must not make; the text itself is unchanged.
-        known_issue_refs: set[str] = set()
     else:
         # Load emoji reactions for all journals (paginated subset)
         journal_ids = [j.id for j in journals]
@@ -475,11 +471,12 @@ async def issue_detail(
         visible_projects, _total = await _project_svc.list_projects(db, user, limit=200)
         move_targets = [p for p in visible_projects if p.id != issue.project_id]
 
-        # Resolve which KEY-123 references in the rendered text actually exist (or
-        # previously existed) so the markdown filter only auto-links real issues.
-        known_issue_refs = await _issue_svc.resolve_known_issue_refs(
-            db, issue.description, *[j.notes for j in all_journals]
-        )
+    # Resolve which KEY-123 references in the rendered text are issues the
+    # reader may see (anonymous visitors by the anonymous rules), so the
+    # markdown filter links only those; any other renders like an unknown key.
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(
+        db, user, issue.description, *[j.notes for j in all_journals]
+    )
 
     # Bare filenames in the description and comments resolve against this
     # issue's own attachments that the reader may open (none for anonymous).
@@ -726,7 +723,7 @@ async def issue_description_diff(
     selected_num = selected_version["num"] if selected_version else "?"
     prev_num = selected_num - 1 if selected_num != "?" and selected_num > 1 else None
 
-    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, old_text, new_text)
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, user, old_text, new_text)
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
     templates = get_templates()

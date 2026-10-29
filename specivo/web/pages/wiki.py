@@ -359,10 +359,6 @@ async def wiki_show(
         # Tags are project vocabulary, which is not part of what a project
         # opts in to.
         wiki_tags: list[dict] = []
-        # An empty set means "link nothing": autolinking a KEY-123 token tells
-        # the reader that the issue exists, which for a private one is a
-        # disclosure the page must not make. The text itself is unchanged.
-        known_issue_refs: set[str] = set()
     else:
         # Load attachments for the wiki page (serialized for Alpine.js)
         raw_attachments = await _attachment_svc.list_for_container(db, "WikiPage", page.id)
@@ -387,7 +383,10 @@ async def wiki_show(
 
         wiki_tags = _wiki_tags_to_dicts(await _tag_svc.tags_for_wiki_page(db, page.id))
 
-        known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, content.text)
+    # Only KEY-123 references to issues the reader may see are linked
+    # (anonymous visitors by the anonymous rules); any other renders like an
+    # unknown key, so the page does not tell the reader a hidden issue exists.
+    known_issue_refs = await _issue_svc.resolve_known_issue_refs(db, user, content.text)
 
     templates = get_templates()
     return templates.TemplateResponse(

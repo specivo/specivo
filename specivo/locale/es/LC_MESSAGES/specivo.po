@@ -7274,3 +7274,7 @@ msgstr "Archivo añadido"
 #: specivo/templates/themes/default/pages/issues/_activity.html
 msgid "File deleted"
 msgstr "Archivo eliminado"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "Sesión de agente no encontrada"

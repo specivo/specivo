@@ -50,7 +50,7 @@ async def log_tokens(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AgentTokenLogOut:
-    log = await _cost_service.log_tokens(db, data)
+    log = await _cost_service.log_tokens(db, data, current_user)
     return AgentTokenLogOut.model_validate(log)
 
 

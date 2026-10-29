@@ -51,8 +51,9 @@ things:
 - **The key's user has a role on the project.** Every write enforces the calling user's project
   permission. If the API key belongs to a user (often a service account) with no membership on that project,
   add them with an appropriate role — typically **Agent** or **Developer**.
-- **The key has the `mcp` scope.** A key without the `mcp` scope can't use the MCP server at all. Create a
-  new key with the `mcp` scope under **Your profile → API keys**. See [API keys](../ai-agents/api-keys.md).
+- **The key reaches the project.** A key limited to some projects answers *not found* for every other
+  project. Create a key without that limit, or one that names the project, under **Your profile → API
+  keys**. See [API keys](../ai-agents/api-keys.md#limit-a-key-to-some-projects).
 
 ## I can't see time entries
 

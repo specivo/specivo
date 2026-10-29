@@ -10,8 +10,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import NotFoundError
+from specivo.core.i18n import gettext as _
 from specivo.models.agent_cost import AgentTokenLog, ModelCostConfig
 from specivo.models.agent_session import AgentSession
+from specivo.models.user import User
 from specivo.schemas.agent_cost import AgentTokenLogCreate, ModelCostConfigCreate
 
 logger = logging.getLogger(__name__)
@@ -60,8 +62,19 @@ class AgentCostService:
         self,
         session: AsyncSession,
         data: AgentTokenLogCreate,
+        user: User,
     ) -> AgentTokenLog:
-        """Log token usage and calculate cost from ModelCostConfig."""
+        """Log token usage on one of *user*'s agent sessions and calculate its cost from ModelCostConfig.
+
+        Only the account a session belongs to may log to it, administrators
+        included. Any other session id, and one that does not exist, is
+        answered with ``NotFoundError`` so the endpoint cannot be used to
+        probe for sessions or to charge tokens to somebody else's.
+        """
+        owner_id = await session.scalar(select(AgentSession.user_id).where(AgentSession.id == data.session_id))
+        if owner_id is None or owner_id != user.id:
+            raise NotFoundError(_("Agent session not found"))
+
         # Look up cost config
         result = await session.execute(select(ModelCostConfig).where(ModelCostConfig.model_name == data.model_name))
         config = result.scalar_one_or_none()

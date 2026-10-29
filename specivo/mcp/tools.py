@@ -2358,6 +2358,7 @@ async def _list_sprint_issues(
         issues, total = await _sprint_svc.backlog_issues(
             session,
             project.id,
+            user,
             offset=offset,
             limit=limit,
         )
@@ -2368,8 +2369,11 @@ async def _list_sprint_issues(
         if sprint.project_id != project.id:
             raise NotFoundError(message="Sprint not found in this project")
 
-        # Query issues for this sprint
+        # Query the issues of this sprint the caller may see
         base_where = [Issue.project_id == project.id, Issue.sprint_id == sprint_id]
+        visibility = await _issue_svc.project_visible_issues_clause(session, user, project)
+        if visibility is not None:
+            base_where.append(visibility)
 
         count_result = await session.execute(select(func.count(Issue.id)).where(*base_where))
         total = count_result.scalar_one()
@@ -2469,6 +2473,10 @@ async def _list_version_issues(
             raise NotFoundError(message="Version not found in this project")
         base_where = [Issue.project_id == project.id, Issue.fixed_version_id == version_id]
         header_prefix = f'Issues in version {version.id} "{version.name}"'
+    # Only the issues the caller may see, as in the issue list
+    visibility = await _issue_svc.project_visible_issues_clause(session, user, project)
+    if visibility is not None:
+        base_where.append(visibility)
 
     count_result = await session.execute(select(func.count(Issue.id)).where(*base_where))
     total = count_result.scalar_one()

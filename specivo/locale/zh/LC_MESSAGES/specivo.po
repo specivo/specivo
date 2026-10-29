@@ -6969,3 +6969,7 @@ msgstr "已添加文件"
 #: specivo/templates/themes/default/pages/issues/_activity.html
 msgid "File deleted"
 msgstr "已删除文件"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "未找到代理会话"

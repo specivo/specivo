@@ -41,8 +41,8 @@ See [Connecting an AI client](connecting.md) for the exact configuration each on
 
 ## Where to go next
 
-- **[API keys & scopes](api-keys.md)** — create a key with the `mcp` scope, and why teams use a
-  dedicated service account.
+- **[API keys & scopes](api-keys.md)** — create a key, limit it to some projects, and why teams use
+  a dedicated service account.
 - **[Connecting an AI client](connecting.md)** — copy-paste config for SSE clients and Codex.
 - **[What agents can do](capabilities.md)** — the tool catalog by area, read vs write, and auditing.
 - **[Common workflows](workflows.md)** — concrete things to ask your agent to do.
