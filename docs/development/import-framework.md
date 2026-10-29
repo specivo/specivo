@@ -149,7 +149,7 @@ on every worklog, and Specivo keeps no history for that column.
 
 Specivo's history keeps a changed attribute's value as text: a Specivo id for
 an attribute that names a record (`status_id`, `fixed_version_id`, …), which
-the issue page turns into a name (`specivo/web/activity_lookups.py`). A bundle
+the issue page turns into a name (`specivo/services/activity_lookups.py`). A bundle
 cannot know those ids, so such a change carries the records' refs (`old_ref`,
 `new_ref`) and, in `old_value` / `new_value`, the source's text for them.
 `issue_loader.py` resolves the refs through the id map when it creates the

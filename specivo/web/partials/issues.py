@@ -10,12 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError
+from specivo.services.activity_lookups import activity_lookup_maps
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
-from specivo.web.activity_lookups import activity_lookup_maps
 from specivo.web.deps import get_current_user_optional, get_templates
 from specivo.web.thread_tree import build_thread_tree
 

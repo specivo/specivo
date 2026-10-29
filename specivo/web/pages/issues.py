@@ -14,6 +14,7 @@ from specivo.core.exceptions import NotFoundError
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
+from specivo.services.activity_lookups import activity_lookup_maps
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
 from specivo.services.issue_service import IssueService
@@ -24,7 +25,6 @@ from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
-from specivo.web.activity_lookups import activity_lookup_maps
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
     get_current_user_optional,

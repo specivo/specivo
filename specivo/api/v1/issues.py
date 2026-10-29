@@ -28,6 +28,7 @@ from specivo.schemas.issue import (
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
+from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
@@ -418,8 +419,14 @@ async def get_issue(
             user_result = await db.execute(select(User).where(User.id.in_(resolved_by_ids)))
             for u in user_result.scalars().all():
                 resolved_by_map[u.id] = u
+        names = await _journal_names(db, current_user, raw_journals, request)
         journals_out = [
-            _journal_out(j, resolved_by_user=resolved_by_map.get(j.resolved_by_id) if j.resolved_by_id else None)
+            _journal_out(
+                j,
+                names,
+                anonymous=anonymous,
+                resolved_by_user=resolved_by_map.get(j.resolved_by_id) if j.resolved_by_id else None,
+            )
             for j in raw_journals
         ]
 
@@ -599,8 +606,27 @@ async def get_allowed_statuses(
 # ---------------------------------------------------------------------------
 
 
-def _journal_out(j: Journal, resolved_by_user: User | None = None) -> JournalOut:
-    """Build a JournalOut from a Journal with eagerly-loaded relationships."""
+async def _journal_names(db: AsyncSession, user: User, journals: list[Journal], request: Request) -> ActivityLookups:
+    """Names for the ids the journals' field changes hold, as the issue page gives them to *user*.
+
+    An API key limited to some projects is shown names only from those.
+    """
+    scopes = getattr(request.state, "api_key_scopes", None) or {}
+    return await activity_lookup_maps(
+        db, user, journals, people_by_login=False, project_scope=scopes.get("projects") or None
+    )
+
+
+def _journal_out(
+    j: Journal, names: ActivityLookups, *, anonymous: bool = False, resolved_by_user: User | None = None
+) -> JournalOut:
+    """Build a JournalOut from a Journal with eagerly-loaded relationships.
+
+    Field changes are named, and left out, as the issue page does for the
+    same reader (see :mod:`specivo.services.activity_lookups`): a parent
+    change naming an issue the caller may not see is not returned, nor, for
+    a caller without an account, any relation or parent change.
+    """
     resolved_by = None
     if j.resolved_by_id is not None and resolved_by_user is not None:
         resolved_by = IdName(id=resolved_by_user.id, name=resolved_by_user.display_name)
@@ -618,8 +644,11 @@ def _journal_out(j: Journal, resolved_by_user: User | None = None) -> JournalOut
                 prop_key=d.prop_key,
                 old_value=d.old_value,
                 new_value=d.new_value,
+                old_name=names.name(d, d.old_value),
+                new_name=names.name(d, d.new_value),
             )
             for d in j.details
+            if not names.hides(d, anonymous=anonymous)
         ],
         reply_to_id=j.reply_to_id,
         is_resolved=j.is_resolved,
@@ -645,6 +674,7 @@ def _journal_out(j: Journal, resolved_by_user: User | None = None) -> JournalOut
 async def add_comment(
     issue_ref: str,
     data: AddCommentRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> JournalOut:
@@ -688,7 +718,7 @@ async def add_comment(
     )
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _journal_out(journal)
+    return _journal_out(journal, await _journal_names(db, current_user, [journal], request))
 
 
 @router.post(
@@ -700,6 +730,7 @@ async def resolve_thread(
     issue_ref: str,
     journal_id: int,
     data: ResolveThreadRequest,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     _rl: None = Depends(rate_limit("resolve_toggle", max_requests=30, window_seconds=60)),
@@ -731,7 +762,9 @@ async def resolve_thread(
     journal = result.scalar_one()
 
     await db.commit()  # commit before response to avoid reload race condition
-    return _journal_out(journal, resolved_by_user=current_user)
+    return _journal_out(
+        journal, await _journal_names(db, current_user, [journal], request), resolved_by_user=current_user
+    )
 
 
 @router.post(

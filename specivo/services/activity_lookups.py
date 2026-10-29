@@ -1,9 +1,10 @@
-"""Names for the ids an issue's activity feed shows.
+"""Names for the ids an issue's history holds.
 
 A field change in an issue's history keeps the ids of the records it names
-(``status_id``, ``fixed_version_id``, …), and the feed shows the records'
-names. The issue page and the activity partial that pages through the feed
-build the same maps here, so a change reads the same on either.
+(``status_id``, ``fixed_version_id``, …), and readers are shown the records'
+names. The issue page, the activity partial that pages through the feed, the
+REST API and the MCP tools build the same maps here, so a change reads the
+same everywhere and names, and leaves out, the same things for one reader.
 
 A value that is not an id (imported history keeps the source's text for a
 record that was not imported) has no entry, and the feed shows it as stored.
@@ -16,10 +17,10 @@ same rules, as an assignee or a target version.
 from __future__ import annotations
 
 import re
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from typing import Any
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import ColumnElement, and_, or_, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.issue import Issue, IssueRefAlias
@@ -117,8 +118,10 @@ async def activity_lookup_maps(
     user: User,
     journals: Iterable[Journal],
     *,
-    members: Sequence[dict[str, Any]],
+    members: Sequence[dict[str, Any]] = (),
     sprint_id: int | None = None,
+    people_by_login: bool = True,
+    project_scope: Collection[str | int] | None = None,
 ) -> ActivityLookups:
     """Return ``{map: {id as text: name}}`` for the activity feed of *journals*.
 
@@ -131,22 +134,27 @@ async def activity_lookup_maps(
     may not see is listed under :data:`HIDDEN_PARENTS` for the feed to leave
     out. A former assignee who is no longer a member only
     when *user* may see them. Signed-in readers see people by login, an
-    anonymous visitor by display name. People and versions an imported custom
-    field change names are named by the same rules.
+    anonymous visitor by display name; with *people_by_login* off (the API's
+    convention), everyone by display name. *members*, the issue's project's
+    members, are named without a further check. *project_scope* (the
+    projects an API key is limited to, by key or id) narrows what is named
+    and which parents are shown to those projects. People and versions an
+    imported custom field change names are named by the same rules.
     """
     referenced = referenced_ids(journals)
+    readable = await _readable_projects(db, user, project_scope)
     if sprint_id is not None:
         referenced["sprint_id"].add(sprint_id)
 
     return ActivityLookups(
         {
             **{key: await _global_names(db, model, referenced[key]) for key, model in _GLOBAL_LOOKUPS.items()},
-            "assigned_to_id": await _people(db, user, referenced["assigned_to_id"], members),
-            "sprint_id": await _names(db, user, Sprint, referenced["sprint_id"]),
-            "fixed_version_id": await _names(db, user, Version, referenced["fixed_version_id"]),
-            "category_id": await _names(db, user, IssueCategory, referenced["category_id"]),
-            "project_id": await _projects(db, user, referenced["project_id"]),
-            HIDDEN_PARENTS: await _hidden_parents(db, user, journals),
+            "assigned_to_id": await _people(db, user, referenced["assigned_to_id"], members, by_login=people_by_login),
+            "sprint_id": await _names(db, readable, Sprint, referenced["sprint_id"]),
+            "fixed_version_id": await _names(db, readable, Version, referenced["fixed_version_id"]),
+            "category_id": await _names(db, readable, IssueCategory, referenced["category_id"]),
+            "project_id": await _projects(db, readable, referenced["project_id"]),
+            HIDDEN_PARENTS: await _hidden_parents(db, user, journals, readable if project_scope else None),
         }
     )
 
@@ -159,8 +167,23 @@ async def _global_names(db: AsyncSession, model: Any, ids: set[int]) -> dict[str
     return {str(row.id): row.name for row in rows}
 
 
-async def _names(db: AsyncSession, user: User, model: Any, ids: set[int]) -> dict[str, str]:
-    """Name the records of *model* (each belongs to a project) whose project *user* may open.
+async def _readable_projects(
+    db: AsyncSession, user: User, scope: Collection[str | int] | None
+) -> ColumnElement[bool] | None:
+    """Return a predicate over ``projects`` selecting those *user* may open (within *scope*), or None for all."""
+    clauses = []
+    accessible = await _project_svc.accessible_projects_clause(db, user)
+    if accessible is not None:
+        clauses.append(accessible)
+    if scope:
+        ids = {int(item) for item in scope if isinstance(item, int) or str(item).isdigit()}
+        keys = {str(item) for item in scope if not (isinstance(item, int) or str(item).isdigit())}
+        clauses.append(or_(Project.id.in_(ids), Project.key.in_(keys)))
+    return and_(*clauses) if clauses else None
+
+
+async def _names(db: AsyncSession, readable: ColumnElement[bool] | None, model: Any, ids: set[int]) -> dict[str, str]:
+    """Name the records of *model* (each belongs to a project) whose project the reader may open.
 
     The rule version sharing follows too: sharing decides which projects a
     version reaches, never that a reader sees one whose own project they
@@ -169,13 +192,14 @@ async def _names(db: AsyncSession, user: User, model: Any, ids: set[int]) -> dic
     if not ids:
         return {}
     stmt = select(model.id, model.name).join(Project, Project.id == model.project_id).where(model.id.in_(ids))
-    accessible = await _project_svc.accessible_projects_clause(db, user)
-    if accessible is not None:
-        stmt = stmt.where(accessible)
+    if readable is not None:
+        stmt = stmt.where(readable)
     return {str(row.id): row.name for row in (await db.execute(stmt)).all()}
 
 
-async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journal]) -> dict[str, str]:
+async def _hidden_parents(
+    db: AsyncSession, user: User, journals: Iterable[Journal], scope: ColumnElement[bool] | None = None
+) -> dict[str, str]:
     """Return the parent changes' values that look like an issue key *user* may not be shown.
 
     History keeps a parent by display key, and the page links any key it
@@ -186,7 +210,8 @@ async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journ
     feed leaves the change out entirely, as the relations list leaves out a
     relation to an issue the reader cannot see. Fails closed: a key naming no
     issue at all is hidden too. A value that is no key (``#123``) stays.
-    Admins see every issue, so nothing is hidden from them.
+    Admins see every issue, so nothing is hidden from them, unless *scope*
+    (a predicate over ``projects``) limits the projects shown.
     """
     keys: dict[tuple[str, int], set[str]] = {}
     for journal in journals:
@@ -197,7 +222,7 @@ async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journ
                 match = _ISSUE_KEY.match(value or "")
                 if match:
                     keys.setdefault((match[1].upper(), int(match[2])), set()).add(str(value))
-    if not keys or user.is_admin:
+    if not keys or (user.is_admin and scope is None):
         return {}
 
     resolved = await _resolve_issue_keys(db, set(keys))
@@ -209,6 +234,8 @@ async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journ
         clause = await IssueService().visible_issues_clause(db, user)
         if clause is not None:
             stmt = stmt.where(clause)
+        if scope is not None:
+            stmt = stmt.where(Issue.project_id.in_(select(Project.id).where(scope)))
         visible = set((await db.execute(stmt)).scalars())
     return {value: "" for key, values in keys.items() if resolved.get(key) not in visible for value in values}
 
@@ -255,22 +282,24 @@ async def _resolve_issue_keys(db: AsyncSession, keys: set[tuple[str, int]]) -> d
     return resolved
 
 
-async def _projects(db: AsyncSession, user: User, ids: set[int]) -> dict[str, str]:
+async def _projects(db: AsyncSession, readable: ColumnElement[bool] | None, ids: set[int]) -> dict[str, str]:
     if not ids:
         return {}
     stmt = select(Project.id, Project.name).where(Project.id.in_(ids))
-    accessible = await _project_svc.accessible_projects_clause(db, user)
-    if accessible is not None:
-        stmt = stmt.where(accessible)
+    if readable is not None:
+        stmt = stmt.where(readable)
     return {str(row.id): row.name for row in (await db.execute(stmt)).all()}
 
 
-async def _people(db: AsyncSession, user: User, ids: set[int], members: Sequence[dict[str, Any]]) -> dict[str, str]:
-    if user.is_anonymous:
-        # The member list names people by login. An anonymous visitor gets
-        # display names, only for the people the feed actually mentions, and
-        # only for those the anonymous user may see: members of the projects
-        # it can open. Anyone else shows as stored.
+async def _people(
+    db: AsyncSession, user: User, ids: set[int], members: Sequence[dict[str, Any]], *, by_login: bool
+) -> dict[str, str]:
+    if user.is_anonymous or not by_login:
+        # The member list names people by login. An anonymous visitor (and an
+        # API caller) gets display names, only for the people the history
+        # actually mentions, and only for those the reader may see: for the
+        # anonymous user, members of the projects it can open. Anyone else
+        # shows as stored.
         if not ids:
             return {}
         stmt = select(User.id, User.display_name).where(User.id.in_(ids))
@@ -290,3 +319,8 @@ async def _people(db: AsyncSession, user: User, ids: set[int], members: Sequence
             stmt = stmt.where(visible)
         people.update({str(row.id): row.login for row in (await db.execute(stmt)).all()})
     return people
+
+
+def detail_names(names: ActivityLookups, detail: JournalDetail) -> tuple[str | None, str | None]:
+    """Return the names of a field change's old and new values, ``None`` for a value that has none to show."""
+    return names.name(detail, detail.old_value), names.name(detail, detail.new_value)

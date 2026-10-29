@@ -10,7 +10,16 @@ from specivo.schemas.common import IdName
 
 
 class JournalDetailOut(BaseModel):
-    """One field change within a journal entry."""
+    """One field change within a journal entry.
+
+    ``old_value`` / ``new_value`` hold what history stores: for a change naming
+    a record (``status_id``, ``assigned_to_id``, ``fixed_version_id``, a
+    ``cf_user`` / ``cf_version`` custom field, …) its id, which ``old_name`` /
+    ``new_name`` name. A name is given only for a record the caller may see,
+    by the issue page's rules; it is null for a plain value, and for an id the
+    caller is not shown (show the value as stored). Imported history can hold
+    the source's text instead of an id, for a record that was not imported.
+    """
 
     model_config = {"from_attributes": True}
 
@@ -19,6 +28,8 @@ class JournalDetailOut(BaseModel):
     prop_key: str
     old_value: str | None
     new_value: str | None
+    old_name: str | None = None
+    new_name: str | None = None
 
 
 class JournalOut(BaseModel):

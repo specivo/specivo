@@ -8,7 +8,7 @@ The cache is process-local: invalidating it reaches only the worker that
 made the change, and an import or another worker can create records too. So
 a copy is kept for at most :data:`TTL_SECONDS`, and nothing that must be
 exact reads from it. An issue's history names the records it refers to from
-the database (``specivo.web.activity_lookups``).
+the database (``specivo.services.activity_lookups``).
 """
 
 from __future__ import annotations
