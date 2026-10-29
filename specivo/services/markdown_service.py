@@ -11,10 +11,12 @@ Pipeline:
 
     raw markdown
       -> wiki link substitution    [[Page]]    -> [Page](/projects/X/wiki/page/)
-      -> issue ref auto-link       PROJ-123    -> [PROJ-123](/issue/PROJ-123/)
       -> render_hazard(...)        over the size, nesting or cost budget:
                                    the raw text, escaped, with a notice instead
       -> markdown.markdown(...)    with fenced_code, tables, toc, codehilite
+           + issue ref inline pattern: PROJ-123 -> <a href="/issue/PROJ-123/">
+             (parsed text only, so code, raw HTML blocks and link text are
+             never touched)
            + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
              -> attachment download URL (parsed tree, so code is never touched)
       -> nh3.clean(...)            HTML sanitizer with our allowlist
@@ -36,6 +38,7 @@ import markdown as _md
 import markupsafe
 import nh3
 from markdown.extensions import Extension  # type: ignore[import-untyped]
+from markdown.inlinepatterns import InlineProcessor  # type: ignore[import-untyped]
 from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
 
 from specivo.core.i18n import gettext as _
@@ -124,8 +127,19 @@ _MD_EXTENSION_CONFIGS = {
 # Compiled once at import time
 # A URL scheme (``https:``, ``mailto:``) at the start of a link target.
 _URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
-# Issue reference: PROJ-123, but not inside markdown links or wiki links
-_ISSUE_REF_RE = re.compile(r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b")
+# Issue reference: PROJ-123, but not right after ``[``, ``(`` or ``/`` (a link
+# label, a link target, a URL path).
+_ISSUE_REF_PATTERN = r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b"
+_ISSUE_REF_RE = re.compile(_ISSUE_REF_PATTERN)
+
+
+def count_issue_ref_candidates(text: str) -> int:
+    """Return how many ``KEY-123`` tokens *text* holds, for the render budget.
+
+    Counts every token, in code too, so the estimate never falls short of
+    what the issue-ref inline pattern may link.
+    """
+    return sum(1 for _ in _ISSUE_REF_RE.finditer(text))
 
 
 def find_issue_ref_candidates(text: str | None) -> set[str]:
@@ -150,14 +164,15 @@ def _sanitize_html(html_str: str) -> str:
     )
 
 
-def _render_markdown(source: str, original: str, extensions: list) -> markupsafe.Markup:
+def _render_markdown(source: str, original: str, extensions: list, issue_refs: int = 0) -> markupsafe.Markup:
     """Render *source* to sanitized HTML, or *original* as plain text if that is unsafe.
 
-    *source* is the text after wiki-link and issue-ref substitution, which is
+    *source* is the text after wiki-link substitution, which is
     what Python-Markdown parses; *original* is what the author wrote, shown
-    as-is in the fallback.
+    as-is in the fallback. *issue_refs* is how many ``KEY-123`` tokens the
+    render may link (see :func:`render_hazard`).
     """
-    hazard = render_hazard(source, len(original))
+    hazard = render_hazard(source, len(original), issue_refs)
     if hazard is None:
         allowance = render_allowance()
         if allowance <= 0:
@@ -257,25 +272,54 @@ class _AttachmentRefExtension(Extension):
         md.treeprocessors.register(_AttachmentRefTreeprocessor(md, self.attachment_map), "attachment_refs", 5)
 
 
-def substitute_links(text: str, project_key: str = "", known_issue_refs: set[str] | None = None) -> str:
-    """Rewrite ``[[Page]]`` wiki links and ``KEY-123`` refs in *text* as Markdown links.
+class _IssueRefInlineProcessor(InlineProcessor):
+    """Link ``KEY-123`` in parsed text to ``/issue/KEY-123/``.
+
+    An inline pattern only sees text Python-Markdown parses as Markdown, so
+    code spans, fenced and indented code blocks and raw HTML blocks (stashed
+    before inline parsing) keep their keys as written, and ``ANCESTOR_EXCLUDES``
+    keeps it out of link text. A key in inline HTML (``<span>ACME-1</span>``) is
+    still linked, as an ``<a>`` element.
+    """
+
+    ANCESTOR_EXCLUDES = ("a",)
+
+    def __init__(self, md: _md.Markdown, known_issue_refs: set[str] | None) -> None:
+        super().__init__(_ISSUE_REF_PATTERN, md)
+        self.known_issue_refs = known_issue_refs
+
+    def handleMatch(  # noqa: N802 - Python-Markdown API
+        self, m: re.Match[str], data: str
+    ) -> tuple[Element | None, int | None, int | None]:
+        ref = m.group(1)
+        if self.known_issue_refs is not None and ref not in self.known_issue_refs:
+            return None, None, None
+        element = Element("a", {"href": f"/issue/{ref}/"})
+        element.text = ref
+        return element, m.start(0), m.end(0)
+
+
+class _IssueRefExtension(Extension):
+    def __init__(self, known_issue_refs: set[str] | None) -> None:
+        super().__init__()
+        self.known_issue_refs = known_issue_refs
+
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below every built-in pattern (the lowest is emphasis at 50), so links,
+        # autolinks, inline HTML and emphasis are matched first and a key in
+        # link text is seen with an ``a`` ancestor.
+        md.inlinePatterns.register(_IssueRefInlineProcessor(md, self.known_issue_refs), "issue_refs", 5)
+
+
+def substitute_links(text: str, project_key: str = "") -> str:
+    """Rewrite ``[[Page]]`` wiki links in *text* as Markdown links.
 
     The first step of :func:`render_wiki_markdown`, and the text the render
     budget is checked against: what Python-Markdown will actually parse.
+    ``KEY-123`` issue refs are linked later, on the parsed text, by an inline
+    pattern (see :class:`_IssueRefInlineProcessor`).
     """
-    processed = _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
-
-    # Auto-link issue references: PROJ-123 -> [PROJ-123](/issue/PROJ-123/).
-    # When known_issue_refs is provided, only link references that resolve to a
-    # real (or previously-existing) issue; leave the rest as plain text.
-    def _link_issue_ref(m: re.Match[str]) -> str:
-        ref = m.group(1)
-        if known_issue_refs is None or ref in known_issue_refs:
-            return f"[{ref}](/issue/{ref}/)"
-        return ref
-
-    processed = _ISSUE_REF_RE.sub(_link_issue_ref, processed)
-    return processed
+    return _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
 
 
 def render_wiki_markdown(
@@ -310,14 +354,14 @@ def render_wiki_markdown(
     if not text:
         return markupsafe.Markup("")
 
-    processed = substitute_links(text, project_key, known_issue_refs)
+    processed = substitute_links(text, project_key)
 
-    # Bare-filename image and link targets are resolved to attachment URLs on
-    # the parsed tree, not by rewriting the source.
-    extensions: list = list(_MD_EXTENSIONS)
+    # Issue refs are linked, and bare-filename image and link targets resolved
+    # to attachment URLs, on the parsed text, not by rewriting the source.
+    extensions: list = [*_MD_EXTENSIONS, _IssueRefExtension(known_issue_refs)]
     if attachment_map:
         extensions.append(_AttachmentRefExtension(attachment_map))
-    return _render_markdown(processed, text, extensions)
+    return _render_markdown(processed, text, extensions, count_issue_ref_candidates(processed))
 
 
 def render_plain_markdown(text: str) -> markupsafe.Markup:
