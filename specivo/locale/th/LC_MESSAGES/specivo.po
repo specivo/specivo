@@ -7115,3 +7115,7 @@ msgstr "รายการประวัตินี้ไม่ได้อย
 #: specivo/api/v1/attachments.py
 msgid "You do not have permission to add files here."
 msgstr "คุณไม่มีสิทธิ์เพิ่มไฟล์ที่นี่"
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to change this file."
+msgstr "คุณไม่มีสิทธิ์เปลี่ยนแปลงไฟล์นี้"

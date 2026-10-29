@@ -41,6 +41,15 @@ async def _visible_to(session: AsyncSession, user: User, stmt: Select[Any]) -> S
     return stmt if visibility is None else stmt.where(visibility)
 
 
+def count_done(board: dict[str, list[Issue]]) -> int:
+    """Return how many issues of a ``board_data`` board are done.
+
+    Done means a status in the done or closed category (``IssueStatus.is_done``),
+    whatever the status is called; the board's status-name keys are labels only.
+    """
+    return sum(1 for issues in board.values() for issue in issues if issue.status.is_done)
+
+
 class SprintService:
     """Service layer for Sprint operations."""
 

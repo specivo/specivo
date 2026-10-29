@@ -158,11 +158,17 @@ async def delete_attachment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete an attachment (author or admin only)."""
-    attachment = await _service.get_visible(db, attachment_id, current_user)
+    """Delete an attachment.
 
-    if not current_user.is_admin and attachment.author_id != current_user.id:
-        raise PermissionDeniedError("You can only delete your own attachments (or be an admin)")
+    The file must be one you may open (404 otherwise) and change (403
+    otherwise): your own file while you may still add files to its container,
+    or anyone's with ``edit_issues`` on an issue, ``manage_wiki`` on a wiki
+    page, or ``edit_notes`` on a comment. Removing a file from an issue is
+    recorded in the issue's history.
+    """
+    attachment = await _service.get_visible(db, attachment_id, current_user)
+    if not await _service.can_change_attachment(db, current_user, attachment):
+        raise PermissionDeniedError(_("You do not have permission to change this file."))
 
     await _service.delete(db, attachment, user=current_user, request=request)
 
@@ -175,16 +181,17 @@ async def update_attachment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> AttachmentOut:
-    """Update an attachment's description and/or metadata (author or admin only).
+    """Update an attachment's description and/or metadata.
+
+    Takes the same rights as deleting it (see ``DELETE /attachments/{id}/``).
 
     Re-indexes the attachment for search and logs the change to the audit trail.
     When ``metadata`` is provided, it is validated via ``AttachmentMetadata``
     Pydantic model and stored as JSONB.
     """
     attachment = await _service.get_visible(db, attachment_id, current_user)
-
-    if not current_user.is_admin and attachment.author_id != current_user.id:
-        raise PermissionDeniedError("You can only update your own attachments (or be an admin)")
+    if not await _service.can_change_attachment(db, current_user, attachment):
+        raise PermissionDeniedError(_("You do not have permission to change this file."))
 
     # Capture author name before flush expires the eagerly-loaded relationship
     author_name = attachment.author.display_name
