@@ -156,17 +156,25 @@ export function issueForm(initial) {
                             return;
                         }
 
-                        /* Upload attachments */
+                        /* Upload attachments, recorded in one history entry */
+                        var uploadJournalId = null;
                         for (var i = 0; i < this.files.length; i++) {
                             var formData = new FormData();
                             formData.append('file', this.files[i]);
                             formData.append('container_type', 'Issue');
                             formData.append('container_id', data.id);
+                            if (uploadJournalId) {
+                                formData.append('journal_id', uploadJournalId);
+                            }
                             try {
-                                await spFetch('/api/v1/attachments/', {
+                                var upRes = await spFetch('/api/v1/attachments/', {
                                     method: 'POST',
                                     body: formData
                                 });
+                                if (upRes.ok) {
+                                    var upData = await upRes.json();
+                                    if (upData.journal_id) uploadJournalId = upData.journal_id;
+                                }
                             } catch (_e) { /* best-effort */ }
                         }
 

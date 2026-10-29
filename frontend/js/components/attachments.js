@@ -148,8 +148,11 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
             async handleFiles(fileList) {
                 if (!fileList || !fileList.length) return;
                 this.uploadError = '';
+                // One issue history entry for the whole batch: every file after
+                // the first joins the entry the first one was recorded in.
+                var batch = { journalId: null };
                 for (var i = 0; i < fileList.length; i++) {
-                    await this._uploadOne(fileList[i]);
+                    await this._uploadOne(fileList[i], batch);
                 }
                 // Reset file input so the same file can be re-selected
                 if (this.$refs.fileInput) {
@@ -157,7 +160,7 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
                 }
             },
 
-            async _uploadOne(file) {
+            async _uploadOne(file, batch) {
                 var entry = { name: file.name, progress: 0 };
                 this.uploads.push(entry);
                 try {
@@ -165,6 +168,9 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
                     formData.append('file', file);
                     formData.append('container_type', this.containerType);
                     formData.append('container_id', this.containerId);
+                    if (batch && batch.journalId) {
+                        formData.append('journal_id', batch.journalId);
+                    }
 
                     var res = await spFetch('/api/v1/attachments/', {
                         method: 'POST',
@@ -174,6 +180,9 @@ function spAttachmentsComponent(initial, defaultContainerType, idField) {
                     entry.progress = 100;
                     if (res.ok) {
                         var data = await res.json();
+                        if (batch && data.journal_id) {
+                            batch.journalId = data.journal_id;
+                        }
                         this.attachments.push(data);
                     } else {
                         var errData = {};

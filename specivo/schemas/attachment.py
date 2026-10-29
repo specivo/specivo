@@ -34,3 +34,5 @@ class AttachmentOut(BaseModel):
     author: IdName
     created_at: datetime
     updated_at: datetime
+    #: The issue history entry recording an upload (set on upload responses only).
+    journal_id: int | None = None
