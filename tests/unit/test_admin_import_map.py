@@ -84,7 +84,8 @@ class TestLinksCommands:
 
     def test_nothing_pending(self):
         assert format_pending(Path("l.sqlite"), None, 0, {}) == (
-            "Nothing is waiting in l.sqlite: no imported text names a record that has not been imported."
+            "Nothing is waiting in l.sqlite: no imported text, relation or parent names a record that has not been "
+            "imported."
         )
 
     def test_the_pending_listing(self):
@@ -94,6 +95,36 @@ class TestLinksCommands:
             "  issue  2",
             "  wiki   1",
         ]
+
+    def test_the_pending_listing_with_relations_and_parents(self):
+        scope = ("sample", "tracker.example.com")
+        assert format_pending(Path("l.sqlite"), scope, 0, {}, {"relation": 2, "parent": 1}).splitlines() == [
+            "sample @ tracker.example.com: 2 relation(s) and 1 issue parent(s) wait for issues not imported yet",
+        ]
+        assert format_pending(Path("l.sqlite"), scope, 1, {"issue": 1}, {"parent": 1}).splitlines() == [
+            "sample @ tracker.example.com: 1 text(s) wait for records not imported yet",
+            "  issue  1",
+            "sample @ tracker.example.com: 1 issue parent(s) wait for issues not imported yet",
+        ]
+
+    def test_resolve_pending_reports_relations_and_parents(self):
+        outcome = LinksOutcome(
+            Path("l.sqlite"),
+            ("sample", "t"),
+            relations_linked=2,
+            parents_linked=1,
+            links_waiting=3,
+            link_problems=["relation r-d: Cannot create a relation between a parent issue and its descendant."],
+        )
+        assert format_resolve(outcome, dry_run=False).splitlines() == [
+            "Linked 0 text(s); 0 left alone because they were edited after import; 0 still waiting. "
+            "Made 2 relation(s) and set 1 parent(s); 1 refused or left alone; 3 still waiting.",
+            "  relation r-d: Cannot create a relation between a parent issue and its descendant.",
+        ]
+        assert format_resolve(outcome, dry_run=True).startswith(
+            "0 text(s) would be linked, 0 left alone because they were edited after import, 0 still waiting. "
+            "2 relation(s) would be made and 1 parent(s) set; 1 refused or left alone; 3 still waiting. "
+        )
 
     def test_a_dry_run_of_resolve_pending(self):
         outcome = LinksOutcome(

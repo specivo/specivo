@@ -329,7 +329,7 @@ async def resolve_pending(
             if batch:
                 await _resolve_batch(session, resolver, store, column, batch, result)
 
-    result.waiting = store.count()
+    result.waiting = store.count_texts()
     return result
 
 

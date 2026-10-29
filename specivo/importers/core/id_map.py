@@ -154,6 +154,20 @@ class ImportIdMap:
         logger.debug("Preloaded %d %s mappings", len(rows), entity_type)
         return dict(self._cache.get(entity_type, {}))
 
+    async def written_by_run(self, session: AsyncSession, entity_type: str) -> set[str]:
+        """Return the source ids of *entity_type* this run mapped: what it created, not what it found.
+
+        A resumed run keeps its run id, so this includes what the attempt it
+        continues created.
+        """
+        stmt = select(ImportIdMapping.source_id).where(
+            ImportIdMapping.source_system == self.source_system,
+            ImportIdMapping.source_instance == self.source_instance,
+            ImportIdMapping.entity_type == str(entity_type),
+            ImportIdMapping.import_run_id == self.run_id,
+        )
+        return set((await session.execute(stmt)).scalars())
+
     async def count(self, session: AsyncSession, entity_type: str | None = None) -> int:
         """Count mappings for this source, optionally narrowed to one entity type."""
         stmt = select(func.count()).where(

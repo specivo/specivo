@@ -1,13 +1,22 @@
-"""The links file: imported texts that wait for records a later import may bring.
+"""The links file: what an import could not link yet, waiting for records a later import may bring.
 
-A placeholder whose record was not imported is written as plain text (see
-:mod:`specivo.importers.core.placeholders`). When a source is exported in parts,
-one project at a time say, the record often arrives with a later bundle. To link
-the text then, an import remembers each such text in a small SQLite file kept
-next to the bundles: which row and column it is, its source text with the
-placeholders, a hash of what Specivo wrote, and the placeholders still waiting.
-A later import of the same source re-expands a text once its records exist,
-unless somebody has edited it since (the hash no longer matches).
+When a source is exported in parts, one project at a time say, a record often
+names one that arrives with a later bundle. The file keeps three kinds of rows
+for that, in a small SQLite file next to the bundles:
+
+* **Texts.** A placeholder whose record was not imported is written as plain
+  text (see :mod:`specivo.importers.core.placeholders`). The file keeps which
+  row and column it is, its source text with the placeholders, a hash of what
+  Specivo wrote, and the placeholders still waiting. A later import of the same
+  source re-expands a text once its records exist, unless somebody has edited
+  it since (the hash no longer matches).
+* **Relations** (:class:`PendingRelation`), one end of which was not imported:
+  the relation as the bundle wrote it, by ``source_ref``.
+* **Parents** (:class:`PendingParent`): an imported issue whose parent was not
+  imported, as the two issues' refs.
+
+Relations and parents name issues by ``source_ref`` only, so they resolve
+through the identifier map of the scope, never to another import's rows.
 
 The file is a convenience, not a record: losing it only means those references
 stay plain text. One file belongs to one identifier-map scope (source system and
@@ -15,11 +24,12 @@ instance), which its ``meta`` table names; a file of another scope, or of a
 format version this code does not know, is refused.
 
 The file is untrusted input: it sits next to the bundles, and whoever supplies
-those can supply it. So every ``pending`` row carries an HMAC-SHA256 over the
-scope, the row and column it names, its source text and its hash, keyed from
+those can supply it. So every row carries an HMAC-SHA256 over the scope, the
+kind of row and everything in it (a text's row, column, source text and hash; a
+relation's refs, type and delay; a parent's two refs), keyed from
 ``SECRET_KEY`` (see :func:`links_signing_key`); a row without a valid signature
 is never used, and neither is one naming a column outside a fixed allowlist or
-holding a malformed id or hash. A file that is a symbolic link is refused. A
+holding a malformed id, hash, ref or relation type. A file that is a symbolic link is refused. A
 links file therefore only works with the installation (the ``SECRET_KEY``) that
 wrote it. Which rows the import may touch at all is checked against the
 identifier map by the caller.
@@ -49,7 +59,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-LINKS_FORMAT_VERSION = "1"
+# Version 2 added the relations and parents waiting for an issue; an older file is refused.
+LINKS_FORMAT_VERSION = "2"
 
 # How long to wait for another process holding the file, in milliseconds.
 _BUSY_TIMEOUT_MS = 5000
@@ -65,7 +76,12 @@ _SCHEMA = (
     " kind TEXT NOT NULL, ref TEXT NOT NULL,"
     " PRIMARY KEY (entity_type, row_id, column_name, kind, ref))",
     "CREATE INDEX ix_pending_ref_kind_ref ON pending_ref (kind, ref)",
+    "CREATE TABLE pending_relation ("
+    " source_ref TEXT PRIMARY KEY, from_ref TEXT NOT NULL, to_ref TEXT NOT NULL, relation_type TEXT NOT NULL,"
+    " delay INTEGER, signature TEXT NOT NULL)",
+    "CREATE TABLE pending_parent ( child_ref TEXT PRIMARY KEY, parent_ref TEXT NOT NULL, signature TEXT NOT NULL)",
 )
+_TABLES = frozenset({"meta", "pending", "pending_ref", "pending_relation", "pending_parent"})
 
 # The texts an import may write, as ``(entity_type, column)``: nothing else in a
 # file is ever acted on.
@@ -82,6 +98,12 @@ _MAX_ROW_ID = 2**31 - 1
 # Longest source text accepted from a file, in characters.
 _MAX_SOURCE_TEXT = 16 * 1024 * 1024
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+# A source_ref as the bundle format defines it (common.schema.json#/$defs/sourceRef).
+_SOURCE_REF_RE = re.compile(r"[^\s{}|]{1,255}")
+# The canonical relation types a bundle may carry (relations.schema.json).
+RELATION_TYPES = frozenset({"relates", "duplicates", "blocks", "precedes", "copied_to"})
+# Largest delay, in days, accepted from a file.
+_MAX_DELAY = 100_000
 # What the signing key is derived for; part of every signature too.
 SIGNING_PURPOSE = "import-links-file-v1"
 
@@ -121,6 +143,30 @@ class PendingText:
     @property
     def key(self) -> tuple[str, int, str]:
         return (self.entity_type, self.row_id, self.column)
+
+
+@dataclass(frozen=True, slots=True)
+class PendingRelation:
+    """A relation of the bundle one end of which was not imported, as the bundle wrote it."""
+
+    source_ref: str
+    from_ref: str
+    to_ref: str
+    relation_type: str
+    delay: int | None = None
+    signature: str | None = field(default=None, compare=False)
+
+
+@dataclass(frozen=True, slots=True)
+class PendingParent:
+    """An imported issue (``child_ref``) whose parent (``parent_ref``) was not imported."""
+
+    child_ref: str
+    parent_ref: str
+    signature: str | None = field(default=None, compare=False)
+
+
+type PendingRow = PendingText | PendingRelation | PendingParent
 
 
 def text_sha256(text: str) -> str:
@@ -171,6 +217,26 @@ def well_formed(text: PendingText) -> bool:
         and len(text.source_text) <= _MAX_SOURCE_TEXT
         and isinstance(text.written_sha256, str)
         and _SHA256_RE.match(text.written_sha256) is not None
+    )
+
+
+def _is_ref(value: Any) -> bool:
+    return isinstance(value, str) and _SOURCE_REF_RE.fullmatch(value) is not None
+
+
+def well_formed_link(row: PendingRelation | PendingParent) -> bool:
+    """Whether a relation or parent read from a file holds sane values: refs, a known type, a small delay."""
+    if isinstance(row, PendingParent):
+        return _is_ref(row.child_ref) and _is_ref(row.parent_ref) and row.child_ref != row.parent_ref
+    delay = row.delay
+    return (
+        _is_ref(row.source_ref)
+        and _is_ref(row.from_ref)
+        and _is_ref(row.to_ref)
+        and row.from_ref != row.to_ref
+        and isinstance(row.relation_type, str)
+        and row.relation_type in RELATION_TYPES
+        and (delay is None or (type(delay) is int and abs(delay) <= _MAX_DELAY))
     )
 
 
@@ -335,15 +401,25 @@ def _read_meta(conn: sqlite3.Connection, path: Path) -> dict[str, str] | None:
         tables = _tables(conn)
         if not tables:
             return None
-        if not {"meta", "pending", "pending_ref"} <= tables:
+        if "meta" not in tables:
             raise LinksFileUnreadableError(f"{path} is an SQLite file, but not a links file")
-        return {key: value for key, value in conn.execute("SELECT key, value FROM meta")}
+        meta = {key: value for key, value in conn.execute("SELECT key, value FROM meta")}
+        # A file of another version is refused by its version, not by what tables it lacks.
+        if meta.get("format_version") == LINKS_FORMAT_VERSION and not _TABLES <= tables:
+            raise LinksFileUnreadableError(f"{path} is an SQLite file, but not a links file")
+        return meta
     except sqlite3.Error as exc:
         raise LinksFileUnreadableError(f"{path} cannot be read: {exc}") from exc
 
 
 def _check_meta(meta: dict[str, str], path: Path, system: str | None, instance: str | None) -> tuple[str, str]:
     version = meta.get("format_version")
+    if isinstance(version, str) and version.isdigit() and int(version) < int(LINKS_FORMAT_VERSION):
+        raise LinksFileMismatchError(
+            f"{path} is a links file of format version {version!r}, written by an earlier version of Specivo; this "
+            f"one reads only version {LINKS_FORMAT_VERSION}. Delete it (the references it kept stay plain text), "
+            "or give this import another path with --links-file"
+        )
     if version != LINKS_FORMAT_VERSION:
         raise LinksFileMismatchError(
             f"{path} is a links file of format version {version!r}, which this version of Specivo does not know "
@@ -498,8 +574,35 @@ class LinksStore:
         return self._conn
 
     def count(self) -> int:
+        """Return how many rows are waiting: texts, relations and parents."""
+        return self.count_texts() + sum(self.waiting_links().values())
+
+    def count_texts(self) -> int:
         """Return how many texts are waiting."""
         return int(self.conn.execute("SELECT count(*) FROM pending").fetchone()[0])
+
+    def waiting_links(self) -> dict[str, int]:
+        """Return how many relations and parents wait, by ``relation`` and ``parent``, leaving out zeros."""
+        counts = {
+            "relation": int(self.conn.execute("SELECT count(*) FROM pending_relation").fetchone()[0]),
+            "parent": int(self.conn.execute("SELECT count(*) FROM pending_parent").fetchone()[0]),
+        }
+        return {kind: count for kind, count in sorted(counts.items()) if count}
+
+    def relations(self) -> list[PendingRelation]:
+        """Return the waiting relations by ``source_ref``, exactly as the file holds them."""
+        rows = self.conn.execute(
+            "SELECT source_ref, from_ref, to_ref, relation_type, delay, signature FROM pending_relation "
+            "ORDER BY source_ref"
+        ).fetchall()
+        return [PendingRelation(*row) for row in rows]
+
+    def parents(self) -> list[PendingParent]:
+        """Return the waiting parents by child, exactly as the file holds them."""
+        rows = self.conn.execute(
+            "SELECT child_ref, parent_ref, signature FROM pending_parent ORDER BY child_ref"
+        ).fetchall()
+        return [PendingParent(*row) for row in rows]
 
     def counts_by_kind(self) -> dict[str, int]:
         """Return how many distinct records each kind of placeholder waits for."""
@@ -551,29 +654,30 @@ class LinksStore:
     # Signatures
     # ------------------------------------------------------------------
 
-    def sign(self, text: PendingText) -> str:
-        """Return the signature of *text* in this file's scope."""
+    def sign(self, row: PendingRow) -> str:
+        """Return the signature of *row* in this file's scope.
+
+        The kind of row is part of what is signed, so a signature cannot be
+        moved from one table to another.
+        """
+        fields: list[Any]
+        if isinstance(row, PendingRelation):
+            fields = ["relation", row.source_ref, row.from_ref, row.to_ref, row.relation_type, row.delay]
+        elif isinstance(row, PendingParent):
+            fields = ["parent", row.child_ref, row.parent_ref]
+        else:
+            fields = [row.entity_type, row.row_id, row.column, row.source_text, row.written_sha256]
         message = json.dumps(
-            [
-                SIGNING_PURPOSE,
-                self.scope[0],
-                self.scope[1],
-                text.entity_type,
-                text.row_id,
-                text.column,
-                text.source_text,
-                text.written_sha256,
-            ],
-            ensure_ascii=True,
-            separators=(",", ":"),
+            [SIGNING_PURPOSE, self.scope[0], self.scope[1], *fields], ensure_ascii=True, separators=(",", ":")
         ).encode("ascii")
         return hmac.new(self._key, message, hashlib.sha256).hexdigest()
 
-    def is_trusted(self, text: PendingText) -> bool:
+    def is_trusted(self, row: PendingRow) -> bool:
         """Whether a row read from the file may be used: well formed, and signed by this installation."""
-        if not well_formed(text) or not isinstance(text.signature, str) or not text.signature:
+        sane = well_formed(row) if isinstance(row, PendingText) else well_formed_link(row)
+        if not sane or not isinstance(row.signature, str) or not row.signature:
             return False
-        return hmac.compare_digest(text.signature, self.sign(text))
+        return hmac.compare_digest(row.signature, self.sign(row))
 
     # ------------------------------------------------------------------
     # Writes (inside the open transaction)
@@ -599,6 +703,34 @@ class LinksStore:
                 f"DELETE FROM {table} WHERE entity_type = ? AND row_id = ? AND column_name = ?",  # noqa: S608
                 (entity_type, row_id, column),
             )
+
+    def put_relation(self, relation: PendingRelation) -> None:
+        """Store *relation*, replacing what was stored under its ``source_ref``."""
+        self.conn.execute(
+            "INSERT OR REPLACE INTO pending_relation (source_ref, from_ref, to_ref, relation_type, delay, signature) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                relation.source_ref,
+                relation.from_ref,
+                relation.to_ref,
+                relation.relation_type,
+                relation.delay,
+                self.sign(relation),
+            ),
+        )
+
+    def delete_relation(self, source_ref: Any) -> None:
+        self.conn.execute("DELETE FROM pending_relation WHERE source_ref = ?", (source_ref,))
+
+    def put_parent(self, parent: PendingParent) -> None:
+        """Store *parent*, replacing what was stored for the same child."""
+        self.conn.execute(
+            "INSERT OR REPLACE INTO pending_parent (child_ref, parent_ref, signature) VALUES (?, ?, ?)",
+            (parent.child_ref, parent.parent_ref, self.sign(parent)),
+        )
+
+    def delete_parent(self, child_ref: Any) -> None:
+        self.conn.execute("DELETE FROM pending_parent WHERE child_ref = ?", (child_ref,))
 
     # ------------------------------------------------------------------
     # Ending

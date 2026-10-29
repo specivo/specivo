@@ -15,6 +15,8 @@ from specivo.importers.core.links_file import (
     LinksFileMismatchError,
     LinksFileUnreadableError,
     LinksStore,
+    PendingParent,
+    PendingRelation,
     PendingText,
     check_scope,
     default_links_path,
@@ -34,6 +36,14 @@ def _text(row_id: int = 1, *refs: tuple[str, str], entity: str = "issue", column
     return PendingText(
         entity, row_id, column, "See {{issue:web-1}}.", text_sha256("See web-1."), refs or (("issue", "web-1"),)
     )
+
+
+def _relation(source_ref: str = "r-1", to_ref: str = "b-1") -> PendingRelation:
+    return PendingRelation(source_ref, "a-1", to_ref, "blocks", None)
+
+
+def _parent(child_ref: str = "b-2", parent_ref: str = "a-2") -> PendingParent:
+    return PendingParent(child_ref, parent_ref)
 
 
 def _store(path, *, writable: bool = True) -> LinksStore:
@@ -183,6 +193,23 @@ class TestRefusals:
             check_scope(path, SYSTEM, INSTANCE)
         with pytest.raises(LinksFileMismatchError):
             _store(path, writable=False)
+
+    def test_a_file_of_an_earlier_format_version_is_refused_with_what_to_do(self, tmp_path):
+        """Version 1 kept texts only; it is refused, never read or upgraded."""
+        path = tmp_path / "links.sqlite"
+        conn = sqlite3.connect(path)
+        conn.executescript(
+            "CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);"
+            "CREATE TABLE pending (entity_type TEXT, row_id INTEGER, column_name TEXT, source_text TEXT,"
+            " written_sha256 TEXT, signature TEXT);"
+            "CREATE TABLE pending_ref (entity_type TEXT, row_id INTEGER, column_name TEXT, kind TEXT, ref TEXT);"
+            f"INSERT INTO meta VALUES ('format_version', '1'), ('source_system', '{SYSTEM}'),"
+            f" ('source_instance', '{INSTANCE}');"
+        )
+        conn.close()
+        for call in (lambda: read_scope(path), lambda: _store(path), lambda: check_scope(path, SYSTEM, INSTANCE)):
+            with pytest.raises(LinksFileMismatchError, match=r"format version '1'.*earlier version.*[Dd]elete it"):
+                call()
 
     def test_an_unknown_format_version_is_refused(self, tmp_path):
         path = self._written(tmp_path / "links.sqlite")
@@ -490,3 +517,110 @@ class TestSpecialFiles:
         """Whatever this build does, the answer is a plain bool and is worked out once."""
         assert links_file.sqlite_honours_nofollow() in (True, False)
         assert links_file.sqlite_honours_nofollow.cache_info().currsize == 1
+
+
+class TestWaitingLinks:
+    """Relations and parents waiting for an issue of a bundle not loaded yet."""
+
+    def test_relations_and_parents_are_kept_and_read_back(self, tmp_path):
+        path = tmp_path / "links.sqlite"
+        store = _store(path)
+        store.put_relation(_relation())
+        store.put_relation(PendingRelation("r-2", "a-1", "b-9", "precedes", 3))
+        store.put_parent(_parent())
+        assert store.commit() is True
+
+        again = _store(path, writable=False)
+        assert again.count() == 3
+        assert again.waiting_links() == {"parent": 1, "relation": 2}
+        assert again.counts_by_kind() == {}
+        assert again.relations() == [_relation(), PendingRelation("r-2", "a-1", "b-9", "precedes", 3)]
+        assert again.parents() == [_parent()]
+        assert all(again.is_trusted(row) for row in [*again.relations(), *again.parents()])
+        again.rollback()
+
+    def test_put_replaces_by_relation_and_by_child(self, tmp_path):
+        store = _store(tmp_path / "links.sqlite")
+        store.put_relation(_relation(to_ref="b-1"))
+        store.put_relation(_relation(to_ref="b-2"))
+        store.put_parent(_parent(parent_ref="a-1"))
+        store.put_parent(_parent(parent_ref="a-2"))
+        assert [r.to_ref for r in store.relations()] == ["b-2"]
+        assert [p.parent_ref for p in store.parents()] == ["a-2"]
+        store.rollback()
+
+    def test_a_file_with_only_links_waiting_is_kept_and_deleted_once_they_are_gone(self, tmp_path):
+        path = tmp_path / "links.sqlite"
+        store = _store(path)
+        store.put_relation(_relation())
+        store.put_parent(_parent())
+        assert store.commit() is True
+
+        store = _store(path)
+        store.delete_relation("r-1")
+        assert store.commit() is True
+        store = _store(path)
+        store.delete_parent("b-2")
+        assert store.commit() is False
+        assert not path.exists()
+
+    @pytest.mark.parametrize(
+        ("table", "column", "value"),
+        [
+            ("pending_relation", "to_ref", "b-7"),
+            ("pending_relation", "relation_type", "duplicates"),
+            ("pending_relation", "delay", 4),
+            ("pending_parent", "parent_ref", "a-9"),
+        ],
+    )
+    def test_a_tampered_row_is_not_trusted(self, tmp_path, table, column, value):
+        path = tmp_path / "links.sqlite"
+        store = LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        store.put_relation(_relation())
+        store.put_parent(_parent())
+        store.commit()
+        conn = sqlite3.connect(path)
+        conn.execute(f"UPDATE {table} SET {column} = ?", (value,))  # noqa: S608
+        conn.commit()
+        conn.close()
+        reader = LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A)
+        rows = reader.relations() if table == "pending_relation" else reader.parents()
+        assert [reader.is_trusted(row) for row in rows] == [False]
+        reader.rollback()
+
+    def test_a_row_signed_by_another_installation_is_not_trusted(self, tmp_path):
+        path = tmp_path / "links.sqlite"
+        store = LinksStore.open(path, SYSTEM, INSTANCE, writable=True, key=KEY_B)
+        store.put_relation(_relation())
+        store.put_parent(_parent())
+        store.commit()
+        reader = LinksStore.open(path, SYSTEM, INSTANCE, writable=False, key=KEY_A)
+        assert [reader.is_trusted(row) for row in [*reader.relations(), *reader.parents()]] == [False, False]
+        reader.rollback()
+
+    def test_a_relations_signature_does_not_fit_a_parent(self, tmp_path):
+        """Each kind of row is signed as that kind, so a signature cannot be moved to another table."""
+        store = LinksStore.open(tmp_path / "links.sqlite", SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        relation = PendingRelation("b-2", "a-2", "x", "relates", None)
+        parent = replace(_parent("b-2", "a-2"), signature=store.sign(relation))
+        assert store.is_trusted(parent) is False
+        store.rollback()
+
+    @pytest.mark.parametrize(
+        "row",
+        [
+            PendingRelation("r-1", "a-1", "b 1", "blocks", None),
+            PendingRelation("r-1", "a-1", "b-1\n", "blocks", None),
+            PendingRelation("r-1", "a-1", "", "blocks", None),
+            PendingRelation("r-1", "a-1", "b-1", "owns", None),
+            PendingRelation("r-1", "a-1", "b-1", "precedes", "3"),  # type: ignore[arg-type]
+            PendingRelation("r-1", "a-1", "a-1", "relates", None),
+            PendingParent("b-2", "x" * 256),
+            PendingParent("b-2", "b-2"),
+            PendingParent("b-{2}", "a-2"),
+        ],
+    )
+    def test_a_malformed_row_is_not_trusted_even_when_signed(self, tmp_path, row):
+        store = LinksStore.open(tmp_path / "links.sqlite", SYSTEM, INSTANCE, writable=True, key=KEY_A)
+        assert store.is_trusted(replace(row, signature=store.sign(row))) is False
+        store.rollback()

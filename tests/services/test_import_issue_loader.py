@@ -33,10 +33,10 @@ from specivo.importers.core.ir import (
     IRWatcher,
     ValueKind,
 )
+from specivo.importers.load.issue_links import WAITING_WARNING, load_issue_links
 from specivo.importers.load.issue_loader import (
     load_issues,
     load_journals,
-    load_relations,
     load_watchers,
 )
 from specivo.importers.load.lookup_loader import load_lookups
@@ -271,10 +271,32 @@ class TestHierarchy:
         """A parent in a project that was not selected must not take the child."""
         ctx = await loaded(_adapter(issues=[_issue("101", parent_ref="999", subject="Subtask")]))
         await load_issues(ctx)
+        await load_issue_links(ctx)
 
         child_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "101")
         assert (await db_session.get(Issue, child_id)).parent_id is None
-        assert any("parent was not imported" in w.message for w in ctx.summary.warnings)
+        (waiting,) = [w for w in ctx.summary.warnings if w.message == WAITING_WARNING]
+        assert waiting.context == {"relations": 0, "parents": 1, "examples": "parent of 101"}
+
+    async def test_a_parent_in_a_later_project_is_set_once_every_issue_exists(self, db_session, loaded):
+        projects = [
+            IRProject(source_ref="1", identifier="issuetest", name="Issue Test"),
+            IRProject(source_ref="2", identifier="issuelater", name="Issue Later"),
+        ]
+        issues = [_issue("101", parent_ref="200", subject="Subtask"), _issue("200", project_ref="2")]
+        ctx = await loaded(_adapter(projects=projects, issues=issues))
+        await load_issues(ctx)
+        child_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "101")
+        assert (await db_session.get(Issue, child_id)).parent_id is None
+
+        await load_issue_links(ctx)
+
+        child = await db_session.get(Issue, child_id)
+        await db_session.refresh(child)
+        assert child.parent_id == await ctx.id_map.get(db_session, EntityType.ISSUE, "200")
+        # Setting the parent is not an edit.
+        assert child.updated_at == datetime(2021, 6, 1, 9, 0, tzinfo=UTC)
+        assert not ctx.summary.warnings
 
 
 class TestCustomFieldValues:
@@ -450,7 +472,7 @@ class TestRelations:
         relations = [IRRelation(source_ref="900", from_ref="100", to_ref="101", relation_type="relates")]
         ctx = await loaded(_adapter(issues=issues, relations=relations))
         await load_issues(ctx)
-        await load_relations(ctx)
+        await load_issue_links(ctx)
 
         relation_id = await ctx.id_map.get(db_session, EntityType.RELATION, "900")
         assert (await db_session.get(IssueRelation, relation_id)).relation_type == "relates"
@@ -460,7 +482,7 @@ class TestRelations:
         relations = [IRRelation(source_ref="900", from_ref="100", to_ref="101", relation_type="blocks")]
         ctx = await loaded(_adapter(issues=issues, relations=relations))
         await load_issues(ctx)
-        await load_relations(ctx)
+        await load_issue_links(ctx)
 
         relation = await db_session.get(IssueRelation, await ctx.id_map.get(db_session, EntityType.RELATION, "900"))
         assert relation.issue_from_id == await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
@@ -471,7 +493,7 @@ class TestRelations:
         relations = [IRRelation(source_ref="900", from_ref="100", to_ref="101", relation_type="precedes", delay=3)]
         ctx = await loaded(_adapter(issues=issues, relations=relations))
         await load_issues(ctx)
-        await load_relations(ctx)
+        await load_issue_links(ctx)
 
         relation = await db_session.get(IssueRelation, await ctx.id_map.get(db_session, EntityType.RELATION, "900"))
         assert relation.delay == 3
@@ -480,7 +502,7 @@ class TestRelations:
         relations = [IRRelation(source_ref="900", from_ref="100", to_ref="999", relation_type="relates")]
         ctx = await loaded(_adapter(issues=[_issue("100")], relations=relations))
         await load_issues(ctx)
-        await load_relations(ctx)
+        await load_issue_links(ctx)
 
         assert any("was not imported" in w.message for w in ctx.summary.warnings)
 
@@ -490,7 +512,7 @@ class TestRelations:
         relations = [IRRelation(source_ref="900", from_ref="100", to_ref="101", relation_type="blocks")]
         ctx = await loaded(_adapter(issues=issues, relations=relations))
         await load_issues(ctx)
-        await load_relations(ctx)
+        await load_issue_links(ctx)
 
         assert any("rejected" in w.message for w in ctx.summary.warnings)
         count = (await db_session.execute(select(func.count()).select_from(IssueRelation))).scalar_one()
