@@ -282,9 +282,13 @@
 {% if total > 0 %}
 {% set current_page = (offset // limit) + 1 %}
 {% set total_pages = ((total - 1) // limit) + 1 %}
-{% set ns = namespace(pbase="/search/?q=" ~ query ~ "&mode=" ~ mode ~ "&scope=" ~ scope ~ ("&project_key=" ~ project_key if project_key else "") ~ ("&mf=" ~ (mf | urlencode) ~ "&mv=" ~ (mv | urlencode) ~ "&ma=" ~ ma if mf else "")) %}
-{% if tags %}{% for t in tags %}{% set ns.pbase = ns.pbase ~ "&tag=" ~ (t.name | urlencode) %}{% endfor %}{% endif %}
-{% set pbase = ns.pbase %}
+{# Every parameter goes through urlencode as a (name, value) pair, so a query
+   with &, #, +, spaces or non-Latin text survives the trip to the next page. #}
+{% set ns = namespace(params=[("q", query), ("mode", mode), ("scope", scope)]) %}
+{% if project_key %}{% set ns.params = ns.params + [("project_key", project_key)] %}{% endif %}
+{% if mf %}{% set ns.params = ns.params + [("mf", mf), ("mv", mv), ("ma", ma)] %}{% endif %}
+{% for t in tags or [] %}{% set ns.params = ns.params + [("tag", t.name)] %}{% endfor %}
+{% set pbase = "/search/?" ~ (ns.params | urlencode) %}
 <div class="sp-pagination">
   <div class="sp-pagination-info">{% trans start=offset + 1, end=[offset + limit, total] | min, total=total %}%(start)s–%(end)s of %(total)s{% endtrans %}</div>
   {% if total_pages > 1 %}
