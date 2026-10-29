@@ -47,6 +47,7 @@ from specivo.services.markdown_service import (
     _MD_EXTENSION_CONFIGS,
     _MD_EXTENSIONS,
     _sanitize_html,
+    count_issue_ref_candidates,
     render_plain_markdown,
     render_wiki_markdown,
     substitute_links,
@@ -103,7 +104,8 @@ def unguarded(text: str) -> str:
 @pytest.mark.parametrize("name", list(PATHOLOGICAL))
 def test_pre_scan_rejects_pathological_input(name):
     text = PATHOLOGICAL[name]
-    assert render_hazard(substitute_links(text, "ACME"), len(text)) is not None
+    source = substitute_links(text, "ACME")
+    assert render_hazard(source, len(text), count_issue_ref_candidates(source)) is not None
 
 
 @pytest.mark.parametrize("name", list(PATHOLOGICAL))
