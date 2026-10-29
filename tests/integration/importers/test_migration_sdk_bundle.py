@@ -23,6 +23,8 @@ from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.lookups import IssueStatus
 from specivo.models.project import Project
+from specivo.models.sprint import Sprint
+from specivo.models.tag import Tag, TagLink
 from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
 from specivo.models.wiki import WikiContent, WikiPage
@@ -66,6 +68,7 @@ class TestAnSdkBundle:
         assert created[EntityType.ATTACHMENT] == 3
         assert created[EntityType.TIME_ENTRY] == 1
         assert created[EntityType.MEMBERSHIP] == 1
+        assert created[EntityType.SPRINT] == 1
 
     async def test_issue_fields_and_placeholders(self, db_session, imported):
         issue = await _issue(db_session, "SDK login fails")
@@ -79,6 +82,10 @@ class TestAnSdkBundle:
         assert issue.issue_metadata == {"sdk_severity": "High", "sdk_reviewer": bob.id}
         child = await _issue(db_session, "SDK session cookie is not cleared")
         assert child.parent_id == issue.id
+        sprint = await db_session.get(Sprint, issue.sprint_id)
+        assert (sprint.name, sprint.status) == ("SDK sprint 1", "active")
+        tags = (await db_session.execute(select(Tag.name).join(TagLink).where(TagLink.issue_id == issue.id))).scalars()
+        assert list(tags) == ["sdk-login"]
 
     async def test_a_timestamp_given_with_another_offset(self, db_session, imported):
         bob = await _user(db_session, "sdk_bob")

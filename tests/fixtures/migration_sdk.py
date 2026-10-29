@@ -88,6 +88,7 @@ def write_sdk_bundle(target: Path) -> Path:
         )
         writer.add(sdk.Version(source_ref="v1", project_ref="p1", name="1.0", effective_date=date(2024, 6, 30)))
         writer.add(sdk.Category(source_ref="c1", project_ref="p1", name="Frontend", assigned_to_ref="u1"))
+        writer.add(sdk.Sprint(source_ref="s1", project_ref="p1", name="SDK sprint 1", status="active"))
         writer.add(
             sdk.CustomField(
                 source_ref="cf1",
@@ -126,12 +127,14 @@ def write_sdk_bundle(target: Path) -> Path:
                 ),
                 category_ref="c1",
                 fixed_version_ref="v1",
+                sprint_ref="s1",
                 estimated_hours=Decimal("2.5"),
                 remaining_estimate=Decimal("0.75"),
                 custom_values=[
                     sdk.CustomValue(field_ref="cf1", key="sdk_severity", value="High"),
                     sdk.CustomValue(field_ref="cf2", key="sdk_reviewer", value="u2", value_kind="user_ref"),
                 ],
+                tags=["sdk-login"],
                 created_at=datetime(2024, 2, 1, 10, 0, tzinfo=UTC),
                 extra={"source_key": "10001"},
             )
