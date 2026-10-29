@@ -71,6 +71,12 @@
             "string",
             "null"
           ]
+        },
+        "old_ref": {
+          "$ref": "common.schema.json#/$defs/optionalRef"
+        },
+        "new_ref": {
+          "$ref": "common.schema.json#/$defs/optionalRef"
         }
       }
     }

@@ -37,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.exceptions import AppError
 from specivo.importers.core.backdate import backdate
 from specivo.importers.core.converter import ContentConverter, ConversionContext
-from specivo.importers.core.ir import EntityType, IRIssue, IRJournalEntry, ValueKind
+from specivo.importers.core.ir import REFERENCE_ATTRIBUTES, EntityType, IRIssue, IRJournalEntry, ValueKind
 from specivo.importers.core.pipeline import PhaseContext
 from specivo.importers.load.user_loader import ensure_import_account
 from specivo.models.issue import Issue
@@ -54,6 +54,8 @@ CONVERTER_STATE_KEY = "converter"
 CONVERSION_CONTEXT_STATE_KEY = "conversion_context"
 # The issues this run created, by source ref: a child is created under one of these at once.
 CREATED_ISSUES_STATE_KEY = "issues_created"
+# Unresolved history refs named in the warning about them.
+_MAX_EXAMPLES = 10
 
 _issue_service = IssueService()
 
@@ -289,16 +291,27 @@ async def load_journals(ctx: PhaseContext) -> None:
     """Replay issue history: comments and field changes, in order."""
     await ensure_import_account(ctx)
 
+    unresolved: list[str] = []
     for project_ref in ctx.project_refs:
         sequences: dict[int, int] = {}
         async for ir in ctx.adapter.extract_journals(project_ref):
             if await ctx.id_map.get(ctx.session, EntityType.JOURNAL, ir.source_ref):
                 ctx.summary.record_skipped(EntityType.JOURNAL)
                 continue
-            await _create_journal(ctx, ir, sequences)
+            await _create_journal(ctx, ir, sequences, unresolved)
+    if unresolved:
+        # One warning however many: history routinely names deleted versions and the like.
+        ctx.warn(
+            "History values name records that were not imported; their text from the source is shown "
+            "instead, or nothing when the source gave none",
+            count=len(unresolved),
+            examples=", ".join(list(dict.fromkeys(unresolved))[:_MAX_EXAMPLES]),
+        )
 
 
-async def _create_journal(ctx: PhaseContext, ir: IRJournalEntry, sequences: dict[int, int]) -> None:
+async def _create_journal(
+    ctx: PhaseContext, ir: IRJournalEntry, sequences: dict[int, int], unresolved: list[str]
+) -> None:
     """Create one journal entry with its field changes."""
     issue_id = await ctx.id_map.get(ctx.session, EntityType.ISSUE, ir.issue_ref)
     if issue_id is None:
@@ -326,13 +339,18 @@ async def _create_journal(ctx: PhaseContext, ir: IRJournalEntry, sequences: dict
     await ctx.session.flush()
 
     for detail in ir.details:
+        old_value, new_value = detail.old_value, detail.new_value
+        entity = REFERENCE_ATTRIBUTES.get(detail.prop_key) if detail.property == "attr" else None
+        if entity is not None:
+            old_value = await _reference_value(ctx, entity, detail.old_ref, old_value, unresolved)
+            new_value = await _reference_value(ctx, entity, detail.new_ref, new_value, unresolved)
         ctx.session.add(
             JournalDetail(
                 journal_id=journal.id,
                 property=detail.property[:30],
                 prop_key=detail.prop_key[:255],
-                old_value=detail.old_value,
-                new_value=detail.new_value,
+                old_value=old_value,
+                new_value=new_value,
             )
         )
 
@@ -341,6 +359,32 @@ async def _create_journal(ctx: PhaseContext, ir: IRJournalEntry, sequences: dict
     await ctx.id_map.put(ctx.session, EntityType.JOURNAL, ir.source_ref, "journals", journal.id)
     ctx.summary.record_created(EntityType.JOURNAL)
     ctx.tick()
+
+
+async def _reference_value(
+    ctx: PhaseContext, entity: EntityType, ref: str | None, text: str | None, unresolved: list[str]
+) -> str | None:
+    """Return what a history value naming a record is stored as.
+
+    Specivo's history keeps the Specivo id of the record, as the issue page
+    looks names up by it; a parent is kept as its display key, as relation
+    changes are. A ref naming nothing this source imported, in this run or an
+    earlier one, is never stored as it is: it would be read as the id of an
+    unrelated Specivo record. The source's text for the value is stored
+    instead, quoted when it is only digits for the same reason, or nothing.
+    """
+    if ref is not None:
+        target_id = await ctx.id_map.get(ctx.session, entity, ref)
+        if target_id is not None and entity is EntityType.ISSUE:
+            issue = await ctx.session.get(Issue, target_id)
+            if issue is not None:
+                return issue.display_key
+        elif target_id is not None:
+            return str(target_id)
+        unresolved.append(f"{entity}:{ref}")
+    if text is None or not text.strip():
+        return None
+    return f'"{text}"' if text.isdigit() else text
 
 
 async def _highest_sequence(session: AsyncSession, issue_id: int) -> int:

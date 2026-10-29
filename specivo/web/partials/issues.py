@@ -17,6 +17,7 @@ from specivo.services.issue_service import IssueService
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
+from specivo.web.activity_lookups import activity_lookup_maps
 from specivo.web.deps import get_current_user_optional, get_templates
 from specivo.web.thread_tree import build_thread_tree
 
@@ -143,7 +144,11 @@ async def issue_activity_partial(
         for jid, groups in reactions_by_journal_raw.items()
     }
 
-    # Build lookup maps for human-readable activity details
+    # Resolve project for member list
+    project = await _project_svc.get_by_key(db, issue.project_key)
+    members = await _project_svc.list_members(db, project)
+
+    # Names for the ids the field changes hold, as the issue page builds them.
     statuses = (await db.execute(select(IssueStatus).order_by(IssueStatus.position))).scalars().all()
     trackers = (await db.execute(select(Tracker).order_by(Tracker.position))).scalars().all()
     priorities = (
@@ -151,19 +156,16 @@ async def issue_activity_partial(
         .scalars()
         .all()
     )
-
-    # Resolve project for member list
-    project = await _project_svc.get_by_key(db, issue.project_key)
-    members = await _project_svc.list_members(db, project)
-
-    lookup_maps: dict[str, dict[str, str]] = {
-        "status_id": {str(s.id): s.name for s in statuses},
-        "tracker_id": {str(t.id): t.name for t in trackers},
-        "priority_id": {str(p.id): p.name for p in priorities},
-        "assigned_to_id": {
-            str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members
-        },
-    }
+    lookup_maps = await activity_lookup_maps(
+        db,
+        user,
+        all_journals,
+        statuses=statuses,
+        trackers=trackers,
+        priorities=priorities,
+        members=members,
+        sprint_id=issue.sprint_id,
+    )
 
     templates = get_templates()
     return templates.TemplateResponse(
