@@ -7038,3 +7038,50 @@ msgstr "คีย์ API ถูกปิดสำหรับบัญชีท�
 #, python-format
 msgid "You sign in through your identity provider (%(providers)s). This account has no password, so there is none to change here. Manage your password at your identity provider."
 msgstr "คุณลงชื่อเข้าใช้ผ่านผู้ให้บริการข้อมูลประจำตัว (%(providers)s) บัญชีนี้ไม่มีรหัสผ่าน จึงไม่มีรหัสผ่านให้เปลี่ยนที่นี่ จัดการรหัสผ่านของคุณได้ที่ผู้ให้บริการข้อมูลประจำตัว"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (soonest first)"
+msgstr "วันครบกำหนด (ใกล้สุดก่อน)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Due date (latest first)"
+msgstr "วันครบกำหนด (ไกลสุดก่อน)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (lowest first)"
+msgstr "หมายเลขเวอร์ชัน (น้อยไปมาก)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Version number (highest first)"
+msgstr "หมายเลขเวอร์ชัน (มากไปน้อย)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (open first)"
+msgstr "สถานะ (เปิดอยู่ก่อน)"
+
+#: specivo/templates/themes/default/components/macros.html
+msgid "Status (closed first)"
+msgstr "สถานะ (ปิดแล้วก่อน)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#: specivo/templates/themes/default/pages/projects/settings.html
+msgid "Sort versions"
+msgstr "เรียงลำดับเวอร์ชัน"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Hide completed versions (%(count)s)"
+msgstr "ซ่อนเวอร์ชันที่เสร็จแล้ว (%(count)s)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+#, python-format
+msgid "Show completed versions (%(count)s)"
+msgstr "แสดงเวอร์ชันที่เสร็จแล้ว (%(count)s)"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "No open versions. All versions of this project are completed."
+msgstr "ไม่มีเวอร์ชันที่เปิดอยู่ ทุกเวอร์ชันของโปรเจกต์นี้เสร็จแล้ว"
+
+#: specivo/templates/themes/default/pages/projects/roadmap.html
+msgid "Completed versions"
+msgstr "เวอร์ชันที่เสร็จแล้ว"
