@@ -24,6 +24,7 @@ from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
+from specivo.web.activity_lookups import activity_lookup_maps
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
     get_current_user_optional,
@@ -483,79 +484,17 @@ async def issue_detail(
     # issue's own attachments that the reader may open (none for anonymous).
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
-    # Build lookup maps for human-readable activity details.
-    # Collect all sprint/version IDs referenced in journal details so we can
-    # bulk-load names instead of showing raw IDs.
-    referenced_sprint_ids: set[int] = set()
-    referenced_version_ids: set[int] = set()
-    for j in all_journals:
-        for d in j.details:
-            if d.prop_key == "sprint_id":
-                for v in (d.old_value, d.new_value):
-                    if v is not None:
-                        try:
-                            referenced_sprint_ids.add(int(v))
-                        except (ValueError, TypeError):
-                            pass
-            elif d.prop_key == "fixed_version_id":
-                for v in (d.old_value, d.new_value):
-                    if v is not None:
-                        try:
-                            referenced_version_ids.add(int(v))
-                        except (ValueError, TypeError):
-                            pass
-    if issue.sprint_id is not None:
-        referenced_sprint_ids.add(issue.sprint_id)
-
-    sprint_lookup: dict[str, str] = {}
-    if referenced_sprint_ids:
-        sprint_rows = (await db.execute(
-            select(Sprint.id, Sprint.name).where(Sprint.id.in_(referenced_sprint_ids))
-        )).all()
-        sprint_lookup = {str(r.id): r.name for r in sprint_rows}
-
-    version_lookup: dict[str, str] = {}
-    if referenced_version_ids:
-        version_rows = (await db.execute(
-            select(Version.id, Version.name).where(Version.id.in_(referenced_version_ids))
-        )).all()
-        version_lookup = {str(r.id): r.name for r in version_rows}
-
-    if anonymous:
-        # The signed-in map is built from the member list, which names people
-        # by login. An anonymous visitor gets display names, and only for the
-        # people the activity feed actually mentions.
-        from specivo.models.user import User as UserModel
-
-        referenced_user_ids = {
-            int(value)
-            for j in all_journals
-            for d in j.details
-            if d.prop_key == "assigned_to_id"
-            for value in (d.old_value, d.new_value)
-            if value is not None and str(value).isdigit()
-        }
-        assignee_lookup: dict[str, str] = {}
-        if referenced_user_ids:
-            assignee_rows = (
-                await db.execute(
-                    select(UserModel.id, UserModel.display_name).where(UserModel.id.in_(referenced_user_ids))
-                )
-            ).all()
-            assignee_lookup = {str(r.id): r.display_name for r in assignee_rows}
-    else:
-        assignee_lookup = {
-            str(m.get("user_id", m.get("id", ""))): m.get("login", m.get("display_name", "")) for m in members
-        }
-
-    lookup_maps: dict[str, dict[str, str]] = {
-        "status_id": {str(s.id): s.name for s in lookups["statuses"]},
-        "tracker_id": {str(t.id): t.name for t in lookups["trackers"]},
-        "priority_id": {str(p.id): p.name for p in lookups["priorities"]},
-        "assigned_to_id": assignee_lookup,
-        "sprint_id": sprint_lookup,
-        "fixed_version_id": version_lookup,
-    }
+    # Names for the ids the activity feed's field changes hold.
+    lookup_maps = await activity_lookup_maps(
+        db,
+        user,
+        all_journals,
+        statuses=lookups["statuses"],
+        trackers=lookups["trackers"],
+        priorities=lookups["priorities"],
+        members=members,
+        sprint_id=issue.sprint_id,
+    )
 
     # Derive from the already-loaded watchers list (list[User])
     is_watching = any(w.id == user.id for w in watchers)

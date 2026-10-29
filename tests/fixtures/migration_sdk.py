@@ -165,7 +165,7 @@ def write_sdk_bundle(target: Path) -> Path:
                 user_ref="u1",
                 notes=f"Reproduced, {ph.user('u2')}.",
                 created_at="2024-02-02T17:00:00+07:00",
-                details=[sdk.JournalDetail(property="attr", prop_key="status_id", old_value="open", new_value="doing")],
+                details=[sdk.JournalDetail(property="attr", prop_key="status_id", old_ref="open", new_ref="doing")],
             )
         )
         writer.add(sdk.Relation(source_ref="r1", from_ref="i1", to_ref="i3", relation_type="blocks"))

@@ -37,7 +37,7 @@ from specivo.core.config import get_settings
 from specivo.core.constants import JWT_ALGORITHM
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import Journal
+from specivo.models.journal import Journal, JournalDetail
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.services.anonymous_access_service import (
@@ -569,6 +569,39 @@ async def test_a_private_issue_is_absent_from_children_and_relations(client: Asy
     assert live.private_child.display_key not in resp.text
     # The relation exists, but naming its target would disclose the key.
     assert live.private_issue.display_key not in resp.text
+
+
+async def test_imported_history_names_no_private_issue_or_project(
+    client: AsyncClient, db_session: AsyncSession, live: World
+) -> None:
+    """Imported history records parent changes by key and moves by project id."""
+    journal = Journal(
+        issue_id=live.public_issue.id,
+        project_id=live.both.id,
+        user_id=live.member.id,
+        sequence=99,
+    )
+    db_session.add(journal)
+    await db_session.flush()
+    db_session.add_all(
+        [
+            JournalDetail(
+                journal_id=journal.id,
+                property="attr",
+                prop_key="parent_id",
+                old_value=live.private_issue.display_key,
+            ),
+            JournalDetail(
+                journal_id=journal.id, property="attr", prop_key="project_id", old_value=str(live.private.id)
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(_pages(live)["issue"])
+    assert resp.status_code == 200
+    assert live.private_issue.display_key not in resp.text
+    assert live.private.name not in resp.text
 
 
 async def test_a_private_journal_never_renders(client: AsyncClient, live: World) -> None:

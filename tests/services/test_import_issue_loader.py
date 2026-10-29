@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from specivo.importers.core.ir import (
     ContainerKind,
     EntityType,
+    IRCategory,
     IRCustomField,
     IRCustomValue,
     IRIssue,
@@ -30,6 +31,7 @@ from specivo.importers.core.ir import (
     IRStatus,
     IRTracker,
     IRUser,
+    IRVersion,
     IRWatcher,
     ValueKind,
 )
@@ -40,7 +42,7 @@ from specivo.importers.load.issue_loader import (
     load_watchers,
 )
 from specivo.importers.load.lookup_loader import load_lookups
-from specivo.importers.load.project_loader import load_projects
+from specivo.importers.load.project_loader import load_project_lookups, load_projects
 from specivo.importers.load.user_loader import load_users
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
@@ -396,26 +398,160 @@ class TestJournals:
         assert journal.notes == "Looking into it"
         assert journal.created_at == datetime(2020, 4, 1, 10, 0, tzinfo=UTC)
 
+    async def _details(self, db_session, ctx, ref: str = "500") -> list[JournalDetail]:
+        journal_id = await ctx.id_map.get(db_session, EntityType.JOURNAL, ref)
+        stmt = select(JournalDetail).where(JournalDetail.journal_id == journal_id).order_by(JournalDetail.id)
+        return list((await db_session.execute(stmt)).scalars().all())
+
     async def test_field_changes_are_replayed(self, db_session, loaded):
         journal = self._journal(
             notes=None,
-            details=[IRJournalDetail(property="attr", prop_key="status_id", old_value="1", new_value="5")],
+            details=[IRJournalDetail(property="attr", prop_key="done_ratio", old_value="10", new_value="50")],
         )
         ctx = await loaded(_adapter(issues=[_issue()], journals=[journal]))
         await load_issues(ctx)
         await load_journals(ctx)
 
-        journal_id = await ctx.id_map.get(db_session, EntityType.JOURNAL, "500")
-        details = (
-            (await db_session.execute(select(JournalDetail).where(JournalDetail.journal_id == journal_id)))
-            .scalars()
-            .all()
+        details = await self._details(db_session, ctx)
+        assert [(d.property, d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("attr", "done_ratio", "10", "50")
+        ]
+
+    async def test_lookup_refs_become_specivo_ids(self, db_session, loaded):
+        """The page names a status by its Specivo id, never by the source's."""
+        journal = self._journal(
+            notes=None,
+            details=[
+                IRJournalDetail(property="attr", prop_key="status_id", old_ref="1", new_ref="5"),
+                IRJournalDetail(property="attr", prop_key="tracker_id", new_ref="1"),
+                IRJournalDetail(property="attr", prop_key="priority_id", old_ref="4"),
+            ],
         )
-        assert len(details) == 1
-        assert details[0].property == "attr"
-        assert details[0].prop_key == "status_id"
-        assert details[0].old_value == "1"
-        assert details[0].new_value == "5"
+        ctx = await loaded(_adapter(issues=[_issue()], journals=[journal]))
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        status = {ref: str(await ctx.id_map.get(db_session, EntityType.STATUS, ref)) for ref in ("1", "5")}
+        tracker = str(await ctx.id_map.get(db_session, EntityType.TRACKER, "1"))
+        priority = str(await ctx.id_map.get(db_session, EntityType.PRIORITY, "4"))
+        details = await self._details(db_session, ctx)
+        assert [(d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("status_id", status["1"], status["5"]),
+            ("tracker_id", None, tracker),
+            ("priority_id", priority, None),
+        ]
+
+    async def test_project_records_and_people_become_specivo_ids(self, db_session, loaded):
+        journal = self._journal(
+            notes=None,
+            details=[
+                IRJournalDetail(property="attr", prop_key="fixed_version_id", new_ref="v1"),
+                IRJournalDetail(property="attr", prop_key="category_id", old_ref="c1"),
+                IRJournalDetail(property="attr", prop_key="assigned_to_id", new_ref="7"),
+                IRJournalDetail(property="attr", prop_key="project_id", old_ref="1"),
+            ],
+        )
+        adapter = _adapter(
+            issues=[_issue()],
+            journals=[journal],
+            versions=[IRVersion(source_ref="v1", project_ref="1", name="2.0")],
+            categories=[IRCategory(source_ref="c1", project_ref="1", name="Backend")],
+        )
+        ctx = await loaded(adapter)
+        await load_project_lookups(ctx)
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        version = str(await ctx.id_map.get(db_session, EntityType.VERSION, "v1"))
+        category = str(await ctx.id_map.get(db_session, EntityType.CATEGORY, "c1"))
+        user = str(await ctx.id_map.get(db_session, EntityType.USER, "7"))
+        project = str(await ctx.id_map.get(db_session, EntityType.PROJECT, "1"))
+        details = await self._details(db_session, ctx)
+        assert [(d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("fixed_version_id", None, version),
+            ("category_id", category, None),
+            ("assigned_to_id", None, user),
+            ("project_id", project, None),
+        ]
+
+    async def test_a_parent_is_named_by_its_display_key(self, db_session, loaded):
+        journal = self._journal(
+            issue_ref="101",
+            notes=None,
+            details=[IRJournalDetail(property="attr", prop_key="parent_id", new_ref="100", new_value="#100")],
+        )
+        ctx = await loaded(_adapter(issues=[_issue("100"), _issue("101")], journals=[journal]))
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        parent = await db_session.get(Issue, await ctx.id_map.get(db_session, EntityType.ISSUE, "100"))
+        details = await self._details(db_session, ctx)
+        assert [(d.old_value, d.new_value) for d in details] == [(None, parent.display_key)]
+
+    async def test_an_unresolved_ref_shows_the_source_text_never_the_ref(self, db_session, loaded):
+        """A deleted version, say: its source id would name an unrelated Specivo record."""
+        journal = self._journal(
+            notes=None,
+            details=[
+                IRJournalDetail(
+                    property="attr", prop_key="fixed_version_id", old_ref="10001", old_value="Sprint 4", new_ref="1"
+                ),
+                IRJournalDetail(property="attr", prop_key="status_id", old_ref="77", old_value="12", new_ref="5"),
+                IRJournalDetail(property="attr", prop_key="parent_id", new_ref="9999", new_value="ABC-12"),
+            ],
+        )
+        ctx = await loaded(_adapter(issues=[_issue()], journals=[journal]))
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        closed = str(await ctx.id_map.get(db_session, EntityType.STATUS, "5"))
+        details = await self._details(db_session, ctx)
+        assert [(d.prop_key, d.old_value, d.new_value) for d in details] == [
+            # Neither ref names a version this source imported; the old one has text.
+            ("fixed_version_id", "Sprint 4", None),
+            # Text of digits only would read as a Specivo id, so it is quoted.
+            ("status_id", '"12"', closed),
+            ("parent_id", None, "ABC-12"),
+        ]
+        warning = next(w for w in ctx.summary.warnings if "History values name records" in w.message)
+        assert warning.context["count"] == 4
+        assert "version:10001" in warning.context["examples"]
+
+    async def test_a_ref_imported_by_an_earlier_run_resolves(self, db_session, loaded):
+        """The identifier map holds every earlier import of the source, as for placeholders."""
+        first = await loaded(_adapter(issues=[_issue("100")]))
+        await load_issues(first)
+
+        journal = self._journal(
+            issue_ref="101",
+            notes=None,
+            details=[IRJournalDetail(property="attr", prop_key="parent_id", old_ref="100")],
+        )
+        second = await loaded(_adapter(issues=[_issue("101")], journals=[journal]))
+        await load_issues(second)
+        await load_journals(second)
+
+        parent = await db_session.get(Issue, await second.id_map.get(db_session, EntityType.ISSUE, "100"))
+        details = await self._details(db_session, second)
+        assert [(d.old_value, d.new_value) for d in details] == [(parent.display_key, None)]
+
+    async def test_values_of_other_attributes_are_stored_as_written(self, db_session, loaded):
+        journal = self._journal(
+            notes=None,
+            details=[
+                IRJournalDetail(property="attr", prop_key="subject", old_value="Old", new_value="New"),
+                IRJournalDetail(property="cf", prop_key="12", old_value="3", new_value="4"),
+            ],
+        )
+        ctx = await loaded(_adapter(issues=[_issue()], journals=[journal]))
+        await load_issues(ctx)
+        await load_journals(ctx)
+
+        details = await self._details(db_session, ctx)
+        assert [(d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("subject", "Old", "New"),
+            ("12", "3", "4"),
+        ]
 
     async def test_entry_can_carry_both_a_note_and_changes(self, db_session, loaded):
         journal = self._journal(

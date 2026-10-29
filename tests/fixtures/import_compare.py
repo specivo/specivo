@@ -241,7 +241,8 @@ class Snapshot:
     async def _journals(self) -> dict[str, list[tuple]]:
         details: dict[int, list[tuple]] = {}
         for d in await self._all(JournalDetail):
-            details.setdefault(d.journal_id, []).append((d.property, d.prop_key, d.old_value, d.new_value))
+            values = (self._detail_value(d.prop_key, d.old_value), self._detail_value(d.prop_key, d.new_value))
+            details.setdefault(d.journal_id, []).append((d.property, d.prop_key, *values))
         journals: dict[str, list[tuple]] = {}
         for j in sorted(await self._all(Journal), key=lambda j: (j.issue_id, j.sequence)):
             journals.setdefault(self.keys[j.issue_id], []).append(
@@ -256,6 +257,21 @@ class Snapshot:
                 )
             )
         return journals
+
+    def _detail_value(self, prop_key: str, value: str | None) -> str | None:
+        """A history value naming a record by Specivo id, as the record's natural key."""
+        names = {
+            "status_id": self.names[IssueStatus],
+            "tracker_id": self.names[Tracker],
+            "priority_id": self.names[IssuePriority],
+            "category_id": self.names[IssueCategory],
+            "fixed_version_id": self.names[Version],
+            "assigned_to_id": self.logins,
+            "project_id": self.identifiers,
+        }.get(prop_key)
+        if names is None or value is None or not value.isdigit():
+            return value
+        return names.get(int(value), value)
 
     def _attachment(self, a: Attachment) -> tuple:
         if a.container_type == "Issue":

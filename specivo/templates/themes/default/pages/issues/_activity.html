@@ -28,8 +28,10 @@
       {# Relation changes name another issue by key, and the issue they name
          may be one this reader cannot see — the relations list drops those,
          and the feed must not put them back. For a visitor without an account
-         the whole row is left out rather than shown without its link. #}
-      {% for d in j.details if not (anonymous and d.property == 'relation') %}
+         the whole row is left out rather than shown without its link, and so
+         is a parent change (imported history has them), which names the
+         parent by key too. #}
+      {% for d in j.details if not (anonymous and (d.property == 'relation' or d.prop_key == 'parent_id')) %}
       <div style="font-size:var(--sp-font-size-sm);margin-bottom:2px;">
         {% if d.property == 'recurring' %}
         ⟳ {% trans %}Created from recurring pattern{% endtrans %}

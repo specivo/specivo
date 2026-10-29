@@ -145,6 +145,22 @@ tracked it (Jira's remaining estimate, for example) and is stored as given;
 remaining estimate's own history is not imported: a source like Jira lowers it
 on every worklog, and Specivo keeps no history for that column.
 
+## History values that name a record
+
+Specivo's history keeps a changed attribute's value as text: a Specivo id for
+an attribute that names a record (`status_id`, `fixed_version_id`, …), which
+the issue page turns into a name (`specivo/web/activity_lookups.py`). A bundle
+cannot know those ids, so such a change carries the records' refs (`old_ref`,
+`new_ref`) and, in `old_value` / `new_value`, the source's text for them.
+`issue_loader.py` resolves the refs through the id map when it creates the
+entry (`REFERENCE_ATTRIBUTES` in `core/ir.py` says which attributes, and of
+what entity type): a Specivo id, or for `parent_id` the parent's display key.
+A ref the map does not hold is never stored, since the page would read the
+source's id as one of its own; the source's text is stored instead, quoted if
+it is only digits, and the phase warns once with the count. History refs are
+resolved once, not kept waiting in the links file: a parent from a bundle
+loaded later shows as its text.
+
 ## The id map and idempotency
 
 `ImportIdMap` (`specivo/importers/core/id_map.py`) wraps the `import_id_map`

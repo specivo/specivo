@@ -21,6 +21,7 @@ from specivo.importers.core.ir import EntityType
 from specivo.models.attachment import Attachment
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
+from specivo.models.lookups import IssueStatus
 from specivo.models.project import Project
 from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
@@ -94,7 +95,8 @@ class TestAnSdkBundle:
         detail = (
             await db_session.execute(select(JournalDetail).where(JournalDetail.journal_id == comment.id))
         ).scalar_one()
-        assert (detail.prop_key, detail.old_value, detail.new_value) == ("status_id", "open", "doing")
+        statuses = [await db_session.get(IssueStatus, int(value)) for value in (detail.old_value, detail.new_value)]
+        assert (detail.prop_key, *(status.name for status in statuses)) == ("status_id", "SDK Open", "SDK Doing")
 
     async def test_wiki_history(self, db_session, imported):
         home = (await db_session.execute(select(WikiPage).where(WikiPage.title == "Home"))).scalar_one()

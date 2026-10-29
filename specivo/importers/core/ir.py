@@ -415,12 +415,33 @@ class IRJournalDetail:
 
     ``property`` is ``attr``, ``cf``, ``attachment`` or ``relation`` — the same
     vocabulary Specivo's ``journal_details`` table uses.
+
+    For an attribute that names a record (see :data:`REFERENCE_ATTRIBUTES`),
+    ``old_ref`` and ``new_ref`` are the source refs of the records, which the
+    loader turns into Specivo ids; ``old_value`` and ``new_value`` are then
+    only the text to show when a ref names nothing that was imported.
     """
 
     property: str
     prop_key: str
     old_value: str | None = None
     new_value: str | None = None
+    old_ref: str | None = None
+    new_ref: str | None = None
+
+
+# Issue attributes whose history values name a record, and the entity type of
+# that record. Their journal details carry refs, translated on load.
+REFERENCE_ATTRIBUTES: dict[str, EntityType] = {
+    "project_id": EntityType.PROJECT,
+    "tracker_id": EntityType.TRACKER,
+    "status_id": EntityType.STATUS,
+    "priority_id": EntityType.PRIORITY,
+    "assigned_to_id": EntityType.USER,
+    "category_id": EntityType.CATEGORY,
+    "fixed_version_id": EntityType.VERSION,
+    "parent_id": EntityType.ISSUE,
+}
 
 
 @dataclass(slots=True)

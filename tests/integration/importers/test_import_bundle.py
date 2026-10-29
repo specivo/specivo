@@ -26,6 +26,7 @@ import pytest
 from sqlalchemy import func, select
 
 from specivo.cli.import_data import parse_args, run_validation
+from specivo.core.lookup_cache import invalidate_lookups
 from specivo.importers.bundle import BundleInvalidError
 from specivo.importers.core.id_map import ImportIdMap
 from specivo.importers.core.ir import EntityType
@@ -76,6 +77,11 @@ COUNTED = (
     Member,
     MemberRole,
 )
+
+
+def _change(old: str, new: str) -> str:
+    """A field change as the issue page's activity feed renders it, whitespace collapsed."""
+    return f'changed from <span class="sp-change-old">{old}</span> to <span class="sp-change-new">{new}</span>'
 
 
 async def _count(session, model) -> int:
@@ -269,15 +275,31 @@ class TestFullBundle:
         ]
         assert imported_entries[0].is_private is True
         assert imported_entries[1].notes == "Reproduced on staging, @bundle_alice is on it."
-        detail = (
-            await db_session.execute(select(JournalDetail).where(JournalDetail.journal_id == imported_entries[1].id))
-        ).scalar_one()
-        assert (detail.property, detail.prop_key, detail.old_value, detail.new_value) == (
-            "attr",
-            "status_id",
-            "triage",
-            "review",
+        details = (
+            (
+                await db_session.execute(
+                    select(JournalDetail)
+                    .where(JournalDetail.journal_id == imported_entries[1].id)
+                    .order_by(JournalDetail.id)
+                )
+            )
+            .scalars()
+            .all()
         )
+        # Refs become the Specivo ids the issue page names records by.
+        triage = (await db_session.execute(select(IssueStatus).where(IssueStatus.name == "Triage"))).scalar_one()
+        assert [(d.property, d.prop_key, d.old_value, d.new_value) for d in details] == [
+            ("attr", "status_id", str(triage.id), str(issue.status_id)),
+            ("attr", "fixed_version_id", None, str(issue.fixed_version_id)),
+        ]
+
+    async def test_the_issue_page_names_what_history_changed(self, admin_client, imported):
+        invalidate_lookups()  # the statuses the run created are not in this process's cache yet
+        response = await admin_client.get("/issue/BUNDLEWEB-1/")
+        assert response.status_code == 200
+        text = " ".join(response.text.split())
+        assert f'<strong class="sp-change-label">Status</strong> {_change("Triage", "In Review")}' in text
+        assert f'<strong class="sp-change-label">Fixed Version</strong> {_change("(none)", "1.0")}' in text
 
     async def test_a_relation_across_projects(self, db_session, imported):
         relation = (await db_session.execute(select(IssueRelation))).scalar_one()
@@ -366,6 +388,77 @@ class TestFullBundle:
     async def test_the_import_account_is_named_after_the_manifests_system(self, db_session, imported):
         accounts = set((await db_session.execute(select(User.login).where(User.login.like("%-import")))).scalars())
         assert accounts == {"sample-import"}
+
+
+class TestHistoryRefs:
+    """History names records by ref; the page must show their names, never a source id."""
+
+    async def _details(self, session, subject: str) -> list[tuple[str, str | None, str | None]]:
+        issue = await _issue(session, subject)
+        stmt = (
+            select(JournalDetail.prop_key, JournalDetail.old_value, JournalDetail.new_value)
+            .join(Journal, Journal.id == JournalDetail.journal_id)
+            .where(Journal.issue_id == issue.id, JournalDetail.prop_key != "description")
+            .order_by(JournalDetail.id)
+        )
+        return [tuple(row) for row in (await session.execute(stmt)).all()]
+
+    async def test_a_record_the_source_no_longer_has_shows_its_text(
+        self, db_session, admin_client, build_bundle_import, tmp_path
+    ):
+        journal = {
+            "source_ref": "j1",
+            "issue_ref": "i1",
+            "created_at": "2024-02-02T10:00:00Z",
+            "details": [
+                # A version deleted in the source: only its name is left.
+                {"property": "attr", "prop_key": "fixed_version_id", "old_ref": "10001", "old_value": "Sprint 4"},
+                # A status the bundle does not carry, and no text for it.
+                {"property": "attr", "prop_key": "status_id", "old_ref": "1", "new_ref": "open"},
+            ],
+        }
+        root = write_bundle(
+            tmp_path / "b", projects=[project("p1", identifier="histrefs")], issues=[issue("i1")], journals=[journal]
+        )
+
+        summary = await build_bundle_import(root).run()
+
+        open_status = (await _issue(db_session, "Issue i1")).status_id
+        assert await self._details(db_session, "Issue i1") == [
+            ("fixed_version_id", "Sprint 4", None),
+            ("status_id", None, str(open_status)),
+        ]
+        (warning,) = [w for w in summary.warnings if w.message.startswith("History values name records")]
+        assert warning.context["count"] == 2
+
+        invalidate_lookups()  # the statuses the run created are not in this process's cache yet
+        text = " ".join((await admin_client.get("/issue/HISTREFS-1/")).text.split())
+        assert _change("Sprint 4", "(none)") in text
+        assert _change("(none)", "Open") in text
+
+    async def test_a_parent_of_an_earlier_bundle_is_its_display_key_and_of_a_later_one_its_text(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        """Parents named by history are resolved once, on load; a later bundle does not revisit them."""
+        a = _part(tmp_path / "a", "p-a", "hista", [issue("a-1", "p-a")])
+        history = {
+            "source_ref": "j-b",
+            "issue_ref": "b-1",
+            "details": [
+                {"property": "attr", "prop_key": "parent_id", "old_ref": "a-1", "old_value": "A-1"},
+                {"property": "attr", "prop_key": "parent_id", "new_ref": "c-1", "new_value": "C-1"},
+            ],
+        }
+        b = _part(tmp_path / "b", "p-b", "histb", [issue("b-1", "p-b")])
+        (b / "journals.jsonl").write_text(json.dumps(history) + "\n")
+
+        await build_bundle_import(a).run()
+        await build_bundle_import(b, continue_import=True).run()
+
+        assert await self._details(db_session, "Issue b-1") == [
+            ("parent_id", "HISTA-1", None),
+            ("parent_id", None, "C-1"),
+        ]
 
 
 class TestAdministrators:
