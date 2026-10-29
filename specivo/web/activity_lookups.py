@@ -11,16 +11,17 @@ record that was not imported) has no entry, and the feed shows it as stored.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Sequence
 from typing import Any
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.models.issue import Issue
+from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssueCategory
-from specivo.models.project import Project
+from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.sprint import Sprint
 from specivo.models.user import User
 from specivo.models.version import Version
@@ -31,6 +32,9 @@ from specivo.services.project_service import ProjectService
 _LOADED_ATTRIBUTES = ("sprint_id", "fixed_version_id", "category_id", "project_id", "assigned_to_id")
 
 _project_svc = ProjectService()
+
+# A value that reads as an issue's display key, ``KEY-N``.
+_ISSUE_KEY = re.compile(r"^([A-Za-z][A-Za-z0-9_]*)-(\d+)$")
 
 # The lookup map holding the parent keys the feed leaves out, as ``{key: ""}``.
 HIDDEN_PARENTS = "parent_id_hidden"
@@ -106,36 +110,83 @@ async def _names(db: AsyncSession, user: User, model: Any, ids: set[int]) -> dic
 
 
 async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journal]) -> dict[str, str]:
-    """Return the parent changes' issue keys that name an issue *user* may not see.
+    """Return the parent changes' values that look like an issue key *user* may not be shown.
 
-    History keeps a parent by display key. The feed leaves such a change out
-    entirely, as the relations list leaves out a relation to an issue the
-    reader cannot see, so the key is never disclosed. A value naming no
-    Specivo issue (the source's text for a parent that was not imported) is
-    no disclosure and stays.
+    History keeps a parent by display key, and the page links any key it
+    shows, resolving it as the app resolves references: the current key, then
+    the aliases a move (``IssueRefAlias``) or a project key rename
+    (``ProjectKeyAlias``) left. A key is shown only when it resolves that way
+    to an issue *user* may see; any other key-like value is listed, so the
+    feed leaves the change out entirely, as the relations list leaves out a
+    relation to an issue the reader cannot see. Fails closed: a key naming no
+    issue at all is hidden too. A value that is no key (``#123``) stays.
+    Admins see every issue, so nothing is hidden from them.
     """
-    keys: dict[tuple[str, int], str] = {}
+    keys: dict[tuple[str, int], set[str]] = {}
     for journal in journals:
         for detail in journal.details:
             if detail.property != "attr" or detail.prop_key != "parent_id":
                 continue
             for value in (detail.old_value, detail.new_value):
-                project_key, _, number = (value or "").rpartition("-")
-                if project_key and number.isdigit():
-                    keys[(project_key, int(number))] = str(value)
+                match = _ISSUE_KEY.match(value or "")
+                if match:
+                    keys.setdefault((match[1].upper(), int(match[2])), set()).add(str(value))
     if not keys or user.is_admin:
         return {}
-    from specivo.services.issue_service import IssueService
 
-    named = or_(*(and_(Issue.project_key == key, Issue.sequence_number == number) for key, number in keys))
-    existing = select(Issue.project_key, Issue.sequence_number).where(named)
-    visible = existing
-    clause = await IssueService().visible_issues_clause(db, user)
-    if clause is not None:
-        visible = existing.where(clause)
-    found = {(row.project_key, row.sequence_number) for row in (await db.execute(existing)).all()}
-    seen = {(row.project_key, row.sequence_number) for row in (await db.execute(visible)).all()}
-    return {keys[key]: "" for key in found - seen}
+    resolved = await _resolve_issue_keys(db, set(keys))
+    visible: set[int] = set()
+    if resolved:
+        from specivo.services.issue_service import IssueService
+
+        stmt = select(Issue.id).where(Issue.id.in_(set(resolved.values())))
+        clause = await IssueService().visible_issues_clause(db, user)
+        if clause is not None:
+            stmt = stmt.where(clause)
+        visible = set((await db.execute(stmt)).scalars())
+    return {value: "" for key, values in keys.items() if resolved.get(key) not in visible for value in values}
+
+
+async def _resolve_issue_keys(db: AsyncSession, keys: set[tuple[str, int]]) -> dict[tuple[str, int], int]:
+    """Return the issue id each ``(project key, number)`` names, as ``IssueService.get_by_display_key`` finds it."""
+    resolved: dict[tuple[str, int], int] = {}
+    rows = await db.execute(
+        select(Issue.project_key, Issue.sequence_number, Issue.id).where(
+            tuple_(Issue.project_key, Issue.sequence_number).in_(keys)
+        )
+    )
+    resolved.update({(key, number): issue_id for key, number, issue_id in rows.all()})
+
+    missing = keys - resolved.keys()
+    if missing:
+        rows = await db.execute(
+            select(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number, IssueRefAlias.issue_id).where(
+                tuple_(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).in_(missing)
+            )
+        )
+        resolved.update({(key, number): issue_id for key, number, issue_id in rows.all()})
+
+    missing = keys - resolved.keys()
+    if missing:
+        renamed = dict(
+            (
+                await db.execute(
+                    select(ProjectKeyAlias.old_key, ProjectKeyAlias.project_id).where(
+                        ProjectKeyAlias.old_key.in_({key for key, _ in missing})
+                    )
+                )
+            ).all()
+        )
+        wanted = {(renamed[key], number): (key, number) for key, number in missing if key in renamed}
+        if wanted:
+            rows = await db.execute(
+                select(Issue.project_id, Issue.sequence_number, Issue.id).where(
+                    tuple_(Issue.project_id, Issue.sequence_number).in_(set(wanted))
+                )
+            )
+            for row in rows.all():
+                resolved[wanted[(int(row.project_id), int(row.sequence_number))]] = int(row.id)
+    return resolved
 
 
 async def _projects(db: AsyncSession, user: User, ids: set[int]) -> dict[str, str]:
