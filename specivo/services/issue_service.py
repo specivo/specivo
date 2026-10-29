@@ -762,13 +762,18 @@ class IssueService:
                 break
         return pairs
 
-    async def resolve_known_issue_refs(self, session: AsyncSession, *texts: str | None) -> set[str]:
-        """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue.
+    async def resolve_known_issue_refs(self, session: AsyncSession, user: User, *texts: str | None) -> set[str]:
+        """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue *user* may see.
 
         A reference is "known" when it matches a current issue
         ``(project_key, sequence_number)`` or a previous reference recorded in
-        ``issue_ref_aliases`` (i.e. the issue was moved). Used to validate
-        autolinks before rendering so non-existent refs are not linked.
+        ``issue_ref_aliases`` (i.e. the issue was moved), and that issue is
+        visible to *user* by the same rules as the issue list
+        (``visible_issues_clause``: private issues, other projects, the
+        anonymous rules and the API key project limit included). Used to
+        validate autolinks before rendering, so a ref the reader cannot see
+        renders exactly like one that does not exist: linking it would tell
+        the reader the issue exists.
 
         The number of refs resolved per call is capped (``MAX_AUTOLINK_REFS``)
         to keep the lookup bounded regardless of input size; refs beyond the cap
@@ -778,22 +783,22 @@ class IssueService:
         if not pairs:
             return set()
 
+        visibility = await self.visible_issues_clause(session, user)
+
         known: set[str] = set()
-        # Issues outside the API key's project limit are not known.
-        limit = scope_clause(Issue.project_id)
         current = select(Issue.project_key, Issue.sequence_number).where(
             tuple_(Issue.project_key, Issue.sequence_number).in_(pairs)
         )
-        if limit is not None:
-            current = current.where(limit)
+        if visibility is not None:
+            current = current.where(visibility)
         for key, num in await session.execute(current):
             known.add(f"{key}-{num}")
 
         aliases = select(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).where(
             tuple_(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).in_(pairs)
         )
-        if limit is not None:
-            aliases = aliases.join(Issue, Issue.id == IssueRefAlias.issue_id).where(limit)
+        if visibility is not None:
+            aliases = aliases.join(Issue, Issue.id == IssueRefAlias.issue_id).where(visibility)
         alias_rows = await session.execute(aliases)
         for key, num in alias_rows:
             known.add(f"{key}-{num}")

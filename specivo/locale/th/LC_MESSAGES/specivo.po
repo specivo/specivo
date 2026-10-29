@@ -7085,3 +7085,7 @@ msgstr "ไม่มีเวอร์ชันที่เปิดอยู่
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr "เวอร์ชันที่เสร็จแล้ว"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "ไม่พบเซสชันของเอเจนต์"

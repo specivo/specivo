@@ -6951,3 +6951,7 @@ msgstr "没有未关闭的版本。此项目的所有版本均已完成。"
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr "已完成的版本"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "未找到代理会话"

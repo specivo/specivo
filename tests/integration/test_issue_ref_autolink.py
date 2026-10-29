@@ -93,7 +93,7 @@ async def test_resolve_known_refs_includes_current_and_alias_excludes_bogus(
     moved_new_ref = movable.display_key  # BCME-1
 
     text = f"Refs: ACME-1 (current), {moved_old_ref} (moved/alias), {moved_new_ref} (current), ZZZ-99 (bogus)."
-    known = await _svc.resolve_known_issue_refs(db_session, text)
+    known = await _svc.resolve_known_issue_refs(db_session, admin_user, text)
 
     assert "ACME-1" in known
     assert moved_old_ref in known  # old ref still resolves via alias

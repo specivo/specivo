@@ -6957,3 +6957,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr ""
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr ""

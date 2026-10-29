@@ -266,7 +266,7 @@ async def get_board(
     sprint = await _sprint_service.get_by_id(db, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
-    board = await _sprint_service.board_data(db, sprint)
+    board = await _sprint_service.board_data(db, sprint, current_user)
     # Serialize issues to dicts for JSON response
     result: dict[str, list[dict]] = {}
     for status_name, issues in board.items():
@@ -287,7 +287,7 @@ async def get_backlog(
 ) -> list[dict]:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
-    issues, _total = await _sprint_service.backlog_issues(db, project.id)
+    issues, _total = await _sprint_service.backlog_issues(db, project.id, current_user)
     return [
         {"id": i.id, "subject": i.subject, "sprint_id": i.sprint_id}
         for i in issues

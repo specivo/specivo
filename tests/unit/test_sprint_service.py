@@ -59,7 +59,7 @@ from tests.factories.lookups import (
     TrackerFactory,
 )
 from tests.factories.project import ProjectFactory
-from tests.factories.user import UserFactory
+from tests.factories.user import AdminUserFactory, UserFactory
 
 # ---------------------------------------------------------------------------
 # Module-level singleton
@@ -180,6 +180,16 @@ async def project(db_session: AsyncSession) -> Project:
 @pytest.fixture
 async def actor(db_session: AsyncSession) -> User:
     return await _make_user(db_session, login="sprint_actor")
+
+
+@pytest.fixture
+async def reader(db_session: AsyncSession) -> User:
+    """An administrator, who sees every issue; visibility itself is covered in test_issue_visibility_listings."""
+    user = AdminUserFactory.build(login="sprint_reader", status="active")
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
 
 
 @pytest.fixture
@@ -501,6 +511,7 @@ async def test_board_data_groups_by_status(
     db_session: AsyncSession,
     project: Project,
     actor: User,
+    reader: User,
     lookups: tuple[Tracker, IssueStatus, IssueStatus, IssuePriority],
 ):
     tracker, status_open, status_done, priority = lookups
@@ -517,7 +528,7 @@ async def test_board_data_groups_by_status(
         tracker=tracker, status=status_done, priority=priority,
     )
 
-    board = await _svc.board_data(db_session, sprint)
+    board = await _svc.board_data(db_session, sprint, reader)
 
     assert isinstance(board, dict)
     # Board should contain status-name keys with lists of issues
@@ -537,6 +548,7 @@ async def test_backlog_issues_returns_unassigned(
     db_session: AsyncSession,
     project: Project,
     actor: User,
+    reader: User,
     lookups: tuple[Tracker, IssueStatus, IssueStatus, IssuePriority],
 ):
     tracker, status_open, status_done, priority = lookups
@@ -551,7 +563,7 @@ async def test_backlog_issues_returns_unassigned(
         tracker=tracker, status=status_open, priority=priority,
     )
 
-    backlog, total = await _svc.backlog_issues(db_session, project.id)
+    backlog, total = await _svc.backlog_issues(db_session, project.id, reader)
 
     backlog_ids = [i.id for i in backlog]
     assert backlog_issue.id in backlog_ids

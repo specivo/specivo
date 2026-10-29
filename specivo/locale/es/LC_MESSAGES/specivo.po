@@ -7256,3 +7256,7 @@ msgstr "No hay versiones abiertas. Todas las versiones de este proyecto están c
 #: specivo/templates/themes/default/pages/projects/roadmap.html
 msgid "Completed versions"
 msgstr "Versiones completadas"
+
+#: specivo/services/agent_cost_service.py
+msgid "Agent session not found"
+msgstr "Sesión de agente no encontrada"
