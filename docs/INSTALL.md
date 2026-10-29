@@ -36,6 +36,11 @@ docker compose up -d
 
 Open http://localhost:9933
 
+`configure.py` (and `make configure`) creates `.env` and `.env.local` readable only by their owner
+(mode `0600`), because they hold the database password and `SECRET_KEY`. Docker Compose reads them
+as the user who runs it, so run `configure.py` and `docker compose` / `make up` as the same user, or
+both with `sudo`.
+
 ## What happens on first start
 
 1. PostgreSQL and Redis start
