@@ -54,7 +54,7 @@ from specivo.services.sso.flow import TX_COOKIE_NAME, TX_TTL_SECONDS, tx_cookie_
 from specivo.services.sso.log import logger
 from specivo.services.sso.login import LINK_RETURN_PATH, SsoLinkResult, SsoLoginService
 from specivo.services.sso.logout import backchannel_logout, release_logout_jti
-from specivo.web.deps import get_current_user_optional, require_user
+from specivo.web.deps import get_current_user_optional, require_user, safe_next_path
 
 router = APIRouter(prefix="/auth/oidc", tags=["web-sso"], include_in_schema=False)
 _service = SsoLoginService()
@@ -310,7 +310,9 @@ async def sso_callback(
     # exists on the very next request.
     await db.commit()
 
-    response = RedirectResponse(result.next_path or f"{_prefix(settings)}/", status_code=302)
+    # ``next_path`` was checked before it was stored with the transaction;
+    # checking it again here keeps the redirect safe whatever the store held.
+    response = RedirectResponse(safe_next_path(result.next_path) or f"{_prefix(settings)}/", status_code=302)
     remaining = int((result.absolute_expires_at - utcnow()).total_seconds())
     set_auth_cookies(
         response,

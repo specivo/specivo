@@ -6,6 +6,8 @@ and issue visibility after API creation.
 
 from __future__ import annotations
 
+from urllib.parse import parse_qs, urlsplit
+
 import httpx
 import pytest
 from playwright.sync_api import Page, expect
@@ -89,3 +91,24 @@ def test_created_issue_appears(
     issues = IssueListPage(admin_page)
     issues.navigate(project_with_issues)
     issues.expect_issue_visible(subject)
+
+
+def test_page_size_select_navigates_on_this_site(admin_page: Page, project_with_issues: str) -> None:
+    """Changing the page size reloads the same list with ``limit`` set and ``offset`` reset."""
+    admin_page.goto(f"/projects/{project_with_issues}/issues/?offset=0&limit=10")
+    admin_page.wait_for_load_state("networkidle")
+    with admin_page.expect_navigation():
+        admin_page.locator("select[data-pagination-limit]").select_option("25")
+    url = urlsplit(admin_page.url)
+    assert url.path.rstrip("/") == f"/projects/{project_with_issues}/issues"
+    assert parse_qs(url.query) == {"offset": ["0"], "limit": ["25"]}
+
+
+def test_board_per_column_select_keeps_the_other_parameters(admin_page: Page, project_with_issues: str) -> None:
+    """The board's cards-per-column select replaces only ``board_per_col``."""
+    admin_page.goto(f"/projects/{project_with_issues}/issues/?view=board&board_per_col=10")
+    admin_page.wait_for_load_state("networkidle")
+    with admin_page.expect_navigation():
+        admin_page.locator("select[data-board-per-col]").select_option("25")
+    query = parse_qs(urlsplit(admin_page.url).query)
+    assert query == {"view": ["board"], "board_per_col": ["25"]}

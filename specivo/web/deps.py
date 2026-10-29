@@ -640,7 +640,7 @@ def safe_next_path(raw: str | None) -> str:
         return ""
     if not raw.startswith("/") or raw.startswith(("//", "/\\")):
         return ""
-    if any(char in raw for char in "\r\n\t") or any(ord(char) < 0x20 for char in raw):
+    if any(ord(char) < 0x20 or char == "\x7f" for char in raw):
         return ""
     return raw
 
