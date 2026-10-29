@@ -42,6 +42,7 @@ from specivo.services.anonymous_access_service import (
     ANONYMOUS_ACCESS_LOCK_KEY,
     ANONYMOUS_ACCESS_SETTING_KEY,
     is_anonymous_access_enabled,
+    lock_anonymous_access,
     set_anonymous_access_enabled,
     set_anonymous_permissions,
 )
@@ -107,6 +108,9 @@ def _cookies(user: User) -> dict[str, str]:
 
 
 async def _set_raw(db: AsyncSession, value: str | None) -> None:
+    # The advisory lock first, then the row, in the order every writer uses:
+    # the reverse lets two xdist workers deadlock on the shared settings row.
+    await lock_anonymous_access(db)
     await db.execute(text("DELETE FROM settings WHERE key = :k"), {"k": ANONYMOUS_ACCESS_SETTING_KEY})
     db.add(Setting(key=ANONYMOUS_ACCESS_SETTING_KEY, value=value))
     await db.commit()
