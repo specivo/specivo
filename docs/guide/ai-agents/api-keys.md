@@ -1,5 +1,5 @@
 ---
-description: Create, scope, rotate, and revoke Specivo API keys for AI agents — the spv_ key format, the mcp scope, and using a dedicated Agent service account.
+description: Create, limit, rotate, and revoke Specivo API keys for AI agents — the spv_ key format, project limits, and using a dedicated Agent service account.
 ---
 
 # API keys & scopes
@@ -11,8 +11,7 @@ that access away again.
 ## Create a key
 
 1. Open **Your profile → API keys** (`/my/api-keys/`).
-2. Click to create a new key, give it a clear name (for example, `claude-code` or `ci-agent`), and
-   select the **`mcp`** scope.
+2. Click to create a new key and give it a clear name (for example, `claude-code` or `ci-agent`).
 3. Copy the key when it's shown. It looks like `spv_your_api_key_here` — a string that always
    starts with `spv_`.
 
@@ -22,10 +21,11 @@ that access away again.
     The full key value is shown only once, at creation. Specivo stores it hashed and cannot display
     it again. If you lose it, revoke the key and create a new one.
 
-## The `mcp` scope
+## What a key can reach
 
-Scopes limit what a key can be used for. To connect an AI client over MCP, the key needs the
-**`mcp`** scope. A key without it will authenticate but be refused by the MCP server.
+Any active key works over both the REST API and the MCP server; there is no separate MCP scope to
+select. What the key can do is decided by its owner's permissions, and optionally by a project
+limit (below).
 
 A key never grants *more* than its owner already has. The agent acts as the user the key belongs to,
 so it inherits exactly that user's project roles and permissions — no project membership, no access.
@@ -56,7 +56,7 @@ with yours and ties its access to your login. The cleaner pattern is a **dedicat
 1. Create a separate user (for example, `agent` or `claude`) for the automation.
 2. Add that user to the relevant projects with the **Agent** role, which is built for API and
    automation accounts.
-3. Generate the `mcp`-scoped key from that account and hand it to the client.
+3. Generate a key from that account and hand it to the client.
 
 This keeps the agent's audit trail and permissions distinct from any person's, and lets you adjust
 or revoke its access without touching real users' accounts.
