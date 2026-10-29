@@ -1708,7 +1708,10 @@ class SearchService:
                     id=m["id"],
                     title=m["title"] or "",
                     subtitle=m["subtitle"],
-                    snippet=m["snippet"],
+                    # Raw stored content, rendered with ``| safe`` on the search
+                    # page: escape it as the keyword path does. Hybrid search
+                    # reuses these results, so this covers both modes.
+                    snippet=_clean_snippet(m["snippet"]),
                     score=float(m["score"]) if m["score"] is not None else 0.0,
                     project_key=m["project_key"] or "",
                 )
