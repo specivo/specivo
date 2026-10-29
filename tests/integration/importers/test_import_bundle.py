@@ -42,6 +42,8 @@ from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
 from specivo.models.relation import IssueRelation
 from specivo.models.role import Role
+from specivo.models.sprint import Sprint
+from specivo.models.tag import Tag, TagLink
 from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
@@ -132,6 +134,23 @@ class TestFullBundle:
         assert created[EntityType.ATTACHMENT] == 3
         assert created[EntityType.TIME_ENTRY] == 2
         assert created[EntityType.MEMBERSHIP] == 3
+        assert created[EntityType.SPRINT] == 2
+
+    async def test_sprints_and_tags(self, db_session, imported):
+        sprints = {sp.name: sp for sp in (await db_session.execute(select(Sprint))).scalars()}
+        assert {name: sp.status for name, sp in sprints.items()} == {
+            "Web sprint 1": "completed",
+            "Web sprint 2": "active",
+        }
+        assert sprints["Web sprint 1"].velocity_snapshot == {
+            "total_issues": 1,
+            "completed_issues": 0,
+            "completed_at": "2024-02-05T16:00:00+00:00",
+        }
+        login = await _issue(db_session, "Login fails after the session times out")
+        assert login.sprint_id == sprints["Web sprint 2"].id
+        tags = (await db_session.execute(select(Tag.name).join(TagLink).where(TagLink.issue_id == login.id))).scalars()
+        assert sorted(tags) == ["auth", "regression"]
 
     async def test_lookups(self, db_session, imported):
         statuses = {s.name: s.category for s in (await db_session.execute(select(IssueStatus))).scalars()}
@@ -288,11 +307,13 @@ class TestFullBundle:
         # Refs become the Specivo ids the issue page names records by.
         triage = (await db_session.execute(select(IssueStatus).where(IssueStatus.name == "Triage"))).scalar_one()
         bob = (await db_session.execute(select(User).where(User.login == "bundle_bob"))).scalar_one()
+        sprints = dict((await db_session.execute(select(Sprint.name, Sprint.id))).all())
         assert [(d.property, d.prop_key, d.old_value, d.new_value) for d in details] == [
             ("attr", "status_id", str(triage.id), str(issue.status_id)),
             ("attr", "fixed_version_id", None, str(issue.fixed_version_id)),
             # A user field, under its key; a value with no ref is the source's text.
             ("cf_user", "reviewer", "Former colleague", str(bob.id)),
+            ("attr", "sprint_id", str(sprints["Web sprint 1"]), str(issue.sprint_id)),
         ]
 
     async def test_the_issue_page_names_what_history_changed(self, admin_client, imported):
@@ -302,6 +323,7 @@ class TestFullBundle:
         assert f'<strong class="sp-change-label">Status</strong> {_change("Triage", "In Review")}' in text
         assert f'<strong class="sp-change-label">Fixed Version</strong> {_change("(none)", "1.0")}' in text
         assert f'<strong class="sp-change-label">Reviewer</strong> {_change("Former colleague", "bundle_bob")}' in text
+        assert f'<strong class="sp-change-label">Sprint</strong> {_change("Web sprint 1", "Web sprint 2")}' in text
 
     async def test_a_relation_across_projects(self, db_session, imported):
         relation = (await db_session.execute(select(IssueRelation))).scalar_one()
@@ -460,6 +482,171 @@ class TestHistoryRefs:
             ("parent_id", "HISTA-1", None),
             ("parent_id", None, "C-1"),
         ]
+
+
+class TestSprintsAndTags:
+    """Sprints with their issues and history, and tags, as the bundle gives them."""
+
+    SPRINTS = [
+        {
+            "source_ref": "s-1",
+            "project_ref": "p1",
+            "name": "Sprint 1",
+            "goal": "Ship the login fix",
+            "status": "completed",
+            "start_date": "2024-01-29",
+            "completed_at": "2024-02-12T04:00:00Z",
+            "created_at": "2024-01-20T09:00:00Z",
+        },
+        {"source_ref": "s-2", "project_ref": "p1", "name": "Sprint 2", "status": "active", "start_date": "2024-02-12",
+         "end_date": "2024-02-26"},
+        {"source_ref": "s-3", "project_ref": "p1", "name": "Sprint 3"},
+        # A second active sprint: Specivo has one active sprint per project.
+        {"source_ref": "s-4", "project_ref": "p1", "name": "Parallel sprint", "status": "active"},
+    ]  # fmt: skip
+
+    def _bundle(self, root: Path) -> Path:
+        closed = {"source_ref": "done", "name": "Done", "category": "closed"}
+        lookups = {
+            "trackers": [{"source_ref": "bug", "name": "Bug", "default_status_ref": "open"}],
+            "statuses": [{"source_ref": "open", "name": "Open", "category": "backlog"}, closed],
+            "priorities": [{"source_ref": "normal", "name": "Normal", "is_default": True}],
+        }
+        history = {
+            "source_ref": "j-1",
+            "issue_ref": "i-2",
+            "created_at": "2024-02-12T05:00:00Z",
+            "details": [
+                {"property": "attr", "prop_key": "sprint_id", "old_ref": "s-1", "old_value": "Sprint 1",
+                 "new_ref": "s-2", "new_value": "Sprint 2"},
+                {"property": "attr", "prop_key": "sprint_id", "old_ref": "s-0", "old_value": "Deleted sprint"},
+            ],
+        }  # fmt: skip
+        return write_bundle(
+            root,
+            lookups=lookups,
+            projects=[project("p1", identifier="sprinted"), project("p2", identifier="tagged")],
+            sprints=self.SPRINTS,
+            issues=[
+                issue("i-1", sprint_ref="s-1", status_ref="done", tags=["login", "Safari", "safari"]),
+                issue("i-2", sprint_ref="s-2", tags=["login"]),
+                issue("i-3", sprint_ref="s-1"),
+                issue("i-4", "p2", tags=["login"]),
+            ],
+            journals=[history],
+        )
+
+    async def _sprints(self, session) -> dict[str, Sprint]:
+        return {s.name: s for s in (await session.execute(select(Sprint))).scalars()}
+
+    async def test_sprints_with_their_dates_goal_and_status(self, db_session, build_bundle_import, tmp_path):
+        summary = await build_bundle_import(self._bundle(tmp_path / "b")).run()
+
+        assert summary.created[EntityType.SPRINT] == 4
+        sprints = await self._sprints(db_session)
+        first = sprints["Sprint 1"]
+        assert (first.goal, first.status, first.start_date) == ("Ship the login fix", "completed", date(2024, 1, 29))
+        # No end date: the day it was completed.
+        assert first.end_date == date(2024, 2, 12)
+        assert first.created_at == datetime(2024, 1, 20, 9, tzinfo=UTC)
+        assert (sprints["Sprint 2"].status, sprints["Sprint 2"].end_date) == ("active", date(2024, 2, 26))
+        assert sprints["Sprint 3"].status == "planned"
+
+    async def test_a_completed_sprint_keeps_its_completion_and_velocity(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        await build_bundle_import(self._bundle(tmp_path / "b")).run()
+
+        first = (await self._sprints(db_session))["Sprint 1"]
+        assert first.velocity_snapshot == {
+            "total_issues": 2,
+            "completed_issues": 1,
+            "completed_at": "2024-02-12T04:00:00+00:00",
+        }
+
+    async def test_a_second_active_sprint_is_planned_and_reported(self, db_session, build_bundle_import, tmp_path):
+        summary = await build_bundle_import(self._bundle(tmp_path / "b")).run()
+
+        assert (await self._sprints(db_session))["Parallel sprint"].status == "planned"
+        (warning,) = [w for w in summary.warnings if "active sprint" in w.message]
+        assert warning.context["sprint"] == "Parallel sprint"
+
+    async def test_issues_sit_in_their_sprints(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "b")).run()
+
+        sprints = await self._sprints(db_session)
+        assert (await _issue(db_session, "Issue i-1")).sprint_id == sprints["Sprint 1"].id
+        assert (await _issue(db_session, "Issue i-2")).sprint_id == sprints["Sprint 2"].id
+        assert (await _issue(db_session, "Issue i-4")).sprint_id is None
+
+    async def test_tags_are_created_per_project_and_linked_once(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "b")).run()
+
+        rows = (
+            await db_session.execute(
+                select(Project.identifier, Tag.name, Issue.subject)
+                .join(Tag, Tag.project_id == Project.id)
+                .join(TagLink, TagLink.tag_id == Tag.id)
+                .join(Issue, Issue.id == TagLink.issue_id)
+            )
+        ).all()
+        assert sorted(tuple(row) for row in rows) == [
+            ("sprinted", "Safari", "Issue i-1"),
+            ("sprinted", "login", "Issue i-1"),
+            ("sprinted", "login", "Issue i-2"),
+            ("tagged", "login", "Issue i-4"),
+        ]
+
+    async def test_sprint_history_names_the_sprints(self, db_session, admin_client, build_bundle_import, tmp_path):
+        summary = await build_bundle_import(self._bundle(tmp_path / "b")).run()
+
+        sprints = await self._sprints(db_session)
+        issue_id = (await _issue(db_session, "Issue i-2")).id
+        details = (
+            await db_session.execute(
+                select(JournalDetail.prop_key, JournalDetail.old_value, JournalDetail.new_value)
+                .join(Journal, Journal.id == JournalDetail.journal_id)
+                .where(Journal.issue_id == issue_id)
+                .order_by(JournalDetail.id)
+            )
+        ).all()
+        assert [tuple(d) for d in details] == [
+            ("sprint_id", str(sprints["Sprint 1"].id), str(sprints["Sprint 2"].id)),
+            ("sprint_id", "Deleted sprint", None),
+        ]
+        assert any(w.message.startswith("History values name records") for w in summary.warnings)
+
+        text = " ".join((await admin_client.get("/issue/SPRINTED-2/")).text.split())
+        assert _change("Sprint 1", "Sprint 2") in text
+        assert _change("Deleted sprint", "(none)") in text
+
+    async def test_the_sprint_pages_show_the_imported_sprint(
+        self, db_session, admin_client, build_bundle_import, tmp_path
+    ):
+        await build_bundle_import(self._bundle(tmp_path / "b")).run()
+
+        first = (await self._sprints(db_session))["Sprint 1"]
+        listing = await admin_client.get("/projects/SPRINTED/sprints/")
+        assert listing.status_code == 200
+        assert "Sprint 1" in listing.text and "Parallel sprint" in listing.text
+        detail = await admin_client.get(f"/projects/SPRINTED/sprints/{first.id}/")
+        assert detail.status_code == 200
+        assert "Issue i-1" in detail.text and "Issue i-3" in detail.text
+
+    async def test_loading_it_again_creates_nothing(self, db_session, build_bundle_import, tmp_path):
+        bundle = self._bundle(tmp_path / "b")
+        await build_bundle_import(bundle).run()
+        before = (await _count(db_session, Sprint), await _count(db_session, Tag), await _count(db_session, TagLink))
+
+        again = await build_bundle_import(bundle, continue_import=True).run()
+
+        assert again.created[EntityType.SPRINT] == 0
+        assert again.skipped[EntityType.SPRINT] == 4
+        assert (
+            await _count(db_session, Sprint),
+            await _count(db_session, Tag),
+            await _count(db_session, TagLink),
+        ) == before
 
 
 class TestAdministrators:

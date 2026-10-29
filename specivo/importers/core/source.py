@@ -33,6 +33,7 @@ from specivo.importers.core.ir import (
     IRMembership,
     IRProject,
     IRRelation,
+    IRSprint,
     IRTimeEntry,
     IRUser,
     IRVersion,
@@ -114,6 +115,8 @@ class SourceAdapter(Protocol):
     def extract_versions(self, project_ref: str) -> AsyncIterator[IRVersion]: ...
 
     def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]: ...
+
+    def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]: ...
 
     def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
         """Yield issues parents-first within the project."""
@@ -226,6 +229,9 @@ class BaseSourceAdapter:
         return _empty()
 
     def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]:
+        return _empty()
+
+    def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]:
         return _empty()
 
     def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:

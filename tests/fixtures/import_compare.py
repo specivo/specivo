@@ -42,6 +42,8 @@ from specivo.models.metadata_schema import MetadataSchema
 from specivo.models.project import Project
 from specivo.models.relation import IssueRelation
 from specivo.models.role import Role
+from specivo.models.sprint import Sprint
+from specivo.models.tag import Tag, TagLink
 from specivo.models.time_entry import TimeEntry, TimeEntryActivity
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
@@ -107,7 +109,17 @@ class Snapshot:
         wikis = {w.id: w.project_id for w in (await s.execute(select(Wiki))).scalars()}
         self.pages = {pid: (self.identifiers[wikis[p.wiki_id]], p.title) for pid, p in pages.items()}
         names = {}
-        for model in (IssueStatus, Tracker, IssuePriority, TimeEntryActivity, Role, IssueCategory, Version, UserGroup):
+        for model in (
+            IssueStatus,
+            Tracker,
+            IssuePriority,
+            TimeEntryActivity,
+            Role,
+            IssueCategory,
+            Version,
+            Sprint,
+            UserGroup,
+        ):
             names[model] = {row.id: row.name for row in (await s.execute(select(model))).scalars()}
         self.names = names
 
@@ -127,6 +139,18 @@ class Snapshot:
             "projects": {p.identifier: self._project(p) for p in projects.values()},
             "memberships": await self._memberships(),
             "versions": {(self.identifiers[v.project_id], v.name): self._version(v) for v in await self._all(Version)},
+            "sprints": {
+                (self.identifiers[sp.project_id], sp.name): (
+                    sp.goal,
+                    sp.status,
+                    sp.start_date,
+                    sp.end_date,
+                    json.dumps(sp.velocity_snapshot, sort_keys=True),
+                    sp.created_at,
+                )
+                for sp in await self._all(Sprint)
+            },
+            "tags": await self._tags(),
             "categories": _ordered(
                 (self.identifiers[c.project_id], c.name, self.logins.get(c.assigned_to_id))
                 for c in await self._all(IssueCategory)
@@ -159,6 +183,16 @@ class Snapshot:
             "time_entries": _ordered(self._time_entry(t) for t in await self._all(TimeEntry)),
             "lookups": await self._lookups(),
         }
+
+    async def _tags(self) -> list[tuple]:
+        rows = (
+            await self.session.execute(
+                select(Tag.project_id, Tag.name, TagLink.issue_id).join(TagLink, TagLink.tag_id == Tag.id)
+            )
+        ).all()
+        return _ordered(
+            (self.identifiers[project_id], name, self.keys[issue_id]) for project_id, name, issue_id in rows
+        )
 
     async def _all(self, model) -> list[Any]:
         return list((await self.session.execute(select(model))).scalars())
@@ -226,6 +260,7 @@ class Snapshot:
             self.keys.get(i.parent_id),
             self.names[IssueCategory].get(i.category_id),
             self.names[Version].get(i.fixed_version_id),
+            self.names[Sprint].get(i.sprint_id),
             i.start_date,
             i.due_date,
             i.estimated_hours,
@@ -266,6 +301,7 @@ class Snapshot:
             "priority_id": self.names[IssuePriority],
             "category_id": self.names[IssueCategory],
             "fixed_version_id": self.names[Version],
+            "sprint_id": self.names[Sprint],
             "assigned_to_id": self.logins,
             "project_id": self.identifiers,
         }.get(prop_key)

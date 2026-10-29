@@ -40,6 +40,7 @@ from specivo.importers.core.ir import (
     IRProject,
     IRPublicAccess,
     IRRelation,
+    IRSprint,
     IRTimeEntry,
     IRUser,
     IRVersion,
@@ -373,6 +374,9 @@ class BundleSourceAdapter(BaseSourceAdapter):
 
     def extract_categories(self, project_ref: str) -> AsyncIterator[IRCategory]:
         return self._scoped(bundle_format.CATEGORIES, project_ref, IRCategory)
+
+    def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]:
+        return self._scoped(bundle_format.SPRINTS, project_ref, IRSprint)
 
     def extract_issues(self, project_ref: str) -> AsyncIterator[IRIssue]:
         """Yield a project's issues parents first."""

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://specivo.io/schemas/import-bundle/v1/sprints.schema.json",
+  "title": "Import bundle v1: sprints.jsonl",
+  "description": "One project sprint (a time-boxed iteration) per line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "source_ref",
+    "project_ref",
+    "name"
+  ],
+  "properties": {
+    "source_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "project_ref": {
+      "$ref": "common.schema.json#/$defs/sourceRef"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "goal": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "active",
+        "completed"
+      ]
+    },
+    "start_date": {
+      "$ref": "common.schema.json#/$defs/optionalDate"
+    },
+    "end_date": {
+      "$ref": "common.schema.json#/$defs/optionalDate"
+    },
+    "completed_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime",
+      "description": "When a completed sprint was completed."
+    },
+    "created_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "updated_at": {
+      "$ref": "common.schema.json#/$defs/optionalDateTime"
+    },
+    "extra": {
+      "$ref": "common.schema.json#/$defs/extra"
+    }
+  }
+}

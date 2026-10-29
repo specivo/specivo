@@ -120,6 +120,10 @@
           "type": "integer",
           "minimum": 0
         },
+        "sprints": {
+          "type": "integer",
+          "minimum": 0
+        },
         "custom_fields": {
           "type": "integer",
           "minimum": 0
