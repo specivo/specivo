@@ -28,6 +28,7 @@ from specivo.importers.core.ir import (
     IRMembership,
     IRProject,
     IRRelation,
+    IRSprint,
     IRTimeEntry,
     IRUser,
     IRVersion,
@@ -86,6 +87,7 @@ class FakeAdapter:
         projects: list[IRProject] | None = None,
         versions: list[IRVersion] | None = None,
         categories: list[IRCategory] | None = None,
+        sprints: list[IRSprint] | None = None,
         memberships: list[IRMembership] | None = None,
         custom_fields: list[IRCustomField] | None = None,
         issues: list[IRIssue] | None = None,
@@ -112,6 +114,7 @@ class FakeAdapter:
         self.projects = projects or []
         self.versions = versions or []
         self.categories = categories or []
+        self.sprints = sprints or []
         self.memberships = memberships or []
         self.custom_fields = custom_fields or []
         self.issues = issues or []
@@ -163,6 +166,11 @@ class FakeAdapter:
         for category in self.categories:
             if category.project_ref == project_ref:
                 yield category
+
+    async def extract_sprints(self, project_ref: str) -> AsyncIterator[IRSprint]:
+        for sprint in self.sprints:
+            if sprint.project_ref == project_ref:
+                yield sprint
 
     async def extract_memberships(self, project_ref: str) -> AsyncIterator[IRMembership]:
         for membership in self.memberships:
