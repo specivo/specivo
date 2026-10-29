@@ -240,14 +240,14 @@
     <div class="sidebar-card"{% if sprint.status != 'completed' %} style="opacity:0.5;pointer-events:none"{% endif %}>
       <h3>{% trans %}Velocity{% endtrans %} {% if sprint.status != 'completed' %}<span style="font-weight:400;color:var(--sp-text-muted);font-size:var(--sp-font-size-xs)">{% trans %}(after completion){% endtrans %}</span>{% endif %}</h3>
       <div class="velocity-card">
-        {% if sprint.status == 'completed' and sprint.velocity_snapshot %}
+        {% if sprint.status == 'completed' and velocity %}
         <div class="velocity-grid">
           <div class="velocity-stat">
-            <div class="velocity-stat-num">{{ sprint.velocity_snapshot.get('total_issues', 0) }}</div>
+            <div class="velocity-stat-num">{{ velocity.total_issues }}</div>
             <div class="velocity-stat-label">{% trans %}Total{% endtrans %}</div>
           </div>
           <div class="velocity-stat">
-            <div class="velocity-stat-num" style="color:var(--sp-success)">{{ sprint.velocity_snapshot.get('completed_issues', 0) }}</div>
+            <div class="velocity-stat-num" style="color:var(--sp-success)">{{ velocity.completed_issues }}</div>
             <div class="velocity-stat-label">{% trans %}Completed{% endtrans %}</div>
           </div>
         </div>

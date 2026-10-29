@@ -692,6 +692,75 @@ class AttachmentService:
             stmt = stmt.where(visibility)
         return (await session.execute(stmt)).scalar_one_or_none() is not None
 
+    async def can_attach_to_container(
+        self,
+        session: AsyncSession,
+        user: User,
+        container_type: str,
+        container_id: int,
+    ) -> bool:
+        """Return whether *user* may add files to a container they can already open.
+
+        Core has no separate attachment permission, so adding a file takes the
+        right to change the container:
+
+        - ``Issue``: ``edit_issues`` or ``add_issue_notes`` (a file is sent
+          with an edit or a comment), or ``add_issues`` on an issue *user*
+          created, so a new issue's files can follow it in.
+        - ``WikiPage``: ``manage_wiki``, the permission that edits pages.
+        - ``Journal``: ``edit_notes``, or ``edit_own_notes`` on *user*'s own
+          comment.
+
+        Callers check :meth:`can_view_container` first and answer 404 when it
+        fails, so a hidden container is not disclosed. Admins pass (within an
+        API key's project limit); the anonymous user never does, since none of
+        these permissions is under its ceiling.
+        """
+        from specivo.models.issue import Issue
+        from specivo.models.journal import Journal
+        from specivo.models.wiki import Wiki, WikiPage
+        from specivo.services.permission_service import Permission, check_permission
+
+        async def holds(project_id: int, permission: Permission) -> bool:
+            return await check_permission(user, project_id, permission, session)
+
+        if container_type == "WikiPage":
+            project_id = (
+                await session.execute(
+                    select(Wiki.project_id)
+                    .join(WikiPage, WikiPage.wiki_id == Wiki.id)
+                    .where(WikiPage.id == container_id)
+                )
+            ).scalar_one_or_none()
+            return project_id is not None and await holds(project_id, Permission.MANAGE_WIKI)
+
+        if container_type == "Journal":
+            journal = (
+                await session.execute(
+                    select(Journal.user_id, Issue.project_id)
+                    .join(Issue, Issue.id == Journal.issue_id)
+                    .where(Journal.id == container_id)
+                )
+            ).one_or_none()
+            if journal is None:
+                return False
+            if await holds(journal.project_id, Permission.EDIT_NOTES):
+                return True
+            return journal.user_id == user.id and await holds(journal.project_id, Permission.EDIT_OWN_NOTES)
+
+        if container_type == "Issue":
+            issue = (
+                await session.execute(select(Issue.project_id, Issue.author_id).where(Issue.id == container_id))
+            ).one_or_none()
+            if issue is None:
+                return False
+            for permission in (Permission.EDIT_ISSUES, Permission.ADD_ISSUE_NOTES):
+                if await holds(issue.project_id, permission):
+                    return True
+            return issue.author_id == user.id and await holds(issue.project_id, Permission.ADD_ISSUES)
+
+        return False
+
     async def get_visible(self, session: AsyncSession, attachment_id: int, user: User) -> Attachment:
         """Fetch an attachment *user* may open, eagerly loading author.
 

@@ -17,6 +17,7 @@ from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.sprint import Sprint
 from specivo.schemas.sprint import SprintCreate, SprintUpdate
+from specivo.services.api_key_scope import project_in_scope
 
 if TYPE_CHECKING:
     from sqlalchemy.sql import Select
@@ -234,9 +235,13 @@ class SprintService:
                 .values(sprint_id=target_sprint_id)
             )
 
+        # The ids let each reader be shown only the issues they may see
+        # (``velocity_for``); the counts are what was committed overall.
         sprint.velocity_snapshot = {
             "total_issues": total,
             "completed_issues": completed,
+            "issue_ids": sorted(issue.id for issue in issues),
+            "completed_issue_ids": sorted(set(i.id for i in issues) - set(incomplete_ids)),
         }
         sprint.status = "completed"
         if sprint.end_date is None:
@@ -331,16 +336,93 @@ class SprintService:
     # Velocity & burndown
     # ------------------------------------------------------------------
 
+    async def velocity_for(
+        self,
+        session: AsyncSession,
+        sprints: list[Sprint],
+        reader: User,
+    ) -> dict[int, dict[str, int] | None]:
+        """Return each sprint's velocity snapshot as *reader* may see it, keyed by sprint id.
+
+        A value is ``{"total_issues": n, "completed_issues": m}``, or None for
+        a sprint without a snapshot or whose snapshot *reader* may not see.
+
+        A snapshot is taken when a sprint is completed, because its unfinished
+        issues then leave the sprint and could not be counted later. It keeps
+        the ids of the issues it counted, and a reader is shown only those
+        they may see now (``IssueService.visible_issues_clause``), so the
+        numbers follow each reader's visibility, including later changes to
+        an issue's privacy, and never reveal hidden issues. A reader who is
+        not filtered at all (an administrator) gets the stored counts.
+
+        A snapshot taken before the ids were kept holds bare counts that may
+        include hidden issues. It is shown only to a reader who sees every
+        issue in the sprint's project today, and is None for anyone else.
+
+        One query for the tracked snapshots, one for the bare ones.
+        """
+        visibility = await _visibility(session, reader)
+        result: dict[int, dict[str, int] | None] = {s.id: None for s in sprints}
+        tracked: list[Sprint] = []
+        bare: list[Sprint] = []
+        for sprint in sprints:
+            snap = sprint.velocity_snapshot
+            if not snap:
+                continue
+            if visibility is None:
+                result[sprint.id] = {
+                    "total_issues": int(snap.get("total_issues", 0)),
+                    "completed_issues": int(snap.get("completed_issues", 0)),
+                }
+            elif "issue_ids" in snap:
+                tracked.append(sprint)
+            else:
+                bare.append(sprint)
+
+        if tracked:
+            wanted = {i for s in tracked for i in s.velocity_snapshot["issue_ids"]}  # type: ignore[index]
+            visible = set()
+            if wanted:
+                stmt = select(Issue.id).where(Issue.id.in_(sorted(wanted)))
+                if visibility is not None:
+                    stmt = stmt.where(visibility)
+                visible = set((await session.execute(stmt)).scalars().all())
+            for sprint in tracked:
+                snap = sprint.velocity_snapshot or {}
+                result[sprint.id] = {
+                    "total_issues": len(visible.intersection(snap.get("issue_ids", []))),
+                    "completed_issues": len(visible.intersection(snap.get("completed_issue_ids", []))),
+                }
+
+        if bare and visibility is not None:
+            project_ids = sorted({s.project_id for s in bare})
+            seen_stmt = (
+                select(Issue.project_id, func.count(), func.count().filter(visibility))
+                .where(Issue.project_id.in_(project_ids))
+                .group_by(Issue.project_id)
+            )
+            counts = {row[0]: (row[1], row[2]) for row in (await session.execute(seen_stmt)).all()}
+            for sprint in bare:
+                total, seen = counts.get(sprint.project_id, (0, 0))
+                if total == seen and project_in_scope(sprint.project_id):
+                    snap = sprint.velocity_snapshot or {}
+                    result[sprint.id] = {
+                        "total_issues": int(snap.get("total_issues", 0)),
+                        "completed_issues": int(snap.get("completed_issues", 0)),
+                    }
+        return result
+
     async def average_velocity(
         self,
         session: AsyncSession,
         project_id: int,
+        reader: User,
     ) -> Decimal:
-        """Return the average completed-issue count across all completed sprints.
+        """Return the average completed-issue count across the completed sprints *reader* may see.
 
-        Reads ``velocity_snapshot["completed_issues"]`` from each completed
-        sprint in the project and returns the arithmetic mean as a Decimal.
-        Returns ``Decimal(0)`` when there are no completed sprints.
+        Uses :meth:`velocity_for`, so each sprint counts only the issues
+        *reader* may see; a sprint whose snapshot is hidden from *reader* is
+        left out. Returns ``Decimal(0)`` when there is none.
         """
         stmt = select(Sprint).where(
             Sprint.project_id == project_id,
@@ -349,13 +431,10 @@ class SprintService:
         result = await session.execute(stmt)
         sprints = list(result.scalars().all())
 
-        if not sprints:
+        shown = [v for v in (await self.velocity_for(session, sprints, reader)).values() if v is not None]
+        if not shown:
             return Decimal(0)
-
-        total_completed = sum(
-            (s.velocity_snapshot or {}).get("completed_issues", 0) for s in sprints
-        )
-        return Decimal(total_completed) / Decimal(len(sprints))
+        return Decimal(sum(v["completed_issues"] for v in shown)) / Decimal(len(shown))
 
     async def burndown_data(
         self,
