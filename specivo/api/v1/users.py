@@ -15,6 +15,7 @@ from specivo.models.user import User
 from specivo.schemas.reaction import UserAutocompleteOut
 from specivo.services.anonymous_user_service import real_users_clause
 from specivo.services.permission_service import visible_users_clause
+from specivo.services.version_service import VERSION_SORT_OPTIONS, VERSION_SORT_PREFERENCE
 
 router = APIRouter(tags=["users"])
 
@@ -81,3 +82,21 @@ async def update_activity_per_page(
     current_user.preferences = {**current_user.preferences, "activity_per_page": per_page}
     await db.flush()
     return {"activity_per_page": per_page}
+
+
+@router.patch(
+    "/users/me/preferences/version-sort/",
+    tags=["preferences"],
+)
+async def update_version_sort(
+    sort: str = Query(..., description="'<field>:<direction>', e.g. 'due:asc' or 'version:desc'"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    _rl: None = Depends(rate_limit("preference_update", max_requests=30, window_seconds=60)),
+) -> dict:
+    """Save how the user sorts version lists (roadmap and project versions)."""
+    if sort not in VERSION_SORT_OPTIONS:
+        raise ValidationError(f"Invalid sort. Allowed: {list(VERSION_SORT_OPTIONS)}")
+    current_user.preferences = {**current_user.preferences, VERSION_SORT_PREFERENCE: sort}
+    await db.flush()
+    return {VERSION_SORT_PREFERENCE: sort}

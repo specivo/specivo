@@ -103,3 +103,4 @@
 /* Changelog placeholder */
 .vd-changelog-empty { color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); font-style: italic; }
 
+.sp-version-list-actions { display: flex; align-items: center; gap: var(--sp-space-sm); flex-wrap: wrap; justify-content: flex-end; }

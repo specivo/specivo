@@ -1,3 +1,5 @@
+import { saveVersionSort } from '../modules/version-sort';
+
 export function projectVersions(initial) {
         var i18n = Object.assign({
             versionCreated: 'Version "%(name)s" created.',
@@ -24,6 +26,7 @@ export function projectVersions(initial) {
             versions: initial.versions || [],
             projectKey: initial.projectKey || '',
             canManage: initial.canManage !== false,
+            sort: initial.sort || 'due:asc',
             showModal: false,
             showDeleteModal: false,
             editingVersion: null,
@@ -126,6 +129,17 @@ export function projectVersions(initial) {
                 this.deleting = false;
             },
 
+            /* Sort select: remember the choice for this viewer, then re-fetch the
+               list in that order (ordering is done server-side, natural sort). */
+            changeSort: async function () {
+                try {
+                    await saveVersionSort(this.sort);
+                } catch (_e) {
+                    // The list still re-sorts for this page view.
+                }
+                await this._reloadVersions();
+            },
+
             flash: function (msg, type) {
                 this.message = msg;
                 this.messageType = type;
@@ -134,7 +148,7 @@ export function projectVersions(initial) {
 
             _reloadVersions: async function () {
                 try {
-                    var roadmapRes = await spFetch('/api/v1/projects/' + this.projectKey + '/roadmap/');
+                    var roadmapRes = await spFetch('/api/v1/projects/' + this.projectKey + '/roadmap/?sort=' + encodeURIComponent(this.sort));
                     if (roadmapRes.ok) {
                         var entries = await roadmapRes.json();
                         var today = new Date().toISOString().slice(0, 10);

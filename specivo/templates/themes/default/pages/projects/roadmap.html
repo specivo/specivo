@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, version_sort_options %}
 
 {% block title %}{% trans %}Roadmap{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -12,59 +12,81 @@
 
 <div class="page-header">
   <h1>{% trans %}Roadmap{% endtrans %}</h1>
-  <div class="page-header-actions">
+  <div class="page-header-actions sp-roadmap-controls">
+    <select class="filter-select" aria-label="{{ _('Sort versions') }}"
+            data-version-sort data-show="{{ show }}">
+      {{ version_sort_options(version_sort) }}
+    </select>
     <div class="filter-tabs">
-      <a href="/projects/{{ project.key }}/roadmap/?show=open"
-         class="filter-tab{{ ' active' if show is not defined or show == 'open' else '' }}">{% trans %}Open{% endtrans %}</a>
-      <a href="/projects/{{ project.key }}/roadmap/?show=all"
-         class="filter-tab{{ ' active' if show is defined and show == 'all' else '' }}">{% trans %}All{% endtrans %}</a>
+      {% if show_completed %}
+      <a href="/projects/{{ project.key }}/roadmap/?show=open" class="filter-tab active" aria-pressed="true"
+         data-testid="roadmap-completed-toggle">{% trans count=completed_count %}Hide completed versions (%(count)s){% endtrans %}</a>
+      {% else %}
+      <a href="/projects/{{ project.key }}/roadmap/?show=all" class="filter-tab" aria-pressed="false"
+         data-testid="roadmap-completed-toggle">{% trans count=completed_count %}Show completed versions (%(count)s){% endtrans %}</a>
+      {% endif %}
     </div>
   </div>
 </div>
 
-{% if entries is defined and entries %}
-<div style="display:flex;flex-direction:column;gap:var(--sp-space-lg);">
-  {% for entry in entries %}
-  <div class="card version-card {{ 'accent-gold' if entry.version.status == 'open' else 'accent-green' }}" x-data="{ expanded: false }">
-    <div class="version-header" @click="expanded = !expanded">
-      <h2><a href="/projects/{{ project.key }}/versions/{{ entry.version.id }}/" style="color:inherit;text-decoration:none">{{ entry.version.name }}</a></h2>
-      <div class="version-meta">
-        <span class="version-badge {{ 'open' if entry.version.status == 'open' else 'vclosed' }}">{{ entry.version.status }}</span>
-        {% if entry.version.effective_date %}
-        <span>{% trans date=entry.version.effective_date %}Due: %(date)s{% endtrans %}</span>
-        {% endif %}
-        {% if entry.version.description %}
-        <span>{{ entry.version.description }}</span>
-        {% endif %}
-      </div>
-
-      {# Progress bar #}
-      <div class="version-progress">
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill {{ 'gold' if entry.version.status == 'open' else 'green' }}" style="width:{{ entry.progress_percent }}%"></div>
-        </div>
-        <span class="progress-label">{{ entry.progress_percent }}%</span>
-      </div>
-
-      <div class="version-counts">
-        <span class="count-open">{% trans count=entry.open_count %}%(count)s open{% endtrans %}</span>
-        <span class="count-closed">{% trans count=entry.closed_count %}%(count)s closed{% endtrans %}</span>
-      </div>
+{% macro version_card(entry) %}
+{% set status = entry.version.status %}
+<div class="card version-card {{ 'accent-green' if status == 'closed' else 'accent-gold' }}" id="version-{{ entry.version.id }}"
+     data-version-name="{{ entry.version.name }}" x-data="{ expanded: false }">
+  <div class="version-header" @click="expanded = !expanded">
+    <h2><a href="/projects/{{ project.key }}/versions/{{ entry.version.id }}/" style="color:inherit;text-decoration:none">{{ entry.version.name }}</a></h2>
+    <div class="version-meta">
+      <span class="version-badge {{ 'vclosed' if status == 'closed' else status }}">{{ status }}</span>
+      {% if entry.version.effective_date %}
+      <span>{% trans date=entry.version.effective_date %}Due: %(date)s{% endtrans %}</span>
+      {% endif %}
+      {% if entry.version.description %}
+      <span>{{ entry.version.description }}</span>
+      {% endif %}
     </div>
 
-    {% if entry.total > 0 %}
-    <div class="version-issues" x-show="expanded" x-cloak>
-      <p style="padding:var(--sp-space-lg) var(--sp-space-xl);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
-        {% trans issues_url="/projects/" ~ project.key ~ "/issues/?fixed_version_id=" ~ entry.version.id %}View issues on the <a href="%(issues_url)s">issues page</a>.{% endtrans %}
-      </p>
+    {# Progress bar #}
+    <div class="version-progress">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill {{ 'green' if status == 'closed' else 'gold' }}" style="width:{{ entry.progress_percent }}%"></div>
+      </div>
+      <span class="progress-label">{{ entry.progress_percent }}%</span>
     </div>
-    {% endif %}
+
+    <div class="version-counts">
+      <span class="count-open">{% trans count=entry.open_count %}%(count)s open{% endtrans %}</span>
+      <span class="count-closed">{% trans count=entry.closed_count %}%(count)s closed{% endtrans %}</span>
+    </div>
   </div>
-  {% endfor %}
+
+  {% if entry.total > 0 %}
+  <div class="version-issues" x-show="expanded" x-cloak>
+    <p style="padding:var(--sp-space-lg) var(--sp-space-xl);font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);">
+      {% trans issues_url="/projects/" ~ project.key ~ "/issues/?fixed_version_id=" ~ entry.version.id %}View issues on the <a href="%(issues_url)s">issues page</a>.{% endtrans %}
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% if active_entries %}
+<div class="sp-roadmap-list" data-testid="roadmap-active">
+  {% for entry in active_entries %}{{ version_card(entry) }}{% endfor %}
+</div>
+{% elif not entries %}
+<div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
+  {% trans %}No versions found for this project. Create versions to track your roadmap.{% endtrans %}
 </div>
 {% else %}
 <div class="card" style="padding:var(--sp-space-xl);text-align:center;color:var(--sp-text-muted);">
-  {% trans %}No versions found for this project. Create versions to track your roadmap.{% endtrans %}
+  {% trans %}No open versions. All versions of this project are completed.{% endtrans %}
+</div>
+{% endif %}
+
+{% if show_completed and completed_entries %}
+<h2 class="sp-roadmap-section-title">{% trans %}Completed versions{% endtrans %}</h2>
+<div class="sp-roadmap-list" data-testid="roadmap-completed">
+  {% for entry in completed_entries %}{{ version_card(entry) }}{% endfor %}
 </div>
 {% endif %}
 {% endblock %}

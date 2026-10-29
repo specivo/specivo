@@ -4,20 +4,105 @@ from __future__ import annotations
 
 import datetime
 import logging
+from collections.abc import Callable, Iterable
+from typing import Any, get_args
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.exceptions import NotFoundError
+from specivo.core.natural_sort import natural_sort_key
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
 from specivo.models.project import Project
 from specivo.models.user import User
 from specivo.models.version import Version
-from specivo.schemas.version import RoadmapEntry, VersionCreate, VersionOut, VersionUpdate
+from specivo.schemas.version import RoadmapEntry, VersionCreate, VersionOut, VersionSort, VersionUpdate
 from specivo.services.markdown_budget import check_markdown_length
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Ordering
+# ---------------------------------------------------------------------------
+
+#: Every accepted ``"<field>:<direction>"`` value, in the order a select offers
+#: them. Fields: ``version`` (natural name), ``due`` (due date), ``status``.
+VERSION_SORT_OPTIONS: tuple[str, ...] = get_args(VersionSort)
+VERSION_SORT_DEFAULT = "due:asc"
+#: Key in ``User.preferences`` that remembers a viewer's version sort.
+VERSION_SORT_PREFERENCE = "version_sort"
+
+_STATUS_RANK = {"open": 0, "locked": 1, "closed": 2}
+
+#: Extracts ``(name, status, effective_date)`` from whatever is being sorted.
+VersionAttrs = Callable[[Any], tuple[str, str, datetime.date | None]]
+
+
+def _version_attrs(version: Version) -> tuple[str, str, datetime.date | None]:
+    return version.name, version.status, version.effective_date
+
+
+def normalize_version_sort(value: str | None) -> str | None:
+    """Return *value* if it is a valid ``"<field>:<direction>"`` sort, else ``None``."""
+    return value if value in VERSION_SORT_OPTIONS else None
+
+
+def _sorted_within[T](items: list[T], field: str, descending: bool, attrs: VersionAttrs) -> list[T]:
+    """Sort *items* by one field; ties fall back to due date, then natural name."""
+
+    def name_key(item: T) -> tuple:
+        return natural_sort_key(attrs(item)[0])
+
+    if field == "version":
+        return sorted(items, key=name_key, reverse=descending)
+
+    # Due date: undated versions always go last, whichever direction is chosen;
+    # ties keep the ascending natural-name order (Python's sort is stable, also
+    # with reverse=True). A status sort uses ascending due date as its tiebreak.
+    by_name = sorted(items, key=name_key)
+    dated = [i for i in by_name if attrs(i)[2] is not None]
+    undated = [i for i in by_name if attrs(i)[2] is None]
+    dated.sort(key=lambda i: attrs(i)[2], reverse=descending and field == "due")  # type: ignore[arg-type,return-value]
+    by_due = dated + undated
+    if field == "due":
+        return by_due
+    return sorted(by_due, key=lambda i: _STATUS_RANK.get(attrs(i)[1], 0), reverse=descending)
+
+
+def order_versions[T](
+    items: Iterable[T],
+    sort: str | None = None,
+    *,
+    attrs: VersionAttrs | None = None,
+) -> list[T]:
+    """Order versions for display.
+
+    *sort* is a ``"<field>:<direction>"`` value from :data:`VERSION_SORT_OPTIONS`
+    (invalid or missing values fall back to :data:`VERSION_SORT_DEFAULT`):
+
+    - ``version`` — natural name order (``0.2.0 < 0.10.0 < 0.11.0``);
+    - ``due`` — due date, undated versions last, then natural name;
+    - ``status`` — open, locked, closed, then due date and natural name.
+
+    For ``version`` and ``due`` the open and locked versions always come before
+    the closed ones and the sort applies within each group, so the default is
+    "open and locked by due date, then closed by due date". ``status`` orders
+    the groups itself, so ``status:desc`` lists closed versions first.
+
+    *attrs* maps an item to ``(name, status, effective_date)``; it defaults to
+    reading a :class:`Version`. Names are compared in Python, so the order does
+    not depend on the database collation.
+    """
+    field, direction = (normalize_version_sort(sort) or VERSION_SORT_DEFAULT).split(":")
+    get: VersionAttrs = attrs or _version_attrs
+    descending = direction == "desc"
+    rows = list(items)
+    if field == "status":
+        return _sorted_within(rows, field, descending, get)
+    active = [i for i in rows if get(i)[1] != "closed"]
+    closed = [i for i in rows if get(i)[1] == "closed"]
+    return _sorted_within(active, field, descending, get) + _sorted_within(closed, field, descending, get)
 
 
 class VersionService:
@@ -64,15 +149,17 @@ class VersionService:
         self,
         session: AsyncSession,
         project_id: int,
+        sort: str | None = None,
     ) -> list[Version]:
-        """List versions for a project, ordered by effective_date nulls last, then name."""
-        stmt = (
-            select(Version)
-            .where(Version.project_id == project_id)
-            .order_by(Version.effective_date.asc().nullslast(), Version.name.asc())
-        )
+        """List versions for a project in display order (see :func:`order_versions`).
+
+        The default order is open and locked versions by due date (undated
+        last), then natural name, followed by closed versions in the same order.
+        A project has few versions, so the list is ordered in Python.
+        """
+        stmt = select(Version).where(Version.project_id == project_id)
         result = await session.execute(stmt)
-        return list(result.scalars().all())
+        return order_versions(result.scalars().all(), sort)
 
     async def search_for_project(
         self,
@@ -81,28 +168,29 @@ class VersionService:
         query: str | None = None,
         limit: int = 20,
     ) -> list[Version]:
-        """Search versions for a project.
+        """Search versions for a project (version picker / autocomplete).
 
-        - Empty query returns the 10 most recent versions ordered by
-          ``effective_date DESC NULLS LAST, name DESC`` regardless of status.
-        - Non-empty query performs a case-insensitive substring match on name,
-          capped at ``limit`` rows.
+        - Empty query returns up to 10 versions; non-empty query does a
+          case-insensitive substring match on name, capped at ``limit`` rows.
+        - Open and locked versions come first in the default order (due date,
+          undated last, then natural name), so the versions you can still
+          assign to lead the list. Closed versions follow, most recent first
+          (latest due date, then highest version number).
         """
         stmt = select(Version).where(Version.project_id == project_id)
         q = (query or "").strip()
         if q:
             stmt = stmt.where(Version.name.ilike(f"%{q}%"))
-            stmt = stmt.order_by(
-                Version.effective_date.desc().nullslast(),
-                Version.name.desc(),
-            ).limit(limit)
-        else:
-            stmt = stmt.order_by(
-                Version.effective_date.desc().nullslast(),
-                Version.name.desc(),
-            ).limit(10)
-        result = await session.execute(stmt)
-        return list(result.scalars().all())
+        rows = list((await session.execute(stmt)).scalars().all())
+        active = order_versions((v for v in rows if v.status != "closed"), VERSION_SORT_DEFAULT)
+        closed = sorted(
+            (v for v in rows if v.status == "closed"),
+            key=lambda v: natural_sort_key(v.name),
+            reverse=True,
+        )
+        # Undated closed versions map to date.min and so land last.
+        closed.sort(key=lambda v: v.effective_date or datetime.date.min, reverse=True)
+        return (active + closed)[: limit if q else 10]
 
     async def update(
         self,
@@ -154,9 +242,19 @@ class VersionService:
         stmt = (
             select(Version, Project.key, Project.name.label("project_name"))
             .join(Project, Project.id == Version.project_id)
-            .order_by(Project.name.asc(), Version.effective_date.asc().nullslast(), Version.name.asc())
+            .order_by(Project.name.asc(), Project.id.asc())
         )
-        rows = (await session.execute(stmt)).all()
+        fetched = (await session.execute(stmt)).all()
+        # Keep the project grouping from SQL and order each project's versions
+        # with the shared display order (natural names, collation-independent).
+        rows: list = []
+        group: list = []
+        for row in fetched:
+            if group and group[0][0].project_id != row[0].project_id:
+                rows.extend(order_versions(group, attrs=lambda r: _version_attrs(r[0])))
+                group = []
+            group.append(row)
+        rows.extend(order_versions(group, attrs=lambda r: _version_attrs(r[0])))
 
         if not rows:
             return []
@@ -220,6 +318,7 @@ class VersionService:
         self,
         session: AsyncSession,
         project: Project,
+        sort: str | None = None,
     ) -> list[RoadmapEntry]:
         """Return roadmap data for *project*: versions with open/closed issue counts.
 
@@ -231,8 +330,11 @@ class VersionService:
         - ``open_count``  — issues whose status is NOT closed
         - ``closed_count`` — issues whose status is done or closed
         - ``progress_percent`` — closed / total * 100 (0 if total == 0)
+
+        Entries follow :func:`order_versions` with *sort* (default: open and
+        locked by due date, then closed).
         """
-        versions = await self.list_for_project(session, project.id)
+        versions = await self.list_for_project(session, project.id, sort)
         if not versions:
             return []
 

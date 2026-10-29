@@ -21,7 +21,12 @@ from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
-from specivo.services.version_service import VersionService
+from specivo.services.version_service import (
+    VERSION_SORT_DEFAULT,
+    VERSION_SORT_PREFERENCE,
+    VersionService,
+    normalize_version_sort,
+)
 from specivo.web.deps import (
     get_current_user_optional,
     get_templates,
@@ -221,14 +226,26 @@ async def project_detail(
     )
 
 
+def _version_sort_for(user: User, requested: str | None = None) -> str:
+    """Pick the version sort: an explicit request, else the saved preference, else the default."""
+    saved = (user.preferences or {}).get(VERSION_SORT_PREFERENCE)
+    return normalize_version_sort(requested) or normalize_version_sort(saved) or VERSION_SORT_DEFAULT
+
+
 @router.get("/projects/{key}/roadmap/", response_class=HTMLResponse)
 async def project_roadmap(
     key: str,
     request: Request,
     db: AsyncSession = Depends(get_db),  # noqa: B008
     show: str = Query("open"),
+    sort: str | None = Query(None),
 ) -> Response:
-    """Render the project roadmap page."""
+    """Render the project roadmap page.
+
+    Open and locked versions are listed first; closed ("completed") versions
+    are hidden unless ``show=all``, and then follow in their own section.
+    ``sort`` overrides the viewer's saved version sort for this request.
+    """
     user_obj = await get_current_user_optional(request, db)
     if not user_obj:
         return RedirectResponse("/login/", status_code=302)
@@ -242,11 +259,11 @@ async def project_roadmap(
         raise HTTPException(status_code=404, detail="Project not found")
     await _svc.require_project_access(db, project, user)
 
-    entries = await _version_svc.roadmap(db, project)
-
-    # Filter by version status if show=open
-    if show == "open":
-        entries = [e for e in entries if e.version.status == "open"]
+    version_sort = _version_sort_for(user, sort)
+    entries = await _version_svc.roadmap(db, project, version_sort)
+    active_entries = [e for e in entries if e.version.status != "closed"]
+    completed_entries = [e for e in entries if e.version.status == "closed"]
+    show_completed = show == "all"
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -258,7 +275,12 @@ async def project_roadmap(
             "active_project": project,
             "project": project,
             "entries": entries,
-            "show": show,
+            "active_entries": active_entries,
+            "completed_entries": completed_entries,
+            "completed_count": len(completed_entries),
+            "show_completed": show_completed,
+            "show": "all" if show_completed else "open",
+            "version_sort": version_sort,
         },
     )
 
@@ -343,7 +365,8 @@ async def project_settings(
     can_manage_versions = user.is_admin or await check_permission(user, project.id, "manage_versions", db)
 
     # Load versions with roadmap data (progress, issue counts)
-    roadmap_entries = await _version_svc.roadmap(db, project)
+    version_sort = _version_sort_for(user)
+    roadmap_entries = await _version_svc.roadmap(db, project, version_sort)
     today = datetime.date.today().isoformat()
     versions_data = []
     for e in roadmap_entries:
@@ -456,6 +479,7 @@ async def project_settings(
             "modules": modules,
             "roles": roles,
             "versions_data": versions_data,
+            "version_sort": version_sort,
             "can_manage_versions": can_manage_versions,
             "available_parents": available_parents,
             "status_label": _STATUS_LABELS.get(project.status, "unknown"),
