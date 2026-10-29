@@ -432,7 +432,7 @@ class TestProjectStats:
         await _join_group(db_session, group, user)
         await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
 
-        stats = await _svc.load_project_stats(db_session, [project.id])
+        stats = await _svc.load_project_stats(db_session, [project.id], reader=user)
 
         assert stats[project.id]["member_count"] == 1
         assert stats[project.id]["group_count"] == 1
@@ -446,7 +446,7 @@ class TestProjectStats:
         await _add_principal(db_session, project, user=user, roles=[await _make_role(db_session, "Direct")])
         await _add_principal(db_session, project, group=group, roles=[await _make_role(db_session, "ViaGroup")])
 
-        stats = await _svc.load_project_stats(db_session, [project.id])
+        stats = await _svc.load_project_stats(db_session, [project.id], reader=user)
 
         assert stats[project.id]["member_count"] == 1
         assert [m["user_id"] for m in stats[project.id]["members"]] == [user.id]
@@ -454,7 +454,7 @@ class TestProjectStats:
     async def test_group_count_is_zero_without_groups(self, db_session: AsyncSession, user: User, project: Project):
         await _add_principal(db_session, project, user=user, roles=[await _make_role(db_session, "Direct")])
 
-        stats = await _svc.load_project_stats(db_session, [project.id])
+        stats = await _svc.load_project_stats(db_session, [project.id], reader=user)
 
         assert stats[project.id]["member_count"] == 1
         assert stats[project.id]["group_count"] == 0

@@ -962,11 +962,14 @@ class ProjectService:
         self,
         session: AsyncSession,
         project_ids: list[int],
+        *,
+        reader: User,
     ) -> dict:
-        """Batch-load stats for a set of project IDs.
+        """Batch-load stats for a set of project IDs, as seen by *reader*.
 
         Returns a dict keyed by project_id with:
-        - open_count, closed_count (issue stats)
+        - open_count, closed_count (issue stats) — only the issues *reader*
+          may see (``IssueService.visible_issues_clause``)
         - member_count — distinct **people** with access, direct or via a group
         - group_count — how many of the memberships are held by a group
         - wiki_page_count
@@ -1008,6 +1011,11 @@ class ProjectService:
             .where(Issue.project_id.in_(project_ids))
             .group_by(Issue.project_id)
         )
+        from specivo.services.issue_service import IssueService
+
+        visibility = await IssueService().visible_issues_clause(session, reader)
+        if visibility is not None:
+            issue_stmt = issue_stmt.where(visibility)
         issue_rows = (await session.execute(issue_stmt)).all()
         for row in issue_rows:
             done = row.done_count or 0

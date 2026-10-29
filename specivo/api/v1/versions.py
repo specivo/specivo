@@ -206,4 +206,4 @@ async def get_roadmap(
     db: AsyncSession = Depends(get_db),
 ) -> list[RoadmapEntry]:
     project = await _get_project(project_key, current_user, db)
-    return await _version_service.roadmap(db, project, sort)
+    return await _version_service.roadmap(db, project, current_user, sort)

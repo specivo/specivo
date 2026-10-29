@@ -76,7 +76,7 @@ async def projects_list(
     # the counts include private issues, and the member list names people. A
     # project opts in to its issues and its wiki being read, not to publishing
     # its team or how much work it is hiding.
-    project_stats = {} if anonymous else await _svc.load_project_stats(db, all_project_ids)
+    project_stats = {} if anonymous else await _svc.load_project_stats(db, all_project_ids, reader=user)
 
     by_parent: dict[int | None, list] = {}
     for p in projects:
@@ -260,7 +260,7 @@ async def project_roadmap(
     await _svc.require_project_access(db, project, user)
 
     version_sort = _version_sort_for(user, sort)
-    entries = await _version_svc.roadmap(db, project, version_sort)
+    entries = await _version_svc.roadmap(db, project, user, version_sort)
     active_entries = [e for e in entries if e.version.status != "closed"]
     completed_entries = [e for e in entries if e.version.status == "closed"]
     show_completed = show == "all"
@@ -366,7 +366,7 @@ async def project_settings(
 
     # Load versions with roadmap data (progress, issue counts)
     version_sort = _version_sort_for(user)
-    roadmap_entries = await _version_svc.roadmap(db, project, version_sort)
+    roadmap_entries = await _version_svc.roadmap(db, project, user, version_sort)
     today = datetime.date.today().isoformat()
     versions_data = []
     for e in roadmap_entries:
@@ -530,7 +530,7 @@ async def version_detail(
         raise HTTPException(status_code=404, detail="Version not found")
 
     # Load roadmap entry for progress/counts
-    roadmap_entries = await _version_svc.roadmap(db, project)
+    roadmap_entries = await _version_svc.roadmap(db, project, user)
     roadmap_entry = next((e for e in roadmap_entries if e.version.id == version.id), None)
 
     open_count = roadmap_entry.open_count if roadmap_entry else 0
