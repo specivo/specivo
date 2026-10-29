@@ -10,13 +10,13 @@ browser.
 Pipeline:
 
     raw markdown
-      -> wiki link substitution    [[Page]]    -> [Page](/projects/X/wiki/page/)
       -> render_hazard(...)        over the size, nesting or cost budget:
                                    the raw text, escaped, with a notice instead
       -> markdown.markdown(...)    with fenced_code, tables, toc, codehilite
+           + wiki link inline pattern: [[Page]] -> <a href="/projects/X/wiki/page/">
            + issue ref inline pattern: PROJ-123 -> <a href="/issue/PROJ-123/">
-             (parsed text only, so code, raw HTML blocks and link text are
-             never touched)
+             (both on parsed text only, so code and raw HTML blocks are never
+             touched; issue refs stay out of link text too)
            + attachment treeprocessor: <img src="b.png"> / <a href="b.pdf">
              -> attachment download URL (parsed tree, so code is never touched)
       -> nh3.clean(...)            HTML sanitizer with our allowlist
@@ -131,6 +131,8 @@ _URL_SCHEME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+.\-]*:")
 # label, a link target, a URL path).
 _ISSUE_REF_PATTERN = r"(?<!\[)(?<!\()(?<!/)\b([A-Z][A-Z0-9]+-\d+)\b"
 _ISSUE_REF_RE = re.compile(_ISSUE_REF_PATTERN)
+# What Python-Markdown leaves in text for a backslash escape it has read.
+_ESCAPED_CHAR_RE = re.compile("\x02(\\d+)\x03")
 
 
 def count_issue_ref_candidates(text: str) -> int:
@@ -164,15 +166,13 @@ def _sanitize_html(html_str: str) -> str:
     )
 
 
-def _render_markdown(source: str, original: str, extensions: list, issue_refs: int = 0) -> markupsafe.Markup:
-    """Render *source* to sanitized HTML, or *original* as plain text if that is unsafe.
+def _render_markdown(source: str, extensions: list, issue_refs: int = 0) -> markupsafe.Markup:
+    """Render *source* to sanitized HTML, or as plain text if that is unsafe.
 
-    *source* is the text after wiki-link substitution, which is
-    what Python-Markdown parses; *original* is what the author wrote, shown
-    as-is in the fallback. *issue_refs* is how many ``KEY-123`` tokens the
-    render may link (see :func:`render_hazard`).
+    *issue_refs* is how many ``KEY-123`` tokens the render may link (see
+    :func:`render_hazard`).
     """
-    hazard = render_hazard(source, len(original), issue_refs)
+    hazard = render_hazard(source, issue_refs)
     if hazard is None:
         allowance = render_allowance()
         if allowance <= 0:
@@ -193,8 +193,8 @@ def _render_markdown(source: str, original: str, extensions: list, issue_refs: i
             return markupsafe.Markup(_sanitize_html(html))
         finally:
             charge_render(markdown_budget._cpu_clock() - started)
-    logger.warning("Markdown shown as plain text (%s, %d characters)", hazard, len(original))
-    return _plain_text_fallback(original)
+    logger.warning("Markdown shown as plain text (%s, %d characters)", hazard, len(source))
+    return _plain_text_fallback(source)
 
 
 def _plain_text_fallback(text: str) -> markupsafe.Markup:
@@ -203,23 +203,6 @@ def _plain_text_fallback(text: str) -> markupsafe.Markup:
     return markupsafe.Markup(
         '<div class="sp-markdown-fallback"><p class="sp-markdown-fallback-notice">{}</p><pre>{}</pre></div>'
     ).format(notice, text)
-
-
-def _replace_wiki_link(project_key: str):
-    def _inner(m: re.Match[str]) -> str:
-        target = m.group(1).strip()
-        display = m.group(2)
-        if display:
-            display = display.strip()
-            display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-        else:
-            display = target
-            display = display.replace("[", "\\[").replace("]", "\\]").replace("<", "&lt;").replace(">", "&gt;")
-        slug = _wiki_slugify(target)
-        url = f"/projects/{project_key}/wiki/{slug}/"
-        return f"[{display}]({url})"
-
-    return _inner
 
 
 def _attachment_filename(target: str) -> str | None:
@@ -311,15 +294,79 @@ class _IssueRefExtension(Extension):
         md.inlinePatterns.register(_IssueRefInlineProcessor(md, self.known_issue_refs), "issue_refs", 5)
 
 
-def substitute_links(text: str, project_key: str = "") -> str:
-    """Rewrite ``[[Page]]`` wiki links in *text* as Markdown links.
+class _WikiLinkInlineProcessor(InlineProcessor):
+    """Link ``[[Page]]`` and ``[[Page|label]]`` in parsed text to ``/projects/KEY/wiki/<slug>/``.
 
-    The first step of :func:`render_wiki_markdown`, and the text the render
-    budget is checked against: what Python-Markdown will actually parse.
-    ``KEY-123`` issue refs are linked later, on the parsed text, by an inline
-    pattern (see :class:`_IssueRefInlineProcessor`).
+    An inline pattern only sees text Python-Markdown parses as Markdown, so
+    code spans, fenced and indented code blocks and raw HTML blocks (stashed
+    before inline parsing) keep their brackets as written. The link reads the
+    label, or else the target, as Markdown link text does: emphasis in it is
+    rendered, ``<`` and ``>`` are shown as written, and backslash escapes hold.
+    The slug is made from the target as the author wrote it.
     """
-    return _WIKI_LINK_RE.sub(_replace_wiki_link(project_key), text)
+
+    def __init__(self, md: _md.Markdown, project_key: str, found: list[tuple[str, str | None]] | None = None) -> None:
+        super().__init__(_WIKI_LINK_RE.pattern, md)
+        self.project_key = project_key
+        self.found = found
+
+    def _written(self, text: str) -> str:
+        """Return *text* with its escapes and code spans read back as the author typed them."""
+        return _ESCAPED_CHAR_RE.sub(lambda e: "\\" + chr(int(e.group(1))), self.unescape(text))
+
+    def handleMatch(  # noqa: N802 - Python-Markdown API
+        self, m: re.Match[str], data: str
+    ) -> tuple[Element | None, int | None, int | None]:
+        target = m.group(1).strip()
+        label = (m.group(2) or "").strip() or target
+        written = self._written(target)
+        if self.found is not None:
+            self.found.append((written, self._written(m.group(2)).strip() if m.group(2) else None))
+        element = Element("a", {"href": f"/projects/{self.project_key}/wiki/{_wiki_slugify(written)}/"})
+        # As entities, so the entity pattern shows them as written rather than
+        # the inline HTML pattern reading a tag.
+        element.text = label.replace("<", "&lt;").replace(">", "&gt;")
+        return element, m.start(0), m.end(0)
+
+
+class _WikiLinkExtension(Extension):
+    def __init__(self, project_key: str, found: list[tuple[str, str | None]] | None = None) -> None:
+        super().__init__()
+        self.project_key = project_key
+        self.found = found
+
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below backticks (190) and escapes (180), so code spans and escaped
+        # brackets are settled first; above references (170) and links (160),
+        # which would otherwise read ``[[Page]]`` as bracketed text.
+        md.inlinePatterns.register(_WikiLinkInlineProcessor(md, self.project_key, self.found), "wiki_links", 175)
+
+
+def find_wiki_links(text: str) -> list[tuple[str, str | None]]:
+    """Return the ``(target, label or None)`` of each ``[[Page]]`` link the renderer makes of *text*, in order.
+
+    Found by the parser, as rendering finds them, so a link written in code or
+    in a raw HTML block is not one. Text the renderer would show as plain text
+    (over the render budget, see :func:`render_hazard`), or whose parse runs
+    out of time, is scanned as written instead, code and all.
+    """
+    if not text or "[[" not in text:
+        return []
+    if render_hazard(text, count_issue_ref_candidates(text)) is None:
+        found: list[tuple[str, str | None]] = []
+        started = markdown_budget._cpu_clock()
+        try:
+            _md.markdown(
+                text,
+                extensions=["fenced_code", "tables", _WikiLinkExtension("", found), RenderDeadline(render_allowance())],
+            )
+        except (RenderDeadlineError, RecursionError):
+            pass
+        else:
+            return found
+        finally:
+            charge_render(markdown_budget._cpu_clock() - started)
+    return [(m.group(1).strip(), m.group(2).strip() if m.group(2) else None) for m in _WIKI_LINK_RE.finditer(text)]
 
 
 def render_wiki_markdown(
@@ -354,14 +401,13 @@ def render_wiki_markdown(
     if not text:
         return markupsafe.Markup("")
 
-    processed = substitute_links(text, project_key)
-
-    # Issue refs are linked, and bare-filename image and link targets resolved
-    # to attachment URLs, on the parsed text, not by rewriting the source.
-    extensions: list = [*_MD_EXTENSIONS, _IssueRefExtension(known_issue_refs)]
+    # Wiki links and issue refs are linked, and bare-filename image and link
+    # targets resolved to attachment URLs, on the parsed text, not by
+    # rewriting the source.
+    extensions: list = [*_MD_EXTENSIONS, _WikiLinkExtension(project_key), _IssueRefExtension(known_issue_refs)]
     if attachment_map:
         extensions.append(_AttachmentRefExtension(attachment_map))
-    return _render_markdown(processed, text, extensions, count_issue_ref_candidates(processed))
+    return _render_markdown(text, extensions, count_issue_ref_candidates(text))
 
 
 def render_plain_markdown(text: str) -> markupsafe.Markup:
@@ -371,4 +417,4 @@ def render_plain_markdown(text: str) -> markupsafe.Markup:
     Same extensions and sanitization as ``render_wiki_markdown``; only the
     pre-processing differs.
     """
-    return _render_markdown(text or "", text or "", list(_MD_EXTENSIONS))
+    return _render_markdown(text or "", list(_MD_EXTENSIONS))

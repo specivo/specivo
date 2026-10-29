@@ -127,19 +127,19 @@ def check_markdown_length(text: str | None, field: str) -> None:
         )
 
 
-def render_hazard(text: str, original_length: int | None = None, issue_refs: int = 0) -> str | None:
+def render_hazard(text: str, issue_refs: int = 0) -> str | None:
     """Return why *text* should not be rendered as Markdown, or None if it may be.
 
     The reasons are ``"size"`` (longer than :data:`MAX_MARKDOWN_CHARS`),
     ``"nesting"`` (deeper than :data:`MAX_NESTING_DEPTH`) and ``"cost"`` (an
     estimated render time over :data:`RENDER_BUDGET_US`). Runs in linear time.
 
-    *original_length* is the length of what the author wrote, when *text* is
-    that after wiki-link substitution (which lengthens it); the size limit
-    applies to the author's text. *issue_refs* is the number of ``KEY-123``
-    refs the render will link, each of which becomes a link element.
+    *text* is what the author wrote: wiki links and issue refs are linked
+    inside the parser, never by rewriting it first. *issue_refs* is the number
+    of ``KEY-123`` refs the render will link, each of which becomes a link
+    element; a ``[[Page]]`` link is costed by its brackets.
     """
-    if (len(text) if original_length is None else original_length) > MAX_MARKDOWN_CHARS:
+    if len(text) > MAX_MARKDOWN_CHARS:
         return "size"
     lines_cost, depth = _line_costs(text)
     if depth > MAX_NESTING_DEPTH:

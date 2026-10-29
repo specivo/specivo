@@ -70,3 +70,22 @@ class TestParseLinks:
         text = "# Heading\n\nSee [[Page_One]] for details.\n\nAlso read [[Page_Two|the other page]]."
         result = service.parse_links(text)
         assert result == [("page-one", None), ("page-two", "the other page")]
+
+    def test_links_in_code_and_raw_html_are_not_links(self, service: WikiLinkService):
+        """Only the links the page renders count; code and raw HTML show theirs as written."""
+        text = (
+            "See [[Real Page]].\n\n"
+            "```\n[[Fenced]]\n```\n\n"
+            "    [[Indented]]\n\n"
+            "Inline `[[Inline]]` code.\n\n"
+            "<div>\n[[Raw Html]]\n</div>\n"
+        )
+        assert service.parse_links(text) == [("real-page", None)]
+
+    def test_label_reads_as_written(self, service: WikiLinkService):
+        assert service.parse_links("[[Page|a <b> \\_c]]") == [("page", "a &lt;b&gt; \\_c")]
+
+    def test_text_over_the_render_budget_is_scanned_as_written(self, service: WikiLinkService):
+        """The page shows such text as plain text; its links still make the graph, code and all."""
+        text = "`[[In Code]]` " + "[" * 30000 + " [[After]]"
+        assert service.parse_links(text) == [("in-code", None), ("after", None)]

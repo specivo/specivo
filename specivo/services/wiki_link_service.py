@@ -9,7 +9,8 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.wiki import WikiContent, WikiPage, WikiPageLink
-from specivo.services.wiki_utils import WIKI_LINK_RE, slugify
+from specivo.services.markdown_service import find_wiki_links
+from specivo.services.wiki_utils import slugify
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,9 @@ class WikiLinkService:
     def parse_links(self, text: str) -> list[tuple[str, str | None]]:
         """Parse ``[[Page_Name]]`` and ``[[Page_Name|display text]]`` from text.
 
+        Only the links the page renders count: one in code or in a raw HTML
+        block is not a link (see ``markdown_service.find_wiki_links``).
+
         Returns a deduplicated list of ``(slug, display_text | None)`` tuples,
         preserving first-occurrence order. Results are capped at
         ``_MAX_LINKS_PER_PAGE`` unique links.
@@ -34,11 +38,9 @@ class WikiLinkService:
         seen: set[str] = set()
         results: list[tuple[str, str | None]] = []
 
-        for match in WIKI_LINK_RE.finditer(text):
-            raw_target = match.group(1).strip()
-            display_text = match.group(2)
+        for raw_target, display_text in find_wiki_links(text):
             if display_text is not None:
-                display_text = html.escape(display_text.strip())
+                display_text = html.escape(display_text)
 
             if not raw_target:
                 continue

@@ -118,7 +118,8 @@ See [[Release Process]] for the steps.
 ```
 
 You can link by title (`[[Release Process]]`) or by slug (`[[release-process]]`) — slugs are normalized, so
-`[[My Page]]`, `[[my-page]]`, and `[[My_Page]]` all resolve to the same page. See
+`[[My Page]]`, `[[my-page]]`, and `[[My_Page]]` all resolve to the same page. Double brackets inside
+code (a code block or `` `inline code` ``) or inside a raw HTML block are shown as written, not linked. See
 [Linking & history](../wiki/history-linking.md) for more.
 
 ## Size and complexity limits
