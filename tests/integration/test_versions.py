@@ -779,18 +779,18 @@ async def test_status_is_done_property() -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_versions_empty_query_returns_recent_10(
+async def test_search_versions_empty_query_returns_10_in_picker_order(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_token: str,
     project: Project,
 ) -> None:
-    """With no query, search returns up to 10 most recent versions, newest first."""
+    """With no query, search returns up to 10 versions: open soonest-due first, closed after."""
     for i in range(12):
         await _make_version(
             db_session,
             project,
-            name=f"v{i:02d}",
+            name=f"v{i}",
             effective_date=datetime.date(2026, 1, 1) + datetime.timedelta(days=i),
         )
 
@@ -801,10 +801,31 @@ async def test_search_versions_empty_query_returns_recent_10(
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert len(data) == 10
-    # Newest (highest effective_date) first
-    assert data[0]["name"] == "v11"
-    assert data[-1]["name"] == "v02"
+    # Soonest due first, natural names (v9 before v10).
+    assert [v["name"] for v in data] == [f"v{i}" for i in range(10)]
     assert {"id", "name", "status", "effective_date"} <= set(data[0].keys())
+
+
+@pytest.mark.asyncio
+async def test_search_versions_picker_order_open_first_closed_most_recent(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+) -> None:
+    """The picker lists open/locked versions first, then closed ones most recent first."""
+    await _make_version(db_session, project, name="0.2.0", status="closed", effective_date=datetime.date(2026, 2, 1))
+    await _make_version(db_session, project, name="0.10.0", status="closed", effective_date=datetime.date(2026, 9, 1))
+    await _make_version(db_session, project, name="0.9.0", status="closed")
+    await _make_version(db_session, project, name="0.12.0", status="open")
+    await _make_version(db_session, project, name="0.11.0", status="locked", effective_date=datetime.date(2026, 11, 1))
+
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/versions/search/?q=0.",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert [v["name"] for v in resp.json()] == ["0.11.0", "0.12.0", "0.10.0", "0.2.0", "0.9.0"]
 
 
 @pytest.mark.asyncio
@@ -857,3 +878,72 @@ async def test_search_versions_requires_auth(
     """Unauthenticated users cannot search versions."""
     resp = await client.get(f"/api/v1/projects/{project.key}/versions/search/")
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Tests: list and roadmap ordering
+# ---------------------------------------------------------------------------
+
+
+async def _seed_release_versions(db: AsyncSession, project: Project) -> None:
+    for name, status, due in [
+        ("0.10.0", "closed", datetime.date(2026, 10, 1)),
+        ("0.2.0", "closed", None),
+        ("0.11.0", "open", None),
+        ("0.1.10", "closed", datetime.date(2026, 5, 2)),
+        ("0.1.9", "closed", datetime.date(2026, 4, 20)),
+        ("0.12.0", "open", datetime.date(2026, 12, 1)),
+    ]:
+        await _make_version(db, project, name=name, status=status, effective_date=due)
+
+
+@pytest.mark.asyncio
+async def test_list_versions_natural_default_order(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+) -> None:
+    """Open versions first by due date (undated last), then closed ones; names compare naturally."""
+    await _seed_release_versions(db_session, project)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    resp = await client.get(f"/api/v1/projects/{project.key}/versions/", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert [v["name"] for v in resp.json()] == ["0.12.0", "0.11.0", "0.1.9", "0.1.10", "0.10.0", "0.2.0"]
+
+    resp = await client.get(f"/api/v1/projects/{project.key}/versions/?sort=version:asc", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert [v["name"] for v in resp.json()] == ["0.11.0", "0.12.0", "0.1.9", "0.1.10", "0.2.0", "0.10.0"]
+
+
+@pytest.mark.asyncio
+async def test_roadmap_api_sort_param(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    admin_token: str,
+    project: Project,
+) -> None:
+    await _seed_release_versions(db_session, project)
+    headers = {"Authorization": f"Bearer {admin_token}"}
+
+    resp = await client.get(f"/api/v1/projects/{project.key}/roadmap/?sort=version:desc", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert [e["version"]["name"] for e in resp.json()] == ["0.12.0", "0.11.0", "0.10.0", "0.2.0", "0.1.10", "0.1.9"]
+
+    resp = await client.get(f"/api/v1/projects/{project.key}/roadmap/?sort=status:desc", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert [e["version"]["name"] for e in resp.json()] == ["0.1.9", "0.1.10", "0.10.0", "0.2.0", "0.12.0", "0.11.0"]
+
+
+@pytest.mark.asyncio
+async def test_list_versions_rejects_unknown_sort(
+    client: AsyncClient,
+    admin_token: str,
+    project: Project,
+) -> None:
+    resp = await client.get(
+        f"/api/v1/projects/{project.key}/versions/?sort=name",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 422, resp.text

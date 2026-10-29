@@ -25,6 +25,7 @@ from specivo.services.relation_service import RelationService
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
+from specivo.services.version_service import order_versions
 from specivo.web.deps import get_active_sprint_id as _get_active_sprint_id
 from specivo.web.deps import (
     get_current_user_optional,
@@ -280,8 +281,8 @@ async def issue_create_form(
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
-    versions_result = await db.execute(select(Version).where(Version.project_id == project.id).order_by(Version.name))
-    versions = list(versions_result.scalars().all())
+    versions_result = await db.execute(select(Version).where(Version.project_id == project.id))
+    versions = order_versions(versions_result.scalars().all())
 
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut
@@ -562,8 +563,8 @@ async def issue_edit_form(
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)
-    versions_result = await db.execute(select(Version).where(Version.project_id == project.id).order_by(Version.name))
-    versions = list(versions_result.scalars().all())
+    versions_result = await db.execute(select(Version).where(Version.project_id == project.id))
+    versions = order_versions(versions_result.scalars().all())
 
     # Load metadata schemas for this project
     from specivo.schemas.metadata_schema import MetadataSchemaOut

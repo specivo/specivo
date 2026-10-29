@@ -19,6 +19,7 @@ import { initColorPicker } from './modules/color-picker';
 import { initAvatarUpload } from './modules/avatar-upload';
 import { initConfirmDialog } from './modules/confirm-dialog';
 import { initModal } from './modules/modal';
+import { initVersionSort } from './modules/version-sort';
 
 document.addEventListener('DOMContentLoaded', function () {
     initCsrf();
@@ -33,4 +34,5 @@ document.addEventListener('DOMContentLoaded', function () {
     initAvatarUpload();
     initConfirmDialog();
     initModal();
+    initVersionSort();
 });
