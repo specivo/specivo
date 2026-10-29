@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.metadata_schema import MetadataSchemaOut
@@ -26,7 +26,7 @@ async def discover_schemas(
     project_key: str,
     tracker_id: int | None = Query(None, description="Filter by tracker"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[MetadataSchemaOut]:
     """Return metadata schemas applicable to a project.
 

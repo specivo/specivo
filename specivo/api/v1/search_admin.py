@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import _ALLOWED_FTS_LANGUAGES
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import PermissionDeniedError, ValidationError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
@@ -132,7 +132,7 @@ async def _status_payload(db: AsyncSession, project_id: int | None) -> dict:
 @router.get("/admin/search/fts/")
 async def get_instance_fts(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     _require_admin(current_user)
     language = await _settings.get(db, _INSTANCE_DEFAULT_KEY, "english")
@@ -147,7 +147,7 @@ async def get_instance_fts(
 async def set_instance_fts(
     data: InstanceLanguageIn,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     _require_admin(current_user)
     lang = _validate_language(data.language)
@@ -159,7 +159,7 @@ async def set_instance_fts(
 @router.post("/admin/search/reindex/", status_code=status.HTTP_202_ACCEPTED)
 async def reindex_instance(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     _require_admin(current_user)
     return await _dispatch_reindex(db, None)
@@ -168,7 +168,7 @@ async def reindex_instance(
 @router.get("/admin/search/reindex/status/")
 async def reindex_instance_status(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     _require_admin(current_user)
     return await _status_payload(db, None)
@@ -183,7 +183,7 @@ async def reindex_instance_status(
 async def get_project_fts(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     project = await _require_project_manage(project_key, current_user, db)
     instance_default = await _settings.get(db, _INSTANCE_DEFAULT_KEY, "english")
@@ -201,7 +201,7 @@ async def set_project_fts(
     project_key: str,
     data: ProjectLanguageIn,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     project = await _require_project_manage(project_key, current_user, db)
     value = (data.language or "").strip().lower()
@@ -216,7 +216,7 @@ async def set_project_fts(
 async def reindex_project(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     project = await _require_project_manage(project_key, current_user, db)
     return await _dispatch_reindex(db, project.id)
@@ -226,7 +226,7 @@ async def reindex_project(
 async def reindex_project_status(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     project = await _require_project_manage(project_key, current_user, db)
     return await _status_payload(db, project.id)

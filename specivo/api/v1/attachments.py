@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Form, Request, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.i18n import gettext as _
 from specivo.core.security import get_current_user
@@ -63,7 +63,7 @@ async def upload_attachment(
     description: str | None = Form(default=None),
     journal_id: int | None = Form(default=None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AttachmentOut:
     """Upload a file attachment to a container entity.
 
@@ -121,7 +121,7 @@ async def upload_attachment(
 async def get_attachment(
     attachment_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AttachmentOut:
     """Get attachment metadata by ID."""
     attachment = await _service.get_visible(db, attachment_id, current_user)
@@ -132,7 +132,7 @@ async def get_attachment(
 async def download_attachment(
     attachment_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> FileResponse:
     """Download an attachment file as a streaming response."""
     attachment = await _service.get_visible(db, attachment_id, current_user)
@@ -156,7 +156,7 @@ async def delete_attachment(
     request: Request,
     attachment_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete an attachment.
 
@@ -179,7 +179,7 @@ async def update_attachment(
     attachment_id: int,
     payload: AttachmentUpdateSchema,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AttachmentOut:
     """Update an attachment's description and/or metadata.
 

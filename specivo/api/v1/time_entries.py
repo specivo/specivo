@@ -7,7 +7,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.core.utils import utcnow
@@ -80,7 +80,7 @@ def _timer_out(timer) -> TimerOut:
 )
 async def list_activities(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[ActivityOut]:
     """List all active time entry activities."""
     activities = await _service.list_activities(db)
@@ -102,7 +102,7 @@ async def create_time_entry(
     data: TimeEntryCreate,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TimeEntryOut:
     """Create a time entry in the given project.
 
@@ -129,7 +129,7 @@ async def list_time_entries(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=25, ge=1, le=200),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TimeEntryListResponse:
     """List the project's time entries the caller may read, with optional filters.
 
@@ -171,7 +171,7 @@ async def list_time_entries(
 async def get_time_entry(
     entry_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TimeEntryOut:
     """Get a single time entry by ID; 404 unless the caller may read it."""
     entry = await _service.get_visible(db, entry_id, current_user)
@@ -186,7 +186,7 @@ async def update_time_entry(
     entry_id: int,
     data: TimeEntryUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TimeEntryOut:
     """Update a time entry: any with ``manage_time_entries``, else only one's own with ``log_time``.
 
@@ -205,7 +205,7 @@ async def update_time_entry(
 async def delete_time_entry(
     entry_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete a time entry: any with ``manage_time_entries``, else only one's own with ``log_time``.
 
@@ -226,7 +226,7 @@ async def delete_time_entry(
 )
 async def get_timer(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TimerOut | None:
     """Get the current active timer for the authenticated user."""
     timer = await _service.get_current_timer(db, current_user)
@@ -244,7 +244,7 @@ async def start_timer(
     data: TimerStartRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TimerOut:
     """Start a timer. Auto-stops existing timer if any.
 
@@ -271,7 +271,7 @@ async def stop_timer(
     data: TimerStopRequest,
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TimeEntryOut:
     """Stop the current timer and create a time entry.
 

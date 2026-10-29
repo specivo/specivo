@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import DEFAULT_PROJECT_COLORS
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.services.computed_metadata_service import computed_values
@@ -52,8 +52,8 @@ _STATUS_LABELS = {1: "active", 5: "closed", 9: "archived"}
 @router.get("/projects/", response_class=HTMLResponse)
 async def projects_list(
     request: Request,
-    reader: object | None = Depends(get_web_reader),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the project list page."""
     if reader is None:
@@ -150,8 +150,8 @@ async def projects_list(
 async def project_detail(
     key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the project detail/overview page."""
     if reader is None:
@@ -236,7 +236,7 @@ def _version_sort_for(user: User, requested: str | None = None) -> str:
 async def project_roadmap(
     key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     show: str = Query("open"),
     sort: str | None = Query(None),
 ) -> Response:
@@ -289,7 +289,7 @@ async def project_roadmap(
 async def project_settings(
     key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render project settings page (admin only)."""
     user_obj = await get_current_user_optional(request, db)
@@ -504,7 +504,7 @@ async def version_detail(
     key: str,
     version_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the version detail page with issues, progress, and time stats."""
     user_obj = await get_current_user_optional(request, db)

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.user import User
@@ -52,7 +52,7 @@ async def _require_project_manage(
 )
 async def list_presets(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[MetadataPresetOut]:
     """Return all metadata presets (built-in + custom)."""
     presets = await _preset_service.list_presets(db)
@@ -67,7 +67,7 @@ async def list_presets(
 async def get_preset(
     slug: str,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MetadataPresetOut:
     """Return a single preset by slug."""
     preset = await _preset_service.get_preset(db, slug)
@@ -83,7 +83,7 @@ async def get_preset(
 async def create_preset(
     data: MetadataPresetCreate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MetadataPresetOut:
     """Create a new custom metadata preset (admin only)."""
     preset = await _preset_service.create_custom(
@@ -106,7 +106,7 @@ async def update_preset(
     slug: str,
     data: MetadataPresetUpdate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MetadataPresetOut:
     """Update a metadata preset (admin only)."""
     preset = await _preset_service.get_preset(db, slug)
@@ -123,7 +123,7 @@ async def update_preset(
 async def delete_preset(
     slug: str,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Delete a custom metadata preset (admin only). Builtin presets return 403."""
     preset = await _preset_service.get_preset(db, slug)
@@ -144,7 +144,7 @@ async def delete_preset(
 async def list_enabled_presets(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[str]:
     """Return slugs of presets enabled on this project."""
     project_id = await _require_project_manage(project_key, current_user, db)
@@ -161,7 +161,7 @@ async def enable_preset(
     project_key: str,
     slug: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
     body: PresetEnableRequest | None = None,
 ) -> MetadataSchemaOut:
     """Enable a preset on a project, creating a MetadataSchema."""
@@ -180,7 +180,7 @@ async def disable_preset(
     project_key: str,
     slug: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Disable a preset on a project, removing its MetadataSchema rows."""
     project_id = await _require_project_manage(project_key, current_user, db)

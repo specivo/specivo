@@ -89,9 +89,11 @@ Defaults and bounds are defined in `specivo.core.constants`: `DEFAULT_PAGE_LIMIT
 async def create_project(
     data: ProjectCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> ProjectOut:
 ```
+
+Take the session as `db: DbSession` (an `Annotated` alias), or as `db: AsyncSession = DB_SESSION` where the parameter follows others with defaults. Never write a bare `Depends(get_db)` -- see section 12.
 
 ### 3. Error Handling
 
@@ -376,18 +378,15 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 Callers (routers, services) must **not** call `session.commit()` themselves -- the dependency handles it. For multi-step transactions, use `session.begin_nested()` (savepoints).
 
-**Browser reload race condition:** FastAPI sends the HTTP response *before* the `get_db` cleanup runs (which is where the commit happens). When the Alpine.js frontend calls `location.reload()` upon receiving a success response, the reload request can arrive before the commit completes — the user doesn't see their changes.
+**Commit before the response.** `DbSession` and `DB_SESSION` both declare `Depends(get_db, scope="function")`. With that scope FastAPI runs the code after `yield` -- the commit -- once the endpoint has returned and its response has been serialized, but *before* the response is sent. With FastAPI's default request scope the commit ran after the response had gone out, so a client that wrote and then read straight away (a browser `location.reload()`, an API client, an MCP agent) could read stale data. `tests/integration/test_commit_before_response.py` walks every route and fails on a session dependency without the function scope.
 
-**Rule:** Endpoints whose responses trigger `location.reload()` in the browser UI must call `await db.commit()` explicitly before returning. The `get_db` cleanup's second `commit()` on an already-committed session is a no-op (since `expire_on_commit=False`).
+Consequences:
 
-```python
-# In mutating endpoints called by the browser UI:
-project = await _service.create(db, data, current_user)
-await db.commit()  # commit before response to avoid reload race condition
-return _project_out(project, parent_key)
-```
+- The session is closed by the time a `StreamingResponse` body or a background task runs; those must open a session of their own from `get_session_factory()`.
+- A yield dependency that takes the session (`get_reader`, `get_web_reader`) must itself be declared with `scope="function"`; FastAPI refuses to start otherwise.
+- Explicit `await db.commit()` calls left in some endpoints from before this rule are harmless (the second commit is a no-op with `expire_on_commit=False`) but no longer needed.
 
-This does **not** apply to pure API endpoints consumed by scripts or agents — only to endpoints whose JS handlers call `location.reload()`.
+MCP tool calls do not use `get_db`: `_get_session_and_user()` in `specivo.mcp.server` commits inside the tool function, before the tool result is returned.
 
 Engine settings: `pool_pre_ping=True`, `pool_size=10`, `max_overflow=20`, `expire_on_commit=False`.
 

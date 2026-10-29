@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
@@ -29,7 +29,7 @@ _time_svc = TimeEntryService()
 async def time_entries_list(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     user_id: str = Query(""),
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
@@ -107,7 +107,7 @@ async def time_entries_list(
 async def time_entry_form(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the log-time form."""
     user_obj = await get_current_user_optional(request, db)

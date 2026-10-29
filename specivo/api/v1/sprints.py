@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
@@ -87,7 +87,7 @@ async def create_sprint(
     project_key: str,
     data: SprintCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SprintOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_sprints(project, current_user, db)
@@ -102,7 +102,7 @@ async def create_sprint(
 async def list_sprints(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[SprintOut]:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
@@ -118,7 +118,7 @@ async def search_sprints(
     q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
     """Autocomplete search for sprints.
 
@@ -149,7 +149,7 @@ async def get_burndown(
     project_key: str,
     sprint_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> BurndownOut:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
@@ -179,7 +179,7 @@ async def get_sprint(
     project_key: str,
     sprint_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SprintOut:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
@@ -198,7 +198,7 @@ async def update_sprint(
     sprint_id: int,
     data: SprintUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SprintOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_sprints(project, current_user, db)
@@ -217,7 +217,7 @@ async def delete_sprint(
     project_key: str,
     sprint_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_sprints(project, current_user, db)
@@ -235,7 +235,7 @@ async def start_sprint(
     project_key: str,
     sprint_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SprintOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_sprints(project, current_user, db)
@@ -255,7 +255,7 @@ async def complete_sprint(
     sprint_id: int,
     data: SprintCompleteRequest | None = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> SprintOut:
     project = await _get_project(project_key, current_user, db)
     await _require_manage_sprints(project, current_user, db)
@@ -274,7 +274,7 @@ async def get_board(
     project_key: str,
     sprint_id: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
@@ -298,7 +298,7 @@ async def get_board(
 async def get_backlog(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)

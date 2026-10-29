@@ -42,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core.auth_cookies import set_auth_cookies
 from specivo.core.client_ip import get_client_ip, rate_limit_subject
 from specivo.core.config import Settings, get_settings
-from specivo.core.database import get_db
+from specivo.core.database import DbSession
 from specivo.core.i18n import gettext as _
 from specivo.core.rate_limit import enforce_rate_limit, rate_limit
 from specivo.core.utils import utcnow
@@ -189,7 +189,7 @@ async def _audit_failure(db: AsyncSession, request: Request, provider: SsoProvid
 async def sso_login_start(
     slug: str,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     _rl: Annotated[None, Depends(_start_rate_limit)],
     next_url: Annotated[str, Query(alias="next")] = "",
 ) -> RedirectResponse:
@@ -222,7 +222,7 @@ async def _link_user(
 @router.post("/{slug}/link/", response_model=None)
 async def sso_link_start(
     slug: str,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     user: Annotated[User, Depends(_link_user)],
 ) -> RedirectResponse:
     """Connect an identity at this provider to the signed-in user: 303 to the IdP."""
@@ -250,7 +250,7 @@ async def sso_link_start(
 async def sso_callback(
     slug: str,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     _rl: Annotated[None, Depends(_callback_rate_limit)],
 ) -> RedirectResponse:
     """Finish the login: new session cookies and a redirect to ``next``, or a refusal redirect."""
@@ -375,7 +375,7 @@ async def sso_backchannel_logout(
     slug: str,
     request: Request,
     response: Response,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
 ) -> Response:
     """End the Specivo sessions a valid logout token names (see the module docstring)."""
     provider = await _service.get_enabled_provider(db, slug)

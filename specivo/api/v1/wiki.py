@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user, get_reader
 from specivo.models.project import EnabledModule
@@ -125,7 +125,7 @@ def _page_out(page: WikiPage) -> WikiPageOut:
 async def list_wiki_pages(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiPageListResponse:
     """List all wiki pages for a project."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -145,7 +145,7 @@ async def create_wiki_page(
     project_key: str,
     data: WikiPageCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiPageWithContent:
     """Create a new wiki page."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -173,7 +173,7 @@ async def create_wiki_page(
 async def get_wiki_graph(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiGraphResponse:
     """Get the link graph for the project wiki."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -198,7 +198,7 @@ async def get_wiki_graph(
 async def list_deleted_wiki_pages(
     project_key: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiTrashListResponse:
     """List soft-deleted wiki pages (trash)."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -235,7 +235,7 @@ async def restore_wiki_page(
     project_key: str,
     slug: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiPageOut:
     """Restore a soft-deleted wiki page."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -271,8 +271,8 @@ async def get_wiki_page(
     project_key: str,
     slug: str,
     request: Request,
-    current_user: User = Depends(get_reader),
-    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_reader, scope="function"),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiPageWithContent:
     """Get a wiki page by slug (follows redirects).
 
@@ -338,7 +338,7 @@ async def update_wiki_page(
     slug: str,
     data: WikiPageUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiPageWithContent:
     """Update wiki page content, title, and/or parent."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -387,7 +387,7 @@ async def delete_wiki_page(
     project_key: str,
     slug: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Soft-delete a wiki page."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -407,7 +407,7 @@ async def rename_wiki_page(
     slug: str,
     data: WikiPageRename,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiPageWithContent:
     """Rename a wiki page (creates a redirect from the old slug)."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -430,7 +430,7 @@ async def get_wiki_page_history(
     project_key: str,
     slug: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiVersionsResponse:
     """Get version history for a wiki page."""
     project = await _project_service.get_by_key(db, project_key.upper())
@@ -463,7 +463,7 @@ async def get_wiki_page_version(
     slug: str,
     version_num: int,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> WikiContentVersionOut:
     """Get a specific content version of a wiki page."""
     project = await _project_service.get_by_key(db, project_key.upper())

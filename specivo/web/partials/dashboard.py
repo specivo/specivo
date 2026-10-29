@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import cast
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
 from specivo.models.project import Project
@@ -26,7 +26,7 @@ _project_svc = ProjectService()
 @router.get("/my-issues/", response_class=HTMLResponse)
 async def my_issues_partial(
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     offset: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=50),
 ) -> Response:

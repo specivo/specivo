@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.user import User
 from specivo.schemas.agent_group import (
     AgentGroupCreate,
@@ -35,7 +35,7 @@ _service = GroupPolicyService()
 async def create_group(
     data: AgentGroupCreate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AgentGroupOut:
     """Create a new agent group (admin only)."""
     group = await _service.create_group(db, name=data.name, description=data.description)
@@ -48,7 +48,7 @@ async def create_group(
 )
 async def list_groups(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[AgentGroupOut]:
     """List all agent groups (admin only)."""
     groups = await _service.list_groups(db)
@@ -62,7 +62,7 @@ async def list_groups(
 async def delete_group(
     group_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete an agent group (admin only)."""
     await _service.delete_group(db, group_id=group_id)
@@ -82,7 +82,7 @@ async def add_member(
     group_id: int,
     data: MemberAdd,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> MembershipOut:
     """Add a user to an agent group (admin only)."""
     membership = await _service.add_member(db, group_id=group_id, user_id=data.user_id)
@@ -97,7 +97,7 @@ async def remove_member(
     group_id: int,
     user_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Remove a user from an agent group (admin only)."""
     await _service.remove_member(db, group_id=group_id, user_id=user_id)
@@ -117,7 +117,7 @@ async def add_policy(
     group_id: int,
     data: PolicyCreate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> PolicyOut:
     """Add a policy to an agent group (admin only)."""
     policy = await _service.create_policy(
@@ -137,7 +137,7 @@ async def add_policy(
 async def list_policies(
     group_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[PolicyOut]:
     """List all policies for an agent group (admin only)."""
     policies = await _service.list_policies(db, group_id=group_id)
@@ -152,7 +152,7 @@ async def remove_policy(
     group_id: int,
     policy_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Remove a policy from an agent group (admin only)."""
     await _service.delete_policy(db, group_id=group_id, policy_id=policy_id)

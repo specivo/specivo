@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
@@ -128,8 +128,8 @@ async def _get_lookups(db: AsyncSession) -> dict:
 async def issues_list(
     project_key: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     status: str = Query("open"),
     tracker_id: str = Query(""),
     assigned_to_id: str = Query(""),
@@ -265,7 +265,7 @@ async def issues_list(
 async def issue_create_form(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the issue creation form."""
     user_obj = await get_current_user_optional(request, db)
@@ -320,9 +320,9 @@ async def issue_create_form(
 async def issue_detail(
     issue_ref: str,
     request: Request,
-    reader: object | None = Depends(get_web_reader),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
     activity_page: int | None = Query(None, ge=1),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the issue detail page."""
     if reader is None:
@@ -554,7 +554,7 @@ async def issue_detail(
 async def issue_edit_form(
     issue_ref: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the issue edit form."""
     user_obj = await get_current_user_optional(request, db)
@@ -610,7 +610,7 @@ async def issue_description_diff(
     issue_ref: str,
     journal_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a description diff page for a specific journal entry."""
     import difflib
@@ -759,7 +759,7 @@ async def restore_description_version(
     issue_ref: str,
     journal_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Restore a previous description version by PATCHing the issue."""
     from specivo.models.journal import JournalDetail
@@ -803,7 +803,7 @@ async def move_issue_form(
     request: Request,
     target_project_key: str = Form(...),
     notes: str | None = Form(None),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Move an issue to another project from the web UI, then redirect to it."""
     from specivo.core.exceptions import ValidationError

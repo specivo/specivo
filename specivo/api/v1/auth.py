@@ -16,12 +16,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Cookie, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.auth_cookies import ACCESS_COOKIE, REFRESH_COOKIE, clear_auth_cookies, set_auth_cookies
 from specivo.core.client_ip import get_client_ip
 from specivo.core.constants import API_KEY_PREFIX
-from specivo.core.database import get_db
+from specivo.core.database import DbSession
 from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import rate_limit
 from specivo.core.security import get_account_user
@@ -102,7 +101,7 @@ _refresh_rate_limit = rate_limit("auth_refresh", max_requests=30, window_seconds
 async def login(
     body: LoginRequest,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     _rl: Annotated[None, Depends(_login_rate_limit)],
 ) -> Response:
     from specivo.core.config import get_settings
@@ -179,7 +178,7 @@ async def login(
 )
 async def refresh(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     _rl: Annotated[None, Depends(_refresh_rate_limit)],
     body: RefreshRequest | None = None,
     refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
@@ -227,7 +226,7 @@ async def refresh(
 )
 async def logout(
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     body: RefreshRequest | None = None,
     refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,
     access_token_cookie: Annotated[str | None, Cookie(alias=ACCESS_COOKIE)] = None,
@@ -269,7 +268,7 @@ async def logout(
     summary="Revoke all sessions for the authenticated user",
 )
 async def logout_all(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> JSONResponse:
     """Revoke all sessions for the currently authenticated user."""
@@ -290,7 +289,7 @@ async def logout_all(
     summary="List active sessions for the authenticated user",
 )
 async def list_sessions(
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> list[SessionOut]:
     """Return active (non-expired) refresh tokens for the current user."""
@@ -313,7 +312,7 @@ async def list_sessions(
 )
 async def revoke_session(
     session_id: int,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
 ) -> Response:
     """Revoke a single session owned by the current user."""
@@ -337,7 +336,7 @@ _forgot_password_rate_limit = rate_limit("auth_forgot_password", max_requests=5,
 async def forgot_password(
     body: ForgotPasswordRequest,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     _rl: Annotated[None, Depends(_forgot_password_rate_limit)],
 ) -> dict:
     """Send a password reset email if the address is associated with an account.
@@ -377,7 +376,7 @@ async def forgot_password(
 async def reset_password(
     body: ResetPasswordRequest,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
 ) -> dict:
     """Set a new password using a valid reset token."""
     validate_password_policy(body.new_password)
@@ -446,7 +445,7 @@ _change_password_rate_limit = rate_limit("auth_change_password", max_requests=5,
 async def change_password(
     body: ChangePasswordRequest,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: DbSession,
     current_user: Annotated[User, Depends(get_account_user)],
     _rl: Annotated[None, Depends(_change_password_rate_limit)],
     refresh_token_cookie: Annotated[str | None, Cookie(alias=REFRESH_COOKIE)] = None,

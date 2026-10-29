@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError
 from specivo.models.user import User
 from specivo.schemas.anonymous_access import AnonymousAccessOut, AnonymousAccessProject, AnonymousAccessUpdate
@@ -33,7 +33,7 @@ _MANAGED_SETTINGS = {
 @router.get("/admin/settings/")
 async def get_settings(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict[str, str | None]:
     """Return all application settings as a key→value dict (admin only)."""
     return await _service.get_all(db)
@@ -43,7 +43,7 @@ async def get_settings(
 async def update_settings(
     updates: dict[str, str | None],
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> dict[str, str | None]:
     """Upsert one or more settings (admin only).
 
@@ -85,7 +85,7 @@ async def _anonymous_access_out(db: AsyncSession) -> AnonymousAccessOut:
 @router.get("/admin/settings/anonymous-access/", response_model=AnonymousAccessOut)
 async def get_anonymous_access(
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AnonymousAccessOut:
     """Return the anonymous access switch and the projects opted in to it (admin only)."""
     return await _anonymous_access_out(db)
@@ -96,7 +96,7 @@ async def update_anonymous_access(
     data: AnonymousAccessUpdate,
     request: Request,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> AnonymousAccessOut:
     """Turn the anonymous access switch on or off (admin only).
 

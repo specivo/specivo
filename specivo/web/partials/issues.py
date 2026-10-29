@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from fastapi import APIRouter, Depends, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.services.activity_lookups import activity_lookup_maps
 from specivo.services.attachment_service import AttachmentService
@@ -35,7 +35,7 @@ _reaction_svc = ReactionService()
 async def issue_table_partial(
     request: Request,
     project_key: str = Query(...),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     status: str = Query("open"),
     tracker_id: str = Query(""),
     assigned_to_id: str = Query(""),
@@ -96,7 +96,7 @@ async def issue_activity_partial(
     issue_ref: str,
     request: Request,
     activity_page: int | None = Query(None, ge=1),
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Return the activity/journal list as an HTML fragment for htmx swapping."""
     user_obj = await get_current_user_optional(request, db)
@@ -180,7 +180,7 @@ async def issue_activity_partial(
 async def issue_attachments_partial(
     issue_ref: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Return the attachments tab content as an HTML fragment for htmx.
 

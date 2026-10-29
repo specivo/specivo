@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.api.v1.admin import require_admin_api
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.models.user import User
 from specivo.schemas.workflow import (
     BulkTransitionReplace,
@@ -34,7 +34,7 @@ async def list_transitions(
     tracker_id: int | None = Query(default=None),
     role_id: int | None = Query(default=None),
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[TransitionOut]:
     """List workflow transitions (admin only)."""
     transitions = await _service.list_transitions(db, tracker_id=tracker_id, role_id=role_id)
@@ -49,7 +49,7 @@ async def list_transitions(
 async def create_transition(
     data: TransitionCreate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> TransitionOut:
     """Create a workflow transition (admin only)."""
     transition = await _service.create_transition(db, data)
@@ -63,7 +63,7 @@ async def create_transition(
 async def delete_transition(
     transition_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete a workflow transition (admin only)."""
     await _service.delete_transition(db, transition_id)
@@ -78,7 +78,7 @@ async def bulk_replace_transitions(
     tracker_id: int = Query(),
     role_id: int = Query(),
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[TransitionOut]:
     """Replace all transitions for tracker+role (admin only)."""
     transitions = await _service.bulk_replace_transitions(db, tracker_id, role_id, data.transitions)
@@ -98,7 +98,7 @@ async def list_field_rules(
     tracker_id: int | None = Query(default=None),
     role_id: int | None = Query(default=None),
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> list[FieldRuleOut]:
     """List workflow field rules (admin only)."""
     rules = await _service.list_field_rules(db, tracker_id=tracker_id, role_id=role_id)
@@ -113,7 +113,7 @@ async def list_field_rules(
 async def create_field_rule(
     data: FieldRuleCreate,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> FieldRuleOut:
     """Create a workflow field rule (admin only)."""
     rule = await _service.create_field_rule(db, data)
@@ -127,7 +127,7 @@ async def create_field_rule(
 async def delete_field_rule(
     rule_id: int,
     current_user: User = Depends(require_admin_api),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = DB_SESSION,
 ) -> None:
     """Delete a workflow field rule (admin only)."""
     await _service.delete_field_rule(db, rule_id)

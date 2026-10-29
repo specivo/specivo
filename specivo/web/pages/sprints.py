@@ -5,13 +5,13 @@ from __future__ import annotations
 from datetime import date
 from typing import TYPE_CHECKING, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssueStatus
@@ -35,7 +35,7 @@ _issue_svc = IssueService()
 async def sprints_list(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the sprints list page showing all sprints grouped by status."""
     user_obj = await get_current_user_optional(request, db)
@@ -113,7 +113,7 @@ async def sprints_list(
 async def sprint_backlog(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
 ) -> Response:
@@ -233,7 +233,7 @@ async def sprint_board(
     project_key: str,
     sprint_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     board_per_col: int = Query(10, ge=1, le=50),
 ) -> Response:
     """Render the sprint board page."""
@@ -319,7 +319,7 @@ async def sprint_edit(
     project_key: str,
     sprint_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the sprint edit page."""
     user_obj = await get_current_user_optional(request, db)
@@ -391,7 +391,7 @@ async def sprint_edit(
 async def sprint_analytics(
     project_key: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render the sprint analytics page with velocity charts and history."""
     user_obj = await get_current_user_optional(request, db)
@@ -517,7 +517,7 @@ async def sprint_detail(
     project_key: str,
     sprint_id: int,
     request: Request,
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
 ) -> Response:
     """Render a single sprint's detail page: header, metrics, and issue list."""
     user_obj = await get_current_user_optional(request, db)

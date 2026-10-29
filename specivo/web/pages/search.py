@@ -10,7 +10,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_SEARCH_OFFSET
-from specivo.core.database import get_db
+from specivo.core.database import DB_SESSION
 from specivo.core.rate_limit import enforce_rate_limit
 from specivo.core.security import (
     ANONYMOUS_SEARCH_MAX_LIMIT,
@@ -47,8 +47,8 @@ _audit_svc = SecurityAuditService()
 async def search_page(
     request: Request,
     response: Response,
-    reader: object | None = Depends(get_web_reader),  # noqa: B008
-    db: AsyncSession = Depends(get_db),  # noqa: B008
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
     q: str = Query(""),
     mode: str = Query("hybrid"),
     scope: str = Query("all"),
