@@ -1,7 +1,7 @@
 # Disposable OpenID Connect identity provider (Keycloak) for the SSO tests.
 #
 # Test fixture, not part of running Specivo. Every credential in this file and
-# in the seeds under tests/fixtures/sso/ is a fixed, public test value; nothing
+# in the seeds next to it (tests/fixtures/sso/) is a fixed, public test value; nothing
 # here protects anything. All state lives in RAM and is gone after a down.
 #
 #   make sso-idp-up              # start Keycloak
@@ -39,7 +39,7 @@ services:
       # The H2 dev database; the image runs as uid 1000.
       - /opt/keycloak/data:uid=1000,gid=0,mode=0770
     volumes:
-      - ./tests/fixtures/sso/keycloak/specivo-test-realm.json:/opt/keycloak/data/import/specivo-test-realm.json:ro
+      - ./keycloak/specivo-test-realm.json:/opt/keycloak/data/import/specivo-test-realm.json:ro
     healthcheck:
       # The image has no curl/wget. The management port (9000) is not published.
       test:

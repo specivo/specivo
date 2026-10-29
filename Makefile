@@ -303,8 +303,8 @@ import-data:  ## Import a bundle (SOURCE=bundle ARGS='--path /import/x.zip --dry
 
 # --- SSO test IdP (SSO integration/E2E tests only) ---------------------------
 # A disposable Keycloak. All state is
-# in RAM and every credential is a fixed test value (docker-compose.sso-test.yml).
-SSO_IDP_COMPOSE := docker compose -f docker-compose.sso-test.yml
+# in RAM and every credential is a fixed test value (tests/fixtures/sso/docker-compose.yml).
+SSO_IDP_COMPOSE := docker compose -f tests/fixtures/sso/docker-compose.yml
 
 sso-idp-up:  ## Start the disposable Keycloak test IdP on :8033 (checkout only)
 	$(SSO_IDP_COMPOSE) up -d --wait

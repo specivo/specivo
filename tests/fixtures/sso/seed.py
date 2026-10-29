@@ -1,4 +1,4 @@
-"""What the disposable IdP in ``docker-compose.sso-test.yml`` are seeded with.
+"""What the disposable IdP in ``tests/fixtures/sso/docker-compose.yml`` are seeded with.
 
 The Keycloak realm (``keycloak/specivo-test-realm.json``) carries this
 content. Tests import the values from here instead of repeating them.

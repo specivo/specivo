@@ -42,7 +42,7 @@ from specivo.testing.sso import sso_login, sso_provider  # noqa: F401
 
 _INSTALLED_PLUGINS = os.environ.get("INSTALLED_PLUGINS", "[]")
 
-# The disposable OIDC IdP (docker-compose.sso-test.yml) is also started on
+# The disposable OIDC IdP (tests/fixtures/sso/docker-compose.yml) is also started on
 # demand. Its discovery document is fetched once at collection time, and only
 # when an ``sso_idp`` test was collected.
 _SSO_TEST_ISSUER = os.environ.get("SSO_TEST_ISSUER", "http://localhost:8033/realms/specivo-test")
