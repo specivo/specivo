@@ -212,6 +212,7 @@ class TestFullBundle:
     async def test_issue_fields(self, db_session, imported):
         child = await _issue(db_session, "Session cookie is not cleared")
         assert child.estimated_hours == Decimal("2.5")
+        assert child.remaining_estimate == Decimal("1.25")
         assert child.done_ratio == 50
         assert (child.start_date, child.due_date) == (date(2024, 2, 1), date(2024, 2, 15))
 

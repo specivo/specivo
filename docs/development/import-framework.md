@@ -133,6 +133,18 @@ full import consists of. The pipeline itself
 (`ImportPipeline.register` / `.run`) knows nothing about any source, issues, or
 wikis; it only knows phases, handlers, and transactions.
 
+## Issue fields outside IssueCreate
+
+`issue_loader.py` creates every issue through `IssueService.create`, so an
+imported issue goes through the same checks as one made in the UI. Two kinds
+of value are written after it, on the row the service returned: the source's
+timestamps (`backdate`), and `remaining_estimate`, which `IssueCreate` does not
+take because nothing in Specivo edits it yet. It is the time left as the source
+tracked it (Jira's remaining estimate, for example) and is stored as given;
+`estimated_hours` stays the estimate Specivo shows, sums and journals. The
+remaining estimate's own history is not imported: a source like Jira lowers it
+on every worklog, and Specivo keeps no history for that column.
+
 ## The id map and idempotency
 
 `ImportIdMap` (`specivo/importers/core/id_map.py`) wraps the `import_id_map`

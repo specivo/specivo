@@ -69,10 +69,23 @@
       ],
       "description": "A decimal number. A string keeps the exact value."
     },
-    "optionalDecimal": {
+    "nonNegativeDecimal": {
       "anyOf": [
         {
-          "$ref": "#/$defs/decimal"
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9]+(\\.[0-9]+)?$"
+        }
+      ],
+      "description": "A decimal number of zero or more. A string keeps the exact value."
+    },
+    "optionalNonNegativeDecimal": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/nonNegativeDecimal"
         },
         {
           "type": "null"

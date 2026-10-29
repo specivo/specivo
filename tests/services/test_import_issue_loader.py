@@ -175,6 +175,7 @@ class TestIssues:
                         start_date=date(2020, 3, 1),
                         due_date=date(2020, 4, 1),
                         estimated_hours=Decimal("7.5"),
+                        remaining_estimate=Decimal("2.25"),
                         done_ratio=40,
                     )
                 ]
@@ -187,7 +188,27 @@ class TestIssues:
         assert issue.start_date == date(2020, 3, 1)
         assert issue.due_date == date(2020, 4, 1)
         assert issue.estimated_hours == Decimal("7.50")
+        assert issue.remaining_estimate == Decimal("2.25")
         assert issue.done_ratio == 40
+
+    async def test_no_remaining_estimate_leaves_it_empty(self, db_session, loaded):
+        ctx = await loaded(_adapter(issues=[_issue(estimated_hours=Decimal("3"))]))
+        await load_issues(ctx)
+
+        issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
+        issue = await db_session.get(Issue, issue_id)
+        assert issue.estimated_hours == Decimal("3.00")
+        assert issue.remaining_estimate is None
+
+    async def test_a_remaining_estimate_alone_is_kept(self, db_session, loaded):
+        """A source may track time left without an original estimate."""
+        ctx = await loaded(_adapter(issues=[_issue(remaining_estimate=Decimal("0"))]))
+        await load_issues(ctx)
+
+        issue_id = await ctx.id_map.get(db_session, EntityType.ISSUE, "100")
+        issue = await db_session.get(Issue, issue_id)
+        assert issue.estimated_hours is None
+        assert issue.remaining_estimate == Decimal("0")
 
     async def test_private_issue_stays_private(self, db_session, loaded):
         ctx = await loaded(_adapter(issues=[_issue(is_private=True)]))

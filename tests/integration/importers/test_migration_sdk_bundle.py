@@ -72,6 +72,7 @@ class TestAnSdkBundle:
         assert issue.description == f"Split into {key}-2; see [[Home]]. Log: [the log](deploy.log)."
         assert issue.created_at == datetime(2024, 2, 1, 10, 0, tzinfo=UTC)
         assert issue.estimated_hours == Decimal("2.5")
+        assert issue.remaining_estimate == Decimal("0.75")
         assert (await db_session.get(User, issue.author_id)).login == "sdk_bob"
         bob = await _user(db_session, "sdk_bob")
         assert issue.issue_metadata == {"sdk_severity": "High", "sdk_reviewer": bob.id}
