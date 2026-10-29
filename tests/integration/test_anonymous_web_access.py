@@ -38,6 +38,7 @@ from specivo.core.constants import JWT_ALGORITHM
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
 from specivo.models.journal import CF_USER, CF_VERSION, Journal, JournalDetail
+from specivo.models.member import Member
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.services.anonymous_access_service import (
@@ -617,20 +618,17 @@ async def test_imported_history_names_no_private_issue_or_project(
     assert 'sp-change-label">Parent<' not in resp.text
 
 
-async def test_imported_custom_field_history_follows_the_anonymous_rules(
+async def test_imported_custom_field_history_names_no_private_version(
     client: AsyncClient, db_session: AsyncSession, live: World
 ) -> None:
-    """A version of a private project goes unnamed; a person is named by display name, never login."""
+    """A version of a project the visitor cannot open goes unnamed."""
     secret = VersionFactory.build(project_id=live.private.id, name="Anon secret release", sharing="system")
     db_session.add(secret)
     journal = Journal(issue_id=live.public_issue.id, project_id=live.both.id, user_id=live.member.id, sequence=98)
     db_session.add(journal)
     await db_session.flush()
-    db_session.add_all(
-        [
-            JournalDetail(journal_id=journal.id, property=CF_VERSION, prop_key="found_in", new_value=str(secret.id)),
-            JournalDetail(journal_id=journal.id, property=CF_USER, prop_key="reviewer", new_value=str(live.member.id)),
-        ]
+    db_session.add(
+        JournalDetail(journal_id=journal.id, property=CF_VERSION, prop_key="found_in", new_value=str(secret.id))
     )
     await db_session.commit()
 
@@ -639,8 +637,44 @@ async def test_imported_custom_field_history_follows_the_anonymous_rules(
     text = " ".join(resp.text.split())
     assert "Anon secret release" not in text
     assert f'<span class="sp-change-new">{secret.id}</span>' in text
-    assert f'<span class="sp-change-new">{live.member.display_name}</span>' in text
-    assert f'<span class="sp-change-new">{live.member.login}</span>' not in text
+
+
+@pytest.mark.parametrize("prop,prop_key", [("attr", "assigned_to_id"), (CF_USER, "reviewer")])
+async def test_history_names_only_people_the_visitor_may_see(
+    client: AsyncClient, db_session: AsyncSession, live: World, prop: str, prop_key: str
+) -> None:
+    """A member of a project the visitor can open is named, by display name; anyone else is not.
+
+    The anonymous user sees the members of the projects it can open, as the
+    users-visibility rule says; a person known only to a private project, or
+    to none, keeps their name to themselves.
+    """
+    visible = UserFactory.build(login="anonweb_visible", display_name="Anonweb Visible", status="active")
+    outsider = UserFactory.build(login="anonweb_outsider", display_name="Anonweb Outsider", status="active")
+    loner = UserFactory.build(login="anonweb_loner", display_name="Anonweb Loner", status="active")
+    db_session.add_all([visible, outsider, loner])
+    await db_session.flush()
+    db_session.add_all(
+        [Member(user_id=visible.id, project_id=live.both.id), Member(user_id=outsider.id, project_id=live.private.id)]
+    )
+    journal = Journal(issue_id=live.public_issue.id, project_id=live.both.id, user_id=live.member.id, sequence=97)
+    db_session.add(journal)
+    await db_session.flush()
+    db_session.add_all(
+        JournalDetail(journal_id=journal.id, property=prop, prop_key=prop_key, old_value=str(old), new_value=str(new))
+        for old, new in ((outsider.id, visible.id), (loner.id, visible.id))
+    )
+    await db_session.commit()
+
+    resp = await client.get(_pages(live)["issue"])
+    assert resp.status_code == 200
+    text = " ".join(resp.text.split())
+    assert f'<span class="sp-change-new">{visible.display_name}</span>' in text
+    assert "anonweb_visible" not in text
+    for hidden in (outsider, loner):
+        assert hidden.display_name not in text
+        assert hidden.login not in text
+        assert f'<span class="sp-change-old">{hidden.id}</span>' in text
 
 
 async def test_a_private_journal_never_renders(client: AsyncClient, live: World) -> None:
