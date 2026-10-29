@@ -536,3 +536,64 @@ async def check_permission(
             logger.warning("Security audit logging failed", exc_info=True)
 
     return granted
+
+
+async def projects_granting(
+    session: AsyncSession,
+    user: User,
+    projects: Iterable[Project],
+    permission: str | Permission,
+) -> set[int]:
+    """Return the ids of *projects* in which ``check_permission`` would grant *permission* to *user*.
+
+    The set-based form of ``check_permission`` for listings that would
+    otherwise check project by project: the same rules (anonymous ceiling,
+    API key project limit, admin bypass, membership roles, else the Non member
+    and anonymous roles of a public project) in one membership query.
+    """
+    projects = list(projects)
+    if user.is_anonymous and permission not in ANONYMOUS_PERMISSION_CEILING:
+        return set()
+    reachable = [p for p in projects if project_in_scope(p.id)]
+    if user.is_admin:
+        return {p.id for p in reachable if admin_reaches(user, p.id)}
+    if not reachable:
+        return set()
+
+    from specivo.services.anonymous_access_service import is_anonymous_access_enabled
+
+    switch_on = await is_anonymous_access_enabled(session)
+
+    def anonymous_grants(project: Project) -> bool:
+        return (
+            switch_on
+            and project.is_public
+            and project.status == PROJECT_STATUS_ACTIVE
+            and str(permission) in (frozenset(project.anonymous_permissions or ()) & _CEILING_VALUES)
+        )
+
+    if user.is_anonymous:
+        return {p.id for p in reachable if anonymous_grants(p)}
+
+    rows = await session.execute(
+        select(Member.project_id, Role.permissions)
+        .select_from(Member)
+        .outerjoin(MemberRole, MemberRole.member_id == Member.id)
+        .outerjoin(Role, Role.id == MemberRole.role_id)
+        .where(Member.project_id.in_([p.id for p in reachable]), member_principal_clause(user.id))
+    )
+    members: set[int] = set()
+    granted: set[int] = set()
+    for project_id, permissions in rows:
+        members.add(project_id)
+        if permissions is not None and role_grants(permissions, permission):
+            granted.add(project_id)
+
+    non_member = await get_non_member_role(session)
+    non_member_grants = non_member is not None and non_member.grants(permission)
+    for project in reachable:
+        if project.id in members or not project.is_public:
+            continue
+        if non_member_grants or anonymous_grants(project):
+            granted.add(project.id)
+    return granted

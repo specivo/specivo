@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import get_db
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
+from specivo.core.i18n import gettext as _
 from specivo.core.security import get_current_user
 from specivo.models.user import User
 from specivo.schemas.attachment import AttachmentOut, AttachmentUpdateSchema
@@ -69,6 +70,11 @@ async def upload_attachment(
     ``container_type``: ``"Issue"``, ``"WikiPage"``, or ``"Journal"``
     ``container_id``: the ID of the target entity
 
+    The container must be one you may open (404 otherwise) and change
+    (403 otherwise): ``edit_issues`` or ``add_issue_notes`` on an issue, or
+    ``add_issues`` on one you created; ``manage_wiki`` on a wiki page;
+    ``edit_notes``, or ``edit_own_notes`` on your own comment.
+
     A file attached to an issue is recorded in the issue's history. Pass
     ``journal_id`` to record it with your own edit or comment it came with
     (the comment's id), or with the earlier files of the same batch (the
@@ -84,6 +90,8 @@ async def upload_attachment(
         )
 
     await _check_container_access(db, current_user, container_type, container_id)
+    if not await _service.can_attach_to_container(db, current_user, container_type, container_id):
+        raise PermissionDeniedError(_("You do not have permission to add files here."))
 
     try:
         uploaded = await _service.upload(

@@ -814,7 +814,23 @@ class IssueService:
         notes: str | None = None,
         api_key_id: int | None = None,
     ) -> Issue:
+        """Apply a partial update to an issue; see :meth:`update_with_journal`."""
+        updated, _journal = await self.update_with_journal(session, issue, data, user, notes, api_key_id)
+        return updated
+
+    async def update_with_journal(
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        data: IssueUpdate,
+        user: User,
+        notes: str | None = None,
+        api_key_id: int | None = None,
+    ) -> tuple[Issue, Journal | None]:
         """Apply a partial update to an issue with optimistic locking.
+
+        Returns the issue and the history entry the update created, or None
+        when it changed nothing and carried no notes.
 
         ``data.lock_version`` must match the current ``issue.lock_version``
         in the database; otherwise ``ConflictError`` (409) is raised with the
@@ -932,7 +948,7 @@ class IssueService:
         new_attrs: dict = {attr: getattr(issue, attr) for attr, _ in _JOURNALIZED_ATTRS}
 
         # Record journal entry (returns None when nothing changed and no notes)
-        await self._journal_service.record_change(
+        journal = await self._journal_service.record_change(
             session=session,
             issue=issue,
             user=user,
@@ -954,7 +970,7 @@ class IssueService:
             issue.display_key,
             user.id,
         )
-        return issue
+        return issue, journal
 
     async def move(
         self,

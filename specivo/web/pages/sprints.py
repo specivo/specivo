@@ -56,14 +56,18 @@ async def sprints_list(
     planned_sprints = [s for s in all_sprints if s.status == "planned"]
     completed_sprints = [s for s in all_sprints if s.status == "completed"]
 
+    # Velocity snapshots as this reader may see them (hidden issues left out)
+    velocity = await _sprint_svc.velocity_for(db, completed_sprints, user)
+
     # Get issue counts per sprint
     sprint_issue_counts: dict[int, dict] = {}
     for sprint in all_sprints:
         total = await _sprint_svc.sprint_issue_count(db, sprint.id, user)
         # For completed sprints, use velocity_snapshot
-        if sprint.status == "completed" and sprint.velocity_snapshot:
-            completed = sprint.velocity_snapshot.get("completed_issues", 0)
-            committed = sprint.velocity_snapshot.get("total_issues", total)
+        snap = velocity.get(sprint.id)
+        if sprint.status == "completed" and snap:
+            completed = snap["completed_issues"]
+            committed = snap["total_issues"]
         else:
             # For active/planned, count done issues
             board = await _sprint_svc.board_data(db, sprint, user)
@@ -77,10 +81,7 @@ async def sprints_list(
         }
 
     # Compute average velocity from completed sprints
-    velocities = []
-    for s in completed_sprints:
-        if s.velocity_snapshot:
-            velocities.append(s.velocity_snapshot.get("completed_issues", 0))
+    velocities = [v["completed_issues"] for v in velocity.values() if v is not None]
     avg_velocity = round(sum(velocities) / len(velocities), 1) if velocities else 0
 
     can_manage = user.is_admin or await check_permission(user, project.id, Permission.MANAGE_SPRINTS, db)
@@ -188,15 +189,16 @@ async def sprint_backlog(
     all_available_sprints.extend(planned_sprints)
 
     # Velocity data for completed sprints
+    velocity = await _sprint_svc.velocity_for(db, completed_sprints, user)
     completed_sprints_with_velocity = [
         {
             "name": s.name,
-            "total_issues": (s.velocity_snapshot or {}).get("total_issues", 0),
-            "completed_issues": (s.velocity_snapshot or {}).get("completed_issues", 0),
+            "total_issues": (velocity.get(s.id) or {}).get("total_issues", 0),
+            "completed_issues": (velocity.get(s.id) or {}).get("completed_issues", 0),
         }
         for s in completed_sprints
     ]
-    average_velocity = await _sprint_svc.average_velocity(db, project.id)
+    average_velocity = await _sprint_svc.average_velocity(db, project.id, user)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -379,6 +381,7 @@ async def sprint_edit(
             "issues_in_sprint": issues_in_sprint,
             "completed_issue_count": completed_issue_count,
             "total_issue_count": total_issue_count,
+            "velocity": (await _sprint_svc.velocity_for(db, [sprint], user))[sprint.id],
             "members": members,
         },
     )
@@ -414,8 +417,9 @@ async def sprint_analytics(
     total_duration_days = 0
     sprints_with_duration = 0
 
+    velocity = await _sprint_svc.velocity_for(db, completed_sprints, user)
     for sprint in completed_sprints:
-        snap = sprint.velocity_snapshot or {}
+        snap = velocity.get(sprint.id) or {}
         committed = snap.get("total_issues", 0)
         completed = snap.get("completed_issues", 0)
 
@@ -574,7 +578,7 @@ async def sprint_detail(
         days_left = max(0, (sprint.end_date - date.today()).days)
 
     # Average velocity across prior completed sprints in this project, for context.
-    avg_velocity = await _sprint_svc.average_velocity(db, project.id)
+    avg_velocity = await _sprint_svc.average_velocity(db, project.id, user)
 
     # Group issues by status category for the issue list (To Do / In Progress / Done).
     grouped: dict[str, list[Issue]] = {"todo": [], "active": [], "done": []}

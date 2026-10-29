@@ -7111,3 +7111,7 @@ msgstr "ไม่พบเซสชันของเอเจนต์"
 #: specivo/services/journal_service.py
 msgid "The history entry does not belong to this issue."
 msgstr "รายการประวัตินี้ไม่ได้อยู่ในงานนี้"
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to add files here."
+msgstr "คุณไม่มีสิทธิ์เพิ่มไฟล์ที่นี่"

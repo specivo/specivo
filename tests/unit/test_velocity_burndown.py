@@ -210,6 +210,7 @@ async def test_velocity_across_sprints(
     db_session: AsyncSession,
     project: Project,
     actor: User,
+    admin: User,
     lookups: tuple[Tracker, IssueStatus, IssueStatus, IssuePriority],
 ):
     """Complete 3 sprints with different issue counts. Verify average velocity."""
@@ -261,7 +262,7 @@ async def test_velocity_across_sprints(
     await db_session.commit()
 
     # Call average_velocity — new method that should exist on SprintService
-    avg = await _svc.average_velocity(db_session, project.id)
+    avg = await _svc.average_velocity(db_session, project.id, admin)
 
     # Average completed: (2 + 4 + 3) / 3 = 3.0
     assert avg == Decimal("3")

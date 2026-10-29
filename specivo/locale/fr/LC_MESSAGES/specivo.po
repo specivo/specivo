@@ -7275,3 +7275,7 @@ msgstr "Session d'agent introuvable"
 #: specivo/services/journal_service.py
 msgid "The history entry does not belong to this issue."
 msgstr "Cette entrée d'historique n'appartient pas à ce ticket."
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to add files here."
+msgstr "Vous n'avez pas l'autorisation d'ajouter des fichiers ici."

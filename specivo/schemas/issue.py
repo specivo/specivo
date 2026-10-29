@@ -169,6 +169,16 @@ class IssueOut(BaseModel):
     updated_at: datetime
 
 
+class IssueUpdateOut(IssueOut):
+    """An updated issue, with the history entry the update created.
+
+    ``journal_id`` is null when the update changed nothing. Pass it to
+    ``POST /attachments/`` as ``journal_id`` to record files with the edit.
+    """
+
+    journal_id: int | None = None
+
+
 class IssueListResponse(PaginatedResponse[IssueOut]):
     """Paginated issue list response."""
 
