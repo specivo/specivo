@@ -57,7 +57,11 @@
       "$ref": "common.schema.json#/$defs/optionalDate"
     },
     "estimated_hours": {
-      "$ref": "common.schema.json#/$defs/optionalDecimal"
+      "$ref": "common.schema.json#/$defs/optionalNonNegativeDecimal"
+    },
+    "remaining_estimate": {
+      "$ref": "common.schema.json#/$defs/optionalNonNegativeDecimal",
+      "description": "Hours of work left, as the source tracks it."
     },
     "done_ratio": {
       "type": "integer",

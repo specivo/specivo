@@ -168,6 +168,20 @@ class TestRecords:
         report = await _validate(root)
         assert report.ok and report.records["users"] == 1
 
+    @pytest.mark.parametrize("value", ["3.25", 3.25, "0", 0])
+    async def test_a_remaining_estimate_is_accepted(self, tmp_path, value):
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], issues=[issue("i1", remaining_estimate=value)])
+        report = await _validate(root)
+        assert report.ok, report.format_text()
+
+    @pytest.mark.parametrize("field", ["estimated_hours", "remaining_estimate"])
+    @pytest.mark.parametrize("value", ["-1", -0.5, "1e3", "", "1.2.3"])
+    async def test_an_estimate_is_a_non_negative_decimal(self, tmp_path, field, value):
+        root = write_bundle(tmp_path / "b", projects=[project("p1")], issues=[issue("i1", **{field: value})])
+        report = await _validate(root)
+        assert _codes(report) == [("issues.jsonl", 1, "schema")]
+        assert report.problems[0].message.startswith(f"/{field}:")
+
 
 class TestReferences:
     async def test_an_unresolved_ref_names_its_line_and_field(self, tmp_path):
@@ -757,6 +771,21 @@ class TestTheAdapterReadsBack:
             await adapter.close()
         assert (p1, p2) == (["r1"], ["r2"])
 
+    async def test_a_remaining_estimate_decodes_to_ir(self, tmp_path):
+        root = write_bundle(
+            tmp_path / "b",
+            projects=[project("p1")],
+            issues=[issue("i1", remaining_estimate="1.75"), issue("i2", remaining_estimate=4), issue("i3")],
+        )
+        adapter = await self._connected(root)
+        try:
+            issues = {i.source_ref: i async for i in adapter.extract_issues("p1")}
+        finally:
+            await adapter.close()
+        assert str(issues["i1"].remaining_estimate) == "1.75"
+        assert str(issues["i2"].remaining_estimate) == "4"
+        assert issues["i3"].remaining_estimate is None
+
     async def test_records_decode_to_ir(self):
         adapter = await self._connected(FULL)
         try:
@@ -773,6 +802,7 @@ class TestTheAdapterReadsBack:
         assert all(isinstance(u, IRUser) for u in users)
         assert isinstance(issues["web-1"], IRIssue)
         assert str(issues["web-2"].estimated_hours) == "2.5"
+        assert str(issues["web-2"].remaining_estimate) == "1.25"
         assert issues["web-1"].custom_values[1].value == "u-carol"
         assert {a.source_ref for a in attachments} == {"a-log", "a-notes"}
         assert all(isinstance(a, IRAttachment) for a in attachments)

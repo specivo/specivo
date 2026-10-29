@@ -229,6 +229,7 @@ class Snapshot:
             i.start_date,
             i.due_date,
             i.estimated_hours,
+            i.remaining_estimate,
             i.done_ratio,
             i.is_private,
             self._metadata(i.issue_metadata),

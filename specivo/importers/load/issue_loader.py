@@ -175,6 +175,12 @@ async def _create_issue(ctx: PhaseContext, project: Project, ir: IRIssue) -> Iss
         ctx.warn("Issue could not be created; skipped", issue=ir.source_ref, reason=str(exc))
         return None
 
+    if ir.remaining_estimate is not None:
+        # Not part of IssueCreate: nothing in Specivo edits it, so it is kept
+        # as the source left it. Flushed before the timestamps are restored.
+        issue.remaining_estimate = ir.remaining_estimate
+        await ctx.session.flush()
+
     await backdate(
         ctx.session,
         Issue,

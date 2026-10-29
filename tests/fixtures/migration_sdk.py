@@ -127,6 +127,7 @@ def write_sdk_bundle(target: Path) -> Path:
                 category_ref="c1",
                 fixed_version_ref="v1",
                 estimated_hours=Decimal("2.5"),
+                remaining_estimate=Decimal("0.75"),
                 custom_values=[
                     sdk.CustomValue(field_ref="cf1", key="sdk_severity", value="High"),
                     sdk.CustomValue(field_ref="cf2", key="sdk_reviewer", value="u2", value_kind="user_ref"),

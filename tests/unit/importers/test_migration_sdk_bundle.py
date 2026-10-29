@@ -52,6 +52,7 @@ class TestWhatTheSdkWrites:
             # Parents first, whatever order the writer was given.
             assert [i.source_ref for i in issues] == ["i1", "i2"]
             assert str(issues[0].estimated_hours) == "2.5"
+            assert str(issues[0].remaining_estimate) == "0.75"
             pages = [p async for p in adapter.extract_wiki_pages("p1")]
             assert [len(p.versions) for p in pages] == [2, 1]
         finally:

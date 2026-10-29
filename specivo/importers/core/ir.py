@@ -400,6 +400,7 @@ class IRIssue:
     start_date: date | None = None
     due_date: date | None = None
     estimated_hours: Decimal | None = None
+    remaining_estimate: Decimal | None = None
     done_ratio: int = 0
     is_private: bool = False
     custom_values: list[IRCustomValue] = field(default_factory=list)
