@@ -27,7 +27,12 @@ from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
 from specivo.services.anonymous_user_service import refuse_anonymous_user
 from specivo.services.api_key_scope import is_global_admin, project_in_scope, scope_clause
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
-from specivo.services.permission_service import anonymous_role, member_principal_clause
+from specivo.services.permission_service import (
+    Permission,
+    anonymous_role,
+    member_principal_clause,
+    projects_granting,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -972,7 +977,8 @@ class ProjectService:
           may see (``IssueService.visible_issues_clause``)
         - member_count — distinct **people** with access, direct or via a group
         - group_count — how many of the memberships are held by a group
-        - wiki_page_count
+        - wiki_page_count — 0 where *reader* may not read the wiki (``view_wiki``);
+          pages in the trash are not counted
         - modules (dict of module_name -> bool)
         - members (list of dicts with user_id, display_name, avatar_url)
 
@@ -1086,11 +1092,13 @@ class ProjectService:
         for group_row in (await session.execute(group_stmt)).all():
             stats[group_row.project_id]["group_count"] = group_row.group_count
 
-        # --- Wiki page counts ---
+        # --- Wiki page counts, where *reader* may read the wiki ---
+        listed = (await session.execute(select(Project).where(Project.id.in_(project_ids)))).scalars().all()
+        wiki_readable = await projects_granting(session, reader, listed, Permission.VIEW_WIKI)
         wiki_stmt = (
             select(Wiki.project_id, func.count(WikiPage.id).label("page_count"))
             .join(WikiPage, Wiki.id == WikiPage.wiki_id)
-            .where(Wiki.project_id.in_(project_ids))
+            .where(Wiki.project_id.in_(sorted(wiki_readable)), WikiPage.deleted_at.is_(None))
             .group_by(Wiki.project_id)
         )
         wiki_rows = (await session.execute(wiki_stmt)).all()

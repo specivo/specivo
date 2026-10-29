@@ -7282,3 +7282,7 @@ msgstr "Sesión de agente no encontrada"
 #: specivo/services/journal_service.py
 msgid "The history entry does not belong to this issue."
 msgstr "La entrada del historial no pertenece a esta incidencia."
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to add files here."
+msgstr "No tienes permiso para añadir archivos aquí."

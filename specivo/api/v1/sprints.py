@@ -9,6 +9,7 @@ from specivo.core.database import get_db
 from specivo.core.exceptions import NotFoundError, PermissionDeniedError
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
+from specivo.models.sprint import Sprint
 from specivo.models.user import User
 from specivo.schemas.sprint import BurndownOut, SprintCompleteRequest, SprintCreate, SprintOut, SprintUpdate
 from specivo.services.permission_service import Permission, check_permission
@@ -58,6 +59,20 @@ async def _require_view_issues(
         raise PermissionDeniedError("You do not have permission to view issues")
 
 
+async def _sprints_out(db: AsyncSession, sprints: list[Sprint], reader: User) -> list[SprintOut]:
+    """Serialize *sprints* with each velocity snapshot as *reader* may see it.
+
+    The stored snapshot keeps the ids of every issue it counted, hidden ones
+    included; readers get only the counts of the issues they may see
+    (``SprintService.velocity_for``), never the ids.
+    """
+    velocity = await _sprint_service.velocity_for(db, sprints, reader)
+    return [
+        SprintOut.model_validate(sprint).model_copy(update={"velocity_snapshot": velocity[sprint.id]})
+        for sprint in sprints
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -77,7 +92,7 @@ async def create_sprint(
     project = await _get_project(project_key, current_user, db)
     await _require_manage_sprints(project, current_user, db)
     sprint = await _sprint_service.create(db, project, data)
-    return SprintOut.model_validate(sprint)
+    return (await _sprints_out(db, [sprint], current_user))[0]
 
 
 @router.get(
@@ -92,7 +107,7 @@ async def list_sprints(
     project = await _get_project(project_key, current_user, db)
     await _require_view_issues(project, current_user, db)
     sprints = await _sprint_service.list_for_project(db, project.id)
-    return [SprintOut.model_validate(s) for s in sprints]
+    return await _sprints_out(db, sprints, current_user)
 
 
 @router.get(
@@ -171,7 +186,7 @@ async def get_sprint(
     sprint = await _sprint_service.get_by_id(db, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
-    return SprintOut.model_validate(sprint)
+    return (await _sprints_out(db, [sprint], current_user))[0]
 
 
 @router.patch(
@@ -191,7 +206,7 @@ async def update_sprint(
     if sprint.project_id != project.id:
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
     sprint = await _sprint_service.update(db, sprint, data)
-    return SprintOut.model_validate(sprint)
+    return (await _sprints_out(db, [sprint], current_user))[0]
 
 
 @router.delete(
@@ -228,7 +243,7 @@ async def start_sprint(
     if sprint.project_id != project.id:
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
     sprint = await _sprint_service.start_sprint(db, sprint)
-    return SprintOut.model_validate(sprint)
+    return (await _sprints_out(db, [sprint], current_user))[0]
 
 
 @router.post(
@@ -249,7 +264,7 @@ async def complete_sprint(
         raise NotFoundError(f"Sprint {sprint_id} not found in project '{project.key}'")
     move_to = data.move_incomplete_to_sprint_id if data else None
     sprint = await _sprint_service.complete_sprint(db, sprint, move_to_sprint_id=move_to)
-    return SprintOut.model_validate(sprint)
+    return (await _sprints_out(db, [sprint], current_user))[0]
 
 
 @router.get(

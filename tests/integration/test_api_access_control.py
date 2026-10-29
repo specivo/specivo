@@ -7,16 +7,22 @@ agent costs, and metadata endpoints.
 
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.api.v1.agent_costs import create_billing_rate, get_cost_summary, list_billing_rates
+from specivo.core.exceptions import NotFoundError
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
 from specivo.models.role import Role
 from specivo.models.user import User
+from specivo.schemas.agent_cost import BillingRateCreate
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, UserFactory
@@ -251,26 +257,27 @@ async def test_metadata_schemas_404_for_non_member(client: AsyncClient, private_
 
 
 # ---------------------------------------------------------------------------
-# Agent Costs API
+# Agent costs and billing rates
 # ---------------------------------------------------------------------------
+# Their router is mounted by an edition plugin, not by core, so a request to
+# these URLs would be a 404 whatever the access rules; the route functions are
+# called directly instead. The permission rules for a public project are in
+# ``test_access_review_followups``.
 
 
 @pytest.mark.asyncio
-async def test_agent_costs_404_for_non_member(client: AsyncClient, private_project: Project, outsider_token: str):
-    resp = await client.get(
-        f"/api/v1/projects/{private_project.key}/agent-costs/",
-        headers={"Authorization": f"Bearer {outsider_token}"},
-    )
-    assert resp.status_code == 404
+async def test_agent_costs_404_for_non_member(db_session: AsyncSession, private_project: Project, outsider: User):
+    with pytest.raises(NotFoundError):
+        await get_cost_summary(private_project.key, date_from=None, date_to=None, current_user=outsider, db=db_session)
 
 
 @pytest.mark.asyncio
-async def test_billing_rates_404_for_non_member(client: AsyncClient, private_project: Project, outsider_token: str):
-    resp = await client.get(
-        f"/api/v1/projects/{private_project.key}/billing-rates/",
-        headers={"Authorization": f"Bearer {outsider_token}"},
-    )
-    assert resp.status_code == 404
+async def test_billing_rates_404_for_non_member(db_session: AsyncSession, private_project: Project, outsider: User):
+    rate = BillingRateCreate(user_id=None, hourly_rate=Decimal("50"), currency="USD", effective_from=date(2026, 1, 1))
+    with pytest.raises(NotFoundError):
+        await list_billing_rates(private_project.key, request=None, current_user=outsider, db=db_session)
+    with pytest.raises(NotFoundError):
+        await create_billing_rate(private_project.key, rate, request=None, current_user=outsider, db=db_session)
 
 
 # ---------------------------------------------------------------------------

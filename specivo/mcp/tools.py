@@ -2200,6 +2200,7 @@ async def _list_sprints(session: AsyncSession, user: User, project_key: str) -> 
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     sprints = await _sprint_svc.list_for_project(session, project.id)
+    velocity = await _sprint_svc.velocity_for(session, sprints, user)
     lines = [f"Sprints for {project.key} ({len(sprints)} total):", ""]
     for s in sprints:
         dates = ""
@@ -2208,8 +2209,9 @@ async def _list_sprints(session: AsyncSession, user: User, project_key: str) -> 
         elif s.start_date:
             dates = f"  {s.start_date} → ?"
         vel = ""
-        if s.velocity_snapshot:
-            vel = f" | velocity: {s.velocity_snapshot.get('completed_issues', '?')} completed"
+        snap = velocity.get(s.id)
+        if snap:
+            vel = f" | velocity: {snap['completed_issues']} completed"
         lines.append(f"  [{s.id}] {s.name} ({s.status}){dates}{vel}")
     if not sprints:
         lines.append("  (none)")
@@ -2316,7 +2318,7 @@ async def _complete_sprint(
         raise NotFoundError(message="Sprint not found in this project")
     sprint = await _sprint_svc.complete_sprint(session, sprint, move_incomplete_to_sprint_id)
     await session.flush()
-    vel = sprint.velocity_snapshot or {}
+    vel = (await _sprint_svc.velocity_for(session, [sprint], user))[sprint.id] or {}
     await _log_tool(
         session,
         user,

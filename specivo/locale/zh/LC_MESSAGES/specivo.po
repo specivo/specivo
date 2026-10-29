@@ -6977,3 +6977,7 @@ msgstr "未找到代理会话"
 #: specivo/services/journal_service.py
 msgid "The history entry does not belong to this issue."
 msgstr "该历史记录不属于此工作项。"
+
+#: specivo/api/v1/attachments.py
+msgid "You do not have permission to add files here."
+msgstr "你没有在此添加文件的权限。"

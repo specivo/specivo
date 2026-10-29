@@ -23,6 +23,7 @@ from specivo.schemas.issue import (
     IssueMove,
     IssueOut,
     IssueUpdate,
+    IssueUpdateOut,
     IssueWithChildren,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
@@ -471,17 +472,21 @@ async def get_issue(
     )
 
 
-@router.patch("/issues/{issue_ref}/", response_model=IssueOut)
+@router.patch("/issues/{issue_ref}/", response_model=IssueUpdateOut)
 async def update_issue(
     issue_ref: str,
     data: IssueUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> IssueOut:
+) -> IssueUpdateOut:
     """Partial update of an issue.
 
     ``lock_version`` in the request body must match the current DB value
     or the request is rejected with 409 Conflict.
+
+    The response is the updated issue plus ``journal_id``: the history entry
+    the edit created, or null when it changed nothing. Pass it as
+    ``journal_id`` to ``POST /attachments/`` to record files with the edit.
     """
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, "edit_issues", db):
@@ -491,7 +496,7 @@ async def update_issue(
         if not await check_permission(current_user, issue.project_id, "set_issues_private", db):
             raise PermissionDeniedError("You do not have permission to change issue privacy")
     old_assignee_id = issue.assigned_to_id
-    issue = await _service.update(db, issue, data, current_user)
+    issue, journal = await _service.update_with_journal(db, issue, data, current_user)
 
     # --- Notifications (from API layer, keeping services decoupled) ---
     if data.assigned_to_id is not None and data.assigned_to_id != old_assignee_id:
@@ -513,7 +518,8 @@ async def update_issue(
     # Reload with relationships
     issue = await _service.get_with_relations(db, issue.id)
     await db.commit()  # commit before response to avoid reload race condition
-    return _issue_out(issue, computed_values(await load_project_settings(db, issue.project_id)))
+    out = _issue_out(issue, computed_values(await load_project_settings(db, issue.project_id)))
+    return IssueUpdateOut(**out.model_dump(), journal_id=journal.id if journal is not None else None)
 
 
 @router.post("/issues/{issue_ref}/move/", response_model=IssueOut)
