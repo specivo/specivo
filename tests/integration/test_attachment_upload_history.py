@@ -4,8 +4,10 @@ The detail is ``attachment`` with the attachment id as ``prop_key`` and the
 file name as ``new_value``, the mirror of a deletion. An upload sent with the
 uploader's own edit or comment (``journal_id``) joins that entry, and so do
 the later files of a batch that pass the ``journal_id`` the first upload
-returned; otherwise each upload gets an entry of its own. Files attached to a
-wiki page are not issue history. A visitor without an account is shown no
+returned; otherwise each upload gets an entry of its own, and so does one
+sent with a private entry, since the file is not private. The check runs under
+the per-issue journal lock. Files attached to a wiki page are not issue
+history. A visitor without an account is shown no
 file changes.
 """
 
@@ -15,14 +17,15 @@ import io
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, Journal, JournalDetail
 from specivo.models.project import EnabledModule, Project
 from specivo.models.user import User
 from specivo.services.anonymous_access_service import set_anonymous_access_enabled, set_anonymous_permissions
+from specivo.services.journal_service import JournalService
 from specivo.services.permission_service import Permission, clear_role_cache
 from specivo.services.wiki_service import WikiService
 from tests.factories.issue import IssueFactory
@@ -202,3 +205,81 @@ async def test_a_visitor_without_an_account_sees_no_upload(
     page = await client.get(f"/issue/{issue.display_key}/")
     assert page.status_code == 200
     assert "public-upload.txt" not in page.text and "File added" not in " ".join(page.text.split())
+
+
+async def test_an_upload_with_a_private_entry_gets_its_own_public_entry(
+    admin_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The file is visible to every reader of the issue, so its history entry must be too."""
+    admin = admin_client.state.user
+    issue = await _issue(db_session, "AUHV", admin)
+    private = Journal(
+        issue_id=issue.id, project_id=issue.project_id, user_id=admin.id, notes="Internal.", is_private=True, sequence=1
+    )
+    db_session.add(private)
+    await db_session.commit()
+
+    uploaded = await _upload(admin_client, "Issue", issue.id, "shared.txt", journal_id=private.id)
+
+    assert uploaded["journal_id"] != private.id
+    entry = await db_session.get(Journal, uploaded["journal_id"], populate_existing=True)
+    assert entry.is_private is False
+    assert await _file_changes(db_session, issue) == [(entry.id, str(uploaded["id"]), None, "shared.txt")]
+
+
+async def test_joining_an_entry_takes_the_issue_lock_before_reading_it(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    author = UserFactory.build(login="auhl_author", status="active")
+    db_session.add(author)
+    await db_session.flush()
+    issue = await _issue(db_session, "AUHL", author)
+    entry = Journal(issue_id=issue.id, project_id=issue.project_id, user_id=author.id, notes="Logs.", sequence=1)
+    db_session.add(entry)
+    await db_session.commit()
+
+    calls: list[str] = []
+    svc = JournalService()
+    real_lock, real_get, real_scalar = svc._lock_issue, db_session.get, db_session.scalar
+
+    async def lock(session, issue_id):
+        calls.append("lock")
+        await real_lock(session, issue_id)
+
+    async def get(*args, **kwargs):
+        calls.append("read entry")
+        return await real_get(*args, **kwargs)
+
+    async def scalar(*args, **kwargs):
+        calls.append("read latest")
+        return await real_scalar(*args, **kwargs)
+
+    monkeypatch.setattr(svc, "_lock_issue", lock)
+    monkeypatch.setattr(db_session, "get", get)
+    monkeypatch.setattr(db_session, "scalar", scalar)
+
+    assert await svc.upload_journal(db_session, issue, author, entry.id) is entry
+    assert calls == ["lock", "read entry", "read latest"]
+
+
+async def test_another_transaction_cannot_add_an_entry_while_an_upload_joins_one(
+    db_session: AsyncSession, db_engine: AsyncEngine
+) -> None:
+    """Until the upload's transaction ends, the per-issue journal lock is held."""
+    author = UserFactory.build(login="auhr_author", status="active")
+    db_session.add(author)
+    await db_session.flush()
+    issue = await _issue(db_session, "AUHR", author)
+    entry = Journal(issue_id=issue.id, project_id=issue.project_id, user_id=author.id, notes="Logs.", sequence=1)
+    db_session.add(entry)
+    await db_session.commit()
+
+    async with db_engine.connect() as other:
+        free = text("SELECT pg_try_advisory_xact_lock(:issue_id)")
+        assert (await other.execute(free, {"issue_id": issue.id})).scalar_one() is True
+        await other.rollback()
+
+        assert await JournalService().upload_journal(db_session, issue, author, entry.id) is entry
+
+        assert (await other.execute(free, {"issue_id": issue.id})).scalar_one() is False
+        await other.rollback()

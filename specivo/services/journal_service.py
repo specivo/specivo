@@ -88,18 +88,28 @@ def _truncate_for_storage(value: str | None) -> str | None:
 class JournalService:
     """Service layer for creating and listing journals."""
 
-    async def _next_sequence(self, session: AsyncSession, issue_id: int) -> int:
-        """Return the next sequence number for this issue's journals.
+    async def _lock_issue(self, session: AsyncSession, issue_id: int) -> None:
+        """Take the per-issue journal lock until the surrounding transaction ends.
 
-        Uses a PostgreSQL advisory lock keyed on ``issue_id`` to prevent
-        race conditions when multiple transactions create journals for the
-        same issue concurrently.  The lock is released automatically when
-        the surrounding transaction commits or rolls back.
+        A PostgreSQL advisory lock keyed on ``issue_id``: whoever holds it is
+        the only transaction adding journals to the issue, so reading the
+        latest entry and writing the next one cannot interleave with another
+        writer. It is reentrant within a transaction.
         """
         await session.execute(
             text("SELECT pg_advisory_xact_lock(:issue_id)"),
             {"issue_id": issue_id},
         )
+
+    async def _next_sequence(self, session: AsyncSession, issue_id: int) -> int:
+        """Return the next sequence number for this issue's journals.
+
+        Takes the per-issue lock (``_lock_issue``) to prevent race conditions
+        when multiple transactions create journals for the same issue
+        concurrently. The lock is released automatically when the surrounding
+        transaction commits or rolls back.
+        """
+        await self._lock_issue(session, issue_id)
         result = await session.execute(
             select(func.coalesce(func.max(Journal.sequence), 0)).where(Journal.issue_id == issue_id)
         )
@@ -284,14 +294,23 @@ class JournalService:
         it was sent with, or the journal the first file of the batch was
         recorded in. It must be *user*'s own entry on *issue*
         (``ValidationError`` otherwise, so history cannot be credited to
-        somebody else or moved to another issue). An upload joins it only
-        while it is still the issue's latest entry; once anything else has
-        been recorded, the upload gets an entry of its own rather than being
-        dated back.
+        somebody else or moved to another issue).
+
+        The upload gets an entry of its own instead (None) when the named one
+        is private, since the file is visible to every reader of the issue and
+        its history entry must be too, and once anything else has been
+        recorded after it, rather than being dated back.
+
+        The per-issue journal lock is taken first and held to the end of the
+        transaction, so no other entry can be added between this check and
+        the upload's detail being written.
         """
-        journal = await session.get(Journal, journal_id)
+        await self._lock_issue(session, issue.id)
+        journal = await session.get(Journal, journal_id, populate_existing=True)
         if journal is None or journal.issue_id != issue.id or journal.user_id != user.id:
             raise ValidationError(_("The history entry does not belong to this issue."), field="journal_id")
+        if journal.is_private:
+            return None
         latest = await session.scalar(select(func.max(Journal.sequence)).where(Journal.issue_id == issue.id))
         return journal if journal.sequence == latest else None
 
