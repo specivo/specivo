@@ -33,6 +33,7 @@ from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
 from specivo.services.watcher_service import WatcherService
+from specivo.services.webhook_events import emit_issue_created, emit_issue_deleted, emit_issue_updated
 
 logger = logging.getLogger(__name__)
 
@@ -585,6 +586,7 @@ class IssueService:
             data.parent_id,
         )
 
+        await emit_issue_created(session, issue, author)
         return issue
 
     async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
@@ -965,6 +967,9 @@ class IssueService:
             if assignee is not None:
                 await self._watcher_service.auto_watch(session, issue, assignee)
 
+        if journal is not None:
+            await emit_issue_updated(session, issue, journal, user, was_private=bool(old_attrs["is_private"]))
+
         logger.info(
             "Updated issue %s by user %d",
             issue.display_key,
@@ -1081,15 +1086,19 @@ class IssueService:
         )
         return issue
 
-    async def delete(self, session: AsyncSession, issue: Issue) -> None:
+    async def delete(self, session: AsyncSession, issue: Issue, actor: User | None = None) -> None:
         """Delete an issue permanently.
 
         When the deleted issue has a parent, recalculate the parent's derived
         attributes after deletion since one child has been removed.
+
+        ``actor`` is who deleted it, for the ``issue.deleted`` webhook event.
         """
         parent_id = issue.parent_id
         display_key = issue.display_key
         issue_id = issue.id
+
+        await emit_issue_deleted(session, issue, actor)
 
         await session.delete(issue)
         await session.flush()

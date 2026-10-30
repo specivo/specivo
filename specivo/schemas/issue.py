@@ -4,11 +4,14 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field, field_validator
 
 from specivo.schemas.common import IdName, PaginatedResponse
+
+if TYPE_CHECKING:
+    from specivo.models.issue import Issue
 
 
 class IssueCreate(BaseModel):
@@ -210,3 +213,54 @@ class IssueWithChildren(IssueOut):
     journals: list | None = Field(default=None)
     watchers: list | None = Field(default=None)
     attachments: list | None = Field(default=None)
+
+
+def issue_out(issue: Issue, computed: dict | None = None) -> IssueOut:
+    """Build an IssueOut from an Issue with eagerly-loaded relationships.
+
+    All relationship attributes (tracker, status, priority, author,
+    assigned_to, category) must already be loaded via selectinload before
+    calling this helper.
+
+    ``computed`` is the issue's project-derived metadata map (see
+    :mod:`specivo.services.computed_metadata_service`); when provided it is
+    overlaid on the stored metadata so derived fields appear on read without
+    being persisted.
+    """
+    return IssueOut(
+        id=issue.id,
+        key=issue.display_key,
+        project_key=issue.project_key,
+        subject=issue.subject,
+        description=issue.description,
+        tracker=IdName(id=issue.tracker_id, name=issue.tracker.name),
+        status=IdName(id=issue.status_id, name=issue.status.name),
+        priority=IdName(id=issue.priority_id, name=issue.priority.name),
+        author=IdName(id=issue.author_id, name=issue.author.display_name),
+        assigned_to=(
+            IdName(id=issue.assigned_to_id, name=issue.assigned_to.display_name)
+            if issue.assigned_to_id is not None
+            else None
+        ),
+        category=(IdName(id=issue.category_id, name=issue.category.name) if issue.category_id is not None else None),
+        fixed_version_id=issue.fixed_version_id,
+        fixed_version=(
+            IdName(id=issue.fixed_version_id, name=issue.fixed_version.name)
+            if issue.fixed_version_id is not None
+            else None
+        ),
+        sprint_id=issue.sprint_id,
+        parent_id=issue.parent_id,
+        root_id=issue.root_id,
+        lft=issue.lft,
+        rgt=issue.rgt,
+        done_ratio=issue.done_ratio,
+        start_date=issue.start_date,
+        due_date=issue.due_date,
+        estimated_hours=issue.estimated_hours,
+        metadata={**(issue.issue_metadata or {}), **(computed or {})},
+        is_private=issue.is_private,
+        lock_version=issue.lock_version,
+        created_at=issue.created_at,
+        updated_at=issue.updated_at,
+    )

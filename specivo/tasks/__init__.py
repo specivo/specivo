@@ -21,6 +21,9 @@ _broker = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 # (which would force SECRET_KEY etc. to be set just to load the worker).
 _RECURRING_BEAT_INTERVAL_SECONDS = int(os.environ.get("RECURRING_TASKS_BEAT_INTERVAL_SECONDS", "3600"))
 
+# Mirrors specivo.core.constants.WEBHOOK_SWEEP_INTERVAL_SECONDS; a literal for the same reason.
+_WEBHOOK_SWEEP_INTERVAL_SECONDS = 60
+
 # Queue for the tasks that run the embedding model. Each worker process that
 # embeds loads its own copy of the model (several hundred MB), so these tasks go
 # to a queue of their own, consumed by the single-process ``celery-embeddings``
@@ -53,6 +56,10 @@ celery_app.config_from_object(
             "ensure-audit-partitions": {
                 "task": "specivo.tasks.cleanup.ensure_audit_partitions",
                 "schedule": 86400,  # daily
+            },
+            "sweep-webhook-deliveries": {
+                "task": "specivo.tasks.webhooks.sweep_webhook_deliveries",
+                "schedule": _WEBHOOK_SWEEP_INTERVAL_SECONDS,
             },
             "generate-recurring-tasks": {
                 "task": "specivo.tasks.recurring.generate_recurring_tasks",

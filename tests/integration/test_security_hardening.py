@@ -191,16 +191,11 @@ class TestFtsLanguageValidation:
 # ===================================================================
 
 
-@pytest.mark.pro
 class TestWebhookPermissions:
-    """Webhook creation/management must require 'manage_project' permission.
-
-    Currently the endpoint only checks get_current_user (any authenticated
-    user can create webhooks for any project).
-    """
+    """Webhook creation/management must require 'manage_project' permission."""
 
     async def test_non_member_cannot_create_webhook(self, client: AsyncClient, db_session: AsyncSession):
-        """A user who is not a project member must get 403."""
+        """A user who is not a member of a private project gets 404: its key is not confirmed."""
         project = await _create_project(db_session, key="WH01", identifier="wh-perm-01")
         user = await _create_user(db_session, login="wh_outsider")
 
@@ -216,7 +211,7 @@ class TestWebhookPermissions:
             },
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 403, f"Non-member should get 403, got {resp.status_code}"
+        assert resp.status_code == 404, f"Non-member should get 404, got {resp.status_code}"
 
     async def test_member_without_manage_project_cannot_create_webhook(
         self, client: AsyncClient, db_session: AsyncSession
@@ -330,7 +325,7 @@ class TestWebhookUrlValidation:
         from specivo.schemas.webhook import WebhookCreate
 
         with pytest.raises(ValidationError) as exc_info:
-            WebhookCreate(url="http://example.com/hook", secret="secret1234", events=["issue.created"])
+            WebhookCreate(url="http://example.com/hook", secret="secret1234secret1234", events=["issue.created"])
 
         errors = exc_info.value.errors()
         url_errors = [e for e in errors if "url" in str(e.get("loc", []))]
@@ -347,7 +342,7 @@ class TestWebhookUrlValidation:
         ]
         for url in private_urls:
             with pytest.raises(ValidationError, match="url"):
-                WebhookCreate(url=url, secret="secret1234", events=["issue.created"])
+                WebhookCreate(url=url, secret="secret1234secret1234", events=["issue.created"])
 
     async def test_webhook_url_rejects_metadata_ip(self):
         """Cloud metadata IP (169.254.169.254) must be rejected."""
@@ -355,7 +350,7 @@ class TestWebhookUrlValidation:
 
         with pytest.raises(ValidationError, match="url"):
             WebhookCreate(
-                url="https://169.254.169.254/latest/meta-data/", secret="secret1234", events=["issue.created"]
+                url="https://169.254.169.254/latest/meta-data/", secret="secret1234secret1234", events=["issue.created"]
             )
 
     async def test_webhook_url_rejects_localhost(self):
@@ -363,13 +358,15 @@ class TestWebhookUrlValidation:
         from specivo.schemas.webhook import WebhookCreate
 
         with pytest.raises(ValidationError, match="url"):
-            WebhookCreate(url="https://127.0.0.1/hook", secret="secret1234", events=["issue.created"])
+            WebhookCreate(url="https://127.0.0.1/hook", secret="secret1234secret1234", events=["issue.created"])
 
     async def test_webhook_url_accepts_valid_https(self):
         """A valid HTTPS URL with a public domain must pass validation."""
         from specivo.schemas.webhook import WebhookCreate
 
-        wh = WebhookCreate(url="https://hooks.example.com/callback", secret="secret1234", events=["issue.created"])
+        wh = WebhookCreate(
+            url="https://hooks.example.com/callback", secret="secret1234secret1234", events=["issue.created"]
+        )
         assert wh.url == "https://hooks.example.com/callback"
 
 

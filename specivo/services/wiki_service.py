@@ -17,6 +17,7 @@ from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 from specivo.schemas.search import SearchSourceType
 from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.search_index_service import sync_sources
+from specivo.services.webhook_events import emit_wiki_page_updated
 from specivo.services.wiki_utils import slugify as _slugify
 
 logger = logging.getLogger(__name__)
@@ -62,6 +63,7 @@ class WikiService:
         *,
         skip_link_rebuild: bool = False,
         limit_text_length: bool = True,
+        emit_webhook: bool = True,
     ) -> tuple[WikiPage, WikiContent]:
         """Create a wiki page with initial content (version 1).
 
@@ -69,6 +71,8 @@ class WikiService:
         callers such as the import pipeline set it and rebuild the graph once
         at the end of the run, rather than per page. ``limit_text_length=False`` lets it keep a
         page longer than ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
+        ``emit_webhook=False`` sends no ``wiki.page.updated`` event (a page the
+        system creates on its own, such as the Home page).
         """
         if limit_text_length:
             check_markdown_length(text, "text")
@@ -132,6 +136,8 @@ class WikiService:
             except Exception:
                 logger.debug("Link graph rebuild dispatch skipped")
 
+        if emit_webhook:
+            await emit_wiki_page_updated(session, project_id, page, content, author, created=True)
         return page, content
 
     async def get_page(
@@ -213,6 +219,9 @@ class WikiService:
         except Exception:
             logger.debug("Link graph rebuild dispatch skipped")
 
+        wiki = await self._get_wiki_by_id(session, page.wiki_id)
+        if wiki is not None:
+            await emit_wiki_page_updated(session, wiki.project_id, page, content, author, created=False)
         return page, content
 
     async def ensure_home_page(self, session: AsyncSession, project_id: int, author: User) -> WikiPage:
@@ -232,6 +241,7 @@ class WikiService:
             "Welcome to the wiki. Edit this page to get started.",
             author,
             comments="Auto-created home page",
+            emit_webhook=False,
         )
         return page
 
