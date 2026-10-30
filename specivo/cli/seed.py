@@ -463,7 +463,7 @@ _DEFAULT_METADATA_PRESETS: list[dict] = [
                 },
                 "commits": {
                     "type": "array",
-                    "items": {"type": "string", "pattern": "^[a-f0-9]{7,40}$"},
+                    "items": {"type": "string", "pattern": "^[a-f0-9]{7,64}$"},
                     "description": "Git commit hashes",
                 },
                 "branches": {

@@ -34,7 +34,7 @@ from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
 from specivo.models.auth import ApiKey
 from specivo.models.user import User
-from specivo.services.anonymous_user_service import refuse_anonymous_user
+from specivo.services.anonymous_user_service import refuse_system_user
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.session_service import SessionService
 
@@ -174,7 +174,7 @@ class UserService:
         administrator. Deactivating an account that already is deactivated
         sweeps again (anything left over is revoked) and logs again.
         """
-        refuse_anonymous_user(user)
+        refuse_system_user(user)
         if user.is_admin and user.status == "active" and not await another_active_admin_exists(db, user.id):
             raise LastActiveAdminError()
 
@@ -202,7 +202,7 @@ class UserService:
         Only a deactivated account changes; any other status (locked, waiting
         for email verification) is left alone, so this never skips a check.
         """
-        refuse_anonymous_user(user)
+        refuse_system_user(user)
         changed = user.status == "deactivated"
         if changed:
             user.status = "active"

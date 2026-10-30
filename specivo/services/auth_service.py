@@ -203,7 +203,7 @@ class AuthService:
         # answer at the same cost, before any status check, so the setting
         # reveals neither that the account exists nor its state, and does not
         # count towards its lockout.
-        if user is None or user.is_anonymous or refused_by_policy:
+        if user is None or user.is_system_principal or refused_by_policy:
             if refused_by_policy and user is not None:
                 from specivo.services.sso.log import logger as sso_logger
 
@@ -438,7 +438,7 @@ class AuthService:
         # Load the associated user
         user_result = await session.execute(select(User).where(User.id == record.user_id))
         user = user_result.scalar_one_or_none()
-        if user is None or user.is_anonymous or user.status not in ("active", "locked"):
+        if user is None or user.is_system_principal or user.status not in ("active", "locked"):
             # User deleted or deactivated, or the anonymous user — refuse refresh
             raise refused
 
@@ -664,7 +664,7 @@ class AuthService:
 
         # Silent return for nonexistent or inactive users, and for the anonymous
         # user, which no one may take over — no enumeration
-        if user is None or user.is_anonymous or user.status not in ("active", "locked"):
+        if user is None or user.is_system_principal or user.status not in ("active", "locked"):
             return None
         # An SSO-only account must not get a local password by email: it would
         # bypass every rule tied to signing in through the IdP. Same silent
@@ -755,7 +755,7 @@ class AuthService:
         # An SSO-only account (a token issued before its identity was
         # connected) is refused like an invalid link: email reset never gives
         # it a local password.
-        if user is None or user.is_anonymous or await is_sso_only_user(session, user):
+        if user is None or user.is_system_principal or await is_sso_only_user(session, user):
             raise AppError(
                 code="password_reset_invalid",
                 message=_("Invalid or expired password reset link"),

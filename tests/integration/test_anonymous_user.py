@@ -450,9 +450,10 @@ async def test_absent_from_user_autocomplete(
 
 async def test_not_counted_in_admin_dashboard_stats(db_session: AsyncSession, anonymous: User) -> None:
     stats = await SettingsService().get_dashboard_stats(db_session)
-    all_rows = await db_session.scalar(select(func.count()).select_from(User))
+    # Every reserved ``$`` account ($anonymous, $git) is left out, not only this one.
+    real_rows = await db_session.scalar(select(func.count()).select_from(User).where(User.login.not_like("$%")))
 
-    assert stats["total_users"] == all_rows - 1
+    assert stats["total_users"] == real_rows
 
 
 async def test_importer_never_maps_a_source_account_onto_it(db_session: AsyncSession, anonymous: User) -> None:

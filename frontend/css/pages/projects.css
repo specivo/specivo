@@ -82,3 +82,18 @@
 .sp-webhook-status-succeeded::before { background: var(--sp-success); }
 .sp-webhook-status-failed { background: var(--sp-danger-subtle); color: var(--sp-danger); }
 .sp-webhook-status-failed::before { background: var(--sp-danger); }
+
+/* Project settings — Repositories tab (list and log layout shared with the Webhooks tab) */
+.sp-repo-provider { display: inline-flex; padding: 1px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; background: var(--sp-bg-muted); border: 1px solid var(--sp-border); color: var(--sp-text-secondary); margin-right: var(--sp-space-xs); }
+.sp-repo-name { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); overflow-wrap: anywhere; }
+.sp-repo-setup { margin-top: var(--sp-space-sm); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); }
+.sp-repo-setup ol { margin: var(--sp-space-xs) 0 0; padding-left: 1.25rem; }
+.sp-repo-setup li { margin-bottom: 2px; }
+.sp-repo-field { margin-top: var(--sp-space-sm); }
+.sp-repo-field-label { font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-muted); margin-bottom: 2px; }
+.sp-repo-detail { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); overflow-wrap: anywhere; max-width: 420px; }
+.sp-repo-status { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: var(--sp-font-size-xs); font-weight: 500; white-space: nowrap; background: var(--sp-bg-muted); color: var(--sp-text-secondary); }
+.sp-repo-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.sp-repo-status-accepted { background: var(--sp-info-subtle); color: var(--sp-info); }
+.sp-repo-status-processed { background: var(--sp-success-subtle); color: var(--sp-success); }
+.sp-repo-status-failed { background: var(--sp-danger-subtle); color: var(--sp-danger); }

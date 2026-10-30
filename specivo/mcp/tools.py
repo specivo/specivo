@@ -286,6 +286,7 @@ async def _show_issue(
     lines.append(f"Lock version: {issue.lock_version}")
     comments_count = await _journal_svc.count_comments(session, issue.id)
     lines.append(f"Comments: {comments_count}")
+    lines.extend(await _commit_lines(session, issue.id))
 
     if not metadata_only:
         description = issue.description or ""
@@ -306,6 +307,27 @@ async def _show_issue(
 
     await _log_tool(session, user, AuditEvent.ISSUE_READ, "show_issue", {"issue_ref": issue_ref})
     return "\n".join(lines)
+
+
+async def _commit_lines(session: AsyncSession, issue_id: int) -> list[str]:
+    """``Commits: N`` and the newest linked commits (short SHA, first line, branch, URL); none when unlinked."""
+    from specivo.core.constants import REPOSITORY_MCP_COMMIT_LIMIT
+    from specivo.services.repository_service import commits_for_issue
+
+    commits, total = await commits_for_issue(session, issue_id, REPOSITORY_MCP_COMMIT_LIMIT)
+    if not total:
+        return []
+    lines = [f"Commits: {total}"]
+    for c in commits:
+        line = f"- {c.short_sha} {c.first_line}"
+        if c.branch:
+            line += f" [{c.branch}]"
+        if c.url:
+            line += f" {c.url}"
+        lines.append(line)
+    if total > len(commits):
+        lines.append(f"- ... and {total - len(commits)} more")
+    return lines
 
 
 def _extract_section(text: str, search: str) -> str | None:

@@ -240,7 +240,12 @@ class TestResume:
         await run_pipeline(_adapter()).run()
 
         count = (
-            await db_session.execute(select(func.count()).select_from(User).where(User.is_service_account.is_(True)))
+            await db_session.execute(
+                # Reserved ``$`` accounts such as ``$git`` are created by migrations, not by imports.
+                select(func.count())
+                .select_from(User)
+                .where(User.is_service_account.is_(True), User.login.not_like("$%"))
+            )
         ).scalar_one()
         assert count == 1
 

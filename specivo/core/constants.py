@@ -96,6 +96,24 @@ WEBHOOK_SWEEP_BATCH = 200
 # How long a project's active-webhook list is cached in Redis.
 WEBHOOK_SUBSCRIPTION_CACHE_SECONDS = 60
 
+# Incoming repository webhooks (see specivo.services.repository_hooks)
+# Commit messages are stored up to this many characters.
+REPOSITORY_COMMIT_MESSAGE_MAX_CHARS = 10_000
+# References taken from one commit (message plus branch name); the rest are ignored,
+# so one commit cannot fan out into thousands of journals.
+REPOSITORY_MAX_REFS_PER_COMMIT = 20
+# Delivery log rows older than this are deleted by the scheduled cleanup.
+REPOSITORY_DELIVERY_RETENTION_DAYS = 30
+# An accepted delivery not processed after this long is queued again by the sweeper.
+REPOSITORY_SWEEP_AGE_SECONDS = 300
+# How often the sweeper runs, and how many deliveries it queues per run.
+REPOSITORY_SWEEP_INTERVAL_SECONDS = 300
+REPOSITORY_SWEEP_BATCH = 200
+# Commits handled per database round trip while processing a push.
+REPOSITORY_COMMIT_BATCH = 500
+# Linked commits listed by specivo_show_issue before "and N more".
+REPOSITORY_MCP_COMMIT_LIMIT = 10
+
 # Celery tasks
 CELERY_MAX_RETRIES = 3
 CELERY_RETRY_DELAY_EMAIL = 60

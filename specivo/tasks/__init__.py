@@ -23,6 +23,8 @@ _RECURRING_BEAT_INTERVAL_SECONDS = int(os.environ.get("RECURRING_TASKS_BEAT_INTE
 
 # Mirrors specivo.core.constants.WEBHOOK_SWEEP_INTERVAL_SECONDS; a literal for the same reason.
 _WEBHOOK_SWEEP_INTERVAL_SECONDS = 60
+# Mirrors specivo.core.constants.REPOSITORY_SWEEP_INTERVAL_SECONDS; a literal for the same reason.
+_REPOSITORY_SWEEP_INTERVAL_SECONDS = 300
 
 # Queue for the tasks that run the embedding model. Each worker process that
 # embeds loads its own copy of the model (several hundred MB), so these tasks go
@@ -60,6 +62,10 @@ celery_app.config_from_object(
             "sweep-webhook-deliveries": {
                 "task": "specivo.tasks.webhooks.sweep_webhook_deliveries",
                 "schedule": _WEBHOOK_SWEEP_INTERVAL_SECONDS,
+            },
+            "sweep-repository-deliveries": {
+                "task": "specivo.tasks.repositories.sweep_repository_deliveries",
+                "schedule": _REPOSITORY_SWEEP_INTERVAL_SECONDS,
             },
             "generate-recurring-tasks": {
                 "task": "specivo.tasks.recurring.generate_recurring_tasks",
@@ -100,6 +106,7 @@ from specivo.tasks import (  # noqa: E402, F401
     embeddings,
     notifications,
     recurring,
+    repositories,
     search,
     webhooks,
     wiki_links,

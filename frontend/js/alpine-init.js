@@ -37,6 +37,7 @@ import { tagField } from './components/tag-field';
 import { tagFilter } from './components/tag-filter';
 import { projectTagsSettings } from './components/project-tags-settings';
 import { projectWebhooks } from './components/project-webhooks';
+import { projectRepositories } from './components/project-repositories';
 import { entityAutocomplete } from './components/entity-autocomplete';
 import { projectCreateModal } from './components/project-create-modal';
 import { adminProjects } from './components/admin-projects';
@@ -96,6 +97,7 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('tagFilter', tagFilter);
   Alpine.data('projectTagsSettings', projectTagsSettings);
   Alpine.data('projectWebhooks', projectWebhooks);
+  Alpine.data('projectRepositories', projectRepositories);
   Alpine.data('entityAutocomplete', entityAutocomplete);
   Alpine.data('projectCreateModal', projectCreateModal);
   Alpine.data('adminProjects', adminProjects);
