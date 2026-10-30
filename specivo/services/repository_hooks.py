@@ -67,8 +67,9 @@ logger = logging.getLogger(__name__)
 
 #: Login of the service account that writes commit journals.
 GIT_LOGIN = "$git"
-#: The issue metadata key commit SHAs are appended to.
+#: The issue metadata keys commit SHAs and branch names are appended to.
 COMMITS_METADATA_KEY = "commits"
+BRANCHES_METADATA_KEY = "branches"
 
 _EVENT_MAX_LENGTH = 50
 _DETAIL_MAX_LENGTH = 1000
@@ -242,7 +243,12 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
         result = ProcessResult(DELIVERY_IGNORED, "The integration is disabled.")
     else:
         try:
-            result = await _process_push(session, integration, delivery.payload or {})
+            if delivery.event == "pull_request":
+                from specivo.services.repository_pull_requests import process_pull_request
+
+                result = await process_pull_request(session, integration, delivery.payload or {})
+            else:
+                result = await _process_push(session, integration, delivery.payload or {})
         except Exception as exc:  # noqa: BLE001 - recorded on the delivery, never lost
             logger.exception(
                 "Repository delivery %d failed",
@@ -354,15 +360,22 @@ async def _process_push(
         return ProcessResult(DELIVERY_PROCESSED, f"{len(push.commits)} commit(s), no issue references.")
 
     new_links: list[tuple[int, int]] = []
+    outcomes: list[tuple[str, str, str]] = []
     for start in range(0, len(referencing), REPOSITORY_COMMIT_BATCH):
         batch = referencing[start : start + REPOSITORY_COMMIT_BATCH]
-        new_links.extend(await _link_batch(session, integration, push, batch, scope))
+        batch_links, batch_outcomes = await _link_batch(session, integration, push, batch, scope)
+        new_links.extend(batch_links)
+        outcomes.extend(batch_outcomes)
 
     linked_issues = len({issue_id for _commit_id, issue_id in new_links})
     detail = (
         f"{len(push.commits)} commit(s), {len(referencing)} with references; "
         f"{len(new_links)} new link(s) to {linked_issues} issue(s)."
     )
+    if outcomes:
+        from specivo.services.repository_commands import describe
+
+        detail += " Commands: " + describe(outcomes) + "."
     return ProcessResult(DELIVERY_PROCESSED, detail, new_links)
 
 
@@ -372,8 +385,11 @@ async def _link_batch(
     push: PushEvent,
     batch: Sequence[tuple[CommitData, dict[str, tuple[Ref, str]]]],
     scope: dict[str, int],
-) -> list[tuple[int, int]]:
-    """Store one batch of referencing commits and their links; journal the new links."""
+) -> tuple[list[tuple[int, int]], list[tuple[str, str, str]]]:
+    """Store one batch of referencing commits and their links; journal the new links and run their commands.
+
+    Returns the new (commit id, issue id) links and the command outcomes.
+    """
     # Resolve references to issues in scope. A reference to a missing issue is dropped silently.
     pairs = {(ref.key, ref.number) for _c, refs in batch for ref, _s in refs.values()}
     issue_rows = await session.execute(
@@ -384,7 +400,7 @@ async def _link_batch(
     )
     issue_ids = {f"{key}-{number}": issue_id for issue_id, key, number in issue_rows.all()}
     if not issue_ids:
-        return []
+        return [], []
 
     batch = [(c, refs) for c, refs in batch if any(k in issue_ids for k in refs)]
     users = await _matched_users(session, (c.author_email for c, _refs in batch))
@@ -440,19 +456,39 @@ async def _link_batch(
         .returning(IssueCommitLink.commit_id, IssueCommitLink.issue_id)
     )
     new_links = [(commit_id, issue_id) for commit_id, issue_id in inserted.all()]
-    if new_links:
-        by_id = {row.id: row for row in commit_rows}
-        await _record_new_links(session, [(by_id[c], i) for c, i in new_links])
-    return new_links
+    if not new_links:
+        return [], []
+    by_id = {row.id: row for row in commit_rows}
+    refs_by_link = {
+        (commits[c.sha].id, issue_ids[display_key]): (ref, source)
+        for c, refs in batch
+        for display_key, (ref, source) in refs.items()
+        if display_key in issue_ids
+    }
+    outcomes = await _record_new_links(
+        session, integration, [(by_id[c], i, *refs_by_link[(c, i)]) for c, i in new_links]
+    )
+    return new_links, outcomes
 
 
-async def _record_new_links(session: AsyncSession, links: Sequence[tuple[RepositoryCommit, int]]) -> None:
-    """One ``$git`` journal per new (commit, issue) link, and the SHA appended to the issue's metadata."""
+async def _record_new_links(
+    session: AsyncSession,
+    integration: RepositoryIntegration,
+    links: Sequence[tuple[RepositoryCommit, int, Ref, str]],
+) -> list[tuple[str, str, str]]:
+    """Journal, metadata and commands for new (commit, issue) links.
+
+    One ``$git`` journal per link; the SHA (and the branch, for a link from
+    the branch name) appended to the issue's metadata; then the commit
+    commands of message references (see ``repository_commands``). Returns
+    (issue key, command, outcome) for each command the links carried.
+    """
     from specivo.services.journal_service import JournalService
+    from specivo.services.repository_commands import run_commit_commands
 
     git_user = await get_git_user(session)
     journals = JournalService()
-    issue_ids = sorted({issue_id for _commit, issue_id in links})
+    issue_ids = sorted({issue_id for _commit, issue_id, _ref, _source in links})
     # Lock the issues in id order, so two pushes touching the same issues cannot deadlock.
     issues = {
         issue.id: issue
@@ -463,20 +499,54 @@ async def _record_new_links(session: AsyncSession, links: Sequence[tuple[Reposit
         .all()
     }
     shas_by_issue: dict[int, list[str]] = {}
-    for commit, issue_id in links:
+    branches_by_issue: dict[int, list[str]] = {}
+    for commit, issue_id, _ref, source in links:
         issue = issues.get(issue_id)
         if issue is None:  # pragma: no cover - deleted between the link insert and now
             continue
         await journals.add_comment(session, issue, git_user, commit_journal_note(commit))
         shas_by_issue.setdefault(issue_id, []).append(commit.sha)
+        if source == "branch" and commit.branch:
+            branches_by_issue.setdefault(issue_id, []).append(commit.branch)
     for issue_id, shas in shas_by_issue.items():
-        issue = issues[issue_id]
-        metadata = dict(issue.issue_metadata or {})
-        merged = append_unique(metadata.get(COMMITS_METADATA_KEY), shas)
-        if merged is not None:
-            metadata[COMMITS_METADATA_KEY] = merged
-            issue.issue_metadata = metadata
+        additions = {COMMITS_METADATA_KEY: shas}
+        if branches_by_issue.get(issue_id):
+            additions[BRANCHES_METADATA_KEY] = branches_by_issue[issue_id]
+        append_metadata(issues[issue_id], additions)
     await session.flush()
+
+    outcomes: list[tuple[str, str, str]] = []
+    for commit, issue_id, ref, source in links:
+        issue = issues.get(issue_id)
+        if issue is None or source != "message":
+            continue
+        for command, outcome in await run_commit_commands(
+            session, integration, commit, issue, ref, commit_label=commit_label(commit)
+        ):
+            outcomes.append((issue.display_key, command, outcome))
+    if outcomes:
+        logger.info(
+            "Repository commit commands: %s",
+            "; ".join(f"{key} {command}: {outcome}" for key, command, outcome in outcomes),
+            extra={"integration_id": integration.id},
+        )
+    return outcomes
+
+
+def append_metadata(issue: Issue, additions: dict[str, list[str]]) -> None:
+    """Append values to list-valued metadata keys of *issue*, skipping ones already there.
+
+    A key that holds something other than a list is left alone.
+    """
+    metadata = dict(issue.issue_metadata or {})
+    changed = False
+    for key, values in additions.items():
+        merged = append_unique(metadata.get(key), values)
+        if merged is not None and merged != metadata.get(key):
+            metadata[key] = merged
+            changed = True
+    if changed:
+        issue.issue_metadata = metadata
 
 
 def append_unique(existing: Any, values: Iterable[str]) -> list[Any] | None:
@@ -499,15 +569,22 @@ def append_unique(existing: Any, values: Iterable[str]) -> list[Any] | None:
 _MARKDOWN_SPECIAL = str.maketrans({c: "\\" + c for c in "\\`*_{}[]<>()#+!|~"})
 
 
-def _md_text(value: str) -> str:
+def md_text(value: str) -> str:
     """Plain text for a Markdown note: no links, emphasis or HTML from a commit author."""
     return value.translate(_MARKDOWN_SPECIAL)
 
 
-def _safe_url(url: str) -> str | None:
+def safe_url(url: str) -> str | None:
     if not url.startswith(("https://", "http://")):
         return None
     return quote(url, safe=":/?&=#%@+,;~-._!$'*")
+
+
+def commit_label(commit: RepositoryCommit) -> str:
+    """``commit [`abc1234`](url)``, safe for Markdown."""
+    short = f"`{commit.short_sha}`"
+    url = safe_url(commit.url)
+    return f"commit [{short}]({url})" if url else f"commit {short}"
 
 
 def commit_journal_note(commit: RepositoryCommit) -> str:
@@ -516,16 +593,16 @@ def commit_journal_note(commit: RepositoryCommit) -> str:
     ``Commit [`abc1234`](url) on `branch` by Author Name: first line``
     """
     short = f"`{commit.short_sha}`"
-    url = _safe_url(commit.url)
+    url = safe_url(commit.url)
     parts = [f"Commit [{short}]({url})" if url else f"Commit {short}"]
     if commit.branch:
         parts.append(f"on `{commit.branch.replace('`', '')}`")
     if commit.author_name:
-        parts.append(f"by {_md_text(commit.author_name)}")
+        parts.append(f"by {md_text(commit.author_name)}")
     first_line = commit.first_line
     if len(first_line) > _FIRST_LINE_MAX_CHARS:
         first_line = first_line[: _FIRST_LINE_MAX_CHARS - 1] + "…"
-    return " ".join(parts) + (f": {_md_text(first_line)}" if first_line else "")
+    return " ".join(parts) + (f": {md_text(first_line)}" if first_line else "")
 
 
 # ---------------------------------------------------------------------------

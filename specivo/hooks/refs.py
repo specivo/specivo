@@ -16,6 +16,11 @@ before it says what the commit claims:
 
 A list after one keyword (``Fixes ACME-1, ACME-2 and ACME-3``) shares it.
 
+Time: ``@2h``, ``@1h30m``, ``@90m`` or ``@1.5h`` right after a reference, on
+the same line (``Fixes KEY-1 @1h30m``), is the time spent on that issue.
+Zero is no time; more than 24 hours is capped at 24. The ``@`` must not be
+glued to a word, so an address such as ``user@2host`` is never time.
+
 Branches: ``KEY-123`` anywhere in the name as its own token (``KEY-123``,
 ``feat/KEY-123-slug``, ``KEY-123/slug``), and lower case is accepted, since
 branch names are often lower-cased (``key-123-slug``). Branch references are
@@ -27,6 +32,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal
 
 Keyword = Literal["refs", "fixes"]
@@ -47,6 +53,18 @@ _KEYWORD_BEFORE = re.compile(
 )
 # What may stand between two references that share a keyword (same line only).
 _LIST_SEPARATOR = re.compile(r"(?:[ \t]|,|&|\band\b)*", re.IGNORECASE)
+# Hours with at most three digits: anything longer is capped anyway, and the
+# number never grows past what ``Decimal`` handles cheaply. A full stop may end
+# the sentence (``@2h.``) but not start a decimal (``@2h.5``).
+_TIME = re.compile(
+    r"[ \t]*@(?:(?P<hours>\d{1,3})h(?:(?P<minutes>\d{1,4})m)?"
+    r"|(?P<decimal>\d{1,3}\.\d{1,2})h"
+    r"|(?P<only_minutes>\d{1,4})m)(?![\w@])(?!\.\d)",
+    re.IGNORECASE,
+)
+#: The most time one commit can log on one issue.
+MAX_LOGGED_HOURS = Decimal(24)
+_HUNDREDTHS = Decimal("0.01")
 _BRANCH_REF = re.compile(r"(?<![A-Za-z0-9])(?P<key>[A-Za-z][A-Za-z0-9]*)-(?P<number>\d{1,9})(?!\d)")
 
 
@@ -57,10 +75,31 @@ class Ref:
     key: str
     number: int
     keyword: Keyword = "refs"
+    hours: Decimal | None = None
 
     @property
     def display_key(self) -> str:
         return f"{self.key}-{self.number}"
+
+
+def _time_at(text: str, pos: int) -> tuple[Decimal | None, int]:
+    """The time written at *pos* and where it ends; ``(None, pos)`` when there is none."""
+    match = _TIME.match(text, pos)
+    if match is None:
+        return None, pos
+    if match.group("decimal") is not None:
+        hours = Decimal(match.group("decimal"))
+    elif match.group("only_minutes") is not None:
+        hours = Decimal(match.group("only_minutes")) / 60
+    else:
+        hours = Decimal(match.group("hours")) + Decimal(match.group("minutes") or 0) / 60
+    hours = min(hours, MAX_LOGGED_HOURS).quantize(_HUNDREDTHS, rounding=ROUND_HALF_UP)
+    return (hours if hours > 0 else None), match.end()
+
+
+def extract_time(text_after_ref: str) -> Decimal | None:
+    """The hours written at the start of *text_after_ref* (``@2h``, ``@1h30m``, ``@90m``, ``@1.5h``), or None."""
+    return _time_at(text_after_ref, 0)[0]
 
 
 def _keyword_for(gap: str, previous: Keyword | None) -> Keyword:
@@ -73,12 +112,16 @@ def _keyword_for(gap: str, previous: Keyword | None) -> Keyword:
 
 
 def _dedupe(refs: Iterable[Ref]) -> list[Ref]:
-    """One ref per issue, in order of first mention; ``fixes`` wins over ``refs``."""
+    """One ref per issue, in order of first mention; ``fixes`` wins over ``refs``, the first time wins."""
     seen: dict[str, Ref] = {}
     for ref in refs:
         current = seen.get(ref.display_key)
-        if current is None or (current.keyword == "refs" and ref.keyword == "fixes"):
-            seen[ref.display_key] = Ref(ref.key, ref.number, ref.keyword if current is None else "fixes")
+        if current is None:
+            seen[ref.display_key] = ref
+            continue
+        keyword: Keyword = "fixes" if "fixes" in (current.keyword, ref.keyword) else "refs"
+        hours = current.hours if current.hours is not None else ref.hours
+        seen[ref.display_key] = Ref(ref.key, ref.number, keyword, hours)
     return list(seen.values())
 
 
@@ -94,9 +137,9 @@ def extract_refs(text: str, known_keys: frozenset[str] | set[str]) -> list[Ref]:
         if match.group("key") not in known_keys or number == 0:
             continue
         keyword = _keyword_for(text[last_end : match.start()], previous)
-        found.append(Ref(match.group("key"), number, keyword))
+        hours, last_end = _time_at(text, match.end())
+        found.append(Ref(match.group("key"), number, keyword, hours))
         previous = keyword
-        last_end = match.end()
     return _dedupe(found)
 
 

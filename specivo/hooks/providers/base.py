@@ -18,6 +18,10 @@ from typing import Any, Protocol
 
 #: ``repository_deliveries.delivery_id`` is VARCHAR(100); a longer id is replaced by the body hash.
 DELIVERY_ID_MAX_LENGTH = 100
+#: ``pull_requests.title`` is VARCHAR(1000).
+PR_TITLE_MAX_LENGTH = 1000
+#: Pull request bodies are only read for references; the rest is never stored.
+PR_BODY_MAX_LENGTH = 10_000
 
 _SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
@@ -53,6 +57,33 @@ class PushEvent:
     pusher_login: str | None
 
 
+@dataclass(frozen=True)
+class PullRequestEvent:
+    """A pull/merge request as one event describes it.
+
+    ``state`` is Specivo's: ``open``, ``draft``, ``merged`` or ``closed``.
+    ``updated_at`` is the forge's update time, used to drop events that arrive
+    after a newer one. ``action`` is the forge's own word (``opened``,
+    ``closed``, ``merge``, ...), kept for the log only.
+    """
+
+    repo_full_name: str | None
+    number: int
+    title: str
+    body: str
+    url: str
+    state: str
+    source_branch: str | None
+    target_branch: str | None
+    default_branch: str | None
+    author_login: str | None
+    merged_by_login: str | None
+    merged_at: datetime | None
+    merge_commit_sha: str | None
+    updated_at: datetime | None
+    action: str | None
+
+
 class ForgeProvider(Protocol):
     """What the incoming hook endpoint needs from a forge."""
 
@@ -76,6 +107,10 @@ class ForgeProvider(Protocol):
 
     def parse_push(self, payload: dict[str, Any]) -> PushEvent:
         """Parse a push payload; commits without a valid id are left out."""
+        ...
+
+    def parse_pull_request(self, payload: dict[str, Any]) -> PullRequestEvent | None:
+        """Parse a pull/merge request payload; None when it names no request."""
         ...
 
 
@@ -124,9 +159,12 @@ def _str(value: Any) -> str:
     return value if isinstance(value, str) else ""
 
 
-def _timestamp(value: Any) -> datetime | None:
+def timestamp(value: Any) -> datetime | None:
+    """An ISO 8601 time, or GitLab's older ``2026-10-01 10:15:00 UTC``; UTC-aware, or None."""
     if not isinstance(value, str) or not value:
         return None
+    if value.endswith(" UTC"):
+        value = value.removesuffix(" UTC") + "+00:00"
     try:
         parsed = datetime.fromisoformat(value)
     except ValueError:
@@ -160,7 +198,7 @@ def parse_commits(raw: Any) -> tuple[CommitData, ...]:
                 url=_str(item.get("url")),
                 author_name=_str(author.get("name")) or _str(author.get("username")),
                 author_email=_str(author.get("email")),
-                timestamp=_timestamp(item.get("timestamp")),
+                timestamp=timestamp(item.get("timestamp")),
             )
         )
     return tuple(commits)
@@ -168,3 +206,17 @@ def parse_commits(raw: Any) -> tuple[CommitData, ...]:
 
 def str_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) and value else None
+
+
+#: Pull request numbers are stored in an INTEGER column.
+_INT_MAX = 2**31 - 1
+
+
+def int_or_none(value: Any) -> int | None:
+    """A positive int that fits an INTEGER column (not a bool, not a string), or None."""
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 < value <= _INT_MAX else None
+
+
+def sha_or_none(value: Any) -> str | None:
+    sha = value.lower() if isinstance(value, str) else ""
+    return sha if _SHA.fullmatch(sha) else None

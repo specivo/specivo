@@ -11,6 +11,10 @@ address and URL is made up (`example.com`, `example.org`), and file lists are tr
 | `gitlab_push.json` | GitLab `Push Hook` | GitLab Docs, "Webhook events", "Push events" example |
 | `gitea_push.json` | Gitea `push` | Gitea Docs, "Webhooks", the example push payload, with the repository fields current releases send |
 | `forgejo_push.json` | Forgejo `push` | Forgejo Docs, "Webhooks" (the payload is the Gitea one) |
+| `github_pull_request.json` | GitHub `pull_request` (`closed`, merged) | GitHub Docs, "Webhook events and payloads", `pull_request`, and the REST "Get a pull request" response it embeds |
+| `gitlab_merge_request.json` | GitLab `Merge Request Hook` (`open`, draft) | GitLab Docs, "Webhook events", "Merge request events" example |
+| `gitea_pull_request.json` | Gitea `pull_request` (`opened`) | Gitea Docs, "Webhooks", and the `PullRequest` structure of the Gitea API the payload embeds |
+| `forgejo_pull_request.json` | Forgejo `pull_request` (`closed`, merged) | Forgejo Docs, "Webhooks" (the payload is the Gitea one), with the merge fields the API documents |
 
 The headers each forge sends with them (event, delivery id, signature or token) are set by the
 tests; see `specivo/hooks/providers/` for which headers each provider reads.

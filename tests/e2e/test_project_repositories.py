@@ -51,7 +51,7 @@ def test_connect_repository_then_receive_ping(
     expect(row).to_contain_text(_REPO)
     expect(row.get_by_test_id("repository-last-delivery")).to_have_text("Never received")
     reveal = admin_page.get_by_test_id("repository-secret")
-    expect(reveal).to_contain_text("Just the push event")
+    expect(reveal).to_contain_text("Pushes and Pull requests")
     hook_url = admin_page.get_by_test_id("repository-hook-url").inner_text()
     secret = admin_page.get_by_test_id("repository-secret-value").inner_text()
     assert re.fullmatch(r"[0-9a-f]{64}", secret)

@@ -6,6 +6,11 @@
  * The secret reaches the page only in the response that set it (create and
  * rotate-secret) and is shown once in a reveal panel. All user-visible strings
  * come from the template (`initial.i18n`, `initial.providerLabels`).
+ *
+ * The form also holds what the repository may change on issues: commit
+ * commands (fixing status, time logging) and merge automation with the role
+ * `$git` holds. Picking a role other than the Automation role needs
+ * `manage_members` (`initial.canPickRole`).
  */
 export function projectRepositories(initial) {
     var i18n = Object.assign({
@@ -26,6 +31,26 @@ export function projectRepositories(initial) {
         statusFailed: 'Failed'
     }, initial.i18n || {});
     var PAGE = 20;
+    var defaultRoleId = initial.defaultRoleId || null;
+
+    function blankForm(provider) {
+        return {
+            provider: provider,
+            repo_full_name: '',
+            repo_url: '',
+            scope: 'project',
+            commands_enabled: false,
+            time_logging_enabled: false,
+            fixing_status_id: '',
+            merge_automation_enabled: false,
+            merge_status_id: '',
+            automation_role_id: defaultRoleId === null ? '' : String(defaultRoleId)
+        };
+    }
+
+    function idOrNull(value) {
+        return value === '' || value === null || value === undefined ? null : parseInt(value, 10);
+    }
 
     return {
         i18n: i18n,
@@ -33,6 +58,10 @@ export function projectRepositories(initial) {
         providers: initial.providers || [],
         providerLabels: initial.providerLabels || {},
         projectKey: initial.projectKey || '',
+        // Option values are strings, as <select> gives them back.
+        statuses: (initial.statuses || []).map(function (st) { return {id: st.id, value: String(st.id), name: st.name}; }),
+        roles: (initial.roles || []).map(function (r) { return {id: r.id, value: String(r.id), name: r.name}; }),
+        canPickRole: initial.canPickRole === true,
         showModal: false,
         showDeleteModal: false,
         editing: null,
@@ -41,7 +70,7 @@ export function projectRepositories(initial) {
         busy: false,
         error: '',
         notice: '',
-        form: {provider: 'github', repo_full_name: '', repo_url: '', scope: 'project'},
+        form: blankForm('github'),
         reveal: null,
         copied: '',
         log: null,
@@ -52,7 +81,22 @@ export function projectRepositories(initial) {
         logError: '',
 
         get canSave() {
-            return !this.saving && this.form.repo_full_name.trim() !== '' && this.form.repo_url.trim() !== '';
+            if (this.saving || this.form.repo_full_name.trim() === '' || this.form.repo_url.trim() === '') return false;
+            return !(this.form.merge_automation_enabled && this.form.merge_status_id === '');
+        },
+
+        statusName(id) {
+            var found = this.statuses.find(function (s) { return s.id === id; });
+            return found ? found.name : '';
+        },
+
+        roleName(id) {
+            var found = this.roles.find(function (r) { return r.id === id; });
+            return found ? found.name : '';
+        },
+
+        onCommandsChange() {
+            if (!this.form.commands_enabled) this.form.time_logging_enabled = false;
         },
 
         base() {
@@ -101,14 +145,25 @@ export function projectRepositories(initial) {
         openCreate() {
             this.editing = null;
             this.error = '';
-            this.form = {provider: this.providers[0] || 'github', repo_full_name: '', repo_url: '', scope: 'project'};
+            this.form = blankForm(this.providers[0] || 'github');
             this.showModal = true;
         },
 
         openEdit(r) {
             this.editing = r;
             this.error = '';
-            this.form = {provider: r.provider, repo_full_name: r.repo_full_name, repo_url: r.repo_url, scope: r.scope};
+            var settings = r.settings || {};
+            var form = blankForm(r.provider);
+            form.repo_full_name = r.repo_full_name;
+            form.repo_url = r.repo_url;
+            form.scope = r.scope;
+            form.commands_enabled = settings.commands_enabled === true;
+            form.time_logging_enabled = settings.time_logging_enabled === true;
+            form.fixing_status_id = settings.fixing_status_id ? String(settings.fixing_status_id) : '';
+            form.merge_automation_enabled = settings.merge_automation_enabled === true;
+            form.merge_status_id = settings.merge_status_id ? String(settings.merge_status_id) : '';
+            if (r.automation_role_id) form.automation_role_id = String(r.automation_role_id);
+            this.form = form;
             this.showModal = true;
         },
 
@@ -121,6 +176,10 @@ export function projectRepositories(initial) {
             } else {
                 this.repositories[idx] = saved;
             }
+            // $git holds one role per project: every integration shows it.
+            this.repositories.forEach(function (r) {
+                if (r.settings && r.settings.merge_automation_enabled) r.automation_role_id = saved.automation_role_id;
+            });
             if (this.log && this.log.id === saved.id) this.log = saved;
             if (secret) {
                 this.reveal = {
@@ -137,12 +196,23 @@ export function projectRepositories(initial) {
             if (!this.canSave) return;
             this.saving = true;
             this.error = '';
+            var f = this.form;
             var payload = {
-                repo_full_name: this.form.repo_full_name.trim(),
-                repo_url: this.form.repo_url.trim(),
-                scope: this.form.scope
+                repo_full_name: f.repo_full_name.trim(),
+                repo_url: f.repo_url.trim(),
+                scope: f.scope,
+                settings: {
+                    commands_enabled: f.commands_enabled,
+                    time_logging_enabled: f.commands_enabled && f.time_logging_enabled,
+                    fixing_status_id: idOrNull(f.fixing_status_id),
+                    merge_automation_enabled: f.merge_automation_enabled,
+                    merge_status_id: idOrNull(f.merge_status_id)
+                }
             };
-            if (!this.editing) payload.provider = this.form.provider;
+            if (f.merge_automation_enabled && this.canPickRole && idOrNull(f.automation_role_id) !== null) {
+                payload.automation_role_id = idOrNull(f.automation_role_id);
+            }
+            if (!this.editing) payload.provider = f.provider;
             var url = this.editing ? this.base() + this.editing.id + '/' : this.base();
             try {
                 var res = await this._send(url, this.editing ? 'PATCH' : 'POST', payload);

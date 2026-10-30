@@ -1,0 +1,34 @@
+/* ============================================================
+   ISSUE DEVELOPMENT PANEL AND BRANCH NAME
+   ============================================================ */
+.sp-dev-panel { background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius-lg); padding: var(--sp-space-lg); margin-bottom: var(--sp-space-xl); box-shadow: var(--sp-shadow-sm); min-width: 0; }
+.sp-dev-title { font-size: var(--sp-font-size-md); font-weight: 600; margin: 0 0 var(--sp-space-md); }
+.sp-dev-section + .sp-dev-section { margin-top: var(--sp-space-lg); padding-top: var(--sp-space-md); border-top: 1px solid var(--sp-border); }
+.sp-dev-heading { font-size: var(--sp-font-size-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--sp-accent); margin: 0 0 var(--sp-space-sm); }
+.sp-dev-count { color: var(--sp-text-muted); font-weight: 500; margin-left: 4px; }
+.sp-dev-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-space-sm); }
+.sp-dev-item { display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: var(--sp-space-sm); align-items: baseline; font-size: var(--sp-font-size-sm); }
+.sp-dev-item > .sp-dev-main:first-child { grid-column: 1 / -1; }
+.sp-dev-main { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sp-space-xs) var(--sp-space-sm); min-width: 0; }
+.sp-dev-item > .sp-dev-meta { grid-column: 1 / -1; }
+.sp-dev-state ~ .sp-dev-meta { grid-column: 2; }
+.sp-dev-text { color: var(--sp-text-primary); overflow-wrap: anywhere; min-width: 0; }
+.sp-dev-meta { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); overflow-wrap: anywhere; }
+.sp-dev-meta code, .sp-dev-branch code, code.sp-dev-branch { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); overflow-wrap: anywhere; }
+.sp-dev-ref, .sp-dev-sha { font-family: var(--sp-font-mono); font-weight: 600; color: var(--sp-accent); white-space: nowrap; }
+.sp-dev-branch { color: var(--sp-accent); }
+.sp-dev-state { display: inline-block; font-size: var(--sp-font-size-xs); font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid transparent; }
+.sp-dev-state-open { color: var(--sp-success); background: var(--sp-success-subtle); border-color: var(--sp-success); }
+.sp-dev-state-draft { color: var(--sp-text-muted); background: var(--sp-bg-input); border-color: var(--sp-border); }
+.sp-dev-state-merged { color: var(--sp-info); background: var(--sp-info-subtle); border-color: var(--sp-info); }
+.sp-dev-state-closed { color: var(--sp-danger); background: var(--sp-danger-subtle); border-color: var(--sp-danger); }
+.sp-dev-closing { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); border: 1px dashed var(--sp-border); border-radius: var(--sp-border-radius); padding: 0 6px; }
+.sp-dev-more { margin-top: var(--sp-space-sm); }
+.sp-dev-note { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin: var(--sp-space-sm) 0 0; }
+
+/* "Copy branch name" sidebar card */
+.sp-branch-name-row { display: flex; gap: var(--sp-space-xs); align-items: stretch; }
+.sp-branch-name-input { flex: 1; min-width: 0; font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); padding: var(--sp-space-xs) var(--sp-space-sm); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-input); color: var(--sp-text-primary); }
+.sp-branch-name-input:focus { outline: 2px solid var(--sp-accent); outline-offset: 1px; }
+.sp-branch-name-status { display: block; min-height: 1.2em; margin-top: var(--sp-space-xs); font-size: var(--sp-font-size-xs); color: var(--sp-success); }
+.sp-branch-name-status.sp-branch-name-hint { color: var(--sp-text-muted); }

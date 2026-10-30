@@ -1247,7 +1247,7 @@
   </div>
 
   <!-- Repositories tab -->
-  <div x-show="tab === 'repositories'" x-cloak x-data='projectRepositories({ repositories: {{ repositories_data | tojson }}, providers: {{ repository_providers | tojson }}, projectKey: {{ project.key | tojson }}, providerLabels: {{ {
+  <div x-show="tab === 'repositories'" x-cloak x-data='projectRepositories({ repositories: {{ repositories_data | tojson }}, providers: {{ repository_providers | tojson }}, projectKey: {{ project.key | tojson }}, statuses: {{ statuses_data | tojson }}, roles: {{ automation_roles | tojson }}, defaultRoleId: {{ default_automation_role_id | tojson }}, canPickRole: {{ can_manage_members | tojson }}, providerLabels: {{ {
     "github": "GitHub",
     "gitlab": "GitLab",
     "gitea": "Gitea",
@@ -1307,14 +1307,14 @@
                 <li>{% trans %}In the repository on GitHub, open Settings, then Webhooks, then Add webhook.{% endtrans %}</li>
                 <li>{% trans %}Paste the webhook URL into Payload URL and set Content type to application/json.{% endtrans %}</li>
                 <li>{% trans %}Paste the secret into Secret.{% endtrans %}</li>
-                <li>{% trans %}Choose "Just the push event" and save. GitHub sends a ping at once; it appears in the delivery log.{% endtrans %}</li>
+                <li>{% trans %}Choose "Let me select individual events", tick Pushes and Pull requests, and save. GitHub sends a ping at once; it appears in the delivery log.{% endtrans %}</li>
               </ol>
             </template>
             <template x-if="reveal.provider === 'gitlab'">
               <ol>
                 <li>{% trans %}In the project on GitLab, open Settings, then Webhooks, then Add new webhook.{% endtrans %}</li>
                 <li>{% trans %}Paste the webhook URL into URL and the secret into Secret token.{% endtrans %}</li>
-                <li>{% trans %}Under Trigger, select Push events.{% endtrans %}</li>
+                <li>{% trans %}Under Trigger, select Push events and Merge request events.{% endtrans %}</li>
                 <li>{% trans %}Save, then use Test, Push events to send a first delivery.{% endtrans %}</li>
               </ol>
             </template>
@@ -1323,7 +1323,7 @@
                 <li>{% trans %}In the repository, open Settings, then Webhooks, then Add webhook, and pick the Gitea or Forgejo webhook type, matching the server.{% endtrans %}</li>
                 <li>{% trans %}Paste the webhook URL into Target URL. Keep the HTTP method POST and set the POST content type to application/json.{% endtrans %}</li>
                 <li>{% trans %}Paste the secret into Secret.{% endtrans %}</li>
-                <li>{% trans %}Under Trigger on, choose Push events, then add the webhook. Test delivery sends a push.{% endtrans %}</li>
+                <li>{% trans %}Under Trigger on, choose Custom events, tick Push and Pull request, then add the webhook. Test delivery sends a push.{% endtrans %}</li>
               </ol>
             </template>
           </div>
@@ -1359,6 +1359,8 @@
                 <span>{% trans %}Last delivery:{% endtrans %} <span x-text="lastDelivery(r)" data-testid="repository-last-delivery"></span></span>
                 <template x-if="r.scope === 'project_and_subprojects'"><span> · {% trans %}includes subprojects{% endtrans %}</span></template>
                 <template x-if="!r.is_active"><span> · {% trans %}disabled{% endtrans %}</span></template>
+                <template x-if="r.settings && r.settings.commands_enabled"><span> · {% trans %}commit commands on{% endtrans %}</span></template>
+                <template x-if="r.settings && r.settings.merge_automation_enabled"><span> · {% trans %}merge automation on{% endtrans %}</span></template>
               </div>
             </div>
             <div class="sp-webhook-actions">
@@ -1470,6 +1472,55 @@
               </select>
               <div class="form-hint">{% trans %}Keys of other projects in commit messages are ignored.{% endtrans %}</div>
             </div>
+            <fieldset class="sp-repo-options" data-testid="repository-options">
+              <legend class="form-label">{% trans %}Changes to issues{% endtrans %}</legend>
+              <div class="sp-repo-warning" role="note">{% trans %}Commit commands trust the commit author email, which anyone with push access can set to any address. With commands on, anyone who can push to this repository can act as any project member whose verified email they use.{% endtrans %}</div>
+              <label class="sp-repo-check">
+                <input type="checkbox" x-model="form.commands_enabled" @change="onCommandsChange()" data-testid="repository-commands">
+                <span>{% trans %}Commit commands{% endtrans %}</span>
+              </label>
+              <div class="form-hint">{% trans %}"Fixes KEY-12" in a commit on the default branch moves the issue to the fixing status, as the Specivo user whose verified email wrote the commit. Their permissions and the workflow apply.{% endtrans %}</div>
+              <div class="form-group sp-repo-sub" x-show="form.commands_enabled">
+                <label class="form-label" for="repository-fixing-status">{% trans %}Fixing status{% endtrans %}</label>
+                <select class="form-input" id="repository-fixing-status" x-model="form.fixing_status_id">
+                  <option value="">{% trans %}Do not change the status{% endtrans %}</option>
+                  <template x-for="st in statuses" :key="st.id">
+                    <option :value="st.value" x-text="st.name" :selected="st.value === form.fixing_status_id"></option>
+                  </template>
+                </select>
+              </div>
+              <label class="sp-repo-check sp-repo-sub" x-show="form.commands_enabled">
+                <input type="checkbox" x-model="form.time_logging_enabled" data-testid="repository-time-logging">
+                <span>{% trans %}Time logging{% endtrans %}</span>
+              </label>
+              <div class="form-hint sp-repo-sub" x-show="form.commands_enabled">{% trans %}"KEY-12 @1h30m" (also @2h, @90m, @1.5h) logs the time on the issue for the commit's author, on any branch. They need permission to log time.{% endtrans %}</div>
+
+              <label class="sp-repo-check">
+                <input type="checkbox" x-model="form.merge_automation_enabled" data-testid="repository-merge-automation">
+                <span>{% trans %}Merge automation{% endtrans %}</span>
+              </label>
+              <div class="form-hint">{% trans %}When a pull or merge request that says "Fixes KEY-12" is merged into the default branch, the issue moves to the merge status. The change is made by Git, with the project role chosen here, and follows the workflow.{% endtrans %}</div>
+              <div class="sp-repo-sub" x-show="form.merge_automation_enabled">
+                <div class="form-group">
+                  <label class="form-label" for="repository-merge-status">{% trans %}Merge status{% endtrans %}</label>
+                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" data-testid="repository-merge-status">
+                    <option value="">{% trans %}Choose a status{% endtrans %}</option>
+                    <template x-for="st in statuses" :key="st.id">
+                      <option :value="st.value" x-text="st.name" :selected="st.value === form.merge_status_id"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="repository-git-role">{% trans %}Role of Git in this project{% endtrans %}</label>
+                  <select class="form-input" id="repository-git-role" x-model="form.automation_role_id" :disabled="!canPickRole">
+                    <template x-for="role in roles" :key="role.id">
+                      <option :value="role.value" x-text="role.name" :selected="role.value === form.automation_role_id"></option>
+                    </template>
+                  </select>
+                  <div class="form-hint">{% trans %}The Automation role may edit issues but has no workflow transitions until an administrator grants them. Changing the role needs permission to manage members.{% endtrans %}</div>
+                </div>
+              </div>
+            </fieldset>
             <template x-if="!editing">
               <div class="form-hint">{% trans %}A webhook URL and a secret are generated and shown once after the repository is connected.{% endtrans %}</div>
             </template>
@@ -1505,6 +1556,44 @@
         </div>
       </div>
     </template>
+  </div>
+
+  <!-- Branch names (Repositories tab) -->
+  <div x-show="tab === 'repositories'" x-cloak x-data='projectBranchName({ projectKey: {{ project.key | tojson }}, settings: {{ branch_name_data | tojson }}, trackers: {{ trackers_data | tojson }}, i18n: {{ {
+    "saved": _("Saved"),
+    "saveFailed": _("Could not save the branch name settings."),
+    "connectFailed": _("Unable to connect.")
+  } | tojson }} })'>
+    <div class="card sp-branch-settings" data-testid="branch-name-settings">
+      <div class="sp-listcard-header">
+        <span class="sp-listcard-title">{% trans %}Branch names{% endtrans %}</span>
+      </div>
+      <p class="form-hint">{% trans %}The "Copy branch name" button on an issue builds the name from this format. {key} is the issue key and must be there; {type} comes from the tracker; {slug} is the subject in lower case, at most 40 characters. Branches named this way link their commits to the issue.{% endtrans %}</p>
+      <div class="form-group">
+        <label class="form-label" for="branch-name-format">{% trans %}Format{% endtrans %}</label>
+        <input class="form-input sp-branch-format" id="branch-name-format" type="text" maxlength="100" x-model="format" placeholder="{type}/{key}-{slug}">
+        <div class="form-hint">{% trans %}Example:{% endtrans %} <code x-text="preview"></code></div>
+      </div>
+      <div class="sp-branch-types">
+        <template x-for="t in trackers" :key="t.name">
+          <div class="form-group">
+            <label class="form-label" :for="'branch-type-' + t.name" x-text="t.name"></label>
+            <input class="form-input" type="text" maxlength="30" :id="'branch-type-' + t.name" x-model="t.type" :placeholder="defaultType">
+          </div>
+        </template>
+        <div class="form-group">
+          <label class="form-label" for="branch-type-default">{% trans %}Other trackers{% endtrans %}</label>
+          <input class="form-input" id="branch-type-default" type="text" maxlength="30" x-model="defaultType">
+        </div>
+      </div>
+      <template x-if="error">
+        <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
+      </template>
+      <div class="sp-branch-actions">
+        <span class="sp-branch-saved" role="status" aria-live="polite" x-text="message"></span>
+        <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving" data-testid="branch-name-save">{% trans %}Save{% endtrans %}</button>
+      </div>
+    </div>
   </div>
 
   <!-- Search tab -->

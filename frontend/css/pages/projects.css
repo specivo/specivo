@@ -97,3 +97,20 @@
 .sp-repo-status-accepted { background: var(--sp-info-subtle); color: var(--sp-info); }
 .sp-repo-status-processed { background: var(--sp-success-subtle); color: var(--sp-success); }
 .sp-repo-status-failed { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+
+/* Repository integrations: what a repository may change on issues */
+.sp-repo-options { border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); padding: var(--sp-space-md); margin: var(--sp-space-md) 0; min-width: 0; }
+.sp-repo-options legend { padding: 0 var(--sp-space-xs); margin-bottom: 0; }
+.sp-repo-warning { background: var(--sp-warning-subtle); color: var(--sp-text-primary); border-left: 3px solid var(--sp-warning); border-radius: var(--sp-border-radius); padding: var(--sp-space-sm) var(--sp-space-md); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-md); }
+.sp-repo-check { display: flex; align-items: center; gap: var(--sp-space-sm); font-size: var(--sp-font-size-sm); font-weight: 600; margin-top: var(--sp-space-md); cursor: pointer; }
+.sp-repo-check input { width: 16px; height: 16px; flex-shrink: 0; }
+.sp-repo-sub { margin-left: calc(16px + var(--sp-space-sm)); }
+.sp-repo-sub.form-group, .sp-repo-sub .form-group { margin-top: var(--sp-space-sm); }
+
+/* Branch names card */
+.sp-branch-settings { padding-bottom: var(--sp-space-lg); }
+.sp-branch-settings > .form-hint, .sp-branch-settings > .form-group, .sp-branch-types, .sp-branch-actions { padding: 0 var(--sp-space-lg); }
+.sp-branch-format { font-family: var(--sp-font-mono); }
+.sp-branch-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0 var(--sp-space-md); }
+.sp-branch-actions { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-space-md); }
+.sp-branch-saved { font-size: var(--sp-font-size-sm); color: var(--sp-success); }

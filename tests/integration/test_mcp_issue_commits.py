@@ -72,3 +72,37 @@ async def test_many_commits_are_capped_with_a_count(db_session: AsyncSession) ->
     assert "Commits: 13" in out
     assert sum(1 for line in out.splitlines() if line.startswith("- ") and "Step" in line) == 10
     assert "- ... and 3 more" in out
+
+
+async def _pull_request(db: AsyncSession, integration, delivery_id: str, **kwargs) -> None:
+    from tests.fixtures.forge_hooks import pull_request_payload
+
+    row = await record_delivery(
+        db,
+        integration,
+        delivery_id=delivery_id,
+        event="pull_request",
+        status="accepted",
+        payload=pull_request_payload("github", **kwargs),
+    )
+    await process_delivery(db, row)
+    await db.commit()
+
+
+async def test_no_pull_requests_line_without_links(db_session: AsyncSession) -> None:
+    admin, _project = await _setup(db_session)
+    assert "Pull requests:" not in await _show_issue(db_session, admin, "RMCP-1")
+
+
+async def test_lists_linked_pull_requests(db_session: AsyncSession) -> None:
+    admin, project = await _setup(db_session)
+    integration = await make_integration(db_session, project)
+    await _pull_request(db_session, integration, "pr-1", number=12, title="Login form", body="Fixes RMCP-1")
+    await _pull_request(db_session, integration, "pr-2", number=13, title="Docs for RMCP-1", state="merged")
+    out = await _show_issue(db_session, admin, "RMCP-1", metadata_only=True)
+    assert "Pull requests: 2" in out
+    assert (
+        "- #12 [open, closing] Login form (feat/login-form) https://forge.example.com/example-org/widgets/pull/12"
+        in out
+    )
+    assert "- #13 [merged] Docs for RMCP-1 (feat/login-form)" in out

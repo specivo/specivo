@@ -502,6 +502,22 @@ async def issue_detail(
     # Relations count (list already loaded via gather above)
     relation_count = len(relations)
 
+    # Branch name and development activity. Neither is shown to a visitor
+    # without an account: commit authors and forge logins are not theirs to read.
+    branch_name = None
+    development = None
+    if not anonymous:
+        from specivo.services.branch_name import BranchNameSettings, make_branch_name
+        from specivo.services.repository_service import development_for_issue
+
+        branch_name = make_branch_name(
+            BranchNameSettings.from_project_settings(project.settings),
+            tracker_name=issue.tracker.name if issue.tracker else "",
+            display_key=issue.display_key,
+            subject=issue.subject,
+        )
+        development = await development_for_issue(db, issue.id)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -522,6 +538,8 @@ async def issue_detail(
             "reactions_by_journal": reactions_by_journal,
             **tab_ctx,
             "relation_count": relation_count,
+            "branch_name": branch_name,
+            "development": development,
             "current_sprint": current_sprint,
             "relations": relations,
             "can_manage_relations": can_manage_relations,

@@ -1,0 +1,67 @@
+{
+  "action": "closed",
+  "number": 7,
+  "pull_request": {
+    "url": "https://api.github.example.com/repos/example-org/widgets/pulls/7",
+    "id": 279147437,
+    "node_id": "MDExOlB1bGxSZXF1ZXN0Mjc5MTQ3NDM3",
+    "html_url": "https://github.example.com/example-org/widgets/pull/7",
+    "diff_url": "https://github.example.com/example-org/widgets/pull/7.diff",
+    "number": 7,
+    "state": "closed",
+    "locked": false,
+    "title": "Add the login form",
+    "user": {
+      "login": "alex-example",
+      "id": 21031067,
+      "type": "User"
+    },
+    "body": "Fixes ACME-3\r\n\r\nAlso touches ACME-4.",
+    "created_at": "2026-10-01T09:00:00Z",
+    "updated_at": "2026-10-02T15:30:00Z",
+    "closed_at": "2026-10-02T15:30:00Z",
+    "merged_at": "2026-10-02T15:30:00Z",
+    "merge_commit_sha": "c48d3ae2e3a7b7f0c3b1b2ad1d9e9b5d0f3a7e21",
+    "assignee": null,
+    "draft": false,
+    "head": {
+      "label": "example-org:feat/ACME-3-login-form",
+      "ref": "feat/ACME-3-login-form",
+      "sha": "59b20b8d5c6ff8d09518454d4dd8b7b30f095ab5",
+      "user": {"login": "example-org", "id": 21031067, "type": "Organization"}
+    },
+    "base": {
+      "label": "example-org:main",
+      "ref": "main",
+      "sha": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+      "user": {"login": "example-org", "id": 21031067, "type": "Organization"}
+    },
+    "author_association": "OWNER",
+    "merged": true,
+    "mergeable": null,
+    "merged_by": {
+      "login": "sam-example",
+      "id": 21031068,
+      "type": "User"
+    },
+    "comments": 0,
+    "commits": 2,
+    "additions": 12,
+    "deletions": 1,
+    "changed_files": 2
+  },
+  "repository": {
+    "id": 186853002,
+    "name": "widgets",
+    "full_name": "example-org/widgets",
+    "private": false,
+    "owner": {"login": "example-org", "id": 21031067, "type": "Organization"},
+    "html_url": "https://github.example.com/example-org/widgets",
+    "default_branch": "main"
+  },
+  "sender": {
+    "login": "sam-example",
+    "id": 21031068,
+    "type": "User"
+  }
+}

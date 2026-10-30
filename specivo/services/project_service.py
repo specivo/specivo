@@ -24,8 +24,9 @@ from specivo.models.user import User
 from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.wiki import Wiki, WikiPage
 from specivo.schemas.project import KNOWN_MODULES, ProjectCreate, ProjectUpdate
-from specivo.services.anonymous_user_service import refuse_anonymous_user
+from specivo.services.anonymous_user_service import real_users_clause, refuse_anonymous_user
 from specivo.services.api_key_scope import is_global_admin, project_in_scope, scope_clause
+from specivo.services.branch_name import BRANCH_NAME_SETTINGS_KEY
 from specivo.services.computed_metadata_service import COMPUTED_METADATA_SETTINGS_KEY
 from specivo.services.permission_service import (
     Permission,
@@ -444,6 +445,10 @@ class ProjectService:
             new_settings = dict(project.settings or {})
             new_settings[COMPUTED_METADATA_SETTINGS_KEY] = data.computed_metadata
             project.settings = new_settings
+        if data.branch_name is not None:
+            new_settings = dict(project.settings or {})
+            new_settings[BRANCH_NAME_SETTINGS_KEY] = data.branch_name.model_dump()
+            project.settings = new_settings
 
         if "parent_id" in data.model_fields_set:
             project = await self._reparent(session, project, data.parent_id)
@@ -761,8 +766,14 @@ class ProjectService:
         deliberately named apart so no screen can show one while meaning the
         other.
         """
-        result = await session.execute(select(func.count()).select_from(Member).where(Member.project_id == project.id))
-        return result.scalar_one()
+        # System accounts (``$git``, holding a role for merge automation) are not grants anyone manages here.
+        stmt = (
+            select(func.count())
+            .select_from(Member)
+            .outerjoin(User, User.id == Member.user_id)
+            .where(Member.project_id == project.id, or_(Member.user_id.is_(None), real_users_clause()))
+        )
+        return (await session.execute(stmt)).scalar_one()
 
     async def count_people_with_access(self, session: AsyncSession, project: Project) -> int:
         """Return the number of distinct users the project's memberships reach.
@@ -776,14 +787,16 @@ class ProjectService:
 
         The counterpart is :meth:`count_membership_rows`.
         """
-        direct = select(Member.user_id.label("user_id")).where(
-            Member.project_id == project.id,
-            Member.user_id.is_not(None),
+        direct = (
+            select(Member.user_id.label("user_id"))
+            .join(User, User.id == Member.user_id)
+            .where(Member.project_id == project.id, real_users_clause())
         )
         via_group = (
             select(UserGroupMember.user_id.label("user_id"))
             .join(Member, Member.group_id == UserGroupMember.group_id)
-            .where(Member.project_id == project.id)
+            .join(User, User.id == UserGroupMember.user_id)
+            .where(Member.project_id == project.id, real_users_clause())
         )
         stmt = select(func.count()).select_from(union(direct, via_group).subquery())
         return (await session.execute(stmt)).scalar_one()
@@ -828,8 +841,9 @@ class ProjectService:
         out = []
         for member in members:
             user = member.user
-            if user is None:
-                # Group-held membership row — see the docstring.
+            if user is None or user.is_system_principal:
+                # Group-held membership row — see the docstring — or a
+                # system account such as ``$git``, which is nobody to assign to.
                 continue
             role_names = [mr.role.name for mr in member.member_roles if mr.role is not None]
             role_ids = [mr.role.id for mr in member.member_roles if mr.role is not None]
@@ -1045,7 +1059,7 @@ class ProjectService:
                 User.preferences,
             )
             .join(User, Member.user_id == User.id)
-            .where(Member.project_id.in_(project_ids))
+            .where(Member.project_id.in_(project_ids), real_users_clause())
             .order_by(Member.project_id, Member.id)
         )
         via_group_stmt = (

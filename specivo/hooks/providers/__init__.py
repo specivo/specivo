@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from specivo.hooks.providers.base import CommitData, ForgeProvider, PushEvent, SignatureError
+from specivo.hooks.providers.base import CommitData, ForgeProvider, PullRequestEvent, PushEvent, SignatureError
 from specivo.hooks.providers.gitea import ForgejoProvider, GiteaProvider
 from specivo.hooks.providers.github import GitHubProvider
 from specivo.hooks.providers.gitlab import GitLabProvider
@@ -28,6 +28,7 @@ __all__ = [
     "PROVIDER_NAMES",
     "CommitData",
     "ForgeProvider",
+    "PullRequestEvent",
     "PushEvent",
     "SignatureError",
     "get_provider",

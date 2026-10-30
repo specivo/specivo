@@ -38,6 +38,8 @@ import { tagFilter } from './components/tag-filter';
 import { projectTagsSettings } from './components/project-tags-settings';
 import { projectWebhooks } from './components/project-webhooks';
 import { projectRepositories } from './components/project-repositories';
+import { copyBranchName } from './components/copy-branch-name';
+import { projectBranchName } from './components/project-branch-name';
 import { entityAutocomplete } from './components/entity-autocomplete';
 import { projectCreateModal } from './components/project-create-modal';
 import { adminProjects } from './components/admin-projects';
@@ -98,6 +100,8 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('projectTagsSettings', projectTagsSettings);
   Alpine.data('projectWebhooks', projectWebhooks);
   Alpine.data('projectRepositories', projectRepositories);
+  Alpine.data('copyBranchName', copyBranchName);
+  Alpine.data('projectBranchName', projectBranchName);
   Alpine.data('entityAutocomplete', entityAutocomplete);
   Alpine.data('projectCreateModal', projectCreateModal);
   Alpine.data('adminProjects', adminProjects);

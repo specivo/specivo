@@ -6,7 +6,14 @@ import re
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from specivo.services.branch_name import (
+    DEFAULT_BRANCH_FORMAT,
+    DEFAULT_BRANCH_TYPE,
+    DEFAULT_BRANCH_TYPES,
+    validate_branch_format,
+)
 
 # ---------------------------------------------------------------------------
 # Project schemas
@@ -73,6 +80,49 @@ class ProjectCreate(BaseModel):
         return v
 
 
+_BRANCH_TYPE_RE = re.compile(r"[A-Za-z0-9._-]{1,30}")
+
+
+class BranchNameConfig(BaseModel):
+    """How the "Copy branch name" button builds a branch name (see ``specivo.services.branch_name``).
+
+    ``format`` must contain ``{key}`` and may use ``{type}`` and ``{slug}``;
+    ``types`` maps tracker names (compared case-insensitively) to the
+    ``{type}`` value, and ``default_type`` covers every other tracker.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    format: str = DEFAULT_BRANCH_FORMAT
+    types: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_BRANCH_TYPES), max_length=50)
+    default_type: str = DEFAULT_BRANCH_TYPE
+
+    @field_validator("format")
+    @classmethod
+    def _check_format(cls, v: str) -> str:
+        return validate_branch_format(v.strip())
+
+    @field_validator("types")
+    @classmethod
+    def _check_types(cls, v: dict[str, str]) -> dict[str, str]:
+        out: dict[str, str] = {}
+        for tracker, branch_type in v.items():
+            name = tracker.strip().lower()
+            if not name or len(name) > 255:
+                raise ValueError("Tracker names must be 1 to 255 characters")
+            if not _BRANCH_TYPE_RE.fullmatch(branch_type):
+                raise ValueError("A type may only hold letters, digits, '.', '_' and '-' (at most 30)")
+            out[name] = branch_type
+        return out
+
+    @field_validator("default_type")
+    @classmethod
+    def _check_default_type(cls, v: str) -> str:
+        if not _BRANCH_TYPE_RE.fullmatch(v):
+            raise ValueError("A type may only hold letters, digits, '.', '_' and '-' (at most 30)")
+        return v
+
+
 class ProjectUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
@@ -84,6 +134,8 @@ class ProjectUpdate(BaseModel):
     # is never stored on the issue, so it cannot drift. See
     # ``specivo.services.computed_metadata_service``.
     computed_metadata: dict | None = None
+    # The "Copy branch name" format and tracker types; replaces the stored one.
+    branch_name: BranchNameConfig | None = None
     # parent_id: use model_fields_set to detect whether this field was provided.
     # - Not in payload          → not in model_fields_set  → do not change parent
     # - parent_id=null in JSON  → in model_fields_set, value is None  → move to root
@@ -156,6 +208,9 @@ class ProjectOut(BaseModel):
     # ``permission_service.get_user_roles``, cached per (user, project)).
     # Read it from the single-project endpoint instead.
     computed_metadata: dict | None = None
+    # The "Copy branch name" settings in effect (defaults when none are
+    # stored). Like ``computed_metadata``, left ``None`` in list responses.
+    branch_name: BranchNameConfig | None = None
 
 
 # ---------------------------------------------------------------------------

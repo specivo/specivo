@@ -9,6 +9,9 @@
   (integration, sha).
 - ``IssueCommitLink``: a commit linked to an issue; its primary key is what
   makes each (commit, issue) journal and command happen once.
+- ``PullRequest``: a pull/merge request; unique per (integration, number).
+- ``IssuePullRequestLink``: a pull request linked to an issue; its primary
+  key makes each (pull request, issue) journal happen once.
 """
 
 from __future__ import annotations
@@ -50,6 +53,13 @@ DELIVERY_STATUSES = (DELIVERY_ACCEPTED, DELIVERY_DUPLICATE, DELIVERY_IGNORED, DE
 
 LINK_SOURCES = ("message", "branch")
 LINK_KEYWORDS = ("refs", "fixes")
+
+PR_OPEN = "open"
+PR_DRAFT = "draft"
+PR_MERGED = "merged"
+PR_CLOSED = "closed"
+PR_STATES = (PR_OPEN, PR_DRAFT, PR_MERGED, PR_CLOSED)
+PR_LINK_SOURCES = ("title", "body", "branch")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -204,3 +214,70 @@ class IssueCommitLink(Base):
 
     def __repr__(self) -> str:
         return f"<IssueCommitLink commit_id={self.commit_id} issue_id={self.issue_id} source={self.source}>"
+
+
+class PullRequest(Base, TimestampMixin):
+    """A pull request (GitHub, Gitea, Forgejo) or merge request (GitLab) that referenced an issue.
+
+    ``provider_updated_at`` is the forge's update time of the version stored;
+    an event carrying an older one is not applied, so events that arrive out
+    of order never move the state backwards.
+    """
+
+    __tablename__ = "pull_requests"
+    __table_args__ = (
+        # Leads with integration_id, so it also serves as the FK index.
+        UniqueConstraint("integration_id", "number", name="uq_pull_requests_integration_number"),
+        CheckConstraint(_in("state", PR_STATES), name="ck_pull_requests_state"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    title: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
+    url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")
+    state: Mapped[str] = mapped_column(String(10), nullable=False)
+    source_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    target_branch: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    author_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    merged_by_login: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    merge_commit_sha: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    provider_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<PullRequest id={self.id} number={self.number} state={self.state}>"
+
+
+class IssuePullRequestLink(Base):
+    """A pull request linked to an issue, from its title, body or source branch.
+
+    ``closing`` is true when the reference used a fixing keyword. Merge
+    automation sets ``merge_handled_at`` when it has acted on the pair, so it
+    acts once per issue per merge. A refused move is tried again by later
+    deliveries, but ``merge_refused_at`` keeps it to one note on the issue.
+    ``merge_qualified_at`` is set on the links that were closing when the
+    pull request became merged: automation acts on those only, never on a
+    reference or keyword added by editing the text after the merge.
+    """
+
+    __tablename__ = "issue_pull_request_links"
+    __table_args__ = (
+        CheckConstraint(_in("source", PR_LINK_SOURCES), name="ck_issue_pull_request_links_source"),
+        # The primary key leads with pull_request_id; issue_id needs its own index.
+        Index("ix_issue_pull_request_links_issue_id", "issue_id"),
+    )
+
+    pull_request_id: Mapped[int] = mapped_column(ForeignKey("pull_requests.id", ondelete="CASCADE"), primary_key=True)
+    issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
+    source: Mapped[str] = mapped_column(String(10), nullable=False)
+    closing: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    merge_handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    merge_refused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    merge_qualified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    def __repr__(self) -> str:
+        return f"<IssuePullRequestLink pull_request_id={self.pull_request_id} issue_id={self.issue_id}>"

@@ -38,6 +38,7 @@
 
 /* Page-specific styling. */
 @import "./pages/issue-detail.css";
+@import "./pages/issue-development.css";
 @import "./pages/new-issue.css";
 @import "./pages/wiki.css";
 @import "./pages/search.css";
