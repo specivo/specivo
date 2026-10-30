@@ -140,7 +140,10 @@ async def list_deliveries(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> PaginatedResponse[WebhookDeliveryOut]:
-    """The webhook's delivery log, newest first: status, attempts, last response code and an excerpt."""
+    """The webhook's delivery log, newest first: status, attempts, last response code and an excerpt.
+
+    Succeeded and failed deliveries are deleted after 30 days; pending ones are kept until they settle.
+    """
     project = await _project_for(project_key, current_user, db)
     await _require_manage_project(current_user, project.id, db)
     webhook = await _webhook_service.get(db, webhook_id, project.id)

@@ -65,6 +65,12 @@ class WebhookDelivery(Base, TimestampMixin):
             postgresql_where=text("status = 'pending'"),
         ),
         Index("ix_webhook_deliveries_webhook_id_created_at", "webhook_id", text("created_at DESC")),
+        # Retention: the scheduled cleanup deletes settled rows oldest first.
+        Index(
+            "ix_webhook_deliveries_settled_created_at",
+            "created_at",
+            postgresql_where=text("status IN ('succeeded', 'failed')"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)

@@ -95,6 +95,13 @@ WEBHOOK_SWEEP_INTERVAL_SECONDS = 60
 WEBHOOK_SWEEP_BATCH = 200
 # How long a project's active-webhook list is cached in Redis.
 WEBHOOK_SUBSCRIPTION_CACHE_SECONDS = 60
+# Settled delivery log rows older than this are deleted by the scheduled cleanup,
+# at most WEBHOOK_PURGE_BATCH per transaction and WEBHOOK_PURGE_MAX_BATCHES
+# transactions per run, so a large backlog is worked off over several runs
+# instead of outliving the cleanup lock.
+WEBHOOK_DELIVERY_RETENTION_DAYS = 30
+WEBHOOK_PURGE_BATCH = 1000
+WEBHOOK_PURGE_MAX_BATCHES = 50
 
 # Incoming repository webhooks (see specivo.services.repository_hooks)
 # Commit messages are stored up to this many characters.
