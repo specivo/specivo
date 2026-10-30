@@ -248,18 +248,24 @@ async def specivo_list_issues(
             ),
         ),
     ] = None,
+    parent_ref: Annotated[
+        str | None,
+        Field(description="Only the direct children of this issue (display key, e.g. ACME-12)."),
+    ] = None,
 ) -> str:
     """List issues for a project with filtering and sorting.
 
     Use status='open' (default) for active issues, 'all' for everything.
     Pass sprint_id to narrow the results to a single sprint.
     Pass metadata_filters to narrow by JSONB metadata (e.g. component=frontend).
+    Pass parent_ref to list only the direct children of that issue that belong
+    to this project.
     Each issue line carries its tags as '[tags: a, b]' when it has any, so no
     follow-up specivo_tag(op='get') call is needed.
     """
     async with _get_session_and_user() as (session, user):
         return await _list_issues(
-            session, user, project_key, status, sort, offset, limit, sprint_id, metadata_filters,
+            session, user, project_key, status, sort, offset, limit, sprint_id, metadata_filters, parent_ref,
         )
 
 
@@ -271,6 +277,9 @@ async def specivo_show_issue(
 ) -> str:
     """Show full issue details including description, tags, linked commits and pull requests.
 
+    ``Parent: REF subject`` names the parent issue and ``Children: REF, ...``
+    the direct children; both are left out when there are none (or none you
+    may see).
     Commits pushed to a repository connected to the project that reference the
     issue are listed as ``Commits: N`` followed by the newest ten (short SHA,
     first line, branch, URL) and "... and N more" beyond that. Pull/merge
@@ -321,11 +330,37 @@ async def specivo_create_issue(
             )
         ),
     ] = None,
+    parent_ref: Annotated[
+        str | None,
+        Field(
+            description=(
+                "Parent issue's display key, e.g. ACME-12, to create a sub-issue. "
+                "Omit for a top-level issue."
+            )
+        ),
+    ] = None,
+    tags: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "Tag names to apply at creation, e.g. ['backend', 'needs-review'] "
+                "(same rules as specivo_tag op='add': existing names are reused "
+                "case-insensitively, missing ones are created; at most 100 names "
+                "of up to 64 characters). Check specivo_list_tags first."
+            )
+        ),
+    ] = None,
 ) -> str:
     """Create a new issue in a project.
 
     Call specivo_list_lookups first to get valid tracker_id and priority_id.
     Call specivo_list_members to find user IDs for assignment.
+    Pass parent_ref to make the new issue a child of an existing one (the
+    parent may be in another project you can see). A parent that is unknown
+    or that you may not see, or one that would exceed the hierarchy depth
+    limit, returns an error string and nothing is created.
+    Pass tags to tag the issue in the same call; invalid names return an
+    error string and nothing is created.
     """
     async with _get_session_and_user() as (session, user):
         return await _create_issue(
@@ -342,6 +377,8 @@ async def specivo_create_issue(
             sprint_id,
             metadata,
             is_private,
+            parent_ref,
+            tags,
         )
 
 
@@ -359,11 +396,24 @@ async def specivo_update_issue(
     notes: Annotated[str | None, Field(description="Journal note (appears in issue history).")] = None,
     fixed_version_id: Annotated[int | None, Field(description="Version ID from list_versions.")] = None,
     sprint_id: Annotated[int | None, Field(description="Sprint ID from list_sprints.")] = None,
+    parent_ref: Annotated[
+        str | None,
+        Field(
+            description=(
+                "New parent's display key, e.g. ACME-12. Empty string '' to make the "
+                "issue top-level. Omit (None) to leave the parent unchanged."
+            )
+        ),
+    ] = None,
 ) -> str:
     """Update an issue. Lock version is handled automatically.
 
     Only pass fields you want to change; others remain unchanged.
     For description patches, prefer specivo_edit_description instead.
+    parent_ref re-parents the issue (its children move with it). An unknown
+    parent or one you may not see, a parent that is the issue itself or one
+    of its descendants (a cycle), or one that would exceed the hierarchy
+    depth limit returns an error string and nothing is changed.
     """
     async with _get_session_and_user() as (session, user):
         return await _update_issue(
@@ -379,6 +429,7 @@ async def specivo_update_issue(
             notes,
             fixed_version_id,
             sprint_id,
+            parent_ref,
         )
 
 
@@ -605,13 +656,26 @@ async def specivo_create_wiki(
     title: Annotated[str, Field(description="Page title. Slug is auto-derived from this.")],
     text: Annotated[str, Field(description="Page content (Markdown).")],
     parent_slug: Annotated[str | None, Field(description="Parent page slug for nested hierarchy.")] = None,
+    tags: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "Tag names to apply at creation, e.g. ['backend', 'needs-review'] "
+                "(same rules as specivo_tag op='add': existing names are reused "
+                "case-insensitively, missing ones are created; at most 100 names "
+                "of up to 64 characters). Check specivo_list_tags first."
+            )
+        ),
+    ] = None,
 ) -> str:
     """Create a new wiki page. Slug is auto-derived from the title.
 
     Use parent_slug to nest under an existing page.
+    Pass tags to tag the page in the same call; invalid names return an
+    error string and nothing is created. Never write tags into the text.
     """
     async with _get_session_and_user() as (session, user):
-        return await _create_wiki(session, user, project_key, title, text, parent_slug)
+        return await _create_wiki(session, user, project_key, title, text, parent_slug, tags)
 
 
 @mcp.tool()

@@ -169,6 +169,26 @@ def _parse_metadata_filters(raw: list[str] | None) -> list[tuple[str, str]]:
     return pairs
 
 
+async def _resolve_parent_ref(session: AsyncSession, user: User, parent_ref: str) -> Issue:
+    """Resolve *parent_ref* (a display key such as ``ACME-12``) to an issue *user* may see.
+
+    Raises ``NotFoundError`` with one message for every refusal: a malformed
+    or unknown ref, a bare database id, an issue *user* may not see and one
+    outside the API key's project limit, so a refusal tells nothing about
+    which issues exist.
+    """
+    not_found = NotFoundError(f"parent issue '{parent_ref}' not found")
+    if "-" not in parent_ref:
+        raise not_found
+    try:
+        parent = await _issue_svc.get_by_display_key(session, parent_ref.strip(), user=user)
+    except NotFoundError:
+        raise not_found from None
+    if not await check_permission(user, parent.project_id, "view_issues", session):
+        raise not_found
+    return parent
+
+
 async def _list_issues(
     session: AsyncSession,
     user: User,
@@ -179,12 +199,20 @@ async def _list_issues(
     limit: int = 25,
     sprint_id: int | None = None,
     metadata_filters: list[str] | None = None,
+    parent_ref: str | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     filters: dict = {"status": status}
     if sprint_id is not None:
         filters["sprint_id"] = sprint_id
+    parent: Issue | None = None
+    if parent_ref:
+        try:
+            parent = await _resolve_parent_ref(session, user, parent_ref)
+        except NotFoundError as exc:
+            return f"Error: {exc.message}"
+        filters["parent_id"] = parent.id
     try:
         parsed_metadata = _parse_metadata_filters(metadata_filters)
     except ValueError as exc:
@@ -208,6 +236,8 @@ async def _list_issues(
         scope += f", sprint_id={sprint_id}"
     if parsed_metadata:
         scope += ", metadata=" + ",".join(f"{k}={v}" for k, v in parsed_metadata)
+    if parent is not None:
+        scope += f", parent={parent.display_key}"
     lines = [f"Issues for {project.key} ({total} total, {scope}):", ""]
     # One batched query for every issue on this page — never per-issue lookups.
     tags_by_issue = await _tag_svc.tags_for_issues(session, [i.id for i in issues])
@@ -274,6 +304,7 @@ async def _show_issue(
     if issue.estimated_hours:
         lines.append(f"Estimated hours: {issue.estimated_hours}")
     lines.append(f"Done: {issue.done_ratio}%")
+    lines.extend(await _hierarchy_lines(session, user, issue))
     effective_metadata = merge_computed(
         issue.issue_metadata, await load_project_settings(session, issue.project_id)
     )
@@ -308,6 +339,22 @@ async def _show_issue(
 
     await _log_tool(session, user, AuditEvent.ISSUE_READ, "show_issue", {"issue_ref": issue_ref})
     return "\n".join(lines)
+
+
+async def _hierarchy_lines(session: AsyncSession, user: User, issue: Issue) -> list[str]:
+    """``Parent: REF subject`` and ``Children: REF, ...`` (direct children), naming only issues *user* may see."""
+    lines: list[str] = []
+    if issue.parent_id is not None:
+        try:
+            parent = await _issue_svc.get_by_id(session, issue.parent_id, user=user)
+        except NotFoundError:
+            parent = None
+        if parent is not None and await check_permission(user, parent.project_id, "view_issues", session):
+            lines.append(f"Parent: {parent.display_key} {parent.subject}")
+    children = await _issue_svc.list_visible_children(session, issue, user)
+    if children:
+        lines.append("Children: " + ", ".join(c.display_key for c in children))
+    return lines
 
 
 async def _commit_lines(session: AsyncSession, issue_id: int) -> list[str]:
@@ -390,9 +437,24 @@ async def _create_issue(
     sprint_id: int | None = None,
     metadata: dict | None = None,
     is_private: bool | None = None,
+    parent_ref: str | None = None,
+    tags: list[str] | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "add_issues")
+    try:
+        tag_names = _clean_tag_names(tags)
+    except ValueError as exc:
+        return f"Error: {exc}"
+    parent: Issue | None = None
+    if parent_ref:
+        # Checked before anything is written: the error string is committed
+        # with the tool call, so a refusal must leave nothing behind.
+        try:
+            parent = await _resolve_parent_ref(session, user, parent_ref)
+            await _issue_svc.check_parent(session, None, parent)
+        except (NotFoundError, ValidationError) as exc:
+            return f"Error: {exc.message}"
     data = IssueCreate(
         project_key=project_key,
         tracker_id=tracker_id,
@@ -405,6 +467,7 @@ async def _create_issue(
         sprint_id=sprint_id,
         metadata=metadata or {},
         is_private=is_private,
+        parent_id=parent.id if parent is not None else None,
     )
     issue = await _issue_svc.create(session, project, data, user)
     await session.flush()
@@ -416,9 +479,17 @@ async def _create_issue(
         {"project_key": project_key, "subject": subject, "issue_ref": issue.display_key},
         project_id=project.id,
     )
-    return (
+    result = (
         f"Created issue {issue.display_key}: {issue.subject}\nStatus: {issue.status_id}, Priority: {issue.priority_id}"
     )
+    if parent is not None:
+        result += f"\nParent: {parent.display_key}"
+    if tag_names:
+        applied = await _add_tags(
+            session, user, "create_issue", "issue", project, issue.id, issue.display_key, tag_names
+        )
+        result += "\nTags: " + ", ".join(applied)
+    return result
 
 
 async def _update_issue(
@@ -434,9 +505,19 @@ async def _update_issue(
     notes: str | None = None,
     fixed_version_id: int | None = None,
     sprint_id: int | None = None,
+    parent_ref: str | None = None,
 ) -> str:
     issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
     await _require_permission(session, user, issue.project_id, "edit_issues")
+    parent: Issue | None = None
+    if parent_ref:
+        # Checked before anything is written: the service applies the other
+        # fields first, and the error string is committed with the tool call.
+        try:
+            parent = await _resolve_parent_ref(session, user, parent_ref)
+            await _issue_svc.check_parent(session, issue, parent)
+        except (NotFoundError, ValidationError) as exc:
+            return f"Error: {exc.message}"
     # Only forward kwargs the caller actually supplied. Pydantic V2 adds every
     # explicit kwarg to ``model_fields_set`` regardless of value, and the
     # service layer uses that set to distinguish "not provided" from
@@ -459,6 +540,9 @@ async def _update_issue(
         supplied["fixed_version_id"] = fixed_version_id
     if sprint_id is not None:
         supplied["sprint_id"] = sprint_id
+    if parent_ref is not None:
+        # The service takes 0 for "move to root".
+        supplied["parent_id"] = parent.id if parent is not None else 0
     data = IssueUpdate(**supplied, lock_version=issue.lock_version)
     updated = await _issue_svc.update(session, issue, data, user, notes=notes)
     await session.flush()
@@ -875,9 +959,14 @@ async def _create_wiki(
     title: str,
     text: str,
     parent_slug: str | None = None,
+    tags: list[str] | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "manage_wiki")
+    try:
+        tag_names = _clean_tag_names(tags)
+    except ValueError as exc:
+        return f"Error: {exc}"
     page, content = await _wiki_svc.create_page(
         session,
         project.id,
@@ -895,10 +984,15 @@ async def _create_wiki(
         {"project_key": project_key, "slug": page.slug, "title": title},
         project_id=project.id,
     )
-    return (
+    result = (
         f"Created wiki page '{page.title}' (slug: {page.slug}).\n"
         f"Version: {content.version}\nLock version: {page.lock_version}"
     )
+    if tag_names:
+        target_ref = f"wiki:{project.key}/{page.slug}"
+        applied = await _add_tags(session, user, "create_wiki", "wiki", project, page.id, target_ref, tag_names)
+        result += "\nTags: " + ", ".join(applied)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -2712,6 +2806,58 @@ async def _delete_tag(session: AsyncSession, user: User, project_key: str, tag_i
     return f"Deleted tag '{name}' from {project.key}."
 
 
+def _clean_tag_names(value: Any) -> list[str]:
+    """Normalise a tag name or list of names; raise ``ValueError`` when it breaks a limit.
+
+    The same bounds as the REST tag schemas: a capped list of stripped,
+    de-duplicated names, none longer than the tag name column. Blank names
+    are dropped.
+    """
+    if value is None:
+        names: list[str] = []
+    elif isinstance(value, list):
+        names = [str(v) for v in value]
+    else:
+        names = [str(value)]
+    if len(names) > MAX_TAG_NAMES:
+        raise ValueError(f"at most {MAX_TAG_NAMES} tag names per call")
+    names = [n.strip() for n in names]
+    if any(len(n) > TAG_NAME_MAX for n in names):
+        raise ValueError(f"tag names must be at most {TAG_NAME_MAX} characters")
+    return normalize_tag_names(names)
+
+
+async def _add_tags(
+    session: AsyncSession,
+    user: User,
+    tool_name: str,
+    kind: str,
+    project: Project,
+    entity_id: int,
+    target_ref: str,
+    names: list[str],
+) -> list[str]:
+    """Apply *names* (from :func:`_clean_tag_names`) to an issue or wiki page, creating missing tags.
+
+    Each new link is audited as ``TAG_ADDED``. Returns the names of the tags
+    newly linked, as stored (an existing tag keeps its own spelling).
+    """
+    added: list[str] = []
+    for name in names:
+        if kind == "issue":
+            tag, created = await _tag_svc.add_to_issue(session, project, entity_id, name, user)
+        else:
+            tag, created = await _tag_svc.add_to_wiki_page(session, project, entity_id, name, user)
+        if created:
+            added.append(tag.name)
+            await _log_tool(
+                session, user, AuditEvent.TAG_ADDED, tool_name,
+                {"target_ref": target_ref, "name": tag.name}, project_id=project.id,
+            )
+    await session.flush()
+    return added
+
+
 async def _resolve_tag_target(session: AsyncSession, user: User, target_ref: str):
     """Resolve a tag target_ref to (kind, project, entity_id, display).
 
@@ -2773,22 +2919,10 @@ async def _tag(
             return f"{display}: (no tags)"
         return f"{display}: " + ", ".join(t.name for t in tags)
 
-    # Normalize value to a list of names.
-    if value is None:
-        names: list[str] = []
-    elif isinstance(value, list):
-        names = [str(v) for v in value]
-    else:
-        names = [str(value)]
-
-    # The same bounds as the REST tag schemas: a capped list of stripped,
-    # de-duplicated names, none longer than the tag name column.
-    if len(names) > MAX_TAG_NAMES:
-        return f"Error: at most {MAX_TAG_NAMES} tag names per call"
-    names = [n.strip() for n in names]
-    if any(len(n) > TAG_NAME_MAX for n in names):
-        return f"Error: tag names must be at most {TAG_NAME_MAX} characters"
-    names = normalize_tag_names(names)
+    try:
+        names = _clean_tag_names(value)
+    except ValueError as exc:
+        return f"Error: {exc}"
 
     if op == "set":
         if kind == "issue":
@@ -2816,18 +2950,7 @@ async def _tag(
 
     changed: list[str] = []
     if op == "add":
-        for n in names:
-            if kind == "issue":
-                tag, created = await _tag_svc.add_to_issue(session, project, entity_id, n, user)
-            else:
-                tag, created = await _tag_svc.add_to_wiki_page(session, project, entity_id, n, user)
-            if created:
-                changed.append(tag.name)
-                await _log_tool(
-                    session, user, AuditEvent.TAG_ADDED, "tag",
-                    {"target_ref": target_ref, "name": tag.name}, project_id=project.id,
-                )
-        await session.flush()
+        changed = await _add_tags(session, user, "tag", kind, project, entity_id, target_ref, names)
         return f"Added tags to {display}: {', '.join(changed) or '(already present)'}"
 
     # op == "remove"
