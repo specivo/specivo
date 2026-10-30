@@ -18,7 +18,11 @@ commit author email:
 
 The commit author email is not authenticated, so turning commands on means
 anyone with push access may act as any project member with a verified email;
-the settings UI says so.
+the settings UI says so. An administrator matched this way is never trusted
+with admin rights: the commands run with the roles of their own membership in
+the issue's project, exactly as for anyone else with those roles
+(:func:`without_admin_rights`), and are skipped (``no_membership``) when they
+have none.
 
 Merge automation (``merge_automation_enabled``): when a pull request whose
 link is *closing* merges into the default branch, the issue moves to
@@ -32,11 +36,14 @@ on the issue saying why.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError
 from specivo.core.utils import utcnow
@@ -192,6 +199,36 @@ def _code(value: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+@contextmanager
+def without_admin_rights(user: User | None) -> Iterator[None]:
+    """Evaluate *user* as a non-administrator inside the block.
+
+    Every check (permissions, issue visibility, workflow and field rules)
+    reads ``user.is_admin``, so the flag is cleared on the loaded object for
+    the block. ``set_committed_value`` leaves no change behind for the unit of
+    work, so nothing is ever written to the database, and the flag is put
+    back however the block ends.
+    """
+    if user is None or not user.is_admin:
+        yield
+        return
+    set_committed_value(user, "is_admin", False)
+    try:
+        yield
+    finally:
+        set_committed_value(user, "is_admin", True)
+
+
+async def _has_membership(session: AsyncSession, user: User, project_id: int) -> bool:
+    """Whether *user* is a member of the project, in person or through a group."""
+    from specivo.services.permission_service import member_principal_clause
+
+    row = await session.execute(
+        select(Member.id).where(Member.project_id == project_id, member_principal_clause(user.id)).limit(1)
+    )
+    return row.first() is not None
+
+
 async def _matched_user(session: AsyncSession, commit: RepositoryCommit) -> User | None:
     if commit.matched_user_id is None:
         return None
@@ -222,14 +259,22 @@ async def run_commit_commands(
         return [("commands", "commands_disabled")]
     outcomes: list[tuple[str, str]] = []
     user = await _matched_user(session, commit)
-    if wants_fix:
-        outcomes.append(("fixes", await _fix(session, integration, settings, commit, issue, user, commit_label)))
-    if wants_time:
-        assert ref.hours is not None
-        if not settings.time_logging_enabled:
-            outcomes.append(("time", "time_logging_disabled"))
-        else:
-            outcomes.append(("time", await _log_time(session, commit, issue, user, ref)))
+    # An administrator acts only through their membership, never with admin rights.
+    skip = (
+        "no_membership"
+        if user is not None and user.is_admin and not await _has_membership(session, user, issue.project_id)
+        else None
+    )
+    with without_admin_rights(user):
+        if wants_fix:
+            fix = skip or await _fix(session, integration, settings, commit, issue, user, commit_label)
+            outcomes.append(("fixes", fix))
+        if wants_time:
+            assert ref.hours is not None
+            if not settings.time_logging_enabled:
+                outcomes.append(("time", "time_logging_disabled"))
+            else:
+                outcomes.append(("time", skip or await _log_time(session, commit, issue, user, ref)))
     return outcomes
 
 

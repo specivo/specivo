@@ -610,3 +610,106 @@ class TestMergeAutomation:
         )
         await _send(client, db_session, integration, payload, queued)
         assert (await _reload(db_session, world.issues["PRH-1"])).status_id == world.new.id
+
+
+ALL_PROVIDERS = ["github", "gitlab", "gitea", "forgejo"]
+
+
+class TestExternalPullRequests:
+    """``ignore_external_pull_requests`` (on by default) skips requests from forks and outsiders."""
+
+    async def _links(self, db: AsyncSession) -> int:
+        return int(await db.scalar(select(func.count()).select_from(IssuePullRequestLink)) or 0)
+
+    async def _last_delivery(self, db: AsyncSession) -> RepositoryDelivery:
+        rows = await db.execute(select(RepositoryDelivery).order_by(RepositoryDelivery.id.desc()).limit(1))
+        return rows.scalar_one()
+
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    async def test_fork_skipped_by_default(self, client, db_session, world, queued, provider):
+        integration = await make_integration(db_session, world.project, provider=provider)
+        payload = pull_request_payload(provider, body="Fixes PRH-1", external=True)
+        result = await _send(client, db_session, integration, payload, queued)
+        assert result.status == "ignored"
+        assert "external_pull_request" in result.detail
+        delivery = await self._last_delivery(db_session)
+        assert (delivery.status, "external_pull_request" in (delivery.detail or "")) == ("ignored", True)
+        assert await self._links(db_session) == 0
+        assert await db_session.scalar(select(func.count()).select_from(PullRequest)) == 0
+        assert await _journals(db_session, world.issues["PRH-1"]) == []
+
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    async def test_fork_processed_when_off(self, client, db_session, world, queued, provider):
+        integration = await make_integration(
+            db_session, world.project, provider=provider, settings={"ignore_external_pull_requests": False}
+        )
+        payload = pull_request_payload(provider, body="Fixes PRH-1", external=True)
+        result = await _send(client, db_session, integration, payload, queued)
+        assert result.status == "processed"
+        assert await self._links(db_session) == 1
+
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    async def test_same_repository_processed_when_on(self, client, db_session, world, queued, provider):
+        integration = await make_integration(
+            db_session, world.project, provider=provider, settings={"ignore_external_pull_requests": True}
+        )
+        result = await _send(
+            client, db_session, integration, pull_request_payload(provider, body="Fixes PRH-1"), queued
+        )
+        assert result.status == "processed"
+        assert await self._links(db_session) == 1
+
+    @pytest.mark.parametrize("association", ["CONTRIBUTOR", "FIRST_TIME_CONTRIBUTOR", "NONE"])
+    async def test_github_author_without_a_role_skipped(self, client, db_session, world, queued, association):
+        integration = await make_integration(db_session, world.project)
+        payload = pull_request_payload("github", body="Fixes PRH-1", author_association=association)
+        result = await _send(client, db_session, integration, payload, queued)
+        assert result.status == "ignored"
+        assert "external_pull_request" in result.detail
+        assert await self._links(db_session) == 0
+
+    @pytest.mark.parametrize("association", ["MEMBER", "COLLABORATOR"])
+    async def test_github_collaborator_processed(self, client, db_session, world, queued, association):
+        integration = await make_integration(db_session, world.project)
+        payload = pull_request_payload("github", body="Fixes PRH-1", author_association=association)
+        result = await _send(client, db_session, integration, payload, queued)
+        assert result.status == "processed"
+        assert await self._links(db_session) == 1
+
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    async def test_merging_a_fork_still_links_and_runs_automation(self, client, db_session, world, queued, provider):
+        """Only someone with write access merges: the merge itself is never noise."""
+        await _grant_git(db_session, world.project)
+        integration = await make_integration(db_session, world.project, provider=provider, settings=_automation(world))
+        opened = pull_request_payload(provider, body="Fixes PRH-1", external=True, updated_at="2026-10-01T09:00:00Z")
+        assert (await _send(client, db_session, integration, opened, queued)).status == "ignored"
+        merged = pull_request_payload(
+            provider, body="Fixes PRH-1", external=True, state="merged", updated_at="2026-10-02T15:30:00Z"
+        )
+        result = await _send(client, db_session, integration, merged, queued)
+        assert result.status == "processed"
+        assert await self._links(db_session) == 1
+        assert (await _reload(db_session, world.issues["PRH-1"])).status_id == world.resolved.id
+        assert len(await _journals(db_session, world.issues["PRH-1"])) == 2  # the link note and the move
+
+    @pytest.mark.parametrize("provider", ALL_PROVIDERS)
+    async def test_payload_without_repository_ids_is_skipped_not_failed(
+        self, client, db_session, world, queued, provider
+    ):
+        """A payload that cannot show where the request comes from is treated as external."""
+        integration = await make_integration(db_session, world.project, provider=provider)
+        payload = pull_request_payload(provider, body="Fixes PRH-1")
+        if provider == "gitlab":
+            payload["object_attributes"].pop("source_project_id")
+        else:
+            payload["pull_request"]["head"] = "unexpected"
+        result = await _send(client, db_session, integration, payload, queued)
+        assert result.status == "ignored"
+        assert "external_pull_request" in result.detail
+        assert await self._links(db_session) == 0
+
+    async def test_setting_defaults_to_on(self, client, db_session, world):
+        from specivo.schemas.repository import RepositorySettings
+
+        assert RepositorySettings().ignore_external_pull_requests is True
+        assert RepositorySettings.model_validate({}, strict=False).ignore_external_pull_requests is True

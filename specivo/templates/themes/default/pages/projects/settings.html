@@ -1520,6 +1520,12 @@
                   <div class="form-hint">{% trans %}The Automation role may edit issues but has no workflow transitions until an administrator grants them. Changing the role needs permission to manage members.{% endtrans %}</div>
                 </div>
               </div>
+
+              <label class="sp-repo-check">
+                <input type="checkbox" x-model="form.ignore_external_pull_requests" data-testid="repository-ignore-external">
+                <span>{% trans %}Ignore pull requests from forks and outsiders{% endtrans %}</span>
+              </label>
+              <div class="form-hint">{% trans %}Requests from another repository, or on GitHub by someone who is not a collaborator, are not linked to issues until they are merged.{% endtrans %}</div>
             </fieldset>
             <template x-if="!editing">
               <div class="form-hint">{% trans %}A webhook URL and a secret are generated and shown once after the repository is connected.{% endtrans %}</div>

@@ -28,6 +28,7 @@ from specivo.hooks.providers.base import (
     constant_time_equal,
     delivery_id_from,
     dict_at,
+    forge_id_or_none,
     header,
     int_or_none,
     parse_commits,
@@ -89,6 +90,7 @@ class GitLabProvider:
         action = str_or_none(mr.get("action"))
         user = str_or_none(dict_at(payload, "user").get("username"))
         merged = state == "merged"
+        source, target = forge_id_or_none(mr.get("source_project_id")), forge_id_or_none(mr.get("target_project_id"))
         return PullRequestEvent(
             repo_full_name=self.repo_full_name(payload),
             number=number,
@@ -105,4 +107,7 @@ class GitLabProvider:
             merge_commit_sha=sha_or_none(mr.get("merge_commit_sha")) if merged else None,
             updated_at=timestamp(mr.get("updated_at")),
             action=action,
+            # A merge request from a fork comes from another project; one that names no project
+            # cannot be shown to come from inside.
+            external=source is None or target is None or source != target,
         )

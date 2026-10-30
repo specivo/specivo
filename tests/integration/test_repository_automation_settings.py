@@ -170,6 +170,59 @@ class TestGitMembership:
         resp = await client.post(_base(project), json=body, headers=settings_only_manager)
         assert resp.status_code == 201, resp.text
 
+    async def _with_custom_git_role(self, client, db_session, project, manager, resolved) -> tuple[dict, Role]:
+        """An integration with merge automation whose ``$git`` role a member manager picked."""
+        bot = Role(name="Rauto Custom Bot", permissions=["view_issues", "edit_issues"])
+        db_session.add(bot)
+        await db_session.commit()
+        body = {
+            **_BODY,
+            "settings": {"merge_automation_enabled": True, "merge_status_id": resolved.id},
+            "automation_role_id": bot.id,
+        }
+        resp = await client.post(_base(project), json=body, headers=manager)
+        assert resp.status_code == 201, resp.text
+        return resp.json(), bot
+
+    async def test_resending_the_current_role_needs_no_manage_members(
+        self, client, db_session, project, manager, settings_only_manager, resolved
+    ):
+        created, bot = await self._with_custom_git_role(client, db_session, project, manager, resolved)
+        resp = await client.patch(
+            f"{_base(project)}{created['id']}/",
+            json={"settings": {**created["settings"], "commands_enabled": True}, "automation_role_id": bot.id},
+            headers=settings_only_manager,
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["settings"]["commands_enabled"] is True
+        assert await _git_roles(db_session, project) == ["Rauto Custom Bot"]
+
+    async def test_changing_to_the_automation_role_needs_manage_project_only(
+        self, client, db_session, project, manager, settings_only_manager, resolved
+    ):
+        created, _bot = await self._with_custom_git_role(client, db_session, project, manager, resolved)
+        automation = await _automation_role(db_session)
+        resp = await client.patch(
+            f"{_base(project)}{created['id']}/",
+            json={"automation_role_id": automation.id},
+            headers=settings_only_manager,
+        )
+        assert resp.status_code == 200, resp.text
+        assert await _git_roles(db_session, project) == ["Automation"]
+
+    async def test_changing_to_another_role_needs_manage_members(
+        self, client, db_session, project, manager, settings_only_manager, resolved
+    ):
+        created, _bot = await self._with_custom_git_role(client, db_session, project, manager, resolved)
+        other = Role(name="Rauto Other Bot", permissions=["*"])
+        db_session.add(other)
+        await db_session.commit()
+        resp = await client.patch(
+            f"{_base(project)}{created['id']}/", json={"automation_role_id": other.id}, headers=settings_only_manager
+        )
+        assert resp.status_code == 403, resp.text
+        assert await _git_roles(db_session, project) == ["Rauto Custom Bot"]
+
     async def test_builtin_or_unknown_role_refused(self, client, db_session, project, manager, resolved):
         non_member = (await db_session.execute(select(Role).where(Role.builtin == 1))).scalar_one_or_none()
         for role_id in [999_999] + ([non_member.id] if non_member else []):
@@ -203,6 +256,86 @@ class TestGitMembership:
         resp = await client.delete(f"{_base(project)}{first['id']}/", headers=manager)
         assert resp.status_code == 204
         assert await _git_roles(db_session, project) == ["Automation"]
+
+
+async def _git_audit(db: AsyncSession, project) -> list[tuple[str, int, str, list[str]]]:
+    """(action, actor id, target login, roles) of the membership audit rows about ``$git``, oldest first."""
+    from specivo.models.security_audit import SecurityAuditLog
+    from specivo.services.security_audit_service import AuditEvent
+
+    rows = await db.execute(
+        select(SecurityAuditLog)
+        .where(SecurityAuditLog.event_type == AuditEvent.MEMBER_CHANGE, SecurityAuditLog.project_id == project.id)
+        .order_by(SecurityAuditLog.id)
+    )
+    return [
+        (log.details["action"], log.user_id, log.details.get("target_login"), log.details.get("roles", []))
+        for log in rows.scalars()
+        if log.details.get("target_login") == "$git"
+    ]
+
+
+async def _login_id(db: AsyncSession, login: str) -> int:
+    return (await db.execute(select(User.id).where(User.login == login))).scalar_one()
+
+
+class TestGitMembershipAudit:
+    """Each ``$git`` membership change writes the audit row the members API writes, by whoever changed the setting."""
+
+    async def test_turning_automation_on_audits_the_new_membership(
+        self, client, db_session, project, manager, resolved
+    ):
+        settings = {"merge_automation_enabled": True, "merge_status_id": resolved.id}
+        resp = await client.post(_base(project), json={**_BODY, "settings": settings}, headers=manager)
+        assert resp.status_code == 201, resp.text
+        actor = await _login_id(db_session, "rauto_manager")
+        assert await _git_audit(db_session, project) == [("added", actor, "$git", ["Automation"])]
+
+    async def test_saving_without_a_change_writes_nothing_more(self, client, db_session, project, manager, resolved):
+        settings = {"merge_automation_enabled": True, "merge_status_id": resolved.id}
+        created = (await client.post(_base(project), json={**_BODY, "settings": settings}, headers=manager)).json()
+        resp = await client.patch(f"{_base(project)}{created['id']}/", json={"settings": settings}, headers=manager)
+        assert resp.status_code == 200, resp.text
+        assert [row[0] for row in await _git_audit(db_session, project)] == ["added"]
+
+    async def test_changing_the_role_audits_the_new_roles(self, client, db_session, project, manager, resolved):
+        other = Role(name="Rauto Audit Bot", permissions=["view_issues", "edit_issues"])
+        db_session.add(other)
+        await db_session.commit()
+        settings = {"merge_automation_enabled": True, "merge_status_id": resolved.id}
+        created = (await client.post(_base(project), json={**_BODY, "settings": settings}, headers=manager)).json()
+        resp = await client.patch(
+            f"{_base(project)}{created['id']}/", json={"automation_role_id": other.id}, headers=manager
+        )
+        assert resp.status_code == 200, resp.text
+        actor = await _login_id(db_session, "rauto_manager")
+        assert (await _git_audit(db_session, project))[-1] == ("roles_changed", actor, "$git", ["Rauto Audit Bot"])
+
+    async def test_turning_automation_off_audits_the_removal(
+        self, client, db_session, project, manager, settings_only_manager, resolved
+    ):
+        settings = {"merge_automation_enabled": True, "merge_status_id": resolved.id}
+        created = (await client.post(_base(project), json={**_BODY, "settings": settings}, headers=manager)).json()
+        resp = await client.patch(
+            f"{_base(project)}{created['id']}/",
+            json={"settings": {**settings, "merge_automation_enabled": False}},
+            headers=settings_only_manager,
+        )
+        assert resp.status_code == 200, resp.text
+        actor = await _login_id(db_session, "rauto_settings")
+        assert [row[:3] for row in await _git_audit(db_session, project)] == [
+            ("added", await _login_id(db_session, "rauto_manager"), "$git"),
+            ("removed", actor, "$git"),
+        ]
+
+    async def test_disconnecting_the_last_integration_audits_the_removal(
+        self, client, db_session, project, manager, resolved
+    ):
+        settings = {"merge_automation_enabled": True, "merge_status_id": resolved.id}
+        created = (await client.post(_base(project), json={**_BODY, "settings": settings}, headers=manager)).json()
+        resp = await client.delete(f"{_base(project)}{created['id']}/", headers=manager)
+        assert resp.status_code == 204
+        assert [row[0] for row in await _git_audit(db_session, project)] == ["added", "removed"]
 
 
 class TestGitHidden:

@@ -24,7 +24,12 @@ accepted ``pull_request`` delivery (GitHub and Gitea/Forgejo
    reference added by editing the text never qualifies. A merge event that
    arrives late, after a newer event already stored the request as merged,
    still qualifies its links without changing the stored request.
-6. A merge into the default branch with merge automation on moves each
+6. With ``ignore_external_pull_requests`` (the default), an event of a
+   request from a fork or an outsider (``PullRequestEvent.external``) stops
+   at step 1 and is logged ``ignored`` with ``external_pull_request``; the
+   merge event is the exception, since only someone with write access
+   merges.
+7. A merge into the default branch with merge automation on moves each
    qualified link's issue once (``merge_handled_at``), while the issue's
    project is still in the integration's scope; see
    :mod:`specivo.services.repository_commands`.
@@ -34,7 +39,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select, tuple_
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -133,15 +138,33 @@ async def _upsert(
     return pr, True, previous
 
 
-async def _issues(session: AsyncSession, links: dict[str, PullRequestLink], scope: dict[str, int]) -> dict[str, Issue]:
-    pairs = {(link.key, link.number) for link in links.values()}
+async def _issues(
+    session: AsyncSession, links: dict[str, PullRequestLink], scope: dict[str, int]
+) -> dict[int, tuple[Issue, PullRequestLink]]:
+    """Issue id → (locked issue, how the pull request references it), for the references in scope.
+
+    An issue named twice (by its old and its current key) gets one entry,
+    closing when either reference is.
+    """
+    from specivo.services.repository_hooks import resolve_references
+
+    resolved = await resolve_references(session, {(link.key, link.number) for link in links.values()}, scope)
+    if not resolved:
+        return {}
     rows = await session.execute(
-        select(Issue)
-        .where(tuple_(Issue.project_key, Issue.sequence_number).in_(pairs), Issue.project_id.in_(set(scope.values())))
-        .order_by(Issue.id)
-        .with_for_update()
+        select(Issue).where(Issue.id.in_(set(resolved.values()))).order_by(Issue.id).with_for_update()
     )
-    return {issue.display_key: issue for issue in rows.scalars().all()}
+    by_id = {issue.id: issue for issue in rows.scalars().all()}
+    issues: dict[int, tuple[Issue, PullRequestLink]] = {}
+    for display_key, link in links.items():
+        issue = by_id.get(resolved.get(display_key, 0))
+        if issue is None:
+            continue
+        seen = issues.get(issue.id)
+        if seen is not None and (seen[1].closing or not link.closing):
+            continue
+        issues[issue.id] = (issue, link)
+    return issues
 
 
 async def process_pull_request(session: AsyncSession, integration: RepositoryIntegration, payload: dict):
@@ -159,6 +182,12 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
     if event.default_branch and event.default_branch != integration.default_branch:
         integration.default_branch = event.default_branch[:255]
     label = f"Pull request #{event.number}" if integration.provider != "gitlab" else f"Merge request !{event.number}"
+    # A request from a fork or an outsider is noise until someone with write access merges it.
+    ignore_external = commands.integration_settings(integration).ignore_external_pull_requests
+    if event.external and ignore_external and not is_merge_event(event):
+        return ProcessResult(
+            DELIVERY_IGNORED, f"{label} ({event.state}) ignored: external_pull_request (from a fork or an outsider)."
+        )
 
     scope = await scope_project_keys(session, integration)
     links = pull_request_links(event, frozenset(scope))
@@ -186,8 +215,7 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
     journals = JournalService()
     merged_before = previous_state == PR_MERGED
     new_count = 0
-    for display_key, issue in issues.items():
-        link = links[display_key]
+    for issue, link in issues.values():
         current = existing.get(issue.id)
         if current is not None:
             if link.closing and not current.closing:
@@ -204,7 +232,7 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
         if pr.source_branch:
             additions[BRANCHES_METADATA_KEY] = [pr.source_branch]
         append_metadata(issue, additions)
-    closing_now = {issue.id: links[key].closing for key, issue in issues.items()}
+    closing_now = {issue_id: link.closing for issue_id, (_issue, link) in issues.items()}
     if not merged_before:
         # Before the merge, closing follows the text as it is now: a dropped
         # reference or keyword no longer counts.

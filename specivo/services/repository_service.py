@@ -14,6 +14,7 @@ import secrets
 from typing import Any
 from urllib.parse import quote
 
+from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -134,7 +135,9 @@ class RepositoryIntegrationService:
     Merge automation runs as ``$git`` with a real project role. Turning it on
     gives ``$git`` a membership in the project holding exactly that role (the
     Automation role unless the caller picks one); turning it off on the
-    project's last integration that had it removes the membership.
+    project's last integration that had it removes the membership. Each of
+    those membership changes writes the audit row the members API writes,
+    with whoever changed the setting as the actor.
     """
 
     async def _validate_settings(self, session: AsyncSession, settings: RepositorySettings) -> None:
@@ -159,7 +162,46 @@ class RepositoryIntegrationService:
             raise ValidationError("Builtin roles cannot be given to a membership", field="automation_role_id")
         return role
 
-    async def _sync_git_membership(self, session: AsyncSession, project_id: int, role_id: int | None) -> None:
+    async def _audit_git_membership(
+        self,
+        session: AsyncSession,
+        action: str,
+        project_id: int,
+        git: User,
+        actor: User,
+        roles: list[str] | None,
+        request: Request | None,
+    ) -> None:
+        """The members API's audit row; like there, a failed audit never fails the change it describes.
+
+        The savepoint keeps a failed insert from breaking the settings change's transaction.
+        """
+        from specivo.services.security_audit_service import MemberAction, SecurityAuditService
+
+        try:
+            async with session.begin_nested():
+                await SecurityAuditService().log_member_change(
+                    session=session,
+                    action=MemberAction(action),
+                    user_id=actor.id,
+                    project_id=project_id,
+                    target_user_id=git.id,
+                    target_login=git.login,
+                    roles=roles,
+                    request=request,
+                )
+        except Exception:
+            logger.warning("Audit of the $git membership in project %d failed", project_id, exc_info=True)
+
+    async def _sync_git_membership(
+        self,
+        session: AsyncSession,
+        project_id: int,
+        role_id: int | None,
+        *,
+        actor: User,
+        request: Request | None = None,
+    ) -> None:
         """Give ``$git`` its role while an integration of the project has merge automation on; else no membership."""
         from specivo.services.repository_hooks import get_git_user
 
@@ -176,13 +218,16 @@ class RepositoryIntegrationService:
             if member is not None:
                 await session.delete(member)
                 await session.flush()
+                await self._audit_git_membership(session, "removed", project_id, git, actor, None, request)
                 logger.info("Merge automation off in project %d: $git membership removed", project_id)
             return
         role = await self._git_role(session, project_id, role_id)
+        action = "roles_changed"
         if member is None:
             member = Member(user_id=git.id, project_id=project_id)
             session.add(member)
             await session.flush()
+            action = "added"
         current = list(
             (await session.execute(select(MemberRole).where(MemberRole.member_id == member.id))).scalars().all()
         )
@@ -193,6 +238,7 @@ class RepositoryIntegrationService:
         await session.flush()
         session.add(MemberRole(member_id=member.id, role_id=role.id))
         await session.flush()
+        await self._audit_git_membership(session, action, project_id, git, actor, [role.name], request)
         logger.info("Merge automation in project %d: $git holds role %d", project_id, role.id)
 
     async def git_role_id(self, session: AsyncSession, project_id: int) -> int | None:
@@ -214,6 +260,7 @@ class RepositoryIntegrationService:
         project_id: int,
         data: RepositoryIntegrationCreate,
         actor: User,
+        request: Request | None = None,
     ) -> tuple[RepositoryIntegration, str]:
         """Connect a repository; returns the integration and its secret in clear."""
         await self._validate_settings(session, data.settings)
@@ -232,7 +279,7 @@ class RepositoryIntegrationService:
         session.add(integration)
         await self._flush_unique(session)
         if data.settings.merge_automation_enabled:
-            await self._sync_git_membership(session, project_id, data.automation_role_id)
+            await self._sync_git_membership(session, project_id, data.automation_role_id, actor=actor, request=request)
         await session.refresh(integration)
         logger.info("Repository integration %d created for project %d (%s)", integration.id, project_id, data.provider)
         return integration, raw_secret
@@ -263,6 +310,7 @@ class RepositoryIntegrationService:
         data: dict[str, Any],
         *,
         actor: User,
+        request: Request | None = None,
     ) -> RepositoryIntegration:
         """Apply a partial update (``RepositoryIntegrationUpdate`` fields that were set).
 
@@ -281,7 +329,9 @@ class RepositoryIntegrationService:
             integration.settings = settings.model_dump()
         await self._flush_unique(session)
         if data.get("settings") is not None or data.get("automation_role_id") is not None:
-            await self._sync_git_membership(session, project_id, data.get("automation_role_id"))
+            await self._sync_git_membership(
+                session, project_id, data.get("automation_role_id"), actor=actor, request=request
+            )
         await session.refresh(integration)
         return integration
 
@@ -301,12 +351,20 @@ class RepositoryIntegrationService:
         logger.info("Repository integration %d secret rotated", integration.id)
         return integration, raw_secret
 
-    async def delete(self, session: AsyncSession, integration_id: int, project_id: int) -> None:
+    async def delete(
+        self,
+        session: AsyncSession,
+        integration_id: int,
+        project_id: int,
+        *,
+        actor: User,
+        request: Request | None = None,
+    ) -> None:
         """Disconnect: the integration, its deliveries and its commits go; journals stay as history."""
         integration = await self.get(session, integration_id, project_id)
         await session.delete(integration)
         await session.flush()
-        await self._sync_git_membership(session, project_id, None)
+        await self._sync_git_membership(session, project_id, None, actor=actor, request=request)
 
     async def list_deliveries(
         self,

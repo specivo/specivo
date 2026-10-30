@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 17:06+0000\n"
+"POT-Creation-Date: 2026-10-30 22:21+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -225,15 +225,15 @@ msgstr "สปรินต์นี้ไม่ได้อยู่ในโป
 msgid "Cannot assign issues to a completed sprint"
 msgstr "ไม่สามารถมอบหมายงานให้สปรินต์ที่เสร็จสิ้นแล้วได้"
 
-#: specivo/services/issue_service.py:853
+#: specivo/services/issue_service.py:862
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "งานถูกแก้ไขโดยคำขออื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง"
 
-#: specivo/services/issue_service.py:1006
+#: specivo/services/issue_service.py:1015
 msgid "Issue is already in this project."
 msgstr "งานนี้อยู่ในโปรเจกต์นี้อยู่แล้ว"
 
-#: specivo/services/issue_service.py:1015
+#: specivo/services/issue_service.py:1024
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -241,12 +241,12 @@ msgstr ""
 "ไม่สามารถย้ายงานที่อยู่ในลำดับชั้นได้ กรุณาแยกงานนี้ออกจากงานหลัก "
 "และย้ายหรือแยกงานย่อยของงานนี้ออกก่อน"
 
-#: specivo/services/issue_service.py:1066
+#: specivo/services/issue_service.py:1075
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "ย้ายจาก {old} ไปยัง {new}"
 
-#: specivo/services/issue_service.py:1140
+#: specivo/services/issue_service.py:1149
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -706,7 +706,7 @@ msgstr "กำลังสร้างดัชนีใหม่..."
 #: specivo/templates/themes/default/pages/projects/settings.html:91
 #: specivo/templates/themes/default/pages/projects/settings.html:255
 #: specivo/templates/themes/default/pages/projects/settings.html:863
-#: specivo/templates/themes/default/pages/projects/settings.html:1594
+#: specivo/templates/themes/default/pages/projects/settings.html:1600
 #: specivo/templates/themes/default/pages/wiki/edit.html:133
 msgid "Save"
 msgstr "บันทึก"
@@ -723,7 +723,7 @@ msgstr "บันทึก"
 #: specivo/templates/themes/default/pages/projects/settings.html:438
 #: specivo/templates/themes/default/pages/projects/settings.html:978
 #: specivo/templates/themes/default/pages/projects/settings.html:1219
-#: specivo/templates/themes/default/pages/projects/settings.html:1531
+#: specivo/templates/themes/default/pages/projects/settings.html:1537
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:134
 msgid "Saving..."
@@ -771,7 +771,7 @@ msgstr "บันทึกภาษาไม่สำเร็จ"
 #: specivo/templates/themes/default/pages/projects/settings.html:875
 #: specivo/templates/themes/default/pages/projects/settings.html:1023
 #: specivo/templates/themes/default/pages/projects/settings.html:1257
-#: specivo/templates/themes/default/pages/projects/settings.html:1565
+#: specivo/templates/themes/default/pages/projects/settings.html:1571
 #: specivo/templates/themes/default/pages/wiki/show.html:97
 msgid "Unable to connect."
 msgstr "ไม่สามารถเชื่อมต่อได้"
@@ -1133,8 +1133,8 @@ msgstr "ยังไม่มีโปรเจกต์ใดเลือกเ
 #: specivo/templates/themes/default/pages/projects/settings.html:1002
 #: specivo/templates/themes/default/pages/projects/settings.html:1217
 #: specivo/templates/themes/default/pages/projects/settings.html:1241
-#: specivo/templates/themes/default/pages/projects/settings.html:1529
-#: specivo/templates/themes/default/pages/projects/settings.html:1553
+#: specivo/templates/themes/default/pages/projects/settings.html:1535
+#: specivo/templates/themes/default/pages/projects/settings.html:1559
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:72
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
@@ -3123,7 +3123,7 @@ msgstr "ลงชื่อเข้าใช้ล่าสุด"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:157
 #: specivo/templates/themes/default/pages/auth/profile.html:147
-#: specivo/templates/themes/default/pages/projects/settings.html:1554
+#: specivo/templates/themes/default/pages/projects/settings.html:1560
 msgid "Disconnect"
 msgstr "ยกเลิกการเชื่อมต่อ"
 
@@ -3426,7 +3426,7 @@ msgstr "ทุกสถานะ"
 #: specivo/templates/themes/default/pages/projects/settings.html:1171
 #: specivo/templates/themes/default/pages/projects/settings.html:1233
 #: specivo/templates/themes/default/pages/projects/settings.html:1442
-#: specivo/templates/themes/default/pages/projects/settings.html:1545
+#: specivo/templates/themes/default/pages/projects/settings.html:1551
 msgid "Close"
 msgstr "ปิด"
 
@@ -6763,7 +6763,19 @@ msgstr ""
 "แต่ไม่มีการเปลี่ยนสถานะในเวิร์กโฟลว์จนกว่าผู้ดูแลระบบจะอนุญาต "
 "การเปลี่ยนบทบาทต้องมีสิทธิ์จัดการสมาชิก"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1525
+#: specivo/templates/themes/default/pages/projects/settings.html:1526
+msgid "Ignore pull requests from forks and outsiders"
+msgstr "ละเว้นคำขอ pull request จาก fork และบุคคลภายนอก"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1528
+msgid ""
+"Requests from another repository, or on GitHub by someone who is not a "
+"collaborator, are not linked to issues until they are merged."
+msgstr ""
+"คำขอจากที่เก็บอื่น หรือบน GitHub จากผู้ที่ไม่ใช่ผู้ร่วมงาน "
+"จะไม่ถูกเชื่อมโยงกับปัญหาจนกว่าจะถูก merge"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1531
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
@@ -6771,11 +6783,11 @@ msgstr ""
 "ระบบจะสร้าง URL ของเว็บฮุกและซีเคร็ต "
 "และแสดงเพียงครั้งเดียวหลังเชื่อมต่อรีโพสิทอรี"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1544
+#: specivo/templates/themes/default/pages/projects/settings.html:1550
 msgid "Disconnect repository"
 msgstr "ยกเลิกการเชื่อมต่อรีโพสิทอรี"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1550
+#: specivo/templates/themes/default/pages/projects/settings.html:1556
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
@@ -6784,20 +6796,20 @@ msgstr ""
 "ของเว็บฮุกจะใช้ไม่ได้และบันทึกการส่งจะถูกลบ บันทึกคอมมิตที่อยู่ใน issue "
 "แล้วจะยังคงอยู่"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1563
+#: specivo/templates/themes/default/pages/projects/settings.html:1569
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
 msgid "Saved"
 msgstr "บันทึกแล้ว"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1564
+#: specivo/templates/themes/default/pages/projects/settings.html:1570
 msgid "Could not save the branch name settings."
 msgstr "บันทึกการตั้งค่าชื่อ branch ไม่สำเร็จ"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1569
+#: specivo/templates/themes/default/pages/projects/settings.html:1575
 msgid "Branch names"
 msgstr "ชื่อ branch"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1571
+#: specivo/templates/themes/default/pages/projects/settings.html:1577
 #, python-brace-format
 msgid ""
 "The \"Copy branch name\" button on an issue builds the name from this "
@@ -6810,23 +6822,23 @@ msgstr ""
 "คือหัวข้อเป็นตัวพิมพ์เล็ก ยาวไม่เกิน 40 ตัวอักษร commit ใน branch "
 "ที่ตั้งชื่อแบบนี้จะเชื่อมโยงกับปัญหา"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1573
+#: specivo/templates/themes/default/pages/projects/settings.html:1579
 msgid "Format"
 msgstr "รูปแบบ"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1575
+#: specivo/templates/themes/default/pages/projects/settings.html:1581
 msgid "Example:"
 msgstr "ตัวอย่าง:"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1585
+#: specivo/templates/themes/default/pages/projects/settings.html:1591
 msgid "Other trackers"
 msgstr "tracker อื่น"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1604
+#: specivo/templates/themes/default/pages/projects/settings.html:1610
 msgid "Search indexing"
 msgstr "การจัดทำดัชนีการค้นหา"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1606
+#: specivo/templates/themes/default/pages/projects/settings.html:1612
 msgid ""
 "Full-text search analyzer language for this project. Leave on Inherit to "
 "use the instance default."

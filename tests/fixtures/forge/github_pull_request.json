@@ -28,13 +28,15 @@
       "label": "example-org:feat/ACME-3-login-form",
       "ref": "feat/ACME-3-login-form",
       "sha": "59b20b8d5c6ff8d09518454d4dd8b7b30f095ab5",
-      "user": {"login": "example-org", "id": 21031067, "type": "Organization"}
+      "user": {"login": "example-org", "id": 21031067, "type": "Organization"},
+      "repo": {"id": 186853002, "name": "widgets", "full_name": "example-org/widgets", "fork": false}
     },
     "base": {
       "label": "example-org:main",
       "ref": "main",
       "sha": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
-      "user": {"login": "example-org", "id": 21031067, "type": "Organization"}
+      "user": {"login": "example-org", "id": 21031067, "type": "Organization"},
+      "repo": {"id": 186853002, "name": "widgets", "full_name": "example-org/widgets", "fork": false}
     },
     "author_association": "OWNER",
     "merged": true,

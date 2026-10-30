@@ -64,7 +64,12 @@ class PullRequestEvent:
     ``state`` is Specivo's: ``open``, ``draft``, ``merged`` or ``closed``.
     ``updated_at`` is the forge's update time, used to drop events that arrive
     after a newer one. ``action`` is the forge's own word (``opened``,
-    ``closed``, ``merge``, ...), kept for the log only.
+    ``closed``, ``merge``, ...), kept for the log only. ``external`` is true
+    when the payload shows the request comes from outside: from another
+    repository (a fork), or, where the forge says so, from an author who is
+    not a collaborator. A payload that does not say (a repository id or,
+    on GitHub, ``author_association`` missing) is external: it cannot be
+    shown to come from inside.
     """
 
     repo_full_name: str | None
@@ -82,6 +87,7 @@ class PullRequestEvent:
     merge_commit_sha: str | None
     updated_at: datetime | None
     action: str | None
+    external: bool = False
 
 
 class ForgeProvider(Protocol):
@@ -215,6 +221,15 @@ _INT_MAX = 2**31 - 1
 def int_or_none(value: Any) -> int | None:
     """A positive int that fits an INTEGER column (not a bool, not a string), or None."""
     return value if isinstance(value, int) and not isinstance(value, bool) and 0 < value <= _INT_MAX else None
+
+
+def forge_id_or_none(value: Any) -> int | None:
+    """A forge's repository or project id: a positive int of any size (not a bool, not a string), or None.
+
+    Only compared, never stored, so unlike :func:`int_or_none` it is not
+    capped at the INTEGER range: GitHub's repository ids grow past it.
+    """
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
 
 
 def sha_or_none(value: Any) -> str | None:

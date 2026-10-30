@@ -18,3 +18,7 @@ address and URL is made up (`example.com`, `example.org`), and file lists are tr
 
 The headers each forge sends with them (event, delivery id, signature or token) are set by the
 tests; see `specivo/hooks/providers/` for which headers each provider reads.
+
+`pull_request_payload(..., external=True)` in `tests/fixtures/forge_hooks.py` turns any of the
+pull request fixtures into one opened from a fork: a different head repository id on GitHub,
+Gitea and Forgejo (`head.repo.id`, `head.repo_id`), a different `source_project_id` on GitLab.
