@@ -22,7 +22,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import jwt
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -115,7 +115,8 @@ _logger = logging.getLogger(__name__)
 _EMAIL_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "_shared"
 _email_env = Environment(
     loader=FileSystemLoader(str(_EMAIL_TEMPLATES_DIR)),
-    autoescape=True,
+    # HTML bodies are escaped, plain-text (.txt) bodies are not.
+    autoescape=select_autoescape(default_for_string=True),
 )
 
 
@@ -699,13 +700,14 @@ class AuthService:
         # Build reset URL and send email
         reset_url = f"{settings.app_url.rstrip('/')}/reset-password/?token={raw_token}"
         subject = str(PASSWORD_RESET_EMAIL_SUBJECT)
-        body_html = _render_email(
-            "password_reset.html",
-            display_name=user.display_name or user.login,
-            reset_url=reset_url,
-            expire_hours=expire_hours,
-        )
-        send_notification_email.delay(user.email, subject, body_html)
+        context = {
+            "display_name": user.display_name or user.login,
+            "reset_url": reset_url,
+            "expire_hours": expire_hours,
+        }
+        body_html = _render_email("password_reset.html", **context)
+        body_plain = _render_email("password_reset.txt", **context)
+        send_notification_email.delay(user.email, subject, body_html, body_plain)
         return user.id
 
     async def reset_password_with_token(

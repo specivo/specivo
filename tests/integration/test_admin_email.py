@@ -59,6 +59,28 @@ class TestSendTestEmail:
         mock_smtp.sendmail.assert_called_once()
         mock_smtp.quit.assert_called_once()
 
+    async def test_message_has_non_issue_headers_only(self, admin_client: AsyncClient):
+        from email import message_from_string, policy
+
+        mock_smtp = MagicMock()
+        with patch("specivo.api.v1.admin.email.smtplib.SMTP", return_value=mock_smtp):
+            resp = await admin_client.post(
+                TEST_EMAIL_URL,
+                json={"to": "recipient@example.com", "subject": "Hello\r\nBcc: x@example.com", "body": "Test body"},
+            )
+        assert resp.status_code == 200
+        msg = message_from_string(mock_smtp.sendmail.call_args.args[2], policy=policy.default)
+        assert msg["Message-ID"] is not None
+        assert msg["Date"] is not None
+        assert msg["Auto-Submitted"] == "auto-generated"
+        assert msg["Bcc"] is None
+        assert msg["Subject"] == "Hello Bcc: x@example.com"
+        for name in ("References", "In-Reply-To", "X-Specivo-Issue", "List-Id"):
+            assert msg[name] is None, name
+        assert msg.get_content_type() == "multipart/alternative"
+        assert msg.get_body(("plain",)).get_content().strip() == "Test body"
+        assert "Test body" in msg.get_body(("html",)).get_content()
+
     async def test_smtp_failure_returns_error(self, admin_client: AsyncClient):
         import smtplib
 

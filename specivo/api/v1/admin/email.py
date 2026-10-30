@@ -5,14 +5,13 @@ from __future__ import annotations
 import logging
 import smtplib
 import ssl
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, EmailStr
 
 from specivo.api.v1.admin import require_admin_api
 from specivo.core.config import get_settings
+from specivo.core.mail_headers import build_message
 from specivo.models.user import User
 
 router = APIRouter(tags=["admin"])
@@ -38,11 +37,12 @@ async def send_test_email(
     """Send a test email synchronously to verify SMTP configuration (admin only)."""
     settings = get_settings()
 
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = payload.subject
-    msg["From"] = settings.smtp_from
-    msg["To"] = payload.to
-    msg.attach(MIMEText(payload.body, "plain"))
+    msg = build_message(
+        from_addr=settings.smtp_from,
+        to_addr=payload.to,
+        subject=payload.subject,
+        body_plain=payload.body,
+    )
 
     try:
         if settings.smtp_tls:

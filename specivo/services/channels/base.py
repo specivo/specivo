@@ -28,6 +28,9 @@ class NotificationPayload:
     issue_subject: str | None = None
     comment_text: str | None = None
     entity_url: str | None = None
+    # One translated line saying what happened ("Alice commented"); email puts
+    # it first in the body, since the subject stays the same for an issue.
+    event_text: str | None = None
 
 
 @runtime_checkable

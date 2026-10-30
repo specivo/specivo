@@ -95,6 +95,25 @@ async def test_forgot_password_queues_email(
     assert to_email == reset_user.email
 
 
+@pytest.mark.asyncio
+async def test_forgot_password_email_has_text_part_and_no_thread(
+    client: AsyncClient,
+    reset_user: User,
+) -> None:
+    """The reset mail carries a plain-text part with the link, and no threading headers."""
+    with patch("specivo.tasks.notifications.send_notification_email.delay") as mock_delay:
+        await client.post(
+            "/api/v1/auth/forgot-password/",
+            json={"email": reset_user.email},
+        )
+    to_email, _subject, body_html, *rest = mock_delay.call_args.args
+    body_plain = rest[0] if rest else mock_delay.call_args.kwargs.get("body_plain")
+    assert body_plain and "/reset-password/?token=" in body_plain
+    assert "<" not in body_plain
+    headers = rest[1] if len(rest) > 1 else mock_delay.call_args.kwargs.get("headers")
+    assert not headers
+
+
 # ---------------------------------------------------------------------------
 # Tests: reset-password
 # ---------------------------------------------------------------------------

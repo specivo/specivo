@@ -166,3 +166,73 @@ class TestEmailChannelDispatch:
             ch.dispatch(payload, {"email": "user@example.com"})
             body_arg = mock_delay.call_args.args[2]
             assert body_arg == "<p>Plain text body</p>"
+
+
+# ---------------------------------------------------------------------------
+# dispatch: issue mail threads per issue
+# ---------------------------------------------------------------------------
+
+
+def _make_issue_payload(*, event_type: str = "comment", issue_subject: str = "Fix login"):
+    from specivo.services.channels.base import NotificationPayload
+
+    return NotificationPayload(
+        event_type=event_type,
+        entity_type="issue",
+        entity_id=42,
+        project_id=1,
+        project_key="ACME",
+        actor_name="Alice",
+        actor_id=5,
+        title="[ACME-7] Alice commented",
+        body_plain="Looks good",
+        body_html="<p>Alice commented</p>",
+        issue_key="ACME-7",
+        issue_subject=issue_subject,
+        comment_text="Looks good",
+        event_text="Alice commented",
+    )
+
+
+class TestEmailChannelIssueMail:
+    def _dispatch(self, payload):
+        from specivo.services.channels.email_channel import EmailChannel
+
+        with patch("specivo.tasks.notifications.send_notification_email.delay") as mock_delay:
+            EmailChannel().dispatch(payload, {"email": "user@example.com"})
+        return mock_delay.call_args
+
+    def test_subject_is_stable_per_issue(self):
+        subjects = {
+            self._dispatch(_make_issue_payload(event_type=e)).args[1]
+            for e in ("assignment", "status_change", "comment")
+        }
+        assert subjects == {"[ACME-7] Fix login"}
+
+    def test_subject_strips_crlf(self):
+        call = self._dispatch(_make_issue_payload(issue_subject="Fix\r\nBcc: x@example.com"))
+        assert call.args[1] == "[ACME-7] Fix Bcc: x@example.com"
+
+    def test_event_text_is_first_line_of_text_part(self):
+        body_plain = self._dispatch(_make_issue_payload()).args[3]
+        lines = body_plain.splitlines()
+        assert lines[0] == "Alice commented"
+        assert "[ACME-7] Fix login" in lines
+        assert "Looks good" in lines
+
+    def test_headers_thread_on_the_issue(self):
+        headers = self._dispatch(_make_issue_payload(event_type="status_change")).args[4]
+        assert headers["References"] == headers["In-Reply-To"]
+        assert headers["References"].startswith("<specivo-issue-42@")
+        assert headers["Message-ID"].startswith("<specivo.42.updated.")
+        assert headers["X-Specivo-Issue"] == "ACME-7"
+        assert headers["X-Specivo-Project"] == "ACME"
+        assert headers["X-Specivo-Event"] == "updated"
+
+    def test_non_issue_payload_has_no_threading_headers(self):
+        call = self._dispatch(_make_payload())
+        assert call.args[4] is None
+
+    def test_fallback_html_is_escaped(self):
+        call = self._dispatch(_make_payload(body_html=None, body_plain="<b>x</b>"))
+        assert call.args[2] == "<p>&lt;b&gt;x&lt;/b&gt;</p>"
