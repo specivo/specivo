@@ -33,6 +33,7 @@ from specivo.api.v1.projects import router as projects_router
 from specivo.api.v1.reactions import router as reactions_router
 from specivo.api.v1.recurring_patterns import router as recurring_patterns_router
 from specivo.api.v1.relations import router as relations_router
+from specivo.api.v1.repositories import router as repositories_router
 from specivo.api.v1.saved_filters import router as saved_filters_router
 from specivo.api.v1.search import router as search_router
 from specivo.api.v1.search_admin import router as search_admin_router
@@ -58,6 +59,7 @@ api_router.include_router(tags_router)
 api_router.include_router(attachments_router)
 api_router.include_router(time_entries_router)
 api_router.include_router(webhooks_router)
+api_router.include_router(repositories_router)
 api_router.include_router(admin_settings_router)
 api_router.include_router(wiki_router)
 api_router.include_router(search_router)

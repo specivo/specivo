@@ -13,6 +13,7 @@ This module is the application side of the same rules:
 - ``get_anonymous_user(session)``: resolve the row, caching only its id.
 - ``refuse_anonymous_user(user)``: the error raised when an endpoint that
   changes or grants something to a user is pointed at the row.
+- ``refuse_system_user(user)``: the same for any system account (``$`` login).
 - ``is_reserved_login(login)``: logins starting with ``$`` belong to the system.
 
 Nothing here grants the row any access.
@@ -22,7 +23,7 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
@@ -47,9 +48,10 @@ def real_users_clause() -> ColumnElement[bool]:
     """Return the predicate selecting user rows that stand for real accounts.
 
     Apply it to every query that lists, searches or counts users, so the
-    anonymous user never shows up as though it were a colleague.
+    anonymous user and the other system accounts (``$git``) never show up as
+    though they were colleagues.
     """
-    return User.is_anonymous.is_(False)
+    return and_(User.is_anonymous.is_(False), User.login.not_like(f"{RESERVED_LOGIN_PREFIX}%"))
 
 
 def is_reserved_login(login: str) -> bool:
@@ -101,3 +103,14 @@ def refuse_anonymous_user(user: User, message: str | None = None) -> None:
         if message is None:
             raise AnonymousUserProtectedError()
         raise AnonymousUserProtectedError(message)
+
+
+def refuse_system_user(user: User, message: str | None = None) -> None:
+    """Raise ``AnonymousUserProtectedError`` if *user* is the anonymous user or another system account.
+
+    For admin actions on an account (password, lock, deactivation): a system
+    account such as ``$git`` is not a person and nobody signs in as it.
+    """
+    refuse_anonymous_user(user, message)
+    if user.is_system_principal:
+        raise AnonymousUserProtectedError(message or "This system account is reserved and cannot be changed.")

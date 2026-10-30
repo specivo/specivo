@@ -1,0 +1,73 @@
+{
+  "object_kind": "push",
+  "event_name": "push",
+  "before": "95790bf891e76fee5e1747ab589903a6a1f80f22",
+  "after": "da1560886d4f094c3e6c9ef40349f7d38b5d27d7",
+  "ref": "refs/heads/main",
+  "ref_protected": true,
+  "checkout_sha": "da1560886d4f094c3e6c9ef40349f7d38b5d27d7",
+  "user_id": 4,
+  "user_name": "Alex Example",
+  "user_username": "alex-example",
+  "user_email": "",
+  "user_avatar": "https://gitlab.example.com/uploads/user/avatar/4/avatar.png",
+  "project_id": 15,
+  "project": {
+    "id": 15,
+    "name": "Widgets",
+    "description": "A sample project",
+    "web_url": "https://gitlab.example.com/example-group/widgets",
+    "avatar_url": null,
+    "git_ssh_url": "git@gitlab.example.com:example-group/widgets.git",
+    "git_http_url": "https://gitlab.example.com/example-group/widgets.git",
+    "namespace": "Example Group",
+    "visibility_level": 0,
+    "path_with_namespace": "example-group/widgets",
+    "default_branch": "main",
+    "homepage": "https://gitlab.example.com/example-group/widgets",
+    "url": "git@gitlab.example.com:example-group/widgets.git",
+    "ssh_url": "git@gitlab.example.com:example-group/widgets.git",
+    "http_url": "https://gitlab.example.com/example-group/widgets.git"
+  },
+  "commits": [
+    {
+      "id": "b6568db1bc1dcd7f8b4d5a946b0b91f9dacd7327",
+      "message": "Update the catalogue\n\nCloses ACME-1\n",
+      "title": "Update the catalogue",
+      "timestamp": "2011-12-12T14:27:31+02:00",
+      "url": "https://gitlab.example.com/example-group/widgets/-/commit/b6568db1bc1dcd7f8b4d5a946b0b91f9dacd7327",
+      "author": {
+        "name": "Alex Example",
+        "email": "alex@example.com"
+      },
+      "added": ["CHANGELOG"],
+      "modified": ["app/controller/application.rb"],
+      "removed": []
+    },
+    {
+      "id": "da1560886d4f094c3e6c9ef40349f7d38b5d27d7",
+      "message": "fixed readme",
+      "title": "fixed readme",
+      "timestamp": "2012-01-03T23:36:29+02:00",
+      "url": "https://gitlab.example.com/example-group/widgets/-/commit/da1560886d4f094c3e6c9ef40349f7d38b5d27d7",
+      "author": {
+        "name": "Sam Sample",
+        "email": "sam@example.org"
+      },
+      "added": ["CHANGELOG"],
+      "modified": ["app/controller/application.rb"],
+      "removed": []
+    }
+  ],
+  "total_commits_count": 2,
+  "push_options": {},
+  "repository": {
+    "name": "Widgets",
+    "url": "git@gitlab.example.com:example-group/widgets.git",
+    "description": "A sample project",
+    "homepage": "https://gitlab.example.com/example-group/widgets",
+    "git_http_url": "https://gitlab.example.com/example-group/widgets.git",
+    "git_ssh_url": "git@gitlab.example.com:example-group/widgets.git",
+    "visibility_level": 0
+  }
+}

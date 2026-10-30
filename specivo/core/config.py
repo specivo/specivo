@@ -231,6 +231,13 @@ class Settings(BaseSettings):
     smtp_timeout: int = 30
     webhook_timeout: int = 30
 
+    # Incoming repository webhooks (``/hooks/{provider}/{public_id}/``): the
+    # largest body accepted, and requests per minute per integration and, for
+    # hook URLs that match no integration, per client address.
+    git_hook_max_body_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    git_hook_rate_limit_per_minute: int = Field(default=120, ge=1)
+    git_hook_unknown_rate_limit_per_minute: int = Field(default=30, ge=1)
+
     # SSO (OpenID Connect). Providers are configured in the database; these
     # are the instance-wide limits every provider shares.
     # Break-glass: always show the local login form, whatever the

@@ -460,20 +460,6 @@ class TestXForwardedForTrust:
 class TestMediumSecurityFixes:
     """Assorted medium-severity findings."""
 
-    async def test_gitlab_webhook_uses_timing_safe_comparison(self):
-        """GitLab token validation must use hmac.compare_digest, not '=='."""
-        import inspect
-
-        from specivo.hooks.gitlab import _validate_gitlab_token
-
-        source = inspect.getsource(_validate_gitlab_token)
-        assert "compare_digest" in source or "hmac" in source, (
-            "_validate_gitlab_token must use hmac.compare_digest for token comparison"
-        )
-        assert "setting.value != token" not in source, (
-            "Direct string comparison (!=) for secrets is a timing side-channel"
-        )
-
     async def test_login_audit_does_not_contain_credentials(self, client: AsyncClient, db_session: AsyncSession):
         """Successful login audit log must NOT include the password."""
         await _create_user(db_session, login="audit_user")

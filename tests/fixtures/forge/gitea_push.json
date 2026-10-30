@@ -1,0 +1,163 @@
+{
+  "ref": "refs/heads/acme-4-export",
+  "before": "28e1879d029cb852e4844d9c718537df08844e03",
+  "after": "bffeb74224043ba2feb48d137756c8a9331c449a",
+  "compare_url": "https://gitea.example.com/example-org/widgets/compare/28e1879d029cb852e4844d9c718537df08844e03...bffeb74224043ba2feb48d137756c8a9331c449a",
+  "commits": [
+    {
+      "id": "bffeb74224043ba2feb48d137756c8a9331c449a",
+      "message": "Export to CSV\n\nresolves ACME-1\n",
+      "url": "https://gitea.example.com/example-org/widgets/commit/bffeb74224043ba2feb48d137756c8a9331c449a",
+      "author": {
+        "name": "Alex Example",
+        "email": "alex@example.com",
+        "username": "alex-example"
+      },
+      "committer": {
+        "name": "Alex Example",
+        "email": "alex@example.com",
+        "username": "alex-example"
+      },
+      "verification": null,
+      "timestamp": "2024-03-04T13:52:11+07:00",
+      "added": [
+        "docs/new.md"
+      ],
+      "removed": [],
+      "modified": [
+        "README.md"
+      ]
+    }
+  ],
+  "total_commits": 1,
+  "head_commit": {
+    "id": "bffeb74224043ba2feb48d137756c8a9331c449a",
+    "message": "Export to CSV\n\nresolves ACME-1\n",
+    "url": "https://gitea.example.com/example-org/widgets/commit/bffeb74224043ba2feb48d137756c8a9331c449a",
+    "author": {
+      "name": "Alex Example",
+      "email": "alex@example.com",
+      "username": "alex-example"
+    },
+    "committer": {
+      "name": "Alex Example",
+      "email": "alex@example.com",
+      "username": "alex-example"
+    },
+    "verification": null,
+    "timestamp": "2024-03-04T13:52:11+07:00",
+    "added": [
+      "docs/new.md"
+    ],
+    "removed": [],
+    "modified": [
+      "README.md"
+    ]
+  },
+  "repository": {
+    "id": 140,
+    "owner": {
+      "id": 1,
+      "login": "example-org",
+      "login_name": "",
+      "full_name": "Example Org",
+      "email": "owner@example.com",
+      "avatar_url": "https://gitea.example.com/avatars/1",
+      "language": "",
+      "is_admin": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "created": "2024-01-02T10:00:00Z",
+      "restricted": false,
+      "active": false,
+      "prohibit_login": false,
+      "location": "",
+      "website": "",
+      "description": "",
+      "visibility": "public",
+      "followers_count": 0,
+      "following_count": 0,
+      "starred_repos_count": 0,
+      "username": "example-org"
+    },
+    "name": "widgets",
+    "full_name": "example-org/widgets",
+    "description": "",
+    "empty": false,
+    "private": false,
+    "fork": false,
+    "template": false,
+    "parent": null,
+    "mirror": false,
+    "size": 42,
+    "language": "",
+    "languages_url": "https://gitea.example.com/api/v1/repos/example-org/widgets/languages",
+    "html_url": "https://gitea.example.com/example-org/widgets",
+    "url": "https://gitea.example.com/api/v1/repos/example-org/widgets",
+    "link": "",
+    "ssh_url": "git@gitea.example.com:example-org/widgets.git",
+    "clone_url": "https://gitea.example.com/example-org/widgets.git",
+    "original_url": "",
+    "website": "",
+    "stars_count": 0,
+    "forks_count": 0,
+    "watchers_count": 1,
+    "open_issues_count": 0,
+    "open_pr_counter": 0,
+    "release_counter": 0,
+    "default_branch": "main",
+    "archived": false,
+    "created_at": "2024-01-02T10:00:00Z",
+    "updated_at": "2024-03-04T12:00:00Z",
+    "has_issues": true,
+    "has_wiki": true,
+    "has_pull_requests": true,
+    "internal": false,
+    "object_format_name": "sha1"
+  },
+  "pusher": {
+    "id": 1,
+    "login": "alex-example",
+    "login_name": "",
+    "full_name": "Alex Example",
+    "email": "alex@example.com",
+    "avatar_url": "https://gitea.example.com/avatars/1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2024-01-02T10:00:00Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "alex-example"
+  },
+  "sender": {
+    "id": 1,
+    "login": "alex-example",
+    "login_name": "",
+    "full_name": "Alex Example",
+    "email": "alex@example.com",
+    "avatar_url": "https://gitea.example.com/avatars/1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2024-01-02T10:00:00Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "alex-example"
+  }
+}

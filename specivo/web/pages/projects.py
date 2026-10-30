@@ -464,6 +464,16 @@ async def project_settings(
     ]
     webhook_events = [e.value for e in SUBSCRIBABLE_EVENTS]
 
+    # Repository integrations: manage_project as well, like their API.
+    # Secrets are never sent to the page.
+    from specivo.hooks.providers import PROVIDER_NAMES
+    from specivo.services.repository_service import RepositoryIntegrationService, integration_out
+
+    repositories_data = [
+        integration_out(i).model_dump(mode="json")
+        for i in await RepositoryIntegrationService().list_for_project(db, project.id)
+    ]
+
     # The admin-only anonymous access card says whether the instance switch is
     # on. Only read for admins, the only users who see that card.
     from specivo.services.anonymous_access_service import is_anonymous_access_enabled
@@ -508,6 +518,8 @@ async def project_settings(
             "anonymous_access_enabled": anonymous_access_enabled,
             "webhooks_data": webhooks_data,
             "webhook_events": webhook_events,
+            "repositories_data": repositories_data,
+            "repository_providers": list(PROVIDER_NAMES),
         },
     )
 

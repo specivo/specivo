@@ -94,6 +94,10 @@ _CSRF_EXEMPT_PATTERNS = (
     # a session; the signed, single-use logout token in the body is the proof.
     # The slug part is the provider slug rule (specivo.models.sso.SLUG_PATTERN).
     r"/auth/oidc/[a-z0-9-]{2,40}/backchannel-logout/",
+    # Repository webhooks: called server to server by the forge, never with a
+    # session; the HMAC signature or token over the raw body is the proof.
+    # The id part is the integration's public UUID in canonical lower-case form.
+    r"/hooks/(?:github|gitlab|gitea|forgejo)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/",
 )
 # Mount points whose whole subtree is exempt. Only for sub-apps that never
 # accept cookie authentication.
@@ -119,7 +123,7 @@ class CSRFMiddleware:
     - The exact paths in ``_CSRF_EXEMPT_PATHS`` (login, token refresh,
       password-reset request and confirm)
     - Paths matching an anchored pattern in ``_CSRF_EXEMPT_PATTERNS`` (SSO
-      back-channel logout)
+      back-channel logout, repository webhooks)
     - Everything under the mount points in ``_CSRF_EXEMPT_MOUNTS`` (MCP)
 
     Every other mutating route needs the token when the request carries the

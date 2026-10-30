@@ -28,6 +28,7 @@
     <a class="filter-tab" :class="{ active: tab === 'tags' }" @click.prevent="tab = 'tags'" href="#">{% trans %}Tags{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'search' }" @click.prevent="tab = 'search'" href="#">{% trans %}Search{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'webhooks' }" @click.prevent="tab = 'webhooks'" href="#">{% trans %}Webhooks{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'repositories' }" @click.prevent="tab = 'repositories'" href="#">{% trans %}Repositories{% endtrans %}</a>
   </div>
 
   <!-- General tab -->
@@ -1239,6 +1240,267 @@
           <div class="sp-modal-footer">
             <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
             <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="busy">{% trans %}Delete webhook{% endtrans %}</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Repositories tab -->
+  <div x-show="tab === 'repositories'" x-cloak x-data='projectRepositories({ repositories: {{ repositories_data | tojson }}, providers: {{ repository_providers | tojson }}, projectKey: {{ project.key | tojson }}, providerLabels: {{ {
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "gitea": "Gitea",
+    "forgejo": "Forgejo"
+  } | tojson }}, i18n: {{ {
+    "saveFailed": _("Failed to save the repository."),
+    "connectFailed": _("Unable to connect."),
+    "loadFailed": _("Could not load deliveries."),
+    "newRepository": _("Connect a repository"),
+    "editRepository": _("Edit repository"),
+    "createRepository": _("Connect repository"),
+    "saveChanges": _("Save changes"),
+    "copy": _("Copy"),
+    "copied": _("Copied"),
+    "neverReceived": _("Never received"),
+    "statusAccepted": _("Accepted"),
+    "statusDuplicate": _("Duplicate"),
+    "statusIgnored": _("Ignored"),
+    "statusProcessed": _("Processed"),
+    "statusFailed": _("Failed")
+  } | tojson }} })'>
+
+    <div class="card" data-testid="repositories-card">
+      <div class="sp-listcard-header">
+        <div>
+          <span class="sp-listcard-title">{% trans %}Repositories{% endtrans %}</span>
+          <span class="sp-text-muted-xs-ml-sm" x-text="'(' + repositories.length + ')'"></span>
+        </div>
+        <button class="sp-btn sp-btn-primary" @click="openCreate()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+          {% trans %}Connect a repository{% endtrans %}
+        </button>
+      </div>
+
+      <!-- Hook URL and secret, shown once, with setup steps for the provider -->
+      <template x-if="reveal">
+        <div class="sp-key-reveal sp-webhook-reveal" data-testid="repository-secret">
+          <div class="sp-key-reveal-label"><span x-text="providerLabel(reveal.provider)"></span> · <span x-text="reveal.repo"></span></div>
+          <div class="sp-repo-field">
+            <div class="sp-repo-field-label">{% trans %}Webhook URL{% endtrans %}</div>
+            <div class="sp-key-reveal-value sp-webhook-secret">
+              <code x-text="reveal.hook_url" data-testid="repository-hook-url"></code>
+              <button class="sp-btn sp-btn-sm" @click="copy('hook_url')" x-text="copied === 'hook_url' ? i18n.copied : i18n.copy"></button>
+            </div>
+          </div>
+          <div class="sp-repo-field">
+            <div class="sp-repo-field-label">{% trans %}Secret{% endtrans %}</div>
+            <div class="sp-key-reveal-value sp-webhook-secret">
+              <code x-text="reveal.secret" data-testid="repository-secret-value"></code>
+              <button class="sp-btn sp-btn-sm" @click="copy('secret')" x-text="copied === 'secret' ? i18n.copied : i18n.copy"></button>
+            </div>
+          </div>
+          <div class="sp-key-reveal-warn">{% trans %}Copy the secret now: it is not shown again.{% endtrans %}</div>
+          <div class="sp-repo-setup">
+            <template x-if="reveal.provider === 'github'">
+              <ol>
+                <li>{% trans %}In the repository on GitHub, open Settings, then Webhooks, then Add webhook.{% endtrans %}</li>
+                <li>{% trans %}Paste the webhook URL into Payload URL and set Content type to application/json.{% endtrans %}</li>
+                <li>{% trans %}Paste the secret into Secret.{% endtrans %}</li>
+                <li>{% trans %}Choose "Just the push event" and save. GitHub sends a ping at once; it appears in the delivery log.{% endtrans %}</li>
+              </ol>
+            </template>
+            <template x-if="reveal.provider === 'gitlab'">
+              <ol>
+                <li>{% trans %}In the project on GitLab, open Settings, then Webhooks, then Add new webhook.{% endtrans %}</li>
+                <li>{% trans %}Paste the webhook URL into URL and the secret into Secret token.{% endtrans %}</li>
+                <li>{% trans %}Under Trigger, select Push events.{% endtrans %}</li>
+                <li>{% trans %}Save, then use Test, Push events to send a first delivery.{% endtrans %}</li>
+              </ol>
+            </template>
+            <template x-if="reveal.provider === 'gitea' || reveal.provider === 'forgejo'">
+              <ol>
+                <li>{% trans %}In the repository, open Settings, then Webhooks, then Add webhook, and pick the Gitea or Forgejo webhook type, matching the server.{% endtrans %}</li>
+                <li>{% trans %}Paste the webhook URL into Target URL. Keep the HTTP method POST and set the POST content type to application/json.{% endtrans %}</li>
+                <li>{% trans %}Paste the secret into Secret.{% endtrans %}</li>
+                <li>{% trans %}Under Trigger on, choose Push events, then add the webhook. Test delivery sends a push.{% endtrans %}</li>
+              </ol>
+            </template>
+          </div>
+          <div class="sp-key-reveal-value sp-webhook-secret">
+            <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="reveal = null">{% trans %}Dismiss{% endtrans %}</button>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="notice">
+        <div class="flash flash-info sp-webhook-notice"><span x-text="notice"></span></div>
+      </template>
+
+      <!-- Empty state -->
+      <template x-if="repositories.length === 0">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="8" r="3"/><path d="M6 9v6M18 11c0 4-6 3-9 6"/></svg>
+          <h3>{% trans %}No repositories connected{% endtrans %}</h3>
+          <p>{% trans %}Connect a GitHub, GitLab, Gitea or Forgejo repository: commits that mention an issue key, such as "Fixes KEY-12", or are pushed to a branch named after one, are linked to the issue.{% endtrans %}</p>
+          <button class="sp-btn sp-btn-primary" @click="openCreate()">{% trans %}Connect the first repository{% endtrans %}</button>
+        </div>
+      </template>
+
+      <div class="sp-webhook-list">
+        <template x-for="r in repositories" :key="r.id">
+          <div class="sp-webhook-row" :class="{ 'sp-webhook-off': !r.is_active }" data-testid="repository-row">
+            <div class="sp-webhook-main">
+              <div>
+                <span class="sp-repo-provider" x-text="providerLabel(r.provider)"></span>
+                <a class="sp-repo-name" :href="r.repo_url" target="_blank" rel="noopener noreferrer" x-text="r.repo_full_name"></a>
+              </div>
+              <div class="sp-webhook-meta">
+                <span>{% trans %}Last delivery:{% endtrans %} <span x-text="lastDelivery(r)" data-testid="repository-last-delivery"></span></span>
+                <template x-if="r.scope === 'project_and_subprojects'"><span> · {% trans %}includes subprojects{% endtrans %}</span></template>
+                <template x-if="!r.is_active"><span> · {% trans %}disabled{% endtrans %}</span></template>
+              </div>
+            </div>
+            <div class="sp-webhook-actions">
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="openLog(r)" :aria-pressed="log && log.id === r.id">{% trans %}Delivery log{% endtrans %}</button>
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="rotate(r)" :disabled="busy">{% trans %}New secret{% endtrans %}</button>
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="toggle(r)" :disabled="busy">
+                <span x-show="r.is_active">{% trans %}Disable{% endtrans %}</span>
+                <span x-show="!r.is_active">{% trans %}Enable{% endtrans %}</span>
+              </button>
+              <button class="action-link" @click="openEdit(r)" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
+              <button class="action-link danger" @click="confirmDelete(r)" title="{{ _('Delete') }}" aria-label="{{ _('Delete') }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Delivery log -->
+    <template x-if="log">
+      <div class="card sp-webhook-log" data-testid="repository-log">
+        <div class="sp-listcard-header">
+          <div>
+            <span class="sp-listcard-title">{% trans %}Delivery log{% endtrans %}</span>
+            <span class="sp-text-muted-xs-ml-sm" x-text="log.repo_full_name"></span>
+          </div>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="loadLog(offset)" :disabled="loadingLog">{% trans %}Refresh{% endtrans %}</button>
+        </div>
+        <template x-if="logError">
+          <div class="flash flash-error sp-webhook-notice"><span x-text="logError"></span></div>
+        </template>
+        <template x-if="!loadingLog && deliveries.length === 0 && !logError">
+          <div class="empty-state">
+            <h3>{% trans %}No deliveries yet{% endtrans %}</h3>
+            <p>{% trans %}Deliveries appear here once the forge sends its first webhook to this URL.{% endtrans %}</p>
+          </div>
+        </template>
+        <template x-if="deliveries.length > 0">
+          <div class="sp-webhook-log-scroll">
+            <table class="version-table">
+              <thead>
+                <tr>
+                  <th>{% trans %}Time{% endtrans %}</th>
+                  <th>{% trans %}Event{% endtrans %}</th>
+                  <th>{% trans %}Status{% endtrans %}</th>
+                  <th>{% trans %}Details{% endtrans %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="d in deliveries" :key="d.id">
+                  <tr>
+                    <td><span class="sp-webhook-time" x-text="formatTime(d.received_at)" :title="d.delivery_id"></span></td>
+                    <td><span x-text="d.event"></span></td>
+                    <td><span :class="statusClass(d.status)" x-text="statusLabel(d.status)"></span></td>
+                    <td><span class="sp-repo-detail" x-text="d.detail || ''"></span></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+        <div class="sp-webhook-pager" x-show="hasNewer || hasOlder">
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="newer()" :disabled="!hasNewer || loadingLog">{% trans %}Newer{% endtrans %}</button>
+          <span x-text="(offset + 1) + '–' + (offset + deliveries.length) + ' / ' + total"></span>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="older()" :disabled="!hasOlder || loadingLog">{% trans %}Older{% endtrans %}</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Create / Edit Modal -->
+    <template x-if="showModal">
+      <div class="sp-scrim open" @click.self="showModal = false" x-cloak>
+        <div class="sp-modal">
+          <div class="sp-modal-header">
+            <h2 x-text="editing ? i18n.editRepository : i18n.newRepository"></h2>
+            <button class="sp-modal-close" @click="showModal = false" aria-label="{{ _('Close') }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <template x-if="error">
+              <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
+            </template>
+            <div class="form-group">
+              <label class="form-label" for="repository-provider">{% trans %}Provider{% endtrans %}</label>
+              <select class="form-input" id="repository-provider" x-model="form.provider" :disabled="editing !== null">
+                <template x-for="p in providers" :key="p">
+                  <option :value="p" x-text="providerLabel(p)" :selected="p === form.provider"></option>
+                </template>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="repository-name">{% trans %}Repository{% endtrans %}</label>
+              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository">
+              <div class="form-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="repository-url">{% trans %}Repository URL{% endtrans %}</label>
+              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="repository-scope">{% trans %}Issues commits may link to{% endtrans %}</label>
+              <select class="form-input" id="repository-scope" x-model="form.scope">
+                <option value="project">{% trans %}This project{% endtrans %}</option>
+                <option value="project_and_subprojects">{% trans %}This project and its subprojects{% endtrans %}</option>
+              </select>
+              <div class="form-hint">{% trans %}Keys of other projects in commit messages are ignored.{% endtrans %}</div>
+            </div>
+            <template x-if="!editing">
+              <div class="form-hint">{% trans %}A webhook URL and a secret are generated and shown once after the repository is connected.{% endtrans %}</div>
+            </template>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="!canSave" data-testid="repository-save">
+              <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+              <span x-show="!saving" x-text="editing ? i18n.saveChanges : i18n.createRepository"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Delete confirmation modal -->
+    <template x-if="showDeleteModal">
+      <div class="sp-scrim open" @click.self="showDeleteModal = false" x-cloak>
+        <div class="sp-modal sp-modal--xs">
+          <div class="sp-modal-header">
+            <h2>{% trans %}Disconnect repository{% endtrans %}</h2>
+            <button class="sp-modal-close" @click="showDeleteModal = false" aria-label="{{ _('Close') }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <p class="sp-modal-lead">{% trans %}Disconnect this repository? Its webhook URL stops working and its delivery log is deleted. Commit notes already on issues stay.{% endtrans %} <strong x-text="deleting?.repo_full_name"></strong></p>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="busy">{% trans %}Disconnect{% endtrans %}</button>
           </div>
         </div>
       </div>
