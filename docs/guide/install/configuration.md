@@ -60,6 +60,7 @@ docker compose up -d
 | `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
 | `TRUSTED_PROXY_HOPS` | How many proxies in a row stand in front of Specivo. Default `1`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |
+| `SMTP_MESSAGE_ID_DOMAIN` | Domain in the `Message-ID` and `List-Id` of outgoing mail: a plain host name such as `mail.example.com`; any other value stops Specivo from starting. Default: the domain of `SMTP_FROM`. |
 | `MARKDOWN_RENDER_DEADLINE_SECONDS` | CPU seconds one Markdown field (a description, a comment, a wiki page) may use to render before it is shown as plain text instead. It also may not take more than 4 times this in elapsed time. A backstop: text that would render slowly is caught before rendering. Counts CPU time, so a busy host does not trigger it. Default `2`, scaled by `MARKDOWN_RENDER_SPEED_FACTOR`; the largest realistic pages need under half a second on a fast machine. See [Size and complexity limits](../reference/markdown.md#size-and-complexity-limits). |
 | `MARKDOWN_RENDER_REQUEST_BUDGET_SECONDS` | CPU seconds all the Markdown fields on one page or API response may use together (a description, its comments and its history). Once spent, the remaining fields are shown as plain text. Default `5`, scaled by `MARKDOWN_RENDER_SPEED_FACTOR`. |
 | `MARKDOWN_RENDER_SPEED_FACTOR` | The two settings above are for a fast current machine. Specivo measures how much slower this host renders Markdown, once per process at first use (logged at INFO as "Markdown render speed factor"), and multiplies both limits by that factor, between 1 and 20, so large pages still render on slow or low-power hardware. Set a fixed value to override the measurement, e.g. `1` to turn scaling off. Default: measured. |
@@ -121,6 +122,25 @@ SMTP_TLS=true
 SMTP_USER=notifications@example.com
 SMTP_PASSWORD=...      # put the password in .env.local
 ```
+
+All mail about one issue has the same subject, `[KEY-123] issue subject`, and refers to the same
+thread, so mail clients group it into one conversation; the first line of each mail says what
+happened ("Assigned to you by …", "… commented"). Every mail carries a `Message-ID`, a `Date` and
+`Auto-Submitted: auto-generated`, so out-of-office replies are not sent back. Mail about an issue
+also carries `X-Specivo-Issue`, `X-Specivo-Project` and `X-Specivo-Event` (`assignment`,
+`updated`, `comment` or `mention`), and a `List-Id` per project, for filtering rules.
+
+`Message-ID`s end in the domain of `SMTP_FROM`. To use another one, for example when the from
+address is on a shared mail provider's domain, set it:
+
+```bash
+# .env
+SMTP_MESSAGE_ID_DOMAIN=specivo.example.com
+```
+
+The value must be a plain host name (letters, digits, hyphens and dots); Specivo refuses to start
+with anything else. If it is not set and the domain of `SMTP_FROM` is not a plain host name, the
+host of `APP_URL` is used.
 
 ## Client addresses behind a proxy
 

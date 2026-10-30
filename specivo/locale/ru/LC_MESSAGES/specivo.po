@@ -27,37 +27,37 @@ msgstr "У вас нет права добавлять сюда файлы."
 msgid "You do not have permission to change this file."
 msgstr "У вас нет права изменять этот файл."
 
-#: specivo/core/notification_templates.py:15
-#, python-brace-format
-msgid "[{issue_key}] Assigned to you: {issue_subject}"
-msgstr "[{issue_key}] Назначена вам: {issue_subject}"
+#: specivo/core/notification_templates.py:19
+#, fuzzy, python-brace-format
+msgid "Assigned to you by {actor_name}"
+msgstr "[{issue_key}] Назначена вам пользователем {actor_name}"
 
-#: specivo/core/notification_templates.py:16
+#: specivo/core/notification_templates.py:20
 #, python-brace-format
 msgid "[{issue_key}] Assigned to you by {actor_name}"
 msgstr "[{issue_key}] Назначена вам пользователем {actor_name}"
 
-#: specivo/core/notification_templates.py:19
-#, python-brace-format
-msgid "[{issue_key}] Updated: {issue_subject}"
-msgstr "[{issue_key}] Обновлена: {issue_subject}"
+#: specivo/core/notification_templates.py:23
+#, fuzzy, python-brace-format
+msgid "Updated by {actor_name}"
+msgstr "[{issue_key}] Обновлена пользователем {actor_name}"
 
-#: specivo/core/notification_templates.py:20
+#: specivo/core/notification_templates.py:24
 #, python-brace-format
 msgid "[{issue_key}] Updated by {actor_name}"
 msgstr "[{issue_key}] Обновлена пользователем {actor_name}"
 
-#: specivo/core/notification_templates.py:23
-#, python-brace-format
-msgid "[{issue_key}] New comment: {issue_subject}"
-msgstr "[{issue_key}] Новый комментарий: {issue_subject}"
+#: specivo/core/notification_templates.py:27
+#, fuzzy, python-brace-format
+msgid "{actor_name} commented"
+msgstr "[{issue_key}] {actor_name} оставил комментарий"
 
-#: specivo/core/notification_templates.py:24
+#: specivo/core/notification_templates.py:28
 #, python-brace-format
 msgid "[{issue_key}] {actor_name} commented"
 msgstr "[{issue_key}] {actor_name} оставил комментарий"
 
-#: specivo/core/notification_templates.py:27
+#: specivo/core/notification_templates.py:31
 msgid "Password reset request"
 msgstr "Запрос на сброс пароля"
 
@@ -109,58 +109,58 @@ msgstr "Срок действия API-ключа истёк"
 msgid "API key not found"
 msgstr "API-ключ не найден"
 
-#: specivo/services/auth_service.py:216 specivo/services/auth_service.py:237
-#: specivo/services/auth_service.py:269
+#: specivo/services/auth_service.py:217 specivo/services/auth_service.py:238
+#: specivo/services/auth_service.py:270
 msgid "Invalid login or password"
 msgstr "Неверный логин или пароль"
 
-#: specivo/services/auth_service.py:241
+#: specivo/services/auth_service.py:242
 msgid "Email address not verified"
 msgstr "Адрес электронной почты не подтверждён"
 
-#: specivo/services/auth_service.py:243
+#: specivo/services/auth_service.py:244
 msgid "Account has been deactivated"
 msgstr "Учётная запись деактивирована"
 
-#: specivo/services/auth_service.py:247
+#: specivo/services/auth_service.py:248
 msgid "Service accounts cannot log in. Use an API key instead."
 msgstr "Сервисные учётные записи не могут входить в систему. Используйте API-ключ."
 
-#: specivo/services/auth_service.py:253
+#: specivo/services/auth_service.py:254
 msgid "Account is temporarily locked due to too many failed login attempts"
 msgstr ""
 "Учётная запись временно заблокирована из-за слишком большого числа "
 "неудачных попыток входа"
 
-#: specivo/services/auth_service.py:287
+#: specivo/services/auth_service.py:288
 msgid "Account is locked. Contact an administrator."
 msgstr "Учётная запись заблокирована. Обратитесь к администратору."
 
-#: specivo/services/auth_service.py:407
+#: specivo/services/auth_service.py:408
 msgid "Refresh token expired or revoked"
 msgstr "Токен обновления истёк или отозван"
 
-#: specivo/services/auth_service.py:637
+#: specivo/services/auth_service.py:638
 msgid "Session not found"
 msgstr "Сессия не найдена"
 
-#: specivo/services/auth_service.py:732 specivo/services/auth_service.py:761
+#: specivo/services/auth_service.py:734 specivo/services/auth_service.py:763
 msgid "Invalid or expired password reset link"
 msgstr "Недействительная или просроченная ссылка для сброса пароля"
 
-#: specivo/services/auth_service.py:740
+#: specivo/services/auth_service.py:742
 msgid "This password reset link has already been used"
 msgstr "Эта ссылка для сброса пароля уже была использована"
 
-#: specivo/services/auth_service.py:748
+#: specivo/services/auth_service.py:750
 msgid "This password reset link has expired"
 msgstr "Срок действия этой ссылки для сброса пароля истёк"
 
-#: specivo/services/auth_service.py:820
+#: specivo/services/auth_service.py:822
 msgid "This account has no password. It authenticates with an API key."
 msgstr "У этой учётной записи нет пароля. Она аутентифицируется по API-ключу."
 
-#: specivo/services/auth_service.py:827
+#: specivo/services/auth_service.py:829
 msgid ""
 "This account has no password. You sign in through your identity provider,"
 " so there is no password to change here."
@@ -168,11 +168,11 @@ msgstr ""
 "У этой учётной записи нет пароля. Вы входите через своего поставщика "
 "удостоверений, поэтому менять здесь нечего."
 
-#: specivo/services/auth_service.py:838
+#: specivo/services/auth_service.py:840
 msgid "Current password is incorrect"
 msgstr "Текущий пароль указан неверно"
 
-#: specivo/services/auth_service.py:848
+#: specivo/services/auth_service.py:850
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:23
 msgid "The new password must be different from the current one"
 msgstr "Новый пароль должен отличаться от текущего"
@@ -8040,4 +8040,13 @@ msgstr "Не удалось выполнить единый вход. Попро
 #~ " then add the webhook. Test delivery"
 #~ " sends a push."
 #~ msgstr ""
+
+#~ msgid "[{issue_key}] Assigned to you: {issue_subject}"
+#~ msgstr "[{issue_key}] Назначена вам: {issue_subject}"
+
+#~ msgid "[{issue_key}] Updated: {issue_subject}"
+#~ msgstr "[{issue_key}] Обновлена: {issue_subject}"
+
+#~ msgid "[{issue_key}] New comment: {issue_subject}"
+#~ msgstr "[{issue_key}] Новый комментарий: {issue_subject}"
 

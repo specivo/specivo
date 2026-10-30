@@ -1,5 +1,6 @@
 """Application configuration via pydantic-settings."""
 
+import re
 from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.metadata import version as _pkg_version
@@ -18,6 +19,18 @@ def _default_available_languages() -> list[str]:
     from specivo.core.locales import get_available_locales
 
     return get_available_locales()
+
+
+# A plain ASCII host name: dot-separated labels of letters, digits and inner
+# hyphens. Used for the domain part of Message-IDs and List-Id.
+_MAIL_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
+
+
+def is_mail_domain(value: str) -> bool:
+    """Whether *value* (lowercase) is a host name usable in a Message-ID."""
+    return bool(_MAIL_DOMAIN_RE.match(value))
 
 
 _ALLOWED_FTS_LANGUAGES: frozenset[str] = frozenset(
@@ -132,6 +145,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "noreply@specivo.dev"
     smtp_tls: bool = True
+    # Domain in the Message-ID and List-Id of outgoing mail. Empty: the
+    # domain of SMTP_FROM.
+    smtp_message_id_domain: str = ""
 
     # Kill switch — emergency token for mobile/unauthenticated kill
     kill_token: str = ""
@@ -250,6 +266,14 @@ class Settings(BaseSettings):
     # Leeway for exp / iat / nbf when validating ID and logout tokens.
     # Values above the cap are lowered to it.
     sso_clock_skew_seconds: int = Field(default=60, ge=0)
+
+    @field_validator("smtp_message_id_domain")
+    @classmethod
+    def validate_smtp_message_id_domain(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v and not is_mail_domain(v):
+            raise ValueError(f"SMTP_MESSAGE_ID_DOMAIN: {v!r} is not a plain host name such as mail.example.com")
+        return v
 
     @field_validator("search_fts_language")
     @classmethod

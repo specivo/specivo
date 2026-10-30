@@ -11,8 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.notification_templates import (
+    ASSIGNMENT_EMAIL_LEAD,
     ASSIGNMENT_IN_APP_TITLE,
+    COMMENT_EMAIL_LEAD,
     COMMENT_IN_APP_TITLE,
+    ISSUE_UPDATED_EMAIL_LEAD,
     ISSUE_UPDATED_IN_APP_TITLE,
 )
 from specivo.core.utils import utcnow
@@ -337,6 +340,7 @@ class NotificationService:
             "issue_subject": issue.subject,
             "actor_name": actor.display_name,
         }
+        event_text = str(ASSIGNMENT_EMAIL_LEAD.format(**ctx))
         return NotificationPayload(
             event_type="assignment",
             entity_type="issue",
@@ -347,9 +351,10 @@ class NotificationService:
             actor_id=actor.id,
             title=str(ASSIGNMENT_IN_APP_TITLE.format(**ctx)),
             body_plain=f"Issue {issue.display_key} has been assigned to you by {actor.display_name}.",
-            body_html=_render_email("assignment.html", **ctx),
+            body_html=_render_email("assignment.html", lead=event_text, **ctx),
             issue_key=issue.display_key,
             issue_subject=issue.subject,
+            event_text=event_text,
         )
 
     def _build_watcher_payload(self, *, issue: Issue, event_type: str, actor: User) -> NotificationPayload:
@@ -358,6 +363,7 @@ class NotificationService:
             "issue_subject": issue.subject,
             "actor_name": actor.display_name,
         }
+        event_text = str(ISSUE_UPDATED_EMAIL_LEAD.format(**ctx))
         return NotificationPayload(
             event_type=event_type,
             entity_type="issue",
@@ -368,9 +374,10 @@ class NotificationService:
             actor_id=actor.id,
             title=str(ISSUE_UPDATED_IN_APP_TITLE.format(**ctx)),
             body_plain=f"Issue {issue.display_key} was updated by {actor.display_name}.",
-            body_html=_render_email("issue_updated.html", **ctx),
+            body_html=_render_email("issue_updated.html", lead=event_text, **ctx),
             issue_key=issue.display_key,
             issue_subject=issue.subject,
+            event_text=event_text,
         )
 
     def _build_comment_payload(self, *, issue: Issue, journal: Journal, actor: User) -> NotificationPayload:
@@ -380,6 +387,7 @@ class NotificationService:
             "actor_name": actor.display_name,
             "comment_text": journal.notes,
         }
+        event_text = str(COMMENT_EMAIL_LEAD.format(**ctx))
         return NotificationPayload(
             event_type="comment",
             entity_type="issue",
@@ -390,10 +398,11 @@ class NotificationService:
             actor_id=actor.id,
             title=str(COMMENT_IN_APP_TITLE.format(**ctx)),
             body_plain=journal.notes or "",
-            body_html=_render_email("comment.html", **ctx),
+            body_html=_render_email("comment.html", lead=event_text, **ctx),
             issue_key=issue.display_key,
             issue_subject=issue.subject,
             comment_text=journal.notes,
+            event_text=event_text,
         )
 
     # ------------------------------------------------------------------

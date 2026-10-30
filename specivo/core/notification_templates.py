@@ -11,16 +11,20 @@ from __future__ import annotations
 
 from specivo.core.i18n import gettext_lazy as _l
 
+# Issue email subjects are always "[{issue_key}] {issue_subject}" (see
+# specivo.core.mail_headers), so a mail client threads every mail about one
+# issue together; the *_EMAIL_LEAD line says what happened, first in the body.
+
 # --- Assignment ---
-ASSIGNMENT_EMAIL_SUBJECT = _l("[{issue_key}] Assigned to you: {issue_subject}")
+ASSIGNMENT_EMAIL_LEAD = _l("Assigned to you by {actor_name}")
 ASSIGNMENT_IN_APP_TITLE = _l("[{issue_key}] Assigned to you by {actor_name}")
 
 # --- Issue updated (watcher) ---
-ISSUE_UPDATED_EMAIL_SUBJECT = _l("[{issue_key}] Updated: {issue_subject}")
+ISSUE_UPDATED_EMAIL_LEAD = _l("Updated by {actor_name}")
 ISSUE_UPDATED_IN_APP_TITLE = _l("[{issue_key}] Updated by {actor_name}")
 
 # --- Comment ---
-COMMENT_EMAIL_SUBJECT = _l("[{issue_key}] New comment: {issue_subject}")
+COMMENT_EMAIL_LEAD = _l("{actor_name} commented")
 COMMENT_IN_APP_TITLE = _l("[{issue_key}] {actor_name} commented")
 
 # --- Password reset ---

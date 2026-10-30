@@ -26,37 +26,37 @@ msgstr "No tienes permiso para añadir archivos aquí."
 msgid "You do not have permission to change this file."
 msgstr "No tienes permiso para modificar este archivo."
 
-#: specivo/core/notification_templates.py:15
-#, python-brace-format
-msgid "[{issue_key}] Assigned to you: {issue_subject}"
-msgstr "[{issue_key}] Asignada a ti: {issue_subject}"
+#: specivo/core/notification_templates.py:19
+#, fuzzy, python-brace-format
+msgid "Assigned to you by {actor_name}"
+msgstr "[{issue_key}] Asignada a ti por {actor_name}"
 
-#: specivo/core/notification_templates.py:16
+#: specivo/core/notification_templates.py:20
 #, python-brace-format
 msgid "[{issue_key}] Assigned to you by {actor_name}"
 msgstr "[{issue_key}] Asignada a ti por {actor_name}"
 
-#: specivo/core/notification_templates.py:19
-#, python-brace-format
-msgid "[{issue_key}] Updated: {issue_subject}"
-msgstr "[{issue_key}] Actualizada: {issue_subject}"
+#: specivo/core/notification_templates.py:23
+#, fuzzy, python-brace-format
+msgid "Updated by {actor_name}"
+msgstr "[{issue_key}] Actualizada por {actor_name}"
 
-#: specivo/core/notification_templates.py:20
+#: specivo/core/notification_templates.py:24
 #, python-brace-format
 msgid "[{issue_key}] Updated by {actor_name}"
 msgstr "[{issue_key}] Actualizada por {actor_name}"
 
-#: specivo/core/notification_templates.py:23
-#, python-brace-format
-msgid "[{issue_key}] New comment: {issue_subject}"
-msgstr "[{issue_key}] Nuevo comentario: {issue_subject}"
+#: specivo/core/notification_templates.py:27
+#, fuzzy, python-brace-format
+msgid "{actor_name} commented"
+msgstr "[{issue_key}] {actor_name} comentó"
 
-#: specivo/core/notification_templates.py:24
+#: specivo/core/notification_templates.py:28
 #, python-brace-format
 msgid "[{issue_key}] {actor_name} commented"
 msgstr "[{issue_key}] {actor_name} comentó"
 
-#: specivo/core/notification_templates.py:27
+#: specivo/core/notification_templates.py:31
 msgid "Password reset request"
 msgstr "Solicitud de restablecimiento de contraseña"
 
@@ -108,60 +108,60 @@ msgstr "La clave API ha caducado"
 msgid "API key not found"
 msgstr "Clave API no encontrada"
 
-#: specivo/services/auth_service.py:216 specivo/services/auth_service.py:237
-#: specivo/services/auth_service.py:269
+#: specivo/services/auth_service.py:217 specivo/services/auth_service.py:238
+#: specivo/services/auth_service.py:270
 msgid "Invalid login or password"
 msgstr "Usuario o contraseña no válidos"
 
-#: specivo/services/auth_service.py:241
+#: specivo/services/auth_service.py:242
 msgid "Email address not verified"
 msgstr "La dirección de correo electrónico no está verificada"
 
-#: specivo/services/auth_service.py:243
+#: specivo/services/auth_service.py:244
 msgid "Account has been deactivated"
 msgstr "La cuenta ha sido desactivada"
 
-#: specivo/services/auth_service.py:247
+#: specivo/services/auth_service.py:248
 msgid "Service accounts cannot log in. Use an API key instead."
 msgstr ""
 "Las cuentas de servicio no pueden iniciar sesión. Usa una clave API en su"
 " lugar."
 
-#: specivo/services/auth_service.py:253
+#: specivo/services/auth_service.py:254
 msgid "Account is temporarily locked due to too many failed login attempts"
 msgstr ""
 "La cuenta está bloqueada temporalmente debido a demasiados intentos "
 "fallidos de inicio de sesión"
 
-#: specivo/services/auth_service.py:287
+#: specivo/services/auth_service.py:288
 msgid "Account is locked. Contact an administrator."
 msgstr "La cuenta está bloqueada. Contacta a un administrador."
 
-#: specivo/services/auth_service.py:407
+#: specivo/services/auth_service.py:408
 msgid "Refresh token expired or revoked"
 msgstr "El token de actualización ha caducado o ha sido revocado"
 
-#: specivo/services/auth_service.py:637
+#: specivo/services/auth_service.py:638
 msgid "Session not found"
 msgstr "Sesión no encontrada"
 
-#: specivo/services/auth_service.py:732 specivo/services/auth_service.py:761
+#: specivo/services/auth_service.py:734 specivo/services/auth_service.py:763
 msgid "Invalid or expired password reset link"
 msgstr "Enlace de restablecimiento de contraseña no válido o caducado"
 
-#: specivo/services/auth_service.py:740
+#: specivo/services/auth_service.py:742
 msgid "This password reset link has already been used"
 msgstr "Este enlace de restablecimiento de contraseña ya se ha utilizado"
 
-#: specivo/services/auth_service.py:748
+#: specivo/services/auth_service.py:750
 msgid "This password reset link has expired"
 msgstr "Este enlace de restablecimiento de contraseña ha caducado"
 
-#: specivo/services/auth_service.py:820
+#: specivo/services/auth_service.py:822
 msgid "This account has no password. It authenticates with an API key."
 msgstr "Esta cuenta no tiene contraseña. Se autentica con una clave API."
 
-#: specivo/services/auth_service.py:827
+#: specivo/services/auth_service.py:829
 msgid ""
 "This account has no password. You sign in through your identity provider,"
 " so there is no password to change here."
@@ -169,11 +169,11 @@ msgstr ""
 "Esta cuenta no tiene contraseña. Inicia sesión a través de su proveedor "
 "de identidad, así que aquí no hay contraseña que cambiar."
 
-#: specivo/services/auth_service.py:838
+#: specivo/services/auth_service.py:840
 msgid "Current password is incorrect"
 msgstr "La contraseña actual es incorrecta"
 
-#: specivo/services/auth_service.py:848
+#: specivo/services/auth_service.py:850
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:23
 msgid "The new password must be different from the current one"
 msgstr "La nueva contraseña debe ser distinta de la actual"
@@ -8096,4 +8096,13 @@ msgstr "El inicio de sesión único falló. Inténtalo de nuevo."
 #~ " then add the webhook. Test delivery"
 #~ " sends a push."
 #~ msgstr ""
+
+#~ msgid "[{issue_key}] Assigned to you: {issue_subject}"
+#~ msgstr "[{issue_key}] Asignada a ti: {issue_subject}"
+
+#~ msgid "[{issue_key}] Updated: {issue_subject}"
+#~ msgstr "[{issue_key}] Actualizada: {issue_subject}"
+
+#~ msgid "[{issue_key}] New comment: {issue_subject}"
+#~ msgstr "[{issue_key}] Nuevo comentario: {issue_subject}"
 
