@@ -291,7 +291,10 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     if SHARED_DIR.exists():
         loaders.append(FileSystemLoader(str(SHARED_DIR)))
 
-    templates = Jinja2Templates(directory=str(TEMPLATES_DIR / "default"))
+    templates = Jinja2Templates(
+        directory=str(TEMPLATES_DIR / "default"),
+        context_processors=[_active_timer_context],
+    )
     templates.env.loader = ChoiceLoader(loaders)
 
     # i18n: install gettext callables for {% trans %} support
@@ -574,14 +577,48 @@ async def get_current_user_optional(
         if user_language in get_available_locales():
             activate(user_language)
 
-    # Last step, and the reason it is here rather than in ``require_user``:
+    # Last check, and the reason it is here rather than in ``require_user``:
     # only a handful of pages use that dependency. Every other page — issues,
     # wiki, projects, sprints, the dashboard — resolves its user through this
     # function and redirects to /login/ itself, so this is the one place a
     # forced password change can be enforced across the whole web surface.
     redirect_if_password_change_required(request, user_obj)
 
+    await load_active_timer(request, db, user_obj)
     return user_obj
+
+
+# ---------------------------------------------------------------------------
+# The running timer in the page header
+# ---------------------------------------------------------------------------
+
+# Where ``load_active_timer`` leaves the signed-in user's running timer (a
+# ``TimerSummary``, or None) for ``_active_timer_context``.
+ACTIVE_TIMER_STATE_KEY = "active_timer"
+
+
+async def load_active_timer(request: Request, db: AsyncSession, user: object) -> None:
+    """Load *user*'s running timer for the page header, once per request.
+
+    Called from ``get_current_user_optional``, which every signed-in page goes
+    through. Only full page loads need it: other methods and htmx partials do
+    not render the header, so they skip the query. The context processor
+    ``_active_timer_context`` hands the result to every template as
+    ``active_timer``.
+    """
+    if request.method != "GET" or request.headers.get("hx-request"):
+        return
+    if hasattr(request.state, ACTIVE_TIMER_STATE_KEY):
+        return
+    from specivo.services.time_entry_service import TimeEntryService
+
+    summary = await TimeEntryService().timer_summary(db, user)  # type: ignore[arg-type]
+    setattr(request.state, ACTIVE_TIMER_STATE_KEY, summary)
+
+
+def _active_timer_context(request: Request) -> dict[str, object]:
+    """Template context processor: ``active_timer`` for the page header (None without one)."""
+    return {"active_timer": getattr(request.state, ACTIVE_TIMER_STATE_KEY, None)}
 
 
 # ---------------------------------------------------------------------------

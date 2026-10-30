@@ -61,12 +61,17 @@
   align-items: center;
   gap: var(--sp-space-sm);
   padding: 5px 10px;
+  border: none;
   border-radius: var(--sp-border-radius);
   background: rgba(196, 154, 60, 0.12);
   color: var(--sp-accent);
+  font-family: inherit;
   font-size: var(--sp-font-size-sm);
   font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
 }
+.header-timer:hover { background: rgba(196, 154, 60, 0.2); }
 .header-timer .timer-dot {
   width: 6px; height: 6px;
   background: var(--sp-accent);
@@ -148,6 +153,19 @@ button.user-dropdown-item { width: 100%; border: none; background: none; font-fa
 .timer-big-display { font-family: var(--sp-font-mono); font-size: 2.5rem; font-weight: 700; color: var(--sp-accent); text-align: center; padding: var(--sp-space-lg) 0; letter-spacing: 0.02em; }
 .timer-started { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); text-align: center; margin-bottom: var(--sp-space-lg); }
 .timer-actions { display: flex; gap: var(--sp-space-sm); }
+.timer-actions .sp-btn { flex: 1; justify-content: center; }
+.timer-actions .sp-btn svg { width: 14px; height: 14px; }
+.sp-timer-icon { width: 18px; height: 18px; color: var(--sp-accent); flex-shrink: 0; }
+.sp-timer-title { font-weight: 600; font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); }
+.sp-timer-subtitle { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-timer-issue-key { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); color: var(--sp-text-link); font-weight: 500; }
+.sp-timer-subject { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); overflow-wrap: anywhere; }
+.sp-timer-form { display: flex; flex-direction: column; gap: var(--sp-space-xs); margin: 0; }
+.sp-timer-label { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-timer-input { width: 100%; padding: var(--sp-space-xs) var(--sp-space-sm); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); font-size: var(--sp-font-size-sm); background: var(--sp-bg-surface); color: var(--sp-text-primary); }
+.sp-timer-form .timer-actions { margin-top: var(--sp-space-sm); }
+.sp-timer-confirm p { font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); margin: 0 0 var(--sp-space-sm); }
+.sp-timer-error { margin-top: var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-danger); }
 
 /* ============================================================
    NOTIFICATION DROPDOWN

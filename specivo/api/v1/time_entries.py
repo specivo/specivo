@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -25,11 +26,15 @@ from specivo.schemas.time_entry import (
 )
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
+from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 from specivo.services.time_entry_service import TimeEntryService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["time-entries"])
 _service = TimeEntryService()
 _project_service = ProjectService()
+_audit = SecurityAuditService()
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +283,38 @@ async def stop_timer(
     Permissions are checked again: a timer the caller may no longer log is
     discarded and the request refused (404 or 403).
     """
-    entry = await _service.stop_timer(db, current_user, data.activity_id, request=request)
+    entry = await _service.stop_timer(db, current_user, data.activity_id, data.comments, request=request)
     entry = await _service.get_by_id(db, entry.id)
     await db.commit()  # commit before response to avoid reload race condition
     return _entry_out(entry)
+
+
+@router.post(
+    "/timer/discard/",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def discard_timer(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Discard the current timer without logging time; 404 when none runs.
+
+    Only the caller's own timer is ever touched. The discard is recorded in
+    the security audit log.
+    """
+    timer = await _service.discard_timer(db, current_user)
+    elapsed = int((utcnow() - timer.started_at).total_seconds())
+    try:
+        await _audit.log_event(
+            session=db,
+            event_type=AuditEvent.TIMER_DISCARDED,
+            user_id=current_user.id,
+            project_id=timer.project_id,
+            resource_type="active_timer",
+            resource_id=timer.id,
+            details={"issue_id": timer.issue_id, "elapsed_seconds": max(0, elapsed)},
+            request=request,
+        )
+    except Exception:
+        logger.warning("Audit write failed for a discarded timer", exc_info=True)

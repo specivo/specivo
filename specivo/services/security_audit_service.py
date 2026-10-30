@@ -62,6 +62,8 @@ class AuditEvent(StrEnum):
     MEMBERS_LISTED = "members_listed"
     LOOKUPS_READ = "lookups_read"
     TIME_LOGGED = "time_logged"
+    TIMER_STARTED = "timer_started"
+    TIMER_DISCARDED = "timer_discarded"
     VERSIONS_LISTED = "versions_listed"
     VERSION_CREATED = "version_created"
     VERSION_UPDATED = "version_updated"

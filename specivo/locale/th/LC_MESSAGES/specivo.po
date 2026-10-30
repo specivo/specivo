@@ -225,15 +225,15 @@ msgstr "สปรินต์นี้ไม่ได้อยู่ในโป
 msgid "Cannot assign issues to a completed sprint"
 msgstr "ไม่สามารถมอบหมายงานให้สปรินต์ที่เสร็จสิ้นแล้วได้"
 
-#: specivo/services/issue_service.py:862
+#: specivo/services/issue_service.py:866
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "งานถูกแก้ไขโดยคำขออื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง"
 
-#: specivo/services/issue_service.py:1015
+#: specivo/services/issue_service.py:1019
 msgid "Issue is already in this project."
 msgstr "งานนี้อยู่ในโปรเจกต์นี้อยู่แล้ว"
 
-#: specivo/services/issue_service.py:1024
+#: specivo/services/issue_service.py:1028
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -241,12 +241,12 @@ msgstr ""
 "ไม่สามารถย้ายงานที่อยู่ในลำดับชั้นได้ กรุณาแยกงานนี้ออกจากงานหลัก "
 "และย้ายหรือแยกงานย่อยของงานนี้ออกก่อน"
 
-#: specivo/services/issue_service.py:1075
+#: specivo/services/issue_service.py:1079
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "ย้ายจาก {old} ไปยัง {new}"
 
-#: specivo/services/issue_service.py:1149
+#: specivo/services/issue_service.py:1153
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -329,7 +329,7 @@ msgid "You are reading a public project. Sign in to take part."
 msgstr "คุณกำลังอ่านโปรเจกต์สาธารณะ เข้าสู่ระบบเพื่อมีส่วนร่วม"
 
 #: specivo/templates/themes/default/base.html:40
-#: specivo/templates/themes/default/components/header.html:93
+#: specivo/templates/themes/default/components/header.html:132
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
 #: specivo/templates/themes/default/pages/auth/login.html:157
@@ -362,25 +362,147 @@ msgstr "ค้นหา"
 msgid "Font size"
 msgstr "ขนาดตัวอักษร"
 
-#: specivo/templates/themes/default/components/header.html:35
+#: specivo/templates/themes/default/components/header.html:31
+msgid "Could not load the activities."
+msgstr "โหลดรายการกิจกรรมไม่สำเร็จ"
+
+#: specivo/templates/themes/default/components/header.html:32
+msgid "Could not stop the timer."
+msgstr "หยุดตัวจับเวลาไม่สำเร็จ"
+
+#: specivo/templates/themes/default/components/header.html:33
+msgid "Could not discard the timer."
+msgstr "ยกเลิกตัวจับเวลาไม่สำเร็จ"
+
+#: specivo/templates/themes/default/components/header.html:34
+#: specivo/templates/themes/default/pages/_fts_i18n.html:9
+#: specivo/templates/themes/default/pages/admin/projects.html:16
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:8
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:14
+#: specivo/templates/themes/default/pages/issues/detail.html:327
+#: specivo/templates/themes/default/pages/issues/detail.html:462
+#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:15
+#: specivo/templates/themes/default/pages/projects/detail.html:161
+#: specivo/templates/themes/default/pages/projects/list.html:32
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:33
+#: specivo/templates/themes/default/pages/projects/settings.html:39
+#: specivo/templates/themes/default/pages/projects/settings.html:266
+#: specivo/templates/themes/default/pages/projects/settings.html:287
+#: specivo/templates/themes/default/pages/projects/settings.html:829
+#: specivo/templates/themes/default/pages/projects/settings.html:875
+#: specivo/templates/themes/default/pages/projects/settings.html:1023
+#: specivo/templates/themes/default/pages/projects/settings.html:1257
+#: specivo/templates/themes/default/pages/projects/settings.html:1571
+#: specivo/templates/themes/default/pages/wiki/show.html:97
+msgid "Unable to connect."
+msgstr "ไม่สามารถเชื่อมต่อได้"
+
+#: specivo/templates/themes/default/components/header.html:36
+#, python-format
+msgid "Timer running on %(target)s"
+msgstr "กำลังจับเวลาที่ %(target)s"
+
+#: specivo/templates/themes/default/components/header.html:45
 #: specivo/templates/themes/default/components/sidebar.html:67
 msgid "Time Tracking"
 msgstr "บันทึกเวลา"
 
-#: specivo/templates/themes/default/components/header.html:36
+#: specivo/templates/themes/default/components/header.html:46
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:17
 msgid "Timer running"
 msgstr "จับเวลาอยู่"
 
-#: specivo/templates/themes/default/components/header.html:46
-msgid "Stop & Log"
+#: specivo/templates/themes/default/components/header.html:61
+msgid "Stop & log"
 msgstr "หยุดและบันทึก"
 
-#: specivo/templates/themes/default/components/header.html:47
-#: specivo/templates/themes/default/pages/issues/detail.html:252
+#: specivo/templates/themes/default/components/header.html:62
+#: specivo/templates/themes/default/components/header.html:83
+#: specivo/templates/themes/default/pages/issues/detail.html:253
 msgid "Discard"
 msgstr "ยกเลิก"
 
-#: specivo/templates/themes/default/components/header.html:65
+#: specivo/templates/themes/default/components/header.html:66
+#: specivo/templates/themes/default/pages/issues/detail.html:268
+#: specivo/templates/themes/default/pages/issues/detail.html:351
+#: specivo/templates/themes/default/pages/issues/detail.html:388
+#: specivo/templates/themes/default/pages/time/list.html:57
+msgid "Activity"
+msgstr "กิจกรรม"
+
+#: specivo/templates/themes/default/components/header.html:72
+#: specivo/templates/themes/default/pages/issues/description_diff.html:74
+#: specivo/templates/themes/default/pages/issues/detail.html:389
+#: specivo/templates/themes/default/pages/issues/detail.html:544
+#: specivo/templates/themes/default/pages/search.html:201
+#: specivo/templates/themes/default/pages/wiki/history.html:33
+msgid "Comment"
+msgstr "ความคิดเห็น"
+
+#: specivo/templates/themes/default/components/header.html:73
+#: specivo/templates/themes/default/pages/issues/detail.html:367
+msgid "Comment (optional)"
+msgstr "ความคิดเห็น (ไม่บังคับ)"
+
+#: specivo/templates/themes/default/components/header.html:75
+#: specivo/templates/themes/default/pages/issues/detail.html:329
+msgid "Log time"
+msgstr "บันทึกเวลา"
+
+#: specivo/templates/themes/default/components/header.html:76
+#: specivo/templates/themes/default/components/header.html:84
+#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:46
+#: specivo/templates/themes/default/pages/admin/groups.html:98
+#: specivo/templates/themes/default/pages/admin/groups.html:123
+#: specivo/templates/themes/default/pages/admin/groups.html:172
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:210
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
+#: specivo/templates/themes/default/pages/admin/projects.html:179
+#: specivo/templates/themes/default/pages/admin/settings.html:161
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
+#: specivo/templates/themes/default/pages/admin/users.html:160
+#: specivo/templates/themes/default/pages/admin/users.html:201
+#: specivo/templates/themes/default/pages/auth/api_keys.html:82
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
+#: specivo/templates/themes/default/pages/issues/_activity.html:133
+#: specivo/templates/themes/default/pages/issues/_activity.html:208
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:29
+#: specivo/templates/themes/default/pages/issues/detail.html:106
+#: specivo/templates/themes/default/pages/issues/detail.html:328
+#: specivo/templates/themes/default/pages/issues/detail.html:466
+#: specivo/templates/themes/default/pages/issues/form.html:397
+#: specivo/templates/themes/default/pages/projects/detail.html:194
+#: specivo/templates/themes/default/pages/projects/list.html:97
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:116
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:333
+#: specivo/templates/themes/default/pages/projects/settings.html:253
+#: specivo/templates/themes/default/pages/projects/settings.html:434
+#: specivo/templates/themes/default/pages/projects/settings.html:463
+#: specivo/templates/themes/default/pages/projects/settings.html:564
+#: specivo/templates/themes/default/pages/projects/settings.html:775
+#: specivo/templates/themes/default/pages/projects/settings.html:796
+#: specivo/templates/themes/default/pages/projects/settings.html:976
+#: specivo/templates/themes/default/pages/projects/settings.html:1002
+#: specivo/templates/themes/default/pages/projects/settings.html:1217
+#: specivo/templates/themes/default/pages/projects/settings.html:1241
+#: specivo/templates/themes/default/pages/projects/settings.html:1535
+#: specivo/templates/themes/default/pages/projects/settings.html:1559
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:72
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:214
+#: specivo/templates/themes/default/pages/time/form.html:56
+#: specivo/templates/themes/default/pages/wiki/edit.html:136
+#: specivo/templates/themes/default/pages/wiki/show.html:231
+msgid "Cancel"
+msgstr "ยกเลิก"
+
+#: specivo/templates/themes/default/components/header.html:81
+msgid "Discard the timer? The time is not logged."
+msgstr "ยกเลิกตัวจับเวลาหรือไม่? เวลาจะไม่ถูกบันทึก"
+
+#: specivo/templates/themes/default/components/header.html:104
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
 #: specivo/templates/themes/default/pages/notifications.html:3
 #: specivo/templates/themes/default/pages/notifications.html:9
@@ -388,20 +510,20 @@ msgstr "ยกเลิก"
 msgid "Notifications"
 msgstr "การแจ้งเตือน"
 
-#: specivo/templates/themes/default/components/header.html:66
+#: specivo/templates/themes/default/components/header.html:105
 #: specivo/templates/themes/default/pages/notifications.html:16
 msgid "Mark all read"
 msgstr "อ่านทั้งหมดแล้ว"
 
-#: specivo/templates/themes/default/components/header.html:80
+#: specivo/templates/themes/default/components/header.html:119
 msgid "No notifications"
 msgstr "ไม่มีการแจ้งเตือน"
 
-#: specivo/templates/themes/default/components/header.html:84
+#: specivo/templates/themes/default/components/header.html:123
 msgid "View all notifications"
 msgstr "ดูการแจ้งเตือนทั้งหมด"
 
-#: specivo/templates/themes/default/components/header.html:114
+#: specivo/templates/themes/default/components/header.html:153
 #: specivo/templates/themes/default/pages/auth/preferences.html:9
 #: specivo/templates/themes/default/pages/auth/profile.html:3
 #: specivo/templates/themes/default/pages/auth/profile.html:9
@@ -409,7 +531,7 @@ msgstr "ดูการแจ้งเตือนทั้งหมด"
 msgid "Profile"
 msgstr "โปรไฟล์"
 
-#: specivo/templates/themes/default/components/header.html:118
+#: specivo/templates/themes/default/components/header.html:157
 #: specivo/templates/themes/default/pages/auth/preferences.html:3
 #: specivo/templates/themes/default/pages/auth/preferences.html:11
 #: specivo/templates/themes/default/pages/auth/preferences.html:14
@@ -417,7 +539,7 @@ msgstr "โปรไฟล์"
 msgid "Preferences"
 msgstr "การตั้งค่า"
 
-#: specivo/templates/themes/default/components/header.html:122
+#: specivo/templates/themes/default/components/header.html:161
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
 #: specivo/templates/themes/default/pages/auth/api_keys.html:3
 #: specivo/templates/themes/default/pages/auth/api_keys.html:9
@@ -427,7 +549,7 @@ msgstr "การตั้งค่า"
 msgid "API Keys"
 msgstr "API Keys"
 
-#: specivo/templates/themes/default/components/header.html:129
+#: specivo/templates/themes/default/components/header.html:168
 #: specivo/templates/themes/default/pages/auth/change_password.html:59
 #: specivo/templates/themes/default/pages/auth/login.html:49
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:11
@@ -436,7 +558,7 @@ msgid "Sign out"
 msgstr "ออกจากระบบ"
 
 #: specivo/templates/themes/default/components/macros.html:68
-#: specivo/templates/themes/default/pages/issues/detail.html:118
+#: specivo/templates/themes/default/pages/issues/detail.html:119
 #: specivo/templates/themes/default/pages/issues/form.html:161
 #: specivo/templates/themes/default/pages/issues/form.html:273
 msgid "Add more..."
@@ -703,8 +825,8 @@ msgstr "กำลังสร้างดัชนีใหม่..."
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
-#: specivo/templates/themes/default/pages/issues/detail.html:106
-#: specivo/templates/themes/default/pages/issues/detail.html:371
+#: specivo/templates/themes/default/pages/issues/detail.html:107
+#: specivo/templates/themes/default/pages/issues/detail.html:372
 #: specivo/templates/themes/default/pages/issues/form.html:391
 #: specivo/templates/themes/default/pages/projects/settings.html:68
 #: specivo/templates/themes/default/pages/projects/settings.html:91
@@ -721,7 +843,7 @@ msgstr "บันทึก"
 #: specivo/templates/themes/default/pages/admin/settings.html:131
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:66
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:28
-#: specivo/templates/themes/default/pages/issues/detail.html:122
+#: specivo/templates/themes/default/pages/issues/detail.html:123
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:335
 #: specivo/templates/themes/default/pages/projects/settings.html:256
 #: specivo/templates/themes/default/pages/projects/settings.html:438
@@ -758,27 +880,6 @@ msgstr "บันทึกภาษาแล้ว"
 #: specivo/templates/themes/default/pages/_fts_i18n.html:8
 msgid "Failed to save language."
 msgstr "บันทึกภาษาไม่สำเร็จ"
-
-#: specivo/templates/themes/default/pages/_fts_i18n.html:9
-#: specivo/templates/themes/default/pages/admin/projects.html:16
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:8
-#: specivo/templates/themes/default/pages/issues/detail.html:326
-#: specivo/templates/themes/default/pages/issues/detail.html:461
-#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:15
-#: specivo/templates/themes/default/pages/projects/detail.html:161
-#: specivo/templates/themes/default/pages/projects/list.html:32
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:33
-#: specivo/templates/themes/default/pages/projects/settings.html:39
-#: specivo/templates/themes/default/pages/projects/settings.html:266
-#: specivo/templates/themes/default/pages/projects/settings.html:287
-#: specivo/templates/themes/default/pages/projects/settings.html:829
-#: specivo/templates/themes/default/pages/projects/settings.html:875
-#: specivo/templates/themes/default/pages/projects/settings.html:1023
-#: specivo/templates/themes/default/pages/projects/settings.html:1257
-#: specivo/templates/themes/default/pages/projects/settings.html:1571
-#: specivo/templates/themes/default/pages/wiki/show.html:97
-msgid "Unable to connect."
-msgstr "ไม่สามารถเชื่อมต่อได้"
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:10
 msgid "Reindex started."
@@ -982,7 +1083,7 @@ msgstr "สถานะ"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
-#: specivo/templates/themes/default/pages/issues/detail.html:496
+#: specivo/templates/themes/default/pages/issues/detail.html:497
 #: specivo/templates/themes/default/pages/issues/form.html:348
 msgid "Type"
 msgstr "ประเภท"
@@ -1102,52 +1203,6 @@ msgstr[0] "โปรเจกต์ %(count)s รายการเลือก�
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:36
 msgid "No project is opted in to anonymous reading yet."
 msgstr "ยังไม่มีโปรเจกต์ใดเลือกเข้าร่วมการอ่านแบบไม่ระบุตัวตน"
-
-#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:46
-#: specivo/templates/themes/default/pages/admin/groups.html:98
-#: specivo/templates/themes/default/pages/admin/groups.html:123
-#: specivo/templates/themes/default/pages/admin/groups.html:172
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:210
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
-#: specivo/templates/themes/default/pages/admin/projects.html:179
-#: specivo/templates/themes/default/pages/admin/settings.html:161
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
-#: specivo/templates/themes/default/pages/admin/users.html:160
-#: specivo/templates/themes/default/pages/admin/users.html:201
-#: specivo/templates/themes/default/pages/auth/api_keys.html:82
-#: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
-#: specivo/templates/themes/default/pages/issues/_activity.html:133
-#: specivo/templates/themes/default/pages/issues/_activity.html:208
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
-#: specivo/templates/themes/default/pages/issues/detail.html:105
-#: specivo/templates/themes/default/pages/issues/detail.html:327
-#: specivo/templates/themes/default/pages/issues/detail.html:465
-#: specivo/templates/themes/default/pages/issues/form.html:397
-#: specivo/templates/themes/default/pages/projects/detail.html:194
-#: specivo/templates/themes/default/pages/projects/list.html:97
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:116
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:333
-#: specivo/templates/themes/default/pages/projects/settings.html:253
-#: specivo/templates/themes/default/pages/projects/settings.html:434
-#: specivo/templates/themes/default/pages/projects/settings.html:463
-#: specivo/templates/themes/default/pages/projects/settings.html:564
-#: specivo/templates/themes/default/pages/projects/settings.html:775
-#: specivo/templates/themes/default/pages/projects/settings.html:796
-#: specivo/templates/themes/default/pages/projects/settings.html:976
-#: specivo/templates/themes/default/pages/projects/settings.html:1002
-#: specivo/templates/themes/default/pages/projects/settings.html:1217
-#: specivo/templates/themes/default/pages/projects/settings.html:1241
-#: specivo/templates/themes/default/pages/projects/settings.html:1535
-#: specivo/templates/themes/default/pages/projects/settings.html:1559
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:72
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:214
-#: specivo/templates/themes/default/pages/time/form.html:56
-#: specivo/templates/themes/default/pages/wiki/edit.html:136
-#: specivo/templates/themes/default/pages/wiki/show.html:231
-msgid "Cancel"
-msgstr "ยกเลิก"
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:13
 msgid "Admin Dashboard"
@@ -1466,7 +1521,7 @@ msgid "Search by name or login..."
 msgstr "ค้นหาด้วยชื่อหรือชื่อเข้าสู่ระบบ..."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
-#: specivo/templates/themes/default/pages/issues/detail.html:512
+#: specivo/templates/themes/default/pages/issues/detail.html:513
 #: specivo/templates/themes/default/pages/issues/form.html:359
 #: specivo/templates/themes/default/pages/projects/settings.html:150
 msgid "Add"
@@ -1479,7 +1534,7 @@ msgstr "กำลังเพิ่ม..."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:71
 #: specivo/templates/themes/default/pages/admin/users.html:44
-#: specivo/templates/themes/default/pages/issues/detail.html:385
+#: specivo/templates/themes/default/pages/issues/detail.html:386
 #: specivo/templates/themes/default/pages/projects/settings.html:111
 #: specivo/templates/themes/default/pages/time/list.html:58
 msgid "User"
@@ -1592,7 +1647,7 @@ msgstr "ไม่มีกลุ่ม"
 #: specivo/templates/themes/default/pages/admin/projects.html:81
 #: specivo/templates/themes/default/pages/admin/settings.html:157
 #: specivo/templates/themes/default/pages/admin/versions.html:125
-#: specivo/templates/themes/default/pages/issues/detail.html:75
+#: specivo/templates/themes/default/pages/issues/detail.html:76
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:86
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
@@ -1771,7 +1826,7 @@ msgid "Reason"
 msgstr "เหตุผล"
 
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:49
-#: specivo/templates/themes/default/pages/issues/detail.html:272
+#: specivo/templates/themes/default/pages/issues/detail.html:273
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
 #: specivo/templates/themes/default/pages/projects/settings.html:1131
@@ -2347,14 +2402,14 @@ msgid "Discovery and signing keys work."
 msgstr "Discovery และคีย์สำหรับลงนามใช้งานได้"
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:31
-#: specivo/templates/themes/default/pages/issues/detail.html:119
+#: specivo/templates/themes/default/pages/issues/detail.html:120
 #: specivo/templates/themes/default/pages/issues/form.html:162
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "Yes"
 msgstr "ใช่"
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:32
-#: specivo/templates/themes/default/pages/issues/detail.html:120
+#: specivo/templates/themes/default/pages/issues/detail.html:121
 #: specivo/templates/themes/default/pages/issues/form.html:163
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "No"
@@ -3400,7 +3455,7 @@ msgid "%(count)s closed"
 msgstr "ปิดแล้ว %(count)s"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:28
-#: specivo/templates/themes/default/pages/issues/detail.html:411
+#: specivo/templates/themes/default/pages/issues/detail.html:412
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
@@ -4065,7 +4120,7 @@ msgstr "ย้อนกลับ"
 
 #: specivo/templates/themes/default/pages/issues/_activity.html:18
 #: specivo/templates/themes/default/pages/issues/_activity.html:107
-#: specivo/templates/themes/default/pages/issues/detail.html:398
+#: specivo/templates/themes/default/pages/issues/detail.html:399
 #: specivo/templates/themes/default/pages/wiki/history.html:48
 msgid "Unknown"
 msgstr "ไม่ทราบ"
@@ -4286,7 +4341,7 @@ msgstr "วันครบกำหนด"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:55
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:323
-#: specivo/templates/themes/default/pages/issues/detail.html:274
+#: specivo/templates/themes/default/pages/issues/detail.html:275
 #: specivo/templates/themes/default/pages/issues/form.html:324
 msgid "Relations"
 msgstr "ความสัมพันธ์"
@@ -4492,6 +4547,35 @@ msgstr "การดำเนินการนี้ไม่สามารถ
 msgid "Are you sure you want to delete"
 msgstr "คุณแน่ใจหรือไม่ว่าต้องการลบ"
 
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:13
+msgid "Could not start the timer."
+msgstr "เริ่มตัวจับเวลาไม่สำเร็จ"
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:21
+msgid "Start timer"
+msgstr "เริ่มจับเวลา"
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:24
+msgid "A timer is already running"
+msgstr "มีตัวจับเวลาทำงานอยู่แล้ว"
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:25
+#, python-format
+msgid ""
+"A timer is already running on %(target)s. Log its time (with the default "
+"activity) or discard it before starting a new one."
+msgstr ""
+"มีตัวจับเวลาทำงานอยู่ที่ %(target)s แล้ว บันทึกเวลา (ด้วยกิจกรรมเริ่มต้น)"
+" หรือยกเลิกก่อนเริ่มตัวใหม่"
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:27
+msgid "Log it and start"
+msgstr "บันทึกแล้วเริ่ม"
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:28
+msgid "Discard it and start"
+msgstr "ยกเลิกแล้วเริ่ม"
+
 #: specivo/templates/themes/default/pages/issues/description_diff.html:4
 msgid "Description Changes"
 msgstr "การเปลี่ยนแปลงคำอธิบาย"
@@ -4544,8 +4628,8 @@ msgid "Author"
 msgstr "ผู้เขียน"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:73
-#: specivo/templates/themes/default/pages/issues/detail.html:360
-#: specivo/templates/themes/default/pages/issues/detail.html:384
+#: specivo/templates/themes/default/pages/issues/detail.html:361
+#: specivo/templates/themes/default/pages/issues/detail.html:385
 #: specivo/templates/themes/default/pages/time/list.html:54
 #: specivo/templates/themes/default/pages/wiki/history.html:32
 msgid "Date"
@@ -4584,7 +4668,7 @@ msgid "← Back to issue"
 msgstr "← กลับไปยังงาน"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:36
-#: specivo/templates/themes/default/pages/issues/detail.html:81
+#: specivo/templates/themes/default/pages/issues/detail.html:82
 msgid "No description."
 msgstr "ไม่มีคำอธิบาย"
 
@@ -4600,197 +4684,182 @@ msgstr "บันทึกการเปลี่ยนแปลงไม่ส
 msgid "Network error. Please retry."
 msgstr "เครือข่ายขัดข้อง โปรดลองอีกครั้ง"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:73
+#: specivo/templates/themes/default/pages/issues/detail.html:74
 #, python-format
 msgid "History (%(count)s)"
 msgstr "ประวัติ (%(count)s)"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:103
-#: specivo/templates/themes/default/pages/issues/detail.html:539
+#: specivo/templates/themes/default/pages/issues/detail.html:104
+#: specivo/templates/themes/default/pages/issues/detail.html:540
 msgid "Supports Markdown. Use @username to mention."
 msgstr "รองรับ Markdown ใช้ @username เพื่อกล่าวถึง"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:117
+#: specivo/templates/themes/default/pages/issues/detail.html:118
 #: specivo/templates/themes/default/pages/issues/form.html:160
 msgid "Type and press Enter..."
 msgstr "พิมพ์แล้วกด Enter..."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:121
+#: specivo/templates/themes/default/pages/issues/detail.html:122
 #, python-format
 msgid "%(filled)s/%(total)s fields"
 msgstr "%(filled)s/%(total)s ฟิลด์"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:123
+#: specivo/templates/themes/default/pages/issues/detail.html:124
 msgid "Save Metadata"
 msgstr "บันทึกเมตาดาต้า"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:129
+#: specivo/templates/themes/default/pages/issues/detail.html:130
 #: specivo/templates/themes/default/pages/issues/form.html:171
 #: specivo/templates/themes/default/pages/projects/settings.html:27
 msgid "Metadata"
 msgstr "เมตาดาต้า"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:218
+#: specivo/templates/themes/default/pages/issues/detail.html:219
 msgid "Press Enter or comma to add"
 msgstr "กด Enter หรือจุลภาคเพื่อเพิ่ม"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:244
+#: specivo/templates/themes/default/pages/issues/detail.html:245
 #: specivo/templates/themes/default/pages/issues/form.html:257
 msgid "from"
 msgstr "จาก"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:244
+#: specivo/templates/themes/default/pages/issues/detail.html:245
 #: specivo/templates/themes/default/pages/issues/form.html:257
 msgid "schema"
 msgstr "สคีมา"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:251
+#: specivo/templates/themes/default/pages/issues/detail.html:252
 msgid "You have unsaved metadata changes"
 msgstr "คุณมีการเปลี่ยนแปลงเมตาดาต้าที่ยังไม่ได้บันทึก"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:267
-#: specivo/templates/themes/default/pages/issues/detail.html:350
-#: specivo/templates/themes/default/pages/issues/detail.html:387
-#: specivo/templates/themes/default/pages/time/list.html:57
-msgid "Activity"
-msgstr "กิจกรรม"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:287
+#: specivo/templates/themes/default/pages/issues/detail.html:288
 #, python-format
 msgid "%(opt)s per page"
 msgstr "%(opt)s ต่อหน้า"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:304
+#: specivo/templates/themes/default/pages/issues/detail.html:305
 #, python-format
 msgid "Showing %(from)s–%(to)s of %(total)s"
 msgstr "กำลังแสดง %(from)s–%(to)s จาก %(total)s"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:310
+#: specivo/templates/themes/default/pages/issues/detail.html:311
 #, python-format
 msgid "Page %(page)s of %(total)s"
 msgstr "หน้า %(page)s จาก %(total)s"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:324
+#: specivo/templates/themes/default/pages/issues/detail.html:325
 msgid "Enter at least 1 minute"
 msgstr "กรอกอย่างน้อย 1 นาที"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:325
+#: specivo/templates/themes/default/pages/issues/detail.html:326
 msgid "Failed to log time"
 msgstr "บันทึกเวลาไม่สำเร็จ"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:328
-msgid "Log time"
-msgstr "บันทึกเวลา"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:340
-#: specivo/templates/themes/default/pages/issues/detail.html:386
+#: specivo/templates/themes/default/pages/issues/detail.html:341
+#: specivo/templates/themes/default/pages/issues/detail.html:387
 #: specivo/templates/themes/default/pages/time/list.html:55
 msgid "Hours"
 msgstr "ชั่วโมง"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:345
+#: specivo/templates/themes/default/pages/issues/detail.html:346
 msgid "Minutes"
 msgstr "นาที"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:353
+#: specivo/templates/themes/default/pages/issues/detail.html:354
 msgid "-- Select --"
 msgstr "-- เลือก --"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:366
-msgid "Comment (optional)"
-msgstr "ความคิดเห็น (ไม่บังคับ)"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:412
+#: specivo/templates/themes/default/pages/issues/detail.html:413
 msgid "h est."
 msgstr "ชม. ประมาณการ"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:419
+#: specivo/templates/themes/default/pages/issues/detail.html:420
 msgid "No time entries logged."
 msgstr "ยังไม่มีการบันทึกเวลา"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:439
+#: specivo/templates/themes/default/pages/issues/detail.html:440
 #, python-format
 msgid "(%(count)s days)"
 msgstr "(%(count)s วัน)"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:444
+#: specivo/templates/themes/default/pages/issues/detail.html:445
 msgid "Remove this relation?"
 msgstr "ลบความสัมพันธ์นี้?"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:454
+#: specivo/templates/themes/default/pages/issues/detail.html:455
 msgid "No relations."
 msgstr "ไม่มีความสัมพันธ์"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:460
+#: specivo/templates/themes/default/pages/issues/detail.html:461
 msgid "Failed to add relation"
 msgstr "เพิ่มความสัมพันธ์ไม่สำเร็จ"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:464
+#: specivo/templates/themes/default/pages/issues/detail.html:465
 msgid "Add relation"
 msgstr "เพิ่มความสัมพันธ์"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:473
+#: specivo/templates/themes/default/pages/issues/detail.html:474
 #: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Related Issue"
 msgstr "งานที่เกี่ยวข้อง"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:474
+#: specivo/templates/themes/default/pages/issues/detail.html:475
 msgid "e.g. PROJ-42"
 msgstr "เช่น PROJ-42"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:491
+#: specivo/templates/themes/default/pages/issues/detail.html:492
 msgid "Searching..."
 msgstr "กำลังค้นหา..."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:499
+#: specivo/templates/themes/default/pages/issues/detail.html:500
 #: specivo/templates/themes/default/pages/issues/form.html:49
 #: specivo/templates/themes/default/pages/issues/form.html:350
 msgid "Relates to"
 msgstr "เกี่ยวข้องกับ"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:500
+#: specivo/templates/themes/default/pages/issues/detail.html:501
 #: specivo/templates/themes/default/pages/issues/form.html:50
 #: specivo/templates/themes/default/pages/issues/form.html:351
 msgid "Blocks"
 msgstr "ขัดขวาง"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:501
+#: specivo/templates/themes/default/pages/issues/detail.html:502
 #: specivo/templates/themes/default/pages/issues/form.html:51
 #: specivo/templates/themes/default/pages/issues/form.html:352
 msgid "Blocked by"
 msgstr "ถูกขัดขวางโดย"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:502
+#: specivo/templates/themes/default/pages/issues/detail.html:503
 #: specivo/templates/themes/default/pages/issues/form.html:52
 #: specivo/templates/themes/default/pages/issues/form.html:353
 msgid "Duplicates"
 msgstr "ซ้ำกับ"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:503
+#: specivo/templates/themes/default/pages/issues/detail.html:504
 #: specivo/templates/themes/default/pages/issues/form.html:54
 #: specivo/templates/themes/default/pages/issues/form.html:355
 msgid "Precedes"
 msgstr "นำหน้า"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:504
+#: specivo/templates/themes/default/pages/issues/detail.html:505
 #: specivo/templates/themes/default/pages/issues/form.html:55
 #: specivo/templates/themes/default/pages/issues/form.html:356
 msgid "Follows"
 msgstr "ตามหลัง"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:505
+#: specivo/templates/themes/default/pages/issues/detail.html:506
 msgid "Copied to"
 msgstr "คัดลอกไปยัง"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:506
+#: specivo/templates/themes/default/pages/issues/detail.html:507
 msgid "Copied from"
 msgstr "คัดลอกจาก"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:528
+#: specivo/templates/themes/default/pages/issues/detail.html:529
 msgid "Loading attachments…"
 msgstr "กำลังโหลดไฟล์แนบ…"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:537
+#: specivo/templates/themes/default/pages/issues/detail.html:538
 msgid "Write a comment (Markdown supported)..."
 msgstr "เขียนความคิดเห็น (รองรับ Markdown)..."
 
@@ -5011,14 +5080,14 @@ msgstr "ทั้งหมด (%(count)s)"
 msgid "Unread (%(count)s)"
 msgstr "ยังไม่ได้อ่าน (%(count)s)"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:308
+#: specivo/templates/themes/default/pages/issues/detail.html:309
 #: specivo/templates/themes/default/pages/issues/list.html:205
 #: specivo/templates/themes/default/pages/notifications.html:76
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:192
 msgid "Previous"
 msgstr "ก่อนหน้า"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:312
+#: specivo/templates/themes/default/pages/issues/detail.html:313
 #: specivo/templates/themes/default/pages/issues/list.html:217
 #: specivo/templates/themes/default/pages/notifications.html:79
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:204
@@ -7411,7 +7480,7 @@ msgid "Comments"
 msgstr "ความคิดเห็น"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:14
-#: specivo/templates/themes/default/pages/issues/detail.html:276
+#: specivo/templates/themes/default/pages/issues/detail.html:277
 #: specivo/templates/themes/default/pages/issues/form.html:370
 #: specivo/templates/themes/default/pages/search.html:50
 #: specivo/templates/themes/default/pages/wiki/show.html:104
@@ -7469,14 +7538,6 @@ msgstr[0] "งาน %(count)s รายการที่ %(field)s = %(value)s
 #, python-format
 msgid "Comment on %(title)s"
 msgstr "ความคิดเห็นเกี่ยวกับ %(title)s"
-
-#: specivo/templates/themes/default/pages/issues/description_diff.html:74
-#: specivo/templates/themes/default/pages/issues/detail.html:388
-#: specivo/templates/themes/default/pages/issues/detail.html:543
-#: specivo/templates/themes/default/pages/search.html:201
-#: specivo/templates/themes/default/pages/wiki/history.html:33
-msgid "Comment"
-msgstr "ความคิดเห็น"
 
 #: specivo/templates/themes/default/pages/search.html:222
 #: specivo/templates/themes/default/pages/time/list.html:56

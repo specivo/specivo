@@ -235,17 +235,17 @@ msgstr "El sprint no pertenece a este proyecto"
 msgid "Cannot assign issues to a completed sprint"
 msgstr "No se pueden asignar incidencias a un sprint completado"
 
-#: specivo/services/issue_service.py:862
+#: specivo/services/issue_service.py:866
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 "La incidencia fue modificada por otra solicitud. Recarga e inténtalo de "
 "nuevo."
 
-#: specivo/services/issue_service.py:1015
+#: specivo/services/issue_service.py:1019
 msgid "Issue is already in this project."
 msgstr "La incidencia ya está en este proyecto."
 
-#: specivo/services/issue_service.py:1024
+#: specivo/services/issue_service.py:1028
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -254,12 +254,12 @@ msgstr ""
 "Sepárala de su incidencia padre y mueve o separa primero sus incidencias "
 "hijas."
 
-#: specivo/services/issue_service.py:1075
+#: specivo/services/issue_service.py:1079
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Movida de {old} a {new}."
 
-#: specivo/services/issue_service.py:1149
+#: specivo/services/issue_service.py:1153
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -346,7 +346,7 @@ msgid "You are reading a public project. Sign in to take part."
 msgstr "Estás leyendo un proyecto público. Inicia sesión para participar."
 
 #: specivo/templates/themes/default/base.html:40
-#: specivo/templates/themes/default/components/header.html:93
+#: specivo/templates/themes/default/components/header.html:132
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
 #: specivo/templates/themes/default/pages/auth/login.html:157
@@ -379,25 +379,147 @@ msgstr "Buscar"
 msgid "Font size"
 msgstr "Tamaño de fuente"
 
-#: specivo/templates/themes/default/components/header.html:35
+#: specivo/templates/themes/default/components/header.html:31
+msgid "Could not load the activities."
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:32
+msgid "Could not stop the timer."
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:33
+msgid "Could not discard the timer."
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:34
+#: specivo/templates/themes/default/pages/_fts_i18n.html:9
+#: specivo/templates/themes/default/pages/admin/projects.html:16
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:8
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:14
+#: specivo/templates/themes/default/pages/issues/detail.html:327
+#: specivo/templates/themes/default/pages/issues/detail.html:462
+#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:15
+#: specivo/templates/themes/default/pages/projects/detail.html:161
+#: specivo/templates/themes/default/pages/projects/list.html:32
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:33
+#: specivo/templates/themes/default/pages/projects/settings.html:39
+#: specivo/templates/themes/default/pages/projects/settings.html:266
+#: specivo/templates/themes/default/pages/projects/settings.html:287
+#: specivo/templates/themes/default/pages/projects/settings.html:829
+#: specivo/templates/themes/default/pages/projects/settings.html:875
+#: specivo/templates/themes/default/pages/projects/settings.html:1023
+#: specivo/templates/themes/default/pages/projects/settings.html:1257
+#: specivo/templates/themes/default/pages/projects/settings.html:1571
+#: specivo/templates/themes/default/pages/wiki/show.html:97
+msgid "Unable to connect."
+msgstr "No se pudo conectar."
+
+#: specivo/templates/themes/default/components/header.html:36
+#, python-format
+msgid "Timer running on %(target)s"
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:45
 #: specivo/templates/themes/default/components/sidebar.html:67
 msgid "Time Tracking"
 msgstr "Registro de tiempo"
 
-#: specivo/templates/themes/default/components/header.html:36
+#: specivo/templates/themes/default/components/header.html:46
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:17
 msgid "Timer running"
 msgstr "Temporizador en marcha"
 
-#: specivo/templates/themes/default/components/header.html:46
-msgid "Stop & Log"
+#: specivo/templates/themes/default/components/header.html:61
+msgid "Stop & log"
 msgstr "Detener y registrar"
 
-#: specivo/templates/themes/default/components/header.html:47
-#: specivo/templates/themes/default/pages/issues/detail.html:252
+#: specivo/templates/themes/default/components/header.html:62
+#: specivo/templates/themes/default/components/header.html:83
+#: specivo/templates/themes/default/pages/issues/detail.html:253
 msgid "Discard"
 msgstr "Descartar"
 
-#: specivo/templates/themes/default/components/header.html:65
+#: specivo/templates/themes/default/components/header.html:66
+#: specivo/templates/themes/default/pages/issues/detail.html:268
+#: specivo/templates/themes/default/pages/issues/detail.html:351
+#: specivo/templates/themes/default/pages/issues/detail.html:388
+#: specivo/templates/themes/default/pages/time/list.html:57
+msgid "Activity"
+msgstr "Actividad"
+
+#: specivo/templates/themes/default/components/header.html:72
+#: specivo/templates/themes/default/pages/issues/description_diff.html:74
+#: specivo/templates/themes/default/pages/issues/detail.html:389
+#: specivo/templates/themes/default/pages/issues/detail.html:544
+#: specivo/templates/themes/default/pages/search.html:201
+#: specivo/templates/themes/default/pages/wiki/history.html:33
+msgid "Comment"
+msgstr "Comentario"
+
+#: specivo/templates/themes/default/components/header.html:73
+#: specivo/templates/themes/default/pages/issues/detail.html:367
+msgid "Comment (optional)"
+msgstr "Comentario (opcional)"
+
+#: specivo/templates/themes/default/components/header.html:75
+#: specivo/templates/themes/default/pages/issues/detail.html:329
+msgid "Log time"
+msgstr "Registrar tiempo"
+
+#: specivo/templates/themes/default/components/header.html:76
+#: specivo/templates/themes/default/components/header.html:84
+#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:46
+#: specivo/templates/themes/default/pages/admin/groups.html:98
+#: specivo/templates/themes/default/pages/admin/groups.html:123
+#: specivo/templates/themes/default/pages/admin/groups.html:172
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:210
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
+#: specivo/templates/themes/default/pages/admin/projects.html:179
+#: specivo/templates/themes/default/pages/admin/settings.html:161
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
+#: specivo/templates/themes/default/pages/admin/users.html:160
+#: specivo/templates/themes/default/pages/admin/users.html:201
+#: specivo/templates/themes/default/pages/auth/api_keys.html:82
+#: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
+#: specivo/templates/themes/default/pages/issues/_activity.html:133
+#: specivo/templates/themes/default/pages/issues/_activity.html:208
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:29
+#: specivo/templates/themes/default/pages/issues/detail.html:106
+#: specivo/templates/themes/default/pages/issues/detail.html:328
+#: specivo/templates/themes/default/pages/issues/detail.html:466
+#: specivo/templates/themes/default/pages/issues/form.html:397
+#: specivo/templates/themes/default/pages/projects/detail.html:194
+#: specivo/templates/themes/default/pages/projects/list.html:97
+#: specivo/templates/themes/default/pages/projects/recurring_list.html:116
+#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:333
+#: specivo/templates/themes/default/pages/projects/settings.html:253
+#: specivo/templates/themes/default/pages/projects/settings.html:434
+#: specivo/templates/themes/default/pages/projects/settings.html:463
+#: specivo/templates/themes/default/pages/projects/settings.html:564
+#: specivo/templates/themes/default/pages/projects/settings.html:775
+#: specivo/templates/themes/default/pages/projects/settings.html:796
+#: specivo/templates/themes/default/pages/projects/settings.html:976
+#: specivo/templates/themes/default/pages/projects/settings.html:1002
+#: specivo/templates/themes/default/pages/projects/settings.html:1217
+#: specivo/templates/themes/default/pages/projects/settings.html:1241
+#: specivo/templates/themes/default/pages/projects/settings.html:1535
+#: specivo/templates/themes/default/pages/projects/settings.html:1559
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:72
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:214
+#: specivo/templates/themes/default/pages/time/form.html:56
+#: specivo/templates/themes/default/pages/wiki/edit.html:136
+#: specivo/templates/themes/default/pages/wiki/show.html:231
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: specivo/templates/themes/default/components/header.html:81
+msgid "Discard the timer? The time is not logged."
+msgstr ""
+
+#: specivo/templates/themes/default/components/header.html:104
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
 #: specivo/templates/themes/default/pages/notifications.html:3
 #: specivo/templates/themes/default/pages/notifications.html:9
@@ -405,20 +527,20 @@ msgstr "Descartar"
 msgid "Notifications"
 msgstr "Notificaciones"
 
-#: specivo/templates/themes/default/components/header.html:66
+#: specivo/templates/themes/default/components/header.html:105
 #: specivo/templates/themes/default/pages/notifications.html:16
 msgid "Mark all read"
 msgstr "Marcar todo como leído"
 
-#: specivo/templates/themes/default/components/header.html:80
+#: specivo/templates/themes/default/components/header.html:119
 msgid "No notifications"
 msgstr "Sin notificaciones"
 
-#: specivo/templates/themes/default/components/header.html:84
+#: specivo/templates/themes/default/components/header.html:123
 msgid "View all notifications"
 msgstr "Ver todas las notificaciones"
 
-#: specivo/templates/themes/default/components/header.html:114
+#: specivo/templates/themes/default/components/header.html:153
 #: specivo/templates/themes/default/pages/auth/preferences.html:9
 #: specivo/templates/themes/default/pages/auth/profile.html:3
 #: specivo/templates/themes/default/pages/auth/profile.html:9
@@ -426,7 +548,7 @@ msgstr "Ver todas las notificaciones"
 msgid "Profile"
 msgstr "Perfil"
 
-#: specivo/templates/themes/default/components/header.html:118
+#: specivo/templates/themes/default/components/header.html:157
 #: specivo/templates/themes/default/pages/auth/preferences.html:3
 #: specivo/templates/themes/default/pages/auth/preferences.html:11
 #: specivo/templates/themes/default/pages/auth/preferences.html:14
@@ -434,7 +556,7 @@ msgstr "Perfil"
 msgid "Preferences"
 msgstr "Preferencias"
 
-#: specivo/templates/themes/default/components/header.html:122
+#: specivo/templates/themes/default/components/header.html:161
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
 #: specivo/templates/themes/default/pages/auth/api_keys.html:3
 #: specivo/templates/themes/default/pages/auth/api_keys.html:9
@@ -444,7 +566,7 @@ msgstr "Preferencias"
 msgid "API Keys"
 msgstr "Claves API"
 
-#: specivo/templates/themes/default/components/header.html:129
+#: specivo/templates/themes/default/components/header.html:168
 #: specivo/templates/themes/default/pages/auth/change_password.html:59
 #: specivo/templates/themes/default/pages/auth/login.html:49
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:11
@@ -453,7 +575,7 @@ msgid "Sign out"
 msgstr "Cerrar sesión"
 
 #: specivo/templates/themes/default/components/macros.html:68
-#: specivo/templates/themes/default/pages/issues/detail.html:118
+#: specivo/templates/themes/default/pages/issues/detail.html:119
 #: specivo/templates/themes/default/pages/issues/form.html:161
 #: specivo/templates/themes/default/pages/issues/form.html:273
 msgid "Add more..."
@@ -720,8 +842,8 @@ msgstr "Reindexando..."
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
-#: specivo/templates/themes/default/pages/issues/detail.html:106
-#: specivo/templates/themes/default/pages/issues/detail.html:371
+#: specivo/templates/themes/default/pages/issues/detail.html:107
+#: specivo/templates/themes/default/pages/issues/detail.html:372
 #: specivo/templates/themes/default/pages/issues/form.html:391
 #: specivo/templates/themes/default/pages/projects/settings.html:68
 #: specivo/templates/themes/default/pages/projects/settings.html:91
@@ -738,7 +860,7 @@ msgstr "Guardar"
 #: specivo/templates/themes/default/pages/admin/settings.html:131
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:66
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:28
-#: specivo/templates/themes/default/pages/issues/detail.html:122
+#: specivo/templates/themes/default/pages/issues/detail.html:123
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:335
 #: specivo/templates/themes/default/pages/projects/settings.html:256
 #: specivo/templates/themes/default/pages/projects/settings.html:438
@@ -775,27 +897,6 @@ msgstr "Idioma guardado."
 #: specivo/templates/themes/default/pages/_fts_i18n.html:8
 msgid "Failed to save language."
 msgstr "No se pudo guardar el idioma."
-
-#: specivo/templates/themes/default/pages/_fts_i18n.html:9
-#: specivo/templates/themes/default/pages/admin/projects.html:16
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:8
-#: specivo/templates/themes/default/pages/issues/detail.html:326
-#: specivo/templates/themes/default/pages/issues/detail.html:461
-#: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:15
-#: specivo/templates/themes/default/pages/projects/detail.html:161
-#: specivo/templates/themes/default/pages/projects/list.html:32
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:33
-#: specivo/templates/themes/default/pages/projects/settings.html:39
-#: specivo/templates/themes/default/pages/projects/settings.html:266
-#: specivo/templates/themes/default/pages/projects/settings.html:287
-#: specivo/templates/themes/default/pages/projects/settings.html:829
-#: specivo/templates/themes/default/pages/projects/settings.html:875
-#: specivo/templates/themes/default/pages/projects/settings.html:1023
-#: specivo/templates/themes/default/pages/projects/settings.html:1257
-#: specivo/templates/themes/default/pages/projects/settings.html:1571
-#: specivo/templates/themes/default/pages/wiki/show.html:97
-msgid "Unable to connect."
-msgstr "No se pudo conectar."
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:10
 msgid "Reindex started."
@@ -1003,7 +1104,7 @@ msgstr "Estado"
 
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
-#: specivo/templates/themes/default/pages/issues/detail.html:496
+#: specivo/templates/themes/default/pages/issues/detail.html:497
 #: specivo/templates/themes/default/pages/issues/form.html:348
 msgid "Type"
 msgstr "Tipo"
@@ -1124,52 +1225,6 @@ msgstr[1] "%(count)s proyectos están habilitados para la lectura anónima:"
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:36
 msgid "No project is opted in to anonymous reading yet."
 msgstr "Aún no hay ningún proyecto habilitado para la lectura anónima."
-
-#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:46
-#: specivo/templates/themes/default/pages/admin/groups.html:98
-#: specivo/templates/themes/default/pages/admin/groups.html:123
-#: specivo/templates/themes/default/pages/admin/groups.html:172
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:210
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
-#: specivo/templates/themes/default/pages/admin/projects.html:179
-#: specivo/templates/themes/default/pages/admin/settings.html:161
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
-#: specivo/templates/themes/default/pages/admin/users.html:160
-#: specivo/templates/themes/default/pages/admin/users.html:201
-#: specivo/templates/themes/default/pages/auth/api_keys.html:82
-#: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
-#: specivo/templates/themes/default/pages/issues/_activity.html:133
-#: specivo/templates/themes/default/pages/issues/_activity.html:208
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
-#: specivo/templates/themes/default/pages/issues/detail.html:105
-#: specivo/templates/themes/default/pages/issues/detail.html:327
-#: specivo/templates/themes/default/pages/issues/detail.html:465
-#: specivo/templates/themes/default/pages/issues/form.html:397
-#: specivo/templates/themes/default/pages/projects/detail.html:194
-#: specivo/templates/themes/default/pages/projects/list.html:97
-#: specivo/templates/themes/default/pages/projects/recurring_list.html:116
-#: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:333
-#: specivo/templates/themes/default/pages/projects/settings.html:253
-#: specivo/templates/themes/default/pages/projects/settings.html:434
-#: specivo/templates/themes/default/pages/projects/settings.html:463
-#: specivo/templates/themes/default/pages/projects/settings.html:564
-#: specivo/templates/themes/default/pages/projects/settings.html:775
-#: specivo/templates/themes/default/pages/projects/settings.html:796
-#: specivo/templates/themes/default/pages/projects/settings.html:976
-#: specivo/templates/themes/default/pages/projects/settings.html:1002
-#: specivo/templates/themes/default/pages/projects/settings.html:1217
-#: specivo/templates/themes/default/pages/projects/settings.html:1241
-#: specivo/templates/themes/default/pages/projects/settings.html:1535
-#: specivo/templates/themes/default/pages/projects/settings.html:1559
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:72
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:214
-#: specivo/templates/themes/default/pages/time/form.html:56
-#: specivo/templates/themes/default/pages/wiki/edit.html:136
-#: specivo/templates/themes/default/pages/wiki/show.html:231
-msgid "Cancel"
-msgstr "Cancelar"
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:13
 msgid "Admin Dashboard"
@@ -1494,7 +1549,7 @@ msgid "Search by name or login..."
 msgstr "Buscar por nombre o usuario..."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
-#: specivo/templates/themes/default/pages/issues/detail.html:512
+#: specivo/templates/themes/default/pages/issues/detail.html:513
 #: specivo/templates/themes/default/pages/issues/form.html:359
 #: specivo/templates/themes/default/pages/projects/settings.html:150
 msgid "Add"
@@ -1507,7 +1562,7 @@ msgstr "Añadiendo..."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:71
 #: specivo/templates/themes/default/pages/admin/users.html:44
-#: specivo/templates/themes/default/pages/issues/detail.html:385
+#: specivo/templates/themes/default/pages/issues/detail.html:386
 #: specivo/templates/themes/default/pages/projects/settings.html:111
 #: specivo/templates/themes/default/pages/time/list.html:58
 msgid "User"
@@ -1623,7 +1678,7 @@ msgstr "No hay grupos."
 #: specivo/templates/themes/default/pages/admin/projects.html:81
 #: specivo/templates/themes/default/pages/admin/settings.html:157
 #: specivo/templates/themes/default/pages/admin/versions.html:125
-#: specivo/templates/themes/default/pages/issues/detail.html:75
+#: specivo/templates/themes/default/pages/issues/detail.html:76
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:86
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
@@ -1802,7 +1857,7 @@ msgid "Reason"
 msgstr "Motivo"
 
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:49
-#: specivo/templates/themes/default/pages/issues/detail.html:272
+#: specivo/templates/themes/default/pages/issues/detail.html:273
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
 #: specivo/templates/themes/default/pages/projects/settings.html:1131
@@ -2382,14 +2437,14 @@ msgid "Discovery and signing keys work."
 msgstr "El descubrimiento y las claves de firma funcionan."
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:31
-#: specivo/templates/themes/default/pages/issues/detail.html:119
+#: specivo/templates/themes/default/pages/issues/detail.html:120
 #: specivo/templates/themes/default/pages/issues/form.html:162
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "Yes"
 msgstr "Sí"
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:32
-#: specivo/templates/themes/default/pages/issues/detail.html:120
+#: specivo/templates/themes/default/pages/issues/detail.html:121
 #: specivo/templates/themes/default/pages/issues/form.html:163
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "No"
@@ -3479,7 +3534,7 @@ msgid "%(count)s closed"
 msgstr "%(count)s cerradas"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:28
-#: specivo/templates/themes/default/pages/issues/detail.html:411
+#: specivo/templates/themes/default/pages/issues/detail.html:412
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
@@ -4154,7 +4209,7 @@ msgstr "Volver"
 
 #: specivo/templates/themes/default/pages/issues/_activity.html:18
 #: specivo/templates/themes/default/pages/issues/_activity.html:107
-#: specivo/templates/themes/default/pages/issues/detail.html:398
+#: specivo/templates/themes/default/pages/issues/detail.html:399
 #: specivo/templates/themes/default/pages/wiki/history.html:48
 msgid "Unknown"
 msgstr "Desconocido"
@@ -4375,7 +4430,7 @@ msgstr "Fecha de vencimiento"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:55
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:323
-#: specivo/templates/themes/default/pages/issues/detail.html:274
+#: specivo/templates/themes/default/pages/issues/detail.html:275
 #: specivo/templates/themes/default/pages/issues/form.html:324
 msgid "Relations"
 msgstr "Relaciones"
@@ -4581,6 +4636,33 @@ msgstr "Esta acción no se puede deshacer."
 msgid "Are you sure you want to delete"
 msgstr "¿Seguro que quieres eliminar"
 
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:13
+msgid "Could not start the timer."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:21
+msgid "Start timer"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:24
+msgid "A timer is already running"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:25
+#, python-format
+msgid ""
+"A timer is already running on %(target)s. Log its time (with the default "
+"activity) or discard it before starting a new one."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:27
+msgid "Log it and start"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:28
+msgid "Discard it and start"
+msgstr ""
+
 #: specivo/templates/themes/default/pages/issues/description_diff.html:4
 msgid "Description Changes"
 msgstr "Cambios en la descripción"
@@ -4633,8 +4715,8 @@ msgid "Author"
 msgstr "Autor"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:73
-#: specivo/templates/themes/default/pages/issues/detail.html:360
-#: specivo/templates/themes/default/pages/issues/detail.html:384
+#: specivo/templates/themes/default/pages/issues/detail.html:361
+#: specivo/templates/themes/default/pages/issues/detail.html:385
 #: specivo/templates/themes/default/pages/time/list.html:54
 #: specivo/templates/themes/default/pages/wiki/history.html:32
 msgid "Date"
@@ -4673,7 +4755,7 @@ msgid "← Back to issue"
 msgstr "← Volver a la incidencia"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:36
-#: specivo/templates/themes/default/pages/issues/detail.html:81
+#: specivo/templates/themes/default/pages/issues/detail.html:82
 msgid "No description."
 msgstr "Sin descripción."
 
@@ -4689,197 +4771,182 @@ msgstr "No se pudieron guardar los cambios."
 msgid "Network error. Please retry."
 msgstr "Error de red. Inténtalo de nuevo."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:73
+#: specivo/templates/themes/default/pages/issues/detail.html:74
 #, python-format
 msgid "History (%(count)s)"
 msgstr "Historial (%(count)s)"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:103
-#: specivo/templates/themes/default/pages/issues/detail.html:539
+#: specivo/templates/themes/default/pages/issues/detail.html:104
+#: specivo/templates/themes/default/pages/issues/detail.html:540
 msgid "Supports Markdown. Use @username to mention."
 msgstr "Admite Markdown. Usa @usuario para mencionar."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:117
+#: specivo/templates/themes/default/pages/issues/detail.html:118
 #: specivo/templates/themes/default/pages/issues/form.html:160
 msgid "Type and press Enter..."
 msgstr "Escribe y pulsa Intro..."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:121
+#: specivo/templates/themes/default/pages/issues/detail.html:122
 #, python-format
 msgid "%(filled)s/%(total)s fields"
 msgstr "%(filled)s/%(total)s campos"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:123
+#: specivo/templates/themes/default/pages/issues/detail.html:124
 msgid "Save Metadata"
 msgstr "Guardar metadatos"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:129
+#: specivo/templates/themes/default/pages/issues/detail.html:130
 #: specivo/templates/themes/default/pages/issues/form.html:171
 #: specivo/templates/themes/default/pages/projects/settings.html:27
 msgid "Metadata"
 msgstr "Metadatos"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:218
+#: specivo/templates/themes/default/pages/issues/detail.html:219
 msgid "Press Enter or comma to add"
 msgstr "Pulsa Intro o coma para añadir"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:244
+#: specivo/templates/themes/default/pages/issues/detail.html:245
 #: specivo/templates/themes/default/pages/issues/form.html:257
 msgid "from"
 msgstr "de"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:244
+#: specivo/templates/themes/default/pages/issues/detail.html:245
 #: specivo/templates/themes/default/pages/issues/form.html:257
 msgid "schema"
 msgstr "esquema"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:251
+#: specivo/templates/themes/default/pages/issues/detail.html:252
 msgid "You have unsaved metadata changes"
 msgstr "Tienes cambios de metadatos sin guardar"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:267
-#: specivo/templates/themes/default/pages/issues/detail.html:350
-#: specivo/templates/themes/default/pages/issues/detail.html:387
-#: specivo/templates/themes/default/pages/time/list.html:57
-msgid "Activity"
-msgstr "Actividad"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:287
+#: specivo/templates/themes/default/pages/issues/detail.html:288
 #, python-format
 msgid "%(opt)s per page"
 msgstr "%(opt)s por página"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:304
+#: specivo/templates/themes/default/pages/issues/detail.html:305
 #, python-format
 msgid "Showing %(from)s–%(to)s of %(total)s"
 msgstr "Mostrando %(from)s–%(to)s de %(total)s"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:310
+#: specivo/templates/themes/default/pages/issues/detail.html:311
 #, python-format
 msgid "Page %(page)s of %(total)s"
 msgstr "Página %(page)s de %(total)s"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:324
+#: specivo/templates/themes/default/pages/issues/detail.html:325
 msgid "Enter at least 1 minute"
 msgstr "Introduce al menos 1 minuto"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:325
+#: specivo/templates/themes/default/pages/issues/detail.html:326
 msgid "Failed to log time"
 msgstr "No se pudo registrar el tiempo"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:328
-msgid "Log time"
-msgstr "Registrar tiempo"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:340
-#: specivo/templates/themes/default/pages/issues/detail.html:386
+#: specivo/templates/themes/default/pages/issues/detail.html:341
+#: specivo/templates/themes/default/pages/issues/detail.html:387
 #: specivo/templates/themes/default/pages/time/list.html:55
 msgid "Hours"
 msgstr "Horas"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:345
+#: specivo/templates/themes/default/pages/issues/detail.html:346
 msgid "Minutes"
 msgstr "Minutos"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:353
+#: specivo/templates/themes/default/pages/issues/detail.html:354
 msgid "-- Select --"
 msgstr "-- Seleccionar --"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:366
-msgid "Comment (optional)"
-msgstr "Comentario (opcional)"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:412
+#: specivo/templates/themes/default/pages/issues/detail.html:413
 msgid "h est."
 msgstr "h est."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:419
+#: specivo/templates/themes/default/pages/issues/detail.html:420
 msgid "No time entries logged."
 msgstr "No hay registros de tiempo."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:439
+#: specivo/templates/themes/default/pages/issues/detail.html:440
 #, python-format
 msgid "(%(count)s days)"
 msgstr "(%(count)s días)"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:444
+#: specivo/templates/themes/default/pages/issues/detail.html:445
 msgid "Remove this relation?"
 msgstr "¿Eliminar esta relación?"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:454
+#: specivo/templates/themes/default/pages/issues/detail.html:455
 msgid "No relations."
 msgstr "No hay relaciones."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:460
+#: specivo/templates/themes/default/pages/issues/detail.html:461
 msgid "Failed to add relation"
 msgstr "No se pudo añadir la relación"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:464
+#: specivo/templates/themes/default/pages/issues/detail.html:465
 msgid "Add relation"
 msgstr "Añadir relación"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:473
+#: specivo/templates/themes/default/pages/issues/detail.html:474
 #: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Related Issue"
 msgstr "Incidencia relacionada"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:474
+#: specivo/templates/themes/default/pages/issues/detail.html:475
 msgid "e.g. PROJ-42"
 msgstr "p. ej. PROJ-42"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:491
+#: specivo/templates/themes/default/pages/issues/detail.html:492
 msgid "Searching..."
 msgstr "Buscando..."
 
-#: specivo/templates/themes/default/pages/issues/detail.html:499
+#: specivo/templates/themes/default/pages/issues/detail.html:500
 #: specivo/templates/themes/default/pages/issues/form.html:49
 #: specivo/templates/themes/default/pages/issues/form.html:350
 msgid "Relates to"
 msgstr "Se relaciona con"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:500
+#: specivo/templates/themes/default/pages/issues/detail.html:501
 #: specivo/templates/themes/default/pages/issues/form.html:50
 #: specivo/templates/themes/default/pages/issues/form.html:351
 msgid "Blocks"
 msgstr "Bloquea"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:501
+#: specivo/templates/themes/default/pages/issues/detail.html:502
 #: specivo/templates/themes/default/pages/issues/form.html:51
 #: specivo/templates/themes/default/pages/issues/form.html:352
 msgid "Blocked by"
 msgstr "Bloqueada por"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:502
+#: specivo/templates/themes/default/pages/issues/detail.html:503
 #: specivo/templates/themes/default/pages/issues/form.html:52
 #: specivo/templates/themes/default/pages/issues/form.html:353
 msgid "Duplicates"
 msgstr "Duplica"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:503
+#: specivo/templates/themes/default/pages/issues/detail.html:504
 #: specivo/templates/themes/default/pages/issues/form.html:54
 #: specivo/templates/themes/default/pages/issues/form.html:355
 msgid "Precedes"
 msgstr "Precede a"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:504
+#: specivo/templates/themes/default/pages/issues/detail.html:505
 #: specivo/templates/themes/default/pages/issues/form.html:55
 #: specivo/templates/themes/default/pages/issues/form.html:356
 msgid "Follows"
 msgstr "Sigue a"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:505
+#: specivo/templates/themes/default/pages/issues/detail.html:506
 msgid "Copied to"
 msgstr "Copiada a"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:506
+#: specivo/templates/themes/default/pages/issues/detail.html:507
 msgid "Copied from"
 msgstr "Copiada de"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:528
+#: specivo/templates/themes/default/pages/issues/detail.html:529
 msgid "Loading attachments…"
 msgstr "Cargando adjuntos…"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:537
+#: specivo/templates/themes/default/pages/issues/detail.html:538
 msgid "Write a comment (Markdown supported)..."
 msgstr "Escribe un comentario (se admite Markdown)..."
 
@@ -5104,14 +5171,14 @@ msgstr "Todas (%(count)s)"
 msgid "Unread (%(count)s)"
 msgstr "Sin leer (%(count)s)"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:308
+#: specivo/templates/themes/default/pages/issues/detail.html:309
 #: specivo/templates/themes/default/pages/issues/list.html:205
 #: specivo/templates/themes/default/pages/notifications.html:76
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:192
 msgid "Previous"
 msgstr "Anterior"
 
-#: specivo/templates/themes/default/pages/issues/detail.html:312
+#: specivo/templates/themes/default/pages/issues/detail.html:313
 #: specivo/templates/themes/default/pages/issues/list.html:217
 #: specivo/templates/themes/default/pages/notifications.html:79
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:204
@@ -7539,7 +7606,7 @@ msgid "Comments"
 msgstr "Comentarios"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:14
-#: specivo/templates/themes/default/pages/issues/detail.html:276
+#: specivo/templates/themes/default/pages/issues/detail.html:277
 #: specivo/templates/themes/default/pages/issues/form.html:370
 #: specivo/templates/themes/default/pages/search.html:50
 #: specivo/templates/themes/default/pages/wiki/show.html:104
@@ -7600,14 +7667,6 @@ msgstr[1] "%(count)s incidencias donde %(field)s = %(value)s"
 #, python-format
 msgid "Comment on %(title)s"
 msgstr "Comentario en %(title)s"
-
-#: specivo/templates/themes/default/pages/issues/description_diff.html:74
-#: specivo/templates/themes/default/pages/issues/detail.html:388
-#: specivo/templates/themes/default/pages/issues/detail.html:543
-#: specivo/templates/themes/default/pages/search.html:201
-#: specivo/templates/themes/default/pages/wiki/history.html:33
-msgid "Comment"
-msgstr "Comentario"
 
 #: specivo/templates/themes/default/pages/search.html:222
 #: specivo/templates/themes/default/pages/time/list.html:56

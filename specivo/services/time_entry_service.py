@@ -20,6 +20,7 @@ importer writes entries for their original authors.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -71,6 +72,35 @@ def _compute_elapsed_hours(started_at: datetime, now: datetime) -> Decimal:
         return _get_max_timer_hours()
 
     return hours
+
+
+@dataclass(frozen=True, slots=True)
+class TimerSummary:
+    """What the page header shows of a user's running timer.
+
+    ``issue_key`` is set whenever the timer runs on an issue; ``subject`` only
+    while the user can still see that issue.
+    """
+
+    project_key: str
+    issue_id: int | None
+    issue_key: str | None
+    subject: str | None
+    started_at: datetime
+    elapsed_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReplacedTimer:
+    """The timer that was running when another one was started.
+
+    ``entry`` is the time entry its time was logged as, or None when the user
+    could no longer log time where it ran and it was discarded instead.
+    """
+
+    project_id: int
+    issue_id: int | None
+    entry: TimeEntry | None
 
 
 # ---------------------------------------------------------------------------
@@ -479,6 +509,51 @@ class TimeEntryService:
             return None
         return timer
 
+    async def timer_summary(self, session: AsyncSession, user: User) -> TimerSummary | None:
+        """Return what the page header shows of *user*'s running timer, or None.
+
+        One query loads the timer with its project and issue. The issue's
+        subject is left out when the user can no longer see the issue
+        (``IssueService.is_visible``, which needs the user's roles there: one
+        more query unless they are cached already); its key stays, since the
+        user started the timer there. A timer outside the authenticating API
+        key's project limit is not reported, as in ``get_current_timer``.
+        """
+        if user.is_anonymous:
+            return None
+        stmt = (
+            select(ActiveTimer.started_at, Project, Issue)
+            .select_from(ActiveTimer)
+            .join(Project, Project.id == ActiveTimer.project_id)
+            .outerjoin(Issue, Issue.id == ActiveTimer.issue_id)
+            .where(ActiveTimer.user_id == user.id)
+        )
+        row = (await session.execute(stmt)).first()
+        if row is None:
+            return None
+        started_at, project, issue = row
+        if not project_in_scope(project.id):
+            return None
+
+        issue_key: str | None = None
+        subject: str | None = None
+        if issue is not None:
+            from specivo.services.issue_service import IssueService
+
+            issue_key = issue.display_key
+            if await IssueService().is_visible(session, issue, user):
+                subject = issue.subject
+
+        elapsed = int((utcnow() - started_at).total_seconds())
+        return TimerSummary(
+            project_key=project.key,
+            issue_id=issue.id if issue is not None else None,
+            issue_key=issue_key,
+            subject=subject,
+            started_at=started_at,
+            elapsed_seconds=max(0, elapsed),
+        )
+
     async def _get_timer_row(self, session: AsyncSession, user: User) -> ActiveTimer | None:
         stmt = select(ActiveTimer).where(ActiveTimer.user_id == user.id)
         result = await session.execute(stmt)
@@ -499,7 +574,24 @@ class TimeEntryService:
         The user must be able to log time there (``require_can_log``). A
         running timer is stopped first and its time logged, unless the user
         may no longer log time where it runs; then it is discarded.
+        ``start_timer_replacing`` also says which of the two happened.
         """
+        timer, _replaced = await self.start_timer_replacing(
+            session, user, project_id, issue_id, comments, request=request
+        )
+        return timer
+
+    async def start_timer_replacing(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: int,
+        issue_id: int | None = None,
+        comments: str | None = None,
+        *,
+        request: Request | None = None,
+    ) -> tuple[ActiveTimer, ReplacedTimer | None]:
+        """``start_timer``, also returning what became of the timer that was running, if any."""
         project = await session.get(Project, project_id)
         if project is None:
             raise NotFoundError(f"Project {project_id} not found")
@@ -511,10 +603,13 @@ class TimeEntryService:
             raise PermissionDeniedError(
                 "A timer is already running in a project this API key cannot reach; stop it there first."
             )
+        replaced: ReplacedTimer | None = None
         if existing is not None:
             if await self._timer_still_allowed(session, user, existing):
-                await self._stop_timer_internal(session, user, existing)
+                entry = await self._stop_timer_internal(session, user, existing)
+                replaced = ReplacedTimer(project_id=existing.project_id, issue_id=existing.issue_id, entry=entry)
             else:
+                replaced = ReplacedTimer(project_id=existing.project_id, issue_id=existing.issue_id, entry=None)
                 await session.delete(existing)
                 await session.flush()
 
@@ -528,18 +623,20 @@ class TimeEntryService:
         session.add(timer)
         await session.flush()
         await session.refresh(timer)
-        return timer
+        return timer, replaced
 
     async def stop_timer(
         self,
         session: AsyncSession,
         user: User,
         activity_id: int,
+        comments: str | None = None,
         *,
         request: Request | None = None,
     ) -> TimeEntry:
         """Stop the current timer and create a time entry.
 
+        *comments*, when given, replace the comment the timer was started with.
         Raises NotFoundError if no active timer. Permissions may have changed
         since the timer started, so they are checked again before anything is
         written: when the user may no longer log time on the timer's project
@@ -566,7 +663,21 @@ class TimeEntryService:
             exc.message = f"{exc.message}. The timer was discarded without logging time."
             raise
 
-        return await self._stop_timer_internal(session, user, timer, activity_id=activity_id)
+        return await self._stop_timer_internal(session, user, timer, activity_id=activity_id, comments=comments)
+
+    async def discard_timer(self, session: AsyncSession, user: User) -> ActiveTimer:
+        """Delete *user*'s running timer without logging time, and return it.
+
+        Raises NotFoundError if no active timer (one outside the authenticating
+        API key's project limit included). Needs no permission: discarding
+        writes nothing, and a user may always drop their own timer.
+        """
+        timer = await self.get_current_timer(session, user)
+        if timer is None:
+            raise NotFoundError("No active timer")
+        await session.delete(timer)
+        await session.flush()
+        return timer
 
     async def _require_timer_allowed(
         self, session: AsyncSession, user: User, timer: ActiveTimer, *, request: Request | None = None
@@ -607,6 +718,7 @@ class TimeEntryService:
         user: User,
         timer: ActiveTimer,
         activity_id: int | None = None,
+        comments: str | None = None,
     ) -> TimeEntry:
         """Internal: stop a timer, create time entry, delete timer."""
         now = utcnow()
@@ -622,7 +734,7 @@ class TimeEntryService:
                 )
             activity_id = default_activity.id
 
-        comments = timer.comments
+        comments = comments or timer.comments
         if hours == _get_max_timer_hours():
             cap_note = " [auto-capped at 12h]"
             comments = f"{comments}{cap_note}" if comments else cap_note.strip()

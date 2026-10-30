@@ -28,9 +28,6 @@ Project **billing rates**, used by the billable-time report, are managed through
 changing or deleting a rate takes the **Manage project settings** permission, and listing the rates takes
 **View time entries**. There is no separate billing permission.
 
-A running timer is checked again when you stop it: if you have lost the right to log time on its
-project or issue in the meantime, the timer is discarded and no time is written.
-
 ## Log time against an issue
 
 Open the issue and add a time entry: the number of **hours**, the **date**, an **activity**, and an
@@ -51,6 +48,31 @@ Every entry is tagged with an **activity** so reports can break effort down by t
 | **Support** | Helping users, answering requests |
 
 **Development** is selected by default, so the common case is one click less.
+
+## Time it with a timer
+
+Instead of adding up the hours yourself, let a timer count them. Open the issue and choose
+**Start timer** next to its key (you need *Log time* in the project). You have one timer at a time:
+
+- While it runs, the header shows the issue key and the elapsed time on every page, and the issue
+  page says *Timer running*. Click the timer in the header to see the issue and its title.
+- **Stop & log** asks for the **activity** (the default one is preselected) and an optional
+  comment, then writes the time entry on the issue, for today. The elapsed time is rounded to the
+  hundredth of an hour, and a timer left running is capped (at 12 hours unless your administrator
+  changed it) and marked so in the comment.
+- **Discard** drops the timer without writing anything.
+
+If a timer already runs on another issue when you choose **Start timer**, Specivo asks first: **Log
+it and start** writes its time with the default activity, **Discard it and start** throws it away,
+then the new timer starts. To log the old one with another activity or a comment, stop it from the
+header first.
+
+A running timer is checked again when you stop it: if you have lost the right to log time on its
+project or issue in the meantime, the timer is discarded and no time is written. If you can no
+longer see the issue, the header still shows its key but not its title.
+
+AI agents can drive the same timer through the `specivo_timer` tool (see
+[What an agent can do](../ai-agents/capabilities.md)).
 
 ## Estimate versus spent
 
