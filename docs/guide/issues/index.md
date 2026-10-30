@@ -46,8 +46,8 @@ else is optional and can be filled in later.
 | **Estimate** | Estimated hours, plus original and remaining estimates |
 | **% done** | Progress from 0 to 100 |
 | **Parent issue** | Makes this a [subtask](subtasks.md) of another issue |
-| **Private** | Hides the issue from members who lack permission to see private issues |
-| **Watchers** | People notified of changes even if they aren't the assignee |
+| **Private** | Hides the issue from everyone except its author, its assignee and administrators |
+| **Watchers** | People notified of changes even if they aren't the assignee, as long as they can see the issue |
 | **Metadata** | Structured, typed fields beyond the core set — see below |
 
 **Metadata** is extra typed data (story points, a git branch, a severity level) defined by reusable

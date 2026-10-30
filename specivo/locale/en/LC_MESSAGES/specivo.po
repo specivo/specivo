@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 22:21+0100\n"
+"POT-Creation-Date: 2026-10-30 23:28+0100\n"
 "PO-Revision-Date: 2026-03-28 10:59+0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -219,26 +219,26 @@ msgstr ""
 msgid "Cannot assign issues to a completed sprint"
 msgstr ""
 
-#: specivo/services/issue_service.py:866
+#: specivo/services/issue_service.py:946
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 
-#: specivo/services/issue_service.py:1019
+#: specivo/services/issue_service.py:1099
 msgid "Issue is already in this project."
 msgstr ""
 
-#: specivo/services/issue_service.py:1028
+#: specivo/services/issue_service.py:1108
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr ""
 
-#: specivo/services/issue_service.py:1079
+#: specivo/services/issue_service.py:1159
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr ""
 
-#: specivo/services/issue_service.py:1153
+#: specivo/services/issue_service.py:1233
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "

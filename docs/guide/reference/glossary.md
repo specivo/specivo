@@ -37,5 +37,5 @@ Every term Specivo uses, defined in one line. Heavier terms link to their full p
 | **tracker** | The *type* of an issue: Bug, Feature, Task, or Support. See [Issues](../issues/index.md). |
 | **users visibility** | A role setting under **Administration → Roles**: find **all active users**, or only the members of projects you can open. See [What a role can see](../projects/index.md#what-a-role-can-see). |
 | **version** | A milestone or release that groups issues toward a target date. See [Versions & roadmap](../projects/versions.md). |
-| **watcher** | A user who follows an issue to receive notifications about changes to it. |
+| **watcher** | A user who follows an issue to receive notifications about changes to it. Watchers who cannot see the issue (it was made private, or they lost access to the project) stay on the list but get no notifications until their access comes back. |
 | **wiki** | A project's Markdown knowledge base, with version history, nesting, and cross-links. See [Wiki](../wiki/index.md). |

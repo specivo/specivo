@@ -80,14 +80,13 @@ async def test_notification_dedup() -> None:
     watcher_svc = AsyncMock()
     watcher_svc.list_watchers.return_value = [watcher_and_assignee]
 
-    # Assignee lookup
-    session.execute = AsyncMock()
-    mock_result = MagicMock()
-    mock_result.scalar_one_or_none.return_value = watcher_and_assignee
-    session.execute.return_value = mock_result
+    # Everyone can see the issue; the visibility check returns the users asked for
+    issue_svc = AsyncMock()
+    issue_svc.users_who_can_view.side_effect = lambda _session, _issue, ids: [watcher_and_assignee for _ in ids]
 
     with (
         patch.object(service, "_watcher_service", watcher_svc),
+        patch.object(service, "_issue_service", issue_svc),
         patch.object(service, "_dispatch_to_channels", new_callable=AsyncMock) as mock_dispatch,
     ):
         await service.notify_comment(

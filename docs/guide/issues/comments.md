@@ -19,6 +19,8 @@ syntax highlighting.
 
 Type `@username` to mention someone. Mentioning a person **notifies** them, which is the easiest way to
 pull a teammate into the discussion or hand something off without reassigning the whole issue.
+Only people who can open the issue are notified: mentioning someone who cannot see it (a private
+issue, or a project they are not a member of) sends them nothing.
 
 ## Reply in threads
 

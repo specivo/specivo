@@ -45,8 +45,8 @@ to make an issue of an ordinary tracker private.
 
 A private issue is visible only to its author, its assignee and administrators. It stays out of
 everything else too, for everyone who may not see it: issue lists, board and backlog columns, version
-and sprint pages, counts and progress bars, recurring-task pages, the dashboard, and issue-key
-links in text. A hidden key written in a comment looks exactly like a key that does not exist.
+and sprint pages, counts and progress bars, recurring-task pages, the dashboard, notifications and
+emails, and issue-key links in text. A hidden key written in a comment looks exactly like a key that does not exist.
 
 !!! tip "Write a description you'll thank yourself for later"
     A good description says what the problem or goal is, how to reproduce a bug, and what "done"

@@ -8,10 +8,12 @@ import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.models.issue import Issue
 from specivo.models.journal import Journal
 from specivo.models.reaction import Mention
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import real_users_clause
+from specivo.services.issue_service import IssueService
 from specivo.services.notification_service import NotificationService
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,7 @@ class MentionService:
 
     def __init__(self) -> None:
         self._notification_service = NotificationService()
+        self._issue_service = IssueService()
 
     def parse_mentions(self, text: str) -> list[str]:
         """Extract unique usernames from @mentions in text.
@@ -45,6 +48,7 @@ class MentionService:
         - Only creates mentions for users that actually exist in the database.
         - Does not create a mention for the actor (no self-mention).
         - Silently ignores nonexistent usernames.
+        - Notifies only the mentioned users who can see the issue.
 
         Returns the list of created Mention records.
         """
@@ -75,19 +79,20 @@ class MentionService:
             session.add(mention)
             created_mentions.append(mention)
 
-            # Determine issue context for notification
-            issue_id = journal.issue_id
-            project_id = journal.project_id
-
-            if issue_id is not None:
-                title = f"You were mentioned by {actor.display_name}"
+        # Only users who can see the issue hear about it; the mention itself is
+        # still recorded.
+        issue = await session.get(Issue, journal.issue_id) if journal.issue_id is not None else None
+        if issue is not None and created_mentions:
+            mentioned_ids = [mention.user_id for mention in created_mentions]
+            title = f"You were mentioned by {actor.display_name}"
+            for mentioned_user in await self._issue_service.users_who_can_view(session, issue, mentioned_ids):
                 await self._notification_service.create_notification(
                     session,
                     user_id=mentioned_user.id,
                     event_type="mention",
                     entity_type="issue",
-                    entity_id=issue_id,
-                    project_id=project_id,
+                    entity_id=issue.id,
+                    project_id=issue.project_id,
                     actor_id=actor.id,
                     title=title,
                     body=text,
