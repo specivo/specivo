@@ -1,12 +1,12 @@
 ---
-description: Connect Specivo to authentik — create an OAuth2/OpenID provider and application, allow the authorization code grant, pick a signing key, keep the default subject mode, send groups, set up logout, and fill in the provider in Specivo.
+description: Connect Specivo to authentik — create an OAuth2/OpenID provider and application, allow the authorization code and refresh token grants, pick a signing key, keep the default subject mode, send groups, set up logout, fill in the provider in Specivo, and offboard people.
 ---
 
 # authentik
 
 This page connects Specivo to authentik. Read [Single sign-on](index.md) first for the concepts and
 what each Specivo setting does. The steps were checked against authentik 2026.8: sign-in, accounts created on first sign-in,
-group mapping, sign-out at authentik and back-channel logout all work.
+group mapping, sign-out at authentik, back-channel logout and the session check all work.
 
 Sample values: Specivo at `https://specivo.example.com` (`APP_URL`), authentik at
 `https://authentik.example.com`, application slug `specivo`, provider slug `authentik`.
@@ -28,24 +28,30 @@ the provider first under **Applications → Providers** and then an application 
 - Under **Protocol settings**:
     - **Client Type**: **Confidential**.
     - **Client ID**: `specivo`, or the generated one. **Client Secret**: copy the generated one.
-    - **Grant Types**: tick **Authorization Code** only. The form ticks almost every grant type by
-      default; Specivo needs none of the others. Do not leave the list empty: a provider without the
-      authorization code grant (for example one created through the API or a blueprint without
-      `grant_types`) refuses every sign-in, and people see `sso_idp_error`.
+    - **Grant Types**: tick **Authorization Code** and **Refresh token**, and nothing else. The
+      form ticks almost every grant type by default; Specivo needs none of the others. Without
+      **Authorization Code** (for example a provider created through the API or a blueprint
+      without `grant_types`) authentik refuses every sign-in, and people see `sso_idp_error`.
+      Without **Refresh token** authentik still hands out refresh tokens but refuses them later,
+      so Specivo cannot check sessions at authentik ([the session check](index.md#the-session-check));
+      Test connection then says the provider refused the refresh token. In the API and in
+      blueprints the values are `authorization_code` and `refresh_token`.
     - **Redirect URIs/Origins**: add `https://specivo.example.com/auth/oidc/authentik/callback/`
       with matching mode **Strict** and type **Authorization**. Add
       `https://specivo.example.com/login/?logged_out=1` with matching mode **Strict** and type
-      **Post Logout**: that is the address Specivo returns to after sign-out. No regular
-      expressions or wildcards.
+      **Post Logout** (`logout` in the API and in blueprints): that is the address Specivo returns
+      to after sign-out. No regular expressions or wildcards.
     - **Signing Key**: choose a certificate key pair, for example the built-in *authentik
       Self-signed Certificate*. **This is required.** Without a signing key authentik signs tokens
       with the client secret (`HS256`), and Specivo rejects those. With a key they are `RS256`.
-- Under **Advanced flow settings**, keep the **Invalidation Flow**
-  `default-provider-invalidation-flow`. It is what runs when Specivo sends someone to authentik to
-  sign out (see [Logout](#3-logout)).
+- Under **Advanced flow settings**, set the **Invalidation Flow** to `default-invalidation-flow`
+  (named *Logout*). It is what runs when Specivo sends someone to authentik to sign out (see
+  [Logout](#3-logout)). The preselected `default-provider-invalidation-flow` only tells the person
+  they left the application and keeps their authentik session open.
 - Under **Advanced protocol settings**:
-    - **Scopes**: keep the default mappings for `openid`, `email` and `profile`. The `profile`
-      mapping is what puts a `groups` claim in the token.
+    - **Scopes**: keep the default mappings for `openid`, `email`, `profile` and
+      `offline_access`. The `profile` mapping is what puts a `groups` claim in the token;
+      `offline_access` is what makes authentik issue the refresh token the session check uses.
     - **Subject Mode**: keep **Based on the User's hashed ID** (the default).
     - **Include claims in id_token**: on (the default), so groups and the email arrive in the ID
       token.
@@ -79,13 +85,16 @@ groups** refuses them with `sso_not_in_required_group`.
 **Sign-out at authentik** works with the settings above. When a person signs out of Specivo,
 Specivo sends the browser to the provider's end-session endpoint
 (`https://authentik.example.com/application/o/specivo/end-session/`) with the ID token and the
-post-logout address. authentik runs the invalidation flow, which ends the authentik session without
-asking anything, and sends the browser back to `https://specivo.example.com/login/?logged_out=1`.
-The post-logout address must be registered with type **Post Logout** (step 1), or authentik does
-not send the browser back.
+post-logout address. authentik runs the invalidation flow, `default-invalidation-flow`, which ends
+the authentik session without asking anything, and sends the browser back to
+`https://specivo.example.com/login/?logged_out=1`. The post-logout address must be registered with
+type **Post Logout** (step 1), or authentik does not send the browser back. With
+`default-provider-invalidation-flow` instead, the person returns to Specivo but stays signed in at
+authentik, and the next **Sign in with authentik** goes through without a password.
 
 **Back-channel logout** (optional) ends Specivo sessions when the authentik session ends: when the
-person signs out at authentik, or an administrator ends their sessions in authentik. Under
+person signs out at authentik, an administrator ends their sessions, or the user is deactivated or
+deleted. authentik sends one logout per session, sometimes twice; Specivo handles repeats. Under
 **Protocol settings**, set the **Logout URI** to
 `https://specivo.example.com/auth/oidc/authentik/backchannel-logout/` and the **Logout Method** to
 **Back-channel**. The authentik **worker** sends these requests, so the worker must be able to
@@ -103,8 +112,9 @@ reach Specivo at that address. In Specivo, tick **Accept back-channel logout fro
 | Client ID | The client ID from the provider |
 | Client authentication | `client_secret_basic` |
 | Client secret | The client secret from the provider |
-| Scopes | `openid profile email` |
+| Scopes | `openid profile email offline_access` |
 | Groups claim | `groups` |
+| Check sessions at the provider when they are renewed | On (the default) |
 | Accept back-channel logout | On, if you set it up in step 3 |
 
 The issuer **ends with a slash** and contains the application slug. Copy it from the **Issuer**
@@ -112,7 +122,9 @@ shown on the provider's page in authentik rather than typing it: a missing slash
 differ and the sign-in fails.
 
 Save, press **Test connection**, tick **Enabled** and save again. Test connection should report an
-end-session endpoint and back-channel logout support. See
+end-session endpoint and back-channel logout support. After the first sign-in it should also say
+that sessions are checked at the provider; if it says the provider sent no refresh token,
+`offline_access` is missing from **Scopes** or from the provider's scope mappings. See
 [Single sign-on](index.md#who-gets-an-account) for accounts, JIT and groups.
 
 ## Notes for authentik
@@ -132,6 +144,22 @@ end-session endpoint and back-channel logout support. See
 - **Test users.** Try both a person in the groups you map and one who is in none of them, and check
   that the second is refused (`sso_not_in_required_group`) if you set required groups.
 
+## Offboarding
+
+To take someone's access away:
+
+1. **Deactivate the user in authentik** (or delete them). authentik refuses their refresh token at
+   once, so their Specivo session ends at its next renewal, within 15 minutes, and with back-channel
+   logout on it ends right away.
+2. If you use API keys, either choose **End all of their sessions and switch off their API keys**
+   for **When the provider ends a session** (the deactivation's back-channel logout then switches
+   off the keys of a person without a Specivo password), or deactivate the user in Specivo as well
+   (**Administration → Users → Deactivate account**), which also works for people with a password.
+
+Ending someone's sessions in authentik (the user's **Sessions** tab) without deactivating them is a
+sign-out, not an offboarding: their refresh token, issued for `offline_access`, stays valid, so only
+back-channel logout ends the Specivo session, and they can sign in again.
+
 ## If it does not work
 
 | Symptom | Check |
@@ -141,7 +169,9 @@ end-session endpoint and back-channel logout support. See
 | `sso_idp_error` after signing in | The secret is wrong, or the user has no access to the application (policy bindings). |
 | `sso_token_invalid` | The signing key is missing (HS256 tokens are refused), or the issuer differs from authentik's by the trailing slash or the application slug. |
 | Groups missing | The provider lost its `profile` scope mapping, or **Include claims in id_token** is off. |
-| Sign-out leaves the authentik session open, or authentik does not return to Specivo | The post-logout address is not registered with type **Post Logout**, the invalidation flow was changed, or **Signing out of Specivo also signs out at the provider** is off in Specivo. |
+| Sign-out leaves the authentik session open, or authentik does not return to Specivo | The invalidation flow is `default-provider-invalidation-flow` instead of `default-invalidation-flow`, the post-logout address is not registered with type **Post Logout**, or **Signing out of Specivo also signs out at the provider** is off in Specivo. |
 | Back-channel logout does nothing | The authentik worker cannot reach the logout URI, or **Accept back-channel logout from the provider** is off. |
+| Test connection: the provider sent no refresh token | `offline_access` is not in the Specivo **Scopes**, or the provider lost its `offline_access` scope mapping. |
+| Test connection: the provider refused the refresh token | **Refresh token** is not ticked under **Grant Types**. |
 
 The full list is in the [error table](index.md#troubleshooting).

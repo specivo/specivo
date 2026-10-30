@@ -35,6 +35,9 @@ function formFromProvider(p, extraKeys) {
         deactivate_on_access_loss: p ? p.deactivate_on_access_loss : false,
         rp_logout_enabled: p ? p.rp_logout_enabled : true,
         backchannel_logout_enabled: p ? p.backchannel_logout_enabled : false,
+        backchannel_action: p ? p.backchannel_action : 'revoke_session',
+        verify_session_at_idp: p ? p.verify_session_at_idp : true,
+        idp_check_failure: p ? p.idp_check_failure : 'allow',
         session_max_age_hours: p ? p.session_max_age_hours : 24,
         extra: {}
     };
@@ -121,6 +124,9 @@ export function adminSsoProvider(initial) {
                 deactivate_on_access_loss: !!f.deactivate_on_access_loss,
                 rp_logout_enabled: !!f.rp_logout_enabled,
                 backchannel_logout_enabled: !!f.backchannel_logout_enabled,
+                backchannel_action: f.backchannel_action,
+                verify_session_at_idp: !!f.verify_session_at_idp,
+                idp_check_failure: f.idp_check_failure,
                 session_max_age_hours: parseInt(f.session_max_age_hours, 10) || 24,
                 extra_auth_params: {}
             };
@@ -218,6 +224,23 @@ export function adminSsoProvider(initial) {
         yesNo(value) {
             if (value === null || value === undefined) return '-';
             return value ? (i18n.yes || 'Yes') : (i18n.no || 'No');
+        },
+
+        get recheckBadgeClass() {
+            var status = this.provider && this.provider.session_recheck_status;
+            if (status === 'ok') return 'sp-sso-badge-ok';
+            if (status === 'no_refresh_token' || status === 'refresh_refused') return 'sp-sso-badge-bad';
+            return '';
+        },
+
+        // Session check state, from a provider or a self-test result.
+        recheckText(source) {
+            var labels = i18n.recheckStatus || {};
+            if (!source) return '';
+            var enabled = 'session_recheck_enabled' in source ? source.session_recheck_enabled : source.verify_session_at_idp;
+            if (!enabled) return labels.off || 'Off';
+            var status = source.session_recheck_status || 'unknown';
+            return labels[status] || status;
         },
 
         warningText(code) {

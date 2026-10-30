@@ -55,13 +55,16 @@ E2E_SSO_BASE_URL = f"http://localhost:{E2E_SERVER_PORT}"
 # in as often as they need; leaked into os.environ it would also switch the
 # limiter off for the in-process rate-limit tests.
 # APP_URL and SSO_ALLOW_INSECURE_HTTP let the SSO tests (``sso_idp``) sign in
-# through the http-only disposable Keycloak; while no SSO provider is
-# configured they change nothing for the other tests.
+# through the http-only disposable IdPs (Keycloak, authentik); while no SSO
+# provider is configured they change nothing for the other tests.
 _E2E_SERVER_ENV = {
     "DEBUG": "true",
     "RATE_LIMIT_ENABLED": os.environ.get("RATE_LIMIT_ENABLED", "false"),
     "APP_URL": E2E_SSO_BASE_URL,
     "SSO_ALLOW_INSECURE_HTTP": "true",
+    # Check SSO sessions at the IdP on every renewal, so a browser test can
+    # see a disabled user lose the session without waiting for the interval.
+    "SSO_IDP_RECHECK_MINUTES": "0",
 }
 E2E_PASSWORD = "testpassword"
 

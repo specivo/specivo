@@ -77,6 +77,12 @@ suspect is exposed. To rotate, create a new key, update the client's configurati
     the middle of work, it stops being able to read or write as soon as you revoke. Have the
     replacement key in place before revoking the old one to avoid an interruption.
 
+Keys can also be switched off for you. Deactivating an account switches off all of its keys, and
+so does a back-channel logout from an identity provider set to **End all of their sessions and
+switch off their API keys**, for a person who signs in only through single sign-on (see
+[What a back-channel logout ends](../install/single-sign-on/index.md#what-a-back-channel-logout-ends)).
+Signing in again does not switch them back on: do that on your API keys page, or create new ones.
+
 ## What an administrator's key cannot do
 
 A key belonging to an administrator can run most administration through the API: reading users,

@@ -266,6 +266,16 @@ class Settings(BaseSettings):
     # Leeway for exp / iat / nbf when validating ID and logout tokens.
     # Values above the cap are lowered to it.
     sso_clock_skew_seconds: int = Field(default=60, ge=0)
+    # How often a renewed SSO session is re-checked at the IdP, at most, in
+    # minutes. Unset: one access-token lifetime (ACCESS_TOKEN_EXPIRE_MINUTES).
+    sso_idp_recheck_minutes: int | None = Field(default=None, ge=0)
+
+    @property
+    def sso_idp_recheck_interval_minutes(self) -> int:
+        """``sso_idp_recheck_minutes``, or the access-token lifetime when unset."""
+        if self.sso_idp_recheck_minutes is not None:
+            return self.sso_idp_recheck_minutes
+        return self.access_token_expire_minutes
 
     @field_validator("smtp_message_id_domain")
     @classmethod

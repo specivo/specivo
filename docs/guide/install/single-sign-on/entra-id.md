@@ -128,9 +128,11 @@ Then tick **Enabled** and save.
 - **No back-channel logout.** Entra supports only front-channel logout, which Specivo does not
   implement. Leave **Accept back-channel logout** off. Signing out of Specivo can still end the
   Entra session (RP-initiated logout, on by default, with the post-logout address registered in
-  step 1). Disabling someone in Entra does not end an open Specivo session, so set a short
-  **Maximum session length**, and deactivate the user in Specivo too. See
-  [Offboarding people](index.md#offboarding-people).
+  step 1). To have Specivo notice a person disabled in Entra, add `offline_access` to the
+  **Scopes**: Entra issues refresh tokens only for it, and Specivo's
+  [session check](index.md#the-session-check) needs one. Without it, disabling someone in Entra
+  does not end an open Specivo session, so set a short **Maximum session length**, and deactivate
+  the user in Specivo too. See [Offboarding people](index.md#offboarding-people).
 - **Recreating the app registration changes every `sub`.** Entra's subject is unique per
   application. If you delete and recreate the registration, or move to a new one, nobody matches
   their connected account any more and everybody must connect again from their profile. Edit the

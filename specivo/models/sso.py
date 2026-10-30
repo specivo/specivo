@@ -3,7 +3,8 @@
 An ``SsoProvider`` is one configured OIDC relying-party registration. A
 ``UserIdentity`` links a Specivo user to one subject at one issuer; an
 ``SsoGroupMapping`` turns an IdP group value into membership of a Specivo
-``UserGroup``. No IdP tokens and no raw claim dumps are stored here.
+``UserGroup``. No IdP tokens and no raw claim dumps are stored here (the
+sealed ID and refresh tokens of a session live on its ``refresh_tokens`` row).
 
 The database also runs the ``reject_sso_identity_for_inert_user`` trigger on
 ``user_identities`` (created by migration, no ORM counterpart): service
@@ -37,6 +38,12 @@ if TYPE_CHECKING:
 TOKEN_ENDPOINT_AUTH_METHODS = ("client_secret_basic", "client_secret_post", "none")
 LINK_POLICIES = ("manual", "auto_verified_email")
 LINKED_VIA_VALUES = ("jit", "user_link", "auto_email", "admin")
+#: What an unreachable IdP means when a session is re-checked there.
+IDP_CHECK_FAILURE_POLICIES = ("allow", "deny")
+#: What a back-channel logout ends (see ``specivo.services.sso.logout``).
+BACKCHANNEL_ACTIONS = ("revoke_session", "revoke_all_sessions", "deprovision")
+#: What the last sign-in found out about the IdP's refresh tokens.
+SESSION_RECHECK_STATUSES = ("ok", "no_refresh_token", "refresh_refused")
 SLUG_PATTERN = r"^[a-z0-9-]{2,40}$"
 
 #: ``client_secret_env`` may only name variables in this namespace. Anything
@@ -83,6 +90,14 @@ class SsoProvider(Base, TimestampMixin):
         ),
         CheckConstraint(_in("link_policy", LINK_POLICIES), name="ck_sso_providers_link_policy"),
         CheckConstraint("session_max_age_hours > 0", name="ck_sso_providers_session_max_age_hours"),
+        CheckConstraint(
+            _in("idp_check_failure", IDP_CHECK_FAILURE_POLICIES), name="ck_sso_providers_idp_check_failure"
+        ),
+        CheckConstraint(_in("backchannel_action", BACKCHANNEL_ACTIONS), name="ck_sso_providers_backchannel_action"),
+        CheckConstraint(
+            "session_recheck_status IS NULL OR " + _in("session_recheck_status", SESSION_RECHECK_STATUSES),
+            name="ck_sso_providers_session_recheck_status",
+        ),
         CheckConstraint(
             "jsonb_typeof(allowed_email_domains) = 'array'", name="ck_sso_providers_allowed_email_domains_array"
         ),
@@ -143,10 +158,26 @@ class SsoProvider(Base, TimestampMixin):
     backchannel_logout_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # revoke_session (the IdP session's sessions), revoke_all_sessions (every
+    # session of the identity) or deprovision (that, plus the API keys of an
+    # account that signs in only through SSO).
+    backchannel_action: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="revoke_session", server_default="revoke_session"
+    )
+    # Renew an SSO session only after the IdP accepted its refresh token.
+    verify_session_at_idp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    # The IdP could not be asked (timeout, 5xx): "allow" renews anyway, "deny" ends the session.
+    idp_check_failure: Mapped[str] = mapped_column(String(16), nullable=False, default="allow", server_default="allow")
     # Absolute session cap.
     session_max_age_hours: Mapped[int] = mapped_column(Integer, nullable=False, default=24, server_default="24")
     # Allowlisted keys only (prompt, domain_hint, login_hint, acr_values, max_age).
     extra_auth_params: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+
+    # --- What the last sign-in found out about re-checking sessions ---
+    # "ok", "no_refresh_token" or "refresh_refused"; NULL until a sign-in with
+    # verify_session_at_idp on. Shown by Test connection.
+    session_recheck_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    session_recheck_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- Discovery cache (last good document) ---
     discovery_cache: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

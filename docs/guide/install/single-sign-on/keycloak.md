@@ -1,5 +1,5 @@
 ---
-description: Connect Specivo to Keycloak — create a confidential OpenID Connect client with PKCE, register the redirect and back-channel logout addresses, send groups, and fill in the provider in Specivo.
+description: Connect Specivo to Keycloak — create a confidential OpenID Connect client with PKCE, register the redirect and back-channel logout addresses, send groups, fill in the provider in Specivo, and offboard people.
 ---
 
 # Keycloak
@@ -89,10 +89,12 @@ from the userinfo endpoint** in Specivo.
 | Client secret | The secret from the **Credentials** tab |
 | Scopes | `openid profile email` |
 | Groups claim | `groups` (or `realm_access.roles`) |
+| Check sessions at the provider when they are renewed | On (the default) |
 | Accept back-channel logout | On, if you set it up in step 1 |
 
 The issuer is the realm address. It has no trailing slash and no `/.well-known/...` part. Specivo
-adds that itself.
+adds that itself. Do not add `offline_access` to the scopes: Keycloak issues the refresh token the
+session check needs for `openid` already, and an offline token outlives a Keycloak sign-out.
 
 Save, press **Test connection**, then tick **Enabled** and save again. The test should show
 back-channel logout as supported. For the remaining choices (accounts, JIT, groups) see
@@ -112,8 +114,30 @@ back-channel logout as supported. For the remaining choices (accounts, JIT, grou
 - **Logout.** Keycloak shows a confirmation page on logout unless it gets the `id_token_hint`,
   which Specivo sends. Make sure the post-logout redirect address from step 1 is registered, or
   Keycloak does not send the person back.
-- **Realm session lifetimes.** Keycloak's SSO session timeouts and Specivo's **Maximum session
-  length** are independent. The shorter one decides when someone is asked to sign in again.
+- **Realm session lifetimes.** With the session check on, a Specivo session ends when the Keycloak
+  session behind it ends: **Realm settings → Sessions → SSO Session Idle** (30 minutes by default)
+  and **SSO Session Max** (10 hours) apply as well as Specivo's **Maximum session length**, and the
+  shortest decides when someone is asked to sign in again. Someone who leaves Specivo idle for
+  longer than the idle timeout signs in again at their next visit. Raise the idle timeout if that
+  is too often, or turn the check off for the provider.
+
+## Offboarding
+
+Keycloak sends **no** back-channel logout when you disable or delete a user. To take someone's access
+away:
+
+1. **Disable the user** (**Users → *user* → Enabled: off**), or delete them. Keycloak refuses their
+   refresh token at once, so with the session check on their Specivo session ends at its next
+   renewal, within 15 minutes.
+2. To end it **at once**, also open the user's **Sessions** tab and press **Sign out**. With
+   back-channel logout set up, Keycloak then tells Specivo, which ends the session immediately.
+3. If you use API keys, choose **End all of their sessions and switch off their API keys** for
+   **When the provider ends a session** (step 2 then switches off the keys of a person without a
+   Specivo password), or deactivate the user in Specivo as well (**Administration → Users →
+   Deactivate account**), which also works for people with a password.
+
+Without the session check (turned off, or the client issues no refresh tokens) step 1 alone leaves
+the Specivo session running until **Maximum session length**: always do step 2 then.
 
 ## If it does not work
 

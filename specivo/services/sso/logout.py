@@ -26,12 +26,17 @@ Back-channel logout
        for as long as the validator would still accept the token
        (:data:`BACKCHANNEL_JTI_TTL_SECONDS` plus twice the clock-skew leeway),
        so a replay is refused (``sso_token_invalid``, reason ``replayed``);
-    3. revokes the sessions the token names, with reason ``backchannel``.
-       ``sub`` finds the identity by ``(iss, sub)`` at this provider; with
-       ``sid`` as well only the sessions of that IdP session are revoked,
-       otherwise every session of the identity. ``sid`` alone revokes the
-       sessions of that IdP session across this provider's identities.
-       Nothing matching is not an error (no information leak).
+    3. ends what the provider's ``backchannel_action`` says for the
+       identities the token names (``sub`` finds the identity by
+       ``(iss, sub)`` at this provider; ``sid`` alone, the identities with a
+       session of that IdP session): ``revoke_session`` the sessions of that
+       IdP session (every session of the identity for a ``sub``-only token),
+       ``revoke_all_sessions`` every session of the identity, ``deprovision``
+       that and, for an SSO-only account, all its sessions and API keys
+       (:func:`_revoke_named_sessions`). Nothing matching is not an error (no
+       information leak). The action is the administrator's choice and is
+       never inferred from the token: IdPs send the same token for a sign-out
+       as for a disabled account.
 
     The replay cache fails closed: when Redis is unavailable the token is not
     acted on and :class:`~specivo.services.sso.errors.SsoUnavailableError` is
@@ -218,6 +223,8 @@ def _valid_access_session(access_token_raw: str) -> uuid.UUID | None:
 
 #: Session revocation reason for back-channel logout.
 BACKCHANNEL_REVOKE_REASON = "backchannel"
+#: Revocation and ``USER_DEPROVISIONED`` reason of ``backchannel_action=deprovision``.
+DEPROVISION_REASON = "sso_backchannel"
 
 #: Base lifetime of a claimed ``jti`` (the design's ``EX 600``). Twice the
 #: clock-skew leeway is added on top: the validator accepts a token from
@@ -309,8 +316,8 @@ async def backchannel_logout(
     return BackchannelLogoutResult(by=by, revoked=revoked, jti_key=key)
 
 
-async def _revoke_named_sessions(db: AsyncSession, provider: SsoProvider, claims: LogoutTokenClaims) -> int:
-    sessions = SessionService()
+async def _named_identities(db: AsyncSession, provider: SsoProvider, claims: LogoutTokenClaims) -> list[int]:
+    """The identities at this provider the token names: by ``sub``, else by the sessions of ``sid``."""
     if claims.subject is not None:
         identity_id = await db.scalar(
             select(UserIdentity.id).where(
@@ -319,29 +326,79 @@ async def _revoke_named_sessions(db: AsyncSession, provider: SsoProvider, claims
                 UserIdentity.subject == claims.subject,
             )
         )
-        if identity_id is None:
-            return 0
-        if claims.sid is not None:
-            return await sessions.revoke_by_idp_sid(
-                db, user_identity_id=identity_id, idp_sid=claims.sid, reason=BACKCHANNEL_REVOKE_REASON
-            )
-        return await sessions.revoke_by_identity(db, identity_id, reason=BACKCHANNEL_REVOKE_REASON)
-
-    # sid without sub: that IdP session, across this provider's identities.
-    sid = claims.sid
-    if sid is None:  # pragma: no cover - the validator requires sid or sub
-        return 0
+        return [identity_id] if identity_id is not None else []
+    if claims.sid is None:  # pragma: no cover - the validator requires sid or sub
+        return []
     identity_ids = (
         await db.scalars(
             select(RefreshToken.user_identity_id)
             .join(UserIdentity, UserIdentity.id == RefreshToken.user_identity_id)
-            .where(UserIdentity.provider_id == provider.id, RefreshToken.idp_sid == sid)
+            .where(UserIdentity.provider_id == provider.id, RefreshToken.idp_sid == claims.sid)
             .distinct()
         )
     ).all()
+    return sorted(i for i in identity_ids if i is not None)
+
+
+async def _revoke_named_sessions(db: AsyncSession, provider: SsoProvider, claims: LogoutTokenClaims) -> int:
+    """End what ``provider.backchannel_action`` says for the identities the token names.
+
+    ``revoke_session``: the sessions of the IdP session (``sid``), or every
+    session of the identity when the token has ``sub`` only.
+    ``revoke_all_sessions``: every session of the identity, whatever ``sid``.
+    ``deprovision``: as ``revoke_all_sessions``, and for an account that signs
+    in only through SSO (no password; never a service account) every session
+    of the user and all their API keys switched off. The account itself stays
+    active. A repeated token finds nothing left to end and records nothing.
+    """
+    sessions = SessionService()
+    identity_ids = await _named_identities(db, provider, claims)
+    action = provider.backchannel_action
     revoked = 0
-    for identity_id in sorted(i for i in identity_ids if i is not None):
-        revoked += await sessions.revoke_by_idp_sid(
-            db, user_identity_id=identity_id, idp_sid=sid, reason=BACKCHANNEL_REVOKE_REASON
+    for identity_id in identity_ids:
+        if action == "revoke_session" and claims.sid is not None:
+            revoked += await sessions.revoke_by_idp_sid(
+                db, user_identity_id=identity_id, idp_sid=claims.sid, reason=BACKCHANNEL_REVOKE_REASON
+            )
+        elif action == "deprovision":
+            revoked += await _deprovision(db, provider, identity_id, claims)
+        else:
+            revoked += await sessions.revoke_by_identity(db, identity_id, reason=BACKCHANNEL_REVOKE_REASON)
+    return revoked
+
+
+async def _deprovision(db: AsyncSession, provider: SsoProvider, identity_id: int, claims: LogoutTokenClaims) -> int:
+    from specivo.models.user import User
+    from specivo.services.api_key_service import ApiKeyService
+    from specivo.services.auth_utils import is_sso_only_user
+
+    sessions = SessionService()
+    found = (
+        await db.execute(
+            select(User, UserIdentity.subject)
+            .join(UserIdentity, UserIdentity.user_id == User.id)
+            .where(UserIdentity.id == identity_id)
+        )
+    ).first()
+    if found is None:  # pragma: no cover - the identity was just found
+        return 0
+    user, subject = found
+    if user.is_system_principal or not await is_sso_only_user(db, user):
+        # A password (or a service account) is a way in the IdP does not
+        # control: end what came from the IdP and leave the rest alone.
+        return await sessions.revoke_by_identity(db, identity_id, reason=BACKCHANNEL_REVOKE_REASON)
+
+    revoked = await sessions.revoke_user_sessions(db, user.id, reason=DEPROVISION_REASON)
+    keys = await ApiKeyService().deactivate_all(db, user.id)
+    if revoked or keys:
+        events.user_deprovisioned(
+            user_id=user.id,
+            actor_id=None,
+            reason=DEPROVISION_REASON,
+            provider_slug=provider.slug,
+            issuer=provider.issuer,
+            subject=subject,
+            sessions_revoked=revoked,
+            api_keys_deactivated=keys,
         )
     return revoked

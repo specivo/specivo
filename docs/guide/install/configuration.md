@@ -262,6 +262,7 @@ None of them can lock an administrator out:
 | Variable | Purpose / default |
 |---|---|
 | `SSO_FORCE_LOCAL_LOGIN` | Break-glass switch: always show the password form, never redirect the login page to a provider, and let every user sign in with a password. Default `false`. |
+| `SSO_IDP_RECHECK_MINUTES` | How often, at most, renewing an SSO session asks the identity provider whether the person may still sign in (per session). Default: the access-token lifetime, `ACCESS_TOKEN_EXPIRE_MINUTES` (15). `0` asks at every renewal. See [The session check](single-sign-on/index.md#the-session-check). |
 
 The other SSO variables are listed in [Single sign-on](single-sign-on/index.md#settings-in-the-environment).
 

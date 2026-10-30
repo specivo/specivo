@@ -28,7 +28,9 @@ the browser still signed in as that user; step 6 then links the identity and
 step 7 is skipped: the user's existing sessions stay, no new one starts.
 
 No session row exists unless every step passed. The IdP's access token is
-used for userinfo only and never stored. An ``SsoError`` raised after the
+used for userinfo only and never stored. Its refresh token is kept, sealed,
+on the session row when the provider re-checks sessions at the IdP
+(:mod:`specivo.services.sso.session_check`). An ``SsoError`` raised after the
 transaction was consumed carries its ``intent``, so the route knows where to
 report it.
 """
@@ -58,6 +60,7 @@ from specivo.services.sso.flow import AuthorizationRequest, LoginTransaction, be
 from specivo.services.sso.id_token import verify_id_token
 from specivo.services.sso.log import logger, sanitize_idp_text
 from specivo.services.sso.provisioning import resolve_user, subject_hash
+from specivo.services.sso.session_check import seal_sign_in_refresh_token
 from specivo.services.sso.tokens import exchange_code, fetch_userinfo
 
 __all__ = ["LINK_RETURN_PATH", "SsoLinkResult", "SsoLoginResult", "SsoLoginService"]
@@ -238,6 +241,7 @@ class SsoLoginService:
                 identity_id=account.identity.id,
                 provider_slug=provider.slug,
             )
+        idp_refresh = await seal_sign_in_refresh_token(db, provider, metadata, tokens)
         session = await AuthService().create_sso_session(
             db,
             user=account.user,
@@ -247,6 +251,8 @@ class SsoLoginService:
             idp_sid=id_token.sid,
             device_info=device_info,
             ip=ip,
+            idp_refresh_token_encrypted=idp_refresh.encrypted,
+            idp_checked_at=idp_refresh.checked_at,
         )
         sub_hash = subject_hash(id_token.subject)
         logger.info("sso.login.success provider=%s user_id=%s sub=%s", provider.slug, account.user.id, sub_hash)
