@@ -46,3 +46,11 @@ def test_the_guide_forbids_tags_in_the_body() -> None:
     anti_patterns = guide.split("## Anti-patterns", 1)[1]
     assert "**Tags**:" in anti_patterns
     assert "frontmatter" in anti_patterns
+
+
+def test_the_guide_teaches_the_timer() -> None:
+    guide = generate_setup_guide(fmt="generic", mcp_server=mcp)
+    assert "| `specivo_timer` |" in guide
+    assert "### Time work with the timer" in guide
+    for op in ("start", "get", "stop", "discard"):
+        assert f'op="{op}"' in guide

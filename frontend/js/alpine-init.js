@@ -49,6 +49,8 @@ import { wikiForm } from './components/wiki-form';
 import { resolveThread } from './components/resolve-thread';
 import { watcherToggle } from './components/watcher-toggle';
 import { timeLogForm } from './components/time-log-form';
+import { headerTimer } from './components/header-timer';
+import { timerStart } from './components/timer-start';
 import { relationForm } from './components/relation-form';
 import { journalReactions } from './components/journal-reactions';
 import { wikiAttachments, issueAttachments } from './components/attachments';
@@ -111,6 +113,8 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('resolveThread', resolveThread);
   Alpine.data('watcherToggle', watcherToggle);
   Alpine.data('timeLogForm', timeLogForm);
+  Alpine.data('headerTimer', headerTimer);
+  Alpine.data('timerStart', timerStart);
   Alpine.data('relationForm', relationForm);
   Alpine.data('journalReactions', journalReactions);
   Alpine.data('wikiAttachments', wikiAttachments);

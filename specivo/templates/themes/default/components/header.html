@@ -20,36 +20,75 @@
       <button data-font="font-lg" style="font-size:18px">A</button>
     </div>
 
-    {% if has_feature("active_timer") %}
-    {% if active_timer is defined and active_timer %}
-    <div class="dropdown">
-      <div class="header-timer" data-bs-toggle="dropdown" data-bs-auto-close="outside" style="cursor:pointer">
+    {# The signed-in user's running timer (``active_timer``, put in every
+       page's context by ``specivo.web.deps``). The subject is absent when
+       the user can no longer see the issue. #}
+    {% if active_timer and not anonymous %}
+    {% set _t = active_timer.elapsed_seconds %}
+    {% set _elapsed = '%d:%02d:%02d' | format(_t // 3600, (_t % 3600) // 60, _t % 60) %}
+    {% set _timer_label = active_timer.issue_key or active_timer.project_key %}
+    <div class="dropdown sp-header-timer" x-data="headerTimer" data-elapsed="{{ _t }}" data-i18n='{{ {
+      "loadFailed": _("Could not load the activities."),
+      "stopFailed": _("Could not stop the timer."),
+      "discardFailed": _("Could not discard the timer."),
+      "connectFailed": _("Unable to connect.")
+    } | tojson }}'>
+      <button type="button" class="header-timer" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="{{ _('Timer running on %(target)s') | format(target=_timer_label) }}">
         <span class="timer-dot"></span>
-        <span>{{ active_timer.issue_key }}</span>
-        <span class="timer-elapsed" id="timerDisplay">{{ active_timer.elapsed }}</span>
-      </div>
+        <span class="sp-header-timer-key">{{ _timer_label }}</span>
+        <span class="timer-elapsed" x-text="elapsedLabel">{{ _elapsed }}</span>
+      </button>
       <div class="dropdown-menu dropdown-menu-end timer-dropdown">
         <div class="timer-dropdown-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--sp-accent)"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          <svg class="sp-timer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
           <div>
-            <div style="font-weight:600;font-size:var(--sp-font-size-sm);color:var(--sp-text-primary)">{% trans %}Time Tracking{% endtrans %}</div>
-            <div style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted)">{% trans %}Timer running{% endtrans %}</div>
+            <div class="sp-timer-title">{% trans %}Time Tracking{% endtrans %}</div>
+            <div class="sp-timer-subtitle">{% trans %}Timer running{% endtrans %}</div>
           </div>
         </div>
         <div class="timer-dropdown-body">
           <div class="timer-issue-line">
-            <a href="#" style="font-family:var(--sp-font-mono);font-size:var(--sp-font-size-sm);color:var(--sp-text-link);font-weight:500">{{ active_timer.issue_key }}</a>
-            <span style="font-size:var(--sp-font-size-sm);color:var(--sp-text-secondary)">{{ active_timer.subject }}</span>
+            {% if active_timer.issue_key %}
+            <a class="sp-timer-issue-key" href="/issue/{{ active_timer.issue_key }}/">{{ active_timer.issue_key }}</a>
+            {% if active_timer.subject %}<span class="sp-timer-subject">{{ active_timer.subject }}</span>{% endif %}
+            {% else %}
+            <a class="sp-timer-issue-key" href="/projects/{{ active_timer.project_key }}/">{{ active_timer.project_key }}</a>
+            {% endif %}
           </div>
-          <div class="timer-big-display" id="timerBigDisplay">{{ active_timer.elapsed }}</div>
-          <div class="timer-actions">
-            <button class="sp-btn sp-btn-primary" style="flex:1"><svg viewBox="0 0 24 24" fill="currentColor" style="width:16px;height:16px"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> {% trans %}Stop & Log{% endtrans %}</button>
-            <button class="sp-btn sp-btn-ghost" style="color:var(--sp-danger)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M18 6L6 18M6 6l12 12"/></svg> {% trans %}Discard{% endtrans %}</button>
+          <div class="timer-big-display" x-text="elapsedLabel">{{ _elapsed }}</div>
+
+          <div class="timer-actions" x-show="isIdle">
+            <button type="button" class="sp-btn sp-btn-primary sp-timer-stop" @click="openStop"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"/></svg> {% trans %}Stop & log{% endtrans %}</button>
+            <button type="button" class="sp-btn sp-btn-ghost sp-timer-discard" @click="askDiscard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg> {% trans %}Discard{% endtrans %}</button>
           </div>
+
+          <form class="sp-timer-form" x-show="isStopping" x-cloak @submit.prevent="stop">
+            <label class="sp-timer-label" for="sp-timer-activity">{% trans %}Activity{% endtrans %}</label>
+            <select id="sp-timer-activity" class="sp-timer-input" x-model="activityId" required>
+              <template x-for="activity in activities" :key="activity.id">
+                <option :value="activity.id" x-text="activity.name"></option>
+              </template>
+            </select>
+            <label class="sp-timer-label" for="sp-timer-comment">{% trans %}Comment{% endtrans %}</label>
+            <input id="sp-timer-comment" class="sp-timer-input" type="text" maxlength="1024" x-model="comments" placeholder="{{ _('Comment (optional)') }}">
+            <div class="timer-actions">
+              <button type="submit" class="sp-btn sp-btn-primary sp-timer-log" :disabled="cannotStop">{% trans %}Log time{% endtrans %}</button>
+              <button type="button" class="sp-btn sp-btn-ghost" @click="cancel">{% trans %}Cancel{% endtrans %}</button>
+            </div>
+          </form>
+
+          <div class="sp-timer-confirm" x-show="isDiscarding" x-cloak>
+            <p>{% trans %}Discard the timer? The time is not logged.{% endtrans %}</p>
+            <div class="timer-actions">
+              <button type="button" class="sp-btn sp-btn-danger sp-timer-discard-confirm" :disabled="busy" @click="discard">{% trans %}Discard{% endtrans %}</button>
+              <button type="button" class="sp-btn sp-btn-ghost" @click="cancel">{% trans %}Cancel{% endtrans %}</button>
+            </div>
+          </div>
+
+          <div class="sp-timer-error" role="alert" x-show="hasError" x-text="error" x-cloak></div>
         </div>
       </div>
     </div>
-    {% endif %}
     {% endif %}
 
     {# Notifications belong to an account, so they are absent for a visitor

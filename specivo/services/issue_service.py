@@ -375,6 +375,10 @@ class IssueService:
 
         return or_(*clauses) if clauses else false()
 
+    async def is_visible(self, session: AsyncSession, issue: Issue, user: User) -> bool:
+        """Return whether *user* may see an already loaded *issue* (the check behind ``get_by_id``)."""
+        return await self._check_visible(session, issue, user)
+
     async def _check_visible(self, session: AsyncSession, issue: Issue, user: User) -> bool:
         """Return whether *user* may see *issue*. Callers raise ``NotFoundError`` when not."""
         if not project_in_scope(issue.project_id):

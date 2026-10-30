@@ -51,6 +51,7 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_add_relation": "Create a relation between two issues",
     "specivo_remove_relation": "Remove a relation by ID",
     "specivo_log_time": "Log time against a project or issue",
+    "specivo_timer": "Your own timer: op='get', 'start' (issue_ref), 'stop' (activity, comments) or 'discard'",
     "specivo_list_versions": "List versions/milestones",
     "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
@@ -147,6 +148,13 @@ Tags are flat labels shared by a project's issues and wiki pages; agents and peo
 2. `specivo_update_issue(issue_ref, status_id=N, done_ratio=100, notes="...")`
 3. `specivo_log_time(project_key, hours, activity_id, issue_ref)`
 
+### Time work with the timer
+1. `specivo_timer(op="start", issue_ref="ACME-12")` -- one timer per user; a running one is stopped
+   and logged first (the reply gives its entry ID)
+2. `specivo_timer(op="get")` -- what runs and for how long
+3. `specivo_timer(op="stop", activity="Development", comments="...")` -- logs the time (activity name
+   or ID; the default activity when omitted), or `op="discard"` to drop it without logging
+
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
 2. `specivo_edit_description(issue_ref, search_text, replace_text)`
@@ -220,8 +228,8 @@ the security audit log. Notable cases:
   audit event tagged with `source=mcp`.
 - Issue and wiki mutations require the matching `add_*` / `edit_*`
   permission and emit `ISSUE_*` / `WIKI_*` audit events.
-- `specivo_log_time` requires **`log_time`** on the project. Reading logged
-  time needs **`view_time_entries`**; the seeded Agent role has both.
+- `specivo_log_time` and `specivo_timer` (`start`, `stop`) require **`log_time`** on the project.
+  Reading logged time needs **`view_time_entries`**; the seeded Agent role has both.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 

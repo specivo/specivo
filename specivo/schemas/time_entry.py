@@ -64,9 +64,13 @@ class TimerStartRequest(BaseModel):
 
 
 class TimerStopRequest(BaseModel):
-    """Payload for stopping a timer."""
+    """Payload for stopping a timer.
+
+    ``comments`` replace the comment the timer was started with, when given.
+    """
 
     activity_id: int
+    comments: str | None = None
 
 
 class TimerOut(BaseModel):

@@ -72,6 +72,7 @@ from specivo.mcp.tools import (
     _skip_recurrence_occurrence,
     _start_sprint,
     _tag,
+    _timer,
     _update_issue,
     _update_metadata_schema,
     _update_recurring_pattern,
@@ -1001,6 +1002,41 @@ async def specivo_log_time(
             comments,
             parsed_date,
         )
+
+
+@mcp.tool()
+async def specivo_timer(
+    op: Annotated[str, Field(description="One of: get, start, stop, discard.")],
+    issue_ref: Annotated[
+        str | None,
+        Field(description="Issue display key to time, e.g. ACME-12. Required for 'start', ignored otherwise."),
+    ] = None,
+    activity: Annotated[
+        str | None,
+        Field(
+            description=(
+                "For 'stop': the activity name or ID from specivo_list_lookups. Defaults to the instance's "
+                "default activity."
+            ),
+        ),
+    ] = None,
+    comments: Annotated[
+        str | None,
+        Field(description="For 'start': a note kept with the timer. For 'stop': the time entry's comment."),
+    ] = None,
+) -> str:
+    """Read or drive your own running timer (one per user).
+
+    Ops: get (what runs and for how long); start (on issue_ref; a timer that
+    is already running is stopped first and its time logged with the default
+    activity, or discarded when you may no longer log time where it ran; the
+    reply says which); stop (logs the elapsed time, capped at the instance limit,
+    with activity and comments); discard (drops the timer, logs nothing).
+    start and stop require ``log_time`` on the project; a timer that can no
+    longer be logged is discarded when stopped. Calls are audited.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _timer(session, user, op, issue_ref, activity, comments)
 
 
 @mcp.tool()
