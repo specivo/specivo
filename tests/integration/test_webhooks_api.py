@@ -242,3 +242,43 @@ class TestEmissionSurfaces:
         rows = (await db_session.execute(select(WebhookDelivery))).scalars().all()
         assert [(r.webhook_id, r.event) for r in rows] == [(hook["id"], "issue.created")]
         assert rows[0].payload["data"]["issue"]["subject"] == "From MCP"
+
+
+class TestPrivateContentNeedsAnAdmin:
+    """Only admins see every private issue, so only they decide where private content goes."""
+
+    async def _manager(self, client, db_session, project, login):
+        user = await _user(db_session, login)
+        await _member(db_session, user, project, ["view_issues", "manage_project"])
+        return await _token(client, login)
+
+    async def test_manager_cannot_turn_private_content_on(self, client, db_session, project):
+        headers = await self._manager(client, db_session, project, "whapi_priv_mgr1")
+        base = f"/api/v1/projects/{project.key}/webhooks/"
+        resp = await client.post(
+            base, json={"url": _URL, "events": ["issue.created"], "include_private": True}, headers=headers
+        )
+        assert resp.status_code == 403
+        body = await _create(client, project, headers)
+        resp = await client.patch(f"{base}{body['id']}/", json={"include_private": True}, headers=headers)
+        assert resp.status_code == 403
+
+    async def test_manager_cannot_redirect_an_admins_private_webhook(self, client, db_session, project, admin_headers):
+        body = await _create(client, project, admin_headers, include_private=True)
+        headers = await self._manager(client, db_session, project, "whapi_priv_mgr2")
+        resp = await client.patch(
+            f"/api/v1/projects/{project.key}/webhooks/{body['id']}/",
+            json={"url": "https://elsewhere.example.org/in"},
+            headers=headers,
+        )
+        assert resp.status_code == 403
+
+    async def test_manager_may_manage_webhooks_without_private_content(self, client, db_session, project):
+        headers = await self._manager(client, db_session, project, "whapi_priv_mgr3")
+        body = await _create(client, project, headers)
+        resp = await client.patch(
+            f"/api/v1/projects/{project.key}/webhooks/{body['id']}/",
+            json={"url": "https://elsewhere.example.org/in", "include_private": False},
+            headers=headers,
+        )
+        assert resp.status_code == 200

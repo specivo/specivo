@@ -38,6 +38,17 @@ async def _project_for(project_key: str, user: User, db: AsyncSession) -> Projec
     return project
 
 
+def _require_admin_for_private(user: User, private: bool) -> None:
+    """Refuse a non-admin who would set up, or change, a webhook that sends private content.
+
+    Only admins see every private issue and note, so only they may decide
+    where such content is sent. Otherwise a manager could subscribe, or point
+    an admin's webhook at their own server, and read issues hidden from them.
+    """
+    if private and not user.is_admin:
+        raise PermissionDeniedError("Only an administrator can manage a webhook that includes private content")
+
+
 async def _require_manage_project(user: User, project_id: int, db: AsyncSession) -> None:
     """Raise 403 if user lacks manage_project permission for the project."""
     if not await check_permission(user, project_id, Permission.MANAGE_PROJECT, db):
@@ -76,6 +87,7 @@ async def register_webhook(
     """
     project = await _project_for(project_key, current_user, db)
     await _require_manage_project(current_user, project.id, db)
+    _require_admin_for_private(current_user, data.include_private)
     webhook, secret = await _webhook_service.register(
         db,
         project_id=project.id,
@@ -99,6 +111,8 @@ async def update_webhook(
     """Update an outgoing webhook. ``secret`` in the response is set only when the secret changed."""
     project = await _project_for(project_key, current_user, db)
     await _require_manage_project(current_user, project.id, db)
+    current = await _webhook_service.get(db, webhook_id, project.id)
+    _require_admin_for_private(current_user, current.include_private or data.include_private is True)
     webhook, secret = await _webhook_service.update(db, webhook_id, project.id, data.model_dump(exclude_unset=True))
     await db.refresh(webhook)
     return WebhookSecretOut(**WebhookOut.model_validate(webhook).model_dump(), secret=secret)

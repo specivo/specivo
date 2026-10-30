@@ -1191,6 +1191,7 @@
                 </template>
               </div>
             </div>
+            {% if user.is_admin %}
             <div class="form-group">
               <label class="checkbox-row">
                 <input type="checkbox" x-model="form.include_private">
@@ -1198,6 +1199,9 @@
               </label>
               <div class="form-hint">{% trans %}Off by default: the receiver then never learns about private content.{% endtrans %}</div>
             </div>
+            {% else %}
+            <div class="form-hint">{% trans %}Private issues and private notes are not sent. Only an administrator can change that.{% endtrans %}</div>
+            {% endif %}
             <template x-if="editing">
               <div class="form-group">
                 <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="rotate(editing); showModal = false" :disabled="busy">{% trans %}Generate a new secret{% endtrans %}</button>

@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 15:09+0100\n"
+"POT-Creation-Date: 2026-10-30 15:15+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -708,7 +708,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:255
 #: specivo/templates/themes/default/pages/projects/settings.html:437
 #: specivo/templates/themes/default/pages/projects/settings.html:977
-#: specivo/templates/themes/default/pages/projects/settings.html:1214
+#: specivo/templates/themes/default/pages/projects/settings.html:1218
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:134
 msgid "Saving..."
@@ -1104,8 +1104,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:795
 #: specivo/templates/themes/default/pages/projects/settings.html:975
 #: specivo/templates/themes/default/pages/projects/settings.html:1001
-#: specivo/templates/themes/default/pages/projects/settings.html:1212
-#: specivo/templates/themes/default/pages/projects/settings.html:1236
+#: specivo/templates/themes/default/pages/projects/settings.html:1216
+#: specivo/templates/themes/default/pages/projects/settings.html:1240
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:72
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
@@ -3289,7 +3289,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:106
 #: specivo/templates/themes/default/pages/projects/settings.html:553
 #: specivo/templates/themes/default/pages/projects/settings.html:1170
-#: specivo/templates/themes/default/pages/projects/settings.html:1228
+#: specivo/templates/themes/default/pages/projects/settings.html:1232
 msgid "Close"
 msgstr ""
 
@@ -6175,40 +6175,46 @@ msgstr ""
 msgid "Events"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1197
+#: specivo/templates/themes/default/pages/projects/settings.html:1198
 msgid "Include private issues and private notes"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1199
+#: specivo/templates/themes/default/pages/projects/settings.html:1200
 msgid "Off by default: the receiver then never learns about private content."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1203
+msgid ""
+"Private issues and private notes are not sent. Only an administrator can "
+"change that."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1207
 msgid "Generate a new secret"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1204
+#: specivo/templates/themes/default/pages/projects/settings.html:1208
 msgid "The old secret stops working at once."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1208
+#: specivo/templates/themes/default/pages/projects/settings.html:1212
 msgid "A signing secret is generated and shown once after the webhook is created."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1227
-#: specivo/templates/themes/default/pages/projects/settings.html:1237
+#: specivo/templates/themes/default/pages/projects/settings.html:1231
+#: specivo/templates/themes/default/pages/projects/settings.html:1241
 msgid "Delete webhook"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1233
+#: specivo/templates/themes/default/pages/projects/settings.html:1237
 msgid "Delete this webhook and its delivery log? Nothing more is sent to:"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1249
+#: specivo/templates/themes/default/pages/projects/settings.html:1253
 msgid "Search indexing"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1251
+#: specivo/templates/themes/default/pages/projects/settings.html:1255
 msgid ""
 "Full-text search analyzer language for this project. Leave on Inherit to "
 "use the instance default."
