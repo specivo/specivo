@@ -2,7 +2,7 @@
 
 Tasks:
 - cleanup_expired_tokens: Delete expired password reset tokens and refresh tokens,
-  and repository webhook deliveries past their retention period.
+  and incoming repository and outgoing webhook deliveries past their retention period.
 """
 
 from __future__ import annotations
@@ -90,6 +90,15 @@ async def _cleanup_async() -> None:
                         used_count,
                         refresh_count,
                     )
+
+            # Outgoing webhook delivery log: settled rows only, committed batch by batch
+            from specivo.services.webhook_delivery import purge_old_deliveries as purge_old_webhook_deliveries
+
+            async with task_session() as session:
+                webhook_count = await purge_old_webhook_deliveries(session)
+
+            if webhook_count:
+                logger.info("Webhook delivery cleanup: deleted %d old deliveries", webhook_count)
     except LockNotOwnedError:
         logger.debug("Token cleanup skipped — another worker holds the lock")
     except LockError:

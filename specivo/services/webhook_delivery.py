@@ -30,15 +30,18 @@ from datetime import datetime, timedelta
 from urllib.parse import urlsplit, urlunsplit
 
 import httpx
-from sqlalchemy import select, update
+from sqlalchemy import delete, literal, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core import secret_box
 from specivo.core.config import get_settings
 from specivo.core.constants import (
     WEBHOOK_ATTEMPT_DEADLINE_SECONDS,
+    WEBHOOK_DELIVERY_RETENTION_DAYS,
     WEBHOOK_LEASE_SECONDS,
     WEBHOOK_MAX_ATTEMPTS,
+    WEBHOOK_PURGE_BATCH,
+    WEBHOOK_PURGE_MAX_BATCHES,
     WEBHOOK_RESPONSE_MAX_BYTES,
     WEBHOOK_SWEEP_BATCH,
 )
@@ -279,3 +282,36 @@ async def claim_due(session: AsyncSession, now: datetime | None = None) -> list[
         )
     await session.commit()
     return [(r.id, r.attempts) for r in rows]
+
+
+async def purge_old_deliveries(
+    session: AsyncSession,
+    batch_size: int = WEBHOOK_PURGE_BATCH,
+    max_batches: int = WEBHOOK_PURGE_MAX_BATCHES,
+) -> int:
+    """Delete settled deliveries past the retention period; returns how many.
+
+    Pending rows are never touched, however old. Rows go *batch_size* at a
+    time, each batch committed on its own so one run never holds many row
+    locks for long, and at most *max_batches* batches per run so a large
+    backlog is worked off over several runs. The status values are inlined so
+    the planner can use the partial index ``ix_webhook_deliveries_settled_created_at``.
+    """
+    cutoff = utcnow() - timedelta(days=WEBHOOK_DELIVERY_RETENTION_DAYS)
+    settled = [literal(DELIVERY_SUCCEEDED, literal_execute=True), literal(DELIVERY_FAILED, literal_execute=True)]
+    total = 0
+    for _ in range(max_batches):
+        batch = (
+            select(WebhookDelivery.id)
+            .where(WebhookDelivery.status.in_(settled), WebhookDelivery.created_at < cutoff)
+            .order_by(WebhookDelivery.created_at)
+            .limit(batch_size)
+            .with_for_update(skip_locked=True)
+        )
+        result = await session.execute(delete(WebhookDelivery).where(WebhookDelivery.id.in_(batch.scalar_subquery())))
+        await session.commit()
+        count = int(getattr(result, "rowcount", 0) or 0)
+        total += count
+        if count < batch_size:
+            break
+    return total
