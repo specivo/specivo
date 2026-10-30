@@ -244,7 +244,7 @@ test-ci:
 # -----------------------------------------------------------------------------
 
 messages-extract:
-	$(RUN) pybabel extract -F babel.cfg -k _l -k gettext_lazy -o specivo/locale/specivo.pot .
+	$(RUN) pybabel extract --sort-by-file -F babel.cfg -k _l -k gettext_lazy -o specivo/locale/specivo.pot .
 
 messages-update:
 	$(RUN) pybabel update -i specivo/locale/specivo.pot -d specivo/locale -D specivo
