@@ -135,13 +135,16 @@ the remaining filters applied.
 If you use Specivo with an AI agent over MCP, the agent has the same tagging capability. It can:
 
 - List the project's tag vocabulary (with usage counts).
-- Apply, remove, or replace the full tag set on an issue or wiki page.
+- Apply, remove, or replace the full tag set on an issue or wiki page, or tag an issue or wiki page
+  in the same step that creates it.
 - Create tags on the fly when applying (subject to the member's project role).
 - Curate tags (create, rename, recolor, delete) if the account has the `manage_project` permission.
 
 The MCP `specivo_tag` tool accepts an issue ref (e.g. `ACME-42`) or a wiki ref
 (`wiki:ACME/some-slug`), an operation (`get`, `add`, `remove`, `set`), and a tag name or list of
-names. See [What agents can do](../ai-agents/capabilities.md) for the full tool catalog.
+names. The setup guide that agents read first tells them to check the existing tags before adding
+any, and never to write tags into the description or page text. See
+[What agents can do](../ai-agents/capabilities.md) for the full tool catalog.
 
 ## What's next
 

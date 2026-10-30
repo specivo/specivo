@@ -13,10 +13,11 @@ know the shape of what's possible.
 
 | Area | What the agent can do |
 |---|---|
-| **Issues & comments** | List, read, create, and update issues; edit descriptions and core fields; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history, or the whole change history with the names of the statuses, people and versions a change refers to. |
+| **Issues & comments** | List, read, create, and update issues; edit descriptions and core fields; set or change an issue's [parent](../issues/subtasks.md) and list its subtasks; [move an issue to another project](../issues/updating.md#move-an-issue-to-another-project); add comments and read the comment history, or the whole change history with the names of the statuses, people and versions a change refers to. |
 | **Search** | Search across issues, wiki, and more using Specivo's hybrid (keyword + meaning) search. |
 | **Wiki** | List, read, create, edit, and append to wiki pages, including section-level reads and edits, and history/restore. |
 | **Metadata & schemas** | Read and set [issue metadata](../metadata/values.md) values, and list the available metadata schemas. |
+| **Tags** | List a project's [tags](../projects/tags.md), tag issues and wiki pages (also while creating them), and, with **Manage project**, create, rename, recolor and delete tags. |
 | **Relations** | Link issues with typed [relations](../issues/relations.md) — relates, blocks, duplicates, and so on — and remove them. |
 | **Versions** | List and manage versions (milestones/releases) and see which issues belong to each. |
 | **Sprints** | List sprints, see sprint issues, and manage the plan/start/complete lifecycle. |

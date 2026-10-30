@@ -507,16 +507,7 @@ class IssueService:
             # A parent outside the API key's project limit is not found.
             if parent is None or not project_in_scope(parent.project_id):
                 raise NotFoundError(f"Parent issue {data.parent_id} not found")
-            # Validate parent before creating the child
-            # (issue not yet created — depth check only against parent's ancestors)
-            parent_ancestors = await self._nested_set.get_ancestors(session, parent)
-            new_depth = len(parent_ancestors) + 1
-            if new_depth >= MAX_DEPTH:
-                raise ValidationError(
-                    message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
-                    field="parent_id",
-                    details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
-                )
+            await self.check_parent(session, None, parent)
 
         issue = Issue(
             project_id=project.id,
@@ -588,6 +579,24 @@ class IssueService:
 
         await emit_issue_created(session, issue, author)
         return issue
+
+    async def check_parent(self, session: AsyncSession, issue: Issue | None, parent: Issue) -> None:
+        """Raise ``ValidationError`` (field ``parent_id``) when *parent* may not become *issue*'s parent.
+
+        *issue* is None for an issue not created yet, which only the depth
+        limit applies to; an existing issue may not become its own parent or
+        the child of one of its descendants either.
+        """
+        if issue is not None:
+            await self._nested_set.validate_parent(session, issue, parent)
+            return
+        new_depth = len(await self._nested_set.get_ancestors(session, parent)) + 1
+        if new_depth >= MAX_DEPTH:
+            raise ValidationError(
+                message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
+                field="parent_id",
+                details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
+            )
 
     async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key like 'ACME-42' to an Issue.
@@ -1234,6 +1243,8 @@ class IssueService:
             stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
         if filters.get("tag_id") is not None:
             stmt = stmt.where(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
+        if filters.get("parent_id") is not None:
+            stmt = stmt.where(Issue.parent_id == filters["parent_id"])
 
         # ------------------------------------------------------------------
         # Text search
