@@ -17,11 +17,13 @@ accepted ``pull_request`` delivery (GitHub and Gitea/Forgejo
    ``branches`` metadata (no duplicates). Until the request is merged, each
    link's ``closing`` follows the current text: a reference that was dropped
    or lost its fixing keyword is no longer closing.
-5. When this delivery is the merge (the stored request goes from another
-   state to merged, or a first-seen request arrives with the merge action
-   itself), its closing links are marked ``merge_qualified_at``. Links added
-   or made closing by editing the text after the merge, including an edit
-   that is the first event seen of an already merged request, never qualify.
+5. Only the merge event itself (closed and merged; GitLab ``merge``)
+   qualifies links: those its own text references with a fixing keyword are
+   marked ``merge_qualified_at``. Any other event that shows the request
+   merged (an edit, a label) records the state and qualifies nothing, so a
+   reference added by editing the text never qualifies. A merge event that
+   arrives late, after a newer event already stored the request as merged,
+   still qualifies its links without changing the stored request.
 6. A merge into the default branch with merge automation on moves each
    qualified link's issue once (``merge_handled_at``), while the issue's
    project is still in the integration's scope; see
@@ -168,7 +170,8 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
         return ProcessResult(DELIVERY_PROCESSED, f"{label} ({event.state}) references no issue.")
 
     pr, applied, previous_state = await _upsert(session, integration, event)
-    if not applied:
+    merge_event = is_merge_event(event) and pr.state == PR_MERGED
+    if not applied and not merge_event:
         return ProcessResult(DELIVERY_PROCESSED, f"{label}: the event is older than the stored state; nothing changed.")
 
     existing = {
@@ -201,21 +204,19 @@ async def process_pull_request(session: AsyncSession, integration: RepositoryInt
         if pr.source_branch:
             additions[BRANCHES_METADATA_KEY] = [pr.source_branch]
         append_metadata(issue, additions)
+    closing_now = {issue.id: links[key].closing for key, issue in issues.items()}
     if not merged_before:
         # Before the merge, closing follows the text as it is now: a dropped
         # reference or keyword no longer counts.
-        closing_now = {issue.id: links[key].closing for key, issue in issues.items()}
         for issue_id, current in existing.items():
             current.closing = closing_now.get(issue_id, False)
-        merging = (previous_state is not None and pr.state == PR_MERGED) or (
-            previous_state is None and is_merge_event(event)
-        )
-        if merging:
-            # The text at the merge decides what automation may act on; later edits never do.
-            now = utcnow()
-            for current in existing.values():
-                if current.closing:
-                    current.merge_qualified_at = now
+    if merge_event:
+        # The merge event's own text decides what automation may act on; an
+        # edit, before or after it, never does.
+        now = utcnow()
+        for issue_id, closing in closing_now.items():
+            if closing and existing[issue_id].merge_qualified_at is None:
+                existing[issue_id].merge_qualified_at = now
     await session.flush()
 
     outcomes: list[tuple[str, str, str]] = []

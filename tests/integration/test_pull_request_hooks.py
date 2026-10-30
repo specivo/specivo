@@ -401,6 +401,7 @@ class TestMergeAutomation:
         edited = pull_request_payload(
             "github", body="Fixes PRH-1, fixes PRH-2", state="merged", updated_at="2026-10-02T16:00:00Z"
         )
+        edited["action"] = "edited"
         await _send(client, db_session, integration, edited, queued)
         assert (await _reload(db_session, world.issues["PRH-2"])).status_id == world.new.id
         link = (
@@ -445,12 +446,46 @@ class TestMergeAutomation:
         await _send(client, db_session, integration, edited, queued)
         assert (await _reload(db_session, world.issues["PRH-1"])).status_id == world.new.id
 
+    @pytest.mark.parametrize("provider", ["github", "gitlab"])
+    @pytest.mark.parametrize(
+        ("merge_body", "merge_time", "moved"),
+        [
+            # The merge delivery arrives late (older than the edit): its text decides.
+            ("Fixes PRH-2", "2026-10-01T10:00:00Z", {"PRH-2"}),
+            # The merge arrives after the edit and its text references the edited-in issue.
+            ("Fixes PRH-1", "2026-10-01T12:00:00Z", {"PRH-1"}),
+        ],
+    )
+    async def test_edit_showing_merged_before_the_merge_event_qualifies_nothing(
+        self, client, db_session, world, queued, provider, merge_body, merge_time, moved
+    ):
+        await _grant_git(db_session, world.project)
+        integration = await make_integration(db_session, world.project, provider=provider, settings=_automation(world))
+        opened = pull_request_payload(provider, body="Refs PRH-3", updated_at="2026-10-01T09:00:00Z")
+        await _send(client, db_session, integration, opened, queued)
+
+        # The merge delivery is lost or late; an edit that already shows merged adds a fixing reference.
+        edited = pull_request_payload(provider, body="Fixes PRH-1", state="merged", updated_at="2026-10-01T11:00:00Z")
+        if provider == "gitlab":
+            edited["object_attributes"]["action"] = "update"
+        else:
+            edited["action"] = "edited"
+        await _send(client, db_session, integration, edited, queued)
+        assert (await _reload(db_session, world.issues["PRH-1"])).status_id == world.new.id
+
+        merge = pull_request_payload(provider, body=merge_body, state="merged", updated_at=merge_time)
+        await _send(client, db_session, integration, merge, queued)
+        for key in ("PRH-1", "PRH-2", "PRH-3"):
+            expected = world.resolved.id if key in moved else world.new.id
+            assert (await _reload(db_session, world.issues[key])).status_id == expected, key
+
     async def test_closing_upgrade_after_the_merge_is_not_acted_on(self, client, db_session, world, queued):
         await _grant_git(db_session, world.project)
         integration = await make_integration(db_session, world.project, settings=_automation(world))
         merged = pull_request_payload("github", body="Refs PRH-2", state="merged", updated_at="2026-10-02T15:30:00Z")
         await _send(client, db_session, integration, merged, queued)
         edited = pull_request_payload("github", body="Fixes PRH-2", state="merged", updated_at="2026-10-02T16:00:00Z")
+        edited["action"] = "edited"
         await _send(client, db_session, integration, edited, queued)
         assert (await _reload(db_session, world.issues["PRH-2"])).status_id == world.new.id
 
