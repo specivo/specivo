@@ -71,4 +71,9 @@ across the project.
     in the Time area, on issues, in version totals and in reports. A person with several roles gets
     the widest setting among them.
 
+    Time logged on an issue you cannot see, such as someone else's private issue, is left out
+    everywhere: from the lists, from every total and from billable-time reports, so the numbers never
+    reveal work on hidden issues. Time logged on the project itself, without an issue, is not
+    affected. Your own entries always stay visible to you, even on an issue you can no longer see.
+
 ![The project time entries](../assets/img/time-entries.webp)

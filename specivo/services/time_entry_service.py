@@ -6,7 +6,9 @@ Which time entries a user may read is decided here, in
 resolves that grant ``view_time_entries``. Every reader goes through one of
 them: the project list (web and REST), a single entry, the issue's time tab
 and its logged-time sum, a version's logged-time sum, the billing report and
-the dashboard's agent feed.
+the dashboard's agent feed. Both also hide an entry logged on an issue the
+reader cannot see (``IssueService``), unless the reader logged it, so lists
+and sums never reveal work on hidden issues.
 
 Who may write is decided here too: ``require_can_log`` (``log_time``) for
 every new entry written on a user's behalf, timers included, and
@@ -30,6 +32,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
+from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
 from specivo.models.role import TIME_ENTRIES_VISIBILITY_ALL, TIME_ENTRIES_VISIBILITY_OWN, Role
@@ -93,6 +96,7 @@ class TimeEntryService:
         all without ``view_time_entries``. Reaching the project is the
         caller's job (``ProjectService.require_project_access``).
         """
+        from specivo.services.issue_service import IssueService
         from specivo.services.permission_service import time_entries_visibility
 
         visibility = await time_entries_visibility(session, user, project)
@@ -100,7 +104,28 @@ class TimeEntryService:
             return false()
         if visibility == TIME_ENTRIES_VISIBILITY_OWN:
             return TimeEntry.user_id == user.id
-        return None
+        issues = await IssueService().project_visible_issues_clause(session, user, project)
+        if issues is not None:
+            issues = and_(Issue.project_id == project.id, issues)
+        return self._issue_visible_clause(user, issues)
+
+    @staticmethod
+    def _issue_visible_clause(user: User, issues: ColumnElement[bool] | None) -> ColumnElement[bool] | None:
+        """Return the predicate keeping entries without an issue, on an issue matching *issues*, or by *user*.
+
+        *issues* is an issue visibility predicate (None: every issue). The
+        author of an entry always reads it: they logged the time, so the issue
+        was visible to them then.
+        """
+        if issues is None:
+            return None
+        visible: list[ColumnElement[bool]] = [
+            TimeEntry.issue_id.is_(None),
+            TimeEntry.issue_id.in_(select(Issue.id).where(issues)),
+        ]
+        if not user.is_anonymous:
+            visible.append(TimeEntry.user_id == user.id)
+        return or_(*visible)
 
     async def visible_entries_clause_any(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
         """Return the cross-project form of ``visible_entries_clause``, or None for no limit (admins).
@@ -112,10 +137,18 @@ class TimeEntryService:
         membership roles; a public project without a membership follows the
         Non member role the same way. Any other project shows nothing. It is
         an allow-list by project, but callers should still limit the query to
-        projects the user can reach. Everyone is narrowed to the
-        authenticating API key's project limit (``specivo.services.api_key_scope``).
+        projects the user can reach. An entry on an issue the user cannot see
+        (``IssueService.visible_issues_clause``) is left out unless the user
+        logged it. Everyone is narrowed to the authenticating API key's project
+        limit (``specivo.services.api_key_scope``).
         """
+        from specivo.services.issue_service import IssueService
+
         clause = await self._visible_entries_clause_any(session, user)
+        if clause is not None:
+            issues = self._issue_visible_clause(user, await IssueService().visible_issues_clause(session, user))
+            if issues is not None:
+                clause = and_(clause, issues)
         limit = scope_clause(TimeEntry.project_id)
         if limit is None:
             return clause
@@ -178,9 +211,9 @@ class TimeEntryService:
 
         404 rather than 403 for an entry in an unreachable project, in a
         project where the user lacks ``view_time_entries``, or outside the
-        user's visibility, so entry ids cannot be probed.
+        user's visibility (an entry on an issue they cannot see included), so
+        entry ids cannot be probed.
         """
-        from specivo.services.permission_service import time_entries_visibility
         from specivo.services.project_service import ProjectService
 
         entry = await self.get_by_id(session, entry_id)
@@ -191,9 +224,11 @@ class TimeEntryService:
             await ProjectService().require_project_access(session, project, user)
         except NotFoundError:
             raise NotFoundError(f"Time entry {entry_id} not found") from None
-        visibility = await time_entries_visibility(session, user, project)
-        if visibility is None or (visibility == TIME_ENTRIES_VISIBILITY_OWN and entry.user_id != user.id):
-            raise NotFoundError(f"Time entry {entry_id} not found")
+        visible = await self.visible_entries_clause(session, user, project)
+        if visible is not None:
+            found = await session.scalar(select(TimeEntry.id).where(TimeEntry.id == entry_id, visible))
+            if found is None:
+                raise NotFoundError(f"Time entry {entry_id} not found")
         return entry
 
     # -------------------------------------------------------------------

@@ -246,6 +246,27 @@ class TestTimeLogging:
         assert await _entries(db_session, world.issue) == []
         assert "time_logging_disabled" in result.detail
 
+    async def test_time_on_a_private_issue_is_hidden_like_any_entry(self, client, db_session, world, queued):
+        """The commit author logs on their private issue; a teammate who cannot see it does not see the time."""
+        from specivo.services.time_entry_service import TimeEntryService
+
+        world.issue.is_private = True
+        teammate = UserFactory.build(login="cmd_teammate", status="active")
+        db_session.add(teammate)
+        await db_session.flush()
+        member = Member(user_id=teammate.id, project_id=world.project.id)
+        db_session.add(member)
+        await db_session.flush()
+        db_session.add(MemberRole(member_id=member.id, role_id=world.role.id))
+        await db_session.commit()
+        integration = await _integration(db_session, world)
+        await _push(client, db_session, integration, [commit("t8", "CMD-1 @2h", email=DEV_EMAIL)], queued)
+        assert [e.hours for e in await _entries(db_session, world.issue)] == [Decimal("2.00")]
+
+        service = TimeEntryService()
+        assert (await service.list_for_project(db_session, world.project, teammate))[1] == 0
+        assert (await service.list_for_project(db_session, world.project, world.dev))[1] == 1
+
     async def test_fix_and_time_in_one_commit(self, client, db_session, world, queued):
         integration = await _integration(db_session, world)
         await _push(client, db_session, integration, [commit("t7", "Fixes CMD-1 @45m", email=DEV_EMAIL)], queued)
