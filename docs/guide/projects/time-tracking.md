@@ -74,6 +74,17 @@ longer see the issue, the header still shows its key but not its title.
 AI agents can drive the same timer through the `specivo_timer` tool (see
 [What an agent can do](../ai-agents/capabilities.md)).
 
+## Log time from a commit
+
+When your project has a [repository integration](../integrations/repositories.md) with commit
+commands and time logging turned on, a commit message can log time too: `ACME-12 @1h30m` (also
+`@2h`, `@90m` or `@1.5h`) logs that time on ACME-12 for the commit's author, with the default
+activity, dated on the commit day. The author is the Specivo account whose verified email wrote
+the commit, and they need *Log time* in the project. The time goes right after the issue key, on
+the same line; zero is ignored, and more than 24 hours for one issue in one commit is cut to 24.
+See
+[Commit commands](../integrations/repositories.md#commit-commands).
+
 ## Estimate versus spent
 
 Issues carry an **estimate** — estimated hours, with original and remaining estimates — alongside the

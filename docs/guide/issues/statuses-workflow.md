@@ -47,3 +47,8 @@ finish. See [Finding issues](finding.md) for the board and list views, and
     which status an issue may move *to* from each status, and which roles are allowed to make each
     transition. So in your project some moves may be restricted, or extra rules may apply, depending on
     your role.
+
+Status changes made from a repository follow the same rules: `Fixes ACME-12` in a commit moves the
+issue only if its author's roles allow the transition, and merge automation only if the
+**Automation** role (or the role chosen for it) does. On an instance with workflow rules, the
+Automation role has no transitions until they are granted. See [Repository integrations](../integrations/repositories.md#the-automation-role).

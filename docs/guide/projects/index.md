@@ -41,6 +41,10 @@ The **Agent** role exists for AI assistants and automation. Teams usually create
 account, give it the Agent role on the projects it should touch, and issue it an API key. See
 [AI agents & MCP](../ai-agents/index.md).
 
+A fifth role, **Automation**, is not offered when adding members: it is the role the built-in
+**Git** account gets by default (a manager may pick another) when a project turns on
+[merge automation](../integrations/repositories.md#merge-automation) for a connected repository.
+
 !!! note "Roles are per project"
     A person can be a Manager in one project and a Reporter in another. Membership and role are set on
     each project, not globally.
