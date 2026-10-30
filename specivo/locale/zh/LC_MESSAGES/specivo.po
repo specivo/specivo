@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 17:06+0000\n"
+"POT-Creation-Date: 2026-10-30 22:21+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -219,26 +219,26 @@ msgstr "该冲刺不属于此项目"
 msgid "Cannot assign issues to a completed sprint"
 msgstr "无法将工作项分配到已完成的冲刺"
 
-#: specivo/services/issue_service.py:853
+#: specivo/services/issue_service.py:862
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "该工作项已被其他请求修改，请重新加载后再试。"
 
-#: specivo/services/issue_service.py:1006
+#: specivo/services/issue_service.py:1015
 msgid "Issue is already in this project."
 msgstr "工作项已在此项目中。"
 
-#: specivo/services/issue_service.py:1015
+#: specivo/services/issue_service.py:1024
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr "无法移动处于层级结构中的工作项。请先将其与父工作项解除关联，并移动其子工作项或解除它们的关联。"
 
-#: specivo/services/issue_service.py:1066
+#: specivo/services/issue_service.py:1075
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "已从 {old} 移动到 {new}。"
 
-#: specivo/services/issue_service.py:1140
+#: specivo/services/issue_service.py:1149
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -694,7 +694,7 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/projects/settings.html:91
 #: specivo/templates/themes/default/pages/projects/settings.html:255
 #: specivo/templates/themes/default/pages/projects/settings.html:863
-#: specivo/templates/themes/default/pages/projects/settings.html:1594
+#: specivo/templates/themes/default/pages/projects/settings.html:1600
 #: specivo/templates/themes/default/pages/wiki/edit.html:133
 msgid "Save"
 msgstr "保存"
@@ -711,7 +711,7 @@ msgstr "保存"
 #: specivo/templates/themes/default/pages/projects/settings.html:438
 #: specivo/templates/themes/default/pages/projects/settings.html:978
 #: specivo/templates/themes/default/pages/projects/settings.html:1219
-#: specivo/templates/themes/default/pages/projects/settings.html:1531
+#: specivo/templates/themes/default/pages/projects/settings.html:1537
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:134
 msgid "Saving..."
@@ -756,7 +756,7 @@ msgstr "保存语言失败。"
 #: specivo/templates/themes/default/pages/projects/settings.html:875
 #: specivo/templates/themes/default/pages/projects/settings.html:1023
 #: specivo/templates/themes/default/pages/projects/settings.html:1257
-#: specivo/templates/themes/default/pages/projects/settings.html:1565
+#: specivo/templates/themes/default/pages/projects/settings.html:1571
 #: specivo/templates/themes/default/pages/wiki/show.html:97
 msgid "Unable to connect."
 msgstr "无法连接。"
@@ -1111,8 +1111,8 @@ msgstr "尚无项目选择加入匿名阅读。"
 #: specivo/templates/themes/default/pages/projects/settings.html:1002
 #: specivo/templates/themes/default/pages/projects/settings.html:1217
 #: specivo/templates/themes/default/pages/projects/settings.html:1241
-#: specivo/templates/themes/default/pages/projects/settings.html:1529
-#: specivo/templates/themes/default/pages/projects/settings.html:1553
+#: specivo/templates/themes/default/pages/projects/settings.html:1535
+#: specivo/templates/themes/default/pages/projects/settings.html:1559
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:72
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
@@ -3029,7 +3029,7 @@ msgstr "上次登录"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:157
 #: specivo/templates/themes/default/pages/auth/profile.html:147
-#: specivo/templates/themes/default/pages/projects/settings.html:1554
+#: specivo/templates/themes/default/pages/projects/settings.html:1560
 msgid "Disconnect"
 msgstr "断开关联"
 
@@ -3322,7 +3322,7 @@ msgstr "所有状态"
 #: specivo/templates/themes/default/pages/projects/settings.html:1171
 #: specivo/templates/themes/default/pages/projects/settings.html:1233
 #: specivo/templates/themes/default/pages/projects/settings.html:1442
-#: specivo/templates/themes/default/pages/projects/settings.html:1545
+#: specivo/templates/themes/default/pages/projects/settings.html:1551
 msgid "Close"
 msgstr "关闭"
 
@@ -6592,36 +6592,46 @@ msgid ""
 "manage members."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1525
+#: specivo/templates/themes/default/pages/projects/settings.html:1526
+msgid "Ignore pull requests from forks and outsiders"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1528
+msgid ""
+"Requests from another repository, or on GitHub by someone who is not a "
+"collaborator, are not linked to issues until they are merged."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1531
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1544
+#: specivo/templates/themes/default/pages/projects/settings.html:1550
 msgid "Disconnect repository"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1550
+#: specivo/templates/themes/default/pages/projects/settings.html:1556
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1563
+#: specivo/templates/themes/default/pages/projects/settings.html:1569
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
 msgid "Saved"
 msgstr "已保存"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1564
+#: specivo/templates/themes/default/pages/projects/settings.html:1570
 msgid "Could not save the branch name settings."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1569
+#: specivo/templates/themes/default/pages/projects/settings.html:1575
 msgid "Branch names"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1571
+#: specivo/templates/themes/default/pages/projects/settings.html:1577
 #, python-brace-format
 msgid ""
 "The \"Copy branch name\" button on an issue builds the name from this "
@@ -6630,23 +6640,23 @@ msgid ""
 "Branches named this way link their commits to the issue."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1573
+#: specivo/templates/themes/default/pages/projects/settings.html:1579
 msgid "Format"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1575
+#: specivo/templates/themes/default/pages/projects/settings.html:1581
 msgid "Example:"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1585
+#: specivo/templates/themes/default/pages/projects/settings.html:1591
 msgid "Other trackers"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1604
+#: specivo/templates/themes/default/pages/projects/settings.html:1610
 msgid "Search indexing"
 msgstr "搜索索引"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1606
+#: specivo/templates/themes/default/pages/projects/settings.html:1612
 msgid ""
 "Full-text search analyzer language for this project. Leave on Inherit to "
 "use the instance default."

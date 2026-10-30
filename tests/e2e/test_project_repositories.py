@@ -106,3 +106,31 @@ def test_disable_and_disconnect(admin_page: Page, project_key: str, api_client: 
     row.get_by_role("button", name="Delete").click()
     admin_page.locator(".sp-modal").get_by_role("button", name="Disconnect").click()
     expect(admin_page.get_by_test_id("repository-row")).to_have_count(0)
+
+
+def test_ignore_external_pull_requests_is_on_by_default_and_can_be_turned_off(
+    admin_page: Page, project_key: str, api_client: httpx.Client
+) -> None:
+    base = f"/api/v1/projects/{project_key}/repositories/"
+    created = api_client.post(
+        base, json={"provider": "github", "repo_full_name": _REPO, "repo_url": f"https://github.example.com/{_REPO}"}
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["settings"]["ignore_external_pull_requests"] is True
+    tracker = ConsoleErrorTracker().attach(admin_page)
+    _open_tab(admin_page, project_key)
+
+    admin_page.get_by_test_id("repository-row").get_by_role("button", name="Edit").click()
+    option = admin_page.get_by_test_id("repository-ignore-external")
+    expect(option).to_be_checked()
+    expect(admin_page.get_by_text("are not linked to issues until they are merged")).to_be_visible()
+    option.uncheck()
+    admin_page.get_by_test_id("repository-save").click()
+    expect(admin_page.get_by_test_id("repository-save")).to_be_hidden()
+
+    stored = api_client.get(f"{base}{created.json()['id']}/").json()
+    assert stored["settings"]["ignore_external_pull_requests"] is False
+    _open_tab(admin_page, project_key)
+    admin_page.get_by_test_id("repository-row").get_by_role("button", name="Edit").click()
+    expect(admin_page.get_by_test_id("repository-ignore-external")).not_to_be_checked()
+    tracker.assert_no_errors()

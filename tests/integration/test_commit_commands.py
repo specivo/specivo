@@ -272,3 +272,106 @@ class TestTimeLogging:
         await _push(client, db_session, integration, [commit("t7", "Fixes CMD-1 @45m", email=DEV_EMAIL)], queued)
         assert await _status(db_session, world.issue) == world.fixed.id
         assert [e.hours for e in await _entries(db_session, world.issue)] == [Decimal("0.75")]
+
+
+ADMIN_EMAIL = "admin-commands@example.com"
+
+
+class TestAdministratorAsMatchedUser:
+    """An administrator matched by the commit email acts only with the roles of their own membership."""
+
+    @pytest_asyncio.fixture
+    async def admin(self, db_session: AsyncSession) -> User:
+        admin = UserFactory.build(
+            login="cmd_admin", email=ADMIN_EMAIL, email_verified_at=utcnow(), status="active", is_admin=True
+        )
+        db_session.add(admin)
+        await db_session.commit()
+        return admin
+
+    async def _member(self, db: AsyncSession, world: World, admin: User, permissions: list[str]) -> Role:
+        role = Role(name="Cmd Admin Role", permissions=permissions)
+        db.add(role)
+        await db.flush()
+        member = Member(user_id=admin.id, project_id=world.project.id)
+        db.add(member)
+        await db.flush()
+        db.add(MemberRole(member_id=member.id, role_id=role.id))
+        await db.commit()
+        return role
+
+    async def _transition(self, db: AsyncSession, world: World, role: Role) -> None:
+        db.add(
+            WorkflowTransition(
+                tracker_id=world.tracker.id, role_id=role.id, old_status_id=world.new.id, new_status_id=world.fixed.id
+            )
+        )
+        await db.commit()
+        await WorkflowService().invalidate_cache()
+
+    async def test_without_membership_nothing_happens(self, client, db_session, world, queued, admin):
+        integration = await _integration(db_session, world)
+        result = await _push(
+            client, db_session, integration, [commit("a1", "Fixes CMD-1 @2h", email=ADMIN_EMAIL)], queued
+        )
+        assert await _status(db_session, world.issue) == world.new.id
+        assert await _entries(db_session, world.issue) == []
+        assert "CMD-1 fixes: no_membership" in result.detail
+        assert "CMD-1 time: no_membership" in result.detail
+        await db_session.refresh(admin)
+        assert admin.is_admin
+
+    async def test_member_role_without_the_transition_is_refused(self, client, db_session, world, queued, admin):
+        await self._member(db_session, world, admin, ["view_issues", "edit_issues"])
+        await self._transition(db_session, world, world.role)  # the workflow allows it to another role only
+        integration = await _integration(db_session, world)
+        result = await _push(client, db_session, integration, [commit("a2", "Fixes CMD-1", email=ADMIN_EMAIL)], queued)
+        assert await _status(db_session, world.issue) == world.new.id
+        assert "CMD-1 fixes: transition_not_allowed" in result.detail
+        await db_session.refresh(admin)
+        assert admin.is_admin
+
+    async def test_member_role_with_the_transition_moves(self, client, db_session, world, queued, admin):
+        role = await self._member(db_session, world, admin, ["view_issues", "edit_issues"])
+        await self._transition(db_session, world, role)
+        integration = await _integration(db_session, world)
+        result = await _push(client, db_session, integration, [commit("a3", "Fixes CMD-1", email=ADMIN_EMAIL)], queued)
+        assert await _status(db_session, world.issue) == world.fixed.id
+        assert "CMD-1 fixes: moved" in result.detail
+
+    async def test_member_role_without_edit_issues(self, client, db_session, world, queued, admin):
+        await self._member(db_session, world, admin, ["view_issues"])
+        integration = await _integration(db_session, world)
+        result = await _push(client, db_session, integration, [commit("a4", "Fixes CMD-1", email=ADMIN_EMAIL)], queued)
+        assert await _status(db_session, world.issue) == world.new.id
+        assert "missing_permission:edit_issues" in result.detail
+
+    async def test_time_needs_log_time_in_the_member_role(self, client, db_session, world, queued, admin):
+        await self._member(db_session, world, admin, ["view_issues", "edit_issues"])
+        integration = await _integration(db_session, world)
+        result = await _push(client, db_session, integration, [commit("a5", "CMD-1 @2h", email=ADMIN_EMAIL)], queued)
+        assert await _entries(db_session, world.issue) == []
+        assert "CMD-1 time: missing_permission:log_time" in result.detail
+
+    async def test_time_with_log_time_in_the_member_role(self, client, db_session, world, queued, admin):
+        await self._member(db_session, world, admin, ["view_issues", "log_time"])
+        integration = await _integration(db_session, world)
+        result = await _push(client, db_session, integration, [commit("a6", "CMD-1 @2h", email=ADMIN_EMAIL)], queued)
+        assert [(e.user_id, e.hours) for e in await _entries(db_session, world.issue)] == [(admin.id, Decimal("2.00"))]
+        assert "CMD-1 time: logged" in result.detail
+
+    async def test_private_issue_follows_the_member_role(self, client, db_session, world, queued, admin):
+        """Admins see every private issue; through a commit only the role's issue visibility counts."""
+        world.issue.is_private = True
+        await db_session.commit()
+        role = await self._member(db_session, world, admin, ["view_issues", "edit_issues", "log_time"])
+        role.issues_visibility = "own"
+        await db_session.commit()
+        integration = await _integration(db_session, world)
+        result = await _push(
+            client, db_session, integration, [commit("a7", "Fixes CMD-1 @1h", email=ADMIN_EMAIL)], queued
+        )
+        assert await _status(db_session, world.issue) == world.new.id
+        assert await _entries(db_session, world.issue) == []
+        assert "CMD-1 fixes: issue_not_visible" in result.detail
+        assert "CMD-1 time: issue_not_visible" in result.detail

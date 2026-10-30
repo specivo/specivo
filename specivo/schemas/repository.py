@@ -43,6 +43,10 @@ class RepositorySettings(BaseModel):
       user. ``time_logging_enabled`` also lets ``KEY-1 @2h`` log time.
     - ``merge_automation_enabled``: a merged pull request with a closing
       reference moves the issue to ``merge_status_id``, as ``$git``.
+
+    ``ignore_external_pull_requests`` is the exception: on by default, it
+    skips pull request events from forks and from authors who are not
+    collaborators, except the merge itself.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -52,6 +56,7 @@ class RepositorySettings(BaseModel):
     fixing_status_id: int | None = Field(default=None, gt=0)
     merge_status_id: int | None = Field(default=None, gt=0)
     merge_automation_enabled: bool = False
+    ignore_external_pull_requests: bool = True
 
     @model_validator(mode="after")
     def _check_dependencies(self) -> RepositorySettings:

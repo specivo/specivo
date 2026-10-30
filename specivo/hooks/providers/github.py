@@ -20,6 +20,7 @@ from specivo.hooks.providers.base import (
     constant_time_equal,
     delivery_id_from,
     dict_at,
+    forge_id_or_none,
     header,
     hmac_sha256_hex,
     int_or_none,
@@ -29,9 +30,36 @@ from specivo.hooks.providers.base import (
     timestamp,
 )
 
+#: GitHub's ``author_association`` values for people with a role in the repository.
+_COLLABORATOR_ASSOCIATIONS = frozenset({"OWNER", "MEMBER", "COLLABORATOR"})
+
 
 def _login(user: dict[str, Any]) -> str | None:
     return str_or_none(user.get("login")) or str_or_none(user.get("username"))
+
+
+def _repo_id(side: Any) -> int | None:
+    """The repository id of a ``head`` or ``base``: Gitea and Forgejo send ``repo_id``, all send ``repo.id``."""
+    if not isinstance(side, dict):
+        return None
+    return forge_id_or_none(side.get("repo_id")) or forge_id_or_none(dict_at(side, "repo").get("id"))
+
+
+def _external(pr: dict[str, Any], *, needs_author_association: bool) -> bool:
+    """From a fork, or by an author without a role, or the payload cannot show otherwise.
+
+    The head and base repositories must both be named and be the same one;
+    a missing id (a deleted fork sends ``head.repo: null``) counts as a fork.
+    ``author_association`` is judged where present; only GitHub sends it, so
+    only there does its absence make the request external.
+    """
+    head_id, base_id = _repo_id(pr.get("head")), _repo_id(pr.get("base"))
+    if head_id is None or base_id is None or head_id != base_id:
+        return True
+    association = str_or_none(pr.get("author_association"))
+    if association is None:
+        return needs_author_association
+    return association.upper() not in _COLLABORATOR_ASSOCIATIONS
 
 
 class GitHubShapedPayloads:
@@ -40,6 +68,9 @@ class GitHubShapedPayloads:
     A pull request is merged when ``merged`` is true, or when it is closed
     with a ``merged_at``; closed otherwise; open, or draft with ``draft``.
     """
+
+    #: Whether the forge always sends ``author_association`` (GitHub does; Gitea and Forgejo never do).
+    sends_author_association = False
 
     def repo_full_name(self, payload: dict[str, Any]) -> str | None:
         return str_or_none(dict_at(payload, "repository").get("full_name"))
@@ -89,11 +120,13 @@ class GitHubShapedPayloads:
             merge_commit_sha=sha_or_none(pr.get("merge_commit_sha")) if state == "merged" else None,
             updated_at=timestamp(pr.get("updated_at")),
             action=str_or_none(payload.get("action")),
+            external=_external(pr, needs_author_association=self.sends_author_association),
         )
 
 
 class GitHubProvider(GitHubShapedPayloads):
     name = "github"
+    sends_author_association = True
 
     def verify(self, headers: Mapping[str, str], raw_body: bytes, secret: str) -> None:
         given = header(headers, "X-Hub-Signature-256")

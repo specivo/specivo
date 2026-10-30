@@ -21,7 +21,9 @@ The ``$git`` service account writes the commit journals, so they are never
 attributed to the issue author. It has no password and is not an
 administrator; ``ck_users_system_principal_inert`` keeps every ``$`` login
 that way. An existing account that already uses the login or the
-``git@specivo.invalid`` address stops the upgrade with an explanation.
+``git@specivo.invalid`` address stops the upgrade with an explanation, and so
+does any other ``$`` login with a password or administrator rights (an import
+could have created one), naming the accounts to fix.
 
 The instance-wide push hook secrets (``github_webhook_secret``,
 ``gitlab_webhook_token`` settings rows) are deleted with the endpoints that
@@ -61,6 +63,37 @@ def _set_commit_pattern(old: str, new: str) -> None:
         )
 
 
+def _refuse_live_dollar_logins() -> None:
+    """Name the ``$`` logins the inert CHECK would refuse, instead of letting it fail with a bare violation."""
+    rows = (
+        op.get_bind()
+        .execute(
+            sa.text(
+                "SELECT id, login, password_hash IS NOT NULL AS has_password, is_admin FROM users "
+                "WHERE login LIKE '$%' AND (password_hash IS NOT NULL OR is_admin) ORDER BY id"
+            )
+        )
+        .all()
+    )
+    if not rows:
+        return
+    accounts = "; ".join(
+        f"id={row.id} {row.login!r} ("
+        + " and ".join(
+            reason
+            for reason, applies in (("has a password", row.has_password), ("is an administrator", row.is_admin))
+            if applies
+        )
+        + ")"
+        for row in rows
+    )
+    raise RuntimeError(
+        "Logins starting with '$' are reserved for system accounts, which can have neither a password nor "
+        f"administrator rights. These accounts break that rule: {accounts}. Rename each to a login without "
+        "'$', or clear its password and administrator flag, then run the upgrade again."
+    )
+
+
 def upgrade() -> None:
     rows = (
         op.get_bind()
@@ -80,6 +113,7 @@ def upgrade() -> None:
                 f"User id={clash.id} (login {clash.login!r}, email {clash.email!r}) uses the login or email "
                 "reserved for the git service account. Rename that account and run the upgrade again."
             )
+    _refuse_live_dollar_logins()
     op.create_check_constraint(
         "ck_users_system_principal_inert",
         "users",

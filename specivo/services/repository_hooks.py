@@ -9,7 +9,9 @@ the Celery task ``process_repository_delivery``, which calls
 
 1. Parse the push with the provider adapter and refresh the default branch.
 2. Collect the issue references in each commit message and in the branch
-   name, limited to the project keys in the integration's scope.
+   name, limited to the project keys in the integration's scope (current
+   keys and the old keys of renamed projects), and resolve them like the web
+   UI does (:func:`resolve_references`).
 3. Upsert the commits that reference something (``repository_commits``),
    with ``matched_user_id`` set only from a *verified* email.
 4. Insert the (commit, issue) links with ``ON CONFLICT DO NOTHING``. Only the
@@ -46,9 +48,9 @@ from specivo.core.constants import (
 )
 from specivo.core.utils import utcnow
 from specivo.hooks.providers import CommitData, PushEvent, get_provider
-from specivo.hooks.refs import Ref, extract_branch_refs, extract_refs
-from specivo.models.issue import Issue
-from specivo.models.project import Project
+from specivo.hooks.refs import Keyword, Ref, extract_branch_refs, extract_refs
+from specivo.models.issue import Issue, IssueRefAlias
+from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.repository import (
     DELIVERY_ACCEPTED,
     DELIVERY_FAILED,
@@ -285,7 +287,25 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
 
 
 async def scope_project_keys(session: AsyncSession, integration: RepositoryIntegration) -> dict[str, int]:
-    """Project key → project id for the projects references may resolve to."""
+    """Project key → project id for the projects references may resolve to.
+
+    Next to each project's current key come the keys it had before a rename
+    (``project_key_aliases``), so ``Fixes OLD-12`` still names its issue.
+    """
+    allowed = await _scope_projects(session, integration)
+    if allowed:
+        aliases = await session.execute(
+            select(ProjectKeyAlias.old_key, ProjectKeyAlias.project_id).where(
+                ProjectKeyAlias.project_id.in_(set(allowed.values()))
+            )
+        )
+        for old_key, project_id in aliases.all():
+            allowed.setdefault(old_key, project_id)
+    return allowed
+
+
+async def _scope_projects(session: AsyncSession, integration: RepositoryIntegration) -> dict[str, int]:
+    """Current project key → project id for the projects in the integration's scope."""
     root = await session.get(Project, integration.project_id)
     if root is None:  # pragma: no cover - the integration is deleted with its project
         return {}
@@ -313,6 +333,50 @@ async def scope_project_keys(session: AsyncSession, integration: RepositoryInteg
             ):
                 allowed[key] = project_id
     return allowed
+
+
+async def resolve_references(
+    session: AsyncSession, pairs: Iterable[tuple[str, int]], scope: dict[str, int]
+) -> dict[str, int]:
+    """``KEY-N`` as written → issue id, for the references that name an issue in the scope.
+
+    A reference names the issue that has it now; failing that, the issue that
+    had it before moving (``issue_ref_aliases``); failing that, the issue
+    with that number in a project renamed from ``KEY``
+    (``project_key_aliases``). An issue outside the scope resolves to
+    nothing, exactly like one that does not exist.
+    """
+    wanted = set(pairs)
+    project_ids = set(scope.values())
+    resolved: dict[str, int] = {}
+
+    def unresolved() -> set[tuple[str, int]]:
+        return {(key, number) for key, number in wanted if f"{key}-{number}" not in resolved}
+
+    async def collect(stmt: Any) -> None:
+        for issue_id, key, number in (await session.execute(stmt.where(Issue.project_id.in_(project_ids)))).all():
+            resolved.setdefault(f"{key}-{number}", issue_id)
+
+    if not wanted or not project_ids:
+        return resolved
+    await collect(
+        select(Issue.id, Issue.project_key, Issue.sequence_number).where(
+            tuple_(Issue.project_key, Issue.sequence_number).in_(wanted)
+        )
+    )
+    if remaining := unresolved():
+        await collect(
+            select(Issue.id, IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number)
+            .join(Issue, Issue.id == IssueRefAlias.issue_id)
+            .where(tuple_(IssueRefAlias.old_project_key, IssueRefAlias.old_sequence_number).in_(remaining))
+        )
+    if remaining := unresolved():
+        await collect(
+            select(Issue.id, ProjectKeyAlias.old_key, Issue.sequence_number)
+            .join(ProjectKeyAlias, ProjectKeyAlias.project_id == Issue.project_id)
+            .where(tuple_(ProjectKeyAlias.old_key, Issue.sequence_number).in_(remaining))
+        )
+    return resolved
 
 
 def _commit_refs(
@@ -392,13 +456,7 @@ async def _link_batch(
     """
     # Resolve references to issues in scope. A reference to a missing issue is dropped silently.
     pairs = {(ref.key, ref.number) for _c, refs in batch for ref, _s in refs.values()}
-    issue_rows = await session.execute(
-        select(Issue.id, Issue.project_key, Issue.sequence_number).where(
-            tuple_(Issue.project_key, Issue.sequence_number).in_(pairs),
-            Issue.project_id.in_(set(scope.values())),
-        )
-    )
-    issue_ids = {f"{key}-{number}": issue_id for issue_id, key, number in issue_rows.all()}
+    issue_ids = await resolve_references(session, pairs, scope)
     if not issue_ids:
         return [], []
 
@@ -438,20 +496,26 @@ async def _link_batch(
     )
     commits = {row.sha: row for row in commit_rows}
 
-    link_values = [
-        {
-            "commit_id": commits[c.sha].id,
-            "issue_id": issue_ids[display_key],
-            "source": source,
-            "keyword": ref.keyword if source == "message" else None,
-        }
-        for c, refs in batch
-        for display_key, (ref, source) in refs.items()
-        if display_key in issue_ids
-    ]
+    # Two references to one issue (its old and its current key) make one link.
+    refs_by_link: dict[tuple[int, int], tuple[Ref, str]] = {}
+    for c, refs in batch:
+        for display_key, (ref, source) in refs.items():
+            if display_key in issue_ids:
+                link = (commits[c.sha].id, issue_ids[display_key])
+                refs_by_link[link] = _stronger(refs_by_link.get(link), (ref, source))
     inserted = await session.execute(
         pg_insert(IssueCommitLink)
-        .values(link_values)
+        .values(
+            [
+                {
+                    "commit_id": commit_id,
+                    "issue_id": issue_id,
+                    "source": source,
+                    "keyword": ref.keyword if source == "message" else None,
+                }
+                for (commit_id, issue_id), (ref, source) in refs_by_link.items()
+            ]
+        )
         .on_conflict_do_nothing()
         .returning(IssueCommitLink.commit_id, IssueCommitLink.issue_id)
     )
@@ -459,16 +523,22 @@ async def _link_batch(
     if not new_links:
         return [], []
     by_id = {row.id: row for row in commit_rows}
-    refs_by_link = {
-        (commits[c.sha].id, issue_ids[display_key]): (ref, source)
-        for c, refs in batch
-        for display_key, (ref, source) in refs.items()
-        if display_key in issue_ids
-    }
     outcomes = await _record_new_links(
         session, integration, [(by_id[c], i, *refs_by_link[(c, i)]) for c, i in new_links]
     )
     return new_links, outcomes
+
+
+def _stronger(current: tuple[Ref, str] | None, other: tuple[Ref, str]) -> tuple[Ref, str]:
+    """Merge two references to the same issue: the message wins over the branch name, and commands add up."""
+    if current is None:
+        return other
+    (ref, source), (other_ref, other_source) = current, other
+    if source != other_source:
+        return current if source == "message" else other
+    keyword: Keyword = "fixes" if "fixes" in (ref.keyword, other_ref.keyword) else "refs"
+    hours = ref.hours if ref.hours is not None else other_ref.hours
+    return Ref(ref.key, ref.number, keyword, hours), source
 
 
 async def _record_new_links(

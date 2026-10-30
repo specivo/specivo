@@ -103,10 +103,14 @@ def pull_request_payload(
     author: str = "alex-example",
     merged_by: str = "sam-example",
     repo: str = REPO,
+    external: bool = False,
+    author_association: str | None = None,
 ) -> dict[str, Any]:
     """A pull/merge request payload in the provider's shape, built on its fixture.
 
     *state* is Specivo's (``open``, ``draft``, ``merged``, ``closed``).
+    *external* opens it from a fork (another source repository or project);
+    *author_association* replaces GitHub's value (``OWNER`` in the fixture).
     """
     merged = state == "merged"
     if provider == "gitlab":
@@ -128,6 +132,8 @@ def pull_request_payload(
             merge_commit_sha="c48d3ae2e3a7b7f0c3b1b2ad1d9e9b5d0f3a7e21" if merged else None,
             url=f"https://forge.example.com/{repo}/-/merge_requests/{number}",
         )
+        if external:
+            payload["object_attributes"]["source_project_id"] = 4242
         return payload
     name = "github_pull_request.json" if provider == "github" else f"{provider}_pull_request.json"
     payload = copy.deepcopy(fixture_payload(name))
@@ -151,6 +157,13 @@ def pull_request_payload(
     )
     pr["head"]["ref"] = branch
     pr["base"]["ref"] = target
+    if external:
+        if provider == "github":
+            pr["head"]["repo"] = {"id": 4242, "name": "widgets", "full_name": "outsider/widgets", "fork": True}
+        else:
+            pr["head"]["repo_id"] = 4242
+    if author_association is not None:
+        pr["author_association"] = author_association
     return payload
 
 

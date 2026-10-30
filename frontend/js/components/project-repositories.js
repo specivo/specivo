@@ -10,7 +10,9 @@
  * The form also holds what the repository may change on issues: commit
  * commands (fixing status, time logging) and merge automation with the role
  * `$git` holds. Picking a role other than the Automation role needs
- * `manage_members` (`initial.canPickRole`).
+ * `manage_members` (`initial.canPickRole`). `ignore_external_pull_requests`
+ * (on unless the stored settings say false) skips pull requests from forks
+ * and outsiders until they are merged.
  */
 export function projectRepositories(initial) {
     var i18n = Object.assign({
@@ -44,6 +46,7 @@ export function projectRepositories(initial) {
             fixing_status_id: '',
             merge_automation_enabled: false,
             merge_status_id: '',
+            ignore_external_pull_requests: true,
             automation_role_id: defaultRoleId === null ? '' : String(defaultRoleId)
         };
     }
@@ -162,6 +165,7 @@ export function projectRepositories(initial) {
             form.fixing_status_id = settings.fixing_status_id ? String(settings.fixing_status_id) : '';
             form.merge_automation_enabled = settings.merge_automation_enabled === true;
             form.merge_status_id = settings.merge_status_id ? String(settings.merge_status_id) : '';
+            form.ignore_external_pull_requests = settings.ignore_external_pull_requests !== false;
             if (r.automation_role_id) form.automation_role_id = String(r.automation_role_id);
             this.form = form;
             this.showModal = true;
@@ -206,7 +210,8 @@ export function projectRepositories(initial) {
                     time_logging_enabled: f.commands_enabled && f.time_logging_enabled,
                     fixing_status_id: idOrNull(f.fixing_status_id),
                     merge_automation_enabled: f.merge_automation_enabled,
-                    merge_status_id: idOrNull(f.merge_status_id)
+                    merge_status_id: idOrNull(f.merge_status_id),
+                    ignore_external_pull_requests: f.ignore_external_pull_requests
                 }
             };
             if (f.merge_automation_enabled && this.canPickRole && idOrNull(f.automation_role_id) !== null) {

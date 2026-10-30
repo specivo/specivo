@@ -7,7 +7,7 @@ create and rotate-secret.
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT
@@ -49,8 +49,11 @@ async def _managed_project(project_key: str, user: User, db: AsyncSession) -> Pr
 
 
 async def _check_role_choice(role_id: int | None, project: Project, user: User, db: AsyncSession) -> None:
-    """Picking a role for ``$git`` other than the Automation role grants it rights: that needs ``manage_members``."""
-    if role_id is None:
+    """Picking a role for ``$git`` other than the Automation role grants it rights: that needs ``manage_members``.
+
+    Sending the role ``$git`` already holds changes nothing and needs nothing more.
+    """
+    if role_id is None or role_id == await git_role_id(db, project.id):
         return
     default = await automation_role(db)
     if default is not None and default.id == role_id:
@@ -75,6 +78,7 @@ async def list_repositories(
 async def create_repository(
     project_key: str,
     data: RepositoryIntegrationCreate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> RepositoryIntegrationSecretOut:
@@ -87,7 +91,7 @@ async def create_repository(
     """
     project = await _managed_project(project_key, current_user, db)
     await _check_role_choice(data.automation_role_id, project, current_user, db)
-    integration, secret = await _service.create(db, project.id, data, current_user)
+    integration, secret = await _service.create(db, project.id, data, current_user, request)
     return integration_secret_out(integration, secret, await git_role_id(db, project.id))
 
 
@@ -109,6 +113,7 @@ async def update_repository(
     project_key: str,
     integration_id: int,
     data: RepositoryIntegrationUpdate,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> RepositoryIntegrationOut:
@@ -121,7 +126,7 @@ async def update_repository(
     project = await _managed_project(project_key, current_user, db)
     await _check_role_choice(data.automation_role_id, project, current_user, db)
     integration = await _service.update(
-        db, integration_id, project.id, data.model_dump(exclude_unset=True), actor=current_user
+        db, integration_id, project.id, data.model_dump(exclude_unset=True), actor=current_user, request=request
     )
     return integration_out(integration, await git_role_id(db, project.id))
 
@@ -130,12 +135,13 @@ async def update_repository(
 async def delete_repository(
     project_key: str,
     integration_id: int,
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> None:
     """Disconnect a repository. Its deliveries and commit records go; issue journals stay."""
     project = await _managed_project(project_key, current_user, db)
-    await _service.delete(db, integration_id, project.id)
+    await _service.delete(db, integration_id, project.id, actor=current_user, request=request)
 
 
 @router.post("/{integration_id}/rotate-secret/", response_model=RepositoryIntegrationSecretOut)

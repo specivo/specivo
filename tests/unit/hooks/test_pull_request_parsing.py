@@ -170,6 +170,130 @@ def test_gitlab_timestamps_in_both_formats() -> None:
 
 
 # ---------------------------------------------------------------------------
+# From outside: a fork or an author who is not a collaborator
+# ---------------------------------------------------------------------------
+
+
+def _external(provider: str, payload: dict[str, Any]) -> bool:
+    event = get_provider(provider).parse_pull_request(payload)
+    assert event is not None
+    return event.external
+
+
+def test_github_same_repository_by_the_owner_is_not_external() -> None:
+    assert _external("github", _github()) is False
+
+
+def test_github_fork_is_external() -> None:
+    payload = _github()
+    payload["pull_request"]["head"]["repo"] = {"id": 4242, "full_name": "outsider/widgets"}
+    assert _external("github", payload) is True
+
+
+def test_github_fork_whose_repository_was_deleted_is_external() -> None:
+    payload = _github()
+    payload["pull_request"]["head"]["repo"] = None
+    assert _external("github", payload) is True
+
+
+@pytest.mark.parametrize(
+    ("association", "external"),
+    [
+        ("OWNER", False),
+        ("MEMBER", False),
+        ("COLLABORATOR", False),
+        ("CONTRIBUTOR", True),
+        ("FIRST_TIME_CONTRIBUTOR", True),
+        ("FIRST_TIMER", True),
+        ("NONE", True),
+    ],
+)
+def test_github_author_association(association: str, external: bool) -> None:
+    assert _external("github", _github(author_association=association)) is external
+
+
+# A payload that does not say where the request comes from is treated as
+# external (the conservative choice): with the option on it is skipped until
+# the merge, which is processed anyway.
+
+
+@pytest.mark.parametrize("side", ["head", "base"])
+def test_github_without_a_repository_is_external(side: str) -> None:
+    payload = _github()
+    payload["pull_request"][side].pop("repo")
+    assert _external("github", payload) is True
+
+
+def test_github_without_author_association_is_external() -> None:
+    payload = _github()
+    payload["pull_request"].pop("author_association")
+    assert _external("github", payload) is True
+
+
+@pytest.mark.parametrize("provider", ["gitea", "forgejo"])
+@pytest.mark.parametrize("side", ["head", "base"])
+def test_gitea_family_without_a_repository_id_is_external(provider: str, side: str) -> None:
+    payload = copy.deepcopy(fixture(f"{provider}_pull_request.json"))
+    payload["pull_request"][side].pop("repo_id", None)
+    payload["pull_request"][side].pop("repo", None)
+    assert _external(provider, payload) is True
+
+
+@pytest.mark.parametrize("provider", ["gitea", "forgejo"])
+def test_gitea_family_needs_no_author_association(provider: str) -> None:
+    payload = copy.deepcopy(fixture(f"{provider}_pull_request.json"))
+    assert "author_association" not in payload["pull_request"]
+    assert _external(provider, payload) is False
+
+
+@pytest.mark.parametrize("field", ["source_project_id", "target_project_id"])
+def test_gitlab_without_a_project_id_is_external(field: str) -> None:
+    payload = _gitlab()
+    payload["object_attributes"].pop(field)
+    assert _external("gitlab", payload) is True
+
+
+@pytest.mark.parametrize("provider", ["github", "gitea", "forgejo"])
+@pytest.mark.parametrize("head", ["not-an-object", None, 12])
+def test_malformed_head_is_external_and_does_not_crash(provider: str, head: Any) -> None:
+    name = "github_pull_request.json" if provider == "github" else f"{provider}_pull_request.json"
+    payload = copy.deepcopy(fixture(name))
+    payload["pull_request"]["head"] = head
+    assert _external(provider, payload) is True
+
+
+def test_github_repository_ids_beyond_32_bits_compare() -> None:
+    """GitHub repository ids grow past 2**31; the comparison must not lose them."""
+    big = 2**31 + 5
+    same = _github()
+    for side in ("head", "base"):
+        same["pull_request"][side]["repo"]["id"] = big
+    assert _external("github", same) is False
+    fork = copy.deepcopy(same)
+    fork["pull_request"]["head"]["repo"]["id"] = big + 1
+    assert _external("github", fork) is True
+
+
+def test_gitlab_project_ids_beyond_32_bits_compare() -> None:
+    big = 2**31 + 5
+    assert _external("gitlab", _gitlab(source_project_id=big, target_project_id=big)) is False
+    assert _external("gitlab", _gitlab(source_project_id=big + 1, target_project_id=big)) is True
+
+
+@pytest.mark.parametrize(("source", "external"), [(1, False), (4242, True)])
+def test_gitlab_source_project(source: int, external: bool) -> None:
+    assert _external("gitlab", _gitlab(source_project_id=source)) is external
+
+
+@pytest.mark.parametrize("provider", ["gitea", "forgejo"])
+@pytest.mark.parametrize(("head_repo_id", "external"), [(1, False), (4242, True)])
+def test_gitea_family_head_repository(provider: str, head_repo_id: int, external: bool) -> None:
+    payload = copy.deepcopy(fixture(f"{provider}_pull_request.json"))
+    payload["pull_request"]["head"]["repo_id"] = head_repo_id
+    assert _external(provider, payload) is external
+
+
+# ---------------------------------------------------------------------------
 # Links
 # ---------------------------------------------------------------------------
 
