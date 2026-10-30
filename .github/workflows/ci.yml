@@ -181,3 +181,25 @@ jobs:
           name: playwright-traces
           path: test-results/
           retention-days: 7
+
+  # Starts the default docker-compose.yml with an image built from this commit
+  # and checks that the bundled nginx answers on the published port.
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build image
+        run: docker build -t specivo/specivo:ci-smoke .
+      - name: Start the default stack
+        env:
+          SPECIVO_VERSION: ci-smoke
+        run: docker compose up -d --wait --wait-timeout 300
+      - name: nginx answers on the published port
+        run: curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors http://localhost:9933/health/
+      - name: Show container state and logs
+        if: failure()
+        env:
+          SPECIVO_VERSION: ci-smoke
+        run: |
+          docker compose ps -a
+          docker compose logs --tail 200

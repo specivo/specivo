@@ -179,9 +179,12 @@ services:
     restart: unless-stopped
 
 networks:
-  # nginx and the api only. Change SPECIVO_PROXY_SUBNET and SPECIVO_NGINX_IP
-  # together if the range is taken on your host.
+  # nginx and the api only. Change SPECIVO_PROXY_SUBNET, SPECIVO_PROXY_IP_RANGE
+  # and SPECIVO_NGINX_IP together if the range is taken on your host.
+  # Automatic addresses come from ip_range only, so the api, which starts
+  # first, never takes nginx's fixed address.
   proxy:
     ipam:
       config:
         - subnet: ${SPECIVO_PROXY_SUBNET:-10.213.47.0/29}
+          ip_range: ${SPECIVO_PROXY_IP_RANGE:-10.213.47.4/30}
