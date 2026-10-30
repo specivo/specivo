@@ -39,6 +39,10 @@ _PARITY_INPUTS: list[tuple[str, str]] = [
         "```python\ndef hello() -> str:\n    return 'world'\n```\n",
     ),
     (
+        "mermaid",
+        "```mermaid\nflowchart LR\n    A[<b>start</b>] --> B\n```\n",
+    ),
+    (
         "table",
         "| col a | col b |\n| --- | --- |\n| 1 | 2 |\n| 3 | 4 |\n",
     ),

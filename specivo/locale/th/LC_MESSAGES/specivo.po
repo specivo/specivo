@@ -268,7 +268,7 @@ msgstr "ไม่สามารถตอบกลับความคิดเ
 msgid "Text is too long ({length} characters); the limit is {limit}."
 msgstr "ข้อความยาวเกินไป ({length} ตัวอักษร) จำกัดไว้ที่ {limit} ตัวอักษร"
 
-#: specivo/services/markdown_service.py:202
+#: specivo/services/markdown_service.py:247
 msgid "This text is too complex to format, so it is shown as plain text."
 msgstr "ข้อความนี้ซับซ้อนเกินกว่าจะจัดรูปแบบได้ จึงแสดงเป็นข้อความธรรมดา"
 
@@ -320,11 +320,15 @@ msgstr "กฎฟิลด์ซ้ำ"
 msgid "Workflow field rule not found"
 msgstr "ไม่พบกฎฟิลด์"
 
-#: specivo/templates/themes/default/base.html:37
+#: specivo/templates/themes/default/base.html:18
+msgid "This diagram could not be drawn. Its source is shown below."
+msgstr "วาดแผนภาพนี้ไม่ได้ จึงแสดงซอร์สไว้ด้านล่าง"
+
+#: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
 msgstr "คุณกำลังอ่านโปรเจกต์สาธารณะ เข้าสู่ระบบเพื่อมีส่วนร่วม"
 
-#: specivo/templates/themes/default/base.html:38
+#: specivo/templates/themes/default/base.html:40
 #: specivo/templates/themes/default/components/header.html:93
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
@@ -332,7 +336,7 @@ msgstr "คุณกำลังอ่านโปรเจกต์สาธา
 msgid "Sign in"
 msgstr "เข้าสู่ระบบ"
 
-#: specivo/templates/themes/default/base.html:43
+#: specivo/templates/themes/default/base.html:45
 msgid "Powered by"
 msgstr "ขับเคลื่อนโดย"
 

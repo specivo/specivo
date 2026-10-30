@@ -16,6 +16,11 @@ Copyright 2015 Sparksuite, Inc.; 2017 Jeroen Akkerman
 Markdown editor (CodeMirror 5 based) used for wiki and issue description editing.
 https://github.com/Ionaru/easy-markdown-editor
 
+## Mermaid — MIT License
+Copyright 2014 - 2022 Knut Sveidqvist
+Diagrams from text, used for mermaid code blocks in wiki pages, issues and comments.
+https://github.com/mermaid-js/mermaid
+
 ## Observable Plot — ISC License
 Copyright 2020-2024 Observable, Inc.
 

@@ -79,6 +79,15 @@
 .prose th { text-align: left; padding: var(--sp-space-sm) var(--sp-space-md); border-bottom: 2px solid var(--sp-border); font-weight: 600; color: var(--sp-text-primary); font-size: var(--sp-font-size-xs); text-transform: uppercase; letter-spacing: 0.05em; }
 .prose td { padding: var(--sp-space-sm) var(--sp-space-md); border-bottom: 1px solid var(--sp-border); }
 
+/* Mermaid diagrams: the server renders the source as pre.sp-mermaid (shown as a
+   code block until it is drawn, and kept when it cannot be); modules/mermaid.js
+   puts the SVG in .sp-mermaid-diagram before it. */
+.sp-mermaid { background: #0d0b20; color: #d4cfc0; padding: var(--sp-space-lg) var(--sp-space-xl); border-radius: var(--sp-border-radius); font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); line-height: 1.6; overflow-x: auto; margin: var(--sp-space-lg) 0; white-space: pre; }
+.sp-mermaid-diagram { margin: var(--sp-space-lg) 0; overflow-x: auto; text-align: center; }
+.sp-mermaid-diagram svg { max-width: 100%; height: auto; }
+.sp-mermaid-error { margin: var(--sp-space-lg) 0 calc(-1 * var(--sp-space-sm)); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); font-style: italic; }
+.sp-mermaid-error::before { content: "\26A0\FE0E\00A0"; font-style: normal; }
+
 /* Pygments syntax highlighting (monokai, adjusted to match #0d0b20 code block background) */
 .codehilite { background: #0d0b20; color: #F8F8F2; padding: var(--sp-space-lg) var(--sp-space-xl); border-radius: var(--sp-border-radius); font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); line-height: 1.6; overflow-x: auto; margin: var(--sp-space-lg) 0; }
 .codehilite pre { background: none; color: inherit; padding: 0; margin: 0; border-radius: 0; overflow: visible; }
@@ -125,7 +134,7 @@
 .editor-textarea { width: 100%; min-height: 500px; padding: var(--sp-space-xl); border: none; font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); line-height: 1.7; color: var(--sp-text-primary); background: var(--sp-bg-surface); outline: none; resize: vertical; tab-size: 4; }
 .editor-textarea:focus { box-shadow: inset 0 0 0 2px rgba(196, 154, 60, 0.15); }
 .editor-textarea::placeholder { color: var(--sp-text-muted); }
-.editor-preview { display: none; padding: var(--sp-space-2xl) var(--sp-space-3xl); line-height: 1.75; color: var(--sp-text-secondary); }
+.editor-preview { padding: var(--sp-space-2xl) var(--sp-space-3xl); line-height: 1.75; color: var(--sp-text-secondary); }
 .editor-preview h2 { font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 600; color: var(--sp-text-primary); margin: var(--sp-space-2xl) 0 var(--sp-space-md); padding-bottom: var(--sp-space-sm); border-bottom: 1px solid var(--sp-border); letter-spacing: -0.01em; }
 .editor-preview h2:first-child { margin-top: 0; }
 .editor-preview h3 { font-size: var(--sp-font-size-lg); font-weight: 600; color: var(--sp-text-primary); margin: var(--sp-space-xl) 0 var(--sp-space-sm); }

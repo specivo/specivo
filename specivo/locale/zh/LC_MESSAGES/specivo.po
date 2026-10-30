@@ -258,7 +258,7 @@ msgstr "无法回复其他工作项的日志记录"
 msgid "Text is too long ({length} characters); the limit is {limit}."
 msgstr "文本过长（{length} 个字符），上限为 {limit} 个字符。"
 
-#: specivo/services/markdown_service.py:202
+#: specivo/services/markdown_service.py:247
 msgid "This text is too complex to format, so it is shown as plain text."
 msgstr "此文本过于复杂，无法格式化，因此以纯文本显示。"
 
@@ -308,11 +308,15 @@ msgstr "工作流字段规则重复"
 msgid "Workflow field rule not found"
 msgstr "未找到工作流字段规则"
 
-#: specivo/templates/themes/default/base.html:37
+#: specivo/templates/themes/default/base.html:18
+msgid "This diagram could not be drawn. Its source is shown below."
+msgstr ""
+
+#: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
 msgstr "你正在浏览一个公开项目。登录后即可参与。"
 
-#: specivo/templates/themes/default/base.html:38
+#: specivo/templates/themes/default/base.html:40
 #: specivo/templates/themes/default/components/header.html:93
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
@@ -320,7 +324,7 @@ msgstr "你正在浏览一个公开项目。登录后即可参与。"
 msgid "Sign in"
 msgstr "登录"
 
-#: specivo/templates/themes/default/base.html:43
+#: specivo/templates/themes/default/base.html:45
 msgid "Powered by"
 msgstr "技术支持"
 

@@ -281,7 +281,7 @@ msgstr "No se puede responder a un registro de otra incidencia"
 msgid "Text is too long ({length} characters); the limit is {limit}."
 msgstr "El texto es demasiado largo ({length} caracteres); el límite es {limit}."
 
-#: specivo/services/markdown_service.py:202
+#: specivo/services/markdown_service.py:247
 msgid "This text is too complex to format, so it is shown as plain text."
 msgstr ""
 "Este texto es demasiado complejo para darle formato, así que se muestra "
@@ -337,11 +337,15 @@ msgstr "Regla de campo de flujo de trabajo duplicada"
 msgid "Workflow field rule not found"
 msgstr "Regla de campo de flujo de trabajo no encontrada"
 
-#: specivo/templates/themes/default/base.html:37
+#: specivo/templates/themes/default/base.html:18
+msgid "This diagram could not be drawn. Its source is shown below."
+msgstr ""
+
+#: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
 msgstr "Estás leyendo un proyecto público. Inicia sesión para participar."
 
-#: specivo/templates/themes/default/base.html:38
+#: specivo/templates/themes/default/base.html:40
 #: specivo/templates/themes/default/components/header.html:93
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
@@ -349,7 +353,7 @@ msgstr "Estás leyendo un proyecto público. Inicia sesión para participar."
 msgid "Sign in"
 msgstr "Iniciar sesión"
 
-#: specivo/templates/themes/default/base.html:43
+#: specivo/templates/themes/default/base.html:45
 msgid "Powered by"
 msgstr "Con tecnología de"
 
