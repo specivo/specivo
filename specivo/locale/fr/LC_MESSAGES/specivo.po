@@ -276,7 +276,7 @@ msgstr "Impossible de répondre à un journal sur un autre ticket"
 msgid "Text is too long ({length} characters); the limit is {limit}."
 msgstr "Le texte est trop long ({length} caractères) ; la limite est de {limit}."
 
-#: specivo/services/markdown_service.py:202
+#: specivo/services/markdown_service.py:247
 msgid "This text is too complex to format, so it is shown as plain text."
 msgstr ""
 "Ce texte est trop complexe pour être mis en forme ; il est donc affiché "
@@ -330,11 +330,15 @@ msgstr "Règle de champ de workflow en double"
 msgid "Workflow field rule not found"
 msgstr "Règle de champ de workflow introuvable"
 
-#: specivo/templates/themes/default/base.html:37
+#: specivo/templates/themes/default/base.html:18
+msgid "This diagram could not be drawn. Its source is shown below."
+msgstr ""
+
+#: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
 msgstr "Vous consultez un projet public. Connectez-vous pour participer."
 
-#: specivo/templates/themes/default/base.html:38
+#: specivo/templates/themes/default/base.html:40
 #: specivo/templates/themes/default/components/header.html:93
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
@@ -342,7 +346,7 @@ msgstr "Vous consultez un projet public. Connectez-vous pour participer."
 msgid "Sign in"
 msgstr "Se connecter"
 
-#: specivo/templates/themes/default/base.html:43
+#: specivo/templates/themes/default/base.html:45
 msgid "Powered by"
 msgstr "Propulsé par"
 

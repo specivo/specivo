@@ -14,6 +14,8 @@
   <link rel="stylesheet" href="/static/vendor/font-awesome/4.7.0/css/font-awesome.min.css">
   {# EasyMDE 2.18.0 — vendored Markdown editor (CodeMirror 5). See specivo/static/vendor/easymde.VENDOR.md. #}
   <link rel="stylesheet" href="/static/vendor/easymde.2.18.0.min.css">
+  {# Mermaid 11.17.2 — loaded by app.min.js only on pages with a diagram. See specivo/static/vendor/mermaid.VENDOR.md. #}
+  <meta name="sp-mermaid" content="/static/vendor/mermaid.11.17.2.min.js" data-error="{{ _('This diagram could not be drawn. Its source is shown below.') }}">
   <link rel="stylesheet" href="/static/dist/css/{{ versioned['specivo.min.css'] }}">
   {% block plugin_css %}
   {% for css_url in plugin_css_files %}

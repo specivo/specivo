@@ -232,6 +232,9 @@ rendered server-side:
   shown as plain text with a notice, never dropped. Stored Markdown fields are capped at 256 Ki
   characters (`MAX_MARKDOWN_CHARS`), checked on write and by the preview endpoint.
 - **Jinja2 filter:** `{{ content.text | markdown }}` — returns sanitized `Markup`
+- **Diagrams:** a ```` ```mermaid ```` fence renders as `<pre class="sp-mermaid">` holding the
+  escaped source; `frontend/js/modules/mermaid.js` loads the vendored Mermaid build only on pages
+  that hold one and draws it client-side (`securityLevel: 'strict'`, no HTML labels)
 - **CSS:** `.wiki-content`, `.editor-preview`, `.prose` classes style rendered HTML
 - **Editing:** the `markdownEditor` component (`frontend/js/components/markdown-editor.js`) wraps
   EasyMDE; EasyMDE must load before `alpine-init.min.js`
@@ -264,7 +267,8 @@ specivo/static/
   vendor/                          # third-party — immutable
                                    #   bootstrap, alpine (standard + csp builds), htmx
                                    #   (+ json-enc ext), easymde, font-awesome,
-                                   #   observable-plot (charts)
+                                   #   observable-plot (charts), mermaid (diagrams,
+                                   #   loaded on demand by modules/mermaid.js)
   fonts/                           # self-hosted WOFF2 — immutable
   img/                             # SVG favicon
 ```

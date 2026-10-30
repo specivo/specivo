@@ -13,6 +13,8 @@ Pipeline:
       -> render_hazard(...)        over the size, nesting or cost budget:
                                    the raw text, escaped, with a notice instead
       -> markdown.markdown(...)    with fenced_code, tables, toc, codehilite
+           + mermaid fences: ```mermaid -> <pre class="sp-mermaid">source</pre>
+             (the browser draws the diagram, see frontend/js/modules/mermaid.js)
            + wiki link inline pattern: [[Page]] -> <a href="/projects/X/wiki/page/">
            + issue ref inline pattern: PROJ-123 -> <a href="/issue/PROJ-123/">
              (both on parsed text only, so code and raw HTML blocks are never
@@ -38,7 +40,10 @@ import markdown as _md
 import markupsafe
 import nh3
 from markdown.extensions import Extension  # type: ignore[import-untyped]
+from markdown.extensions.attr_list import get_attrs_and_remainder  # type: ignore[import-untyped]
+from markdown.extensions.fenced_code import FencedBlockPreprocessor  # type: ignore[import-untyped]
 from markdown.inlinepatterns import InlineProcessor  # type: ignore[import-untyped]
+from markdown.preprocessors import Preprocessor  # type: ignore[import-untyped]
 from markdown.treeprocessors import Treeprocessor  # type: ignore[import-untyped]
 
 from specivo.core.i18n import gettext as _
@@ -119,7 +124,47 @@ _ALLOWED_ATTRIBUTES: dict[str, set[str]] = {
     "h6": {"id"},
 }
 
-_MD_EXTENSIONS = ["fenced_code", "tables", "toc", "codehilite"]
+
+class _MermaidPreprocessor(Preprocessor):
+    """Stash each ```` ```mermaid ```` fence as ``<pre class="sp-mermaid">`` with its source escaped.
+
+    Runs just before ``fenced_code`` and walks the fences as it does, so a
+    mermaid fence inside a longer fence stays code. The source is kept as
+    text: search, exports and MCP reads see it, and the browser module that
+    draws the diagram reads it back with ``textContent``. Other fences are
+    left for ``fenced_code``.
+    """
+
+    def run(self, lines: list[str]) -> list[str]:
+        text = "\n".join(lines)
+        index = 0
+        while m := FencedBlockPreprocessor.FENCED_BLOCK_RE.search(text, index):
+            lang = m.group("lang")
+            if m.group("attrs"):
+                attrs, remainder = get_attrs_and_remainder(m.group("attrs"))
+                if remainder:
+                    # fenced_code skips a malformed attribute list the same way.
+                    index = m.end("attrs")
+                    continue
+                classes = [value for key, value in attrs if key == "."]
+                lang = classes[0] if classes else None
+            if lang != "mermaid":
+                index = m.end()
+                continue
+            html = markupsafe.Markup('<pre class="sp-mermaid">{}</pre>').format(m.group("code"))
+            placeholder = self.md.htmlStash.store(str(html))
+            text = f"{text[: m.start()]}\n{placeholder}\n{text[m.end() :]}"
+            index = m.start() + 1 + len(placeholder)
+        return text.split("\n")
+
+
+class _MermaidExtension(Extension):
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Just above fenced_code (25), so mermaid fences are taken first.
+        md.preprocessors.register(_MermaidPreprocessor(md), "mermaid_fences", 26)
+
+
+_MD_EXTENSIONS: list = ["fenced_code", "tables", "toc", "codehilite", _MermaidExtension()]
 _MD_EXTENSION_CONFIGS = {
     "codehilite": {"css_class": "codehilite", "guess_lang": False},
 }

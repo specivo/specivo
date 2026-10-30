@@ -273,7 +273,7 @@ msgstr "Нельзя ответить на запись журнала из др
 msgid "Text is too long ({length} characters); the limit is {limit}."
 msgstr "Текст слишком длинный (символов: {length}); допустимо не более {limit}."
 
-#: specivo/services/markdown_service.py:202
+#: specivo/services/markdown_service.py:247
 msgid "This text is too complex to format, so it is shown as plain text."
 msgstr ""
 "Этот текст слишком сложен для форматирования, поэтому он показан как "
@@ -329,11 +329,15 @@ msgstr "Дублирующееся правило поля в рабочем п�
 msgid "Workflow field rule not found"
 msgstr "Правило поля рабочего процесса не найдено"
 
-#: specivo/templates/themes/default/base.html:37
+#: specivo/templates/themes/default/base.html:18
+msgid "This diagram could not be drawn. Its source is shown below."
+msgstr ""
+
+#: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
 msgstr "Вы просматриваете публичный проект. Войдите, чтобы участвовать."
 
-#: specivo/templates/themes/default/base.html:38
+#: specivo/templates/themes/default/base.html:40
 #: specivo/templates/themes/default/components/header.html:93
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
@@ -341,7 +345,7 @@ msgstr "Вы просматриваете публичный проект. Во�
 msgid "Sign in"
 msgstr "Войти"
 
-#: specivo/templates/themes/default/base.html:43
+#: specivo/templates/themes/default/base.html:45
 msgid "Powered by"
 msgstr "Работает на"
 
