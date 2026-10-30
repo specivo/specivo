@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, delete, false, func, or_, select, tuple_, update
+from sqlalchemy import and_, delete, false, func, or_, select, tuple_, union_all, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -391,12 +391,92 @@ class IssueService:
             return False
 
         visibility = await self._get_best_visibility(session, user, project)
+        return self._visible_at(issue, user, visibility)
+
+    @staticmethod
+    def _visible_at(issue: Issue, user: User, visibility: str | None) -> bool:
+        """Return whether *user* sees the loaded *issue* at *visibility*: ``_visibility_clause`` in Python."""
         own = not user.is_anonymous and user.id in (issue.author_id, issue.assigned_to_id)
         if visibility in ("all", "default"):
             return not issue.is_private or own
         if visibility == "own":
             return own
         return False
+
+    async def users_who_can_view(self, session: AsyncSession, issue: Issue, user_ids: Iterable[int]) -> list[User]:
+        """Return the users among *user_ids* who may see *issue*, in the order given.
+
+        The batch form of ``is_visible`` for notification delivery, with the
+        rules of ``visible_issues_clause``: the roles of the user's
+        memberships, direct or through a group, and without one, on a public
+        project, the Non member role and anonymous access. Admins see
+        everything. Only active, real accounts qualify, so locked and
+        deactivated users get nothing. Every candidate is resolved at once, in
+        a constant number of queries.
+
+        The authenticating API key's project limit does not apply: it narrows
+        what the caller reads, not who hears about the caller's changes.
+        """
+        ids = list(dict.fromkeys(user_ids))
+        if not ids:
+            return []
+
+        from specivo.models.user_group import UserGroupMember
+        from specivo.services.anonymous_user_service import real_users_clause
+        from specivo.services.permission_service import (
+            Permission,
+            anonymous_role,
+            get_non_member_role,
+            role_grants,
+        )
+
+        result = await session.execute(
+            select(User).where(User.id.in_(ids), User.status == "active", real_users_clause())
+        )
+        users = {user.id: user for user in result.scalars().all()}
+        if not users:
+            return []
+
+        direct = select(Member.user_id.label("user_id"), Member.id.label("member_id")).where(
+            Member.project_id == issue.project_id, Member.user_id.in_(users)
+        )
+        via_group = (
+            select(UserGroupMember.user_id, Member.id)
+            .join(Member, Member.group_id == UserGroupMember.group_id)
+            .where(Member.project_id == issue.project_id, UserGroupMember.user_id.in_(users))
+        )
+        principals = union_all(direct, via_group).subquery()
+        rows = await session.execute(
+            select(principals.c.user_id, Role.issues_visibility, Role.permissions)
+            .select_from(principals)
+            .outerjoin(MemberRole, MemberRole.member_id == principals.c.member_id)
+            .outerjoin(Role, Role.id == MemberRole.role_id)
+        )
+        # A membership whose roles grant no view_issues shows nothing and is
+        # not topped up by the Non member role, as in get_user_roles.
+        member_visibilities: dict[int, set[str]] = defaultdict(set)
+        for user_id, visibility, permissions in rows:
+            granted = member_visibilities[user_id]
+            if visibility is not None and role_grants(permissions, Permission.VIEW_ISSUES):
+                granted.add(visibility)
+
+        non_member_visibilities: set[str] = set()
+        project = await session.get(Project, issue.project_id)
+        if project is not None and project.is_public:
+            fallback = [await get_non_member_role(session), await anonymous_role(session, project)]
+            non_member_visibilities = {
+                role.issues_visibility for role in fallback if role is not None and role.grants(Permission.VIEW_ISSUES)
+            }
+
+        visible: list[User] = []
+        for user_id in ids:
+            user = users.get(user_id)
+            if user is None:
+                continue
+            visibilities = member_visibilities.get(user_id, non_member_visibilities)
+            if user.is_admin or self._visible_at(issue, user, self._best_visibility(visibilities)):
+                visible.append(user)
+        return visible
 
     async def list_visible_children(self, session: AsyncSession, issue: Issue, user: User) -> list[Issue]:
         """Return *issue*'s direct children that *user* may see, in nested-set order."""
