@@ -165,13 +165,17 @@ any client.
 
 `docker-compose.yml` puts nginx and the api on their own network, `proxy`
 (`10.213.47.0/29`), with nginx at the fixed address `10.213.47.2`, and sets
-`TRUSTED_PROXIES=["10.213.47.2/32"]`. Nothing else is on that network, the api publishes no port,
-and nginx appends the address it saw, so it works without changes. If that range is already used on
-your host (`docker compose up` fails with "Pool overlaps"), pick another one in `.env`:
+`TRUSTED_PROXIES=["10.213.47.2/32"]`. Docker hands out automatic addresses, such as the api's,
+only from `10.213.47.4/30`, so they never collide with nginx's. Nothing else is on that network,
+the api publishes no port, and nginx appends the address it saw, so it works without changes. If
+that range is already used on your host (`docker compose up` fails with "Pool overlaps"), pick
+another one in `.env`. Change all three together, and keep the nginx address inside the subnet
+but outside the range:
 
 ```bash
 # .env
 SPECIVO_PROXY_SUBNET=10.99.0.0/29
+SPECIVO_PROXY_IP_RANGE=10.99.0.4/30
 SPECIVO_NGINX_IP=10.99.0.2
 ```
 
