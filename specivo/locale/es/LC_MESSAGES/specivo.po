@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 15:02+0100\n"
+"POT-Creation-Date: 2026-10-30 15:15+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <EMAIL@ADDRESS>\n"
 "Language: es\n"
@@ -184,17 +184,17 @@ msgstr "La nueva contraseña debe ser distinta de la actual"
 msgid "Password must be at least %(count)d characters"
 msgstr "La contraseña debe tener al menos %(count)d caracteres"
 
-#: specivo/services/issue_service.py:96
+#: specivo/services/issue_service.py:97
 msgid "No issue statuses found; run seed data first"
 msgstr ""
 "No se encontraron estados de incidencia; ejecuta primero los datos "
 "iniciales"
 
-#: specivo/services/issue_service.py:136
+#: specivo/services/issue_service.py:137
 msgid "You do not have permission to set issue privacy"
 msgstr "No tienes permiso para cambiar la privacidad de las incidencias"
 
-#: specivo/services/issue_service.py:138
+#: specivo/services/issue_service.py:139
 msgid ""
 "Issues of this tracker are private by default; you do not have permission"
 " to change that"
@@ -202,50 +202,50 @@ msgstr ""
 "Las incidencias de este tipo de seguimiento son privadas por defecto; no "
 "tienes permiso para cambiarlo"
 
-#: specivo/services/issue_service.py:158
+#: specivo/services/issue_service.py:159
 msgid "No issue priorities found; run seed data first"
 msgstr ""
 "No se encontraron prioridades de incidencia; ejecuta primero los datos "
 "iniciales"
 
-#: specivo/services/issue_service.py:178
+#: specivo/services/issue_service.py:179
 #, python-format
 msgid "Version %(id)s not found"
 msgstr "Versión %(id)s no encontrada"
 
-#: specivo/services/issue_service.py:184
+#: specivo/services/issue_service.py:185
 msgid "Version does not belong to this project"
 msgstr "La versión no pertenece a este proyecto"
 
-#: specivo/services/issue_service.py:190
+#: specivo/services/issue_service.py:191
 #, python-format
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "No se pueden asignar incidencias a una versión %(status)s"
 
-#: specivo/services/issue_service.py:203
+#: specivo/services/issue_service.py:204
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "Sprint %(id)s no encontrado"
 
-#: specivo/services/issue_service.py:209
+#: specivo/services/issue_service.py:210
 msgid "Sprint does not belong to this project"
 msgstr "El sprint no pertenece a este proyecto"
 
-#: specivo/services/issue_service.py:215
+#: specivo/services/issue_service.py:216
 msgid "Cannot assign issues to a completed sprint"
 msgstr "No se pueden asignar incidencias a un sprint completado"
 
-#: specivo/services/issue_service.py:851
+#: specivo/services/issue_service.py:853
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 "La incidencia fue modificada por otra solicitud. Recarga e inténtalo de "
 "nuevo."
 
-#: specivo/services/issue_service.py:1001
+#: specivo/services/issue_service.py:1006
 msgid "Issue is already in this project."
 msgstr "La incidencia ya está en este proyecto."
 
-#: specivo/services/issue_service.py:1010
+#: specivo/services/issue_service.py:1015
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -254,12 +254,12 @@ msgstr ""
 "Sepárala de su incidencia padre y mueve o separa primero sus incidencias "
 "hijas."
 
-#: specivo/services/issue_service.py:1061
+#: specivo/services/issue_service.py:1066
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Movida de {old} a {new}."
 
-#: specivo/services/issue_service.py:1131
+#: specivo/services/issue_service.py:1140
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -268,11 +268,11 @@ msgstr ""
 "Filtro de estado desconocido '{value}'. Usa 'open', 'closed', 'all', un "
 "id de estado o uno de: {known}"
 
-#: specivo/services/journal_service.py:311
+#: specivo/services/journal_service.py:312
 msgid "The history entry does not belong to this issue."
 msgstr "La entrada del historial no pertenece a esta incidencia."
 
-#: specivo/services/journal_service.py:417
+#: specivo/services/journal_service.py:418
 msgid "Cannot reply to a journal on a different issue"
 msgstr "No se puede responder a un registro de otra incidencia"
 
@@ -543,9 +543,9 @@ msgstr "Proyectos"
 #: specivo/templates/themes/default/pages/projects/list.html:87
 #: specivo/templates/themes/default/pages/projects/list.html:161
 #: specivo/templates/themes/default/pages/projects/list.html:192
-#: specivo/templates/themes/default/pages/projects/settings.html:82
-#: specivo/templates/themes/default/pages/projects/settings.html:346
-#: specivo/templates/themes/default/pages/projects/settings.html:913
+#: specivo/templates/themes/default/pages/projects/settings.html:83
+#: specivo/templates/themes/default/pages/projects/settings.html:347
+#: specivo/templates/themes/default/pages/projects/settings.html:914
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:100
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:127
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:191
@@ -578,7 +578,7 @@ msgstr "Sprint actual"
 #: specivo/templates/themes/default/pages/projects/detail.html:45
 #: specivo/templates/themes/default/pages/projects/list.html:88
 #: specivo/templates/themes/default/pages/projects/list.html:195
-#: specivo/templates/themes/default/pages/projects/settings.html:86
+#: specivo/templates/themes/default/pages/projects/settings.html:87
 #: specivo/templates/themes/default/pages/search.html:48
 #: specivo/templates/themes/default/pages/wiki/diff.html:10
 #: specivo/templates/themes/default/pages/wiki/edit.html:12
@@ -719,10 +719,10 @@ msgstr "Reindexando..."
 #: specivo/templates/themes/default/pages/issues/detail.html:106
 #: specivo/templates/themes/default/pages/issues/detail.html:369
 #: specivo/templates/themes/default/pages/issues/form.html:391
-#: specivo/templates/themes/default/pages/projects/settings.html:66
-#: specivo/templates/themes/default/pages/projects/settings.html:89
-#: specivo/templates/themes/default/pages/projects/settings.html:253
-#: specivo/templates/themes/default/pages/projects/settings.html:861
+#: specivo/templates/themes/default/pages/projects/settings.html:67
+#: specivo/templates/themes/default/pages/projects/settings.html:90
+#: specivo/templates/themes/default/pages/projects/settings.html:254
+#: specivo/templates/themes/default/pages/projects/settings.html:862
 #: specivo/templates/themes/default/pages/wiki/edit.html:133
 msgid "Save"
 msgstr "Guardar"
@@ -735,9 +735,10 @@ msgstr "Guardar"
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:28
 #: specivo/templates/themes/default/pages/issues/detail.html:122
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:335
-#: specivo/templates/themes/default/pages/projects/settings.html:254
-#: specivo/templates/themes/default/pages/projects/settings.html:436
-#: specivo/templates/themes/default/pages/projects/settings.html:976
+#: specivo/templates/themes/default/pages/projects/settings.html:255
+#: specivo/templates/themes/default/pages/projects/settings.html:437
+#: specivo/templates/themes/default/pages/projects/settings.html:977
+#: specivo/templates/themes/default/pages/projects/settings.html:1218
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:134
 msgid "Saving..."
@@ -778,11 +779,12 @@ msgstr "No se pudo guardar el idioma."
 #: specivo/templates/themes/default/pages/projects/detail.html:161
 #: specivo/templates/themes/default/pages/projects/list.html:32
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:33
-#: specivo/templates/themes/default/pages/projects/settings.html:37
-#: specivo/templates/themes/default/pages/projects/settings.html:264
-#: specivo/templates/themes/default/pages/projects/settings.html:285
-#: specivo/templates/themes/default/pages/projects/settings.html:827
-#: specivo/templates/themes/default/pages/projects/settings.html:873
+#: specivo/templates/themes/default/pages/projects/settings.html:38
+#: specivo/templates/themes/default/pages/projects/settings.html:265
+#: specivo/templates/themes/default/pages/projects/settings.html:286
+#: specivo/templates/themes/default/pages/projects/settings.html:828
+#: specivo/templates/themes/default/pages/projects/settings.html:874
+#: specivo/templates/themes/default/pages/projects/settings.html:1022
 #: specivo/templates/themes/default/pages/wiki/show.html:97
 msgid "Unable to connect."
 msgstr "No se pudo conectar."
@@ -804,7 +806,7 @@ msgid "Reindex failed."
 msgstr "La reindexación falló."
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:14
-#: specivo/templates/themes/default/pages/projects/settings.html:585
+#: specivo/templates/themes/default/pages/projects/settings.html:586
 #, python-format
 msgid "%(count)s issues"
 msgstr "Incidencias: %(count)s"
@@ -948,7 +950,7 @@ msgstr "de"
 #: specivo/templates/themes/default/pages/projects/detail.html:70
 #: specivo/templates/themes/default/pages/projects/detail.html:183
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:214
-#: specivo/templates/themes/default/pages/projects/settings.html:49
+#: specivo/templates/themes/default/pages/projects/settings.html:50
 #: specivo/templates/themes/default/pages/projects/version_detail.html:94
 msgid "Key"
 msgstr "Clave"
@@ -979,9 +981,10 @@ msgstr "Asunto"
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:63
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:216
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:226
-#: specivo/templates/themes/default/pages/projects/settings.html:343
-#: specivo/templates/themes/default/pages/projects/settings.html:417
-#: specivo/templates/themes/default/pages/projects/settings.html:513
+#: specivo/templates/themes/default/pages/projects/settings.html:344
+#: specivo/templates/themes/default/pages/projects/settings.html:418
+#: specivo/templates/themes/default/pages/projects/settings.html:514
+#: specivo/templates/themes/default/pages/projects/settings.html:1132
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:109
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:173
 #: specivo/templates/themes/default/pages/projects/version_detail.html:97
@@ -1030,7 +1033,7 @@ msgstr "Activo"
 #: specivo/templates/themes/default/pages/admin/_user_i18n.html:8
 #: specivo/templates/themes/default/pages/admin/versions.html:36
 #: specivo/templates/themes/default/pages/admin/versions.html:58
-#: specivo/templates/themes/default/pages/projects/settings.html:420
+#: specivo/templates/themes/default/pages/projects/settings.html:421
 msgid "Locked"
 msgstr "Bloqueada"
 
@@ -1137,14 +1140,16 @@ msgstr "Aún no hay ningún proyecto habilitado para la lectura anónima."
 #: specivo/templates/themes/default/pages/projects/list.html:97
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:116
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:333
-#: specivo/templates/themes/default/pages/projects/settings.html:251
-#: specivo/templates/themes/default/pages/projects/settings.html:432
-#: specivo/templates/themes/default/pages/projects/settings.html:461
-#: specivo/templates/themes/default/pages/projects/settings.html:562
-#: specivo/templates/themes/default/pages/projects/settings.html:773
-#: specivo/templates/themes/default/pages/projects/settings.html:794
-#: specivo/templates/themes/default/pages/projects/settings.html:974
-#: specivo/templates/themes/default/pages/projects/settings.html:1000
+#: specivo/templates/themes/default/pages/projects/settings.html:252
+#: specivo/templates/themes/default/pages/projects/settings.html:433
+#: specivo/templates/themes/default/pages/projects/settings.html:462
+#: specivo/templates/themes/default/pages/projects/settings.html:563
+#: specivo/templates/themes/default/pages/projects/settings.html:774
+#: specivo/templates/themes/default/pages/projects/settings.html:795
+#: specivo/templates/themes/default/pages/projects/settings.html:975
+#: specivo/templates/themes/default/pages/projects/settings.html:1001
+#: specivo/templates/themes/default/pages/projects/settings.html:1216
+#: specivo/templates/themes/default/pages/projects/settings.html:1240
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:72
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
@@ -1197,7 +1202,7 @@ msgstr "Gestiona cuentas de usuario, crea usuarios y restablece contraseñas."
 #: specivo/templates/themes/default/pages/admin/projects.html:42
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:299
-#: specivo/templates/themes/default/pages/projects/settings.html:172
+#: specivo/templates/themes/default/pages/projects/settings.html:173
 msgid "Groups"
 msgstr "Grupos"
 
@@ -1230,7 +1235,7 @@ msgstr "Crea y gestiona proyectos, claves y miembros."
 #: specivo/templates/themes/default/pages/admin/versions.html:11
 #: specivo/templates/themes/default/pages/admin/versions.html:22
 #: specivo/templates/themes/default/pages/projects/settings.html:25
-#: specivo/templates/themes/default/pages/projects/settings.html:308
+#: specivo/templates/themes/default/pages/projects/settings.html:309
 msgid "Versions"
 msgstr "Versiones"
 
@@ -1255,7 +1260,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/roles.html:3
 #: specivo/templates/themes/default/pages/admin/roles.html:11
 #: specivo/templates/themes/default/pages/admin/roles.html:14
-#: specivo/templates/themes/default/pages/projects/settings.html:181
+#: specivo/templates/themes/default/pages/projects/settings.html:182
 msgid "Roles"
 msgstr "Roles"
 
@@ -1480,19 +1485,19 @@ msgstr "Buscar por nombre o usuario..."
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
 #: specivo/templates/themes/default/pages/issues/detail.html:510
 #: specivo/templates/themes/default/pages/issues/form.html:359
-#: specivo/templates/themes/default/pages/projects/settings.html:148
+#: specivo/templates/themes/default/pages/projects/settings.html:149
 msgid "Add"
 msgstr "Añadir"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:60
-#: specivo/templates/themes/default/pages/projects/settings.html:149
+#: specivo/templates/themes/default/pages/projects/settings.html:150
 msgid "Adding..."
 msgstr "Añadiendo..."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:71
 #: specivo/templates/themes/default/pages/admin/users.html:44
 #: specivo/templates/themes/default/pages/issues/detail.html:383
-#: specivo/templates/themes/default/pages/projects/settings.html:109
+#: specivo/templates/themes/default/pages/projects/settings.html:110
 #: specivo/templates/themes/default/pages/time/list.html:58
 msgid "User"
 msgstr "Usuario"
@@ -1505,7 +1510,7 @@ msgstr "Usuario"
 #: specivo/templates/themes/default/pages/admin/users.html:49
 #: specivo/templates/themes/default/pages/auth/api_keys.html:97
 #: specivo/templates/themes/default/pages/issues/description_diff.html:75
-#: specivo/templates/themes/default/pages/projects/settings.html:182
+#: specivo/templates/themes/default/pages/projects/settings.html:183
 #: specivo/templates/themes/default/pages/wiki/history.html:34
 msgid "Actions"
 msgstr "Acciones"
@@ -1518,8 +1523,8 @@ msgstr "Aún no hay nadie en este grupo."
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:296
 #: specivo/templates/themes/default/pages/issues/form.html:329
 #: specivo/templates/themes/default/pages/issues/form.html:381
-#: specivo/templates/themes/default/pages/projects/settings.html:224
-#: specivo/templates/themes/default/pages/projects/settings.html:622
+#: specivo/templates/themes/default/pages/projects/settings.html:225
+#: specivo/templates/themes/default/pages/projects/settings.html:623
 msgid "Remove"
 msgstr "Eliminar"
 
@@ -1573,7 +1578,7 @@ msgid "Showing the first %(shown)s of %(total)s groups."
 msgstr "Mostrando los primeros %(shown)s de %(total)s grupos."
 
 #: specivo/templates/themes/default/pages/admin/groups.html:49
-#: specivo/templates/themes/default/pages/projects/settings.html:108
+#: specivo/templates/themes/default/pages/projects/settings.html:109
 msgid "Group"
 msgstr "Grupo"
 
@@ -1586,8 +1591,8 @@ msgstr "Grupo"
 #: specivo/templates/themes/default/pages/issues/form.html:90
 #: specivo/templates/themes/default/pages/projects/detail.html:188
 #: specivo/templates/themes/default/pages/projects/list.html:58
-#: specivo/templates/themes/default/pages/projects/settings.html:62
-#: specivo/templates/themes/default/pages/projects/settings.html:412
+#: specivo/templates/themes/default/pages/projects/settings.html:63
+#: specivo/templates/themes/default/pages/projects/settings.html:413
 msgid "Description"
 msgstr "Descripción"
 
@@ -1611,10 +1616,11 @@ msgstr "No hay grupos."
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:86
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:53
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
-#: specivo/templates/themes/default/pages/projects/settings.html:381
-#: specivo/templates/themes/default/pages/projects/settings.html:532
-#: specivo/templates/themes/default/pages/projects/settings.html:709
-#: specivo/templates/themes/default/pages/projects/settings.html:930
+#: specivo/templates/themes/default/pages/projects/settings.html:382
+#: specivo/templates/themes/default/pages/projects/settings.html:533
+#: specivo/templates/themes/default/pages/projects/settings.html:710
+#: specivo/templates/themes/default/pages/projects/settings.html:931
+#: specivo/templates/themes/default/pages/projects/settings.html:1094
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:43
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
@@ -1639,10 +1645,11 @@ msgstr "Editar"
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:98
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:133
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:89
-#: specivo/templates/themes/default/pages/projects/settings.html:384
-#: specivo/templates/themes/default/pages/projects/settings.html:535
-#: specivo/templates/themes/default/pages/projects/settings.html:712
-#: specivo/templates/themes/default/pages/projects/settings.html:933
+#: specivo/templates/themes/default/pages/projects/settings.html:385
+#: specivo/templates/themes/default/pages/projects/settings.html:536
+#: specivo/templates/themes/default/pages/projects/settings.html:713
+#: specivo/templates/themes/default/pages/projects/settings.html:934
+#: specivo/templates/themes/default/pages/projects/settings.html:1097
 #: specivo/templates/themes/default/pages/wiki/show.html:160
 #: specivo/templates/themes/default/pages/wiki/show.html:195
 #: specivo/templates/themes/default/pages/wiki/show.html:197
@@ -1662,12 +1669,12 @@ msgstr "Nuevo grupo"
 #: specivo/templates/themes/default/pages/projects/detail.html:174
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:60
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:69
-#: specivo/templates/themes/default/pages/projects/settings.html:41
-#: specivo/templates/themes/default/pages/projects/settings.html:407
-#: specivo/templates/themes/default/pages/projects/settings.html:510
-#: specivo/templates/themes/default/pages/projects/settings.html:663
-#: specivo/templates/themes/default/pages/projects/settings.html:745
-#: specivo/templates/themes/default/pages/projects/settings.html:959
+#: specivo/templates/themes/default/pages/projects/settings.html:42
+#: specivo/templates/themes/default/pages/projects/settings.html:408
+#: specivo/templates/themes/default/pages/projects/settings.html:511
+#: specivo/templates/themes/default/pages/projects/settings.html:664
+#: specivo/templates/themes/default/pages/projects/settings.html:746
+#: specivo/templates/themes/default/pages/projects/settings.html:960
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:29
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:62
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:196
@@ -1726,9 +1733,9 @@ msgstr "Este grupo no otorga acceso a ningún proyecto, así que no se revoca na
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:344
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:134
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:118
-#: specivo/templates/themes/default/pages/projects/settings.html:463
-#: specivo/templates/themes/default/pages/projects/settings.html:564
-#: specivo/templates/themes/default/pages/projects/settings.html:1002
+#: specivo/templates/themes/default/pages/projects/settings.html:464
+#: specivo/templates/themes/default/pages/projects/settings.html:565
+#: specivo/templates/themes/default/pages/projects/settings.html:1003
 #: specivo/templates/themes/default/pages/wiki/show.html:234
 msgid "Deleting..."
 msgstr "Eliminando..."
@@ -1785,6 +1792,7 @@ msgstr "Motivo"
 #: specivo/templates/themes/default/pages/issues/detail.html:270
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
+#: specivo/templates/themes/default/pages/projects/settings.html:1130
 msgid "Time"
 msgstr "Tiempo"
 
@@ -1806,7 +1814,7 @@ msgid "Create preset"
 msgstr "Crear ajuste predefinido"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:17
-#: specivo/templates/themes/default/pages/projects/settings.html:588
+#: specivo/templates/themes/default/pages/projects/settings.html:589
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:96
 msgid "Save Changes"
 msgstr "Guardar cambios"
@@ -1824,7 +1832,7 @@ msgid "Use lowercase letters, numbers and dashes only."
 msgstr "Usa solo letras minúsculas, números y guiones."
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:21
-#: specivo/templates/themes/default/pages/projects/settings.html:580
+#: specivo/templates/themes/default/pages/projects/settings.html:581
 msgid "Schema definition is required."
 msgstr "La definición del esquema es obligatoria."
 
@@ -1833,7 +1841,7 @@ msgid "Root schema type must be \"object\"."
 msgstr "El tipo raíz del esquema debe ser \"object\"."
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:23
-#: specivo/templates/themes/default/pages/projects/settings.html:582
+#: specivo/templates/themes/default/pages/projects/settings.html:583
 #, python-format
 msgid "Invalid JSON: %(error)s"
 msgstr "JSON no válido: %(error)s"
@@ -1957,7 +1965,7 @@ msgstr ""
 "megaphone, sprint, book, star"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:196
-#: specivo/templates/themes/default/pages/projects/settings.html:759
+#: specivo/templates/themes/default/pages/projects/settings.html:760
 msgid "Schema Definition (JSON)"
 msgstr "Definición del esquema (JSON)"
 
@@ -1990,8 +1998,8 @@ msgid "Delete Preset"
 msgstr "Eliminar ajuste predefinido"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:15
-#: specivo/templates/themes/default/pages/projects/settings.html:36
-#: specivo/templates/themes/default/pages/projects/settings.html:826
+#: specivo/templates/themes/default/pages/projects/settings.html:37
+#: specivo/templates/themes/default/pages/projects/settings.html:827
 #: specivo/templates/themes/default/pages/wiki/edit.html:41
 msgid "Failed to save"
 msgstr "No se pudo guardar"
@@ -2009,7 +2017,7 @@ msgstr "Archivado"
 #: specivo/templates/themes/default/pages/admin/versions.html:40
 #: specivo/templates/themes/default/pages/admin/versions.html:59
 #: specivo/templates/themes/default/pages/issues/list.html:43
-#: specivo/templates/themes/default/pages/projects/settings.html:421
+#: specivo/templates/themes/default/pages/projects/settings.html:422
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:106
 #: specivo/templates/themes/default/pages/projects/version_detail.html:85
 msgid "Closed"
@@ -2066,7 +2074,7 @@ msgstr "p. ej. Backend API"
 #: specivo/templates/themes/default/pages/projects/detail.html:66
 #: specivo/templates/themes/default/pages/projects/detail.html:179
 #: specivo/templates/themes/default/pages/projects/list.html:47
-#: specivo/templates/themes/default/pages/projects/settings.html:45
+#: specivo/templates/themes/default/pages/projects/settings.html:46
 msgid "Identifier"
 msgstr "Identificador"
 
@@ -2093,13 +2101,13 @@ msgstr "Breve descripción del proyecto..."
 
 #: specivo/templates/themes/default/pages/admin/projects.html:137
 #: specivo/templates/themes/default/pages/projects/list.html:63
-#: specivo/templates/themes/default/pages/projects/settings.html:964
+#: specivo/templates/themes/default/pages/projects/settings.html:965
 msgid "Color"
 msgstr "Color"
 
 #: specivo/templates/themes/default/pages/admin/projects.html:149
 #: specivo/templates/themes/default/pages/projects/list.html:75
-#: specivo/templates/themes/default/pages/projects/settings.html:53
+#: specivo/templates/themes/default/pages/projects/settings.html:54
 msgid "Parent project"
 msgstr "Proyecto padre"
 
@@ -2137,7 +2145,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/users.html:151
 #: specivo/templates/themes/default/pages/admin/workflows.html:29
 #: specivo/templates/themes/default/pages/auth/profile.html:75
-#: specivo/templates/themes/default/pages/projects/settings.html:138
+#: specivo/templates/themes/default/pages/projects/settings.html:139
 msgid "Role"
 msgstr "Rol"
 
@@ -2208,7 +2216,7 @@ msgstr ""
 " contenido ya indexado hasta que reindexes."
 
 #: specivo/templates/themes/default/pages/admin/settings.html:63
-#: specivo/templates/themes/default/pages/projects/settings.html:73
+#: specivo/templates/themes/default/pages/projects/settings.html:74
 msgid "Anonymous access"
 msgstr "Acceso anónimo"
 
@@ -2302,6 +2310,7 @@ msgid "No automatic redirect"
 msgstr "Sin redirección automática"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:119
+#: specivo/templates/themes/default/pages/projects/settings.html:1084
 msgid "disabled"
 msgstr "desactivado"
 
@@ -2323,7 +2332,7 @@ msgid "Failed to save."
 msgstr "No se pudo guardar."
 
 #: specivo/templates/themes/default/pages/admin/settings.html:138
-#: specivo/templates/themes/default/pages/projects/settings.html:848
+#: specivo/templates/themes/default/pages/projects/settings.html:849
 msgid "Value"
 msgstr "Valor"
 
@@ -2529,11 +2538,13 @@ msgstr "URI de redirección"
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:126
 #: specivo/templates/themes/default/pages/admin/user_detail.html:34
 #: specivo/templates/themes/default/pages/auth/api_keys.html:17
+#: specivo/templates/themes/default/pages/projects/settings.html:1030
 msgid "Copy"
 msgstr "Copiar"
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:119
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:127
+#: specivo/templates/themes/default/pages/projects/settings.html:1031
 msgid "Copied"
 msgstr "Copiado"
 
@@ -2925,7 +2936,7 @@ msgstr "Usuarios vinculados"
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:25
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:31
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:75
-#: specivo/templates/themes/default/pages/projects/settings.html:619
+#: specivo/templates/themes/default/pages/projects/settings.html:620
 msgid "Enabled"
 msgstr "Habilitado"
 
@@ -3035,7 +3046,7 @@ msgstr "Administrador"
 #: specivo/templates/themes/default/pages/admin/user_detail.html:28
 #: specivo/templates/themes/default/pages/admin/users.html:33
 #: specivo/templates/themes/default/pages/admin/users.html:153
-#: specivo/templates/themes/default/pages/projects/settings.html:180
+#: specivo/templates/themes/default/pages/projects/settings.html:181
 msgid "Member"
 msgstr "Miembro"
 
@@ -3434,14 +3445,14 @@ msgstr "Seleccionados: %(count)s"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:18
 #: specivo/templates/themes/default/pages/projects/roadmap.html:57
-#: specivo/templates/themes/default/pages/projects/settings.html:288
+#: specivo/templates/themes/default/pages/projects/settings.html:289
 #, python-format
 msgid "%(count)s open"
 msgstr "%(count)s abiertas"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:19
 #: specivo/templates/themes/default/pages/projects/roadmap.html:58
-#: specivo/templates/themes/default/pages/projects/settings.html:289
+#: specivo/templates/themes/default/pages/projects/settings.html:290
 #, python-format
 msgid "%(count)s closed"
 msgstr "%(count)s cerradas"
@@ -3457,7 +3468,7 @@ msgstr "Total"
 #: specivo/templates/themes/default/pages/admin/versions.html:32
 #: specivo/templates/themes/default/pages/admin/versions.html:57
 #: specivo/templates/themes/default/pages/issues/list.html:42
-#: specivo/templates/themes/default/pages/projects/settings.html:419
+#: specivo/templates/themes/default/pages/projects/settings.html:420
 #: specivo/templates/themes/default/pages/projects/version_detail.html:84
 msgid "Open"
 msgstr "Abierta"
@@ -3472,7 +3483,9 @@ msgstr "Todos los estados"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:69
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:106
-#: specivo/templates/themes/default/pages/projects/settings.html:552
+#: specivo/templates/themes/default/pages/projects/settings.html:553
+#: specivo/templates/themes/default/pages/projects/settings.html:1170
+#: specivo/templates/themes/default/pages/projects/settings.html:1232
 msgid "Close"
 msgstr "Cerrar"
 
@@ -3484,15 +3497,15 @@ msgstr "Reabrir"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:120
 #: specivo/templates/themes/default/pages/issues/description_diff.html:71
 #: specivo/templates/themes/default/pages/issues/form.html:129
-#: specivo/templates/themes/default/pages/projects/settings.html:342
+#: specivo/templates/themes/default/pages/projects/settings.html:343
 #: specivo/templates/themes/default/pages/wiki/history.html:30
 #: specivo/templates/themes/default/pages/wiki/show.html:51
 msgid "Version"
 msgstr "Versión"
 
 #: specivo/templates/themes/default/pages/admin/versions.html:83
-#: specivo/templates/themes/default/pages/projects/settings.html:344
-#: specivo/templates/themes/default/pages/projects/settings.html:426
+#: specivo/templates/themes/default/pages/projects/settings.html:345
+#: specivo/templates/themes/default/pages/projects/settings.html:427
 #: specivo/templates/themes/default/pages/projects/version_detail.html:145
 msgid "Due date"
 msgstr "Fecha límite"
@@ -3500,7 +3513,7 @@ msgstr "Fecha límite"
 #: specivo/templates/themes/default/pages/admin/versions.html:84
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:36
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:238
-#: specivo/templates/themes/default/pages/projects/settings.html:345
+#: specivo/templates/themes/default/pages/projects/settings.html:346
 msgid "Progress"
 msgstr "Progreso"
 
@@ -3517,7 +3530,7 @@ msgid "Select tracker..."
 msgstr "Selecciona un tipo de seguimiento..."
 
 #: specivo/templates/themes/default/pages/admin/workflows.html:31
-#: specivo/templates/themes/default/pages/projects/settings.html:140
+#: specivo/templates/themes/default/pages/projects/settings.html:141
 msgid "Select role..."
 msgstr "Selecciona un rol..."
 
@@ -3634,6 +3647,7 @@ msgid "Copy it now — you will not see it again."
 msgstr "Cópiala ahora — no volverás a verla."
 
 #: specivo/templates/themes/default/pages/auth/api_keys.html:60
+#: specivo/templates/themes/default/pages/projects/settings.html:1056
 msgid "Dismiss"
 msgstr "Descartar"
 
@@ -4314,7 +4328,7 @@ msgstr "Sin coincidencias"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:158
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:204
-#: specivo/templates/themes/default/pages/projects/settings.html:968
+#: specivo/templates/themes/default/pages/projects/settings.html:969
 msgid "Clear"
 msgstr "Borrar"
 
@@ -4325,7 +4339,7 @@ msgstr "-- Sin sprint --"
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:213
 #: specivo/templates/themes/default/pages/issues/form.html:271
 #: specivo/templates/themes/default/pages/projects/settings.html:28
-#: specivo/templates/themes/default/pages/projects/settings.html:885
+#: specivo/templates/themes/default/pages/projects/settings.html:886
 #: specivo/templates/themes/default/pages/wiki/edit.html:80
 msgid "Tags"
 msgstr "Etiquetas"
@@ -5110,11 +5124,13 @@ msgid "Flexible"
 msgstr "Flexible"
 
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:27
-#: specivo/templates/themes/default/pages/projects/settings.html:629
+#: specivo/templates/themes/default/pages/projects/settings.html:630
+#: specivo/templates/themes/default/pages/projects/settings.html:1092
 msgid "Enable"
 msgstr "Habilitar"
 
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:28
+#: specivo/templates/themes/default/pages/projects/settings.html:1091
 msgid "Disable"
 msgstr "Desactivar"
 
@@ -5159,7 +5175,7 @@ msgid "Subprojects"
 msgstr "Subproyectos"
 
 #: specivo/templates/themes/default/pages/projects/detail.html:104
-#: specivo/templates/themes/default/pages/projects/settings.html:267
+#: specivo/templates/themes/default/pages/projects/settings.html:268
 msgid "Enabled Modules"
 msgstr "Módulos habilitados"
 
@@ -5236,7 +5252,7 @@ msgstr "Cree uno para empezar."
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:10
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:10
 #: specivo/templates/themes/default/pages/projects/settings.html:26
-#: specivo/templates/themes/default/pages/projects/settings.html:486
+#: specivo/templates/themes/default/pages/projects/settings.html:487
 msgid "Recurring tasks"
 msgstr "Tareas recurrentes"
 
@@ -5246,47 +5262,47 @@ msgstr "Patrones"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:38
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:11
-#: specivo/templates/themes/default/pages/projects/settings.html:491
+#: specivo/templates/themes/default/pages/projects/settings.html:492
 msgid "New pattern"
 msgstr "Nuevo patrón"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:46
-#: specivo/templates/themes/default/pages/projects/settings.html:498
+#: specivo/templates/themes/default/pages/projects/settings.html:499
 msgid "No recurring tasks yet"
 msgstr "Aún no hay tareas recurrentes"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:50
-#: specivo/templates/themes/default/pages/projects/settings.html:501
+#: specivo/templates/themes/default/pages/projects/settings.html:502
 msgid "Create first pattern"
 msgstr "Crear el primer patrón"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:61
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:76
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:80
-#: specivo/templates/themes/default/pages/projects/settings.html:511
+#: specivo/templates/themes/default/pages/projects/settings.html:512
 msgid "Schedule"
 msgstr "Programación"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:62
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:46
-#: specivo/templates/themes/default/pages/projects/settings.html:512
+#: specivo/templates/themes/default/pages/projects/settings.html:513
 msgid "Mode"
 msgstr "Modo"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:105
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:119
-#: specivo/templates/themes/default/pages/projects/settings.html:551
-#: specivo/templates/themes/default/pages/projects/settings.html:565
+#: specivo/templates/themes/default/pages/projects/settings.html:552
+#: specivo/templates/themes/default/pages/projects/settings.html:566
 msgid "Delete pattern"
 msgstr "Eliminar patrón"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:112
-#: specivo/templates/themes/default/pages/projects/settings.html:558
+#: specivo/templates/themes/default/pages/projects/settings.html:559
 msgid "Delete recurring pattern"
 msgstr "Eliminar patrón recurrente"
 
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:112
-#: specivo/templates/themes/default/pages/projects/settings.html:558
+#: specivo/templates/themes/default/pages/projects/settings.html:559
 msgid "? Already-generated issues are kept; only the pattern is removed."
 msgstr "? Las incidencias ya generadas se conservan; solo se elimina el patrón."
 
@@ -5410,6 +5426,7 @@ msgid "Live preview"
 msgstr "Vista previa en vivo"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:187
+#: specivo/templates/themes/default/pages/projects/settings.html:1114
 msgid "Refresh"
 msgstr "Actualizar"
 
@@ -5734,13 +5751,14 @@ msgid "Create pattern"
 msgstr "Crear patrón"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:336
-#: specivo/templates/themes/default/pages/projects/settings.html:292
-#: specivo/templates/themes/default/pages/projects/settings.html:878
+#: specivo/templates/themes/default/pages/projects/settings.html:293
+#: specivo/templates/themes/default/pages/projects/settings.html:879
+#: specivo/templates/themes/default/pages/projects/settings.html:1029
 msgid "Save changes"
 msgstr "Guardar cambios"
 
 #: specivo/templates/themes/default/pages/projects/roadmap.html:16
-#: specivo/templates/themes/default/pages/projects/settings.html:312
+#: specivo/templates/themes/default/pages/projects/settings.html:313
 msgid "Sort versions"
 msgstr "Ordenar versiones"
 
@@ -5790,29 +5808,34 @@ msgstr "General"
 msgid "Members"
 msgstr "Miembros"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:34
-#: specivo/templates/themes/default/pages/projects/settings.html:825
+#: specivo/templates/themes/default/pages/projects/settings.html:30
+#: specivo/templates/themes/default/pages/projects/settings.html:1040
+msgid "Webhooks"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:35
+#: specivo/templates/themes/default/pages/projects/settings.html:826
 msgid "Saved successfully."
 msgstr "Guardado correctamente."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:35
+#: specivo/templates/themes/default/pages/projects/settings.html:36
 #, python-format
 msgid "Error: %(message)s"
 msgstr "Error: %(message)s"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:55
+#: specivo/templates/themes/default/pages/projects/settings.html:56
 msgid "(none — root project)"
 msgstr "(ninguno — proyecto raíz)"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:72
+#: specivo/templates/themes/default/pages/projects/settings.html:73
 msgid "Anonymous access saved."
 msgstr "Acceso anónimo guardado."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:72
+#: specivo/templates/themes/default/pages/projects/settings.html:73
 msgid "Could not save anonymous access."
 msgstr "No se pudo guardar el acceso anónimo."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:74
+#: specivo/templates/themes/default/pages/projects/settings.html:75
 msgid ""
 "Choose which parts of this public project are opted in to anonymous "
 "reading. Only instance administrators can see or change this section."
@@ -5821,11 +5844,11 @@ msgstr ""
 "lectura anónima. Solo los administradores de la instancia pueden ver o "
 "cambiar esta sección."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:76
+#: specivo/templates/themes/default/pages/projects/settings.html:77
 msgid "Anonymous access is turned on for the whole instance."
 msgstr "El acceso anónimo está activado para toda la instancia."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:78
+#: specivo/templates/themes/default/pages/projects/settings.html:79
 msgid ""
 "These settings have no effect while anonymous access is turned off for "
 "the whole instance."
@@ -5833,46 +5856,46 @@ msgstr ""
 "Esta configuración no tiene efecto mientras el acceso anónimo esté "
 "desactivado para toda la instancia."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:78
+#: specivo/templates/themes/default/pages/projects/settings.html:79
 msgid "Instance settings"
 msgstr "Configuración de la instancia"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:101
+#: specivo/templates/themes/default/pages/projects/settings.html:102
 msgid "1 person"
 msgstr "1 persona"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:102
+#: specivo/templates/themes/default/pages/projects/settings.html:103
 #, python-format
 msgid "%d people"
 msgstr "%d personas"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:103
+#: specivo/templates/themes/default/pages/projects/settings.html:104
 msgid "added."
 msgstr "añadido."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:104
+#: specivo/templates/themes/default/pages/projects/settings.html:105
 msgid "Failed to add member."
 msgstr "No se pudo añadir el miembro."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:105
+#: specivo/templates/themes/default/pages/projects/settings.html:106
 msgid "Failed to update roles."
 msgstr "No se pudieron actualizar los roles."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:106
+#: specivo/templates/themes/default/pages/projects/settings.html:107
 #, python-format
 msgid "Remove %s from this project?"
 msgstr "¿Quitar a %s de este proyecto?"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:107
+#: specivo/templates/themes/default/pages/projects/settings.html:108
 #, python-format
 msgid "Remove the group %s? %d people lose the access it grants."
 msgstr "¿Quitar el grupo %s? %d personas pierden el acceso que otorga."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:115
+#: specivo/templates/themes/default/pages/projects/settings.html:116
 msgid "Add Member"
 msgstr "Añadir miembro"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:117
+#: specivo/templates/themes/default/pages/projects/settings.html:118
 msgid ""
 "Grant access to one person, or to a group so everyone in it gets the same"
 " roles."
@@ -5880,196 +5903,196 @@ msgstr ""
 "Da acceso a una persona, o a un grupo para que todos sus miembros reciban"
 " los mismos roles."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:121
+#: specivo/templates/themes/default/pages/projects/settings.html:122
 msgid "User or group"
 msgstr "Usuario o grupo"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:122
+#: specivo/templates/themes/default/pages/projects/settings.html:123
 msgid "Search people and groups..."
 msgstr "Buscar personas y grupos..."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:164
+#: specivo/templates/themes/default/pages/projects/settings.html:165
 msgid "Project Access"
 msgstr "Acceso al proyecto"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:170
+#: specivo/templates/themes/default/pages/projects/settings.html:171
 msgid "Direct members"
 msgstr "Miembros directos"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:174
+#: specivo/templates/themes/default/pages/projects/settings.html:175
 msgid "People with access"
 msgstr "Personas con acceso"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:188
+#: specivo/templates/themes/default/pages/projects/settings.html:189
 msgid "No members."
 msgstr "No hay miembros."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:203
+#: specivo/templates/themes/default/pages/projects/settings.html:204
 msgid "Show who this covers"
 msgstr "Mostrar a quién incluye"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:204
+#: specivo/templates/themes/default/pages/projects/settings.html:205
 msgid "Hide"
 msgstr "Ocultar"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:211
+#: specivo/templates/themes/default/pages/projects/settings.html:212
 msgid "via this group only"
 msgstr "solo a través de este grupo"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:220
+#: specivo/templates/themes/default/pages/projects/settings.html:221
 msgid "Click to edit roles"
 msgstr "Haz clic para editar los roles"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:223
+#: specivo/templates/themes/default/pages/projects/settings.html:224
 msgid "Edit roles"
 msgstr "Editar roles"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:237
+#: specivo/templates/themes/default/pages/projects/settings.html:238
 msgid "Edit Roles"
 msgstr "Editar roles"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:239
+#: specivo/templates/themes/default/pages/projects/settings.html:240
 msgid "These roles apply to everyone in the group."
 msgstr "Estos roles se aplican a todos los miembros del grupo."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:263
+#: specivo/templates/themes/default/pages/projects/settings.html:264
 msgid "Module updated."
 msgstr "Módulo actualizado."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:280
+#: specivo/templates/themes/default/pages/projects/settings.html:281
 #, python-format
 msgid "Version \"%(name)s\" created."
 msgstr "Versión «%(name)s» creada."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:281
+#: specivo/templates/themes/default/pages/projects/settings.html:282
 #, python-format
 msgid "Version \"%(name)s\" updated."
 msgstr "Versión «%(name)s» actualizada."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:282
+#: specivo/templates/themes/default/pages/projects/settings.html:283
 #, python-format
 msgid "Version \"%(name)s\" deleted."
 msgstr "Versión «%(name)s» eliminada."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:283
+#: specivo/templates/themes/default/pages/projects/settings.html:284
 msgid "Failed to save version."
 msgstr "No se pudo guardar la versión."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:284
+#: specivo/templates/themes/default/pages/projects/settings.html:285
 msgid "Failed to delete version."
 msgstr "No se pudo eliminar la versión."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:286
+#: specivo/templates/themes/default/pages/projects/settings.html:287
 msgid "Create versions to organize your issues into releases and milestones."
 msgstr "Cree versiones para organizar sus incidencias en lanzamientos e hitos."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:287
+#: specivo/templates/themes/default/pages/projects/settings.html:288
 msgid "No versions have been created for this project yet."
 msgstr "Todavía no se han creado versiones para este proyecto."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:290
+#: specivo/templates/themes/default/pages/projects/settings.html:291
 msgid "Edit version"
 msgstr "Editar versión"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:291
-#: specivo/templates/themes/default/pages/projects/settings.html:318
+#: specivo/templates/themes/default/pages/projects/settings.html:292
+#: specivo/templates/themes/default/pages/projects/settings.html:319
 msgid "New version"
 msgstr "Nueva versión"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:293
+#: specivo/templates/themes/default/pages/projects/settings.html:294
 msgid "Create version"
 msgstr "Crear versión"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:327
+#: specivo/templates/themes/default/pages/projects/settings.html:328
 msgid "No versions yet"
 msgstr "Aún no hay versiones"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:331
+#: specivo/templates/themes/default/pages/projects/settings.html:332
 msgid "Create first version"
 msgstr "Crear la primera versión"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:408
+#: specivo/templates/themes/default/pages/projects/settings.html:409
 msgid "e.g. v1.0.0, Sprint 12, Q2 2026"
 msgstr "p. ej. v1.0.0, Sprint 12, Q2 2026"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:409
+#: specivo/templates/themes/default/pages/projects/settings.html:410
 msgid "The version name shown in roadmap and issue dropdowns."
 msgstr ""
 "El nombre de la versión que se muestra en la hoja de ruta y en los menús "
 "desplegables de incidencias."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:413
+#: specivo/templates/themes/default/pages/projects/settings.html:414
 msgid "Optional summary of what this version includes..."
 msgstr "Resumen opcional de lo que incluye esta versión..."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:423
+#: specivo/templates/themes/default/pages/projects/settings.html:424
 msgid "Locked versions cannot receive new issues."
 msgstr "Las versiones bloqueadas no pueden recibir nuevas incidencias."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:450
-#: specivo/templates/themes/default/pages/projects/settings.html:464
+#: specivo/templates/themes/default/pages/projects/settings.html:451
+#: specivo/templates/themes/default/pages/projects/settings.html:465
 msgid "Delete version"
 msgstr "Eliminar versión"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:457
+#: specivo/templates/themes/default/pages/projects/settings.html:458
 msgid "Are you sure you want to delete version"
 msgstr "¿Seguro que quieres eliminar la versión"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:457
+#: specivo/templates/themes/default/pages/projects/settings.html:458
 msgid "? This action cannot be undone."
 msgstr "? Esta acción no se puede deshacer."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:576
+#: specivo/templates/themes/default/pages/projects/settings.html:577
 #, python-format
 msgid "Tracker #%(id)s"
 msgstr "Tipo de seguimiento n.º %(id)s"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:577
+#: specivo/templates/themes/default/pages/projects/settings.html:578
 #, python-format
 msgid "(%(tracker)s only)"
 msgstr "(solo %(tracker)s)"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:578
+#: specivo/templates/themes/default/pages/projects/settings.html:579
 msgid "(all trackers)"
 msgstr "(todos los tipos de seguimiento)"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:579
+#: specivo/templates/themes/default/pages/projects/settings.html:580
 msgid "Cannot disable: issues have data from this preset."
 msgstr ""
 "No se puede desactivar: hay incidencias con datos de este ajuste "
 "predefinido."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:581
+#: specivo/templates/themes/default/pages/projects/settings.html:582
 msgid "Root type must be \"object\"."
 msgstr "El tipo raíz debe ser \"object\"."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:583
+#: specivo/templates/themes/default/pages/projects/settings.html:584
 #, python-format
 msgid "Cannot delete: %(count)s issue(s) use this schema."
 msgstr "No se puede eliminar: incidencias que usan este esquema: %(count)s."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:584
+#: specivo/templates/themes/default/pages/projects/settings.html:585
 #, python-format
 msgid "from %(preset)s"
 msgstr "de %(preset)s"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:586
+#: specivo/templates/themes/default/pages/projects/settings.html:587
 msgid "Edit Schema"
 msgstr "Editar esquema"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:587
+#: specivo/templates/themes/default/pages/projects/settings.html:588
 msgid "New Custom Schema"
 msgstr "Nuevo esquema personalizado"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:589
+#: specivo/templates/themes/default/pages/projects/settings.html:590
 msgid "Create Schema"
 msgstr "Crear esquema"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:593
+#: specivo/templates/themes/default/pages/projects/settings.html:594
 msgid "Available Presets"
 msgstr "Ajustes predefinidos disponibles"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:594
+#: specivo/templates/themes/default/pages/projects/settings.html:595
 msgid ""
 "Enable presets to add predefined metadata fields to issues in this "
 "project. Each preset can be scoped to all trackers or a specific one."
@@ -6078,45 +6101,45 @@ msgstr ""
 "incidencias de este proyecto. Cada plantilla puede aplicarse a todos los "
 "tipos de seguimiento o a uno específico."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:633
-#: specivo/templates/themes/default/pages/projects/settings.html:682
-#: specivo/templates/themes/default/pages/projects/settings.html:751
+#: specivo/templates/themes/default/pages/projects/settings.html:634
+#: specivo/templates/themes/default/pages/projects/settings.html:683
+#: specivo/templates/themes/default/pages/projects/settings.html:752
 msgid "All trackers"
 msgstr "Todos los rastreadores"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:647
+#: specivo/templates/themes/default/pages/projects/settings.html:648
 msgid "Custom Schemas"
 msgstr "Esquemas personalizados"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:651
+#: specivo/templates/themes/default/pages/projects/settings.html:652
 msgid "Project-specific metadata schemas"
 msgstr "Esquemas de metadatos específicos del proyecto"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:654
+#: specivo/templates/themes/default/pages/projects/settings.html:655
 msgid "New Schema"
 msgstr "Nuevo esquema"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:664
+#: specivo/templates/themes/default/pages/projects/settings.html:665
 msgid "Scope"
 msgstr "Alcance"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:665
+#: specivo/templates/themes/default/pages/projects/settings.html:666
 msgid "Fields"
 msgstr "Campos"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:666
+#: specivo/templates/themes/default/pages/projects/settings.html:667
 msgid "Usage"
 msgstr "Uso"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:704
+#: specivo/templates/themes/default/pages/projects/settings.html:705
 msgid "No usage"
 msgstr "Sin uso"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:727
+#: specivo/templates/themes/default/pages/projects/settings.html:728
 msgid "No metadata schemas"
 msgstr "No hay esquemas de metadatos"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:728
+#: specivo/templates/themes/default/pages/projects/settings.html:729
 msgid ""
 "Enable a preset above or create a custom schema to add metadata fields to"
 " issues."
@@ -6124,15 +6147,15 @@ msgstr ""
 "Activa una plantilla arriba o crea un esquema personalizado para añadir "
 "campos de metadatos a las incidencias."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:746
+#: specivo/templates/themes/default/pages/projects/settings.html:747
 msgid "e.g. Deployment Tracking"
 msgstr "p. ej. Seguimiento de despliegues"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:749
+#: specivo/templates/themes/default/pages/projects/settings.html:750
 msgid "Tracker Scope"
 msgstr "Alcance del tipo de seguimiento"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:756
+#: specivo/templates/themes/default/pages/projects/settings.html:757
 msgid ""
 "Limit this schema to a specific tracker, or leave as \"All trackers\" for"
 " project-wide."
@@ -6140,7 +6163,7 @@ msgstr ""
 "Limita este esquema a un tipo de seguimiento específico o déjalo como "
 "\"Todos los tipos de seguimiento\" para aplicarlo a todo el proyecto."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:768
+#: specivo/templates/themes/default/pages/projects/settings.html:769
 msgid ""
 "JSON Schema with \"type\": \"object\" and \"properties\" defining the "
 "fields."
@@ -6148,15 +6171,15 @@ msgstr ""
 "Esquema JSON con \"type\": \"object\" y \"properties\" que definen los "
 "campos."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:790
+#: specivo/templates/themes/default/pages/projects/settings.html:791
 msgid "Delete schema?"
 msgstr "¿Eliminar el esquema?"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:791
+#: specivo/templates/themes/default/pages/projects/settings.html:792
 msgid "This will permanently remove"
 msgstr "Esto eliminará permanentemente"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:791
+#: specivo/templates/themes/default/pages/projects/settings.html:792
 msgid ""
 "from this project. Issues that already have metadata will retain their "
 "data."
@@ -6164,32 +6187,32 @@ msgstr ""
 "de este proyecto. Las incidencias que ya tengan metadatos conservarán sus"
 " datos."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:795
+#: specivo/templates/themes/default/pages/projects/settings.html:796
 msgid "Delete Schema"
 msgstr "Eliminar esquema"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:809
+#: specivo/templates/themes/default/pages/projects/settings.html:810
 msgid "Cannot remove this preset"
 msgstr "No se puede eliminar este ajuste predefinido"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:815
+#: specivo/templates/themes/default/pages/projects/settings.html:816
 msgid "Understood"
 msgstr "Entendido"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:823
+#: specivo/templates/themes/default/pages/projects/settings.html:824
 msgid "Every value needs a field name."
 msgstr "Cada valor necesita un nombre de campo."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:824
+#: specivo/templates/themes/default/pages/projects/settings.html:825
 #, python-format
 msgid "Duplicate field name: %(name)s"
 msgstr "Nombre de campo duplicado: %(name)s"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:829
+#: specivo/templates/themes/default/pages/projects/settings.html:830
 msgid "Computed Fields"
 msgstr "Campos calculados"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:830
+#: specivo/templates/themes/default/pages/projects/settings.html:831
 msgid ""
 "Fields whose value is fixed by the project. Each one is filled in "
 "automatically on every issue here, is never stored on the issue itself, "
@@ -6202,7 +6225,7 @@ msgstr ""
 " que nunca puede desincronizarse, y se vuelve a calcular cuando una "
 "incidencia se mueve a otro proyecto."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:834
+#: specivo/templates/themes/default/pages/projects/settings.html:835
 msgid ""
 "One of these fields holds a non-text value, which this editor cannot "
 "represent. Edit it through the projects API instead."
@@ -6210,89 +6233,89 @@ msgstr ""
 "Uno de estos campos contiene un valor que no es texto y que este editor "
 "no puede representar. Edítalo a través de la API de proyectos."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:840
+#: specivo/templates/themes/default/pages/projects/settings.html:841
 msgid "No computed fields configured for this project."
 msgstr "No hay campos calculados configurados para este proyecto."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:846
+#: specivo/templates/themes/default/pages/projects/settings.html:847
 msgid "Field name"
 msgstr "Nombre del campo"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:850
+#: specivo/templates/themes/default/pages/projects/settings.html:851
 msgid "Remove field"
 msgstr "Quitar campo"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:860
+#: specivo/templates/themes/default/pages/projects/settings.html:861
 msgid "Add field"
 msgstr "Añadir campo"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:872
+#: specivo/templates/themes/default/pages/projects/settings.html:873
 msgid "Failed to save tag."
 msgstr "No se pudo guardar la etiqueta."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:874
+#: specivo/templates/themes/default/pages/projects/settings.html:875
 msgid "Create tags to label issues and wiki pages across this project."
 msgstr ""
 "Cree etiquetas para clasificar incidencias y páginas wiki en este "
 "proyecto."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:875
+#: specivo/templates/themes/default/pages/projects/settings.html:876
 msgid "No tags have been created for this project yet."
 msgstr "Todavía no se han creado etiquetas para este proyecto."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:876
+#: specivo/templates/themes/default/pages/projects/settings.html:877
 msgid "Edit tag"
 msgstr "Editar etiqueta"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:877
-#: specivo/templates/themes/default/pages/projects/settings.html:890
+#: specivo/templates/themes/default/pages/projects/settings.html:878
+#: specivo/templates/themes/default/pages/projects/settings.html:891
 msgid "New tag"
 msgstr "Nueva etiqueta"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:879
+#: specivo/templates/themes/default/pages/projects/settings.html:880
 msgid "Create tag"
 msgstr "Crear etiqueta"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:898
+#: specivo/templates/themes/default/pages/projects/settings.html:899
 msgid "No tags yet"
 msgstr "Aún no hay etiquetas"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:901
+#: specivo/templates/themes/default/pages/projects/settings.html:902
 msgid "Create first tag"
 msgstr "Crear la primera etiqueta"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:912
+#: specivo/templates/themes/default/pages/projects/settings.html:913
 msgid "Tag"
 msgstr "Etiqueta"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:914
+#: specivo/templates/themes/default/pages/projects/settings.html:915
 msgid "Wiki pages"
 msgstr "Páginas de wiki"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:960
+#: specivo/templates/themes/default/pages/projects/settings.html:961
 msgid "e.g. backend, ux, needs-review"
 msgstr "p. ej. backend, ux, needs-review"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:961
+#: specivo/templates/themes/default/pages/projects/settings.html:962
 msgid "Tag names are unique per project (case-insensitive)."
 msgstr ""
 "Los nombres de etiqueta son únicos por proyecto (sin distinguir "
 "mayúsculas y minúsculas)."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:970
+#: specivo/templates/themes/default/pages/projects/settings.html:971
 msgid "Optional. A hex color like #4f9d6c."
 msgstr "Opcional. Un color hexadecimal como #4f9d6c."
 
-#: specivo/templates/themes/default/pages/projects/settings.html:989
-#: specivo/templates/themes/default/pages/projects/settings.html:1003
+#: specivo/templates/themes/default/pages/projects/settings.html:990
+#: specivo/templates/themes/default/pages/projects/settings.html:1004
 msgid "Delete tag"
 msgstr "Eliminar etiqueta"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:996
+#: specivo/templates/themes/default/pages/projects/settings.html:997
 msgid "Are you sure you want to delete tag"
 msgstr "¿Seguro que quieres eliminar la etiqueta"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:996
+#: specivo/templates/themes/default/pages/projects/settings.html:997
 msgid ""
 "? It will be removed from all issues and wiki pages. This action cannot "
 "be undone."
@@ -6300,11 +6323,222 @@ msgstr ""
 "? Se quitará de todas las incidencias y páginas de wiki. Esta acción no "
 "se puede deshacer."
 
+#: specivo/templates/themes/default/pages/projects/settings.html:1014
+#, fuzzy
+msgid "Issue created"
+msgstr "Emisor declarado"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1015
+#, fuzzy
+msgid "Issue updated"
+msgstr "Plantilla de incidencia"
+
 #: specivo/templates/themes/default/pages/projects/settings.html:1016
+#, fuzzy
+msgid "Issue commented"
+msgstr "incidencias cerradas"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1017
+#, fuzzy
+msgid "Issue deleted"
+msgstr "Archivo eliminado"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1018
+#, fuzzy
+msgid "Wiki page updated"
+msgstr "Página de wiki"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1019
+msgid "Test event"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1021
+#, fuzzy
+msgid "Failed to save webhook."
+msgstr "No se pudo guardar."
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1023
+#, fuzzy
+msgid "Could not load deliveries."
+msgstr "No se pudieron guardar los cambios."
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1024
+msgid "Test event queued. Open the delivery log to see the result."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1025
+#, fuzzy
+msgid "Could not send the test event."
+msgstr "No se pudo cambiar la contraseña."
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1026
+#: specivo/templates/themes/default/pages/projects/settings.html:1045
+msgid "New webhook"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1027
+msgid "Edit webhook"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1028
+#, fuzzy
+msgid "Create webhook"
+msgstr "Creado el"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1032
+#, fuzzy
+msgid "Pending"
+msgstr "Enviando..."
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1033
+msgid "Succeeded"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1034
+#, fuzzy
+msgid "Failed"
+msgstr "ARCHIVO"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1052
+#, fuzzy
+msgid "Signing secret"
+msgstr "Claves de firma"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1058
+msgid ""
+"Copy it now: it is not shown again. Receivers check the X-Specivo-"
+"Signature header (HMAC-SHA256 of the body) with it."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1070
+#, fuzzy
+msgid "No webhooks yet"
+msgstr "Aún no hay versiones"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1071
+msgid ""
+"A webhook sends a signed HTTPS request to another system when issues or "
+"wiki pages in this project change."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1072
+#, fuzzy
+msgid "Create first webhook"
+msgstr "Crear la primera versión"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1083
+msgid "includes private content"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1088
+#: specivo/templates/themes/default/pages/projects/settings.html:1111
+#, fuzzy
+msgid "Delivery log"
+msgstr "URL de descubrimiento"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1089
+#, fuzzy
+msgid "Send test"
+msgstr "Enviar prueba"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1121
+#, fuzzy
+msgid "No deliveries yet"
+msgstr "Aún no hay versiones"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1122
+msgid ""
+"Deliveries appear here when a subscribed event happens, or when you send "
+"a test event."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1131
+#, fuzzy
+msgid "Event"
+msgstr "Eventos de bloqueo"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1133
+#, fuzzy
+msgid "Attempts"
+msgstr "Adjuntos"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1134
+msgid "Response code"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1135
+#, fuzzy
+msgid "Response"
+msgstr "Motivo"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1157
+#, fuzzy
+msgid "Newer"
+msgstr "Nunca"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1159
+#, fuzzy
+msgid "Older"
+msgstr "Rol"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1179
+msgid "Payload URL"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1181
+msgid ""
+"HTTPS only. Addresses inside private networks are refused when the "
+"request is sent."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1184
+#, fuzzy
+msgid "Events"
+msgstr "Eventos de bloqueo"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1198
+#, fuzzy
+msgid "Include private issues and private notes"
+msgstr "Las nuevas incidencias son privadas"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1200
+msgid "Off by default: the receiver then never learns about private content."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1203
+msgid ""
+"Private issues and private notes are not sent. Only an administrator can "
+"change that."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1207
+#, fuzzy
+msgid "Generate a new secret"
+msgstr "Generar contraseña"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1208
+msgid "The old secret stops working at once."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1212
+msgid "A signing secret is generated and shown once after the webhook is created."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1231
+#: specivo/templates/themes/default/pages/projects/settings.html:1241
+#, fuzzy
+msgid "Delete webhook"
+msgstr "Eliminar versión"
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1237
+msgid "Delete this webhook and its delivery log? Nothing more is sent to:"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1253
 msgid "Search indexing"
 msgstr "Indexación de búsqueda"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1018
+#: specivo/templates/themes/default/pages/projects/settings.html:1255
 msgid ""
 "Full-text search analyzer language for this project. Leave on Inherit to "
 "use the instance default."

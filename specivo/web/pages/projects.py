@@ -453,6 +453,17 @@ async def project_settings(
     fts_instance_default = await _fts_settings.get(db, "search_fts_language", "english")
     fts_reindex_needed = (await _fts_settings.get(db, reindex_needed_key(project.id))) == "1"
 
+    # Outgoing webhooks. The page already requires manage_project, which is
+    # what every webhook route asks for; secrets are never sent to the page.
+    from specivo.schemas.webhook import SUBSCRIBABLE_EVENTS, WebhookOut
+    from specivo.services.webhook_service import WebhookService
+
+    webhooks_data = [
+        WebhookOut.model_validate(w).model_dump(mode="json")
+        for w in await WebhookService().list_for_project(db, project.id)
+    ]
+    webhook_events = [e.value for e in SUBSCRIBABLE_EVENTS]
+
     # The admin-only anonymous access card says whether the instance switch is
     # on. Only read for admins, the only users who see that card.
     from specivo.services.anonymous_access_service import is_anonymous_access_enabled
@@ -495,6 +506,8 @@ async def project_settings(
             "can_manage_tags": can_manage_tags,
             "computed_metadata": computed_values(project.settings),
             "anonymous_access_enabled": anonymous_access_enabled,
+            "webhooks_data": webhooks_data,
+            "webhook_events": webhook_events,
         },
     )
 

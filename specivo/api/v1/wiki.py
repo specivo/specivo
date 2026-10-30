@@ -26,6 +26,7 @@ from specivo.schemas.wiki import (
     WikiPageWithContent,
     WikiTrashListResponse,
     WikiVersionsResponse,
+    page_with_content,
 )
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
@@ -84,20 +85,7 @@ async def _require_delete_wiki(user: User, project_id: int, db: AsyncSession) ->
 
 def _page_with_content(page: WikiPage, content: WikiContent) -> WikiPageWithContent:
     """Build a WikiPageWithContent response from models."""
-    return WikiPageWithContent(
-        id=page.id,
-        title=page.title,
-        slug=page.slug,
-        parent_id=page.parent_id,
-        protected=page.protected,
-        lock_version=page.lock_version,
-        created_at=page.created_at,
-        updated_at=page.updated_at,
-        text=content.text,
-        content_version=content.version,
-        content_author=IdName(id=content.author_id, name=content.author.display_name),
-        content_updated_at=content.created_at,
-    )
+    return page_with_content(page, content, content.author)
 
 
 def _page_out(page: WikiPage) -> WikiPageOut:

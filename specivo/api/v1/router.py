@@ -1,10 +1,8 @@
 """API v1 router — aggregates all sub-routers.
 
 Core routes include: auth, issues, journals, reactions, saved filters, bulk
-operations, notifications (inbox + preferences), wiki, search, and admin.
-
-Pro-only routes (webhooks) are mounted by the ProPlugin via ``get_routers()``
-when specivo-pro is installed.
+operations, notifications (inbox + preferences), wiki, search, outgoing
+webhooks, and admin.
 
 Enterprise-only routes (admin agent groups, credentials, kill switch, audit logs,
 model costs, agent costs, admin metadata_schemas) are NOT included here.
@@ -43,6 +41,7 @@ from specivo.api.v1.tags import router as tags_router
 from specivo.api.v1.time_entries import router as time_entries_router
 from specivo.api.v1.users import router as users_router
 from specivo.api.v1.versions import router as versions_router
+from specivo.api.v1.webhooks import router as webhooks_router
 from specivo.api.v1.wiki import router as wiki_router
 
 api_router = APIRouter(prefix="/api/v1")
@@ -58,6 +57,7 @@ api_router.include_router(sprints_router)
 api_router.include_router(tags_router)
 api_router.include_router(attachments_router)
 api_router.include_router(time_entries_router)
+api_router.include_router(webhooks_router)
 api_router.include_router(admin_settings_router)
 api_router.include_router(wiki_router)
 api_router.include_router(search_router)

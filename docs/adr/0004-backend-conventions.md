@@ -404,7 +404,7 @@ Human-readable format in debug mode. `request_id` is propagated from the `Reques
 
 Celery + Redis for background jobs in `specivo/tasks/`. Constants in `specivo.core.constants`:
 - `CELERY_MAX_RETRIES = 3`
-- Per-task retry delays: email 60s, webhook 30s, embedding 30s, link graph 15s.
+- Per-task retry delays: email 60s, embedding 30s, link graph 15s. Outgoing webhook deliveries retry on their own schedule (`WEBHOOK_*` constants, see `specivo.services.webhook_delivery`).
 
 Task types: email notifications, webhook delivery, embedding generation, wiki link graph updates, partition management.
 
