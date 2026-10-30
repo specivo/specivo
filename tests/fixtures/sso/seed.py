@@ -1,7 +1,9 @@
 """What the disposable IdP in ``tests/fixtures/sso/docker-compose.yml`` are seeded with.
 
-The Keycloak realm (``keycloak/specivo-test-realm.json``) carries this
-content. Tests import the values from here instead of repeating them.
+The Keycloak realm (``keycloak/specivo-test-realm.json``) and the authentik
+blueprint (``authentik/specivo-test.yaml``) carry this content: the same users,
+groups, client id and secret. Tests import the values from here instead of
+repeating them.
 
 Every credential below is a fixed, public test value. None of them protects
 anything: the IdP runs on localhost, keep their state in RAM and are discarded
@@ -31,6 +33,20 @@ PUBLIC_CLIENT_ID = "specivo-public"
 
 # Provider slug the redirect URIs are registered for.
 KEYCLOAK_SLUG = "keycloak"
+
+# authentik (profile "authentik", ``make sso-authentik-up``). Same client id and
+# secret as Keycloak; only the confidential client exists there.
+AUTHENTIK_PORT = int(os.environ.get("SSO_AUTHENTIK_PORT", "8036"))
+AUTHENTIK_APP_SLUG = "specivo-test"
+AUTHENTIK_BASE_URL = f"http://localhost:{AUTHENTIK_PORT}"
+AUTHENTIK_ISSUER = f"{AUTHENTIK_BASE_URL}/application/o/{AUTHENTIK_APP_SLUG}/"
+AUTHENTIK_SLUG = "authentik"
+# Admin API token (AUTHENTIK_BOOTSTRAP_TOKEN in the compose file), e.g. to
+# deactivate a user. Test-only.
+AUTHENTIK_API_TOKEN = "authentik-test-only-api-token"
+# authentik's default email scope mapping always sends ``email_verified: false``,
+# so every seeded user arrives unverified there, and ``locale``/``zoneinfo`` are
+# not sent at all.
 
 E2E_BASE_URL = "http://localhost:9944"
 ASGI_BASE_URL = "http://testserver"

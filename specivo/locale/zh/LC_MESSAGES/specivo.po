@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 23:28+0100\n"
+"POT-Creation-Date: 2026-10-31 00:48+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -104,66 +104,66 @@ msgstr "API 密钥已过期"
 msgid "API key not found"
 msgstr "未找到 API 密钥"
 
-#: specivo/services/auth_service.py:217 specivo/services/auth_service.py:238
-#: specivo/services/auth_service.py:270
+#: specivo/services/auth_service.py:222 specivo/services/auth_service.py:243
+#: specivo/services/auth_service.py:275
 msgid "Invalid login or password"
 msgstr "登录名或密码不正确"
 
-#: specivo/services/auth_service.py:242
+#: specivo/services/auth_service.py:247
 msgid "Email address not verified"
 msgstr "电子邮件地址未验证"
 
-#: specivo/services/auth_service.py:244
+#: specivo/services/auth_service.py:249
 msgid "Account has been deactivated"
 msgstr "账户已被停用"
 
-#: specivo/services/auth_service.py:248
+#: specivo/services/auth_service.py:253
 msgid "Service accounts cannot log in. Use an API key instead."
 msgstr "服务账户无法登录，请改用 API 密钥。"
 
-#: specivo/services/auth_service.py:254
+#: specivo/services/auth_service.py:259
 msgid "Account is temporarily locked due to too many failed login attempts"
 msgstr "因登录失败次数过多，账户已被临时锁定"
 
-#: specivo/services/auth_service.py:288
+#: specivo/services/auth_service.py:293
 msgid "Account is locked. Contact an administrator."
 msgstr "账户已被锁定，请联系管理员。"
 
-#: specivo/services/auth_service.py:408
+#: specivo/services/auth_service.py:422
 msgid "Refresh token expired or revoked"
 msgstr "刷新令牌已过期或已被吊销"
 
-#: specivo/services/auth_service.py:638
+#: specivo/services/auth_service.py:712
 msgid "Session not found"
 msgstr "未找到会话"
 
-#: specivo/services/auth_service.py:734 specivo/services/auth_service.py:763
+#: specivo/services/auth_service.py:808 specivo/services/auth_service.py:837
 msgid "Invalid or expired password reset link"
 msgstr "密码重置链接无效或已过期"
 
-#: specivo/services/auth_service.py:742
+#: specivo/services/auth_service.py:816
 msgid "This password reset link has already been used"
 msgstr "该密码重置链接已被使用"
 
-#: specivo/services/auth_service.py:750
+#: specivo/services/auth_service.py:824
 msgid "This password reset link has expired"
 msgstr "该密码重置链接已过期"
 
-#: specivo/services/auth_service.py:822
+#: specivo/services/auth_service.py:896
 msgid "This account has no password. It authenticates with an API key."
 msgstr "此账户未设置密码，通过 API 密钥进行身份验证。"
 
-#: specivo/services/auth_service.py:829
+#: specivo/services/auth_service.py:903
 msgid ""
 "This account has no password. You sign in through your identity provider,"
 " so there is no password to change here."
 msgstr "此账户没有密码。您通过身份提供商登录，因此这里没有可更改的密码。"
 
-#: specivo/services/auth_service.py:840
+#: specivo/services/auth_service.py:914
 msgid "Current password is incorrect"
 msgstr "当前密码不正确"
 
-#: specivo/services/auth_service.py:850
+#: specivo/services/auth_service.py:924
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:23
 msgid "The new password must be different from the current one"
 msgstr "新密码不能与当前密码相同"
@@ -447,7 +447,7 @@ msgstr "记录工时"
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
 #: specivo/templates/themes/default/pages/admin/projects.html:179
 #: specivo/templates/themes/default/pages/admin/settings.html:161
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:384
 #: specivo/templates/themes/default/pages/admin/users.html:160
 #: specivo/templates/themes/default/pages/admin/users.html:201
 #: specivo/templates/themes/default/pages/auth/api_keys.html:82
@@ -554,7 +554,7 @@ msgstr "添加更多……"
 
 #: specivo/templates/themes/default/components/macros.html:95
 #: specivo/templates/themes/default/pages/admin/groups.html:100
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:65
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:75
 #: specivo/templates/themes/default/pages/admin/users.html:162
 #: specivo/templates/themes/default/pages/issues/form.html:299
 msgid "Create"
@@ -808,7 +808,7 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/admin/settings.html:58
 #: specivo/templates/themes/default/pages/admin/settings.html:124
 #: specivo/templates/themes/default/pages/admin/settings.html:132
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:65
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:75
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
@@ -829,7 +829,7 @@ msgstr "保存"
 #: specivo/templates/themes/default/pages/admin/groups.html:126
 #: specivo/templates/themes/default/pages/admin/projects.html:182
 #: specivo/templates/themes/default/pages/admin/settings.html:131
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:66
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:76
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:28
 #: specivo/templates/themes/default/pages/issues/detail.html:123
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:335
@@ -1222,8 +1222,8 @@ msgstr "管理用户账户、创建用户、重置密码。"
 #: specivo/templates/themes/default/pages/admin/groups.html:11
 #: specivo/templates/themes/default/pages/admin/groups.html:24
 #: specivo/templates/themes/default/pages/admin/projects.html:42
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:299
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
 #: specivo/templates/themes/default/pages/projects/settings.html:174
 msgid "Groups"
 msgstr "用户组"
@@ -1532,7 +1532,7 @@ msgid "Nobody is in this group yet."
 msgstr "此用户组中还没有任何人。"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:296
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:310
 #: specivo/templates/themes/default/pages/issues/form.html:329
 #: specivo/templates/themes/default/pages/issues/form.html:381
 #: specivo/templates/themes/default/pages/projects/settings.html:226
@@ -1644,8 +1644,8 @@ msgstr "编辑"
 #: specivo/templates/themes/default/pages/admin/groups.html:72
 #: specivo/templates/themes/default/pages/admin/groups.html:142
 #: specivo/templates/themes/default/pages/admin/groups.html:174
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:73
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:343
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:83
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:386
 #: specivo/templates/themes/default/pages/admin/versions.html:128
 #: specivo/templates/themes/default/pages/auth/api_keys.html:132
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
@@ -1737,7 +1737,7 @@ msgid "This group grants no project access, so nothing is revoked."
 msgstr "此用户组未授予任何项目访问权限，因此不会撤销任何权限。"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:175
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:344
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:387
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:134
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:118
 #: specivo/templates/themes/default/pages/projects/settings.html:465
@@ -1929,7 +1929,7 @@ msgid "Create first preset"
 msgstr "创建第一个预设"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:137
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:151
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:30
 msgid "Slug"
 msgstr "标识串"
@@ -2430,79 +2430,129 @@ msgstr "不允许使用此客户端密钥环境变量名。"
 msgid "No client secret is set."
 msgstr "未设置客户端密钥。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:70
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:56
+#, fuzzy
+msgid ""
+"Session check is on, but the provider does not advertise the "
+"refresh_token grant."
+msgstr "已开启 userinfo，但提供商没有 userinfo_endpoint。"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:57
+msgid ""
+"The last sign-in returned no refresh token, so sessions are not checked "
+"at the provider. Some providers need the offline_access scope."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:58
+msgid ""
+"The provider refused the refresh token right after sign-in, so sessions "
+"are not checked at the provider. Allow the refresh_token grant for this "
+"client."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:61
+msgid "Works: sessions are checked at the provider"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:62
+msgid "Not available: the provider sent no refresh token"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:63
+msgid "Not available: the provider refused the refresh token"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:64
+msgid "Not known yet: no sign-in since it was turned on"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:65
+#, fuzzy
+msgid "Off"
+msgstr "/"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
 msgid "Test connection"
 msgstr "测试连接"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:71
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
 msgid "Testing..."
 msgstr "正在测试..."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:85
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:95
 msgid "Discovery URL"
 msgstr "发现 URL"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:86
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:96
 msgid "Expected issuer"
 msgstr "预期的颁发者"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:87
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:97
 msgid "Issuer reported"
 msgstr "报告的颁发者"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:98
 msgid "Issuer matches"
 msgstr "颁发者匹配"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:90
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:100
 msgid "Authorization endpoint"
 msgstr "授权端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:91
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:101
 msgid "Token endpoint"
 msgstr "令牌端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:92
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:102
 msgid "Userinfo endpoint"
 msgstr "Userinfo 端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:93
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:103
 msgid "End session endpoint"
 msgstr "结束会话端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:94
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:104
 msgid "Signing algorithms"
 msgstr "签名算法"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:95
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:157
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:105
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:171
 msgid "Client authentication"
 msgstr "客户端认证"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:96
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:106
 msgid "Back-channel logout"
 msgstr "后端通道注销"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:98
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:108
+msgid "Refresh token grant"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:110
+#, fuzzy
+msgid "Session check at the provider"
+msgstr "提供商处的组"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:112
 msgid "Signing keys"
 msgstr "签名密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:111
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:125
 msgid "Connection"
 msgstr "连接"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:112
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:126
 msgid ""
 "Register Specivo at the identity provider with exactly these URLs (no "
 "wildcards), then copy its issuer and client ID here."
 msgstr "在身份提供商处使用完全相同的这些 URL（不要通配符）注册 Specivo，然后将其颁发者和客户端 ID 复制到此处。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:114
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:128
 msgid "Redirect URI"
 msgstr "重定向 URI"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:118
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:126
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:132
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:140
 #: specivo/templates/themes/default/pages/admin/user_detail.html:34
 #: specivo/templates/themes/default/pages/auth/api_keys.html:17
 #: specivo/templates/themes/default/pages/projects/settings.html:1031
@@ -2510,296 +2560,365 @@ msgstr "重定向 URI"
 msgid "Copy"
 msgstr "复制"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:119
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:127
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:133
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:141
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:345
 #: specivo/templates/themes/default/pages/projects/settings.html:1032
 #: specivo/templates/themes/default/pages/projects/settings.html:1264
 msgid "Copied"
 msgstr "已复制"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:122
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:136
 msgid "Back-channel logout URI"
 msgstr "后端通道注销 URI"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:133
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:147
 msgid "Button label"
 msgstr "按钮文字"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:139
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:153
 msgid "Part of the URLs above. Changing it means updating them at the provider."
 msgstr "这是上方 URL 的一部分。修改后需在提供商处更新。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:143
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:157
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:32
 msgid "Issuer"
 msgstr "颁发者"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:145
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:159
 msgid "Must match the issuer the provider publishes, character for character."
 msgstr "必须与提供商公布的颁发者逐字符一致。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:148
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:162
 msgid "Discovery URL (optional)"
 msgstr "发现 URL（可选）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:149
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:163
 msgid "Issuer + /.well-known/openid-configuration"
 msgstr "颁发者 + /.well-known/openid-configuration"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:153
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:167
 msgid "Client ID"
 msgstr "客户端 ID"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:161
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:175
 msgid "none (public client, PKCE only)"
 msgstr "none（公共客户端，仅 PKCE）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:167
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:181
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:33
 msgid "Client secret"
 msgstr "客户端密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:171
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:185
 msgid "Store it in Specivo (encrypted)"
 msgstr "存储在 Specivo 中（加密）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:172
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:186
 msgid "Read it from an environment variable"
 msgstr "从环境变量读取"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:175
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:189
 msgid "Leave empty to keep the current secret"
 msgstr "留空以保留当前密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:176
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:190
 msgid "Write-only: the secret is never shown again."
 msgstr "只写：密钥不会再次显示。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:180
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:194
 msgid ""
 "The name must start with SPECIVO_SSO_SECRET_ (capital letters, digits and"
 " underscores). Set the variable on every Specivo container."
 msgstr "名称必须以 SPECIVO_SSO_SECRET_ 开头（大写字母、数字和下划线）。请在每个 Specivo 容器上设置该变量。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:183
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:197
 msgid "Remove the client secret"
 msgstr "移除客户端密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:188
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:202
 msgid "Scopes"
 msgstr "作用域"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:190
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:204
 msgid "Space-separated. openid is required."
 msgstr "以空格分隔。必须包含 openid。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:200
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:214
 msgid "Optional extra parameters for the sign-in request."
 msgstr "登录请求的可选附加参数。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:203
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:217
 msgid "Enabled (shown on the login page)"
 msgstr "已启用（显示在登录页面）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:204
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:218
 msgid "Turning it off signs out everyone who signed in through this provider."
 msgstr "关闭后，所有通过此提供方登录的用户都会被登出。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:206
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:220
 msgid "Button order"
 msgstr "按钮顺序"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:214
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:228
 msgid "Sign-in policy"
 msgstr "登录策略"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:215
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:229
 msgid "Who may sign in, and what happens the first time someone does."
 msgstr "谁可以登录，以及首次登录时会发生什么。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:217
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:231
 msgid "Create an account on first sign-in"
 msgstr "首次登录时创建账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:219
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:233
 msgid "Existing accounts"
 msgstr "现有账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:221
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:235
 msgid "Users connect their account themselves, while signed in"
 msgstr "用户登录后自行关联账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:222
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:236
 msgid "Link automatically by verified email (never for administrators)"
 msgstr "按已验证邮箱自动关联（管理员除外）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:226
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "This provider really verifies email addresses"
 msgstr "此提供商确实会验证邮箱地址"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:227
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:241
 msgid "Required for automatic linking. Never turn it on for Microsoft Entra ID."
 msgstr "自动关联所必需。切勿为 Microsoft Entra ID 开启。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:229
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:243
 msgid "Allowed email domains"
 msgstr "允许的邮箱域名"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:231
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
 msgid "One per line. Empty allows every domain."
 msgstr "每行一个。留空则允许所有域名。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:232
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:246
 msgid ""
 "Needs email verification to be trusted (the setting above): only verified"
 " addresses are checked. Google Workspace accounts are checked by their "
 "hosted domain."
 msgstr "需要信任电子邮件验证（上方的设置）：只检查已验证的地址。Google Workspace 账户按其托管域检查。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:235
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:249
 msgid "Maximum session length (hours)"
 msgstr "最长会话时长（小时）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:237
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
 msgid "After this, people sign in at the provider again."
 msgstr "之后用户需在提供商处重新登录。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:238
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:252
+#, fuzzy
 msgid ""
-"At most 168 hours (one week). An account disabled at the provider keeps "
-"its Specivo session until then: turn on back-channel logout to end it at "
-"once."
+"At most 168 hours (one week). With the session check below, an account "
+"disabled at the provider loses its Specivo session within minutes; "
+"without it, only back-channel logout ends it sooner."
 msgstr ""
 "最多 168 小时（一周）。在提供方被停用的账户会保留其 Specivo 会话直到那时：开启后端通道登出（back-channel "
 "logout）可立即结束会话。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:244
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:258
 msgid "Claims"
 msgstr "声明（Claims）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:259
 msgid ""
 "Which token claims fill the Specivo profile. Leave a field empty for the "
 "standard claim."
 msgstr "哪些令牌声明用于填充 Specivo 个人资料。留空则使用标准声明。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:247
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:261
 msgid "Username claim"
 msgstr "用户名声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:249
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:263
 msgid "Email claim"
 msgstr "邮箱声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
 msgid "Name claim"
 msgstr "姓名声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:253
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:267
 msgid "Language claim"
 msgstr "语言声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:255
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:269
 msgid "Groups claim"
 msgstr "组声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:257
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:271
 msgid "A dotted path, for example realm_access.roles."
 msgstr "以点分隔的路径，例如 realm_access.roles。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:260
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
 msgid "Also read claims from the userinfo endpoint"
 msgstr "同时从 userinfo 端点读取声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:266
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:280
 msgid ""
 "Group values from the groups claim decide who may sign in, who is an "
 "administrator, and which Specivo groups people are in. Values match "
 "exactly, including case."
 msgstr "组声明中的值决定谁可以登录、谁是管理员，以及用户属于哪些 Specivo 组。值必须完全匹配，区分大小写。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:269
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:283
 msgid "Required groups"
 msgstr "必需的组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:271
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:285
 msgid "One per line. Empty lets everyone from this provider in."
 msgstr "每行一个。留空则允许此提供商的所有用户登录。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:288
 msgid "Administrator groups"
 msgstr "管理员组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:293
 msgid "Set the administrator flag from the administrator groups at every sign-in"
 msgstr "每次登录时根据管理员组设置管理员标记"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:281
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:295
 msgid "Update Specivo group memberships from the mappings below at every sign-in"
 msgstr "每次登录时根据下方映射更新 Specivo 组成员身份"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:283
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:297
 msgid ""
 "Deactivate the Specivo account when a sign-in is refused by the required "
 "groups or allowed email domains"
 msgstr "当登录因必需组或允许的邮箱域被拒绝时，停用 Specivo 账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:284
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:298
 msgid ""
 "Deactivation signs the user out everywhere and switches off their API "
 "keys. Without it, only the sessions started through this provider end."
 msgstr "停用会让该用户在所有位置退出登录并关闭其 API 密钥。不启用时，只会结束通过此提供商开始的会话。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:287
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:301
 msgid "Group mappings"
 msgstr "组映射"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:290
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:304
 msgid "Group at the provider"
 msgstr "提供商处的组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:291
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:305
 msgid "Specivo group"
 msgstr "Specivo 组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:299
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
 msgid "Create a Specivo group first."
 msgstr "请先创建一个 Specivo 组。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:301
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:315
 msgid "+ Add mapping"
 msgstr "+ 添加映射"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:302
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:316
 msgid "Save mappings"
 msgstr "保存映射"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:307
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:321
 msgid "Group mappings can be added once the provider is saved."
 msgstr "保存提供商后即可添加组映射。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:327
+#, fuzzy
+msgid "Session check"
+msgstr "会话"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:328
+msgid ""
+"Specivo renews a session every few minutes. With the check on, it first "
+"asks the provider whether the person may still sign in, so someone "
+"disabled, deleted or signed out there loses their Specivo session within "
+"one renewal."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
+msgid "Check sessions at the provider when they are renewed"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:331
+msgid ""
+"Needs a refresh token from the provider. Providers that send none, or "
+"refuse it, keep the sessions as before: Test connection shows which."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:336
+#, fuzzy
+msgid "If the provider cannot be reached"
+msgstr "无法连接身份提供商"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:338
+msgid "Keep the session and ask again at the next renewal"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:339
+#, fuzzy
+msgid "End the session"
+msgstr "智能体会话"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
+msgid ""
+"Ending sessions signs everybody from this provider out while it is down. "
+"Local sign-in keeps working."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:347
 msgid "Logout"
 msgstr "注销"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:315
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:349
 msgid "Signing out of Specivo also signs out at the provider"
 msgstr "退出 Specivo 时也在提供商处退出"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:317
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:351
 msgid "Accept back-channel logout from the provider"
 msgstr "接受来自提供商的后端通道注销"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:318
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:352
 msgid "Register the back-channel logout URI above at the provider."
 msgstr "请在提供商处注册上方的后端通道注销 URI。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:325
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:354
+msgid "When the provider ends a session"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:356
+msgid "End the matching Specivo session"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:357
+#, fuzzy
+msgid "End every session of that person from this provider"
+msgstr "该版本不属于此项目"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:358
+msgid "End all of their sessions and switch off their API keys"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:360
+msgid ""
+"The provider sends the same message when someone signs out as when they "
+"are disabled. Switching off API keys applies only to accounts without a "
+"password, and never deactivates the account: a later sign-in works, but "
+"the keys stay off."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:368
 msgid "Delete provider"
 msgstr "删除提供商"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:328
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:371
 #, python-format
 msgid ""
 "%(count)s user signs in through this provider. Disabling it is usually "
@@ -2809,15 +2928,15 @@ msgid_plural ""
 "what you want."
 msgstr[0] "有 %(count)s 位用户通过此提供商登录。通常建议改为禁用它。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:373
 msgid "Delete anyway: unlink these users and end their sessions"
 msgstr "仍然删除：解除这些用户的关联并结束其会话"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:334
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:377
 msgid "Nobody is linked to this provider. Its group mappings are deleted with it."
 msgstr "没有用户关联到此提供商。其组映射将一并删除。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:337
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:380
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
 msgid_plural "%(count)s group memberships granted by this provider are removed with it."

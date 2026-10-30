@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 23:28+0100\n"
+"POT-Creation-Date: 2026-10-31 00:48+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -108,56 +108,56 @@ msgstr "API key หมดอายุแล้ว"
 msgid "API key not found"
 msgstr "ไม่พบ API key"
 
-#: specivo/services/auth_service.py:217 specivo/services/auth_service.py:238
-#: specivo/services/auth_service.py:270
+#: specivo/services/auth_service.py:222 specivo/services/auth_service.py:243
+#: specivo/services/auth_service.py:275
 msgid "Invalid login or password"
 msgstr "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง"
 
-#: specivo/services/auth_service.py:242
+#: specivo/services/auth_service.py:247
 msgid "Email address not verified"
 msgstr "อีเมลยังไม่ได้รับการยืนยัน"
 
-#: specivo/services/auth_service.py:244
+#: specivo/services/auth_service.py:249
 msgid "Account has been deactivated"
 msgstr "บัญชีถูกปิดใช้งานแล้ว"
 
-#: specivo/services/auth_service.py:248
+#: specivo/services/auth_service.py:253
 msgid "Service accounts cannot log in. Use an API key instead."
 msgstr "บัญชีบริการไม่สามารถเข้าสู่ระบบได้ กรุณาใช้ API key แทน"
 
-#: specivo/services/auth_service.py:254
+#: specivo/services/auth_service.py:259
 msgid "Account is temporarily locked due to too many failed login attempts"
 msgstr "บัญชีถูกล็อกชั่วคราวเนื่องจากเข้าสู่ระบบผิดพลาดหลายครั้ง"
 
-#: specivo/services/auth_service.py:288
+#: specivo/services/auth_service.py:293
 msgid "Account is locked. Contact an administrator."
 msgstr "บัญชีถูกล็อก กรุณาติดต่อผู้ดูแลระบบ"
 
-#: specivo/services/auth_service.py:408
+#: specivo/services/auth_service.py:422
 msgid "Refresh token expired or revoked"
 msgstr "โทเค็นรีเฟรชหมดอายุหรือถูกเพิกถอน"
 
-#: specivo/services/auth_service.py:638
+#: specivo/services/auth_service.py:712
 msgid "Session not found"
 msgstr "ไม่พบเซสชัน"
 
-#: specivo/services/auth_service.py:734 specivo/services/auth_service.py:763
+#: specivo/services/auth_service.py:808 specivo/services/auth_service.py:837
 msgid "Invalid or expired password reset link"
 msgstr "ลิงก์รีเซ็ตรหัสผ่านไม่ถูกต้องหรือหมดอายุแล้ว"
 
-#: specivo/services/auth_service.py:742
+#: specivo/services/auth_service.py:816
 msgid "This password reset link has already been used"
 msgstr "ลิงก์รีเซ็ตรหัสผ่านนี้ถูกใช้งานไปแล้ว"
 
-#: specivo/services/auth_service.py:750
+#: specivo/services/auth_service.py:824
 msgid "This password reset link has expired"
 msgstr "ลิงก์รีเซ็ตรหัสผ่านนี้หมดอายุแล้ว"
 
-#: specivo/services/auth_service.py:822
+#: specivo/services/auth_service.py:896
 msgid "This account has no password. It authenticates with an API key."
 msgstr "บัญชีนี้ไม่มีรหัสผ่าน ใช้ API key ในการยืนยันตัวตน"
 
-#: specivo/services/auth_service.py:829
+#: specivo/services/auth_service.py:903
 msgid ""
 "This account has no password. You sign in through your identity provider,"
 " so there is no password to change here."
@@ -165,11 +165,11 @@ msgstr ""
 "บัญชีนี้ไม่มีรหัสผ่าน คุณลงชื่อเข้าใช้ผ่านผู้ให้บริการข้อมูลประจำตัว "
 "จึงไม่มีรหัสผ่านให้เปลี่ยนที่นี่"
 
-#: specivo/services/auth_service.py:840
+#: specivo/services/auth_service.py:914
 msgid "Current password is incorrect"
 msgstr "รหัสผ่านปัจจุบันไม่ถูกต้อง"
 
-#: specivo/services/auth_service.py:850
+#: specivo/services/auth_service.py:924
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:23
 msgid "The new password must be different from the current one"
 msgstr "รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านปัจจุบัน"
@@ -459,7 +459,7 @@ msgstr "บันทึกเวลา"
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
 #: specivo/templates/themes/default/pages/admin/projects.html:179
 #: specivo/templates/themes/default/pages/admin/settings.html:161
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:384
 #: specivo/templates/themes/default/pages/admin/users.html:160
 #: specivo/templates/themes/default/pages/admin/users.html:201
 #: specivo/templates/themes/default/pages/auth/api_keys.html:82
@@ -566,7 +566,7 @@ msgstr "เพิ่มอีก..."
 
 #: specivo/templates/themes/default/components/macros.html:95
 #: specivo/templates/themes/default/pages/admin/groups.html:100
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:65
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:75
 #: specivo/templates/themes/default/pages/admin/users.html:162
 #: specivo/templates/themes/default/pages/issues/form.html:299
 msgid "Create"
@@ -820,7 +820,7 @@ msgstr "กำลังสร้างดัชนีใหม่..."
 #: specivo/templates/themes/default/pages/admin/settings.html:58
 #: specivo/templates/themes/default/pages/admin/settings.html:124
 #: specivo/templates/themes/default/pages/admin/settings.html:132
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:65
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:75
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
@@ -841,7 +841,7 @@ msgstr "บันทึก"
 #: specivo/templates/themes/default/pages/admin/groups.html:126
 #: specivo/templates/themes/default/pages/admin/projects.html:182
 #: specivo/templates/themes/default/pages/admin/settings.html:131
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:66
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:76
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:28
 #: specivo/templates/themes/default/pages/issues/detail.html:123
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:335
@@ -1244,8 +1244,8 @@ msgstr "จัดการบัญชีผู้ใช้ สร้างผ�
 #: specivo/templates/themes/default/pages/admin/groups.html:11
 #: specivo/templates/themes/default/pages/admin/groups.html:24
 #: specivo/templates/themes/default/pages/admin/projects.html:42
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:299
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
 #: specivo/templates/themes/default/pages/projects/settings.html:174
 msgid "Groups"
 msgstr "กลุ่ม"
@@ -1558,7 +1558,7 @@ msgid "Nobody is in this group yet."
 msgstr "ยังไม่มีใครอยู่ในกลุ่มนี้"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:296
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:310
 #: specivo/templates/themes/default/pages/issues/form.html:329
 #: specivo/templates/themes/default/pages/issues/form.html:381
 #: specivo/templates/themes/default/pages/projects/settings.html:226
@@ -1672,8 +1672,8 @@ msgstr "แก้ไข"
 #: specivo/templates/themes/default/pages/admin/groups.html:72
 #: specivo/templates/themes/default/pages/admin/groups.html:142
 #: specivo/templates/themes/default/pages/admin/groups.html:174
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:73
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:343
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:83
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:386
 #: specivo/templates/themes/default/pages/admin/versions.html:128
 #: specivo/templates/themes/default/pages/auth/api_keys.html:132
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
@@ -1767,7 +1767,7 @@ msgid "This group grants no project access, so nothing is revoked."
 msgstr "กลุ่มนี้ไม่ได้มอบสิทธิ์เข้าถึงโปรเจกต์ใด จึงไม่มีสิทธิ์ใดถูกเพิกถอน"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:175
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:344
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:387
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:134
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:118
 #: specivo/templates/themes/default/pages/projects/settings.html:465
@@ -1963,7 +1963,7 @@ msgid "Create first preset"
 msgstr "สร้างพรีเซ็ตแรก"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:137
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:151
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:30
 msgid "Slug"
 msgstr "Slug"
@@ -2491,68 +2491,123 @@ msgstr "ไม่อนุญาตชื่อตัวแปรสภาพแ
 msgid "No client secret is set."
 msgstr "ยังไม่ได้ตั้งค่าข้อมูลลับของไคลเอนต์"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:70
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:56
+msgid ""
+"Session check is on, but the provider does not advertise the "
+"refresh_token grant."
+msgstr ""
+"เปิดการตรวจสอบเซสชันอยู่ แต่ผู้ให้บริการไม่ได้ประกาศรองรับ grant แบบ "
+"refresh_token"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:57
+msgid ""
+"The last sign-in returned no refresh token, so sessions are not checked "
+"at the provider. Some providers need the offline_access scope."
+msgstr ""
+"การลงชื่อเข้าใช้ครั้งล่าสุดไม่ได้รับ refresh token "
+"จึงไม่มีการตรวจสอบเซสชันกับผู้ให้บริการ ผู้ให้บริการบางรายต้องใช้ scope "
+"offline_access"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:58
+msgid ""
+"The provider refused the refresh token right after sign-in, so sessions "
+"are not checked at the provider. Allow the refresh_token grant for this "
+"client."
+msgstr ""
+"ผู้ให้บริการปฏิเสธ refresh token ทันทีหลังลงชื่อเข้าใช้ "
+"จึงไม่มีการตรวจสอบเซสชันกับผู้ให้บริการ ให้อนุญาต grant แบบ refresh_token"
+" สำหรับไคลเอนต์นี้"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:61
+msgid "Works: sessions are checked at the provider"
+msgstr "ใช้งานได้: เซสชันได้รับการตรวจสอบกับผู้ให้บริการ"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:62
+msgid "Not available: the provider sent no refresh token"
+msgstr "ใช้ไม่ได้: ผู้ให้บริการไม่ได้ส่ง refresh token"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:63
+msgid "Not available: the provider refused the refresh token"
+msgstr "ใช้ไม่ได้: ผู้ให้บริการปฏิเสธ refresh token"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:64
+msgid "Not known yet: no sign-in since it was turned on"
+msgstr "ยังไม่ทราบ: ยังไม่มีการลงชื่อเข้าใช้ตั้งแต่เปิดการตรวจสอบ"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:65
+msgid "Off"
+msgstr "ปิด"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
 msgid "Test connection"
 msgstr "ทดสอบการเชื่อมต่อ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:71
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
 msgid "Testing..."
 msgstr "กำลังทดสอบ..."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:85
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:95
 msgid "Discovery URL"
 msgstr "URL ของ Discovery"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:86
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:96
 msgid "Expected issuer"
 msgstr "ผู้ออกที่คาดไว้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:87
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:97
 msgid "Issuer reported"
 msgstr "ผู้ออกที่รายงาน"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:98
 msgid "Issuer matches"
 msgstr "ผู้ออกตรงกัน"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:90
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:100
 msgid "Authorization endpoint"
 msgstr "Endpoint การอนุญาต"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:91
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:101
 msgid "Token endpoint"
 msgstr "Endpoint โทเค็น"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:92
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:102
 msgid "Userinfo endpoint"
 msgstr "Endpoint userinfo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:93
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:103
 msgid "End session endpoint"
 msgstr "Endpoint สิ้นสุดเซสชัน"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:94
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:104
 msgid "Signing algorithms"
 msgstr "อัลกอริทึมการลงนาม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:95
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:157
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:105
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:171
 msgid "Client authentication"
 msgstr "การยืนยันตัวตนไคลเอนต์"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:96
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:106
 msgid "Back-channel logout"
 msgstr "การออกจากระบบผ่าน back-channel"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:98
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:108
+msgid "Refresh token grant"
+msgstr "Grant แบบ refresh token"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:110
+msgid "Session check at the provider"
+msgstr "การตรวจสอบเซสชันกับผู้ให้บริการ"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:112
 msgid "Signing keys"
 msgstr "คีย์สำหรับลงนาม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:111
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:125
 msgid "Connection"
 msgstr "การเชื่อมต่อ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:112
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:126
 msgid ""
 "Register Specivo at the identity provider with exactly these URLs (no "
 "wildcards), then copy its issuer and client ID here."
@@ -2560,12 +2615,12 @@ msgstr ""
 "ลงทะเบียน Specivo ที่ผู้ให้บริการข้อมูลประจำตัวด้วย URL เหล่านี้ตรงตัว "
 "(ห้ามใช้ wildcard) แล้วคัดลอกผู้ออกและ Client ID มาที่นี่"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:114
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:128
 msgid "Redirect URI"
 msgstr "URI สำหรับเปลี่ยนเส้นทาง"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:118
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:126
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:132
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:140
 #: specivo/templates/themes/default/pages/admin/user_detail.html:34
 #: specivo/templates/themes/default/pages/auth/api_keys.html:17
 #: specivo/templates/themes/default/pages/projects/settings.html:1031
@@ -2573,73 +2628,73 @@ msgstr "URI สำหรับเปลี่ยนเส้นทาง"
 msgid "Copy"
 msgstr "คัดลอก"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:119
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:127
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:133
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:141
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:345
 #: specivo/templates/themes/default/pages/projects/settings.html:1032
 #: specivo/templates/themes/default/pages/projects/settings.html:1264
 msgid "Copied"
 msgstr "คัดลอกแล้ว"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:122
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:136
 msgid "Back-channel logout URI"
 msgstr "URI สำหรับออกจากระบบผ่าน back-channel"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:133
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:147
 msgid "Button label"
 msgstr "ข้อความบนปุ่ม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:139
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:153
 msgid "Part of the URLs above. Changing it means updating them at the provider."
 msgstr "เป็นส่วนหนึ่งของ URL ด้านบน หากเปลี่ยนต้องอัปเดตที่ผู้ให้บริการด้วย"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:143
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:157
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:32
 msgid "Issuer"
 msgstr "ผู้ออก (Issuer)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:145
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:159
 msgid "Must match the issuer the provider publishes, character for character."
 msgstr "ต้องตรงกับผู้ออกที่ผู้ให้บริการเผยแพร่ทุกตัวอักษร"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:148
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:162
 msgid "Discovery URL (optional)"
 msgstr "URL ของ Discovery (ไม่บังคับ)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:149
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:163
 msgid "Issuer + /.well-known/openid-configuration"
 msgstr "ผู้ออก + /.well-known/openid-configuration"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:153
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:167
 msgid "Client ID"
 msgstr "Client ID"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:161
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:175
 msgid "none (public client, PKCE only)"
 msgstr "none (ไคลเอนต์สาธารณะ ใช้ PKCE เท่านั้น)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:167
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:181
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:33
 msgid "Client secret"
 msgstr "ข้อมูลลับของไคลเอนต์"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:171
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:185
 msgid "Store it in Specivo (encrypted)"
 msgstr "จัดเก็บใน Specivo (เข้ารหัส)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:172
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:186
 msgid "Read it from an environment variable"
 msgstr "อ่านจากตัวแปรสภาพแวดล้อม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:175
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:189
 msgid "Leave empty to keep the current secret"
 msgstr "เว้นว่างไว้เพื่อใช้ข้อมูลลับเดิม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:176
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:190
 msgid "Write-only: the secret is never shown again."
 msgstr "เขียนได้อย่างเดียว: จะไม่แสดงข้อมูลลับอีก"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:180
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:194
 msgid ""
 "The name must start with SPECIVO_SSO_SECRET_ (capital letters, digits and"
 " underscores). Set the variable on every Specivo container."
@@ -2647,75 +2702,75 @@ msgstr ""
 "ชื่อต้องขึ้นต้นด้วย SPECIVO_SSO_SECRET_ (ตัวพิมพ์ใหญ่ ตัวเลข และขีดล่าง) "
 "ตั้งค่าตัวแปรนี้ในทุกคอนเทนเนอร์ของ Specivo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:183
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:197
 msgid "Remove the client secret"
 msgstr "ลบข้อมูลลับของไคลเอนต์"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:188
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:202
 msgid "Scopes"
 msgstr "ขอบเขต (Scopes)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:190
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:204
 msgid "Space-separated. openid is required."
 msgstr "คั่นด้วยช่องว่าง ต้องมี openid"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:200
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:214
 msgid "Optional extra parameters for the sign-in request."
 msgstr "พารามิเตอร์เพิ่มเติม (ไม่บังคับ) สำหรับคำขอลงชื่อเข้าใช้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:203
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:217
 msgid "Enabled (shown on the login page)"
 msgstr "เปิดใช้งาน (แสดงในหน้าลงชื่อเข้าใช้)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:204
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:218
 msgid "Turning it off signs out everyone who signed in through this provider."
 msgstr "การปิดใช้งานจะออกจากระบบทุกคนที่ลงชื่อเข้าใช้ผ่านผู้ให้บริการนี้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:206
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:220
 msgid "Button order"
 msgstr "ลำดับปุ่ม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:214
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:228
 msgid "Sign-in policy"
 msgstr "นโยบายการลงชื่อเข้าใช้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:215
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:229
 msgid "Who may sign in, and what happens the first time someone does."
 msgstr "ใครลงชื่อเข้าใช้ได้ และจะเกิดอะไรขึ้นเมื่อมีผู้ลงชื่อเข้าใช้ครั้งแรก"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:217
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:231
 msgid "Create an account on first sign-in"
 msgstr "สร้างบัญชีเมื่อลงชื่อเข้าใช้ครั้งแรก"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:219
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:233
 msgid "Existing accounts"
 msgstr "บัญชีที่มีอยู่"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:221
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:235
 msgid "Users connect their account themselves, while signed in"
 msgstr "ผู้ใช้เชื่อมบัญชีเองขณะลงชื่อเข้าใช้อยู่"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:222
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:236
 msgid "Link automatically by verified email (never for administrators)"
 msgstr "เชื่อมโยงอัตโนมัติด้วยอีเมลที่ยืนยันแล้ว (ไม่ใช้กับผู้ดูแลระบบ)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:226
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "This provider really verifies email addresses"
 msgstr "ผู้ให้บริการนี้ยืนยันที่อยู่อีเมลจริง"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:227
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:241
 msgid "Required for automatic linking. Never turn it on for Microsoft Entra ID."
 msgstr "จำเป็นสำหรับการเชื่อมโยงอัตโนมัติ ห้ามเปิดสำหรับ Microsoft Entra ID"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:229
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:243
 msgid "Allowed email domains"
 msgstr "โดเมนอีเมลที่อนุญาต"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:231
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
 msgid "One per line. Empty allows every domain."
 msgstr "บรรทัดละหนึ่งรายการ เว้นว่างไว้เพื่ออนุญาตทุกโดเมน"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:232
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:246
 msgid ""
 "Needs email verification to be trusted (the setting above): only verified"
 " addresses are checked. Google Workspace accounts are checked by their "
@@ -2725,29 +2780,30 @@ msgstr ""
 "เนื่องจากจะตรวจสอบเฉพาะที่อยู่อีเมลที่ยืนยันแล้ว บัญชี Google Workspace "
 "จะตรวจสอบจากโดเมนขององค์กร"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:235
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:249
 msgid "Maximum session length (hours)"
 msgstr "ระยะเวลาเซสชันสูงสุด (ชั่วโมง)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:237
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
 msgid "After this, people sign in at the provider again."
 msgstr "หลังจากนั้นผู้ใช้ต้องลงชื่อเข้าใช้ที่ผู้ให้บริการอีกครั้ง"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:238
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:252
 msgid ""
-"At most 168 hours (one week). An account disabled at the provider keeps "
-"its Specivo session until then: turn on back-channel logout to end it at "
-"once."
+"At most 168 hours (one week). With the session check below, an account "
+"disabled at the provider loses its Specivo session within minutes; "
+"without it, only back-channel logout ends it sooner."
 msgstr ""
-"สูงสุด 168 ชั่วโมง (หนึ่งสัปดาห์) "
-"บัญชีที่ถูกปิดใช้งานที่ผู้ให้บริการจะยังคงเซสชัน Specivo ไว้จนถึงตอนนั้น:"
-" เปิด back-channel logout เพื่อยุติเซสชันทันที"
+"สูงสุด 168 ชั่วโมง (หนึ่งสัปดาห์) เมื่อเปิดการตรวจสอบเซสชันด้านล่าง "
+"บัญชีที่ถูกปิดใช้งานที่ผู้ให้บริการจะเสียเซสชัน Specivo ภายในไม่กี่นาที "
+"หากไม่เปิด มีเพียงการออกจากระบบผ่าน back-channel "
+"ที่จะสิ้นสุดเซสชันได้เร็วกว่านั้น"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:244
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:258
 msgid "Claims"
 msgstr "Claims"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:259
 msgid ""
 "Which token claims fill the Specivo profile. Leave a field empty for the "
 "standard claim."
@@ -2755,35 +2811,35 @@ msgstr ""
 "claims ใดในโทเค็นที่ใช้กรอกโปรไฟล์ Specivo เว้นว่างไว้เพื่อใช้ claim "
 "มาตรฐาน"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:247
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:261
 msgid "Username claim"
 msgstr "Claim ชื่อผู้ใช้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:249
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:263
 msgid "Email claim"
 msgstr "Claim อีเมล"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
 msgid "Name claim"
 msgstr "Claim ชื่อ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:253
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:267
 msgid "Language claim"
 msgstr "Claim ภาษา"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:255
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:269
 msgid "Groups claim"
 msgstr "Claim กลุ่ม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:257
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:271
 msgid "A dotted path, for example realm_access.roles."
 msgstr "เส้นทางแบบจุด เช่น realm_access.roles"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:260
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
 msgid "Also read claims from the userinfo endpoint"
 msgstr "อ่าน claims จาก endpoint userinfo ด้วย"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:266
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:280
 msgid ""
 "Group values from the groups claim decide who may sign in, who is an "
 "administrator, and which Specivo groups people are in. Values match "
@@ -2792,29 +2848,29 @@ msgstr ""
 "ค่าจาก claim กลุ่มใช้ตัดสินว่าใครลงชื่อเข้าใช้ได้ ใครเป็นผู้ดูแลระบบ "
 "และผู้ใช้อยู่ในกลุ่มใดของ Specivo ค่าต้องตรงกันทุกตัวอักษรรวมถึงตัวพิมพ์"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:269
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:283
 msgid "Required groups"
 msgstr "กลุ่มที่จำเป็น"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:271
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:285
 msgid "One per line. Empty lets everyone from this provider in."
 msgstr "บรรทัดละหนึ่งรายการ เว้นว่างไว้เพื่อให้ทุกคนจากผู้ให้บริการนี้เข้าได้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:288
 msgid "Administrator groups"
 msgstr "กลุ่มผู้ดูแลระบบ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:293
 msgid "Set the administrator flag from the administrator groups at every sign-in"
 msgstr "ตั้งค่าสถานะผู้ดูแลระบบจากกลุ่มผู้ดูแลระบบทุกครั้งที่ลงชื่อเข้าใช้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:281
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:295
 msgid "Update Specivo group memberships from the mappings below at every sign-in"
 msgstr ""
 "อัปเดตการเป็นสมาชิกกลุ่ม Specivo "
 "ตามการจับคู่ด้านล่างทุกครั้งที่ลงชื่อเข้าใช้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:283
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:297
 msgid ""
 "Deactivate the Specivo account when a sign-in is refused by the required "
 "groups or allowed email domains"
@@ -2822,7 +2878,7 @@ msgstr ""
 "ปิดใช้งานบัญชี Specivo "
 "เมื่อการลงชื่อเข้าใช้ถูกปฏิเสธโดยกลุ่มที่กำหนดหรือโดเมนอีเมลที่อนุญาต"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:284
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:298
 msgid ""
 "Deactivation signs the user out everywhere and switches off their API "
 "keys. Without it, only the sessions started through this provider end."
@@ -2830,55 +2886,132 @@ msgstr ""
 "การปิดใช้งานจะนำผู้ใช้ออกจากระบบทุกที่และปิดคีย์ API ของผู้ใช้ "
 "หากไม่เลือก จะสิ้นสุดเฉพาะเซสชันที่เริ่มผ่านผู้ให้บริการนี้"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:287
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:301
 msgid "Group mappings"
 msgstr "การจับคู่กลุ่ม"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:290
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:304
 msgid "Group at the provider"
 msgstr "กลุ่มที่ผู้ให้บริการ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:291
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:305
 msgid "Specivo group"
 msgstr "กลุ่มใน Specivo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:299
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
 msgid "Create a Specivo group first."
 msgstr "สร้างกลุ่มใน Specivo ก่อน"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:301
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:315
 msgid "+ Add mapping"
 msgstr "+ เพิ่มการจับคู่"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:302
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:316
 msgid "Save mappings"
 msgstr "บันทึกการจับคู่"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:307
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:321
 msgid "Group mappings can be added once the provider is saved."
 msgstr "เพิ่มการจับคู่กลุ่มได้หลังจากบันทึกผู้ให้บริการแล้ว"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:327
+msgid "Session check"
+msgstr "การตรวจสอบเซสชัน"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:328
+msgid ""
+"Specivo renews a session every few minutes. With the check on, it first "
+"asks the provider whether the person may still sign in, so someone "
+"disabled, deleted or signed out there loses their Specivo session within "
+"one renewal."
+msgstr ""
+"Specivo ต่ออายุเซสชันทุกไม่กี่นาที เมื่อเปิดการตรวจสอบ "
+"ระบบจะถามผู้ให้บริการก่อนว่าบุคคลนั้นยังลงชื่อเข้าใช้ได้หรือไม่ "
+"ผู้ที่ถูกปิดใช้งาน ถูกลบ หรือออกจากระบบที่นั่นจะเสียเซสชัน Specivo "
+"ภายในการต่ออายุครั้งเดียว"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
+msgid "Check sessions at the provider when they are renewed"
+msgstr "ตรวจสอบเซสชันกับผู้ให้บริการเมื่อมีการต่ออายุ"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:331
+msgid ""
+"Needs a refresh token from the provider. Providers that send none, or "
+"refuse it, keep the sessions as before: Test connection shows which."
+msgstr ""
+"ต้องได้รับ refresh token จากผู้ให้บริการ ผู้ให้บริการที่ไม่ส่งหรือปฏิเสธ "
+"refresh token จะคงเซสชันไว้เหมือนเดิม: "
+"ทดสอบการเชื่อมต่อจะแสดงว่าเป็นกรณีใด"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:336
+msgid "If the provider cannot be reached"
+msgstr "หากติดต่อผู้ให้บริการไม่ได้"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:338
+msgid "Keep the session and ask again at the next renewal"
+msgstr "คงเซสชันไว้และถามอีกครั้งในการต่ออายุครั้งถัดไป"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:339
+msgid "End the session"
+msgstr "สิ้นสุดเซสชัน"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
+msgid ""
+"Ending sessions signs everybody from this provider out while it is down. "
+"Local sign-in keeps working."
+msgstr ""
+"การสิ้นสุดเซสชันจะทำให้ทุกคนที่มาจากผู้ให้บริการนี้ออกจากระบบขณะที่ผู้ให้บริการล่ม"
+" การลงชื่อเข้าใช้ด้วยบัญชีภายในยังใช้งานได้"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:347
 msgid "Logout"
 msgstr "การออกจากระบบ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:315
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:349
 msgid "Signing out of Specivo also signs out at the provider"
 msgstr "การออกจากระบบ Specivo จะออกจากระบบที่ผู้ให้บริการด้วย"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:317
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:351
 msgid "Accept back-channel logout from the provider"
 msgstr "รับการออกจากระบบผ่าน back-channel จากผู้ให้บริการ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:318
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:352
 msgid "Register the back-channel logout URI above at the provider."
 msgstr "ลงทะเบียน URI สำหรับออกจากระบบผ่าน back-channel ด้านบนที่ผู้ให้บริการ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:325
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:354
+msgid "When the provider ends a session"
+msgstr "เมื่อผู้ให้บริการสิ้นสุดเซสชัน"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:356
+msgid "End the matching Specivo session"
+msgstr "สิ้นสุดเซสชัน Specivo ที่ตรงกัน"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:357
+msgid "End every session of that person from this provider"
+msgstr "สิ้นสุดทุกเซสชันของบุคคลนั้นที่มาจากผู้ให้บริการนี้"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:358
+msgid "End all of their sessions and switch off their API keys"
+msgstr "สิ้นสุดเซสชันทั้งหมดของบุคคลนั้นและปิด API key ของเขา"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:360
+msgid ""
+"The provider sends the same message when someone signs out as when they "
+"are disabled. Switching off API keys applies only to accounts without a "
+"password, and never deactivates the account: a later sign-in works, but "
+"the keys stay off."
+msgstr ""
+"ผู้ให้บริการส่งข้อความเดียวกันทั้งเมื่อมีคนออกจากระบบและเมื่อถูกปิดใช้งาน"
+" การปิด API key ใช้กับบัญชีที่ไม่มีรหัสผ่านเท่านั้น "
+"และจะไม่ปิดใช้งานบัญชี: การลงชื่อเข้าใช้ครั้งต่อไปยังทำได้ แต่ key "
+"จะยังคงปิดอยู่"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:368
 msgid "Delete provider"
 msgstr "ลบผู้ให้บริการ"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:328
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:371
 #, python-format
 msgid ""
 "%(count)s user signs in through this provider. Disabling it is usually "
@@ -2890,15 +3023,15 @@ msgstr[0] ""
 "มีผู้ใช้ %(count)s คนลงชื่อเข้าใช้ผ่านผู้ให้บริการนี้ "
 "โดยทั่วไปควรปิดใช้งานแทน"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:373
 msgid "Delete anyway: unlink these users and end their sessions"
 msgstr "ลบต่อไป: ยกเลิกการเชื่อมโยงผู้ใช้เหล่านี้และยุติเซสชันของพวกเขา"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:334
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:377
 msgid "Nobody is linked to this provider. Its group mappings are deleted with it."
 msgstr "ไม่มีผู้ใช้เชื่อมโยงกับผู้ให้บริการนี้ การจับคู่กลุ่มจะถูกลบไปด้วย"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:337
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:380
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
 msgid_plural "%(count)s group memberships granted by this provider are removed with it."

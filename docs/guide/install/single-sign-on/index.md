@@ -175,9 +175,20 @@ claim.
 Required groups, administrator groups and the group mappings. See
 [Groups and roles](#groups-and-roles).
 
+### Session check
+
+| Field | What it does |
+|---|---|
+| Check sessions at the provider when they are renewed | **On by default.** Before Specivo renews a session (every 15 minutes while someone is active), it asks the IdP whether the person may still sign in. Someone disabled, deleted or signed out there loses their Specivo session at the next renewal. Needs a refresh token from the IdP; see [The session check](#the-session-check). |
+| If the provider cannot be reached | **Keep the session** (default): the renewal goes ahead and the next one asks again. Someone who can block the traffic between Specivo and the IdP can keep a session this way, but never past **Maximum session length**. **End the session**: everybody from this provider is signed out while it is down. Local sign-in always keeps working. |
+
 ### Logout
 
-Two switches, described in [Sessions and logout](#sessions-and-logout).
+| Field | What it does |
+|---|---|
+| Signing out of Specivo also signs out at the provider | RP-initiated logout, on by default. See [Sessions and logout](#sessions-and-logout). |
+| Accept back-channel logout from the provider | Off by default. See [Sessions and logout](#sessions-and-logout). |
+| When the provider ends a session | What a back-channel logout ends: the matching session (default), every session of that person from this provider, or all of their sessions and their API keys. See [What a back-channel logout ends](#what-a-back-channel-logout-ends). |
 
 ## Test connection
 
@@ -188,12 +199,17 @@ signing keys right now, stores nothing, and shows:
 - whether the issuer reported by the IdP matches the one you entered,
 - the signing algorithms it can use, the client authentication methods the IdP offers, and how many
   signing keys it published,
-- whether the IdP advertises back-channel logout,
+- whether the IdP advertises back-channel logout and the refresh token grant,
+- whether sessions are checked at the provider, as the last sign-in found out: **Works**, **Not
+  available: the provider sent no refresh token**, **Not available: the provider refused the
+  refresh token**, or **Not known yet** when nobody has signed in since the check was turned on.
+  Only a real sign-in gets a refresh token, so the test cannot try it itself,
 - warnings for settings that work but probably are not what you want: the IdP does not advertise
   the chosen client authentication method or PKCE, sign-out at the provider is on but the IdP has
   no end-session endpoint, back-channel logout is on but the IdP does not support it, userinfo is
-  on but the IdP has none, or the client secret is missing, unreadable or points at a bad
-  environment variable.
+  on but the IdP has none, the client secret is missing, unreadable or points at a bad
+  environment variable, or the session check is on but cannot work (see
+  [The session check](#the-session-check)).
 
 The test does not sign anyone in. It proves that Specivo can reach the IdP and that the issuer is
 right. It cannot prove that the client ID, the secret or the redirect URI are right. Only a real
@@ -344,9 +360,9 @@ provider manages, are never removed.
 
 **Session length.** A sign-in through a provider lasts at most **Maximum session length** (default
 24 hours, at most 168 hours, one week), even if the person keeps using Specivo. After that they go
-through the IdP again. This is how an IdP that has disabled someone eventually stops them here, so
-the number is also how long a person disabled at the IdP can keep working in Specivo. For fast
-offboarding turn on back-channel logout (below); lower the number if you cannot use it.
+through the IdP again. With [the session check](#the-session-check) working, a person disabled at
+the IdP is stopped much sooner; without it, this number is how long they can keep working in
+Specivo, unless back-channel logout ends the session first.
 
 **A session follows its provider and its identity.** Each time its access token expires (every 15
 minutes by default) the browser renews the session in the background. An SSO session is not renewed,
@@ -354,6 +370,45 @@ and ends, once its provider is disabled or its identity is disconnected. Turning
 every session that came from it at once (the admin page says how many; the API returns the count in
 the `X-Revoked-Sessions` header of the `PATCH`). Turning it on again does not bring them back:
 people sign in again. Password sessions and sessions from other providers are not affected.
+
+### The session check
+
+Specivo issues its own session tokens. Without help it would not ask the IdP again until the
+session reaches its maximum length. With **Check sessions at the provider when they are renewed**
+on (the default), it keeps the refresh token the IdP issued at sign-in, encrypted, and presents it
+to the IdP every time it renews the session, at most once per `SSO_IDP_RECHECK_MINUTES` (by default
+the access-token lifetime, 15 minutes):
+
+- the IdP accepts it: the session is renewed (and keeps the new refresh token, if the IdP rotates
+  it);
+- the IdP refuses it (`invalid_grant`): the person was disabled, deleted or signed out there, or
+  their IdP session expired. The Specivo session ends at once, and the next page they open is the
+  login page. The security audit log records `sso_session_rejected`;
+- the IdP cannot be reached or answers with another error: **If the provider cannot be reached**
+  decides, and the log has an `sso.session.idp_check_failed` line.
+
+This works with any OpenID Connect IdP that issues refresh tokens, without back-channel logout.
+API keys are not affected by it.
+
+**When it cannot work.** Some IdPs issue a refresh token only when Specivo asks for the
+`offline_access` scope (authentik, Microsoft Entra ID, Okta and others); add it to **Scopes** for
+them. Keycloak issues one for `openid` already, and `offline_access` there creates offline sessions
+that outlive a Keycloak sign-out, so do not add it for Keycloak. Specivo tries the refresh token
+once right after each sign-in. If the IdP sent none, or refused it (the client may not use the
+refresh token grant), that person's sessions are renewed as before, and Test connection shows why.
+Nobody is signed out because the check cannot work.
+
+**The IdP's own session timeouts now apply.** A refresh token usually lives only as long as the
+person's session at the IdP. When that session idles out or reaches its maximum at the IdP (in
+Keycloak: **SSO Session Idle**, 30 minutes by default, and **SSO Session Max**, 10 hours), the next
+Specivo renewal is refused and the person signs in again. Raise those timeouts at the IdP, or turn
+the check off for the provider, if that is too often.
+
+**The token belongs to the IdP that issued it.** The stored refresh token is only ever sent to the
+issuer, token endpoint and client ID it came from. Changing the provider's issuer, discovery URL or
+client ID drops the stored tokens of its open sessions, and so does a new token endpoint in the
+IdP's discovery document. Those sessions are then renewed without the check until the person signs
+in again.
 
 **Signing out of Specivo.** The **Sign out** button in the header is a form that posts to
 `/logout/`. A plain link or bookmark to `/logout/` opens a "Sign out?" confirmation page and does
@@ -376,14 +431,39 @@ IdP's keys are unreachable, or the token is signed with a key Specivo has not se
 the IdP's keys less than a minute ago (right after a key rotation). It answers 429 to more than
 60 requests a minute for one provider from one sender address (for IPv6, from one /64 network).
 
+### What a back-channel logout ends
+
+**When the provider ends a session** decides:
+
+| Choice | What ends |
+|---|---|
+| End the matching Specivo session (default) | The Specivo sessions of the IdP session the logout names (its `sid`). A logout that names only the person (`sub`) ends all their sessions from this provider. |
+| End every session of that person from this provider | Every session that came from this identity, whichever IdP session it belongs to. |
+| End all of their sessions and switch off their API keys | As above; and if the account signs in only through SSO (it has no password), every one of its sessions, also from other providers, and all of its API keys, MCP keys included, are switched off. The security audit log records `user_deprovisioned` with reason `sso_backchannel`. |
+
+The last choice never deactivates the account and never touches an account with a password or a
+service account (those get the second behaviour). If the person signs in through the IdP again
+later, that works, but their API keys stay off until they or an administrator switch them back on.
+IdPs send the same logout for a person who signed out as for one who was disabled, so choose it
+only if you accept that signing out at the IdP also switches off that person's API keys. A repeated
+logout for the same session changes nothing.
+
 ## Offboarding people
 
 Specivo has no SCIM, so it learns that someone left through the following. Use as many as your IdP
-allows.
+allows. The provider pages have a short runbook each:
+[Keycloak](keycloak.md#offboarding), [authentik](authentik.md#offboarding).
 
-1. **Disable the person at the IdP.** They cannot sign in again. Their existing Specivo session
-   keeps working until you end it or it reaches the maximum session length (at most a week).
-2. **Back-channel logout**, where the IdP supports it, ends the session when the IdP ends theirs.
+1. **Disable the person at the IdP.** They cannot sign in again. With
+   [the session check](#the-session-check) working, their Specivo session ends at its next renewal,
+   usually within one access-token lifetime (15 minutes), at most `SSO_IDP_RECHECK_MINUTES` plus that
+   lifetime. Without it, the session keeps working until you end it or it reaches the
+   maximum session length (at most a week).
+2. **Back-channel logout**, where the IdP supports it, ends the session when the IdP ends theirs,
+   at once. Which IdP actions send one differs: Keycloak sends it when an administrator signs the
+   person out (not when they are disabled), authentik when the person is disabled, deleted or
+   signed out. With **End all of their sessions and switch off their API keys** it also switches
+   off their API keys (see [What a back-channel logout ends](#what-a-back-channel-logout-ends)).
 3. **A refused sign-in** because they lost a required group, their email domain no longer
    qualifies, or a group overage hides their groups (`sso_groups_overage`), ends the remaining
    sessions that came from that identity.
@@ -402,9 +482,14 @@ on, a refused sign-in (step 3, a group overage included) deactivates the account
 already connected to that identity. Specivo never deactivates a service account this way, nor the
 last active administrator (it logs a warning instead).
 
-**API keys.** People who sign in through SSO can create API keys, which keep working after the IdP
-disables them, until the key expires or you deactivate the user. Turn off **Users who sign in through
-SSO may use API keys** under **Administration → Settings → Authentication** if you do not want that.
+**API keys.** People who sign in through SSO can create API keys (on by default). A key does not
+pass through the IdP, so neither the session check nor an ordinary back-channel logout stops it: it
+keeps working after the IdP disables the person, until the key expires, you deactivate the user, or
+a back-channel logout with **End all of their sessions and switch off their API keys** switches it
+off. That is the trade-off of keeping keys for SSO users: agents and scripts keep working across an
+IdP outage or a forgotten group, but offboarding needs one of those steps. Turn off **Users who sign
+in through SSO may use API keys** under **Administration → Settings → Authentication** if you do not
+want that.
 It applies to accounts with no password and a connected identity: they cannot create keys, and
 their existing keys are refused while the setting is off. Whatever this setting says, such accounts
 cannot get a password through **Forgot password**; an administrator can still set one deliberately. Users with a password
@@ -442,6 +527,7 @@ These are set in `.env` like other [configuration](../configuration.md). They ap
 | `SSO_FORCE_LOCAL_LOGIN` | `false` | Break-glass switch: always show the password form, never redirect, ignore the hide and admins-only settings. |
 | `SSO_ALLOW_INSECURE_HTTP` | `false` | Allow `http://` IdP addresses. For a disposable test IdP only. Never use it on a real one: tokens and secrets travel in clear text. |
 | `SSO_HTTP_TIMEOUT_SECONDS` | `5` | How long each request to the IdP may take. |
+| `SSO_IDP_RECHECK_MINUTES` | access-token lifetime (15) | How often a session renewal asks the IdP at most, per session. See [The session check](#the-session-check). `0` asks at every renewal. |
 | `SSO_CLOCK_SKEW_SECONDS` | `60` | How far the clocks of Specivo and the IdP may differ when checking token times. Values above 300 are lowered to 300. Fix the clocks (use NTP) rather than raising this. |
 | `SPECIVO_SSO_SECRET_<NAME>` | none | A client secret you point a provider at. |
 
@@ -453,6 +539,11 @@ These are set in `.env` like other [configuration](../configuration.md). They ap
 - **`SECRET_KEY`**: if you rotate it later, re-enter stored client secrets (see
   [The client secret](#the-client-secret)).
 - **Existing sessions** keep working.
+- **The session check** is on for every provider after the upgrade, existing ones included. Nobody
+  is signed out by it: sessions open at the upgrade carry no IdP refresh token and are renewed as
+  before; sessions started afterwards are checked if the IdP issues refresh tokens (add
+  `offline_access` to **Scopes** where the IdP needs it). Press **Test connection** after the first
+  sign-in to see whether it works.
 
 ## Troubleshooting
 
@@ -497,3 +588,8 @@ Other things administrators run into:
 - **A person's display name or language changed, but their email did not.** Expected unless the
   provider is trusted for email verification.
 - **A person is signed out of Specivo after 24 hours.** That is **Maximum session length**.
+- **A person is signed out after a break of half an hour or so.** Their session at the IdP idled out,
+  and the session check found that at the next renewal. Raise the IdP's idle timeout, or turn off
+  the session check for the provider. See [The session check](#the-session-check).
+- **Test connection says the provider refused the refresh token.** The client may not use the
+  refresh token grant at the IdP. Allow it (authentik: **Grant Types → Refresh token**).

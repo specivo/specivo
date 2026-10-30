@@ -1,4 +1,4 @@
-# Disposable OpenID Connect identity provider (Keycloak) for the SSO tests.
+# Disposable OpenID Connect identity providers (Keycloak, authentik) for the SSO tests.
 #
 # Test fixture, not part of running Specivo. Every credential in this file and
 # in the seeds next to it (tests/fixtures/sso/) is a fixed, public test value; nothing
@@ -6,14 +6,18 @@
 #
 #   make sso-idp-up              # start Keycloak
 #   make test-sso-idp            # pytest -m 'sso_idp and not e2e'
-#   make test-e2e-sso            # sso-idp-up + the Playwright SSO tests
+#   make test-e2e-sso            # sso-authentik-up + the Playwright SSO tests
+#   make sso-authentik-up        # start authentik as well (profile "authentik")
 #   make sso-idp-down            # stop everything, discard volumes
 #
 # Keycloak:  issuer http://localhost:8033/realms/specivo-test
 #            admin console http://localhost:8033/admin/ (admin / admin-test-only)
+# authentik: issuer http://localhost:8036/application/o/specivo-test/
+#            admin interface http://localhost:8036/if/admin/ (akadmin / akadmin-test-only)
+#            API token AUTHENTIK_BOOTSTRAP_TOKEN below
 #
 # Specivo must run with SSO_ALLOW_INSECURE_HTTP=true to accept these http
-# issuer. That is a test-only setting.
+# issuers. That is a test-only setting.
 
 name: specivo-sso-test
 
@@ -53,3 +57,69 @@ services:
       retries: 40
       start_period: 10s
 
+
+  # authentik needs a server, a worker and PostgreSQL. The worker applies the
+  # blueprint (tests/fixtures/sso/authentik/) and sends back-channel logouts.
+  authentik-postgresql:
+    profiles: [authentik]
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik-test-only
+      POSTGRES_DB: authentik
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  authentik-server:
+    profiles: [authentik]
+    image: ghcr.io/goauthentik/server:2026.8
+    command: server
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: authentik-test-only-secret-key-not-a-real-secret
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentik-test-only
+      AUTHENTIK_BOOTSTRAP_PASSWORD: akadmin-test-only
+      AUTHENTIK_BOOTSTRAP_TOKEN: authentik-test-only-api-token
+      AUTHENTIK_BOOTSTRAP_EMAIL: akadmin@example.com
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      AUTHENTIK_LOG_LEVEL: warning
+    ports:
+      - "127.0.0.1:${SSO_AUTHENTIK_PORT:-8036}:9000"
+    volumes:
+      - ./authentik:/blueprints/custom/specivo:ro
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+    healthcheck:
+      # "ready" is not enough: wait until the blueprint created the application.
+      test:
+        - CMD-SHELL
+        - >-
+          python3 -c "import urllib.request as u;
+          u.urlopen('http://127.0.0.1:9000/application/o/specivo-test/.well-known/openid-configuration', timeout=2)"
+      interval: 5s
+      timeout: 5s
+      retries: 60
+      start_period: 20s
+
+  authentik-worker:
+    profiles: [authentik]
+    image: ghcr.io/goauthentik/server:2026.8
+    command: worker
+    environment: *authentik-env
+    # Back-channel logout calls the E2E server on the host (port 9944).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./authentik:/blueprints/custom/specivo:ro
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy

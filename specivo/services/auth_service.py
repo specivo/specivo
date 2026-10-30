@@ -20,6 +20,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import jwt
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -47,6 +48,10 @@ from specivo.services.auth_utils import (
 )
 from specivo.services.session_service import SessionService
 from specivo.tasks.notifications import send_notification_email
+
+if TYPE_CHECKING:
+    from specivo.core.config import Settings
+    from specivo.services.sso.session_check import RecheckPlan, RecheckResult
 
 # ---------------------------------------------------------------------------
 # Lockout thresholds (failures → lock duration in minutes)
@@ -335,6 +340,8 @@ class AuthService:
         idp_sid: str | None,
         device_info: str | None = None,
         ip: str | None = None,
+        idp_refresh_token_encrypted: str | None = None,
+        idp_checked_at: datetime | None = None,
     ) -> SsoSession:
         """Start a new session for a user who signed in through ``provider``.
 
@@ -342,7 +349,10 @@ class AuthService:
         and ``identity`` (account status included). The refresh row records
         ``auth_method="sso"``, the identity, the IdP session id (``sid``
         claim, for back-channel logout) and the ID token encrypted for
-        ``id_token_hint``. ``absolute_expires_at`` caps the session at
+        ``id_token_hint``, and the IdP's refresh token as
+        :func:`specivo.services.sso.session_check.seal_sign_in_refresh_token`
+        sealed it (``None``: the session is not re-checked at the IdP).
+        ``absolute_expires_at`` caps the session at
         ``provider.session_max_age_hours`` (at most
         ``SSO_SESSION_MAX_AGE_HOURS``), after which the user goes back to
         the IdP; ``expires_at`` never runs past it. Always new tokens, never a
@@ -360,6 +370,8 @@ class AuthService:
         record.user_identity_id = identity.id
         record.idp_sid = idp_sid[:255] if idp_sid else None
         record.id_token_encrypted = secret_box.encrypt(id_token, ID_TOKEN_PURPOSE)
+        record.idp_refresh_token_encrypted = idp_refresh_token_encrypted
+        record.idp_checked_at = idp_checked_at
         record.absolute_expires_at = absolute_expires_at
         record.expires_at = min(record.expires_at, absolute_expires_at)
 
@@ -390,7 +402,11 @@ class AuthService:
         the session keeps its identity. Past ``absolute_expires_at`` the
         session cannot be refreshed at all. An SSO session is refused, and
         revoked for good, once its identity is unlinked or its provider is
-        disabled.
+        disabled, or when the IdP no longer accepts its refresh token
+        (:mod:`specivo.services.sso.session_check`). That check runs before
+        the session is locked and outside any transaction (the read
+        transaction is committed first), so a slow IdP holds no database
+        connection or lock.
 
         Rotation cannot outlive a concurrent revocation: the session is locked
         (``SessionService.lock_sessions``) before the old row is claimed with
@@ -399,8 +415,6 @@ class AuthService:
         marked ``revoked_session:{sid}`` in Redis is refused too, failing
         closed when Redis is unreachable, like access-token checks.
         """
-        from specivo.core.security import is_access_token_revoked
-
         settings = get_settings()
         token_hash = _hash_token(refresh_token_raw)
         refused = AppError(
@@ -417,12 +431,52 @@ class AuthService:
         if record is None:
             raise refused
 
+        # An SSO session may have to be re-checked at its IdP first. That is
+        # network I/O of up to twice SSO_HTTP_TIMEOUT_SECONDS: end the read
+        # transaction first, so no pooled connection, session lock or claimed
+        # row is held while the IdP answers, and let one renewal of this row
+        # ask it (recheck_guard). The answer is applied after the claim.
+        plan = None
+        if record.auth_method == "sso":
+            from specivo.services.sso.session_check import plan_recheck
+
+            plan = await plan_recheck(session, record, settings=settings)
+        if plan is None:
+            return await self._rotate(session, record, remember, settings, refused)
+
+        from specivo.services.sso.session_check import recheck_guard, run_recheck
+
+        await session.commit()
+        async with recheck_guard(record.id, settings=settings) as held:
+            if not held:
+                raise refused
+            idp_check = await run_recheck(plan, settings=settings)
+            return await self._rotate(session, record, remember, settings, refused, plan=plan, idp_check=idp_check)
+
+    async def _rotate(
+        self,
+        session: AsyncSession,
+        record: RefreshToken,
+        remember: bool,
+        settings: Settings,
+        refused: AppError,
+        *,
+        plan: RecheckPlan | None = None,
+        idp_check: RecheckResult | None = None,
+    ) -> tuple[str, str, User]:
+        """Steps 2 to 7 of :meth:`refresh`: lock, claim, check, and issue the new tokens."""
+        from specivo.core.security import is_access_token_revoked
+
         # 2. Lock the session, then claim the old row (rotation). Zero rows
-        # means a revocation deleted it after we read it.
+        # means a revocation (or a concurrent renewal) deleted it after we read it.
         await _sessions.lock_sessions(session, [record.session_id])
-        claimed = await session.scalar(
-            delete(RefreshToken).where(RefreshToken.id == record.id).returning(RefreshToken.id)
-        )
+        claimed = (
+            await session.execute(
+                delete(RefreshToken)
+                .where(RefreshToken.id == record.id)
+                .returning(RefreshToken.id, RefreshToken.idp_refresh_token_encrypted, RefreshToken.idp_checked_at)
+            )
+        ).first()
         await session.flush()
         if claimed is None:
             raise refused
@@ -457,9 +511,26 @@ class AuthService:
             )
             raise refused
 
-        # 6. Issue new tokens
+        # 6. The IdP's answer (asked before the lock, see refresh). The stored
+        # token changed meanwhile (the provider's issuer, discovery URL or
+        # client changed and dropped it): the answer is about a token the
+        # session no longer has, so it is ignored. Refused: end it for good.
+        if plan is not None and idp_check is not None:
+            from specivo.services.sso.session_check import RecheckResult, report_rejected
+
+            if claimed.idp_refresh_token_encrypted != plan.sealed:
+                idp_check = RecheckResult(
+                    encrypted=claimed.idp_refresh_token_encrypted, checked_at=claimed.idp_checked_at
+                )
+            elif idp_check.revoke_reason is not None:
+                report_rejected(plan, idp_check)
+                await _sessions.revoke(session, [record.session_id], reason=idp_check.revoke_reason, actor_id=None)
+                await session.commit()
+                raise refused
+
+        # 7. Issue new tokens
         new_refresh_raw = _make_refresh_token()
-        await self._store_refresh_token(
+        new_record = await self._store_refresh_token(
             session,
             user.id,
             new_refresh_raw,
@@ -468,6 +539,9 @@ class AuthService:
             settings,
             inherit_from=record,
         )
+        if idp_check is not None:
+            new_record.idp_refresh_token_encrypted = idp_check.encrypted
+            new_record.idp_checked_at = idp_check.checked_at
         new_access_token = _make_access_token(user, settings, remember=remember, session_id=record.session_id)
 
         await session.flush()
@@ -920,6 +994,8 @@ class AuthService:
             record.user_identity_id = inherit_from.user_identity_id
             record.idp_sid = inherit_from.idp_sid
             record.id_token_encrypted = inherit_from.id_token_encrypted
+            record.idp_refresh_token_encrypted = inherit_from.idp_refresh_token_encrypted
+            record.idp_checked_at = inherit_from.idp_checked_at
             record.absolute_expires_at = inherit_from.absolute_expires_at
             if inherit_from.absolute_expires_at is not None:
                 expires_at = min(expires_at, inherit_from.absolute_expires_at)

@@ -16,6 +16,12 @@ In every case register the redirect URI exactly as the Specivo form shows it, us
 if the provider asks, and leave **Accept back-channel logout** off unless Test connection says the
 provider supports it.
 
+For [the session check](index.md#the-session-check), allow the refresh token grant for the client
+and add `offline_access` to **Scopes** where the provider issues refresh tokens only for it (Okta,
+Zitadel and Authelia do). After the first sign-in, Test connection says whether sessions are
+checked. Google issues refresh tokens only on request parameters Specivo does not send, so with
+Google sessions are not checked: keep **Maximum session length** short.
+
 ## Okta
 
 - **Application**: create an **OIDC - OpenID Connect** app of type **Web Application**, with the

@@ -105,6 +105,9 @@ class AuditEvent(StrEnum):
     SSO_GROUPS_OVERAGE = "sso_groups_overage"
     SSO_LOGOUT = "sso_logout"
     SSO_BACKCHANNEL_LOGOUT = "sso_backchannel_logout"
+    # The IdP refused a session's refresh token (or could not be asked, with
+    # ``idp_check_failure=deny``), so the session ended.
+    SSO_SESSION_REJECTED = "sso_session_rejected"
     SSO_PROVIDER_CREATED = "sso_provider_created"
     SSO_PROVIDER_UPDATED = "sso_provider_updated"
     SSO_PROVIDER_DELETED = "sso_provider_deleted"

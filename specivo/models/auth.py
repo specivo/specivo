@@ -72,6 +72,15 @@ class RefreshToken(Base, TimestampMixin):
     idp_sid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # The ID token, sealed, sent back to the IdP as ``id_token_hint`` on logout.
     id_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The IdP's refresh token, sealed for the issuer, token endpoint and client
+    # that issued it (``tokens.idp_refresh_token_purpose``), never sent elsewhere. The
+    # session is renewed only after the IdP accepted it (when the provider has
+    # ``verify_session_at_idp`` on); replaced when the IdP rotates it. NULL: the
+    # IdP issued none, or refused it at sign-in, and the session is not checked.
+    idp_refresh_token_encrypted: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # When the IdP last accepted that token: the check runs at most once per
+    # ``SSO_IDP_RECHECK_MINUTES``.
+    idp_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Hard cap: the session cannot be refreshed past this point, whatever
     # ``expires_at`` says. NULL means no cap (password sessions).
     absolute_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

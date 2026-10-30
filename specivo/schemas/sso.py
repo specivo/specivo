@@ -46,6 +46,11 @@ EXTRA_AUTH_PARAM_KEYS: frozenset[str] = frozenset({"prompt", "domain_hint", "log
 
 TokenEndpointAuthMethod = Literal["client_secret_basic", "client_secret_post", "none"]
 LinkPolicy = Literal["manual", "auto_verified_email"]
+#: What an unreachable IdP means when a session is re-checked there.
+IdpCheckFailure = Literal["allow", "deny"]
+#: What a back-channel logout ends.
+BackchannelAction = Literal["revoke_session", "revoke_all_sessions", "deprovision"]
+SessionRecheckStatus = Literal["ok", "no_refresh_token", "refresh_refused"]
 SecretStatusValue = Literal[
     "configured", "unreadable", "env", "env_missing", "env_not_allowed", "missing", "not_required"
 ]
@@ -231,6 +236,14 @@ class SsoProviderCreate(BaseModel):
 
     rp_logout_enabled: bool = True
     backchannel_logout_enabled: bool = False
+    #: revoke_session: the IdP session's Specivo sessions; revoke_all_sessions:
+    #: every session of the identity; deprovision: that, and every session and
+    #: API key of an account that signs in only through SSO.
+    backchannel_action: BackchannelAction = "revoke_session"
+    #: Renew a session only after the IdP accepted its refresh token.
+    verify_session_at_idp: bool = True
+    #: What an unreachable IdP means for that check: allow renews, deny ends the session.
+    idp_check_failure: IdpCheckFailure = "allow"
     session_max_age_hours: int = Field(24, ge=1, le=SSO_SESSION_MAX_AGE_HOURS)
     extra_auth_params: ExtraParams = Field(default_factory=dict)
 
@@ -273,6 +286,9 @@ class SsoProviderUpdate(BaseModel):
 
     rp_logout_enabled: bool | None = None
     backchannel_logout_enabled: bool | None = None
+    backchannel_action: BackchannelAction | None = None
+    verify_session_at_idp: bool | None = None
+    idp_check_failure: IdpCheckFailure | None = None
     session_max_age_hours: int | None = Field(None, ge=1, le=SSO_SESSION_MAX_AGE_HOURS)
     extra_auth_params: ExtraParams | None = None
 
@@ -312,6 +328,14 @@ class SsoProviderOut(BaseModel):
 
     rp_logout_enabled: bool
     backchannel_logout_enabled: bool
+    backchannel_action: str
+    verify_session_at_idp: bool
+    idp_check_failure: str
+    #: What the last sign-in found: ``ok`` (sessions are re-checked),
+    #: ``no_refresh_token`` or ``refresh_refused`` (they are not); ``null``
+    #: before the first sign-in with the check on.
+    session_recheck_status: SessionRecheckStatus | None = None
+    session_recheck_status_at: datetime | None = None
     session_max_age_hours: int
     extra_auth_params: dict[str, str]
 
@@ -430,6 +454,15 @@ class SsoSelfTestResult(BaseModel):
     iss_parameter_supported: bool | None = None
     backchannel_logout_supported: bool | None = None
     backchannel_logout_session_supported: bool | None = None
+    #: ``refresh_token`` in the discovery ``grant_types_supported``; ``null`` when the list is absent.
+    refresh_grant_advertised: bool | None = None
+
+    #: The provider's ``verify_session_at_idp`` and what the last sign-in
+    #: found (``SsoProviderOut.session_recheck_status``). Not tested live: only
+    #: a sign-in yields a refresh token.
+    session_recheck_enabled: bool = False
+    session_recheck_status: SessionRecheckStatus | None = None
+    session_recheck_status_at: datetime | None = None
 
     jwks_key_count: int | None = None
     jwks_key_ids: list[str] = Field(default_factory=list)

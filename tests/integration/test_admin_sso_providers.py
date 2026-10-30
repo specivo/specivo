@@ -297,6 +297,30 @@ async def test_deactivate_on_access_loss_defaults_off_and_round_trips(
     assert created["deactivate_on_access_loss"] is True
 
 
+async def test_session_recheck_settings_default_and_round_trip(admin_client: AsyncClient, db_session: AsyncSession):
+    data = await _create(admin_client)
+    assert data["verify_session_at_idp"] is True
+    assert data["idp_check_failure"] == "allow"
+    assert data["backchannel_action"] == "revoke_session"
+    assert data["session_recheck_status"] is None
+
+    resp = await admin_client.patch(
+        f"{URL}{data['id']}/", json={"verify_session_at_idp": False, "idp_check_failure": "deny"}
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["verify_session_at_idp"] is False
+    assert resp.json()["idp_check_failure"] == "deny"
+    row = (await db_session.execute(select(SsoProvider).where(SsoProvider.id == data["id"]))).scalar_one()
+    await db_session.refresh(row)
+    assert (row.verify_session_at_idp, row.idp_check_failure) == (False, "deny")
+
+
+@pytest.mark.parametrize("overrides", [{"idp_check_failure": "maybe"}, {"backchannel_action": "delete_everything"}])
+async def test_session_settings_reject_unknown_values(admin_client: AsyncClient, overrides: dict[str, Any]):
+    resp = await admin_client.post(URL, json=_body(**overrides))
+    assert resp.status_code == 422, resp.text
+
+
 async def test_patch_secret_never_echoed(admin_client: AsyncClient):
     data = await _create(admin_client)
     resp = await admin_client.patch(f"{URL}{data['id']}/", json={"client_secret": "brand-new-secret-value"})
@@ -405,6 +429,38 @@ async def test_self_test_endpoint(admin_client: AsyncClient, mock_idp: MockIdP):
     assert result["issuer_match"] is True
     assert result["jwks_key_count"] == 2
     assert mock_idp.client_secret not in resp.text
+
+
+async def test_self_test_reports_the_session_recheck(
+    admin_client: AsyncClient, db_session: AsyncSession, mock_idp: MockIdP
+):
+    data = await _create(admin_client, issuer=mock_idp.issuer, client_secret=mock_idp.client_secret)
+    result = (await admin_client.post(f"{URL}{data['id']}/test/")).json()
+    assert result["session_recheck_enabled"] is True
+    assert result["session_recheck_status"] is None
+    assert result["refresh_grant_advertised"] is True
+    assert not {w for w in result["warnings"] if w.startswith(("session_recheck", "refresh_grant"))}
+
+    # A sign-in found that the IdP sends no refresh token, and discovery does not offer the grant.
+    row = (await db_session.execute(select(SsoProvider).where(SsoProvider.id == data["id"]))).scalar_one()
+    row.session_recheck_status = "no_refresh_token"
+    await db_session.flush()
+    mock_idp.discovery_overrides["grant_types_supported"] = ["authorization_code"]
+    result = (await admin_client.post(f"{URL}{data['id']}/test/")).json()
+    assert result["session_recheck_status"] == "no_refresh_token"
+    assert result["refresh_grant_advertised"] is False
+    assert {"session_recheck_no_refresh_token", "refresh_grant_not_advertised"} <= set(result["warnings"])
+
+    row.session_recheck_status = "refresh_refused"
+    await db_session.flush()
+    result = (await admin_client.post(f"{URL}{data['id']}/test/")).json()
+    assert "session_recheck_refresh_refused" in result["warnings"]
+
+    # With the check off there is nothing to warn about.
+    await admin_client.patch(f"{URL}{data['id']}/", json={"verify_session_at_idp": False})
+    result = (await admin_client.post(f"{URL}{data['id']}/test/")).json()
+    assert result["session_recheck_enabled"] is False
+    assert not {w for w in result["warnings"] if w.startswith(("session_recheck", "refresh_grant"))}
 
 
 async def test_self_test_endpoint_issuer_mismatch(admin_client: AsyncClient, mock_idp: MockIdP):
