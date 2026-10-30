@@ -381,7 +381,9 @@ class TestRefusals:
         from specivo.services.repository_service import RepositoryIntegrationService
 
         integration = await make_integration(db_session, world.project)
-        _, new_secret = await RepositoryIntegrationService().rotate_secret(db_session, integration.id, world.project.id)
+        _, new_secret = await RepositoryIntegrationService().rotate_secret(
+            db_session, integration.id, world.project.id, actor=world.author
+        )
         await db_session.commit()
         payload = push_payload("github", [commit("r", "RHOOK-1")])
         assert (await _post(client, integration, payload)).status_code == 401

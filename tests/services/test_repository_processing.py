@@ -156,6 +156,30 @@ class TestScope:
             "RPROD": setup["child"].id,
         }
 
+    async def test_a_manager_who_reconfigures_an_admins_integration_gets_their_own_scope(self, db_session, setup):
+        # Rotating or editing must not borrow the administrator's rights over subprojects.
+        from specivo.services.repository_service import RepositoryIntegrationService
+
+        admin = AdminUserFactory.build(login="rproc_admin2")
+        manager = UserFactory.build(login="rproc_manager2", status="active")
+        db_session.add_all([admin, manager])
+        await db_session.flush()
+        await _grant(db_session, manager, setup["parent"], ["view_issues", "manage_project"])
+        integration = await make_integration(
+            db_session, setup["parent"], scope="project_and_subprojects", created_by_id=admin.id
+        )
+        assert set(await scope_project_keys(db_session, integration)) == {"RPROC", "RPROD"}
+
+        await RepositoryIntegrationService().rotate_secret(
+            db_session, integration.id, setup["parent"].id, actor=manager
+        )
+        await db_session.commit()
+        assert set(await scope_project_keys(db_session, integration)) == {"RPROC"}
+
+        await RepositoryIntegrationService().rotate_secret(db_session, integration.id, setup["parent"].id, actor=admin)
+        await db_session.commit()
+        assert set(await scope_project_keys(db_session, integration)) == {"RPROC", "RPROD"}
+
     async def test_subproject_scope_without_a_creator_is_the_project_only(self, db_session, setup):
         integration = await make_integration(db_session, setup["parent"], scope="project_and_subprojects")
         assert await scope_project_keys(db_session, integration) == {"RPROC": setup["parent"].id}

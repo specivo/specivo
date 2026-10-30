@@ -146,9 +146,17 @@ class RepositoryIntegrationService:
         integration_id: int,
         project_id: int,
         data: dict[str, Any],
+        *,
+        actor: User,
     ) -> RepositoryIntegration:
-        """Apply a partial update (``RepositoryIntegrationUpdate`` fields that were set)."""
+        """Apply a partial update (``RepositoryIntegrationUpdate`` fields that were set).
+
+        The actor becomes the integration's ``created_by``: whoever last
+        configured it is the one whose rights bound its subproject scope, so
+        editing an administrator's integration never borrows their rights.
+        """
         integration = await self.get(session, integration_id, project_id)
+        integration.created_by_id = actor.id
         for field in ("repo_full_name", "repo_url", "scope", "is_active"):
             if data.get(field) is not None:
                 setattr(integration, field, data[field])
@@ -159,10 +167,14 @@ class RepositoryIntegrationService:
         return integration
 
     async def rotate_secret(
-        self, session: AsyncSession, integration_id: int, project_id: int
+        self, session: AsyncSession, integration_id: int, project_id: int, *, actor: User
     ) -> tuple[RepositoryIntegration, str]:
-        """Replace the secret; the old one stops working at once."""
+        """Replace the secret; the old one stops working at once.
+
+        The actor, who now holds the secret, becomes ``created_by`` (see ``update``).
+        """
         integration = await self.get(session, integration_id, project_id)
+        integration.created_by_id = actor.id
         raw_secret = generate_secret()
         integration.secret_encrypted = secret_box.encrypt(raw_secret, REPO_INTEGRATION_SECRET_PURPOSE)
         await session.flush()

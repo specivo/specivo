@@ -67,6 +67,12 @@ async def manager_headers(client: AsyncClient, db_session: AsyncSession, project
     return await _token(client, "rpapi_manager")
 
 
+async def _user_id(db_session: AsyncSession, login: str) -> int:
+    from specivo.models.user import User
+
+    return (await db_session.execute(select(User.id).where(User.login == login))).scalar_one()
+
+
 def _base(project) -> str:
     return f"/api/v1/projects/{project.key}/repositories/"
 
@@ -220,6 +226,28 @@ class TestCrud:
         assert (await client.patch(base, json={"is_active": False}, headers=manager_headers)).status_code == 404
         assert (await client.post(f"{base}rotate-secret/", headers=manager_headers)).status_code == 404
         assert (await client.delete(base, headers=manager_headers)).status_code == 404
+
+
+class TestResponsibleUser:
+    """Whoever last edits an integration or rotates its secret is the user whose rights bound its scope."""
+
+    async def test_edit_and_rotate_record_the_actor(self, client, db_session, project, manager_headers):
+        admin = await _user(db_session, "rpapi_owner_admin", admin=True)
+        admin_headers = await _token(client, "rpapi_owner_admin")
+        body = await _create(client, project, admin_headers, scope="project_and_subprojects")
+        integration = await db_session.get(RepositoryIntegration, body["id"])
+        assert integration.created_by_id == admin.id
+
+        manager = await _user_id(db_session, "rpapi_manager")
+        resp = await client.patch(f"{_base(project)}{body['id']}/", json={"is_active": True}, headers=manager_headers)
+        assert resp.status_code == 200
+        await db_session.refresh(integration)
+        assert integration.created_by_id == manager
+
+        resp = await client.post(f"{_base(project)}{body['id']}/rotate-secret/", headers=admin_headers)
+        assert resp.status_code == 200
+        await db_session.refresh(integration)
+        assert integration.created_by_id == admin.id
 
 
 class TestValidation:

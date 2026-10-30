@@ -96,7 +96,9 @@ async def update_repository(
 ) -> RepositoryIntegrationOut:
     """Change the repository name or URL, the scope, the settings, or enable/disable it."""
     project = await _managed_project(project_key, current_user, db)
-    integration = await _service.update(db, integration_id, project.id, data.model_dump(exclude_unset=True))
+    integration = await _service.update(
+        db, integration_id, project.id, data.model_dump(exclude_unset=True), actor=current_user
+    )
     return integration_out(integration)
 
 
@@ -121,7 +123,7 @@ async def rotate_repository_secret(
 ) -> RepositoryIntegrationSecretOut:
     """Generate a new secret, returned once. The old secret stops working at once."""
     project = await _managed_project(project_key, current_user, db)
-    integration, secret = await _service.rotate_secret(db, integration_id, project.id)
+    integration, secret = await _service.rotate_secret(db, integration_id, project.id, actor=current_user)
     return integration_secret_out(integration, secret)
 
 
