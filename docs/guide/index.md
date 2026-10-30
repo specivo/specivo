@@ -41,6 +41,8 @@ sprint, wiki) that the rest of this guide uses.
 | Plan releases and sprints | [Versions & roadmap](projects/versions.md), [Sprints](projects/sprints.md) |
 | Schedule issues to recur automatically | [Recurring tasks](projects/recurring-tasks.md) |
 | Write and organize documentation | [Wiki & knowledge base](wiki/index.md) |
+| Link commits and pull requests from GitHub, GitLab, Gitea or Forgejo to issues | [Repository integrations](integrations/repositories.md) |
+| Notify another system when issues or wiki pages change | [Outgoing webhooks](integrations/webhooks.md) |
 | Connect Claude Code, Codex, or another AI client | [AI agents & MCP](ai-agents/index.md) |
 | Install or self-host Specivo | [Installing Specivo](install/index.md) |
 | Let people sign in with your identity provider | [Single sign-on](install/single-sign-on/index.md) |

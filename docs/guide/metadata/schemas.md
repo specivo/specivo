@@ -79,6 +79,9 @@ Track the code behind an issue.
 | `branches` | Array |
 | `pull_requests` | Array |
 
+A [repository integration](../integrations/repositories.md) fills `commits`, `branches` and
+`pull_requests` by itself as commits and pull requests are linked to an issue.
+
 ### Bug Triage
 
 Capture the details that make a bug reproducible and prioritizable.

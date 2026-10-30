@@ -84,3 +84,13 @@ what the limit is, or split the file. See [Attachments](../issues/attachments.md
 If the sign-up page is unavailable or rejects new accounts, the instance is running in a closed registration
 mode — self-service sign-up is turned off. Ask an administrator to create an account for you or send you an
 invite.
+
+## Commits don't show up on an issue, or a webhook doesn't arrive
+
+Both have a delivery log in the project's settings, which needs the *Manage project settings*
+permission. For commits and pull requests, open **Settings → Repositories → Delivery log**: it shows
+each delivery the forge sent and why it linked nothing (see
+[Troubleshooting with the delivery log](../integrations/repositories.md#troubleshooting-with-the-delivery-log)).
+If the log is empty, the forge's own webhook page shows the error Specivo answered. For outgoing
+webhooks, open **Settings → Webhooks → Delivery log**; see
+[The delivery log](../integrations/webhooks.md#the-delivery-log).

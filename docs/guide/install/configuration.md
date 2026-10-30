@@ -215,6 +215,22 @@ address.
 TRUSTED_PROXIES=["192.0.2.10/32"]
 ```
 
+## Repository integrations and webhooks
+
+[Repository integrations](../integrations/repositories.md) receive webhooks from GitHub, GitLab,
+Gitea and Forgejo at `APP_URL` followed by `/hooks/...` (after the `STEALTH_PREFIX`, if set), so
+`APP_URL` must be the address the forge can reach. Both they and
+[outgoing webhooks](../integrations/webhooks.md) do their work in the background containers
+(`celery-worker`, with `celery-beat` to pick up anything that was missed): while those are down, incoming deliveries wait
+as *Accepted* and outgoing ones as *Pending*, and both are picked up once they run again.
+
+| Variable | Purpose / default |
+|---|---|
+| `GIT_HOOK_MAX_BODY_BYTES` | Largest webhook body a repository integration accepts; larger ones are answered 413. Default `5242880` (5 MB), at least `1024`. |
+| `GIT_HOOK_RATE_LIMIT_PER_MINUTE` | Webhook requests per minute one repository integration may receive before Specivo answers 429. Default `120`. |
+| `GIT_HOOK_UNKNOWN_RATE_LIMIT_PER_MINUTE` | Requests per minute one client address may send to hook URLs that match no integration, or with a bad signature. Default `30`. |
+| `WEBHOOK_TIMEOUT` | Seconds an outgoing webhook may take for each step of a request (connecting, sending, reading the answer). Default `30`; a whole attempt is always cut off after 60 seconds. |
+
 ## Single sign-on: getting back in
 
 Identity providers are configured in **Administration → Single sign-on**, and the login page
