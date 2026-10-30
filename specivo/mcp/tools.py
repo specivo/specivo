@@ -287,6 +287,7 @@ async def _show_issue(
     comments_count = await _journal_svc.count_comments(session, issue.id)
     lines.append(f"Comments: {comments_count}")
     lines.extend(await _commit_lines(session, issue.id))
+    lines.extend(await _pull_request_lines(session, issue.id))
 
     if not metadata_only:
         description = issue.description or ""
@@ -327,6 +328,26 @@ async def _commit_lines(session: AsyncSession, issue_id: int) -> list[str]:
         lines.append(line)
     if total > len(commits):
         lines.append(f"- ... and {total - len(commits)} more")
+    return lines
+
+
+async def _pull_request_lines(session: AsyncSession, issue_id: int) -> list[str]:
+    """``Pull requests: N`` and each linked request (number, state, title, branch, URL); none when unlinked."""
+    from specivo.services.repository_service import development_for_issue
+
+    pull_requests = (await development_for_issue(session, issue_id)).pull_requests
+    if not pull_requests:
+        return []
+    lines = [f"Pull requests: {len(pull_requests)}"]
+    for pr in pull_requests:
+        sigil = "!" if pr.provider == "gitlab" else "#"
+        state = f"{pr.state}, closing" if pr.closing else pr.state
+        line = f"- {sigil}{pr.number} [{state}] {pr.title}"
+        if pr.source_branch:
+            line += f" ({pr.source_branch})"
+        if pr.url:
+            line += f" {pr.url}"
+        lines.append(line)
     return lines
 
 

@@ -113,6 +113,9 @@ REPOSITORY_SWEEP_BATCH = 200
 REPOSITORY_COMMIT_BATCH = 500
 # Linked commits listed by specivo_show_issue before "and N more".
 REPOSITORY_MCP_COMMIT_LIMIT = 10
+# Linked commits and pull requests the issue Development panel and API return.
+DEVELOPMENT_COMMIT_LIMIT = 50
+DEVELOPMENT_PULL_REQUEST_LIMIT = 100
 
 # Celery tasks
 CELERY_MAX_RETRIES = 3

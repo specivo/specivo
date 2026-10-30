@@ -549,6 +549,23 @@ class TimeEntryService:
             return False
         return True
 
+    async def default_activity(self, session: AsyncSession) -> TimeEntryActivity | None:
+        """The active activity marked default, else the first active one by position; None when none is active."""
+        stmt = select(TimeEntryActivity).where(
+            TimeEntryActivity.is_default.is_(True),
+            TimeEntryActivity.active.is_(True),
+        )
+        activity = (await session.execute(stmt)).scalars().first()
+        if activity is not None:
+            return activity
+        stmt = (
+            select(TimeEntryActivity)
+            .where(TimeEntryActivity.active.is_(True))
+            .order_by(TimeEntryActivity.position, TimeEntryActivity.id)
+            .limit(1)
+        )
+        return (await session.execute(stmt)).scalar_one_or_none()
+
     async def _stop_timer_internal(
         self,
         session: AsyncSession,
@@ -562,31 +579,13 @@ class TimeEntryService:
 
         # If no activity_id provided (auto-stop), use default activity
         if activity_id is None:
-            stmt = select(TimeEntryActivity).where(
-                TimeEntryActivity.is_default.is_(True),
-                TimeEntryActivity.active.is_(True),
-            )
-            result = await session.execute(stmt)
-            default_activity = result.scalar_one_or_none()
-            if default_activity is not None:
-                activity_id = default_activity.id
-            else:
-                # Fallback to first active activity
-                stmt2 = (
-                    select(TimeEntryActivity)
-                    .where(TimeEntryActivity.active.is_(True))
-                    .order_by(TimeEntryActivity.position)
-                    .limit(1)
+            default_activity = await self.default_activity(session)
+            if default_activity is None:
+                raise ValidationError(
+                    message="No active activities available",
+                    field="activity_id",
                 )
-                result2 = await session.execute(stmt2)
-                fallback = result2.scalar_one_or_none()
-                if fallback is not None:
-                    activity_id = fallback.id
-                else:
-                    raise ValidationError(
-                        message="No active activities available",
-                        field="activity_id",
-                    )
+            activity_id = default_activity.id
 
         comments = timer.comments
         if hours == _get_max_timer_hours():

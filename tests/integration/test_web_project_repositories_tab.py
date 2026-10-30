@@ -51,3 +51,24 @@ async def test_tab_lists_repositories_without_secret(client: AsyncClient, db_ses
     data = json.loads(x_data[x_data.index("repositories: ") + len("repositories: ") : x_data.index(", providers:")])
     assert [r["repo_full_name"] for r in data] == ["example-org/widgets"]
     assert data[0]["hook_url"].endswith(f"/hooks/forgejo/{integration.public_id}/")
+
+
+async def test_tab_offers_issue_changes_with_the_email_warning(client: AsyncClient, db_session: AsyncSession) -> None:
+    admin = AdminUserFactory.build(login="rweb_admin2", status="active")
+    project = ProjectFactory.build(key="RWEC", identifier="rwec", name="Repository options")
+    db_session.add_all([admin, project])
+    await db_session.commit()
+
+    cookies = {"access_token": _make_access_token(admin, get_settings())}
+    html = (await client.get(f"/projects/{project.key}/settings/", cookies=cookies)).text
+    assert 'data-testid="repository-options"' in html
+    assert "Commit commands trust the commit author email" in html
+    assert 'data-testid="repository-merge-automation"' in html
+    assert 'data-testid="branch-name-settings"' in html
+
+    parser = _XData()
+    parser.feed(html)
+    (x_data,) = parser.found
+    # The Automation role is offered for $git even though it is not assignable.
+    assert '"Automation"' in x_data
+    assert "canPickRole: true" in x_data

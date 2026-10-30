@@ -13,8 +13,9 @@ One URL per repository integration. In order:
 5. The delivery is recorded once (``ON CONFLICT DO NOTHING``); a delivery id
    seen before answers 200 ``duplicate`` and changes nothing.
 6. A payload that names another repository is ``ignored``; ``ping`` is
-   answered at once; a push is committed as ``accepted``, queued for the
-   Celery task, and answered 202, so a large push never makes the forge wait.
+   answered at once; a push or a pull/merge request event is committed as
+   ``accepted``, queued for the Celery task, and answered 202, so a large
+   push never makes the forge wait.
 
 The route is exempt from CSRF (``_CSRF_EXEMPT_PATTERNS``): forges call it
 server to server and the signature is the proof.
@@ -52,8 +53,6 @@ from specivo.services.repository_service import REPO_INTEGRATION_SECRET_PURPOSE
 logger = logging.getLogger(__name__)
 
 hooks_router = APIRouter(prefix="/hooks", tags=["hooks"])
-
-_HANDLED_EVENTS = ("push", "ping")
 
 
 def _not_found() -> AppError:
@@ -128,7 +127,7 @@ def _classify(
         return DELIVERY_IGNORED, f"The payload names repository {repo or '(none)'}, not {integration.repo_full_name}."
     if event == "ping":
         return DELIVERY_PROCESSED, "Ping received."
-    if event == "push":
+    if event in ("push", "pull_request"):
         return DELIVERY_ACCEPTED, None
     return DELIVERY_IGNORED, f"Event {event} is not handled."
 

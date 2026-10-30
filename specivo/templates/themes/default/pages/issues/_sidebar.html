@@ -337,6 +337,23 @@
   </div>
 </div>
 
+{# Card: Copy branch name. The server builds the name from the project's
+   format; the button copies it, and selects it where the clipboard is not
+   available. #}
+{% if branch_name %}
+<div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);" x-data='copyBranchName({ name: {{ branch_name | tojson }}, i18n: {{ {
+  "copied": _("Copied"),
+  "pressToCopy": _("Press Ctrl+C to copy")
+} | tojson }} })'>
+  <label style="{{ lbl }}" for="sp-branch-name">{% trans %}Branch name{% endtrans %}</label>
+  <div class="sp-branch-name-row">
+    <input id="sp-branch-name" class="sp-branch-name-input" type="text" readonly value="{{ branch_name }}" x-ref="input" @focus="$el.select()" data-testid="branch-name">
+    <button type="button" class="sp-btn sp-btn-sm sp-btn-ghost" @click="copy()" data-testid="copy-branch-name">{% trans %}Copy branch name{% endtrans %}</button>
+  </div>
+  <span class="sp-branch-name-status" :class="{ 'sp-branch-name-hint': hint }" role="status" aria-live="polite" x-text="message"></span>
+</div>
+{% endif %}
+
 {# Card: Move to another project #}
 <div class="card" style="padding: var(--sp-space-lg); margin-bottom: var(--sp-space-md);">
   <label style="{{ lbl }}">{% trans %}Move{% endtrans %}</label>

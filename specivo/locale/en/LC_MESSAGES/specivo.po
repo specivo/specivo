@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 14:48+0000\n"
+"POT-Creation-Date: 2026-10-30 17:06+0000\n"
 "PO-Revision-Date: 2026-03-28 10:59+0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -688,12 +688,13 @@ msgstr ""
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:281
 #: specivo/templates/themes/default/pages/issues/detail.html:106
-#: specivo/templates/themes/default/pages/issues/detail.html:369
+#: specivo/templates/themes/default/pages/issues/detail.html:371
 #: specivo/templates/themes/default/pages/issues/form.html:391
 #: specivo/templates/themes/default/pages/projects/settings.html:68
 #: specivo/templates/themes/default/pages/projects/settings.html:91
 #: specivo/templates/themes/default/pages/projects/settings.html:255
 #: specivo/templates/themes/default/pages/projects/settings.html:863
+#: specivo/templates/themes/default/pages/projects/settings.html:1594
 #: specivo/templates/themes/default/pages/wiki/edit.html:133
 msgid "Save"
 msgstr ""
@@ -710,7 +711,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:438
 #: specivo/templates/themes/default/pages/projects/settings.html:978
 #: specivo/templates/themes/default/pages/projects/settings.html:1219
-#: specivo/templates/themes/default/pages/projects/settings.html:1480
+#: specivo/templates/themes/default/pages/projects/settings.html:1531
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:134
 msgid "Saving..."
@@ -742,8 +743,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/_fts_i18n.html:9
 #: specivo/templates/themes/default/pages/admin/projects.html:16
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:8
-#: specivo/templates/themes/default/pages/issues/detail.html:324
-#: specivo/templates/themes/default/pages/issues/detail.html:459
+#: specivo/templates/themes/default/pages/issues/detail.html:326
+#: specivo/templates/themes/default/pages/issues/detail.html:461
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:15
 #: specivo/templates/themes/default/pages/projects/detail.html:161
 #: specivo/templates/themes/default/pages/projects/list.html:32
@@ -755,6 +756,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:875
 #: specivo/templates/themes/default/pages/projects/settings.html:1023
 #: specivo/templates/themes/default/pages/projects/settings.html:1257
+#: specivo/templates/themes/default/pages/projects/settings.html:1565
 #: specivo/templates/themes/default/pages/wiki/show.html:97
 msgid "Unable to connect."
 msgstr ""
@@ -951,7 +953,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:419
 #: specivo/templates/themes/default/pages/projects/settings.html:515
 #: specivo/templates/themes/default/pages/projects/settings.html:1133
-#: specivo/templates/themes/default/pages/projects/settings.html:1409
+#: specivo/templates/themes/default/pages/projects/settings.html:1411
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:109
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:173
 #: specivo/templates/themes/default/pages/projects/version_detail.html:97
@@ -961,7 +963,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/_my_issues.html:34
 #: specivo/templates/themes/default/pages/auth/profile.html:81
-#: specivo/templates/themes/default/pages/issues/detail.html:494
+#: specivo/templates/themes/default/pages/issues/detail.html:496
 #: specivo/templates/themes/default/pages/issues/form.html:348
 msgid "Type"
 msgstr ""
@@ -1093,8 +1095,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/_activity.html:208
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
 #: specivo/templates/themes/default/pages/issues/detail.html:105
-#: specivo/templates/themes/default/pages/issues/detail.html:325
-#: specivo/templates/themes/default/pages/issues/detail.html:463
+#: specivo/templates/themes/default/pages/issues/detail.html:327
+#: specivo/templates/themes/default/pages/issues/detail.html:465
 #: specivo/templates/themes/default/pages/issues/form.html:397
 #: specivo/templates/themes/default/pages/projects/detail.html:194
 #: specivo/templates/themes/default/pages/projects/list.html:97
@@ -1110,8 +1112,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:1002
 #: specivo/templates/themes/default/pages/projects/settings.html:1217
 #: specivo/templates/themes/default/pages/projects/settings.html:1241
-#: specivo/templates/themes/default/pages/projects/settings.html:1478
-#: specivo/templates/themes/default/pages/projects/settings.html:1502
+#: specivo/templates/themes/default/pages/projects/settings.html:1529
+#: specivo/templates/themes/default/pages/projects/settings.html:1553
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:72
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
@@ -1433,7 +1435,7 @@ msgid "Search by name or login..."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:59
-#: specivo/templates/themes/default/pages/issues/detail.html:510
+#: specivo/templates/themes/default/pages/issues/detail.html:512
 #: specivo/templates/themes/default/pages/issues/form.html:359
 #: specivo/templates/themes/default/pages/projects/settings.html:150
 msgid "Add"
@@ -1446,7 +1448,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:71
 #: specivo/templates/themes/default/pages/admin/users.html:44
-#: specivo/templates/themes/default/pages/issues/detail.html:383
+#: specivo/templates/themes/default/pages/issues/detail.html:385
 #: specivo/templates/themes/default/pages/projects/settings.html:111
 #: specivo/templates/themes/default/pages/time/list.html:58
 msgid "User"
@@ -1566,7 +1568,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:711
 #: specivo/templates/themes/default/pages/projects/settings.html:932
 #: specivo/templates/themes/default/pages/projects/settings.html:1095
-#: specivo/templates/themes/default/pages/projects/settings.html:1371
+#: specivo/templates/themes/default/pages/projects/settings.html:1373
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:43
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
@@ -1596,7 +1598,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:714
 #: specivo/templates/themes/default/pages/projects/settings.html:935
 #: specivo/templates/themes/default/pages/projects/settings.html:1098
-#: specivo/templates/themes/default/pages/projects/settings.html:1374
+#: specivo/templates/themes/default/pages/projects/settings.html:1376
 #: specivo/templates/themes/default/pages/wiki/show.html:160
 #: specivo/templates/themes/default/pages/wiki/show.html:195
 #: specivo/templates/themes/default/pages/wiki/show.html:197
@@ -1732,11 +1734,11 @@ msgid "Reason"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:49
-#: specivo/templates/themes/default/pages/issues/detail.html:270
+#: specivo/templates/themes/default/pages/issues/detail.html:272
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
 #: specivo/templates/themes/default/pages/projects/settings.html:1131
-#: specivo/templates/themes/default/pages/projects/settings.html:1407
+#: specivo/templates/themes/default/pages/projects/settings.html:1409
 msgid "Time"
 msgstr ""
 
@@ -1950,6 +1952,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/projects.html:20
 #: specivo/templates/themes/default/pages/admin/versions.html:40
 #: specivo/templates/themes/default/pages/admin/versions.html:59
+#: specivo/templates/themes/default/pages/issues/_development.html:7
 #: specivo/templates/themes/default/pages/issues/list.html:43
 #: specivo/templates/themes/default/pages/projects/settings.html:423
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:106
@@ -2450,6 +2453,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:119
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:127
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:345
 #: specivo/templates/themes/default/pages/projects/settings.html:1032
 #: specivo/templates/themes/default/pages/projects/settings.html:1264
 msgid "Copied"
@@ -2776,7 +2780,7 @@ msgid "Authentication settings"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
-#: specivo/templates/themes/default/pages/projects/settings.html:1449
+#: specivo/templates/themes/default/pages/projects/settings.html:1451
 msgid "Provider"
 msgstr ""
 
@@ -3023,7 +3027,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:157
 #: specivo/templates/themes/default/pages/auth/profile.html:147
-#: specivo/templates/themes/default/pages/projects/settings.html:1503
+#: specivo/templates/themes/default/pages/projects/settings.html:1554
 msgid "Disconnect"
 msgstr ""
 
@@ -3276,7 +3280,7 @@ msgid "%(count)s closed"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/versions.html:28
-#: specivo/templates/themes/default/pages/issues/detail.html:409
+#: specivo/templates/themes/default/pages/issues/detail.html:411
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:186
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:247
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:258
@@ -3285,6 +3289,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/versions.html:32
 #: specivo/templates/themes/default/pages/admin/versions.html:57
+#: specivo/templates/themes/default/pages/issues/_development.html:7
 #: specivo/templates/themes/default/pages/issues/list.html:42
 #: specivo/templates/themes/default/pages/projects/settings.html:421
 #: specivo/templates/themes/default/pages/projects/version_detail.html:84
@@ -3304,8 +3309,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/settings.html:554
 #: specivo/templates/themes/default/pages/projects/settings.html:1171
 #: specivo/templates/themes/default/pages/projects/settings.html:1233
-#: specivo/templates/themes/default/pages/projects/settings.html:1440
-#: specivo/templates/themes/default/pages/projects/settings.html:1494
+#: specivo/templates/themes/default/pages/projects/settings.html:1442
+#: specivo/templates/themes/default/pages/projects/settings.html:1545
 msgid "Close"
 msgstr ""
 
@@ -3923,7 +3928,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_activity.html:18
 #: specivo/templates/themes/default/pages/issues/_activity.html:107
-#: specivo/templates/themes/default/pages/issues/detail.html:396
+#: specivo/templates/themes/default/pages/issues/detail.html:398
 #: specivo/templates/themes/default/pages/wiki/history.html:48
 msgid "Unknown"
 msgstr ""
@@ -4072,6 +4077,48 @@ msgstr ""
 msgid "e.g. Agreed on approach"
 msgstr ""
 
+#: specivo/templates/themes/default/pages/issues/_development.html:7
+msgid "Draft"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:7
+msgid "Merged"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:9
+msgid "Development"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:13
+msgid "Pull requests"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:26
+msgid "Says it fixes this issue"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:26
+msgid "fixes"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:37
+msgid "Branches"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:57
+msgid "Commits"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:74
+#, python-format
+msgid "Show %(count)s more"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_development.html:77
+#, python-format
+msgid "The newest %(shown)s of %(total)s commits."
+msgstr ""
+
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:21
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:87
 #: specivo/templates/themes/default/pages/issues/form.html:118
@@ -4102,7 +4149,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:55
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:323
-#: specivo/templates/themes/default/pages/issues/detail.html:272
+#: specivo/templates/themes/default/pages/issues/detail.html:274
 #: specivo/templates/themes/default/pages/issues/form.html:324
 msgid "Relations"
 msgstr ""
@@ -4179,43 +4226,55 @@ msgstr ""
 msgid "Unwatch"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:342
-msgid "Move"
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:346
+msgid "Press Ctrl+C to copy"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:346
-msgid "-- Select project --"
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:348
+msgid "Branch name"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:351
+msgid "Copy branch name"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:359
+msgid "Move"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:363
+msgid "-- Select project --"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:368
 msgid "Optional note"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:352
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:369
 msgid "Move issue"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:355
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:372
 msgid ""
 "Version, sprint, category and tags are cleared. History and the old "
 "reference are kept."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:358
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:375
 msgid "No other projects available"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:367
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:384
 #, python-format
 msgid "Created %(ago)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:367
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:384
 #, python-format
 msgid "by %(name)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:370
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:387
 #, python-format
 msgid "Updated %(ago)s"
 msgstr ""
@@ -4344,8 +4403,8 @@ msgid "Author"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:73
-#: specivo/templates/themes/default/pages/issues/detail.html:358
-#: specivo/templates/themes/default/pages/issues/detail.html:382
+#: specivo/templates/themes/default/pages/issues/detail.html:360
+#: specivo/templates/themes/default/pages/issues/detail.html:384
 #: specivo/templates/themes/default/pages/time/list.html:54
 #: specivo/templates/themes/default/pages/wiki/history.html:32
 msgid "Date"
@@ -4406,7 +4465,7 @@ msgid "History (%(count)s)"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/detail.html:103
-#: specivo/templates/themes/default/pages/issues/detail.html:537
+#: specivo/templates/themes/default/pages/issues/detail.html:539
 msgid "Supports Markdown. Use @username to mention."
 msgstr ""
 
@@ -4448,149 +4507,149 @@ msgstr ""
 msgid "You have unsaved metadata changes"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:265
-#: specivo/templates/themes/default/pages/issues/detail.html:348
-#: specivo/templates/themes/default/pages/issues/detail.html:385
+#: specivo/templates/themes/default/pages/issues/detail.html:267
+#: specivo/templates/themes/default/pages/issues/detail.html:350
+#: specivo/templates/themes/default/pages/issues/detail.html:387
 #: specivo/templates/themes/default/pages/time/list.html:57
 msgid "Activity"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:285
+#: specivo/templates/themes/default/pages/issues/detail.html:287
 #, python-format
 msgid "%(opt)s per page"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:302
+#: specivo/templates/themes/default/pages/issues/detail.html:304
 #, python-format
 msgid "Showing %(from)s–%(to)s of %(total)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:308
+#: specivo/templates/themes/default/pages/issues/detail.html:310
 #, python-format
 msgid "Page %(page)s of %(total)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:322
+#: specivo/templates/themes/default/pages/issues/detail.html:324
 msgid "Enter at least 1 minute"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:323
+#: specivo/templates/themes/default/pages/issues/detail.html:325
 msgid "Failed to log time"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:326
+#: specivo/templates/themes/default/pages/issues/detail.html:328
 msgid "Log time"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:338
-#: specivo/templates/themes/default/pages/issues/detail.html:384
+#: specivo/templates/themes/default/pages/issues/detail.html:340
+#: specivo/templates/themes/default/pages/issues/detail.html:386
 #: specivo/templates/themes/default/pages/time/list.html:55
 msgid "Hours"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:343
+#: specivo/templates/themes/default/pages/issues/detail.html:345
 msgid "Minutes"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:351
+#: specivo/templates/themes/default/pages/issues/detail.html:353
 msgid "-- Select --"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:364
+#: specivo/templates/themes/default/pages/issues/detail.html:366
 msgid "Comment (optional)"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:410
+#: specivo/templates/themes/default/pages/issues/detail.html:412
 msgid "h est."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:417
+#: specivo/templates/themes/default/pages/issues/detail.html:419
 msgid "No time entries logged."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:437
+#: specivo/templates/themes/default/pages/issues/detail.html:439
 #, python-format
 msgid "(%(count)s days)"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:442
+#: specivo/templates/themes/default/pages/issues/detail.html:444
 msgid "Remove this relation?"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:452
+#: specivo/templates/themes/default/pages/issues/detail.html:454
 msgid "No relations."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:458
+#: specivo/templates/themes/default/pages/issues/detail.html:460
 msgid "Failed to add relation"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:462
+#: specivo/templates/themes/default/pages/issues/detail.html:464
 msgid "Add relation"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:471
+#: specivo/templates/themes/default/pages/issues/detail.html:473
 #: specivo/templates/themes/default/pages/issues/form.html:335
 msgid "Related Issue"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:472
+#: specivo/templates/themes/default/pages/issues/detail.html:474
 msgid "e.g. PROJ-42"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:489
+#: specivo/templates/themes/default/pages/issues/detail.html:491
 msgid "Searching..."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:497
+#: specivo/templates/themes/default/pages/issues/detail.html:499
 #: specivo/templates/themes/default/pages/issues/form.html:49
 #: specivo/templates/themes/default/pages/issues/form.html:350
 msgid "Relates to"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:498
+#: specivo/templates/themes/default/pages/issues/detail.html:500
 #: specivo/templates/themes/default/pages/issues/form.html:50
 #: specivo/templates/themes/default/pages/issues/form.html:351
 msgid "Blocks"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:499
+#: specivo/templates/themes/default/pages/issues/detail.html:501
 #: specivo/templates/themes/default/pages/issues/form.html:51
 #: specivo/templates/themes/default/pages/issues/form.html:352
 msgid "Blocked by"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:500
+#: specivo/templates/themes/default/pages/issues/detail.html:502
 #: specivo/templates/themes/default/pages/issues/form.html:52
 #: specivo/templates/themes/default/pages/issues/form.html:353
 msgid "Duplicates"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:501
+#: specivo/templates/themes/default/pages/issues/detail.html:503
 #: specivo/templates/themes/default/pages/issues/form.html:54
 #: specivo/templates/themes/default/pages/issues/form.html:355
 msgid "Precedes"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:502
+#: specivo/templates/themes/default/pages/issues/detail.html:504
 #: specivo/templates/themes/default/pages/issues/form.html:55
 #: specivo/templates/themes/default/pages/issues/form.html:356
 msgid "Follows"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:503
+#: specivo/templates/themes/default/pages/issues/detail.html:505
 msgid "Copied to"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:504
+#: specivo/templates/themes/default/pages/issues/detail.html:506
 msgid "Copied from"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:526
+#: specivo/templates/themes/default/pages/issues/detail.html:528
 msgid "Loading attachments…"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:535
+#: specivo/templates/themes/default/pages/issues/detail.html:537
 msgid "Write a comment (Markdown supported)..."
 msgstr ""
 
@@ -4813,14 +4872,14 @@ msgstr ""
 msgid "Unread (%(count)s)"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:306
+#: specivo/templates/themes/default/pages/issues/detail.html:308
 #: specivo/templates/themes/default/pages/issues/list.html:205
 #: specivo/templates/themes/default/pages/notifications.html:76
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:192
 msgid "Previous"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/detail.html:310
+#: specivo/templates/themes/default/pages/issues/detail.html:312
 #: specivo/templates/themes/default/pages/issues/list.html:217
 #: specivo/templates/themes/default/pages/notifications.html:79
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:204
@@ -4914,13 +4973,13 @@ msgstr ""
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:27
 #: specivo/templates/themes/default/pages/projects/settings.html:631
 #: specivo/templates/themes/default/pages/projects/settings.html:1093
-#: specivo/templates/themes/default/pages/projects/settings.html:1369
+#: specivo/templates/themes/default/pages/projects/settings.html:1371
 msgid "Enable"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:28
 #: specivo/templates/themes/default/pages/projects/settings.html:1092
-#: specivo/templates/themes/default/pages/projects/settings.html:1368
+#: specivo/templates/themes/default/pages/projects/settings.html:1370
 msgid "Disable"
 msgstr ""
 
@@ -5211,7 +5270,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:187
 #: specivo/templates/themes/default/pages/projects/settings.html:1115
-#: specivo/templates/themes/default/pages/projects/settings.html:1391
+#: specivo/templates/themes/default/pages/projects/settings.html:1393
 msgid "Refresh"
 msgstr ""
 
@@ -6148,8 +6207,8 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1089
 #: specivo/templates/themes/default/pages/projects/settings.html:1112
-#: specivo/templates/themes/default/pages/projects/settings.html:1365
-#: specivo/templates/themes/default/pages/projects/settings.html:1388
+#: specivo/templates/themes/default/pages/projects/settings.html:1367
+#: specivo/templates/themes/default/pages/projects/settings.html:1390
 msgid "Delivery log"
 msgstr ""
 
@@ -6158,7 +6217,7 @@ msgid "Send test"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1122
-#: specivo/templates/themes/default/pages/projects/settings.html:1398
+#: specivo/templates/themes/default/pages/projects/settings.html:1400
 msgid "No deliveries yet"
 msgstr ""
 
@@ -6169,7 +6228,7 @@ msgid ""
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1132
-#: specivo/templates/themes/default/pages/projects/settings.html:1408
+#: specivo/templates/themes/default/pages/projects/settings.html:1410
 msgid "Event"
 msgstr ""
 
@@ -6186,12 +6245,12 @@ msgid "Response"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1158
-#: specivo/templates/themes/default/pages/projects/settings.html:1427
+#: specivo/templates/themes/default/pages/projects/settings.html:1429
 msgid "Newer"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1160
-#: specivo/templates/themes/default/pages/projects/settings.html:1429
+#: specivo/templates/themes/default/pages/projects/settings.html:1431
 msgid "Older"
 msgstr ""
 
@@ -6312,8 +6371,9 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1310
 msgid ""
-"Choose \"Just the push event\" and save. GitHub sends a ping at once; it "
-"appears in the delivery log."
+"Choose \"Let me select individual events\", tick Pushes and Pull "
+"requests, and save. GitHub sends a ping at once; it appears in the "
+"delivery log."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1315
@@ -6327,7 +6387,7 @@ msgid "Paste the webhook URL into URL and the secret into Secret token."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1317
-msgid "Under Trigger, select Push events."
+msgid "Under Trigger, select Push events and Merge request events."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1318
@@ -6348,8 +6408,8 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1326
 msgid ""
-"Under Trigger on, choose Push events, then add the webhook. Test delivery"
-" sends a push."
+"Under Trigger on, choose Custom events, tick Push and Pull request, then "
+"add the webhook. Test delivery sends a push."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1344
@@ -6375,15 +6435,23 @@ msgstr ""
 msgid "includes subprojects"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1366
+#: specivo/templates/themes/default/pages/projects/settings.html:1362
+msgid "commit commands on"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1363
+msgid "merge automation on"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1368
 msgid "New secret"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1399
+#: specivo/templates/themes/default/pages/projects/settings.html:1401
 msgid "Deliveries appear here once the forge sends its first webhook to this URL."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1410
+#: specivo/templates/themes/default/pages/projects/settings.html:1412
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:116
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:164
@@ -6391,57 +6459,162 @@ msgstr ""
 msgid "Details"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1457
+#: specivo/templates/themes/default/pages/projects/settings.html:1459
 msgid "Repository"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1459
+#: specivo/templates/themes/default/pages/projects/settings.html:1461
 msgid ""
 "The full name as the forge shows it, owner and repository. Deliveries "
 "that name another repository are ignored."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1462
+#: specivo/templates/themes/default/pages/projects/settings.html:1464
 msgid "Repository URL"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1466
+#: specivo/templates/themes/default/pages/projects/settings.html:1468
 msgid "Issues commits may link to"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1468
+#: specivo/templates/themes/default/pages/projects/settings.html:1470
 msgid "This project"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1469
+#: specivo/templates/themes/default/pages/projects/settings.html:1471
 msgid "This project and its subprojects"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1471
+#: specivo/templates/themes/default/pages/projects/settings.html:1473
 msgid "Keys of other projects in commit messages are ignored."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1474
+#: specivo/templates/themes/default/pages/projects/settings.html:1476
+msgid "Changes to issues"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1477
+msgid ""
+"Commit commands trust the commit author email, which anyone with push "
+"access can set to any address. With commands on, anyone who can push to "
+"this repository can act as any project member whose verified email they "
+"use."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1480
+msgid "Commit commands"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1482
+msgid ""
+"\"Fixes KEY-12\" in a commit on the default branch moves the issue to the"
+" fixing status, as the Specivo user whose verified email wrote the "
+"commit. Their permissions and the workflow apply."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1484
+msgid "Fixing status"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1486
+msgid "Do not change the status"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1494
+msgid "Time logging"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1496
+msgid ""
+"\"KEY-12 @1h30m\" (also @2h, @90m, @1.5h) logs the time on the issue for "
+"the commit's author, on any branch. They need permission to log time."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1500
+msgid "Merge automation"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1502
+msgid ""
+"When a pull or merge request that says \"Fixes KEY-12\" is merged into "
+"the default branch, the issue moves to the merge status. The change is "
+"made by Git, with the project role chosen here, and follows the workflow."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1505
+msgid "Merge status"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1507
+msgid "Choose a status"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1514
+msgid "Role of Git in this project"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1520
+msgid ""
+"The Automation role may edit issues but has no workflow transitions until"
+" an administrator grants them. Changing the role needs permission to "
+"manage members."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1525
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1493
+#: specivo/templates/themes/default/pages/projects/settings.html:1544
 msgid "Disconnect repository"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1499
+#: specivo/templates/themes/default/pages/projects/settings.html:1550
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1515
+#: specivo/templates/themes/default/pages/projects/settings.html:1563
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
+msgid "Saved"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1564
+msgid "Could not save the branch name settings."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1569
+msgid "Branch names"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1571
+#, python-brace-format
+msgid ""
+"The \"Copy branch name\" button on an issue builds the name from this "
+"format. {key} is the issue key and must be there; {type} comes from the "
+"tracker; {slug} is the subject in lower case, at most 40 characters. "
+"Branches named this way link their commits to the issue."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1573
+msgid "Format"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1575
+msgid "Example:"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1585
+msgid "Other trackers"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/projects/settings.html:1604
 msgid "Search indexing"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1517
+#: specivo/templates/themes/default/pages/projects/settings.html:1606
 msgid ""
 "Full-text search analyzer language for this project. Leave on Inherit to "
 "use the instance default."
@@ -6838,10 +7011,6 @@ msgstr ""
 msgid "Calculated from start and end dates."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
-msgid "Saved"
-msgstr ""
-
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:109
 msgid "Sprint Lifecycle"
 msgstr ""
@@ -7013,7 +7182,7 @@ msgid "Comments"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:14
-#: specivo/templates/themes/default/pages/issues/detail.html:274
+#: specivo/templates/themes/default/pages/issues/detail.html:276
 #: specivo/templates/themes/default/pages/issues/form.html:370
 #: specivo/templates/themes/default/pages/search.html:50
 #: specivo/templates/themes/default/pages/wiki/show.html:104
@@ -7076,8 +7245,8 @@ msgid "Comment on %(title)s"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:74
-#: specivo/templates/themes/default/pages/issues/detail.html:386
-#: specivo/templates/themes/default/pages/issues/detail.html:541
+#: specivo/templates/themes/default/pages/issues/detail.html:388
+#: specivo/templates/themes/default/pages/issues/detail.html:543
 #: specivo/templates/themes/default/pages/search.html:201
 #: specivo/templates/themes/default/pages/wiki/history.html:33
 msgid "Comment"
@@ -7516,4 +7685,19 @@ msgstr ""
 #: specivo/web/pages/sso.py:123
 msgid "Single sign-on failed. Please try again."
 msgstr ""
+
+#~ msgid ""
+#~ "Choose \"Just the push event\" and "
+#~ "save. GitHub sends a ping at once;"
+#~ " it appears in the delivery log."
+#~ msgstr ""
+
+#~ msgid "Under Trigger, select Push events."
+#~ msgstr ""
+
+#~ msgid ""
+#~ "Under Trigger on, choose Push events,"
+#~ " then add the webhook. Test delivery"
+#~ " sends a push."
+#~ msgstr ""
 

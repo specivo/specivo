@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Provider = Literal["github", "gitlab", "gitea", "forgejo"]
 Scope = Literal["project", "project_and_subprojects"]
@@ -36,7 +36,14 @@ def _validate_repo_url(v: str) -> str:
 
 
 class RepositorySettings(BaseModel):
-    """Commit command switches. Stored now, acted on only once commit commands exist; all off by default."""
+    """What the repository may change on issues; everything is off by default.
+
+    - ``commands_enabled``: commit messages may move issues (``Fixes KEY-1``
+      on the default branch, to ``fixing_status_id``) as the commit's matched
+      user. ``time_logging_enabled`` also lets ``KEY-1 @2h`` log time.
+    - ``merge_automation_enabled``: a merged pull request with a closing
+      reference moves the issue to ``merge_status_id``, as ``$git``.
+    """
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -45,6 +52,14 @@ class RepositorySettings(BaseModel):
     fixing_status_id: int | None = Field(default=None, gt=0)
     merge_status_id: int | None = Field(default=None, gt=0)
     merge_automation_enabled: bool = False
+
+    @model_validator(mode="after")
+    def _check_dependencies(self) -> RepositorySettings:
+        if self.time_logging_enabled and not self.commands_enabled:
+            raise ValueError("time_logging_enabled needs commands_enabled")
+        if self.merge_automation_enabled and self.merge_status_id is None:
+            raise ValueError("merge_automation_enabled needs merge_status_id")
+        return self
 
 
 class RepositoryIntegrationCreate(BaseModel):
@@ -55,6 +70,8 @@ class RepositoryIntegrationCreate(BaseModel):
     repo_url: str
     scope: Scope = "project"
     settings: RepositorySettings = Field(default_factory=RepositorySettings)
+    # The project role $git gets for merge automation; the Automation role when omitted.
+    automation_role_id: int | None = Field(default=None, gt=0)
 
     _check_name = field_validator("repo_full_name")(_validate_repo_full_name)
     _check_url = field_validator("repo_url")(_validate_repo_url)
@@ -68,6 +85,8 @@ class RepositoryIntegrationUpdate(BaseModel):
     scope: Scope | None = None
     settings: RepositorySettings | None = None
     is_active: bool | None = None
+    # The project role $git gets for merge automation; its current role (or Automation) when omitted.
+    automation_role_id: int | None = Field(default=None, gt=0)
 
     @field_validator("repo_full_name")
     @classmethod
@@ -97,6 +116,8 @@ class RepositoryIntegrationOut(BaseModel):
     is_active: bool
     last_delivery_at: datetime | None
     hook_url: str
+    # The project role $git holds for merge automation, if it holds one.
+    automation_role_id: int | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -119,3 +140,51 @@ class RepositoryDeliveryOut(BaseModel):
     detail: str | None
     received_at: datetime
     processed_at: datetime | None
+
+
+class DevelopmentCommitOut(BaseModel):
+    """A commit linked to an issue. The author email is never shown: it is not authenticated."""
+
+    sha: str
+    short_sha: str
+    first_line: str
+    url: str
+    branch: str | None
+    author_name: str
+    committed_at: datetime | None
+    repository: str
+    provider: str
+
+
+class DevelopmentPullRequestOut(BaseModel):
+    """A pull/merge request linked to an issue; ``closing`` when it says it fixes the issue."""
+
+    number: int
+    title: str
+    url: str
+    state: str
+    source_branch: str | None
+    target_branch: str | None
+    author_login: str | None
+    merged_at: datetime | None
+    closing: bool
+    repository: str
+    provider: str
+
+
+class DevelopmentBranchOut(BaseModel):
+    """A branch an issue was worked on: a linked commit's or pull request's, other than the default branch."""
+
+    name: str
+    url: str | None
+    repository: str
+    provider: str
+
+
+class IssueDevelopmentOut(BaseModel):
+    """The development activity of an issue. ``commits`` holds the newest; ``commit_count`` all of them."""
+
+    commit_count: int
+    commits: list[DevelopmentCommitOut]
+    pull_requests: list[DevelopmentPullRequestOut]
+    branches: list[DevelopmentBranchOut]

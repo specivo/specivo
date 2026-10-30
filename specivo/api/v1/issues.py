@@ -29,6 +29,7 @@ from specivo.schemas.issue import (
     issue_out,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
+from specivo.schemas.repository import IssueDevelopmentOut
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
@@ -43,6 +44,7 @@ from specivo.services.notification_service import NotificationService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
+from specivo.services.repository_service import development_for_issue
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.workflow_service import WorkflowService
@@ -541,6 +543,23 @@ async def delete_issue(
 # ---------------------------------------------------------------------------
 # Allowed statuses (workflow)
 # ---------------------------------------------------------------------------
+
+
+@router.get("/issues/{issue_ref}/development/", response_model=IssueDevelopmentOut, tags=["repositories"])
+async def get_issue_development(
+    issue_ref: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> IssueDevelopmentOut:
+    """The issue's development activity: linked commits (newest first), pull/merge requests and branches.
+
+    Needs ``view_issues`` and an issue the caller may see; anything else is
+    404. Commit author emails are never returned.
+    """
+    issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
+    if not await check_permission(current_user, issue.project_id, Permission.VIEW_ISSUES, db):
+        raise NotFoundError(f"Issue {issue_ref} not found")
+    return await development_for_issue(db, issue.id)
 
 
 @router.get(

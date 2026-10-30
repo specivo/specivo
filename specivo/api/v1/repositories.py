@@ -28,6 +28,8 @@ from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.repository_service import (
     RepositoryIntegrationService,
+    automation_role,
+    git_role_id,
     integration_out,
     integration_secret_out,
 )
@@ -46,6 +48,17 @@ async def _managed_project(project_key: str, user: User, db: AsyncSession) -> Pr
     return project
 
 
+async def _check_role_choice(role_id: int | None, project: Project, user: User, db: AsyncSession) -> None:
+    """Picking a role for ``$git`` other than the Automation role grants it rights: that needs ``manage_members``."""
+    if role_id is None:
+        return
+    default = await automation_role(db)
+    if default is not None and default.id == role_id:
+        return
+    if not await check_permission(user, project.id, Permission.MANAGE_MEMBERS, db):
+        raise PermissionDeniedError("Permission required: manage_members")
+
+
 @router.get("/", response_model=list[RepositoryIntegrationOut])
 async def list_repositories(
     project_key: str,
@@ -54,7 +67,8 @@ async def list_repositories(
 ) -> list[RepositoryIntegrationOut]:
     """List the repositories connected to the project."""
     project = await _managed_project(project_key, current_user, db)
-    return [integration_out(i) for i in await _service.list_for_project(db, project.id)]
+    role_id = await git_role_id(db, project.id)
+    return [integration_out(i, role_id) for i in await _service.list_for_project(db, project.id)]
 
 
 @router.post("/", response_model=RepositoryIntegrationSecretOut, status_code=status.HTTP_201_CREATED)
@@ -66,12 +80,15 @@ async def create_repository(
 ) -> RepositoryIntegrationSecretOut:
     """Connect a repository.
 
-    The response carries ``hook_url`` and the generated ``secret`` in clear;
-    the secret is never shown again (use ``rotate-secret`` for a new one).
+    With ``settings.merge_automation_enabled``, ``$git`` gets a project role
+    (``automation_role_id``, or the Automation role). The response carries
+    ``hook_url`` and the generated ``secret`` in clear; the secret is never
+    shown again (use ``rotate-secret`` for a new one).
     """
     project = await _managed_project(project_key, current_user, db)
+    await _check_role_choice(data.automation_role_id, project, current_user, db)
     integration, secret = await _service.create(db, project.id, data, current_user)
-    return integration_secret_out(integration, secret)
+    return integration_secret_out(integration, secret, await git_role_id(db, project.id))
 
 
 @router.get("/{integration_id}/", response_model=RepositoryIntegrationOut)
@@ -83,7 +100,8 @@ async def get_repository(
 ) -> RepositoryIntegrationOut:
     """One connected repository."""
     project = await _managed_project(project_key, current_user, db)
-    return integration_out(await _service.get(db, integration_id, project.id))
+    integration = await _service.get(db, integration_id, project.id)
+    return integration_out(integration, await git_role_id(db, project.id))
 
 
 @router.patch("/{integration_id}/", response_model=RepositoryIntegrationOut)
@@ -94,12 +112,18 @@ async def update_repository(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> RepositoryIntegrationOut:
-    """Change the repository name or URL, the scope, the settings, or enable/disable it."""
+    """Change the repository name or URL, the scope, the settings, or enable/disable it.
+
+    Turning ``settings.merge_automation_enabled`` on gives ``$git`` a project
+    role: ``automation_role_id`` (needs ``manage_members`` unless it is the
+    Automation role), else the role it holds, else the Automation role.
+    """
     project = await _managed_project(project_key, current_user, db)
+    await _check_role_choice(data.automation_role_id, project, current_user, db)
     integration = await _service.update(
         db, integration_id, project.id, data.model_dump(exclude_unset=True), actor=current_user
     )
-    return integration_out(integration)
+    return integration_out(integration, await git_role_id(db, project.id))
 
 
 @router.delete("/{integration_id}/", status_code=status.HTTP_204_NO_CONTENT)
@@ -124,7 +148,7 @@ async def rotate_repository_secret(
     """Generate a new secret, returned once. The old secret stops working at once."""
     project = await _managed_project(project_key, current_user, db)
     integration, secret = await _service.rotate_secret(db, integration_id, project.id, actor=current_user)
-    return integration_secret_out(integration, secret)
+    return integration_secret_out(integration, secret, await git_role_id(db, project.id))
 
 
 @router.get("/{integration_id}/deliveries/", response_model=PaginatedResponse[RepositoryDeliveryOut])

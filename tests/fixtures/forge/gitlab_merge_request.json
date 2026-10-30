@@ -1,0 +1,62 @@
+{
+  "object_kind": "merge_request",
+  "event_type": "merge_request",
+  "user": {
+    "id": 1,
+    "name": "Alex Example",
+    "username": "alex-example",
+    "avatar_url": "https://gitlab.example.com/uploads/avatar.png",
+    "email": "[REDACTED]"
+  },
+  "project": {
+    "id": 1,
+    "name": "widgets",
+    "description": "",
+    "web_url": "https://gitlab.example.com/example-group/widgets",
+    "git_ssh_url": "git@gitlab.example.com:example-group/widgets.git",
+    "git_http_url": "https://gitlab.example.com/example-group/widgets.git",
+    "namespace": "example-group",
+    "visibility_level": 20,
+    "path_with_namespace": "example-group/widgets",
+    "default_branch": "main"
+  },
+  "object_attributes": {
+    "id": 99,
+    "iid": 12,
+    "target_branch": "main",
+    "source_branch": "feat/ACME-3-login-form",
+    "source_project_id": 1,
+    "author_id": 1,
+    "assignee_ids": [],
+    "title": "Draft: Add the login form",
+    "created_at": "2026-10-01 09:00:00 UTC",
+    "updated_at": "2026-10-01 10:15:00 UTC",
+    "milestone_id": null,
+    "state": "opened",
+    "blocking_discussions_resolved": true,
+    "work_in_progress": true,
+    "draft": true,
+    "first_contribution": false,
+    "merge_status": "unchecked",
+    "target_project_id": 1,
+    "description": "Closes ACME-3",
+    "url": "https://gitlab.example.com/example-group/widgets/-/merge_requests/12",
+    "last_commit": {
+      "id": "59b20b8d5c6ff8d09518454d4dd8b7b30f095ab5",
+      "message": "Add the login form",
+      "timestamp": "2026-10-01T09:58:00+00:00",
+      "url": "https://gitlab.example.com/example-group/widgets/-/commit/59b20b8d5c6ff8d09518454d4dd8b7b30f095ab5",
+      "author": {"name": "Alex Example", "email": "alex@example.com"}
+    },
+    "merge_commit_sha": null,
+    "action": "open"
+  },
+  "labels": [],
+  "changes": {},
+  "repository": {
+    "name": "widgets",
+    "url": "git@gitlab.example.com:example-group/widgets.git",
+    "description": "",
+    "homepage": "https://gitlab.example.com/example-group/widgets"
+  }
+}

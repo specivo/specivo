@@ -1,0 +1,82 @@
+{# Development panel: the pull requests, branches and commits linked to the
+   issue by a connected repository. Rendered only when there is something to
+   show, and never for a visitor without an account (``development`` is None). #}
+{% set dev = development %}
+{% if dev and (dev.commit_count or dev.pull_requests or dev.branches) %}
+{% set web_url = ('http://', 'https://') %}
+{% set pr_states = {"open": _("Open"), "draft": _("Draft"), "merged": _("Merged"), "closed": _("Closed")} %}
+<section class="sp-dev-panel" aria-labelledby="sp-dev-title" data-testid="development-panel" x-data="{ allCommits: false }">
+  <h2 id="sp-dev-title" class="sp-dev-title">{% trans %}Development{% endtrans %}</h2>
+
+  {% if dev.pull_requests %}
+  <div class="sp-dev-section">
+    <h3 class="sp-dev-heading">{% trans %}Pull requests{% endtrans %} <span class="sp-dev-count">{{ dev.pull_requests | length }}</span></h3>
+    <ul class="sp-dev-list">
+      {% for pr in dev.pull_requests %}
+      {% set number = ("!" if pr.provider == "gitlab" else "#") ~ pr.number %}
+      <li class="sp-dev-item">
+        <span class="sp-dev-state sp-dev-state-{{ pr.state }}">{{ pr_states.get(pr.state, pr.state) }}</span>
+        <span class="sp-dev-main">
+          {% if pr.url.startswith(web_url) %}
+          <a class="sp-dev-ref" href="{{ pr.url }}" target="_blank" rel="noopener noreferrer">{{ number }}</a>
+          {% else %}
+          <span class="sp-dev-ref">{{ number }}</span>
+          {% endif %}
+          <span class="sp-dev-text">{{ pr.title }}</span>
+          {% if pr.closing %}<span class="sp-dev-closing" title="{% trans %}Says it fixes this issue{% endtrans %}">{% trans %}fixes{% endtrans %}</span>{% endif %}
+        </span>
+        <span class="sp-dev-meta">{{ pr.repository }}{% if pr.source_branch %} · <code>{{ pr.source_branch }}</code>{% endif %}{% if pr.author_login %} · {{ pr.author_login }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if dev.branches %}
+  <div class="sp-dev-section">
+    <h3 class="sp-dev-heading">{% trans %}Branches{% endtrans %} <span class="sp-dev-count">{{ dev.branches | length }}</span></h3>
+    <ul class="sp-dev-list">
+      {% for b in dev.branches %}
+      <li class="sp-dev-item">
+        <span class="sp-dev-main">
+          {% if b.url %}
+          <a class="sp-dev-branch" href="{{ b.url }}" target="_blank" rel="noopener noreferrer"><code>{{ b.name }}</code></a>
+          {% else %}
+          <code class="sp-dev-branch">{{ b.name }}</code>
+          {% endif %}
+        </span>
+        <span class="sp-dev-meta">{{ b.repository }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+
+  {% if dev.commits %}
+  <div class="sp-dev-section">
+    <h3 class="sp-dev-heading">{% trans %}Commits{% endtrans %} <span class="sp-dev-count">{{ dev.commit_count }}</span></h3>
+    <ul class="sp-dev-list">
+      {% for c in dev.commits %}
+      <li class="sp-dev-item"{% if loop.index > 5 %} x-show="allCommits" x-cloak{% endif %}>
+        <span class="sp-dev-main">
+          {% if c.url.startswith(web_url) %}
+          <a class="sp-dev-sha" href="{{ c.url }}" target="_blank" rel="noopener noreferrer">{{ c.short_sha }}</a>
+          {% else %}
+          <code class="sp-dev-sha">{{ c.short_sha }}</code>
+          {% endif %}
+          <span class="sp-dev-text">{{ c.first_line }}</span>
+        </span>
+        <span class="sp-dev-meta">{{ c.author_name }}{% if c.branch %} · <code>{{ c.branch }}</code>{% endif %}{% if c.committed_at %} · {{ c.committed_at | timeago(user.timezone) }}{% endif %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if dev.commits | length > 5 %}
+    <button type="button" class="sp-btn sp-btn-sm sp-btn-ghost sp-dev-more" x-show="!allCommits" @click="allCommits = true">{% trans count=dev.commits | length - 5 %}Show %(count)s more{% endtrans %}</button>
+    {% endif %}
+    {% if dev.commit_count > dev.commits | length %}
+    <p class="sp-dev-note">{% trans shown=dev.commits | length, total=dev.commit_count %}The newest %(shown)s of %(total)s commits.{% endtrans %}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}

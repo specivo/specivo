@@ -12,6 +12,7 @@ from specivo.core import secret_box
 from specivo.models.member import Member, MemberRole
 from specivo.models.repository import RepositoryDelivery, RepositoryIntegration
 from specivo.models.role import Role
+from tests.factories.lookups import StatusFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, AdminUserFactory, UserFactory
 
@@ -272,18 +273,21 @@ class TestValidation:
         resp = await client.post(_base(project), json={**_BODY, **override}, headers=manager_headers)
         assert resp.status_code == 422, resp.text
 
-    async def test_gitlab_subgroup_and_settings_accepted(self, client, project, manager_headers):
+    async def test_gitlab_subgroup_and_settings_accepted(self, client, db_session, project, manager_headers):
+        status = StatusFactory.build()
+        db_session.add(status)
+        await db_session.commit()
         body = await _create(
             client,
             project,
             manager_headers,
             provider="gitlab",
             repo_full_name="example-group/sub.group/widgets_2",
-            settings={"commands_enabled": True, "fixing_status_id": 3},
+            settings={"commands_enabled": True, "fixing_status_id": status.id},
         )
         assert body["repo_full_name"] == "example-group/sub.group/widgets_2"
         assert body["settings"]["commands_enabled"] is True
-        assert body["settings"]["fixing_status_id"] == 3
+        assert body["settings"]["fixing_status_id"] == status.id
 
 
 class TestPermissions:

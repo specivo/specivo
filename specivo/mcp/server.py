@@ -269,13 +269,16 @@ async def specivo_show_issue(
     metadata_only: Annotated[bool, Field(description="If true, skip description body to save tokens.")] = False,
     search: Annotated[str | None, Field(description="Return only the description section matching this text.")] = None,
 ) -> str:
-    """Show full issue details including description, tags and linked commits.
+    """Show full issue details including description, tags, linked commits and pull requests.
 
     Commits pushed to a repository connected to the project that reference the
     issue are listed as ``Commits: N`` followed by the newest ten (short SHA,
-    first line, branch, URL) and "... and N more" beyond that.
+    first line, branch, URL) and "... and N more" beyond that. Pull/merge
+    requests that reference it follow as ``Pull requests: N``, open ones
+    first: number, state (``open``, ``draft``, ``merged``, ``closed``, plus
+    ``closing`` when it says it fixes the issue), title, source branch, URL.
     Use metadata_only=true to skip the description body and save tokens
-    (tags and commits are still included).
+    (tags, commits and pull requests are still included).
     Use search= to extract only the section containing specific text.
     """
     async with _get_session_and_user() as (session, user):
