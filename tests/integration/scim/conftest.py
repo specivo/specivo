@@ -89,6 +89,8 @@ async def make_scim_provider(db: AsyncSession, slug: str, **overrides: Any) -> t
         "issuer": f"https://{slug}.example.com",
         "client_id": "specivo",
         "token_endpoint_auth_method": "none",
+        # Linking existing accounts by email is the admin's opt-in; most tests need it.
+        "link_policy": "auto_verified_email",
     }
     values.update(overrides)
     provider = SsoProvider(**values)

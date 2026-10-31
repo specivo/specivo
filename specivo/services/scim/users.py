@@ -93,6 +93,17 @@ _PROTECTED_DETAIL = {
 }
 
 
+def _check_email_domain(provider: SsoProvider, email: str) -> None:
+    """Refuse an email outside the provider's ``allowed_email_domains``, when it lists any."""
+    allowed = {
+        d.strip().lstrip("@").rstrip(".").lower()
+        for d in provider.allowed_email_domains or ()
+        if isinstance(d, str) and d.strip()
+    }
+    if allowed and email.rsplit("@", 1)[-1].rstrip(".").lower() not in allowed:
+        raise ScimError.invalid_value("The email address is not in a domain this identity provider may use.")
+
+
 def _protection(user: User) -> str | None:
     """Why SCIM must not deactivate ``user`` or change its email, or ``None``."""
     if user.is_system_principal:
@@ -319,6 +330,7 @@ class ScimUserService:
 
     async def create(self, db: AsyncSession, provider: SsoProvider, body: Any) -> tuple[ScimResource, User]:
         attrs = self._attributes(body)
+        _check_email_domain(provider, attrs.email)
         await self._require_user_name_free(db, provider, attrs.user_name)
         user = await self._existing_account(db, attrs)
         scim_id = str(uuid.uuid4())
@@ -328,6 +340,14 @@ class ScimUserService:
             res = ScimResource(provider_id=provider.id, resource_type="User", user_id=user.id, scim_id=scim_id)
             action, fields = "created", list[str]()
         else:
+            proven = user.email_verified_at is not None and user.status != "pending_verification"
+            if proven and provider.link_policy != "auto_verified_email":
+                # Taking over an account somebody already uses is the admin's
+                # choice, the same one that lets sign-in link it by email.
+                raise ScimError.uniqueness(
+                    "An account with this email already exists, and this identity provider does not link "
+                    "existing accounts (its link policy is manual)."
+                )
             revived = await self._link_target(db, provider, user)
             res = revived or ScimResource(provider_id=provider.id, resource_type="User", user_id=user.id)
             res.scim_id = scim_id
@@ -417,6 +437,12 @@ class ScimUserService:
             changed.append("externalId")
 
         if attrs.email.lower() != user.email.lower():
+            _check_email_domain(provider, attrs.email)
+            if user.password_hash is not None:
+                # A password reset would go to the address the IdP chose.
+                raise ScimError.mutability(
+                    "The email of an account with a Specivo password cannot be changed through SCIM."
+                )
             owner = await self._user_with(db, User.email, attrs.email)
             if owner is not None and owner.id != user.id:
                 raise ScimError.uniqueness("Another account has this email address.")

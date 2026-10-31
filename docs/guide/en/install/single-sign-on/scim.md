@@ -183,10 +183,21 @@ belong to system accounts.
 
 ### Existing accounts
 
-Most installs already have accounts when SCIM is turned on. When the IdP creates a user, Specivo
-links the existing account instead of creating a second one if an account has the same email
-address (ignoring case). The existing login and password stay; the email and the profile follow
-the IdP from then on. A linked account that was deactivated in Specivo stays deactivated.
+Most installs already have accounts when SCIM is turned on. When the IdP creates a user and an
+account with the same email address (ignoring case) already exists, Specivo links that account
+instead of creating a second one, but only when the provider's **Existing accounts** setting is
+**Link automatically by verified email (never for administrators)**. That is the same choice that
+lets sign-in link existing accounts ([Linking an existing account](index.md#linking-an-existing-account));
+with the default, the IdP gets `409 uniqueness` and you link or rename the account by hand. The existing login and password stay, and the profile follows the IdP from then on. A
+linked account that was deactivated in Specivo stays deactivated.
+
+SCIM never changes the email address of an account that has a Specivo password: the IdP gets
+`400 mutability`. A password reset goes to the account's email, so moving it would hand the
+password to whoever the IdP names. Change it in Specivo, or remove the password first. Accounts
+that sign in only through the IdP follow its email changes.
+
+When the provider lists **Allowed email domains**, SCIM applies them as well: a user created or
+updated with an email outside them gets `400 invalidValue`.
 
 An account is **never** linked, and the IdP gets `409 uniqueness`, when it is:
 
