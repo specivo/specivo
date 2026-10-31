@@ -28,9 +28,9 @@ msgid "You do not have permission to change this file."
 msgstr "У вас нет права изменять этот файл."
 
 #: specivo/core/notification_templates.py:19
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Assigned to you by {actor_name}"
-msgstr "[{issue_key}] Назначена вам пользователем {actor_name}"
+msgstr "{actor_name} назначил(а) задачу на вас"
 
 #: specivo/core/notification_templates.py:20
 #, python-brace-format
@@ -38,9 +38,9 @@ msgid "[{issue_key}] Assigned to you by {actor_name}"
 msgstr "[{issue_key}] Назначена вам пользователем {actor_name}"
 
 #: specivo/core/notification_templates.py:23
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Updated by {actor_name}"
-msgstr "[{issue_key}] Обновлена пользователем {actor_name}"
+msgstr "Обновлено: {actor_name}"
 
 #: specivo/core/notification_templates.py:24
 #, python-brace-format
@@ -48,9 +48,9 @@ msgid "[{issue_key}] Updated by {actor_name}"
 msgstr "[{issue_key}] Обновлена пользователем {actor_name}"
 
 #: specivo/core/notification_templates.py:27
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "{actor_name} commented"
-msgstr "[{issue_key}] {actor_name} оставил комментарий"
+msgstr "{actor_name} оставил(а) комментарий"
 
 #: specivo/core/notification_templates.py:28
 #, python-brace-format
@@ -68,6 +68,8 @@ msgstr "Сессия агента не найдена"
 #: specivo/services/api_key_scope.py:147
 msgid "This API key is limited to specific projects and cannot do this."
 msgstr ""
+"Этот API-ключ ограничен отдельными проектами и не может выполнить это "
+"действие."
 
 #: specivo/services/api_key_service.py:61
 #: specivo/services/api_key_service.py:69
@@ -335,7 +337,7 @@ msgstr "Правило поля рабочего процесса не найд�
 
 #: specivo/templates/themes/default/base.html:18
 msgid "This diagram could not be drawn. Its source is shown below."
-msgstr ""
+msgstr "Не удалось построить диаграмму. Ниже показан её исходный код."
 
 #: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
@@ -377,15 +379,15 @@ msgstr "Размер шрифта"
 
 #: specivo/templates/themes/default/components/header.html:31
 msgid "Could not load the activities."
-msgstr ""
+msgstr "Не удалось загрузить виды деятельности."
 
 #: specivo/templates/themes/default/components/header.html:32
 msgid "Could not stop the timer."
-msgstr ""
+msgstr "Не удалось остановить таймер."
 
 #: specivo/templates/themes/default/components/header.html:33
 msgid "Could not discard the timer."
-msgstr ""
+msgstr "Не удалось сбросить таймер."
 
 #: specivo/templates/themes/default/components/header.html:34
 #: specivo/templates/themes/default/pages/_fts_i18n.html:9
@@ -413,7 +415,7 @@ msgstr "Не удалось подключиться."
 #: specivo/templates/themes/default/components/header.html:39
 #, python-format
 msgid "Timer running on %(target)s"
-msgstr ""
+msgstr "Таймер запущен: %(target)s"
 
 #: specivo/templates/themes/default/components/header.html:48
 #: specivo/templates/themes/default/components/sidebar.html:67
@@ -513,7 +515,7 @@ msgstr "Отмена"
 
 #: specivo/templates/themes/default/components/header.html:84
 msgid "Discard the timer? The time is not logged."
-msgstr ""
+msgstr "Сбросить таймер? Время не будет учтено."
 
 #: specivo/templates/themes/default/components/header.html:107
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
@@ -4582,45 +4584,45 @@ msgstr "например, Договорились о подходе"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:7
 msgid "Draft"
-msgstr ""
+msgstr "Черновик"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:7
 msgid "Merged"
-msgstr ""
+msgstr "Слит"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:9
 msgid "Development"
-msgstr ""
+msgstr "Разработка"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:13
 msgid "Pull requests"
-msgstr ""
+msgstr "Запросы на слияние"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:26
 msgid "Says it fixes this issue"
-msgstr ""
+msgstr "Заявлено, что исправляет эту задачу"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:26
 msgid "fixes"
-msgstr ""
+msgstr "исправляет"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:37
 msgid "Branches"
-msgstr ""
+msgstr "Ветки"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:57
 msgid "Commits"
-msgstr ""
+msgstr "Коммиты"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:74
 #, python-format
 msgid "Show %(count)s more"
-msgstr ""
+msgstr "Показать ещё %(count)s"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:77
 #, python-format
 msgid "The newest %(shown)s of %(total)s commits."
-msgstr ""
+msgstr "Показаны последние %(shown)s из %(total)s коммитов."
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:21
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:87
@@ -4731,15 +4733,15 @@ msgstr "Не следить"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:346
 msgid "Press Ctrl+C to copy"
-msgstr ""
+msgstr "Нажмите Ctrl+C, чтобы скопировать"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:348
 msgid "Branch name"
-msgstr ""
+msgstr "Имя ветки"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:351
 msgid "Copy branch name"
-msgstr ""
+msgstr "Копировать имя ветки"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:359
 msgid "Move"
@@ -4860,7 +4862,7 @@ msgstr "Вы уверены, что хотите удалить"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:13
 msgid "Could not start the timer."
-msgstr ""
+msgstr "Не удалось запустить таймер."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:15
 #, python-format
@@ -4878,11 +4880,11 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"
-msgstr ""
+msgstr "Запустить таймер"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:26
 msgid "A timer is already running"
-msgstr ""
+msgstr "Таймер уже запущен"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:27
 #, python-format
@@ -4890,14 +4892,16 @@ msgid ""
 "A timer is already running on %(target)s. Log its time (with the default "
 "activity) or discard it before starting a new one."
 msgstr ""
+"Таймер уже запущен: %(target)s. Учтите его время (с видом деятельности по"
+" умолчанию) или сбросьте его, прежде чем запускать новый."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:29
 msgid "Log it and start"
-msgstr ""
+msgstr "Учесть и запустить"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:30
 msgid "Discard it and start"
-msgstr ""
+msgstr "Сбросить и запустить"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:4
 msgid "Description Changes"
@@ -6198,12 +6202,12 @@ msgstr "Участники"
 #: specivo/templates/themes/default/pages/projects/settings.html:30
 #: specivo/templates/themes/default/pages/projects/settings.html:1041
 msgid "Webhooks"
-msgstr ""
+msgstr "Веб-хуки"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:31
 #: specivo/templates/themes/default/pages/projects/settings.html:1276
 msgid "Repositories"
-msgstr ""
+msgstr "Репозитории"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:36
 #: specivo/templates/themes/default/pages/projects/settings.html:827
@@ -6705,289 +6709,281 @@ msgstr ""
 "отменить."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1015
-#, fuzzy
 msgid "Issue created"
-msgstr "Заявленный издатель"
+msgstr "Задача создана"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1016
-#, fuzzy
 msgid "Issue updated"
-msgstr "Шаблон задачи"
+msgstr "Задача обновлена"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1017
-#, fuzzy
 msgid "Issue commented"
-msgstr "задач закрыто"
+msgstr "Комментарий к задаче"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1018
-#, fuzzy
 msgid "Issue deleted"
-msgstr "Файл удалён"
+msgstr "Задача удалена"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1019
-#, fuzzy
 msgid "Wiki page updated"
-msgstr "Страница вики"
+msgstr "Вики-страница обновлена"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1020
 msgid "Test event"
-msgstr ""
+msgstr "Тестовое событие"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1022
-#, fuzzy
 msgid "Failed to save webhook."
-msgstr "Не удалось сохранить."
+msgstr "Не удалось сохранить веб-хук."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1024
 #: specivo/templates/themes/default/pages/projects/settings.html:1258
-#, fuzzy
 msgid "Could not load deliveries."
-msgstr "Не удалось сохранить изменения."
+msgstr "Не удалось загрузить доставки."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1025
 msgid "Test event queued. Open the delivery log to see the result."
 msgstr ""
+"Тестовое событие поставлено в очередь. Результат смотрите в журнале "
+"доставки."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1026
-#, fuzzy
 msgid "Could not send the test event."
-msgstr "Не удалось изменить пароль."
+msgstr "Не удалось отправить тестовое событие."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1027
 #: specivo/templates/themes/default/pages/projects/settings.html:1046
 msgid "New webhook"
-msgstr ""
+msgstr "Новый веб-хук"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1028
 msgid "Edit webhook"
-msgstr ""
+msgstr "Изменить веб-хук"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1029
-#, fuzzy
 msgid "Create webhook"
-msgstr "Создано"
+msgstr "Создать веб-хук"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1033
-#, fuzzy
 msgid "Pending"
-msgstr "Отправка..."
+msgstr "Ожидает"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1034
 msgid "Succeeded"
-msgstr ""
+msgstr "Успешно"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1035
 #: specivo/templates/themes/default/pages/projects/settings.html:1270
-#, fuzzy
 msgid "Failed"
-msgstr "ФАЙЛ"
+msgstr "Ошибка"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1053
-#, fuzzy
 msgid "Signing secret"
-msgstr "Ключи подписи"
+msgstr "Секрет подписи"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1059
 msgid ""
 "Copy it now: it is not shown again. Receivers check the X-Specivo-"
 "Signature header (HMAC-SHA256 of the body) with it."
 msgstr ""
+"Скопируйте его сейчас: он больше не будет показан. Получатели проверяют "
+"им заголовок X-Specivo-Signature (HMAC-SHA256 тела запроса)."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1071
-#, fuzzy
 msgid "No webhooks yet"
-msgstr "Версий пока нет"
+msgstr "Веб-хуков пока нет"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1072
 msgid ""
 "A webhook sends a signed HTTPS request to another system when issues or "
 "wiki pages in this project change."
 msgstr ""
+"Веб-хук отправляет подписанный HTTPS-запрос в другую систему, когда в "
+"этом проекте меняются задачи или вики-страницы."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1073
-#, fuzzy
 msgid "Create first webhook"
-msgstr "Создать первую версию"
+msgstr "Создать первый веб-хук"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1084
 msgid "includes private content"
-msgstr ""
+msgstr "включает приватное содержимое"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1089
 #: specivo/templates/themes/default/pages/projects/settings.html:1112
 #: specivo/templates/themes/default/pages/projects/settings.html:1367
 #: specivo/templates/themes/default/pages/projects/settings.html:1390
-#, fuzzy
 msgid "Delivery log"
-msgstr "URL discovery"
+msgstr "Журнал доставки"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1090
-#, fuzzy
 msgid "Send test"
 msgstr "Отправить тест"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1122
 #: specivo/templates/themes/default/pages/projects/settings.html:1400
-#, fuzzy
 msgid "No deliveries yet"
-msgstr "Версий пока нет"
+msgstr "Доставок пока нет"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1123
 msgid ""
 "Deliveries appear here when a subscribed event happens, or when you send "
 "a test event."
 msgstr ""
+"Доставки появятся здесь, когда произойдёт событие из подписки или вы "
+"отправите тестовое событие."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1132
 #: specivo/templates/themes/default/pages/projects/settings.html:1410
-#, fuzzy
 msgid "Event"
-msgstr "События отключения"
+msgstr "Событие"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1134
-#, fuzzy
 msgid "Attempts"
-msgstr "Вложения"
+msgstr "Попытки"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1135
 msgid "Response code"
-msgstr ""
+msgstr "Код ответа"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1136
-#, fuzzy
 msgid "Response"
-msgstr "Причина"
+msgstr "Ответ"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1158
 #: specivo/templates/themes/default/pages/projects/settings.html:1429
-#, fuzzy
 msgid "Newer"
-msgstr "Никогда"
+msgstr "Новее"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1160
 #: specivo/templates/themes/default/pages/projects/settings.html:1431
-#, fuzzy
 msgid "Older"
-msgstr "Роль"
+msgstr "Старее"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1180
 msgid "Payload URL"
-msgstr ""
+msgstr "URL получателя"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1182
 msgid ""
 "HTTPS only. Addresses inside private networks are refused when the "
 "request is sent."
-msgstr ""
+msgstr "Только HTTPS. Адреса во внутренних сетях отклоняются при отправке запроса."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1185
-#, fuzzy
 msgid "Events"
-msgstr "События отключения"
+msgstr "События"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1199
-#, fuzzy
 msgid "Include private issues and private notes"
-msgstr "Новые задачи приватные"
+msgstr "Включать приватные задачи и приватные комментарии"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1201
 msgid "Off by default: the receiver then never learns about private content."
-msgstr ""
+msgstr "По умолчанию выключено: получатель не узнает о приватном содержимом."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1204
 msgid ""
 "Private issues and private notes are not sent. Only an administrator can "
 "change that."
 msgstr ""
+"Приватные задачи и приватные комментарии не отправляются. Изменить это "
+"может только администратор."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1208
-#, fuzzy
 msgid "Generate a new secret"
-msgstr "Сгенерировать пароль"
+msgstr "Сгенерировать новый секрет"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1209
 msgid "The old secret stops working at once."
-msgstr ""
+msgstr "Старый секрет сразу перестанет работать."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1213
 msgid "A signing secret is generated and shown once after the webhook is created."
 msgstr ""
+"После создания веб-хука будет сгенерирован секрет подписи; он "
+"показывается один раз."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1232
 #: specivo/templates/themes/default/pages/projects/settings.html:1242
-#, fuzzy
 msgid "Delete webhook"
-msgstr "Удалить версию"
+msgstr "Удалить веб-хук"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1238
 msgid "Delete this webhook and its delivery log? Nothing more is sent to:"
 msgstr ""
+"Удалить этот веб-хук и его журнал доставки? Сюда больше ничего не будет "
+"отправляться:"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1256
 msgid "Failed to save the repository."
-msgstr ""
+msgstr "Не удалось сохранить репозиторий."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1259
 #: specivo/templates/themes/default/pages/projects/settings.html:1281
 msgid "Connect a repository"
-msgstr ""
+msgstr "Подключить репозиторий"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1260
 msgid "Edit repository"
-msgstr ""
+msgstr "Изменить репозиторий"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1261
 msgid "Connect repository"
-msgstr ""
+msgstr "Подключить репозиторий"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1265
 msgid "Never received"
-msgstr ""
+msgstr "Ни разу не получено"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1266
 msgid "Accepted"
-msgstr ""
+msgstr "Принято"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1267
 msgid "Duplicate"
-msgstr ""
+msgstr "Дубликат"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1268
 msgid "Ignored"
-msgstr ""
+msgstr "Проигнорировано"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1269
 msgid "Processed"
-msgstr ""
+msgstr "Обработано"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1290
 msgid "Webhook URL"
-msgstr ""
+msgstr "URL веб-хука"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1297
 msgid "Secret"
-msgstr ""
+msgstr "Секрет"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1303
 msgid "Copy the secret now: it is not shown again."
-msgstr ""
+msgstr "Скопируйте секрет сейчас: он больше не будет показан."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1307
 msgid ""
 "In the repository on GitHub, open Settings, then Webhooks, then Add "
 "webhook."
 msgstr ""
+"В репозитории на GitHub откройте Settings, затем Webhooks, затем Add "
+"webhook."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1308
 msgid ""
 "Paste the webhook URL into Payload URL and set Content type to "
 "application/json."
 msgstr ""
+"Вставьте URL веб-хука в поле Payload URL и выберите Content type "
+"application/json."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1309
 #: specivo/templates/themes/default/pages/projects/settings.html:1325
 msgid "Paste the secret into Secret."
-msgstr ""
+msgstr "Вставьте секрет в поле Secret."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1310
 msgid ""
@@ -6995,46 +6991,59 @@ msgid ""
 "requests, and save. GitHub sends a ping at once; it appears in the "
 "delivery log."
 msgstr ""
+"Выберите «Let me select individual events», отметьте Pushes и Pull "
+"requests и сохраните. GitHub сразу отправит ping — он появится в журнале "
+"доставки."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1315
 msgid ""
 "In the project on GitLab, open Settings, then Webhooks, then Add new "
 "webhook."
 msgstr ""
+"В проекте на GitLab откройте Settings, затем Webhooks, затем Add new "
+"webhook."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1316
 msgid "Paste the webhook URL into URL and the secret into Secret token."
-msgstr ""
+msgstr "Вставьте URL веб-хука в поле URL, а секрет — в поле Secret token."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1317
 msgid "Under Trigger, select Push events and Merge request events."
-msgstr ""
+msgstr "В разделе Trigger выберите Push events и Merge request events."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1318
 msgid "Save, then use Test, Push events to send a first delivery."
 msgstr ""
+"Сохраните, затем нажмите Test → Push events, чтобы отправить первую "
+"доставку."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1323
 msgid ""
 "In the repository, open Settings, then Webhooks, then Add webhook, and "
 "pick the Gitea or Forgejo webhook type, matching the server."
 msgstr ""
+"В репозитории откройте Settings, затем Webhooks, затем Add webhook и "
+"выберите тип веб-хука Gitea или Forgejo — в зависимости от сервера."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1324
 msgid ""
 "Paste the webhook URL into Target URL. Keep the HTTP method POST and set "
 "the POST content type to application/json."
 msgstr ""
+"Вставьте URL веб-хука в поле Target URL. Оставьте метод HTTP POST и "
+"выберите POST content type application/json."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1326
 msgid ""
 "Under Trigger on, choose Custom events, tick Push and Pull request, then "
 "add the webhook. Test delivery sends a push."
 msgstr ""
+"В разделе Trigger on выберите Custom events, отметьте Push и Pull "
+"request, затем добавьте веб-хук. Test delivery отправит push."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1344
 msgid "No repositories connected"
-msgstr ""
+msgstr "Нет подключённых репозиториев"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1345
 msgid ""
@@ -7042,34 +7051,39 @@ msgid ""
 "mention an issue key, such as \"Fixes KEY-12\", or are pushed to a branch"
 " named after one, are linked to the issue."
 msgstr ""
+"Подключите репозиторий GitHub, GitLab, Gitea или Forgejo: коммиты, в "
+"которых упомянут ключ задачи (например, «Fixes KEY-12») или отправленные "
+"в ветку, названную по ключу, будут связаны с задачей."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1346
 msgid "Connect the first repository"
-msgstr ""
+msgstr "Подключить первый репозиторий"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1359
 msgid "Last delivery:"
-msgstr ""
+msgstr "Последняя доставка:"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1360
 msgid "includes subprojects"
-msgstr ""
+msgstr "включая подпроекты"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1362
 msgid "commit commands on"
-msgstr ""
+msgstr "команды в коммитах включены"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1363
 msgid "merge automation on"
-msgstr ""
+msgstr "автоматизация слияний включена"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1368
 msgid "New secret"
-msgstr ""
+msgstr "Новый секрет"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1401
 msgid "Deliveries appear here once the forge sends its first webhook to this URL."
 msgstr ""
+"Доставки появятся здесь, когда Git-хостинг отправит на этот URL первый "
+"веб-хук."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1412
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
@@ -7081,37 +7095,39 @@ msgstr "Подробности"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1459
 msgid "Repository"
-msgstr ""
+msgstr "Репозиторий"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1461
 msgid ""
 "The full name as the forge shows it, owner and repository. Deliveries "
 "that name another repository are ignored."
 msgstr ""
+"Полное имя в том виде, как его показывает Git-хостинг: владелец и "
+"репозиторий. Доставки для другого репозитория игнорируются."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1464
 msgid "Repository URL"
-msgstr ""
+msgstr "URL репозитория"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1468
 msgid "Issues commits may link to"
-msgstr ""
+msgstr "Задачи, с которыми могут связываться коммиты"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1470
 msgid "This project"
-msgstr ""
+msgstr "Этот проект"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1471
 msgid "This project and its subprojects"
-msgstr ""
+msgstr "Этот проект и его подпроекты"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1473
 msgid "Keys of other projects in commit messages are ignored."
-msgstr ""
+msgstr "Ключи других проектов в сообщениях коммитов игнорируются."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1476
 msgid "Changes to issues"
-msgstr ""
+msgstr "Изменения задач"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1477
 msgid ""
@@ -7120,10 +7136,15 @@ msgid ""
 "this repository can act as any project member whose verified email they "
 "use."
 msgstr ""
+"Команды в коммитах доверяют email автора коммита, а его любой, у кого "
+"есть право push, может указать произвольно. Когда команды включены, "
+"любой, кто может отправлять изменения в этот репозиторий, может "
+"действовать от имени любого участника проекта, чей подтверждённый email "
+"он укажет."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1480
 msgid "Commit commands"
-msgstr ""
+msgstr "Команды в коммитах"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1482
 msgid ""
@@ -7131,28 +7152,33 @@ msgid ""
 " fixing status, as the Specivo user whose verified email wrote the "
 "commit. Their permissions and the workflow apply."
 msgstr ""
+"«Fixes KEY-12» в коммите в ветке по умолчанию переводит задачу в статус "
+"исправления от имени пользователя Specivo, чей подтверждённый email "
+"указан в коммите. Действуют его права и рабочий процесс."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1484
 msgid "Fixing status"
-msgstr ""
+msgstr "Статус исправления"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1486
 msgid "Do not change the status"
-msgstr ""
+msgstr "Не менять статус"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1494
 msgid "Time logging"
-msgstr ""
+msgstr "Учёт времени"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1496
 msgid ""
 "\"KEY-12 @1h30m\" (also @2h, @90m, @1.5h) logs the time on the issue for "
 "the commit's author, on any branch. They need permission to log time."
 msgstr ""
+"«KEY-12 @1h30m» (а также @2h, @90m, @1.5h) учитывает время в задаче за "
+"автором коммита, в любой ветке. Нужно право на учёт времени."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1500
 msgid "Merge automation"
-msgstr ""
+msgstr "Автоматизация слияний"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1502
 msgid ""
@@ -7160,18 +7186,22 @@ msgid ""
 "the default branch, the issue moves to the merge status. The change is "
 "made by Git, with the project role chosen here, and follows the workflow."
 msgstr ""
+"Когда pull request или merge request с текстом «Fixes KEY-12» сливается в"
+" ветку по умолчанию, задача переходит в статус слияния. Изменение "
+"выполняет Git с выбранной здесь ролью в проекте, с соблюдением рабочего "
+"процесса."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1505
 msgid "Merge status"
-msgstr ""
+msgstr "Статус слияния"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1507
 msgid "Choose a status"
-msgstr ""
+msgstr "Выберите статус"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1514
 msgid "Role of Git in this project"
-msgstr ""
+msgstr "Роль Git в этом проекте"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1520
 msgid ""
@@ -7179,32 +7209,42 @@ msgid ""
 " an administrator grants them. Changing the role needs permission to "
 "manage members."
 msgstr ""
+"Роль Automation может изменять задачи, но не имеет переходов рабочего "
+"процесса, пока их не выдаст администратор. Для смены роли нужно право "
+"управлять участниками."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1526
 msgid "Ignore pull requests from forks and outsiders"
-msgstr ""
+msgstr "Игнорировать запросы на слияние из форков и от посторонних"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1528
 msgid ""
 "Requests from another repository, or on GitHub by someone who is not a "
 "collaborator, are not linked to issues until they are merged."
 msgstr ""
+"Запросы из другого репозитория или, на GitHub, от того, кто не является "
+"соавтором (collaborator), не связываются с задачами, пока не будут слиты."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1531
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
 msgstr ""
+"После подключения репозитория будут сгенерированы URL веб-хука и секрет; "
+"они показываются один раз."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1550
 msgid "Disconnect repository"
-msgstr ""
+msgstr "Отключить репозиторий"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1556
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
 msgstr ""
+"Отключить этот репозиторий? Его URL веб-хука перестанет работать, а "
+"журнал доставки будет удалён. Комментарии о коммитах в задачах "
+"сохранятся."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1569
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
@@ -7213,11 +7253,11 @@ msgstr "Сохранено"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1570
 msgid "Could not save the branch name settings."
-msgstr ""
+msgstr "Не удалось сохранить настройки имён веток."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1575
 msgid "Branch names"
-msgstr ""
+msgstr "Имена веток"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1577
 #, python-brace-format
@@ -7227,18 +7267,22 @@ msgid ""
 "tracker; {slug} is the subject in lower case, at most 40 characters. "
 "Branches named this way link their commits to the issue."
 msgstr ""
+"Кнопка «Копировать имя ветки» в задаче строит имя по этому формату. {key}"
+" — ключ задачи, он обязателен; {type} берётся из трекера; {slug} — тема в"
+" нижнем регистре, не более 40 символов. Коммиты в ветках с таким именем "
+"связываются с задачей."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1579
 msgid "Format"
-msgstr ""
+msgstr "Формат"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1581
 msgid "Example:"
-msgstr ""
+msgstr "Пример:"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1591
 msgid "Other trackers"
-msgstr ""
+msgstr "Другие трекеры"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1610
 msgid "Search indexing"

@@ -27,9 +27,9 @@ msgid "You do not have permission to change this file."
 msgstr "你没有修改此文件的权限。"
 
 #: specivo/core/notification_templates.py:19
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Assigned to you by {actor_name}"
-msgstr "[{issue_key}] {actor_name} 已将其指派给你"
+msgstr "{actor_name} 已将其指派给你"
 
 #: specivo/core/notification_templates.py:20
 #, python-brace-format
@@ -37,9 +37,9 @@ msgid "[{issue_key}] Assigned to you by {actor_name}"
 msgstr "[{issue_key}] {actor_name} 已将其指派给你"
 
 #: specivo/core/notification_templates.py:23
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Updated by {actor_name}"
-msgstr "[{issue_key}] {actor_name} 已更新"
+msgstr "{actor_name} 已更新"
 
 #: specivo/core/notification_templates.py:24
 #, python-brace-format
@@ -47,9 +47,9 @@ msgid "[{issue_key}] Updated by {actor_name}"
 msgstr "[{issue_key}] {actor_name} 已更新"
 
 #: specivo/core/notification_templates.py:27
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "{actor_name} commented"
-msgstr "[{issue_key}] {actor_name} 发表了评论"
+msgstr "{actor_name} 发表了评论"
 
 #: specivo/core/notification_templates.py:28
 #, python-brace-format
@@ -66,7 +66,7 @@ msgstr "未找到代理会话"
 
 #: specivo/services/api_key_scope.py:147
 msgid "This API key is limited to specific projects and cannot do this."
-msgstr ""
+msgstr "此 API 密钥仅限于特定项目，无法执行此操作。"
 
 #: specivo/services/api_key_service.py:61
 #: specivo/services/api_key_service.py:69
@@ -314,7 +314,7 @@ msgstr "未找到工作流字段规则"
 
 #: specivo/templates/themes/default/base.html:18
 msgid "This diagram could not be drawn. Its source is shown below."
-msgstr ""
+msgstr "无法绘制此图表，下方显示其源代码。"
 
 #: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
@@ -356,15 +356,15 @@ msgstr "字号"
 
 #: specivo/templates/themes/default/components/header.html:31
 msgid "Could not load the activities."
-msgstr ""
+msgstr "无法加载活动类型。"
 
 #: specivo/templates/themes/default/components/header.html:32
 msgid "Could not stop the timer."
-msgstr ""
+msgstr "无法停止计时器。"
 
 #: specivo/templates/themes/default/components/header.html:33
 msgid "Could not discard the timer."
-msgstr ""
+msgstr "无法放弃计时器。"
 
 #: specivo/templates/themes/default/components/header.html:34
 #: specivo/templates/themes/default/pages/_fts_i18n.html:9
@@ -392,7 +392,7 @@ msgstr "无法连接。"
 #: specivo/templates/themes/default/components/header.html:39
 #, python-format
 msgid "Timer running on %(target)s"
-msgstr ""
+msgstr "计时器正在 %(target)s 上运行"
 
 #: specivo/templates/themes/default/components/header.html:48
 #: specivo/templates/themes/default/components/sidebar.html:67
@@ -492,7 +492,7 @@ msgstr "取消"
 
 #: specivo/templates/themes/default/components/header.html:84
 msgid "Discard the timer? The time is not logged."
-msgstr ""
+msgstr "放弃计时器？这段时间不会被记录。"
 
 #: specivo/templates/themes/default/components/header.html:107
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
@@ -4402,45 +4402,45 @@ msgstr "例如：已就方案达成一致"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:7
 msgid "Draft"
-msgstr ""
+msgstr "草稿"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:7
 msgid "Merged"
-msgstr ""
+msgstr "已合并"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:9
 msgid "Development"
-msgstr ""
+msgstr "开发"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:13
 msgid "Pull requests"
-msgstr ""
+msgstr "拉取请求"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:26
 msgid "Says it fixes this issue"
-msgstr ""
+msgstr "声明修复了此工作项"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:26
 msgid "fixes"
-msgstr ""
+msgstr "修复"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:37
 msgid "Branches"
-msgstr ""
+msgstr "分支"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:57
 msgid "Commits"
-msgstr ""
+msgstr "提交"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:74
 #, python-format
 msgid "Show %(count)s more"
-msgstr ""
+msgstr "再显示 %(count)s 项"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:77
 #, python-format
 msgid "The newest %(shown)s of %(total)s commits."
-msgstr ""
+msgstr "显示 %(total)s 个提交中最新的 %(shown)s 个。"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:21
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:87
@@ -4551,15 +4551,15 @@ msgstr "取消关注"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:346
 msgid "Press Ctrl+C to copy"
-msgstr ""
+msgstr "按 Ctrl+C 复制"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:348
 msgid "Branch name"
-msgstr ""
+msgstr "分支名称"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:351
 msgid "Copy branch name"
-msgstr ""
+msgstr "复制分支名称"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:359
 msgid "Move"
@@ -4678,7 +4678,7 @@ msgstr "确定要删除"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:13
 msgid "Could not start the timer."
-msgstr ""
+msgstr "无法启动计时器。"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:15
 #, python-format
@@ -4696,26 +4696,26 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"
-msgstr ""
+msgstr "启动计时器"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:26
 msgid "A timer is already running"
-msgstr ""
+msgstr "已有计时器在运行"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:27
 #, python-format
 msgid ""
 "A timer is already running on %(target)s. Log its time (with the default "
 "activity) or discard it before starting a new one."
-msgstr ""
+msgstr "%(target)s 上已有计时器在运行。请先记录其时间（使用默认活动类型）或放弃它，再启动新的计时器。"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:29
 msgid "Log it and start"
-msgstr ""
+msgstr "记录并启动"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:30
 msgid "Discard it and start"
-msgstr ""
+msgstr "放弃并启动"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:4
 msgid "Description Changes"
@@ -5969,12 +5969,12 @@ msgstr "成员"
 #: specivo/templates/themes/default/pages/projects/settings.html:30
 #: specivo/templates/themes/default/pages/projects/settings.html:1041
 msgid "Webhooks"
-msgstr ""
+msgstr "Webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:31
 #: specivo/templates/themes/default/pages/projects/settings.html:1276
 msgid "Repositories"
-msgstr ""
+msgstr "仓库"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:36
 #: specivo/templates/themes/default/pages/projects/settings.html:827
@@ -6454,85 +6454,73 @@ msgid ""
 msgstr "吗？它将从所有工作项和维基页面中移除。此操作无法撤销。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1015
-#, fuzzy
 msgid "Issue created"
-msgstr "报告的颁发者"
+msgstr "工作项已创建"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1016
-#, fuzzy
 msgid "Issue updated"
-msgstr "问题模板"
+msgstr "工作项已更新"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1017
-#, fuzzy
 msgid "Issue commented"
-msgstr "项工作项已关闭"
+msgstr "工作项有新评论"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1018
-#, fuzzy
 msgid "Issue deleted"
-msgstr "已删除文件"
+msgstr "工作项已删除"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1019
-#, fuzzy
 msgid "Wiki page updated"
-msgstr "维基页面"
+msgstr "维基页面已更新"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1020
 msgid "Test event"
-msgstr ""
+msgstr "测试事件"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1022
-#, fuzzy
 msgid "Failed to save webhook."
-msgstr "保存失败。"
+msgstr "保存 Webhook 失败。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1024
 #: specivo/templates/themes/default/pages/projects/settings.html:1258
-#, fuzzy
 msgid "Could not load deliveries."
-msgstr "无法保存更改。"
+msgstr "无法加载投递记录。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1025
 msgid "Test event queued. Open the delivery log to see the result."
-msgstr ""
+msgstr "测试事件已加入队列。打开投递日志查看结果。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1026
-#, fuzzy
 msgid "Could not send the test event."
-msgstr "无法更改密码。"
+msgstr "无法发送测试事件。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1027
 #: specivo/templates/themes/default/pages/projects/settings.html:1046
 msgid "New webhook"
-msgstr ""
+msgstr "新建 Webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1028
 msgid "Edit webhook"
-msgstr ""
+msgstr "编辑 Webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1029
-#, fuzzy
 msgid "Create webhook"
-msgstr "创建于"
+msgstr "创建 Webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1033
-#, fuzzy
 msgid "Pending"
-msgstr "发送中……"
+msgstr "等待中"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1034
 msgid "Succeeded"
-msgstr ""
+msgstr "成功"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1035
 #: specivo/templates/themes/default/pages/projects/settings.html:1270
-#, fuzzy
 msgid "Failed"
-msgstr "文件"
+msgstr "失败"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1053
-#, fuzzy
 msgid "Signing secret"
 msgstr "签名密钥"
 
@@ -6540,203 +6528,189 @@ msgstr "签名密钥"
 msgid ""
 "Copy it now: it is not shown again. Receivers check the X-Specivo-"
 "Signature header (HMAC-SHA256 of the body) with it."
-msgstr ""
+msgstr "请立即复制：它不会再次显示。接收方用它校验 X-Specivo-Signature 请求头（请求体的 HMAC-SHA256）。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1071
-#, fuzzy
 msgid "No webhooks yet"
-msgstr "尚无版本"
+msgstr "尚无 Webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1072
 msgid ""
 "A webhook sends a signed HTTPS request to another system when issues or "
 "wiki pages in this project change."
-msgstr ""
+msgstr "当此项目中的工作项或维基页面发生变化时，Webhook 会向其他系统发送带签名的 HTTPS 请求。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1073
-#, fuzzy
 msgid "Create first webhook"
-msgstr "创建第一个版本"
+msgstr "创建第一个 Webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1084
 msgid "includes private content"
-msgstr ""
+msgstr "包含私有内容"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1089
 #: specivo/templates/themes/default/pages/projects/settings.html:1112
 #: specivo/templates/themes/default/pages/projects/settings.html:1367
 #: specivo/templates/themes/default/pages/projects/settings.html:1390
-#, fuzzy
 msgid "Delivery log"
-msgstr "发现 URL"
+msgstr "投递日志"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1090
-#, fuzzy
 msgid "Send test"
 msgstr "发送测试"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1122
 #: specivo/templates/themes/default/pages/projects/settings.html:1400
-#, fuzzy
 msgid "No deliveries yet"
-msgstr "尚无版本"
+msgstr "尚无投递记录"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1123
 msgid ""
 "Deliveries appear here when a subscribed event happens, or when you send "
 "a test event."
-msgstr ""
+msgstr "当订阅的事件发生或你发送测试事件时，投递记录会显示在这里。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1132
 #: specivo/templates/themes/default/pages/projects/settings.html:1410
-#, fuzzy
 msgid "Event"
-msgstr "终止事件"
+msgstr "事件"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1134
-#, fuzzy
 msgid "Attempts"
-msgstr "附件"
+msgstr "尝试次数"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1135
 msgid "Response code"
-msgstr ""
+msgstr "响应代码"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1136
-#, fuzzy
 msgid "Response"
-msgstr "原因"
+msgstr "响应"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1158
 #: specivo/templates/themes/default/pages/projects/settings.html:1429
-#, fuzzy
 msgid "Newer"
-msgstr "从未"
+msgstr "较新"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1160
 #: specivo/templates/themes/default/pages/projects/settings.html:1431
-#, fuzzy
 msgid "Older"
-msgstr "角色"
+msgstr "较旧"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1180
 msgid "Payload URL"
-msgstr ""
+msgstr "Payload URL"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1182
 msgid ""
 "HTTPS only. Addresses inside private networks are refused when the "
 "request is sent."
-msgstr ""
+msgstr "仅支持 HTTPS。发送请求时会拒绝私有网络内的地址。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1185
-#, fuzzy
 msgid "Events"
-msgstr "终止事件"
+msgstr "事件"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1199
-#, fuzzy
 msgid "Include private issues and private notes"
-msgstr "新问题为私有"
+msgstr "包含私有工作项和私有备注"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1201
 msgid "Off by default: the receiver then never learns about private content."
-msgstr ""
+msgstr "默认关闭：这样接收方永远不会得知私有内容。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1204
 msgid ""
 "Private issues and private notes are not sent. Only an administrator can "
 "change that."
-msgstr ""
+msgstr "私有工作项和私有备注不会被发送。只有管理员可以更改此设置。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1208
-#, fuzzy
 msgid "Generate a new secret"
-msgstr "生成密码"
+msgstr "生成新密钥"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1209
 msgid "The old secret stops working at once."
-msgstr ""
+msgstr "旧密钥会立即失效。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1213
 msgid "A signing secret is generated and shown once after the webhook is created."
-msgstr ""
+msgstr "创建 Webhook 后会生成签名密钥，并仅显示一次。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1232
 #: specivo/templates/themes/default/pages/projects/settings.html:1242
-#, fuzzy
 msgid "Delete webhook"
-msgstr "删除版本"
+msgstr "删除 Webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1238
 msgid "Delete this webhook and its delivery log? Nothing more is sent to:"
-msgstr ""
+msgstr "删除此 Webhook 及其投递日志？之后将不再向以下地址发送任何内容："
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1256
 msgid "Failed to save the repository."
-msgstr ""
+msgstr "保存仓库失败。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1259
 #: specivo/templates/themes/default/pages/projects/settings.html:1281
 msgid "Connect a repository"
-msgstr ""
+msgstr "连接仓库"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1260
 msgid "Edit repository"
-msgstr ""
+msgstr "编辑仓库"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1261
 msgid "Connect repository"
-msgstr ""
+msgstr "连接仓库"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1265
 msgid "Never received"
-msgstr ""
+msgstr "从未收到"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1266
 msgid "Accepted"
-msgstr ""
+msgstr "已接受"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1267
 msgid "Duplicate"
-msgstr ""
+msgstr "重复"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1268
 msgid "Ignored"
-msgstr ""
+msgstr "已忽略"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1269
 msgid "Processed"
-msgstr ""
+msgstr "已处理"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1290
 msgid "Webhook URL"
-msgstr ""
+msgstr "Webhook URL"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1297
 msgid "Secret"
-msgstr ""
+msgstr "密钥"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1303
 msgid "Copy the secret now: it is not shown again."
-msgstr ""
+msgstr "请立即复制密钥：它不会再次显示。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1307
 msgid ""
 "In the repository on GitHub, open Settings, then Webhooks, then Add "
 "webhook."
-msgstr ""
+msgstr "在 GitHub 上的仓库中，依次打开 Settings、Webhooks，然后点击 Add webhook。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1308
 msgid ""
 "Paste the webhook URL into Payload URL and set Content type to "
 "application/json."
-msgstr ""
+msgstr "将 Webhook URL 粘贴到 Payload URL，并将 Content type 设为 application/json。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1309
 #: specivo/templates/themes/default/pages/projects/settings.html:1325
 msgid "Paste the secret into Secret."
-msgstr ""
+msgstr "将密钥粘贴到 Secret。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1310
 msgid ""
@@ -6744,46 +6718,54 @@ msgid ""
 "requests, and save. GitHub sends a ping at once; it appears in the "
 "delivery log."
 msgstr ""
+"选择“Let me select individual events”，勾选 Pushes 和 Pull requests，然后保存。GitHub"
+" 会立即发送一个 ping，它会显示在投递日志中。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1315
 msgid ""
 "In the project on GitLab, open Settings, then Webhooks, then Add new "
 "webhook."
-msgstr ""
+msgstr "在 GitLab 上的项目中，依次打开 Settings、Webhooks，然后点击 Add new webhook。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1316
 msgid "Paste the webhook URL into URL and the secret into Secret token."
-msgstr ""
+msgstr "将 Webhook URL 粘贴到 URL，将密钥粘贴到 Secret token。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1317
 msgid "Under Trigger, select Push events and Merge request events."
-msgstr ""
+msgstr "在 Trigger 下选择 Push events 和 Merge request events。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1318
 msgid "Save, then use Test, Push events to send a first delivery."
-msgstr ""
+msgstr "保存后，使用 Test → Push events 发送第一次投递。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1323
 msgid ""
 "In the repository, open Settings, then Webhooks, then Add webhook, and "
 "pick the Gitea or Forgejo webhook type, matching the server."
 msgstr ""
+"在仓库中，依次打开 Settings、Webhooks、Add webhook，并根据服务器选择 Gitea 或 Forgejo 类型的 "
+"Webhook。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1324
 msgid ""
 "Paste the webhook URL into Target URL. Keep the HTTP method POST and set "
 "the POST content type to application/json."
 msgstr ""
+"将 Webhook URL 粘贴到 Target URL。HTTP 方法保持 POST，并将 POST content type 设为 "
+"application/json。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1326
 msgid ""
 "Under Trigger on, choose Custom events, tick Push and Pull request, then "
 "add the webhook. Test delivery sends a push."
 msgstr ""
+"在 Trigger on 下选择 Custom events，勾选 Push 和 Pull request，然后添加 Webhook。Test "
+"delivery 会发送一次推送。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1344
 msgid "No repositories connected"
-msgstr ""
+msgstr "尚未连接仓库"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1345
 msgid ""
@@ -6791,34 +6773,36 @@ msgid ""
 "mention an issue key, such as \"Fixes KEY-12\", or are pushed to a branch"
 " named after one, are linked to the issue."
 msgstr ""
+"连接 GitHub、GitLab、Gitea 或 Forgejo 仓库：提及工作项键（例如“Fixes "
+"KEY-12”）的提交，或推送到以工作项键命名的分支的提交，都会关联到该工作项。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1346
 msgid "Connect the first repository"
-msgstr ""
+msgstr "连接第一个仓库"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1359
 msgid "Last delivery:"
-msgstr ""
+msgstr "最近一次投递："
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1360
 msgid "includes subprojects"
-msgstr ""
+msgstr "包含子项目"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1362
 msgid "commit commands on"
-msgstr ""
+msgstr "提交命令已开启"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1363
 msgid "merge automation on"
-msgstr ""
+msgstr "合并自动化已开启"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1368
 msgid "New secret"
-msgstr ""
+msgstr "新密钥"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1401
 msgid "Deliveries appear here once the forge sends its first webhook to this URL."
-msgstr ""
+msgstr "代码托管平台向此 URL 发送第一个 Webhook 后，投递记录会显示在这里。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1412
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
@@ -6830,37 +6814,37 @@ msgstr "详情"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1459
 msgid "Repository"
-msgstr ""
+msgstr "仓库"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1461
 msgid ""
 "The full name as the forge shows it, owner and repository. Deliveries "
 "that name another repository are ignored."
-msgstr ""
+msgstr "代码托管平台上显示的完整名称，包括所有者和仓库名。指向其他仓库的投递会被忽略。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1464
 msgid "Repository URL"
-msgstr ""
+msgstr "仓库 URL"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1468
 msgid "Issues commits may link to"
-msgstr ""
+msgstr "提交可关联的工作项"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1470
 msgid "This project"
-msgstr ""
+msgstr "此项目"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1471
 msgid "This project and its subprojects"
-msgstr ""
+msgstr "此项目及其子项目"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1473
 msgid "Keys of other projects in commit messages are ignored."
-msgstr ""
+msgstr "提交信息中其他项目的键会被忽略。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1476
 msgid "Changes to issues"
-msgstr ""
+msgstr "对工作项的更改"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1477
 msgid ""
@@ -6868,11 +6852,11 @@ msgid ""
 "access can set to any address. With commands on, anyone who can push to "
 "this repository can act as any project member whose verified email they "
 "use."
-msgstr ""
+msgstr "提交命令信任提交作者的邮箱，而任何拥有推送权限的人都可以将其设为任意地址。开启命令后，任何能向此仓库推送的人，只要使用某位项目成员已验证的邮箱，就能以该成员身份执行操作。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1480
 msgid "Commit commands"
-msgstr ""
+msgstr "提交命令"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1482
 msgid ""
@@ -6880,28 +6864,30 @@ msgid ""
 " fixing status, as the Specivo user whose verified email wrote the "
 "commit. Their permissions and the workflow apply."
 msgstr ""
+"默认分支上的提交中出现“Fixes KEY-12”时，会以提交邮箱经过验证的 Specivo "
+"用户身份，将工作项移到修复状态。适用该用户的权限和工作流。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1484
 msgid "Fixing status"
-msgstr ""
+msgstr "修复状态"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1486
 msgid "Do not change the status"
-msgstr ""
+msgstr "不更改状态"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1494
 msgid "Time logging"
-msgstr ""
+msgstr "工时记录"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1496
 msgid ""
 "\"KEY-12 @1h30m\" (also @2h, @90m, @1.5h) logs the time on the issue for "
 "the commit's author, on any branch. They need permission to log time."
-msgstr ""
+msgstr "“KEY-12 @1h30m”（也支持 @2h、@90m、@1.5h）会在任意分支上为提交作者在该工作项上记录工时。作者需要拥有记录工时的权限。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1500
 msgid "Merge automation"
-msgstr ""
+msgstr "合并自动化"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1502
 msgid ""
@@ -6909,51 +6895,53 @@ msgid ""
 "the default branch, the issue moves to the merge status. The change is "
 "made by Git, with the project role chosen here, and follows the workflow."
 msgstr ""
+"当包含“Fixes KEY-12”的拉取请求或合并请求合并到默认分支时，工作项会移到合并状态。此更改由 Git "
+"以此处选择的项目角色执行，并遵循工作流。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1505
 msgid "Merge status"
-msgstr ""
+msgstr "合并状态"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1507
 msgid "Choose a status"
-msgstr ""
+msgstr "选择状态"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1514
 msgid "Role of Git in this project"
-msgstr ""
+msgstr "Git 在此项目中的角色"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1520
 msgid ""
 "The Automation role may edit issues but has no workflow transitions until"
 " an administrator grants them. Changing the role needs permission to "
 "manage members."
-msgstr ""
+msgstr "Automation 角色可以编辑工作项，但在管理员授予之前没有任何工作流转换。更改角色需要管理成员的权限。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1526
 msgid "Ignore pull requests from forks and outsiders"
-msgstr ""
+msgstr "忽略来自派生仓库和外部人员的拉取请求"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1528
 msgid ""
 "Requests from another repository, or on GitHub by someone who is not a "
 "collaborator, are not linked to issues until they are merged."
-msgstr ""
+msgstr "来自其他仓库的请求，或 GitHub 上非协作者提交的请求，在合并之前不会关联到工作项。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1531
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
-msgstr ""
+msgstr "连接仓库后会生成 Webhook URL 和密钥，并仅显示一次。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1550
 msgid "Disconnect repository"
-msgstr ""
+msgstr "断开仓库连接"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1556
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
-msgstr ""
+msgstr "断开此仓库的连接？其 Webhook URL 将失效，投递日志将被删除。工作项上已有的提交备注会保留。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1569
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
@@ -6962,11 +6950,11 @@ msgstr "已保存"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1570
 msgid "Could not save the branch name settings."
-msgstr ""
+msgstr "无法保存分支名称设置。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1575
 msgid "Branch names"
-msgstr ""
+msgstr "分支名称"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1577
 #, python-brace-format
@@ -6976,18 +6964,20 @@ msgid ""
 "tracker; {slug} is the subject in lower case, at most 40 characters. "
 "Branches named this way link their commits to the issue."
 msgstr ""
+"工作项上的“复制分支名称”按钮会按此格式生成名称。{key} 是工作项键，必须包含；{type} 来自追踪器；{slug} 是小写的主题，最多 "
+"40 个字符。以这种方式命名的分支，其提交会关联到该工作项。"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1579
 msgid "Format"
-msgstr ""
+msgstr "格式"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1581
 msgid "Example:"
-msgstr ""
+msgstr "示例："
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1591
 msgid "Other trackers"
-msgstr ""
+msgstr "其他追踪器"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1610
 msgid "Search indexing"
