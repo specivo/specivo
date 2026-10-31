@@ -104,7 +104,9 @@ flowchart LR
 Diagrams work in issue descriptions, comments, wiki pages and the editor preview, and need no
 internet access. Labels are plain text: HTML in a label is shown as written, and `click` links and
 callbacks do nothing. If a diagram has a syntax error, its source is shown as a code block below a
-short notice instead. Search and exports see the diagram's source text.
+short notice instead. Search and exports see the diagram's source text. A diagram wider than the
+page is scaled down to fit on a wide screen; on a phone it keeps its full size and you scroll it
+sideways.
 
 ## @username mentions
 

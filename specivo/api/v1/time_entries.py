@@ -16,11 +16,13 @@ from specivo.models.user import User
 from specivo.schemas.common import IdName
 from specivo.schemas.time_entry import (
     ActivityOut,
+    ReplacedTimerOut,
     TimeEntryCreate,
     TimeEntryListResponse,
     TimeEntryOut,
     TimeEntryUpdate,
     TimerOut,
+    TimerStartOut,
     TimerStartRequest,
     TimerStopRequest,
 )
@@ -242,7 +244,7 @@ async def get_timer(
 
 @router.post(
     "/timer/start/",
-    response_model=TimerOut,
+    response_model=TimerStartOut,
     status_code=status.HTTP_201_CREATED,
 )
 async def start_timer(
@@ -250,13 +252,16 @@ async def start_timer(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
-) -> TimerOut:
-    """Start a timer. Auto-stops existing timer if any.
+) -> TimerStartOut:
+    """Start a timer. A timer already running is stopped first.
 
     Requires ``log_time`` in the project (404 for a project or issue the
-    caller cannot see, 403 without the permission).
+    caller cannot see, 403 without the permission). The running timer's time
+    is logged with the default activity, or the timer is discarded when the
+    caller may no longer log time where it ran; ``replaced`` says which
+    (``None`` when no timer was running).
     """
-    timer = await _service.start_timer(
+    timer, replaced = await _service.start_timer_replacing(
         db,
         current_user,
         project_id=data.project_id,
@@ -264,7 +269,18 @@ async def start_timer(
         comments=data.comments,
         request=request,
     )
-    return _timer_out(timer)
+    replaced_out = None
+    if replaced is not None:
+        replaced_out = ReplacedTimerOut(
+            outcome="logged" if replaced.entry is not None else "discarded",
+            project_id=replaced.project_id,
+            project_key=replaced.project_key,
+            issue_id=replaced.issue_id,
+            issue_key=replaced.issue_key,
+            hours=replaced.entry.hours if replaced.entry is not None else None,
+            entry_id=replaced.entry.id if replaced.entry is not None else None,
+        )
+    return TimerStartOut(**_timer_out(timer).model_dump(), replaced=replaced_out)
 
 
 @router.post(

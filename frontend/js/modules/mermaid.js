@@ -114,6 +114,20 @@ function showError(pre, detail) {
     pre.parentNode.insertBefore(notice, pre);
 }
 
+/* The library sizes a diagram to its container: width="100%" and an inline
+   max-width of its natural width, so a wide one shrinks until it is unreadable
+   on a phone. Give it its natural size instead and leave the rest to CSS
+   (.sp-mermaid-diagram): scaled down to fit on wide screens, scrolled
+   sideways on narrow ones. */
+function useNaturalSize(figure) {
+    var svg = figure.querySelector('svg');
+    var box = svg && svg.viewBox && svg.viewBox.baseVal;
+    if (!box || !box.width || !box.height) return;
+    svg.setAttribute('width', String(box.width));
+    svg.setAttribute('height', String(box.height));
+    svg.style.removeProperty('max-width');
+}
+
 function draw(mermaid, pre) {
     var theme = themeFor(pre);
     if (theme !== currentTheme) initialize(mermaid, theme);
@@ -129,6 +143,7 @@ function draw(mermaid, pre) {
         /* SVG from mermaid.render with securityLevel 'strict': labels are
          * text and the output has been through the library's DOMPurify. */
         figure.innerHTML = result.svg;  /* noqa: XSS */
+        useNaturalSize(figure);
         pre.parentNode.insertBefore(figure, pre);
         pre.hidden = true;
     }, function (err) {

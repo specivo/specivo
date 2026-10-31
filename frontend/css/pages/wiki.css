@@ -85,6 +85,11 @@
 .sp-mermaid { background: #0d0b20; color: #d4cfc0; padding: var(--sp-space-lg) var(--sp-space-xl); border-radius: var(--sp-border-radius); font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); line-height: 1.6; overflow-x: auto; margin: var(--sp-space-lg) 0; white-space: pre; }
 .sp-mermaid-diagram { margin: var(--sp-space-lg) 0; overflow-x: auto; text-align: center; }
 .sp-mermaid-diagram svg { max-width: 100%; height: auto; }
+/* On a narrow screen a wide diagram keeps its natural width and the figure
+   scrolls sideways, rather than shrinking it until the labels are unreadable. */
+@media (max-width: 768px) {
+    .sp-mermaid-diagram svg { max-width: none; }
+}
 .sp-mermaid-error { margin: var(--sp-space-lg) 0 calc(-1 * var(--sp-space-sm)); font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); font-style: italic; }
 .sp-mermaid-error::before { content: "\26A0\FE0E\00A0"; font-style: normal; }
 

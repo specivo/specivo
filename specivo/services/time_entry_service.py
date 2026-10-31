@@ -96,10 +96,14 @@ class ReplacedTimer:
 
     ``entry`` is the time entry its time was logged as, or None when the user
     could no longer log time where it ran and it was discarded instead.
+    ``issue_key`` is set whenever it ran on an issue, as in ``TimerSummary``:
+    it was the user's own timer.
     """
 
     project_id: int
+    project_key: str
     issue_id: int | None
+    issue_key: str | None
     entry: TimeEntry | None
 
 
@@ -605,13 +609,22 @@ class TimeEntryService:
             )
         replaced: ReplacedTimer | None = None
         if existing is not None:
+            old_project = await session.get(Project, existing.project_id)
+            old_issue = await session.get(Issue, existing.issue_id) if existing.issue_id is not None else None
+            old_project_id, old_issue_id = existing.project_id, existing.issue_id
+            entry: TimeEntry | None = None
             if await self._timer_still_allowed(session, user, existing):
                 entry = await self._stop_timer_internal(session, user, existing)
-                replaced = ReplacedTimer(project_id=existing.project_id, issue_id=existing.issue_id, entry=entry)
             else:
-                replaced = ReplacedTimer(project_id=existing.project_id, issue_id=existing.issue_id, entry=None)
                 await session.delete(existing)
                 await session.flush()
+            replaced = ReplacedTimer(
+                project_id=old_project_id,
+                project_key=old_project.key if old_project is not None else str(old_project_id),
+                issue_id=old_issue_id,
+                issue_key=old_issue.display_key if old_issue is not None else None,
+                entry=entry,
+            )
 
         timer = ActiveTimer(
             user_id=user.id,

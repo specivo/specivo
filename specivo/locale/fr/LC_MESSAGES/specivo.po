@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-31 13:04+0100\n"
+"POT-Creation-Date: 2026-10-31 13:56+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.app>\n"
 "Language: fr\n"
@@ -232,15 +232,15 @@ msgstr "Le sprint n'appartient pas à ce projet"
 msgid "Cannot assign issues to a completed sprint"
 msgstr "Impossible d'assigner des tickets à un sprint terminé"
 
-#: specivo/services/issue_service.py:946
+#: specivo/services/issue_service.py:998
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "Le ticket a été modifié par une autre requête. Rechargez et réessayez."
 
-#: specivo/services/issue_service.py:1099
+#: specivo/services/issue_service.py:1151
 msgid "Issue is already in this project."
 msgstr "Le ticket se trouve déjà dans ce projet."
 
-#: specivo/services/issue_service.py:1108
+#: specivo/services/issue_service.py:1160
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -249,12 +249,12 @@ msgstr ""
 "Détachez-le de son parent, et déplacez ou détachez d'abord ses tickets "
 "enfants."
 
-#: specivo/services/issue_service.py:1159
+#: specivo/services/issue_service.py:1211
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Déplacé de {old} vers {new}."
 
-#: specivo/services/issue_service.py:1233
+#: specivo/services/issue_service.py:1285
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -343,7 +343,7 @@ msgid "You are reading a public project. Sign in to take part."
 msgstr "Vous consultez un projet public. Connectez-vous pour participer."
 
 #: specivo/templates/themes/default/base.html:40
-#: specivo/templates/themes/default/components/header.html:132
+#: specivo/templates/themes/default/components/header.html:135
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
 #: specivo/templates/themes/default/pages/auth/login.html:157
@@ -411,32 +411,32 @@ msgstr ""
 msgid "Unable to connect."
 msgstr "Connexion impossible."
 
-#: specivo/templates/themes/default/components/header.html:36
+#: specivo/templates/themes/default/components/header.html:39
 #, python-format
 msgid "Timer running on %(target)s"
 msgstr ""
 
-#: specivo/templates/themes/default/components/header.html:45
+#: specivo/templates/themes/default/components/header.html:48
 #: specivo/templates/themes/default/components/sidebar.html:67
 msgid "Time Tracking"
 msgstr "Suivi du temps"
 
-#: specivo/templates/themes/default/components/header.html:46
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:17
+#: specivo/templates/themes/default/components/header.html:49
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:19
 msgid "Timer running"
 msgstr "Minuteur en cours"
 
-#: specivo/templates/themes/default/components/header.html:61
+#: specivo/templates/themes/default/components/header.html:64
 msgid "Stop & log"
 msgstr "Arrêter et enregistrer"
 
-#: specivo/templates/themes/default/components/header.html:62
-#: specivo/templates/themes/default/components/header.html:83
+#: specivo/templates/themes/default/components/header.html:65
+#: specivo/templates/themes/default/components/header.html:86
 #: specivo/templates/themes/default/pages/issues/detail.html:253
 msgid "Discard"
 msgstr "Abandonner"
 
-#: specivo/templates/themes/default/components/header.html:66
+#: specivo/templates/themes/default/components/header.html:69
 #: specivo/templates/themes/default/pages/issues/detail.html:268
 #: specivo/templates/themes/default/pages/issues/detail.html:351
 #: specivo/templates/themes/default/pages/issues/detail.html:388
@@ -444,7 +444,7 @@ msgstr "Abandonner"
 msgid "Activity"
 msgstr "Activité"
 
-#: specivo/templates/themes/default/components/header.html:72
+#: specivo/templates/themes/default/components/header.html:75
 #: specivo/templates/themes/default/pages/issues/description_diff.html:74
 #: specivo/templates/themes/default/pages/issues/detail.html:389
 #: specivo/templates/themes/default/pages/issues/detail.html:544
@@ -453,18 +453,18 @@ msgstr "Activité"
 msgid "Comment"
 msgstr "Commentaire"
 
-#: specivo/templates/themes/default/components/header.html:73
+#: specivo/templates/themes/default/components/header.html:76
 #: specivo/templates/themes/default/pages/issues/detail.html:367
 msgid "Comment (optional)"
 msgstr "Commentaire (facultatif)"
 
-#: specivo/templates/themes/default/components/header.html:75
+#: specivo/templates/themes/default/components/header.html:78
 #: specivo/templates/themes/default/pages/issues/detail.html:329
 msgid "Log time"
 msgstr "Consigner le temps"
 
-#: specivo/templates/themes/default/components/header.html:76
-#: specivo/templates/themes/default/components/header.html:84
+#: specivo/templates/themes/default/components/header.html:79
+#: specivo/templates/themes/default/components/header.html:87
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:46
 #: specivo/templates/themes/default/pages/admin/groups.html:98
 #: specivo/templates/themes/default/pages/admin/groups.html:123
@@ -481,7 +481,7 @@ msgstr "Consigner le temps"
 #: specivo/templates/themes/default/pages/issues/_activity.html:133
 #: specivo/templates/themes/default/pages/issues/_activity.html:208
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:29
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:31
 #: specivo/templates/themes/default/pages/issues/detail.html:106
 #: specivo/templates/themes/default/pages/issues/detail.html:328
 #: specivo/templates/themes/default/pages/issues/detail.html:466
@@ -512,11 +512,11 @@ msgstr "Consigner le temps"
 msgid "Cancel"
 msgstr "Annuler"
 
-#: specivo/templates/themes/default/components/header.html:81
+#: specivo/templates/themes/default/components/header.html:84
 msgid "Discard the timer? The time is not logged."
 msgstr ""
 
-#: specivo/templates/themes/default/components/header.html:104
+#: specivo/templates/themes/default/components/header.html:107
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
 #: specivo/templates/themes/default/pages/notifications.html:3
 #: specivo/templates/themes/default/pages/notifications.html:9
@@ -524,20 +524,20 @@ msgstr ""
 msgid "Notifications"
 msgstr "Notifications"
 
-#: specivo/templates/themes/default/components/header.html:105
+#: specivo/templates/themes/default/components/header.html:108
 #: specivo/templates/themes/default/pages/notifications.html:16
 msgid "Mark all read"
 msgstr "Tout marquer comme lu"
 
-#: specivo/templates/themes/default/components/header.html:119
+#: specivo/templates/themes/default/components/header.html:122
 msgid "No notifications"
 msgstr "Aucune notification"
 
-#: specivo/templates/themes/default/components/header.html:123
+#: specivo/templates/themes/default/components/header.html:126
 msgid "View all notifications"
 msgstr "Voir toutes les notifications"
 
-#: specivo/templates/themes/default/components/header.html:153
+#: specivo/templates/themes/default/components/header.html:156
 #: specivo/templates/themes/default/pages/auth/preferences.html:9
 #: specivo/templates/themes/default/pages/auth/profile.html:3
 #: specivo/templates/themes/default/pages/auth/profile.html:9
@@ -545,7 +545,7 @@ msgstr "Voir toutes les notifications"
 msgid "Profile"
 msgstr "Profil"
 
-#: specivo/templates/themes/default/components/header.html:157
+#: specivo/templates/themes/default/components/header.html:160
 #: specivo/templates/themes/default/pages/auth/preferences.html:3
 #: specivo/templates/themes/default/pages/auth/preferences.html:11
 #: specivo/templates/themes/default/pages/auth/preferences.html:14
@@ -553,7 +553,7 @@ msgstr "Profil"
 msgid "Preferences"
 msgstr "Préférences"
 
-#: specivo/templates/themes/default/components/header.html:161
+#: specivo/templates/themes/default/components/header.html:164
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
 #: specivo/templates/themes/default/pages/auth/api_keys.html:3
 #: specivo/templates/themes/default/pages/auth/api_keys.html:9
@@ -563,7 +563,7 @@ msgstr "Préférences"
 msgid "API Keys"
 msgstr "Clés API"
 
-#: specivo/templates/themes/default/components/header.html:168
+#: specivo/templates/themes/default/components/header.html:171
 #: specivo/templates/themes/default/pages/auth/change_password.html:59
 #: specivo/templates/themes/default/pages/auth/login.html:49
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:11
@@ -3965,6 +3965,7 @@ msgid "Copy it now — you will not see it again."
 msgstr "Copiez-la maintenant — vous ne la reverrez plus."
 
 #: specivo/templates/themes/default/pages/auth/api_keys.html:60
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:39
 #: specivo/templates/themes/default/pages/projects/settings.html:1057
 #: specivo/templates/themes/default/pages/projects/settings.html:1331
 msgid "Dismiss"
@@ -4881,26 +4882,40 @@ msgstr "Voulez-vous vraiment supprimer"
 msgid "Could not start the timer."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:21
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:15
+#, python-format
+msgid ""
+"The timer on %(target)s was stopped and %(hours)s h were logged with the "
+"default activity."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:16
+#, python-format
+msgid ""
+"The timer on %(target)s was discarded without logging time: you may no "
+"longer log time there."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:24
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:26
 msgid "A timer is already running"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:25
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:27
 #, python-format
 msgid ""
 "A timer is already running on %(target)s. Log its time (with the default "
 "activity) or discard it before starting a new one."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:27
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:29
 msgid "Log it and start"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:28
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:30
 msgid "Discard it and start"
 msgstr ""
 

@@ -7,6 +7,7 @@ to the shared admin account, so every test leaves none running.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Generator
 
 import httpx
@@ -116,6 +117,46 @@ def test_starting_with_a_timer_elsewhere_asks_first(
     expect(admin_page.locator(".sp-timer-start-running")).to_be_visible()
     assert api_client.get("/api/v1/timer/").json()["issue_id"] == issue["id"]
     assert _entries(api_client, project["key"]) == []
+
+
+def test_log_it_and_start_says_what_happened_to_the_running_timer(
+    admin_page: Page, api_client: httpx.Client, project: dict, issue: dict, no_timer: None
+) -> None:
+    other = create_issue(api_client, project["key"], "Drain the expansion tank")
+    started = api_client.post("/api/v1/timer/start/", json={"project_id": project["id"], "issue_id": other["id"]})
+    assert started.status_code == 201, started.text
+
+    admin_page.goto(f"/issue/{issue['key']}/")
+    wait_for_alpine(admin_page)
+    admin_page.get_by_role("button", name="Start timer").click()
+    admin_page.locator(".sp-timer-start-confirm").get_by_role("button", name="Log it and start").click()
+
+    expect(admin_page.locator(".sp-timer-start-running")).to_be_visible()
+    notice = admin_page.get_by_role("status").filter(has_text="was stopped")
+    expect(notice).to_contain_text(f"The timer on {other['key']} was stopped and")
+    expect(notice).to_contain_text("logged with the default activity")
+    [entry] = _entries(api_client, project["key"])
+    assert entry["issue_id"] == other["id"]
+
+    # Shown once: the next visit has no notice.
+    notice.get_by_role("button", name="Dismiss").click()
+    expect(notice).to_be_hidden()
+    admin_page.reload()
+    wait_for_alpine(admin_page)
+    expect(admin_page.locator(".sp-timer-notice")).to_be_hidden()
+
+
+def test_header_timer_name_includes_the_elapsed_time(
+    admin_page: Page, api_client: httpx.Client, project: dict, issue: dict, no_timer: None
+) -> None:
+    _start_on_issue_page(admin_page, issue)
+
+    button = admin_page.get_by_role(
+        "button", name=re.compile(rf"^Timer running on {re.escape(issue['key'])} \d+:\d\d:\d\d$")
+    )
+    expect(button).to_be_visible()
+    elapsed = admin_page.locator(".sp-header-timer .timer-elapsed").inner_text()
+    expect(button).not_to_have_accessible_name(re.compile(rf"{re.escape(elapsed)}$"), timeout=5000)
 
 
 def _activity_id(api: httpx.Client, name: str) -> str:

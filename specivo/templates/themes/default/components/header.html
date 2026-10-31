@@ -33,10 +33,13 @@
       "discardFailed": _("Could not discard the timer."),
       "connectFailed": _("Unable to connect.")
     } | tojson }}'>
-      <button type="button" class="header-timer" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="{{ _('Timer running on %(target)s') | format(target=_timer_label) }}">
+      {# The accessible name is the hidden label followed by the elapsed time,
+         so screen readers hear the time the button shows. #}
+      <button type="button" class="header-timer" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-labelledby="sp-header-timer-label sp-header-timer-elapsed">
+        <span id="sp-header-timer-label" hidden>{{ _('Timer running on %(target)s') | format(target=_timer_label) }}</span>
         <span class="timer-dot"></span>
         <span class="sp-header-timer-key">{{ _timer_label }}</span>
-        <span class="timer-elapsed" x-text="elapsedLabel">{{ _elapsed }}</span>
+        <span id="sp-header-timer-elapsed" class="timer-elapsed" x-text="elapsedLabel">{{ _elapsed }}</span>
       </button>
       <div class="dropdown-menu dropdown-menu-end timer-dropdown">
         <div class="timer-dropdown-header">
