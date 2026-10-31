@@ -24,6 +24,9 @@ from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.sso import (
     AuthSettingsOut,
     AuthSettingsUpdate,
+    ScimSettingsOut,
+    ScimSettingsUpdate,
+    ScimTokenOut,
     SsoGroupMappingIn,
     SsoGroupMappingOut,
     SsoProviderCreate,
@@ -31,11 +34,13 @@ from specivo.schemas.sso import (
     SsoProviderUpdate,
     SsoSelfTestResult,
 )
+from specivo.services.scim.config_service import ScimConfigService
 from specivo.services.sso.auth_settings import get_auth_settings, update_auth_settings
 from specivo.services.sso.provider_service import ProviderService
 
 router = APIRouter(tags=["admin-sso"])
 _service = ProviderService()
+_scim = ScimConfigService()
 
 UNLINKED_IDENTITIES_HEADER = "X-Unlinked-Identities"
 REVOKED_SESSIONS_HEADER = "X-Revoked-Sessions"
@@ -248,6 +253,57 @@ async def delete_group_mapping(
 ) -> Response:
     """Remove one mapping. Memberships it created are re-evaluated on the users' next sign-in."""
     await _service.delete_group_mapping(db, provider_id, mapping_id, actor=admin)
+    await db.commit()  # commit before response to avoid reload race condition
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------------------------------------------------------------------------
+# SCIM provisioning
+# ---------------------------------------------------------------------------
+
+
+@router.get("/admin/sso/providers/{provider_id}/scim/", response_model=ScimSettingsOut)
+async def get_scim_settings(provider_id: int, admin: AdminUser, db: AsyncSession = DB_SESSION) -> ScimSettingsOut:
+    """The provider's SCIM settings: switch, base URL, token prefix and last request. Never the token."""
+    return await _scim.settings_out(db, await _service.get(db, provider_id))
+
+
+@router.patch("/admin/sso/providers/{provider_id}/scim/", response_model=ScimSettingsOut)
+async def update_scim_settings(
+    provider_id: int,
+    data: ScimSettingsUpdate,
+    admin: AdminSessionUser,
+    db: AsyncSession = DB_SESSION,
+) -> ScimSettingsOut:
+    """Switch SCIM provisioning on or off. On needs a token (400 ``scim_token_required``)."""
+    provider = await _service.get(db, provider_id)
+    await _scim.set_enabled(db, provider, data.enabled, actor=admin)
+    await db.commit()  # commit before response to avoid reload race condition
+    return await _scim.settings_out(db, provider)
+
+
+@router.post(
+    "/admin/sso/providers/{provider_id}/scim/token/",
+    response_model=ScimTokenOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_scim_token(provider_id: int, admin: AdminSessionUser, db: AsyncSession = DB_SESSION) -> ScimTokenOut:
+    """Generate the SCIM token, or rotate it: the old one stops working at once.
+
+    The token is in this response only; Specivo keeps its hash.
+    """
+    provider = await _service.get(db, provider_id)
+    token = await _scim.generate_token(db, provider, actor=admin)
+    await db.commit()  # commit before response to avoid reload race condition
+    settings = await _scim.settings_out(db, provider)
+    return ScimTokenOut(**settings.model_dump(), token=token)
+
+
+@router.delete("/admin/sso/providers/{provider_id}/scim/token/", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_scim_token(provider_id: int, admin: AdminUser, db: AsyncSession = DB_SESSION) -> Response:
+    """Revoke the SCIM token and switch SCIM off. Provisioned accounts and groups stay as they are."""
+    provider = await _service.get(db, provider_id)
+    await _scim.revoke_token(db, provider, actor=admin)
     await db.commit()  # commit before response to avoid reload race condition
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

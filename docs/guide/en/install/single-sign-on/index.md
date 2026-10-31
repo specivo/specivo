@@ -15,6 +15,9 @@ use its page:
 - [Microsoft Entra ID](entra-id.md)
 - [Okta, Google, Zitadel and Authelia](other-providers.md)
 
+To have the IdP create, update and deactivate accounts and groups ahead of sign-in, add
+[provisioning with SCIM](scim.md) to the provider.
+
 ## What Specivo supports
 
 - **OpenID Connect only.** Specivo is an OpenID Connect *relying party*: it asks your IdP who the
@@ -27,8 +30,10 @@ use its page:
   [Getting back in](../configuration.md#single-sign-on-getting-back-in).
 - **Humans only.** Service accounts (the accounts AI agents use) can never sign in through SSO.
   API keys are not affected by it.
-- **No directory sync.** Specivo does not support SCIM or LDAP. People appear when they first sign
-  in, and leave through the steps in [Offboarding people](#offboarding-people).
+- **Provisioning with SCIM, optionally.** Without it, people appear when they first sign in, and
+  leave through the steps in [Offboarding people](#offboarding-people). With
+  [SCIM](scim.md), the IdP creates them beforehand and deactivates them at once. LDAP is not
+  supported.
 
 ## Before you start
 
@@ -343,6 +348,9 @@ Group mappings can be added once the provider is saved. Create the Specivo group
 Sync only touches what it created. Memberships that an administrator added by hand, or that another
 provider manages, are never removed.
 
+While the provider's [SCIM provisioning](scim.md) is on, group mappings are skipped at sign-in: the
+IdP then manages memberships through SCIM. Required groups and administrator groups still apply.
+
 !!! note "A missing claim never removes anyone"
     If the groups claim is missing from a token, which happens when an IdP mapper breaks, Specivo
     changes no memberships and no administrator flags. It removes a membership only when the claim
@@ -453,8 +461,9 @@ logout for the same session changes nothing.
 
 ## Offboarding people
 
-Specivo has no SCIM, so it learns that someone left through the following. Use as many as your IdP
-allows. The provider pages have a short runbook each:
+The quickest way is [SCIM provisioning](scim.md): disabling or deleting the person at the IdP
+deactivates their Specivo account at once (sessions and API keys). Without SCIM, Specivo learns that
+someone left through the following. Use as many as your IdP allows. The provider pages have a short runbook each:
 [Keycloak](keycloak.md#offboarding), [authentik](authentik.md#offboarding).
 
 1. **Disable the person at the IdP.** They cannot sign in again. With

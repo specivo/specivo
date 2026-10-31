@@ -113,6 +113,18 @@ class AuditEvent(StrEnum):
     SSO_PROVIDER_DELETED = "sso_provider_deleted"
     SSO_PROVIDER_SECRET_CHANGED = "sso_provider_secret_changed"
     USER_DEPROVISIONED = "user_deprovisioned"
+    # SCIM provisioning. The actor is nobody (the IdP); details name the
+    # provider (``source: scim``), the SCIM id, the Specivo id and an action.
+    SCIM_USER_CREATED = "scim_user_created"
+    SCIM_USER_UPDATED = "scim_user_updated"
+    SCIM_USER_DEPROVISIONED = "scim_user_deprovisioned"
+    SCIM_GROUP_CREATED = "scim_group_created"
+    SCIM_GROUP_UPDATED = "scim_group_updated"
+    SCIM_GROUP_DELETED = "scim_group_deleted"
+    # A SCIM change Specivo refused for a reason worth auditing (the last admin).
+    SCIM_REQUEST_REFUSED = "scim_request_refused"
+    # The admin generated, rotated or revoked a provider's SCIM token, or switched SCIM.
+    SCIM_CONFIG_CHANGED = "scim_config_changed"
     SESSIONS_REVOKED = "sessions_revoked"
 
 

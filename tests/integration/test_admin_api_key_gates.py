@@ -191,6 +191,8 @@ SESSION_ONLY_ROUTES: list[tuple[str, str, str]] = [
     ("specivo.api.v1.admin.sso", "POST", "/admin/sso/providers/{provider_id}/group-mappings/"),
     ("specivo.api.v1.admin.sso", "DELETE", "/admin/sso/providers/{provider_id}/group-mappings/{mapping_id}/"),
     ("specivo.api.v1.admin.sso", "PATCH", "/admin/settings/authentication/"),
+    ("specivo.api.v1.admin.sso", "PATCH", "/admin/sso/providers/{provider_id}/scim/"),
+    ("specivo.api.v1.admin.sso", "POST", "/admin/sso/providers/{provider_id}/scim/token/"),
 ]
 
 

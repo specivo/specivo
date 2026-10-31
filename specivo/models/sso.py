@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 TOKEN_ENDPOINT_AUTH_METHODS = ("client_secret_basic", "client_secret_post", "none")
 LINK_POLICIES = ("manual", "auto_verified_email")
-LINKED_VIA_VALUES = ("jit", "user_link", "auto_email", "admin")
+LINKED_VIA_VALUES = ("jit", "user_link", "auto_email", "admin", "scim")
 #: What an unreachable IdP means when a session is re-checked there.
 IDP_CHECK_FAILURE_POLICIES = ("allow", "deny")
 #: What a back-channel logout ends (see ``specivo.services.sso.logout``).
@@ -105,6 +105,8 @@ class SsoProvider(Base, TimestampMixin):
         CheckConstraint("jsonb_typeof(admin_groups) = 'array'", name="ck_sso_providers_admin_groups_array"),
         CheckConstraint("jsonb_typeof(claim_config) = 'object'", name="ck_sso_providers_claim_config_object"),
         CheckConstraint("jsonb_typeof(extra_auth_params) = 'object'", name="ck_sso_providers_extra_auth_params_object"),
+        # SCIM can only be on while a token exists to authenticate the IdP.
+        CheckConstraint("NOT scim_enabled OR scim_token_hash IS NOT NULL", name="ck_sso_providers_scim_needs_token"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -178,6 +180,18 @@ class SsoProvider(Base, TimestampMixin):
     # verify_session_at_idp on. Shown by Test connection.
     session_recheck_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
     session_recheck_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # --- SCIM provisioning (``/scim/v2/{slug}/``, see ``specivo.services.scim``) ---
+    # Off by default; turning it on needs a token.
+    scim_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
+    # SHA-256 of the bearer token the IdP sends (as for API keys); the token
+    # itself is shown once and never stored.
+    scim_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # The first characters of the token, so the admin can tell tokens apart.
+    scim_token_prefix: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    scim_token_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The last authenticated SCIM request (debounced).
+    scim_last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- Discovery cache (last good document) ---
     discovery_cache: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)

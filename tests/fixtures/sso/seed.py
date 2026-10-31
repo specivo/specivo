@@ -48,6 +48,13 @@ AUTHENTIK_API_TOKEN = "authentik-test-only-api-token"
 # so every seeded user arrives unverified there, and ``locale``/``zoneinfo`` are
 # not sent at all.
 
+# SCIM: authentik's SCIM provider pushes the members of GROUP_SCIM to
+# http://host.docker.internal:{SCIM_PORT}/scim/v2/{AUTHENTIK_SLUG}, where the
+# sso_idp test runs a small forwarder into the in-process app. Test-only token.
+SCIM_PORT = 9945
+SCIM_TOKEN = "spvscim_authentik-test-only-scim-token"
+GROUP_SCIM = "specivo-scim"
+
 E2E_BASE_URL = "http://localhost:9944"
 ASGI_BASE_URL = "http://testserver"
 POST_LOGOUT_REDIRECT_URI = f"{E2E_BASE_URL}/login/?logged_out=1"

@@ -29,6 +29,9 @@
 .sp-sso-report dd { margin: 0; overflow-wrap: anywhere; }
 .sp-sso-report ul { margin: var(--sp-space-sm) 0 0; padding-left: 1.2em; }
 
+.sp-sso-token { margin-bottom: var(--sp-space-md); padding: var(--sp-space-md); border: 1px solid var(--sp-warning); border-radius: 8px; font-size: var(--sp-font-size-sm); }
+.sp-sso-token strong { display: block; margin-bottom: var(--sp-space-sm); }
+
 .sp-sso-mapping-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--sp-space-sm); align-items: center; margin-bottom: var(--sp-space-sm); }
 
 @media (max-width: 640px) {

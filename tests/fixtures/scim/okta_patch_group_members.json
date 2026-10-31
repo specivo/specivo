@@ -1,0 +1,19 @@
+{
+  "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+  "Operations": [
+    {
+      "op": "remove",
+      "path": "members[value eq \"{remove_id}\"]"
+    },
+    {
+      "op": "add",
+      "path": "members",
+      "value": [
+        {
+          "value": "{add_id}",
+          "display": "test.user@example.com"
+        }
+      ]
+    }
+  ]
+}

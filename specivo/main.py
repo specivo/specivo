@@ -44,6 +44,8 @@ from specivo.core.plugin_manager import PluginManager, bootstrap
 from specivo.core.redis import close_redis, get_redis
 from specivo.hooks.router import hooks_router
 from specivo.schemas.common import HealthResponse
+from specivo.scim.router import scim_error_handler, scim_router
+from specivo.services.scim.errors import ScimError
 from specivo.web.assets import load_asset_manifests, warn_if_bundles_missing
 from specivo.web.router import web_router
 
@@ -275,6 +277,7 @@ def create_app() -> FastAPI:
     # Error handlers — register most specific first.
     application.add_exception_handler(RequestValidationError, request_validation_error_handler)
     application.add_exception_handler(AppError, app_error_handler)
+    application.add_exception_handler(ScimError, scim_error_handler)
     application.add_exception_handler(StarletteHTTPException, http_exception_handler)
     application.add_exception_handler(HTTPException, http_exception_handler)
     application.add_exception_handler(Exception, unhandled_exception_handler)
@@ -333,6 +336,9 @@ def create_app() -> FastAPI:
 
     # Incoming webhooks — behind stealth prefix
     application.include_router(hooks_router, prefix=sp)
+
+    # SCIM provisioning (identity providers) — behind stealth prefix
+    application.include_router(scim_router, prefix=sp)
 
     # Static files — always at /static (not behind stealth prefix)
     application.mount("/static", StaticFiles(directory="specivo/static"), name="static")

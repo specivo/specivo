@@ -39,6 +39,8 @@ Google sessions are not checked: keep **Maximum session length** short.
   Specivo **Scopes** if you configure it that way. Set the Specivo **Groups claim** to `groups`.
 - **Logout**: Okta supports sign-out at the provider (RP-initiated logout). Leave back-channel
   logout off unless Test connection says it is supported.
+- **Provisioning**: Okta can create and deactivate Specivo accounts and push groups over SCIM; see
+  [Provisioning with SCIM](scim.md#okta).
 
 ## Google
 
