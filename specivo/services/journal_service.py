@@ -18,6 +18,7 @@ from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, Journal, JournalDetail
 from specivo.models.user import User
 from specivo.services.markdown_budget import check_markdown_length
+from specivo.services.webhook_events import emit_issue_commented
 
 logger = logging.getLogger(__name__)
 
@@ -443,6 +444,7 @@ class JournalService:
             sequence,
             issue.display_key,
         )
+        await emit_issue_commented(session, issue, journal, user)
         return journal
 
     async def resolve_thread(

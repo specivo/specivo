@@ -14,7 +14,15 @@ a counterpart that refuses what a real IdP refuses:
   ``redirect_uri`` equality with the authorize request, PKCE S256 and client
   authentication (``client_secret_basic`` / ``client_secret_post`` /
   ``none``), and answers ``invalid_grant`` / ``invalid_client`` like a real IdP;
-* only S256 PKCE is accepted when a code is issued.
+* only S256 PKCE is accepted when a code is issued;
+* the refresh grant: every code exchange returns a refresh token (unless
+  ``issue_refresh_tokens`` is off); presenting it answers like a real IdP,
+  ``invalid_grant`` once :meth:`MockIdP.revoke_refresh_tokens` revoked it (the
+  user was disabled or signed out), when it is unknown, or when
+  ``refresh_grant_allowed`` is off (an IdP that issues refresh tokens the
+  client may not use). With ``rotate_refresh_tokens`` each refresh returns a
+  new token and the presented one stops working. ``grants`` counts the token
+  requests per ``grant_type``.
 
 Tokens: :meth:`MockIdP.mint_id_token` and :meth:`MockIdP.mint_logout_token`
 sign valid tokens (``**overrides`` replace claims, :data:`OMIT` removes one).
@@ -290,8 +298,17 @@ class MockIdP:
         #: ``Cache-Control`` header on the JWKS response.
         self.jwks_cache_control = "max-age=300"
 
+        #: Refresh grant behaviour (see the module docstring).
+        self.issue_refresh_tokens = True
+        self.rotate_refresh_tokens = False
+        self.refresh_grant_allowed = True
+        #: When set, every refresh request is refused with this OAuth error code.
+        self.refresh_error: str | None = None
+
         #: Requests per route name (see :data:`ROUTES`), faulted ones included.
         self.calls: Counter[str] = Counter()
+        #: Token requests per ``grant_type`` that got past client authentication.
+        self.grants: Counter[str] = Counter()
         #: Query parameters of every end-session request, in order.
         self.end_session_requests: list[dict[str, str]] = []
 
@@ -300,6 +317,8 @@ class MockIdP:
         self._generation = {"RSA": 1, "EC": 1}
         self._codes: dict[str, _CodeRecord] = {}
         self._access_tokens: dict[str, dict[str, Any]] = {}
+        # Live refresh token -> the subject it was issued for.
+        self._refresh_tokens: dict[str, str] = {}
         self._faults: dict[str, _Fault] = {}
 
         split = urlsplit(self.issuer)
@@ -569,6 +588,27 @@ class MockIdP:
         return f"{redirect_uri}{separator}{urlencode(result)}"
 
     # ------------------------------------------------------------------
+    # Refresh tokens
+    # ------------------------------------------------------------------
+
+    def issue_refresh_token(self, sub: str | None = None) -> str:
+        """A live refresh token for ``sub`` (default: :attr:`default_sub`), as if a code exchange issued it."""
+        token = secrets.token_urlsafe(32)
+        self._refresh_tokens[token] = sub or self.default_sub
+        return token
+
+    def revoke_refresh_tokens(self, sub: str | None = None) -> int:
+        """Refuse every refresh token (of ``sub`` only, if given) from now on, as after a disable or sign-out."""
+        dead = [t for t, owner in self._refresh_tokens.items() if sub is None or owner == sub]
+        for token in dead:
+            del self._refresh_tokens[token]
+        return len(dead)
+
+    @property
+    def live_refresh_tokens(self) -> int:
+        return len(self._refresh_tokens)
+
+    # ------------------------------------------------------------------
     # Faults
     # ------------------------------------------------------------------
 
@@ -606,7 +646,7 @@ class MockIdP:
             "jwks_uri": self.jwks_uri,
             "end_session_endpoint": self.end_session_endpoint,
             "response_types_supported": ["code"],
-            "grant_types_supported": ["authorization_code"],
+            "grant_types_supported": ["authorization_code", "refresh_token"],
             "subject_types_supported": ["public"],
             "id_token_signing_alg_values_supported": ["RS256", "ES256"],
             "scopes_supported": ["openid", "profile", "email"],
@@ -706,7 +746,11 @@ class MockIdP:
     def _handle_token(self, request: httpx.Request) -> httpx.Response:
         form = self._form(request)
         self._authenticate_client(request, form)
-        if form.get("grant_type") != "authorization_code":
+        grant_type = form.get("grant_type", "")
+        self.grants[grant_type] += 1
+        if grant_type == "refresh_token":
+            return self._handle_refresh(form)
+        if grant_type != "authorization_code":
             raise _OAuthError("unsupported_grant_type")
 
         # Single use: the code is burnt on its first presentation.
@@ -741,6 +785,28 @@ class MockIdP:
             "id_token": id_token,
             "scope": "openid profile email",
         }
+        if self.issue_refresh_tokens:
+            body["refresh_token"] = self.issue_refresh_token(str(profile.get("sub") or self.default_sub))
+        return httpx.Response(200, json=body, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
+
+    def _handle_refresh(self, form: dict[str, str]) -> httpx.Response:
+        if self.refresh_error is not None:
+            raise _OAuthError(self.refresh_error)
+        token = form.get("refresh_token", "")
+        sub = self._refresh_tokens.get(token)
+        if sub is None or not self.refresh_grant_allowed:
+            raise _OAuthError("invalid_grant", description="Token is not active")
+        body: dict[str, Any] = {
+            "access_token": secrets.token_urlsafe(32),
+            "token_type": "Bearer",
+            "expires_in": self.token_ttl_seconds,
+            "id_token": self.mint_id_token(sub=sub, nonce=OMIT),
+        }
+        if self.rotate_refresh_tokens:
+            del self._refresh_tokens[token]
+            body["refresh_token"] = self.issue_refresh_token(sub)
+        else:
+            body["refresh_token"] = token
         return httpx.Response(200, json=body, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
 
     def _handle_userinfo(self, request: httpx.Request) -> httpx.Response:

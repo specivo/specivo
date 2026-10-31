@@ -149,6 +149,51 @@ _CASES: list[tuple[str, Callable[[], None], AuditEvent, int | None, dict[str, An
         None,
         {"provider": "idp", "user_id": 7, "reason": "idp_account_removed", "sessions_revoked": 2},
     ),
+    (
+        "user_deprovisioned_backchannel",
+        lambda: events.user_deprovisioned(
+            user_id=7,
+            actor_id=None,
+            reason="sso_backchannel",
+            provider_slug="idp",
+            issuer=ISS,
+            subject=SUB,
+            sessions_revoked=2,
+            api_keys_deactivated=3,
+        ),
+        AuditEvent.USER_DEPROVISIONED,
+        None,
+        {
+            "provider": "idp",
+            "iss": ISS,
+            "sub_hash": subject_hash(SUB),
+            "user_id": 7,
+            "reason": "sso_backchannel",
+            "sessions_revoked": 2,
+            "api_keys_deactivated": 3,
+        },
+    ),
+    (
+        "session_rejected",
+        lambda: events.session_rejected(
+            provider_slug="idp",
+            issuer=ISS,
+            user_id=7,
+            subject=SUB,
+            reason="idp_refresh_rejected",
+            idp_error="invalid_grant",
+        ),
+        AuditEvent.SSO_SESSION_REJECTED,
+        None,
+        {
+            "provider": "idp",
+            "iss": ISS,
+            "sub_hash": subject_hash(SUB),
+            "user_id": 7,
+            "reason": "idp_refresh_rejected",
+            "idp_error": "invalid_grant",
+        },
+    ),
 ]
 
 
@@ -258,6 +303,7 @@ def test_new_event_types_fit_the_column() -> None:
         "SSO_PROVIDER_SECRET_CHANGED",
         "USER_DEPROVISIONED",
         "SESSIONS_REVOKED",
+        "SSO_SESSION_REJECTED",
     ]
     for name in names:
         member = AuditEvent[name]

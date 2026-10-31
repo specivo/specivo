@@ -59,6 +59,9 @@
   .header-search input { padding-right: 40px; }
   .header-search-btn { right: 6px; }
   .header-user-name { display: none; }
+  /* The timer keeps its elapsed time; the issue key is in its dropdown. */
+  .header-timer .sp-header-timer-key { display: none; }
+  .timer-dropdown { width: min(340px, calc(100vw - 2 * var(--sp-space-md))); }
   .font-toggle { display: none; }
   .main-content { padding: var(--sp-space-md); overflow-x: hidden; scrollbar-gutter: stable; }
   .issue-table th:nth-child(5),

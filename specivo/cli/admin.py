@@ -136,8 +136,8 @@ async def _reset_password(
     if user is None:
         print(f"Error: user '{login}' not found.", file=sys.stderr)
         sys.exit(1)
-    if user.is_anonymous:
-        print("Error: the anonymous user cannot have a password.", file=sys.stderr)
+    if user.is_system_principal:
+        print("Error: system accounts (the anonymous user, '$' logins) cannot have a password.", file=sys.stderr)
         sys.exit(1)
 
     user.password_hash = hash_password(password)

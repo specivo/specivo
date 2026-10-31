@@ -36,12 +36,13 @@ from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 from pydantic import SecretStr
-from sqlalchemy import CursorResult, delete, func, select
+from sqlalchemy import CursorResult, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core import secret_box
 from specivo.core.config import Settings, get_settings
 from specivo.core.exceptions import AppError, NotFoundError
+from specivo.models.auth import RefreshToken
 from specivo.models.sso import SsoGroupMapping, SsoProvider, UserIdentity, is_allowed_client_secret_env
 from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.schemas.sso import (
@@ -104,11 +105,17 @@ _PLAIN_FIELDS: tuple[str, ...] = (
     "deactivate_on_access_loss",
     "rp_logout_enabled",
     "backchannel_logout_enabled",
+    "backchannel_action",
+    "verify_session_at_idp",
+    "idp_check_failure",
     "session_max_age_hours",
     "extra_auth_params",
 )
 # Fields whose change makes a stored discovery document belong to another endpoint.
 _ENDPOINT_FIELDS = frozenset({"issuer", "discovery_url"})
+# Fields whose change means the sessions' stored IdP refresh tokens belong to
+# another IdP or client: they are dropped, never sent to the new one.
+_TOKEN_BINDING_FIELDS = _ENDPOINT_FIELDS | {"client_id"}
 
 
 class SecretStatus(StrEnum):
@@ -138,6 +145,13 @@ class ProviderDeleteResult:
     identities_unlinked: int
     sessions_revoked: int
     memberships_removed: int
+
+
+def _refresh_grant_advertised(metadata: ProviderMetadata) -> bool | None:
+    grants = metadata.raw.get("grant_types_supported")
+    if not isinstance(grants, list):
+        return None
+    return "refresh_token" in grants
 
 
 def _invalid(code: str, message: str, field: str | None = None) -> AppError:
@@ -256,6 +270,11 @@ class ProviderService:
             deactivate_on_access_loss=provider.deactivate_on_access_loss,
             rp_logout_enabled=provider.rp_logout_enabled,
             backchannel_logout_enabled=provider.backchannel_logout_enabled,
+            backchannel_action=provider.backchannel_action,
+            verify_session_at_idp=provider.verify_session_at_idp,
+            idp_check_failure=provider.idp_check_failure,
+            session_recheck_status=provider.session_recheck_status,  # type: ignore[arg-type]
+            session_recheck_status_at=provider.session_recheck_status_at,
             session_max_age_hours=provider.session_max_age_hours,
             extra_auth_params={k: str(v) for k, v in (provider.extra_auth_params or {}).items()},
             discovery_fetched_at=provider.discovery_fetched_at,
@@ -376,6 +395,8 @@ class ProviderService:
         if _ENDPOINT_FIELDS.intersection(changed):
             provider.discovery_cache = None
             provider.discovery_fetched_at = None
+        if _TOKEN_BINDING_FIELDS.intersection(changed):
+            await self._drop_idp_refresh_tokens(session, provider.id)
         await session.flush()
         sessions_revoked = 0
         if current["enabled"] and not values["enabled"]:
@@ -469,6 +490,19 @@ class ProviderService:
             identities_unlinked=len(identity_ids),
             sessions_revoked=sessions_revoked,
             memberships_removed=memberships_removed,
+        )
+
+    @staticmethod
+    async def _drop_idp_refresh_tokens(session: AsyncSession, provider_id: int) -> None:
+        """Forget the IdP refresh tokens of every session that came from this provider."""
+        identity_ids = select(UserIdentity.id).where(UserIdentity.provider_id == provider_id)
+        await session.execute(
+            update(RefreshToken)
+            .where(
+                RefreshToken.user_identity_id.in_(identity_ids),
+                RefreshToken.idp_refresh_token_encrypted.is_not(None),
+            )
+            .values(idp_refresh_token_encrypted=None, idp_checked_at=None)
         )
 
     @staticmethod
@@ -595,7 +629,13 @@ class ProviderService:
         """
         settings = settings or get_settings()
         url = provider.discovery_url or default_discovery_url(provider.issuer)
-        found: dict[str, Any] = {"discovery_url": url, "expected_issuer": provider.issuer}
+        found: dict[str, Any] = {
+            "discovery_url": url,
+            "expected_issuer": provider.issuer,
+            "session_recheck_enabled": provider.verify_session_at_idp,
+            "session_recheck_status": provider.session_recheck_status,
+            "session_recheck_status_at": provider.session_recheck_status_at,
+        }
 
         try:
             document = await fetch_discovery_document(url, settings=settings)
@@ -660,6 +700,7 @@ class ProviderService:
             "iss_parameter_supported": metadata.authorization_response_iss_parameter_supported,
             "backchannel_logout_supported": metadata.backchannel_logout_supported,
             "backchannel_logout_session_supported": metadata.backchannel_logout_session_supported,
+            "refresh_grant_advertised": _refresh_grant_advertised(metadata),
         }
 
     def _warnings(self, provider: SsoProvider, metadata: ProviderMetadata) -> list[str]:
@@ -676,6 +717,13 @@ class ProviderService:
             warnings.append("backchannel_logout_unsupported")
         if (provider.claim_config or {}).get("use_userinfo") and not metadata.userinfo_endpoint:
             warnings.append("userinfo_missing")
+        if provider.verify_session_at_idp:
+            if _refresh_grant_advertised(metadata) is False:
+                warnings.append("refresh_grant_not_advertised")
+            if provider.session_recheck_status == "no_refresh_token":
+                warnings.append("session_recheck_no_refresh_token")
+            elif provider.session_recheck_status == "refresh_refused":
+                warnings.append("session_recheck_refresh_refused")
         status = self.secret_status(provider)
         if status is SecretStatus.UNREADABLE:
             warnings.append("client_secret_unreadable")

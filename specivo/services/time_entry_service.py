@@ -6,7 +6,9 @@ Which time entries a user may read is decided here, in
 resolves that grant ``view_time_entries``. Every reader goes through one of
 them: the project list (web and REST), a single entry, the issue's time tab
 and its logged-time sum, a version's logged-time sum, the billing report and
-the dashboard's agent feed.
+the dashboard's agent feed. Both also hide an entry logged on an issue the
+reader cannot see (``IssueService``), unless the reader logged it, so lists
+and sums never reveal work on hidden issues.
 
 Who may write is decided here too: ``require_can_log`` (``log_time``) for
 every new entry written on a user's behalf, timers included, and
@@ -18,6 +20,7 @@ importer writes entries for their original authors.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 
@@ -30,6 +33,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
+from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
 from specivo.models.role import TIME_ENTRIES_VISIBILITY_ALL, TIME_ENTRIES_VISIBILITY_OWN, Role
@@ -70,6 +74,39 @@ def _compute_elapsed_hours(started_at: datetime, now: datetime) -> Decimal:
     return hours
 
 
+@dataclass(frozen=True, slots=True)
+class TimerSummary:
+    """What the page header shows of a user's running timer.
+
+    ``issue_key`` is set whenever the timer runs on an issue; ``subject`` only
+    while the user can still see that issue.
+    """
+
+    project_key: str
+    issue_id: int | None
+    issue_key: str | None
+    subject: str | None
+    started_at: datetime
+    elapsed_seconds: int
+
+
+@dataclass(frozen=True, slots=True)
+class ReplacedTimer:
+    """The timer that was running when another one was started.
+
+    ``entry`` is the time entry its time was logged as, or None when the user
+    could no longer log time where it ran and it was discarded instead.
+    ``issue_key`` is set whenever it ran on an issue, as in ``TimerSummary``:
+    it was the user's own timer.
+    """
+
+    project_id: int
+    project_key: str
+    issue_id: int | None
+    issue_key: str | None
+    entry: TimeEntry | None
+
+
 # ---------------------------------------------------------------------------
 # Service class
 # ---------------------------------------------------------------------------
@@ -93,6 +130,7 @@ class TimeEntryService:
         all without ``view_time_entries``. Reaching the project is the
         caller's job (``ProjectService.require_project_access``).
         """
+        from specivo.services.issue_service import IssueService
         from specivo.services.permission_service import time_entries_visibility
 
         visibility = await time_entries_visibility(session, user, project)
@@ -100,7 +138,28 @@ class TimeEntryService:
             return false()
         if visibility == TIME_ENTRIES_VISIBILITY_OWN:
             return TimeEntry.user_id == user.id
-        return None
+        issues = await IssueService().project_visible_issues_clause(session, user, project)
+        if issues is not None:
+            issues = and_(Issue.project_id == project.id, issues)
+        return self._issue_visible_clause(user, issues)
+
+    @staticmethod
+    def _issue_visible_clause(user: User, issues: ColumnElement[bool] | None) -> ColumnElement[bool] | None:
+        """Return the predicate keeping entries without an issue, on an issue matching *issues*, or by *user*.
+
+        *issues* is an issue visibility predicate (None: every issue). The
+        author of an entry always reads it: they logged the time, so the issue
+        was visible to them then.
+        """
+        if issues is None:
+            return None
+        visible: list[ColumnElement[bool]] = [
+            TimeEntry.issue_id.is_(None),
+            TimeEntry.issue_id.in_(select(Issue.id).where(issues)),
+        ]
+        if not user.is_anonymous:
+            visible.append(TimeEntry.user_id == user.id)
+        return or_(*visible)
 
     async def visible_entries_clause_any(self, session: AsyncSession, user: User) -> ColumnElement[bool] | None:
         """Return the cross-project form of ``visible_entries_clause``, or None for no limit (admins).
@@ -112,10 +171,18 @@ class TimeEntryService:
         membership roles; a public project without a membership follows the
         Non member role the same way. Any other project shows nothing. It is
         an allow-list by project, but callers should still limit the query to
-        projects the user can reach. Everyone is narrowed to the
-        authenticating API key's project limit (``specivo.services.api_key_scope``).
+        projects the user can reach. An entry on an issue the user cannot see
+        (``IssueService.visible_issues_clause``) is left out unless the user
+        logged it. Everyone is narrowed to the authenticating API key's project
+        limit (``specivo.services.api_key_scope``).
         """
+        from specivo.services.issue_service import IssueService
+
         clause = await self._visible_entries_clause_any(session, user)
+        if clause is not None:
+            issues = self._issue_visible_clause(user, await IssueService().visible_issues_clause(session, user))
+            if issues is not None:
+                clause = and_(clause, issues)
         limit = scope_clause(TimeEntry.project_id)
         if limit is None:
             return clause
@@ -178,9 +245,9 @@ class TimeEntryService:
 
         404 rather than 403 for an entry in an unreachable project, in a
         project where the user lacks ``view_time_entries``, or outside the
-        user's visibility, so entry ids cannot be probed.
+        user's visibility (an entry on an issue they cannot see included), so
+        entry ids cannot be probed.
         """
-        from specivo.services.permission_service import time_entries_visibility
         from specivo.services.project_service import ProjectService
 
         entry = await self.get_by_id(session, entry_id)
@@ -191,9 +258,11 @@ class TimeEntryService:
             await ProjectService().require_project_access(session, project, user)
         except NotFoundError:
             raise NotFoundError(f"Time entry {entry_id} not found") from None
-        visibility = await time_entries_visibility(session, user, project)
-        if visibility is None or (visibility == TIME_ENTRIES_VISIBILITY_OWN and entry.user_id != user.id):
-            raise NotFoundError(f"Time entry {entry_id} not found")
+        visible = await self.visible_entries_clause(session, user, project)
+        if visible is not None:
+            found = await session.scalar(select(TimeEntry.id).where(TimeEntry.id == entry_id, visible))
+            if found is None:
+                raise NotFoundError(f"Time entry {entry_id} not found")
         return entry
 
     # -------------------------------------------------------------------
@@ -444,6 +513,51 @@ class TimeEntryService:
             return None
         return timer
 
+    async def timer_summary(self, session: AsyncSession, user: User) -> TimerSummary | None:
+        """Return what the page header shows of *user*'s running timer, or None.
+
+        One query loads the timer with its project and issue. The issue's
+        subject is left out when the user can no longer see the issue
+        (``IssueService.is_visible``, which needs the user's roles there: one
+        more query unless they are cached already); its key stays, since the
+        user started the timer there. A timer outside the authenticating API
+        key's project limit is not reported, as in ``get_current_timer``.
+        """
+        if user.is_anonymous:
+            return None
+        stmt = (
+            select(ActiveTimer.started_at, Project, Issue)
+            .select_from(ActiveTimer)
+            .join(Project, Project.id == ActiveTimer.project_id)
+            .outerjoin(Issue, Issue.id == ActiveTimer.issue_id)
+            .where(ActiveTimer.user_id == user.id)
+        )
+        row = (await session.execute(stmt)).first()
+        if row is None:
+            return None
+        started_at, project, issue = row
+        if not project_in_scope(project.id):
+            return None
+
+        issue_key: str | None = None
+        subject: str | None = None
+        if issue is not None:
+            from specivo.services.issue_service import IssueService
+
+            issue_key = issue.display_key
+            if await IssueService().is_visible(session, issue, user):
+                subject = issue.subject
+
+        elapsed = int((utcnow() - started_at).total_seconds())
+        return TimerSummary(
+            project_key=project.key,
+            issue_id=issue.id if issue is not None else None,
+            issue_key=issue_key,
+            subject=subject,
+            started_at=started_at,
+            elapsed_seconds=max(0, elapsed),
+        )
+
     async def _get_timer_row(self, session: AsyncSession, user: User) -> ActiveTimer | None:
         stmt = select(ActiveTimer).where(ActiveTimer.user_id == user.id)
         result = await session.execute(stmt)
@@ -464,7 +578,24 @@ class TimeEntryService:
         The user must be able to log time there (``require_can_log``). A
         running timer is stopped first and its time logged, unless the user
         may no longer log time where it runs; then it is discarded.
+        ``start_timer_replacing`` also says which of the two happened.
         """
+        timer, _replaced = await self.start_timer_replacing(
+            session, user, project_id, issue_id, comments, request=request
+        )
+        return timer
+
+    async def start_timer_replacing(
+        self,
+        session: AsyncSession,
+        user: User,
+        project_id: int,
+        issue_id: int | None = None,
+        comments: str | None = None,
+        *,
+        request: Request | None = None,
+    ) -> tuple[ActiveTimer, ReplacedTimer | None]:
+        """``start_timer``, also returning what became of the timer that was running, if any."""
         project = await session.get(Project, project_id)
         if project is None:
             raise NotFoundError(f"Project {project_id} not found")
@@ -476,12 +607,24 @@ class TimeEntryService:
             raise PermissionDeniedError(
                 "A timer is already running in a project this API key cannot reach; stop it there first."
             )
+        replaced: ReplacedTimer | None = None
         if existing is not None:
+            old_project = await session.get(Project, existing.project_id)
+            old_issue = await session.get(Issue, existing.issue_id) if existing.issue_id is not None else None
+            old_project_id, old_issue_id = existing.project_id, existing.issue_id
+            entry: TimeEntry | None = None
             if await self._timer_still_allowed(session, user, existing):
-                await self._stop_timer_internal(session, user, existing)
+                entry = await self._stop_timer_internal(session, user, existing)
             else:
                 await session.delete(existing)
                 await session.flush()
+            replaced = ReplacedTimer(
+                project_id=old_project_id,
+                project_key=old_project.key if old_project is not None else str(old_project_id),
+                issue_id=old_issue_id,
+                issue_key=old_issue.display_key if old_issue is not None else None,
+                entry=entry,
+            )
 
         timer = ActiveTimer(
             user_id=user.id,
@@ -493,18 +636,20 @@ class TimeEntryService:
         session.add(timer)
         await session.flush()
         await session.refresh(timer)
-        return timer
+        return timer, replaced
 
     async def stop_timer(
         self,
         session: AsyncSession,
         user: User,
         activity_id: int,
+        comments: str | None = None,
         *,
         request: Request | None = None,
     ) -> TimeEntry:
         """Stop the current timer and create a time entry.
 
+        *comments*, when given, replace the comment the timer was started with.
         Raises NotFoundError if no active timer. Permissions may have changed
         since the timer started, so they are checked again before anything is
         written: when the user may no longer log time on the timer's project
@@ -531,7 +676,21 @@ class TimeEntryService:
             exc.message = f"{exc.message}. The timer was discarded without logging time."
             raise
 
-        return await self._stop_timer_internal(session, user, timer, activity_id=activity_id)
+        return await self._stop_timer_internal(session, user, timer, activity_id=activity_id, comments=comments)
+
+    async def discard_timer(self, session: AsyncSession, user: User) -> ActiveTimer:
+        """Delete *user*'s running timer without logging time, and return it.
+
+        Raises NotFoundError if no active timer (one outside the authenticating
+        API key's project limit included). Needs no permission: discarding
+        writes nothing, and a user may always drop their own timer.
+        """
+        timer = await self.get_current_timer(session, user)
+        if timer is None:
+            raise NotFoundError("No active timer")
+        await session.delete(timer)
+        await session.flush()
+        return timer
 
     async def _require_timer_allowed(
         self, session: AsyncSession, user: User, timer: ActiveTimer, *, request: Request | None = None
@@ -549,12 +708,30 @@ class TimeEntryService:
             return False
         return True
 
+    async def default_activity(self, session: AsyncSession) -> TimeEntryActivity | None:
+        """The active activity marked default, else the first active one by position; None when none is active."""
+        stmt = select(TimeEntryActivity).where(
+            TimeEntryActivity.is_default.is_(True),
+            TimeEntryActivity.active.is_(True),
+        )
+        activity = (await session.execute(stmt)).scalars().first()
+        if activity is not None:
+            return activity
+        stmt = (
+            select(TimeEntryActivity)
+            .where(TimeEntryActivity.active.is_(True))
+            .order_by(TimeEntryActivity.position, TimeEntryActivity.id)
+            .limit(1)
+        )
+        return (await session.execute(stmt)).scalar_one_or_none()
+
     async def _stop_timer_internal(
         self,
         session: AsyncSession,
         user: User,
         timer: ActiveTimer,
         activity_id: int | None = None,
+        comments: str | None = None,
     ) -> TimeEntry:
         """Internal: stop a timer, create time entry, delete timer."""
         now = utcnow()
@@ -562,33 +739,15 @@ class TimeEntryService:
 
         # If no activity_id provided (auto-stop), use default activity
         if activity_id is None:
-            stmt = select(TimeEntryActivity).where(
-                TimeEntryActivity.is_default.is_(True),
-                TimeEntryActivity.active.is_(True),
-            )
-            result = await session.execute(stmt)
-            default_activity = result.scalar_one_or_none()
-            if default_activity is not None:
-                activity_id = default_activity.id
-            else:
-                # Fallback to first active activity
-                stmt2 = (
-                    select(TimeEntryActivity)
-                    .where(TimeEntryActivity.active.is_(True))
-                    .order_by(TimeEntryActivity.position)
-                    .limit(1)
+            default_activity = await self.default_activity(session)
+            if default_activity is None:
+                raise ValidationError(
+                    message="No active activities available",
+                    field="activity_id",
                 )
-                result2 = await session.execute(stmt2)
-                fallback = result2.scalar_one_or_none()
-                if fallback is not None:
-                    activity_id = fallback.id
-                else:
-                    raise ValidationError(
-                        message="No active activities available",
-                        field="activity_id",
-                    )
+            activity_id = default_activity.id
 
-        comments = timer.comments
+        comments = comments or timer.comments
         if hours == _get_max_timer_hours():
             cap_note = " [auto-capped at 12h]"
             comments = f"{comments}{cap_note}" if comments else cap_note.strip()

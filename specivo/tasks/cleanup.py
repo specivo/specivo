@@ -1,7 +1,8 @@
 """Periodic cleanup tasks for expired tokens and stale data.
 
 Tasks:
-- cleanup_expired_tokens: Delete expired password reset tokens and refresh tokens.
+- cleanup_expired_tokens: Delete expired password reset tokens and refresh tokens,
+  and incoming repository and outgoing webhook deliveries past their retention period.
 """
 
 from __future__ import annotations
@@ -71,7 +72,15 @@ async def _cleanup_async() -> None:
                 refresh_result = await session.execute(refresh_stmt)
                 refresh_count = refresh_result.rowcount
 
+                # Repository webhook delivery log, kept for 30 days
+                from specivo.services.repository_hooks import purge_old_deliveries
+
+                delivery_count = await purge_old_deliveries(session)
+
                 await session.commit()
+
+                if delivery_count:
+                    logger.info("Repository delivery cleanup: deleted %d old deliveries", delivery_count)
 
                 total = reset_count + used_count + refresh_count
                 if total > 0:
@@ -81,6 +90,15 @@ async def _cleanup_async() -> None:
                         used_count,
                         refresh_count,
                     )
+
+            # Outgoing webhook delivery log: settled rows only, committed batch by batch
+            from specivo.services.webhook_delivery import purge_old_deliveries as purge_old_webhook_deliveries
+
+            async with task_session() as session:
+                webhook_count = await purge_old_webhook_deliveries(session)
+
+            if webhook_count:
+                logger.info("Webhook delivery cleanup: deleted %d old deliveries", webhook_count)
     except LockNotOwnedError:
         logger.debug("Token cleanup skipped — another worker holds the lock")
     except LockError:

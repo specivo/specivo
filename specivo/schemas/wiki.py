@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
 from specivo.schemas.common import IdName  # noqa: TC001
+
+if TYPE_CHECKING:
+    from specivo.models.user import User
+    from specivo.models.wiki import WikiContent, WikiPage
 
 # ---------------------------------------------------------------------------
 # Request schemas
@@ -56,6 +61,24 @@ class WikiPageWithContent(WikiPageOut):
     content_version: int
     content_author: IdName
     content_updated_at: datetime
+
+
+def page_with_content(page: WikiPage, content: WikiContent, author: User) -> WikiPageWithContent:
+    """Build a WikiPageWithContent from a page, one of its versions and that version's author."""
+    return WikiPageWithContent(
+        id=page.id,
+        title=page.title,
+        slug=page.slug,
+        parent_id=page.parent_id,
+        protected=page.protected,
+        lock_version=page.lock_version,
+        created_at=page.created_at,
+        updated_at=page.updated_at,
+        text=content.text,
+        content_version=content.version,
+        content_author=IdName(id=content.author_id, name=author.display_name),
+        content_updated_at=content.created_at,
+    )
 
 
 class WikiContentVersionOut(BaseModel):

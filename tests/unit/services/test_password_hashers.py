@@ -732,7 +732,7 @@ class TestHasherTestCommand:
 class TestGuideExample:
     """The guide's plugin example is the fixture module, and its CLI example matches."""
 
-    GUIDE = "docs/guide/install/password-hasher-plugins.md"
+    GUIDE = "docs/guide/en/install/password-hasher-plugins.md"
 
     def _guide(self) -> str:
         from pathlib import Path

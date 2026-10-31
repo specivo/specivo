@@ -1,0 +1,180 @@
+# Seed of the disposable authentik in tests/fixtures/sso/docker-compose.yml (profile "authentik").
+#
+# Test fixture. Every credential here is a fixed, public test value, mirrored in
+# tests/fixtures/sso/seed.py. The users, groups, client id and secret match the
+# Keycloak realm, so a test can run against either IdP with the same values.
+#
+# Issuer: http://localhost:8036/application/o/specivo-test/
+version: 1
+metadata:
+  name: Specivo SSO test
+entries:
+  # The flows, scope mappings and signing key below come from authentik's own
+  # blueprints; apply them first so the !Find lookups resolve on a fresh start.
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: default/flow-default-provider-authorization-implicit-consent.yaml
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: default/flow-default-invalidation-flow.yaml
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: system/providers-oauth2.yaml
+      required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: system/providers-scim.yaml
+      required: true
+
+  - model: authentik_core.group
+    id: group-users
+    identifiers:
+      name: specivo-users
+  - model: authentik_core.group
+    id: group-admins
+    identifiers:
+      name: specivo-admins
+  # Only members of this group are provisioned over SCIM (tests/integration/sso_idp/test_scim_authentik.py).
+  - model: authentik_core.group
+    id: group-scim
+    identifiers:
+      name: specivo-scim
+
+  - model: authentik_core.user
+    identifiers:
+      username: sso-member
+    attrs:
+      name: SSO Member
+      email: sso-member@example.com
+      password: sso-test-password
+      path: users
+      groups: [!KeyOf group-users]
+  - model: authentik_core.user
+    identifiers:
+      username: sso-admin
+    attrs:
+      name: SSO Admin
+      email: sso-admin@example.com
+      password: sso-test-password
+      path: users
+      groups: [!KeyOf group-users, !KeyOf group-admins]
+  - model: authentik_core.user
+    identifiers:
+      username: sso-outsider
+    attrs:
+      name: SSO Outsider
+      email: sso-outsider@example.com
+      password: sso-test-password
+      path: users
+      groups: []
+  - model: authentik_core.user
+    identifiers:
+      username: sso-unverified
+    attrs:
+      name: SSO Unverified
+      email: sso-unverified@example.com
+      password: sso-test-password
+      path: users
+      groups: [!KeyOf group-users]
+  - model: authentik_core.user
+    identifiers:
+      username: sso-collide
+    attrs:
+      name: SSO Collide
+      email: collide@example.com
+      password: sso-test-password
+      path: users
+      groups: [!KeyOf group-users]
+  - model: authentik_core.user
+    identifiers:
+      username: sso-thai
+    attrs:
+      name: SSO Thai
+      email: sso-thai@example.com
+      password: sso-test-password
+      path: users
+      groups: [!KeyOf group-users]
+      attributes:
+        settings:
+          locale: th
+
+  - model: authentik_providers_oauth2.oauth2provider
+    id: provider
+    identifiers:
+      name: specivo-test
+    attrs:
+      authorization_flow: !Find [authentik_flows.flow, [slug, default-provider-authorization-implicit-consent]]
+      # The global logout flow: it ends the authentik session when Specivo
+      # sends someone to sign out. default-provider-invalidation-flow only says
+      # "logged out of the application" and keeps the authentik session.
+      invalidation_flow: !Find [authentik_flows.flow, [slug, default-invalidation-flow]]
+      client_type: confidential
+      client_id: specivo
+      client_secret: specivo-test-client-secret-not-a-real-secret
+      # Without grant_types authentik refuses every authorization request.
+      # refresh_token lets tests check how the IdP treats a disabled user.
+      grant_types: [authorization_code, refresh_token]
+      # RS256; without a key authentik signs with the client secret (HS256).
+      signing_key: !Find [authentik_crypto.certificatekeypair, [name, authentik Self-signed Certificate]]
+      property_mappings:
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-openid]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-email]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-profile]]
+        - !Find [authentik_providers_oauth2.scopemapping, [managed, goauthentik.io/providers/oauth2/scope-offline_access]]
+      redirect_uris:
+        - {matching_mode: strict, url: "http://localhost:9944/auth/oidc/authentik/callback/"}
+        - {matching_mode: strict, url: "http://testserver/auth/oidc/authentik/callback/"}
+        - {matching_mode: strict, url: "http://localhost:9944/login/?logged_out=1", redirect_uri_type: logout}
+      # The worker calls the E2E server on the host.
+      logout_uri: http://host.docker.internal:9944/auth/oidc/authentik/backchannel-logout/
+      logout_method: backchannel
+
+  # SCIM provisioning into the test server. The worker calls a forwarder the
+  # sso_idp SCIM test runs on the host; while it is not running, syncs fail
+  # harmlessly. The token is the fixed test value in tests/fixtures/sso/seed.py.
+  # Scope (authentik 2026.8): users are those the backchannel application's
+  # policy bindings let in (the specivo-test-scim application below, bound to
+  # specivo-scim). Every group is pushed (no group_filters), each with its
+  # provisioned members only, so the test can create a fresh group per run.
+  - model: authentik_providers_scim.scimprovider
+    id: scim-provider
+    identifiers:
+      name: specivo-test-scim
+    attrs:
+      url: http://host.docker.internal:9945/scim/v2/authentik
+      token: spvscim_authentik-test-only-scim-token
+      verify_certificates: false
+      exclude_users_service_account: true
+      property_mappings:
+        - !Find [authentik_providers_scim.scimmapping, [managed, goauthentik.io/providers/scim/user]]
+      property_mappings_group:
+        - !Find [authentik_providers_scim.scimmapping, [managed, goauthentik.io/providers/scim/group]]
+
+  - model: authentik_core.application
+    identifiers:
+      slug: specivo-test
+    attrs:
+      name: Specivo test
+      provider: !KeyOf provider
+
+  # The SCIM provider's own application, so that its user scope (members of
+  # specivo-scim) leaves the OIDC application open to every test user.
+  - model: authentik_core.application
+    id: scim-application
+    identifiers:
+      slug: specivo-test-scim
+    attrs:
+      name: Specivo test SCIM
+      backchannel_providers: [!KeyOf scim-provider]
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf scim-application
+      group: !KeyOf group-scim
+    attrs:
+      order: 0

@@ -453,6 +453,46 @@ async def project_settings(
     fts_instance_default = await _fts_settings.get(db, "search_fts_language", "english")
     fts_reindex_needed = (await _fts_settings.get(db, reindex_needed_key(project.id))) == "1"
 
+    # Outgoing webhooks. The page already requires manage_project, which is
+    # what every webhook route asks for; secrets are never sent to the page.
+    from specivo.schemas.webhook import SUBSCRIBABLE_EVENTS, WebhookOut
+    from specivo.services.webhook_service import WebhookService
+
+    webhooks_data = [
+        WebhookOut.model_validate(w).model_dump(mode="json")
+        for w in await WebhookService().list_for_project(db, project.id)
+    ]
+    webhook_events = [e.value for e in SUBSCRIBABLE_EVENTS]
+
+    # Repository integrations: manage_project as well, like their API.
+    # Secrets are never sent to the page.
+    from specivo.hooks.providers import PROVIDER_NAMES
+    from specivo.services.branch_name import BranchNameSettings
+    from specivo.services.repository_service import (
+        RepositoryIntegrationService,
+        automation_role,
+        git_role_id,
+        integration_out,
+    )
+
+    project_git_role_id = await git_role_id(db, project.id)
+    repositories_data = [
+        integration_out(i, project_git_role_id).model_dump(mode="json")
+        for i in await RepositoryIntegrationService().list_for_project(db, project.id)
+    ]
+    # Roles $git may hold for merge automation: every ordinary role, the
+    # unassignable Automation role included (it is the default).
+    automation_roles_result = await db.execute(select(Role).where(Role.builtin == 0).order_by(Role.position, Role.id))
+    automation_roles = [{"id": r.id, "name": r.name} for r in automation_roles_result.scalars().all()]
+    default_automation_role = await automation_role(db)
+    can_manage_members = await check_permission(user, project.id, Permission.MANAGE_MEMBERS, db)
+    branch_settings = BranchNameSettings.from_project_settings(project.settings)
+    branch_name_data = {
+        "format": branch_settings.format,
+        "types": dict(branch_settings.types),
+        "default_type": branch_settings.default_type,
+    }
+
     # The admin-only anonymous access card says whether the instance switch is
     # on. Only read for admins, the only users who see that card.
     from specivo.services.anonymous_access_service import is_anonymous_access_enabled
@@ -495,6 +535,14 @@ async def project_settings(
             "can_manage_tags": can_manage_tags,
             "computed_metadata": computed_values(project.settings),
             "anonymous_access_enabled": anonymous_access_enabled,
+            "webhooks_data": webhooks_data,
+            "webhook_events": webhook_events,
+            "automation_roles": automation_roles,
+            "default_automation_role_id": default_automation_role.id if default_automation_role else None,
+            "can_manage_members": can_manage_members,
+            "branch_name_data": branch_name_data,
+            "repositories_data": repositories_data,
+            "repository_providers": list(PROVIDER_NAMES),
         },
     )
 

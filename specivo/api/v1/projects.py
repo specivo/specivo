@@ -13,6 +13,7 @@ from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.project import (
+    BranchNameConfig,
     MemberAdd,
     MemberOut,
     MemberUpdateRoles,
@@ -23,6 +24,7 @@ from specivo.schemas.project import (
     ProjectUpdate,
 )
 from specivo.services.api_key_scope import is_global_admin
+from specivo.services.branch_name import BranchNameSettings
 from specivo.services.computed_metadata_service import computed_values
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
@@ -93,9 +95,18 @@ async def _disclosed_computed_metadata(project, user: User, db: AsyncSession) ->
     return computed_values(project.settings)
 
 
-def _project_out(project, parent_key: str | None, computed_metadata: dict | None = None) -> ProjectOut:
+def _branch_name(project) -> BranchNameConfig:
+    """The project's branch name settings in effect, defaults filled in."""
+    settings = BranchNameSettings.from_project_settings(project.settings)
+    return BranchNameConfig(format=settings.format, types=dict(settings.types), default_type=settings.default_type)
+
+
+def _project_out(
+    project, parent_key: str | None, computed_metadata: dict | None = None, *, detail: bool = False
+) -> ProjectOut:
     return ProjectOut(
         computed_metadata=computed_metadata,
+        branch_name=_branch_name(project) if detail else None,
         id=project.id,
         name=project.name,
         identifier=project.identifier,
@@ -193,7 +204,7 @@ async def create_project(
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # Creation is admin-only, so the creator may always see the map.
-    return _project_out(project, parent_key, computed_values(project.settings))
+    return _project_out(project, parent_key, computed_values(project.settings), detail=True)
 
 
 @router.get("/{key}/", response_model=ProjectOut)
@@ -207,7 +218,7 @@ async def get_project(
 
     parent_key = await _service.get_parent_key(db, project)
     computed = await _disclosed_computed_metadata(project, current_user, db)
-    return _project_out(project, parent_key, computed)
+    return _project_out(project, parent_key, computed, detail=True)
 
 
 @router.patch("/{key}/", response_model=ProjectOut)
@@ -225,7 +236,7 @@ async def update_project(
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # _require_manage passed, so the caller may always see the map.
-    return _project_out(project, parent_key, computed_values(project.settings))
+    return _project_out(project, parent_key, computed_values(project.settings), detail=True)
 
 
 @router.delete("/{key}/", status_code=status.HTTP_204_NO_CONTENT)

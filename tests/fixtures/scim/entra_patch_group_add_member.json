@@ -1,0 +1,16 @@
+{
+  "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+  "Operations": [
+    {
+      "name": "addMember",
+      "op": "add",
+      "path": "members",
+      "value": [
+        {
+          "displayName": "new User",
+          "value": "{member_id}"
+        }
+      ]
+    }
+  ]
+}

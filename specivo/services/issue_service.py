@@ -8,7 +8,7 @@ from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, delete, false, func, or_, select, tuple_, update
+from sqlalchemy import and_, delete, false, func, or_, select, tuple_, union_all, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -19,7 +19,7 @@ from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import PROJECT_STATUS_ACTIVE, Project
+from specivo.models.project import PROJECT_STATUS_ACTIVE, Project, ProjectKeyAlias
 from specivo.models.role import Role
 from specivo.models.tag import TagLink
 from specivo.models.time_entry import ActiveTimer, TimeEntry
@@ -33,6 +33,7 @@ from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.metadata_schema_service import MetadataSchemaService
 from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
 from specivo.services.watcher_service import WatcherService
+from specivo.services.webhook_events import emit_issue_created, emit_issue_deleted, emit_issue_updated
 
 logger = logging.getLogger(__name__)
 
@@ -374,6 +375,10 @@ class IssueService:
 
         return or_(*clauses) if clauses else false()
 
+    async def is_visible(self, session: AsyncSession, issue: Issue, user: User) -> bool:
+        """Return whether *user* may see an already loaded *issue* (the check behind ``get_by_id``)."""
+        return await self._check_visible(session, issue, user)
+
     async def _check_visible(self, session: AsyncSession, issue: Issue, user: User) -> bool:
         """Return whether *user* may see *issue*. Callers raise ``NotFoundError`` when not."""
         if not project_in_scope(issue.project_id):
@@ -386,12 +391,92 @@ class IssueService:
             return False
 
         visibility = await self._get_best_visibility(session, user, project)
+        return self._visible_at(issue, user, visibility)
+
+    @staticmethod
+    def _visible_at(issue: Issue, user: User, visibility: str | None) -> bool:
+        """Return whether *user* sees the loaded *issue* at *visibility*: ``_visibility_clause`` in Python."""
         own = not user.is_anonymous and user.id in (issue.author_id, issue.assigned_to_id)
         if visibility in ("all", "default"):
             return not issue.is_private or own
         if visibility == "own":
             return own
         return False
+
+    async def users_who_can_view(self, session: AsyncSession, issue: Issue, user_ids: Iterable[int]) -> list[User]:
+        """Return the users among *user_ids* who may see *issue*, in the order given.
+
+        The batch form of ``is_visible`` for notification delivery, with the
+        rules of ``visible_issues_clause``: the roles of the user's
+        memberships, direct or through a group, and without one, on a public
+        project, the Non member role and anonymous access. Admins see
+        everything. Only active, real accounts qualify, so locked and
+        deactivated users get nothing. Every candidate is resolved at once, in
+        a constant number of queries.
+
+        The authenticating API key's project limit does not apply: it narrows
+        what the caller reads, not who hears about the caller's changes.
+        """
+        ids = list(dict.fromkeys(user_ids))
+        if not ids:
+            return []
+
+        from specivo.models.user_group import UserGroupMember
+        from specivo.services.anonymous_user_service import real_users_clause
+        from specivo.services.permission_service import (
+            Permission,
+            anonymous_role,
+            get_non_member_role,
+            role_grants,
+        )
+
+        result = await session.execute(
+            select(User).where(User.id.in_(ids), User.status == "active", real_users_clause())
+        )
+        users = {user.id: user for user in result.scalars().all()}
+        if not users:
+            return []
+
+        direct = select(Member.user_id.label("user_id"), Member.id.label("member_id")).where(
+            Member.project_id == issue.project_id, Member.user_id.in_(users)
+        )
+        via_group = (
+            select(UserGroupMember.user_id, Member.id)
+            .join(Member, Member.group_id == UserGroupMember.group_id)
+            .where(Member.project_id == issue.project_id, UserGroupMember.user_id.in_(users))
+        )
+        principals = union_all(direct, via_group).subquery()
+        rows = await session.execute(
+            select(principals.c.user_id, Role.issues_visibility, Role.permissions)
+            .select_from(principals)
+            .outerjoin(MemberRole, MemberRole.member_id == principals.c.member_id)
+            .outerjoin(Role, Role.id == MemberRole.role_id)
+        )
+        # A membership whose roles grant no view_issues shows nothing and is
+        # not topped up by the Non member role, as in get_user_roles.
+        member_visibilities: dict[int, set[str]] = defaultdict(set)
+        for user_id, visibility, permissions in rows:
+            granted = member_visibilities[user_id]
+            if visibility is not None and role_grants(permissions, Permission.VIEW_ISSUES):
+                granted.add(visibility)
+
+        non_member_visibilities: set[str] = set()
+        project = await session.get(Project, issue.project_id)
+        if project is not None and project.is_public:
+            fallback = [await get_non_member_role(session), await anonymous_role(session, project)]
+            non_member_visibilities = {
+                role.issues_visibility for role in fallback if role is not None and role.grants(Permission.VIEW_ISSUES)
+            }
+
+        visible: list[User] = []
+        for user_id in ids:
+            user = users.get(user_id)
+            if user is None:
+                continue
+            visibilities = member_visibilities.get(user_id, non_member_visibilities)
+            if user.is_admin or self._visible_at(issue, user, self._best_visibility(visibilities)):
+                visible.append(user)
+        return visible
 
     async def list_visible_children(self, session: AsyncSession, issue: Issue, user: User) -> list[Issue]:
         """Return *issue*'s direct children that *user* may see, in nested-set order."""
@@ -506,16 +591,7 @@ class IssueService:
             # A parent outside the API key's project limit is not found.
             if parent is None or not project_in_scope(parent.project_id):
                 raise NotFoundError(f"Parent issue {data.parent_id} not found")
-            # Validate parent before creating the child
-            # (issue not yet created — depth check only against parent's ancestors)
-            parent_ancestors = await self._nested_set.get_ancestors(session, parent)
-            new_depth = len(parent_ancestors) + 1
-            if new_depth >= MAX_DEPTH:
-                raise ValidationError(
-                    message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
-                    field="parent_id",
-                    details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
-                )
+            await self.check_parent(session, None, parent)
 
         issue = Issue(
             project_id=project.id,
@@ -585,7 +661,26 @@ class IssueService:
             data.parent_id,
         )
 
+        await emit_issue_created(session, issue, author)
         return issue
+
+    async def check_parent(self, session: AsyncSession, issue: Issue | None, parent: Issue) -> None:
+        """Raise ``ValidationError`` (field ``parent_id``) when *parent* may not become *issue*'s parent.
+
+        *issue* is None for an issue not created yet, which only the depth
+        limit applies to; an existing issue may not become its own parent or
+        the child of one of its descendants either.
+        """
+        if issue is not None:
+            await self._nested_set.validate_parent(session, issue, parent)
+            return
+        new_depth = len(await self._nested_set.get_ancestors(session, parent)) + 1
+        if new_depth >= MAX_DEPTH:
+            raise ValidationError(
+                message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
+                field="parent_id",
+                details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
+            )
 
     async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key like 'ACME-42' to an Issue.
@@ -613,10 +708,13 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
-                    # Fall back to a historical reference (issue moved projects).
-                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    # Fall back to a retired reference (issue moved, project renamed).
+                    aliased_id = await self._resolve_retired_ref(session, project_key, seq)
                     if aliased_id is not None:
-                        return await self.get_by_id(session, aliased_id, user=user)
+                        try:
+                            return await self.get_by_id(session, aliased_id, user=user)
+                        except NotFoundError:
+                            pass
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -710,10 +808,13 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
-                    # Fall back to a historical reference (issue moved projects).
-                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    # Fall back to a retired reference (issue moved, project renamed).
+                    aliased_id = await self._resolve_retired_ref(session, project_key, seq)
                     if aliased_id is not None:
-                        return await self.get_with_relations(session, aliased_id, user=user)
+                        try:
+                            return await self.get_with_relations(session, aliased_id, user=user)
+                        except NotFoundError:
+                            pass
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -725,15 +826,48 @@ class IssueService:
             raise NotFoundError(f"Invalid issue reference: {display_key!r}")
         return await self.get_with_relations(session, issue_id, user=user)
 
-    async def _resolve_ref_alias(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
-        """Return the issue id a retired ``KEY-N`` reference points to, if any."""
+    async def _resolve_retired_ref(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
+        """Return the issue id a retired ``KEY-N`` reference points to, if any.
+
+        Called only when no current issue is ``KEY-N``. A reference retires in
+        two ways: the issue moved to another project (``issue_ref_aliases``
+        records its old key), or its project was renamed
+        (``project_key_aliases`` records the old project key). The two
+        combine: under a renamed project's old key, number ``N`` names the
+        issue that has it in that project now or, when that issue moved out
+        later, the issue that left under any key the project has had. Numbers
+        are never reused within a project, so the answer is unique.
+
+        No visibility check here; the caller applies it to the issue found.
+        """
         issue_id: int | None = await session.scalar(
             select(IssueRefAlias.issue_id).where(
                 IssueRefAlias.old_project_key == project_key,
                 IssueRefAlias.old_sequence_number == seq,
             )
         )
-        return issue_id
+        if issue_id is not None:
+            return issue_id
+        project_id = await session.scalar(
+            select(ProjectKeyAlias.project_id).where(ProjectKeyAlias.old_key == project_key)
+        )
+        if project_id is None:
+            return None
+        issue_id = await session.scalar(
+            select(Issue.id).where(Issue.project_id == project_id, Issue.sequence_number == seq)
+        )
+        if issue_id is not None:
+            return issue_id
+        project_keys = union_all(
+            select(Project.key).where(Project.id == project_id),
+            select(ProjectKeyAlias.old_key).where(ProjectKeyAlias.project_id == project_id),
+        )
+        return await session.scalar(
+            select(IssueRefAlias.issue_id).where(
+                IssueRefAlias.old_project_key.in_(project_keys),
+                IssueRefAlias.old_sequence_number == seq,
+            )
+        )
 
     @staticmethod
     def _autolink_ref_pairs(texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS) -> list[tuple[str, int]]:
@@ -766,8 +900,9 @@ class IssueService:
         """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue *user* may see.
 
         A reference is "known" when it matches a current issue
-        ``(project_key, sequence_number)`` or a previous reference recorded in
-        ``issue_ref_aliases`` (i.e. the issue was moved), and that issue is
+        ``(project_key, sequence_number)``, a previous reference recorded in
+        ``issue_ref_aliases`` (i.e. the issue was moved) or the same number
+        under a project's old key (``project_key_aliases``), and that issue is
         visible to *user* by the same rules as the issue list
         (``visible_issues_clause``: private issues, other projects, the
         anonymous rules and the API key project limit included). Used to
@@ -802,6 +937,18 @@ class IssueService:
         alias_rows = await session.execute(aliases)
         for key, num in alias_rows:
             known.add(f"{key}-{num}")
+
+        remaining = [(key, num) for key, num in pairs if f"{key}-{num}" not in known]
+        if remaining:
+            renamed = (
+                select(ProjectKeyAlias.old_key, Issue.sequence_number)
+                .join(Issue, Issue.project_id == ProjectKeyAlias.project_id)
+                .where(tuple_(ProjectKeyAlias.old_key, Issue.sequence_number).in_(remaining))
+            )
+            if visibility is not None:
+                renamed = renamed.where(visibility)
+            for key, num in await session.execute(renamed):
+                known.add(f"{key}-{num}")
 
         return known
 
@@ -965,6 +1112,9 @@ class IssueService:
             if assignee is not None:
                 await self._watcher_service.auto_watch(session, issue, assignee)
 
+        if journal is not None:
+            await emit_issue_updated(session, issue, journal, user, was_private=bool(old_attrs["is_private"]))
+
         logger.info(
             "Updated issue %s by user %d",
             issue.display_key,
@@ -1081,15 +1231,19 @@ class IssueService:
         )
         return issue
 
-    async def delete(self, session: AsyncSession, issue: Issue) -> None:
+    async def delete(self, session: AsyncSession, issue: Issue, actor: User | None = None) -> None:
         """Delete an issue permanently.
 
         When the deleted issue has a parent, recalculate the parent's derived
         attributes after deletion since one child has been removed.
+
+        ``actor`` is who deleted it, for the ``issue.deleted`` webhook event.
         """
         parent_id = issue.parent_id
         display_key = issue.display_key
         issue_id = issue.id
+
+        await emit_issue_deleted(session, issue, actor)
 
         await session.delete(issue)
         await session.flush()
@@ -1225,6 +1379,8 @@ class IssueService:
             stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])
         if filters.get("tag_id") is not None:
             stmt = stmt.where(Issue.id.in_(select(TagLink.issue_id).where(TagLink.tag_id == filters["tag_id"])))
+        if filters.get("parent_id") is not None:
+            stmt = stmt.where(Issue.parent_id == filters["parent_id"])
 
         # ------------------------------------------------------------------
         # Text search

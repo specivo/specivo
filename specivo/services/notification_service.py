@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -11,8 +12,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.core.notification_templates import (
+    ASSIGNMENT_EMAIL_LEAD,
     ASSIGNMENT_IN_APP_TITLE,
+    COMMENT_EMAIL_LEAD,
     COMMENT_IN_APP_TITLE,
+    ISSUE_UPDATED_EMAIL_LEAD,
     ISSUE_UPDATED_IN_APP_TITLE,
 )
 from specivo.core.utils import utcnow
@@ -23,6 +27,7 @@ from specivo.models.user import User
 from specivo.services.api_key_scope import scope_clause
 from specivo.services.channels.base import NotificationPayload
 from specivo.services.channels.registry import get_all_channels
+from specivo.services.issue_service import IssueService
 from specivo.services.watcher_service import WatcherService
 
 logger = logging.getLogger(__name__)
@@ -58,6 +63,8 @@ class NotificationService:
     Core rules:
     - **No self-notification**: the actor (who made the change) never receives
       a notification for their own action.
+    - **Visibility**: only users who can see the issue when the notification
+      is built receive it (``IssueService.users_who_can_view``).
     - **Dedup**: if a user qualifies via multiple channels (e.g. watcher AND
       assignee), they receive only one dispatch.
     - **Preferences**: ``NotificationPreference.channels`` JSONB can disable
@@ -67,6 +74,7 @@ class NotificationService:
 
     def __init__(self) -> None:
         self._watcher_service = WatcherService()
+        self._issue_service = IssueService()
 
     # ------------------------------------------------------------------
     # Public notification methods
@@ -81,22 +89,18 @@ class NotificationService:
         actor: User,
     ) -> None:
         """Notify the new assignee about the assignment change."""
-        if new_assignee_id is None or new_assignee_id == actor.id:
-            return
-
-        result = await session.execute(select(User).where(User.id == new_assignee_id))
-        assignee = result.scalar_one_or_none()
-        if assignee is None:
+        if new_assignee_id is None:
             return
 
         payload = self._build_assignment_payload(issue=issue, actor=actor)
-        await self._dispatch_to_channels(
-            session,
-            user=assignee,
-            project_id=issue.project_id,
-            event_type="assignment",
-            payload=payload,
-        )
+        for assignee in await self._recipients(session, issue, [new_assignee_id], actor):
+            await self._dispatch_to_channels(
+                session,
+                user=assignee,
+                project_id=issue.project_id,
+                event_type="assignment",
+                payload=payload,
+            )
 
     async def notify_watchers(
         self,
@@ -109,15 +113,12 @@ class NotificationService:
     ) -> None:
         """Notify all watchers of an issue about an event, excluding the actor."""
         watchers = await self._watcher_service.list_watchers(session, issue)
-        skip = {actor.id}
-        if exclude_user_ids:
-            skip |= exclude_user_ids
+        skip = exclude_user_ids or set()
+        candidates = [watcher.id for watcher in watchers if watcher.id not in skip]
 
         payload = self._build_watcher_payload(issue=issue, event_type=event_type, actor=actor)
 
-        for watcher_user in watchers:
-            if watcher_user.id in skip:
-                continue
+        for watcher_user in await self._recipients(session, issue, candidates, actor):
             await self._dispatch_to_channels(
                 session,
                 user=watcher_user,
@@ -133,37 +134,35 @@ class NotificationService:
         journal: Journal,
         actor: User,
     ) -> None:
-        """Notify watchers and assignee about a new comment, with dedup."""
-        notified_ids: set[int] = {actor.id}
+        """Notify the assignee, then the watchers, about a new comment; each user once."""
         payload = self._build_comment_payload(issue=issue, journal=journal, actor=actor)
 
-        # Notify assignee first (if different from actor)
-        if issue.assigned_to_id and issue.assigned_to_id not in notified_ids:
-            result = await session.execute(select(User).where(User.id == issue.assigned_to_id))
-            assignee = result.scalar_one_or_none()
-            if assignee is not None:
-                await self._dispatch_to_channels(
-                    session,
-                    user=assignee,
-                    project_id=issue.project_id,
-                    event_type="comment",
-                    payload=payload,
-                )
-                notified_ids.add(assignee.id)
+        candidates = [issue.assigned_to_id] if issue.assigned_to_id else []
+        candidates += [watcher.id for watcher in await self._watcher_service.list_watchers(session, issue)]
 
-        # Notify watchers (skip already-notified)
-        watchers = await self._watcher_service.list_watchers(session, issue)
-        for watcher_user in watchers:
-            if watcher_user.id in notified_ids:
-                continue
+        for user in await self._recipients(session, issue, candidates, actor):
             await self._dispatch_to_channels(
                 session,
-                user=watcher_user,
+                user=user,
                 project_id=issue.project_id,
                 event_type="comment",
                 payload=payload,
             )
-            notified_ids.add(watcher_user.id)
+
+    async def _recipients(
+        self, session: AsyncSession, issue: Issue, user_ids: Iterable[int], actor: User
+    ) -> list[User]:
+        """Return the users among *user_ids* to notify about *issue*, each once, in order.
+
+        Drops the actor and everyone who cannot see the issue right now
+        (``IssueService.users_who_can_view``), with one check for all of them.
+        Watchers who lost access stay watchers and are notified again once
+        their access comes back.
+        """
+        candidates = list(dict.fromkeys(user_id for user_id in user_ids if user_id != actor.id))
+        if not candidates:
+            return []
+        return await self._issue_service.users_who_can_view(session, issue, candidates)
 
     # ------------------------------------------------------------------
     # In-app notification CRUD
@@ -337,6 +336,7 @@ class NotificationService:
             "issue_subject": issue.subject,
             "actor_name": actor.display_name,
         }
+        event_text = str(ASSIGNMENT_EMAIL_LEAD.format(**ctx))
         return NotificationPayload(
             event_type="assignment",
             entity_type="issue",
@@ -347,9 +347,10 @@ class NotificationService:
             actor_id=actor.id,
             title=str(ASSIGNMENT_IN_APP_TITLE.format(**ctx)),
             body_plain=f"Issue {issue.display_key} has been assigned to you by {actor.display_name}.",
-            body_html=_render_email("assignment.html", **ctx),
+            body_html=_render_email("assignment.html", lead=event_text, **ctx),
             issue_key=issue.display_key,
             issue_subject=issue.subject,
+            event_text=event_text,
         )
 
     def _build_watcher_payload(self, *, issue: Issue, event_type: str, actor: User) -> NotificationPayload:
@@ -358,6 +359,7 @@ class NotificationService:
             "issue_subject": issue.subject,
             "actor_name": actor.display_name,
         }
+        event_text = str(ISSUE_UPDATED_EMAIL_LEAD.format(**ctx))
         return NotificationPayload(
             event_type=event_type,
             entity_type="issue",
@@ -368,9 +370,10 @@ class NotificationService:
             actor_id=actor.id,
             title=str(ISSUE_UPDATED_IN_APP_TITLE.format(**ctx)),
             body_plain=f"Issue {issue.display_key} was updated by {actor.display_name}.",
-            body_html=_render_email("issue_updated.html", **ctx),
+            body_html=_render_email("issue_updated.html", lead=event_text, **ctx),
             issue_key=issue.display_key,
             issue_subject=issue.subject,
+            event_text=event_text,
         )
 
     def _build_comment_payload(self, *, issue: Issue, journal: Journal, actor: User) -> NotificationPayload:
@@ -380,6 +383,7 @@ class NotificationService:
             "actor_name": actor.display_name,
             "comment_text": journal.notes,
         }
+        event_text = str(COMMENT_EMAIL_LEAD.format(**ctx))
         return NotificationPayload(
             event_type="comment",
             entity_type="issue",
@@ -390,10 +394,11 @@ class NotificationService:
             actor_id=actor.id,
             title=str(COMMENT_IN_APP_TITLE.format(**ctx)),
             body_plain=journal.notes or "",
-            body_html=_render_email("comment.html", **ctx),
+            body_html=_render_email("comment.html", lead=event_text, **ctx),
             issue_key=issue.display_key,
             issue_subject=issue.subject,
             comment_text=journal.notes,
+            event_text=event_text,
         )
 
     # ------------------------------------------------------------------

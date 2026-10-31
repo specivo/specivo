@@ -26,8 +26,10 @@ from specivo.schemas.issue import (
     IssueUpdateOut,
     IssueWithChildren,
     MetadataFieldOut,
+    issue_out,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
+from specivo.schemas.repository import IssueDevelopmentOut
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
@@ -42,6 +44,7 @@ from specivo.services.notification_service import NotificationService
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
+from specivo.services.repository_service import development_for_issue
 from specivo.services.saved_filter_service import SavedFilterService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.workflow_service import WorkflowService
@@ -66,54 +69,8 @@ _reaction_svc = ReactionService()
 
 
 def _issue_out(issue: Issue, computed: dict | None = None) -> IssueOut:
-    """Build an IssueOut from an Issue with eagerly-loaded relationships.
-
-    All relationship attributes (tracker, status, priority, author,
-    assigned_to, category) must already be loaded via selectinload before
-    calling this helper.
-
-    ``computed`` is the issue's project-derived metadata map (see
-    :mod:`specivo.services.computed_metadata_service`); when provided it is
-    overlaid on the stored metadata so derived fields appear on read without
-    being persisted.
-    """
-    return IssueOut(
-        id=issue.id,
-        key=issue.display_key,
-        project_key=issue.project_key,
-        subject=issue.subject,
-        description=issue.description,
-        tracker=IdName(id=issue.tracker_id, name=issue.tracker.name),
-        status=IdName(id=issue.status_id, name=issue.status.name),
-        priority=IdName(id=issue.priority_id, name=issue.priority.name),
-        author=IdName(id=issue.author_id, name=issue.author.display_name),
-        assigned_to=(
-            IdName(id=issue.assigned_to_id, name=issue.assigned_to.display_name)
-            if issue.assigned_to_id is not None
-            else None
-        ),
-        category=(IdName(id=issue.category_id, name=issue.category.name) if issue.category_id is not None else None),
-        fixed_version_id=issue.fixed_version_id,
-        fixed_version=(
-            IdName(id=issue.fixed_version_id, name=issue.fixed_version.name)
-            if issue.fixed_version_id is not None
-            else None
-        ),
-        sprint_id=issue.sprint_id,
-        parent_id=issue.parent_id,
-        root_id=issue.root_id,
-        lft=issue.lft,
-        rgt=issue.rgt,
-        done_ratio=issue.done_ratio,
-        start_date=issue.start_date,
-        due_date=issue.due_date,
-        estimated_hours=issue.estimated_hours,
-        metadata={**(issue.issue_metadata or {}), **(computed or {})},
-        is_private=issue.is_private,
-        lock_version=issue.lock_version,
-        created_at=issue.created_at,
-        updated_at=issue.updated_at,
-    )
+    """Build an IssueOut; see :func:`specivo.schemas.issue.issue_out`."""
+    return issue_out(issue, computed)
 
 
 # ---------------------------------------------------------------------------
@@ -580,12 +537,29 @@ async def delete_issue(
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, "delete_issues", db):
         raise PermissionDeniedError("You do not have permission to delete issues in this project")
-    await _service.delete(db, issue)
+    await _service.delete(db, issue, actor=current_user)
 
 
 # ---------------------------------------------------------------------------
 # Allowed statuses (workflow)
 # ---------------------------------------------------------------------------
+
+
+@router.get("/issues/{issue_ref}/development/", response_model=IssueDevelopmentOut, tags=["repositories"])
+async def get_issue_development(
+    issue_ref: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> IssueDevelopmentOut:
+    """The issue's development activity: linked commits (newest first), pull/merge requests and branches.
+
+    Needs ``view_issues`` and an issue the caller may see; anything else is
+    404. Commit author emails are never returned.
+    """
+    issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
+    if not await check_permission(current_user, issue.project_id, Permission.VIEW_ISSUES, db):
+        raise NotFoundError(f"Issue {issue_ref} not found")
+    return await development_for_issue(db, issue.id)
 
 
 @router.get(

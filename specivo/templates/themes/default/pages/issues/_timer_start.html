@@ -1,0 +1,41 @@
+{# "Start timer" for a user who may log time on this issue. ``active_timer``
+   is the user's running timer (see ``specivo.web.deps``): on this issue the
+   button gives way to a note; elsewhere, starting asks first whether to log
+   or discard it. #}
+{% if active_timer and active_timer.issue_id == issue.id %}
+  {% set _running = "here" %}
+{% elif active_timer %}
+  {% set _running = "other" %}
+{% else %}
+  {% set _running = "none" %}
+{% endif %}
+<div class="sp-timer-start" x-data="timerStart" data-project-id="{{ project.id }}" data-issue-id="{{ issue.id }}" data-running="{{ _running }}" data-i18n='{{ {
+  "startFailed": _("Could not start the timer."),
+  "connectFailed": _("Unable to connect."),
+  "replacedLogged": _("The timer on %(target)s was stopped and %(hours)s h were logged with the default activity."),
+  "replacedDiscarded": _("The timer on %(target)s was discarded without logging time: you may no longer log time there.")
+} | tojson }}'>
+  {% if _running == "here" %}
+  <span class="sp-timer-start-running"><span class="timer-dot"></span> {% trans %}Timer running{% endtrans %}</span>
+  {% else %}
+  <button type="button" class="sp-btn sp-btn-sm sp-btn-ghost sp-timer-start-btn" :disabled="busy" @click="start">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M10 8l6 4-6 4z"/></svg>
+    {% trans %}Start timer{% endtrans %}
+  </button>
+  {% if _running == "other" %}
+  <div class="sp-timer-start-confirm" role="dialog" aria-label="{{ _('A timer is already running') }}" x-show="confirming" x-cloak>
+    <p>{% trans target=(active_timer.issue_key or active_timer.project_key) %}A timer is already running on %(target)s. Log its time (with the default activity) or discard it before starting a new one.{% endtrans %}</p>
+    <div class="sp-timer-start-actions">
+      <button type="button" class="sp-btn sp-btn-sm sp-btn-primary sp-timer-log-start" :disabled="busy" @click="logAndStart">{% trans %}Log it and start{% endtrans %}</button>
+      <button type="button" class="sp-btn sp-btn-sm sp-btn-danger sp-timer-discard-start" :disabled="busy" @click="discardAndStart">{% trans %}Discard it and start{% endtrans %}</button>
+      <button type="button" class="sp-btn sp-btn-sm sp-btn-ghost" @click="cancel">{% trans %}Cancel{% endtrans %}</button>
+    </div>
+  </div>
+  {% endif %}
+  <div class="sp-timer-error" role="alert" x-show="hasError" x-text="error" x-cloak></div>
+  {% endif %}
+  <div class="sp-timer-notice" role="status" x-show="hasNotice" x-cloak>
+    <span x-text="notice"></span>
+    <button type="button" class="sp-timer-notice-close" aria-label="{{ _('Dismiss') }}" @click="dismissNotice">&times;</button>
+  </div>
+</div>

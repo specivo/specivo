@@ -40,13 +40,14 @@ __all__ = [
     "logout",
     "provider_changed",
     "roles_synced",
+    "session_rejected",
     "subject_hash",
     "user_deprovisioned",
     "user_provisioned",
 ]
 
 #: How an identity came to be linked (``UserIdentity.linked_via`` without ``jit``).
-LinkMethod = Literal["user_link", "auto_email", "admin"]
+LinkMethod = Literal["user_link", "auto_email", "admin", "scim"]
 #: Who removed an identity.
 UnlinkedBy = Literal["user", "admin"]
 
@@ -184,6 +185,7 @@ def user_deprovisioned(
     issuer: str | None = None,
     subject: str | None = None,
     sessions_revoked: int = 0,
+    api_keys_deactivated: int | None = None,
 ) -> None:
     """A user lost access because the IdP or an admin removed them (deactivated, sessions ended).
 
@@ -208,6 +210,7 @@ def user_deprovisioned(
             user_id=user_id,
             reason=reason,
             sessions_revoked=sessions_revoked,
+            **({"api_keys_deactivated": api_keys_deactivated} if api_keys_deactivated is not None else {}),
         ),
     )
 
@@ -346,6 +349,36 @@ def backchannel_logout(
         event=AuditEvent.SSO_BACKCHANNEL_LOGOUT,
         actor_id=None,
         details=_details(provider_slug=provider_slug, issuer=issuer, subject=subject, by=by, sessions_revoked=revoked),
+    )
+
+
+def session_rejected(
+    *, provider_slug: str, issuer: str, user_id: int, subject: str | None, reason: str, idp_error: str | None = None
+) -> None:
+    """A session ended when it was re-checked at the IdP. No actor: the IdP decided.
+
+    ``reason`` is ``idp_refresh_rejected`` (the IdP refused the refresh token)
+    or ``idp_check_failed`` (the IdP could not be asked and the provider says
+    ``deny``); ``idp_error`` is the IdP's sanitised OAuth error code.
+    """
+    _emit(
+        logging.INFO,
+        "sso.session.rejected provider=%s user_id=%s sub=%s reason=%s idp_error=%s",
+        provider_slug,
+        user_id,
+        subject_hash(subject) if subject is not None else "-",
+        reason,
+        idp_error or "-",
+        event=AuditEvent.SSO_SESSION_REJECTED,
+        actor_id=None,
+        details=_details(
+            provider_slug=provider_slug,
+            issuer=issuer,
+            subject=subject,
+            user_id=user_id,
+            reason=reason,
+            **({"idp_error": idp_error} if idp_error else {}),
+        ),
     )
 
 

@@ -1,0 +1,55 @@
+{
+  "action": "closed",
+  "number": 4,
+  "pull_request": {
+    "id": 21,
+    "url": "https://forgejo.example.com/example-org/widgets/pulls/4",
+    "number": 4,
+    "user": {"id": 1, "login": "alex-example", "username": "alex-example", "email": "alex@example.com"},
+    "title": "Add the login form",
+    "body": "Resolves ACME-3",
+    "labels": [],
+    "milestone": null,
+    "assignees": null,
+    "state": "closed",
+    "is_locked": false,
+    "comments": 0,
+    "html_url": "https://forgejo.example.com/example-org/widgets/pulls/4",
+    "diff_url": "https://forgejo.example.com/example-org/widgets/pulls/4.diff",
+    "patch_url": "https://forgejo.example.com/example-org/widgets/pulls/4.patch",
+    "mergeable": true,
+    "merged": true,
+    "merged_at": "2026-10-03T11:00:00Z",
+    "merge_commit_sha": "c48d3ae2e3a7b7f0c3b1b2ad1d9e9b5d0f3a7e21",
+    "merged_by": {"id": 3, "login": "sam-example", "username": "sam-example"},
+    "draft": false,
+    "base": {
+      "label": "main",
+      "ref": "main",
+      "sha": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+      "repo_id": 1
+    },
+    "head": {
+      "label": "feat/ACME-3-login-form",
+      "ref": "feat/ACME-3-login-form",
+      "sha": "59b20b8d5c6ff8d09518454d4dd8b7b30f095ab5",
+      "repo_id": 1
+    },
+    "merge_base": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+    "due_date": null,
+    "created_at": "2026-10-01T09:00:00Z",
+    "updated_at": "2026-10-03T11:00:00Z",
+    "closed_at": "2026-10-03T11:00:00Z"
+  },
+  "repository": {
+    "id": 1,
+    "owner": {"id": 2, "login": "example-org", "username": "example-org"},
+    "name": "widgets",
+    "full_name": "example-org/widgets",
+    "private": false,
+    "html_url": "https://forgejo.example.com/example-org/widgets",
+    "default_branch": "main"
+  },
+  "sender": {"id": 3, "login": "sam-example", "username": "sam-example"},
+  "review": null
+}

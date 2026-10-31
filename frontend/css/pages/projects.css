@@ -53,3 +53,64 @@
 .color-swatch.selected::after { content: '\2713'; color: #fff; font-size: 13px; font-weight: 700; line-height: 1; }
 /* Checkbox rows (module selector) — .checkbox-row defined once in pages/wiki.css */
 
+
+/* Project settings — Webhooks tab */
+.sp-webhook-list { display: flex; flex-direction: column; }
+.sp-webhook-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-sm) var(--sp-space-md); padding: var(--sp-space-md) var(--sp-space-lg); border-top: 1px solid var(--sp-border); }
+.sp-webhook-main { flex: 1 1 260px; min-width: 0; }
+.sp-webhook-url { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); overflow-wrap: anywhere; }
+.sp-webhook-meta { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-top: 2px; }
+.sp-webhook-actions { display: flex; flex-wrap: wrap; gap: var(--sp-space-xs); }
+.sp-webhook-off .sp-webhook-main { opacity: 0.6; }
+.sp-webhook-events { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: var(--sp-space-xs) var(--sp-space-md); }
+.sp-webhook-reveal { margin: var(--sp-space-md) var(--sp-space-lg); }
+.sp-webhook-secret { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-sm); }
+.sp-webhook-secret code { flex: 1 1 240px; font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); background: var(--sp-bg-surface); border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); padding: var(--sp-space-xs) var(--sp-space-sm); overflow-wrap: anywhere; }
+.sp-webhook-notice { margin: var(--sp-space-md) var(--sp-space-lg) 0; }
+.sp-webhook-log { margin-top: var(--sp-space-lg); }
+.sp-webhook-log-scroll { overflow-x: auto; }
+.sp-webhook-log table { min-width: 640px; }
+.sp-webhook-log td { vertical-align: top; }
+.sp-webhook-time { white-space: nowrap; font-size: var(--sp-font-size-sm); }
+.sp-webhook-excerpt { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; max-width: 360px; max-height: 6em; overflow: auto; margin: 0; }
+.sp-webhook-pager { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-space-sm); padding: var(--sp-space-md) var(--sp-space-lg); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); }
+.sp-webhook-status { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: var(--sp-font-size-xs); font-weight: 500; white-space: nowrap; }
+.sp-webhook-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; }
+.sp-webhook-status-pending { background: var(--sp-warning-subtle); color: var(--sp-warning); }
+.sp-webhook-status-pending::before { background: var(--sp-warning); }
+.sp-webhook-status-succeeded { background: var(--sp-success-subtle); color: var(--sp-success); }
+.sp-webhook-status-succeeded::before { background: var(--sp-success); }
+.sp-webhook-status-failed { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+.sp-webhook-status-failed::before { background: var(--sp-danger); }
+
+/* Project settings — Repositories tab (list and log layout shared with the Webhooks tab) */
+.sp-repo-provider { display: inline-flex; padding: 1px 8px; border-radius: 10px; font-size: var(--sp-font-size-xs); font-weight: 500; background: var(--sp-bg-muted); border: 1px solid var(--sp-border); color: var(--sp-text-secondary); margin-right: var(--sp-space-xs); }
+.sp-repo-name { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-sm); color: var(--sp-text-primary); overflow-wrap: anywhere; }
+.sp-repo-setup { margin-top: var(--sp-space-sm); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); }
+.sp-repo-setup ol { margin: var(--sp-space-xs) 0 0; padding-left: 1.25rem; }
+.sp-repo-setup li { margin-bottom: 2px; }
+.sp-repo-field { margin-top: var(--sp-space-sm); }
+.sp-repo-field-label { font-size: var(--sp-font-size-xs); font-weight: 600; color: var(--sp-text-muted); margin-bottom: 2px; }
+.sp-repo-detail { font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); overflow-wrap: anywhere; max-width: 420px; }
+.sp-repo-status { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 12px; font-size: var(--sp-font-size-xs); font-weight: 500; white-space: nowrap; background: var(--sp-bg-muted); color: var(--sp-text-secondary); }
+.sp-repo-status::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.sp-repo-status-accepted { background: var(--sp-info-subtle); color: var(--sp-info); }
+.sp-repo-status-processed { background: var(--sp-success-subtle); color: var(--sp-success); }
+.sp-repo-status-failed { background: var(--sp-danger-subtle); color: var(--sp-danger); }
+
+/* Repository integrations: what a repository may change on issues */
+.sp-repo-options { border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); padding: var(--sp-space-md); margin: var(--sp-space-md) 0; min-width: 0; }
+.sp-repo-options legend { padding: 0 var(--sp-space-xs); margin-bottom: 0; }
+.sp-repo-warning { background: var(--sp-warning-subtle); color: var(--sp-text-primary); border-left: 3px solid var(--sp-warning); border-radius: var(--sp-border-radius); padding: var(--sp-space-sm) var(--sp-space-md); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-md); }
+.sp-repo-check { display: flex; align-items: center; gap: var(--sp-space-sm); font-size: var(--sp-font-size-sm); font-weight: 600; margin-top: var(--sp-space-md); cursor: pointer; }
+.sp-repo-check input { width: 16px; height: 16px; flex-shrink: 0; }
+.sp-repo-sub { margin-left: calc(16px + var(--sp-space-sm)); }
+.sp-repo-sub.form-group, .sp-repo-sub .form-group { margin-top: var(--sp-space-sm); }
+
+/* Branch names card */
+.sp-branch-settings { padding-bottom: var(--sp-space-lg); }
+.sp-branch-settings > .form-hint, .sp-branch-settings > .form-group, .sp-branch-types, .sp-branch-actions { padding: 0 var(--sp-space-lg); }
+.sp-branch-format { font-family: var(--sp-font-mono); }
+.sp-branch-types { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0 var(--sp-space-md); }
+.sp-branch-actions { display: flex; justify-content: flex-end; align-items: center; gap: var(--sp-space-md); }
+.sp-branch-saved { font-size: var(--sp-font-size-sm); color: var(--sp-success); }

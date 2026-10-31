@@ -27,6 +27,8 @@
     <a class="filter-tab" :class="{ active: tab === 'metadata' }" @click.prevent="tab = 'metadata'" href="#">{% trans %}Metadata{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'tags' }" @click.prevent="tab = 'tags'" href="#">{% trans %}Tags{% endtrans %}</a>
     <a class="filter-tab" :class="{ active: tab === 'search' }" @click.prevent="tab = 'search'" href="#">{% trans %}Search{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'webhooks' }" @click.prevent="tab = 'webhooks'" href="#">{% trans %}Webhooks{% endtrans %}</a>
+    <a class="filter-tab" :class="{ active: tab === 'repositories' }" @click.prevent="tab = 'repositories'" href="#">{% trans %}Repositories{% endtrans %}</a>
   </div>
 
   <!-- General tab -->
@@ -1006,6 +1008,598 @@
         </div>
       </div>
     </template>
+  </div>
+
+  <!-- Webhooks tab -->
+  <div x-show="tab === 'webhooks'" x-cloak x-data='projectWebhooks({ webhooks: {{ webhooks_data | tojson }}, events: {{ webhook_events | tojson }}, projectKey: {{ project.key | tojson }}, eventLabels: {{ {
+    "issue.created": _("Issue created"),
+    "issue.updated": _("Issue updated"),
+    "issue.commented": _("Issue commented"),
+    "issue.deleted": _("Issue deleted"),
+    "wiki.page.updated": _("Wiki page updated"),
+    "ping": _("Test event")
+  } | tojson }}, i18n: {{ {
+    "saveFailed": _("Failed to save webhook."),
+    "connectFailed": _("Unable to connect."),
+    "loadFailed": _("Could not load deliveries."),
+    "testQueued": _("Test event queued. Open the delivery log to see the result."),
+    "testFailed": _("Could not send the test event."),
+    "newWebhook": _("New webhook"),
+    "editWebhook": _("Edit webhook"),
+    "createWebhook": _("Create webhook"),
+    "saveChanges": _("Save changes"),
+    "copy": _("Copy"),
+    "copied": _("Copied"),
+    "statusPending": _("Pending"),
+    "statusSucceeded": _("Succeeded"),
+    "statusFailed": _("Failed")
+  } | tojson }} })'>
+
+    <div class="card" data-testid="webhooks-card">
+      <div class="sp-listcard-header">
+        <div>
+          <span class="sp-listcard-title">{% trans %}Webhooks{% endtrans %}</span>
+          <span class="sp-text-muted-xs-ml-sm" x-text="'(' + webhooks.length + ')'"></span>
+        </div>
+        <button class="sp-btn sp-btn-primary" @click="openCreate()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+          {% trans %}New webhook{% endtrans %}
+        </button>
+      </div>
+
+      <!-- Secret, shown once -->
+      <template x-if="reveal">
+        <div class="sp-key-reveal sp-webhook-reveal" data-testid="webhook-secret">
+          <div class="sp-key-reveal-label">{% trans %}Signing secret{% endtrans %}</div>
+          <div class="sp-key-reveal-value sp-webhook-secret">
+            <code x-text="reveal.secret"></code>
+            <button class="sp-btn sp-btn-sm" @click="copySecret()" x-text="copied ? i18n.copied : i18n.copy"></button>
+            <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="reveal = null">{% trans %}Dismiss{% endtrans %}</button>
+          </div>
+          <div class="sp-key-reveal-warn">{% trans %}Copy it now: it is not shown again. Receivers check the X-Specivo-Signature header (HMAC-SHA256 of the body) with it.{% endtrans %}</div>
+        </div>
+      </template>
+
+      <template x-if="notice">
+        <div class="flash flash-info sp-webhook-notice"><span x-text="notice"></span></div>
+      </template>
+
+      <!-- Empty state -->
+      <template x-if="webhooks.length === 0">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 16.98h-5.99c-1.1 0-1.95.94-2.48 1.9A4 4 0 0 1 2 17c.01-.7.2-1.4.57-2"/><path d="m6 17 3.13-5.78c.53-.97.1-2.18-.5-3.1a4 4 0 1 1 6.89-4.06"/><path d="m12 6 3.13 5.73C15.66 12.7 16.9 13 18 13a4 4 0 0 1 0 8"/></svg>
+          <h3>{% trans %}No webhooks yet{% endtrans %}</h3>
+          <p>{% trans %}A webhook sends a signed HTTPS request to another system when issues or wiki pages in this project change.{% endtrans %}</p>
+          <button class="sp-btn sp-btn-primary" @click="openCreate()">{% trans %}Create first webhook{% endtrans %}</button>
+        </div>
+      </template>
+
+      <div class="sp-webhook-list">
+        <template x-for="w in webhooks" :key="w.id">
+          <div class="sp-webhook-row" :class="{ 'sp-webhook-off': !w.is_active }" data-testid="webhook-row">
+            <div class="sp-webhook-main">
+              <div class="sp-webhook-url" x-text="w.url"></div>
+              <div class="sp-webhook-meta">
+                <span x-text="eventsText(w)"></span>
+                <template x-if="w.include_private"><span> · {% trans %}includes private content{% endtrans %}</span></template>
+                <template x-if="!w.is_active"><span> · {% trans %}disabled{% endtrans %}</span></template>
+              </div>
+            </div>
+            <div class="sp-webhook-actions">
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="openLog(w)" :aria-pressed="log && log.id === w.id">{% trans %}Delivery log{% endtrans %}</button>
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="sendTest(w)" :disabled="busy">{% trans %}Send test{% endtrans %}</button>
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="toggle(w)" :disabled="busy">
+                <span x-show="w.is_active">{% trans %}Disable{% endtrans %}</span>
+                <span x-show="!w.is_active">{% trans %}Enable{% endtrans %}</span>
+              </button>
+              <button class="action-link" @click="openEdit(w)" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
+              <button class="action-link danger" @click="confirmDelete(w)" title="{{ _('Delete') }}" aria-label="{{ _('Delete') }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Delivery log -->
+    <template x-if="log">
+      <div class="card sp-webhook-log" data-testid="webhook-log">
+        <div class="sp-listcard-header">
+          <div>
+            <span class="sp-listcard-title">{% trans %}Delivery log{% endtrans %}</span>
+            <span class="sp-text-muted-xs-ml-sm" x-text="log.url"></span>
+          </div>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="loadLog(offset)" :disabled="loadingLog">{% trans %}Refresh{% endtrans %}</button>
+        </div>
+        <template x-if="logError">
+          <div class="flash flash-error sp-webhook-notice"><span x-text="logError"></span></div>
+        </template>
+        <template x-if="!loadingLog && deliveries.length === 0 && !logError">
+          <div class="empty-state">
+            <h3>{% trans %}No deliveries yet{% endtrans %}</h3>
+            <p>{% trans %}Deliveries appear here when a subscribed event happens, or when you send a test event.{% endtrans %}</p>
+          </div>
+        </template>
+        <template x-if="deliveries.length > 0">
+          <div class="sp-webhook-log-scroll">
+            <table class="version-table">
+              <thead>
+                <tr>
+                  <th>{% trans %}Time{% endtrans %}</th>
+                  <th>{% trans %}Event{% endtrans %}</th>
+                  <th>{% trans %}Status{% endtrans %}</th>
+                  <th>{% trans %}Attempts{% endtrans %}</th>
+                  <th>{% trans %}Response code{% endtrans %}</th>
+                  <th>{% trans %}Response{% endtrans %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="d in deliveries" :key="d.id">
+                  <tr>
+                    <td><span class="sp-webhook-time" x-text="formatTime(d.created_at)" :title="d.delivery_uuid"></span></td>
+                    <td><span x-text="eventLabel(d.event)"></span></td>
+                    <td><span :class="statusClass(d.status)" x-text="statusLabel(d.status)"></span></td>
+                    <td><span x-text="d.attempts"></span></td>
+                    <td><span x-text="d.status_code === null ? '–' : d.status_code"></span></td>
+                    <td>
+                      <pre class="sp-webhook-excerpt" x-show="d.last_error" x-text="d.last_error"></pre>
+                      <pre class="sp-webhook-excerpt" x-show="d.response_body" x-text="d.response_body"></pre>
+                    </td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+        <div class="sp-webhook-pager" x-show="hasNewer || hasOlder">
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="newer()" :disabled="!hasNewer || loadingLog">{% trans %}Newer{% endtrans %}</button>
+          <span x-text="(offset + 1) + '–' + (offset + deliveries.length) + ' / ' + total"></span>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="older()" :disabled="!hasOlder || loadingLog">{% trans %}Older{% endtrans %}</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Create / Edit Modal -->
+    <template x-if="showModal">
+      <div class="sp-scrim open" @click.self="showModal = false" x-cloak>
+        <div class="sp-modal">
+          <div class="sp-modal-header">
+            <h2 x-text="editing ? i18n.editWebhook : i18n.newWebhook"></h2>
+            <button class="sp-modal-close" @click="showModal = false" aria-label="{{ _('Close') }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <template x-if="error">
+              <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
+            </template>
+            <div class="form-group">
+              <label class="form-label" for="webhook-url">{% trans %}Payload URL{% endtrans %}</label>
+              <input class="form-input" id="webhook-url" type="url" x-model="form.url" maxlength="2048" placeholder="https://example.com/hooks/specivo">
+              <div class="form-hint">{% trans %}HTTPS only. Addresses inside private networks are refused when the request is sent.{% endtrans %}</div>
+            </div>
+            <div class="form-group">
+              <span class="form-label">{% trans %}Events{% endtrans %}</span>
+              <div class="sp-webhook-events">
+                <template x-for="e in events" :key="e">
+                  <label class="checkbox-row">
+                    <input type="checkbox" :value="e" x-model="form.events">
+                    <span x-text="eventLabel(e)"></span>
+                  </label>
+                </template>
+              </div>
+            </div>
+            {% if user.is_admin %}
+            <div class="form-group">
+              <label class="checkbox-row">
+                <input type="checkbox" x-model="form.include_private">
+                <span>{% trans %}Include private issues and private notes{% endtrans %}</span>
+              </label>
+              <div class="form-hint">{% trans %}Off by default: the receiver then never learns about private content.{% endtrans %}</div>
+            </div>
+            {% else %}
+            <div class="form-hint">{% trans %}Private issues and private notes are not sent. Only an administrator can change that.{% endtrans %}</div>
+            {% endif %}
+            <template x-if="editing">
+              <div class="form-group">
+                <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="rotate(editing); showModal = false" :disabled="busy">{% trans %}Generate a new secret{% endtrans %}</button>
+                <div class="form-hint">{% trans %}The old secret stops working at once.{% endtrans %}</div>
+              </div>
+            </template>
+            <template x-if="!editing">
+              <div class="form-hint">{% trans %}A signing secret is generated and shown once after the webhook is created.{% endtrans %}</div>
+            </template>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="!canSave">
+              <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+              <span x-show="!saving" x-text="editing ? i18n.saveChanges : i18n.createWebhook"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Delete confirmation modal -->
+    <template x-if="showDeleteModal">
+      <div class="sp-scrim open" @click.self="showDeleteModal = false" x-cloak>
+        <div class="sp-modal sp-modal--xs">
+          <div class="sp-modal-header">
+            <h2>{% trans %}Delete webhook{% endtrans %}</h2>
+            <button class="sp-modal-close" @click="showDeleteModal = false" aria-label="{{ _('Close') }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <p class="sp-modal-lead">{% trans %}Delete this webhook and its delivery log? Nothing more is sent to:{% endtrans %} <strong x-text="deleting?.url"></strong></p>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="busy">{% trans %}Delete webhook{% endtrans %}</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Repositories tab -->
+  <div x-show="tab === 'repositories'" x-cloak x-data='projectRepositories({ repositories: {{ repositories_data | tojson }}, providers: {{ repository_providers | tojson }}, projectKey: {{ project.key | tojson }}, statuses: {{ statuses_data | tojson }}, roles: {{ automation_roles | tojson }}, defaultRoleId: {{ default_automation_role_id | tojson }}, canPickRole: {{ can_manage_members | tojson }}, providerLabels: {{ {
+    "github": "GitHub",
+    "gitlab": "GitLab",
+    "gitea": "Gitea",
+    "forgejo": "Forgejo"
+  } | tojson }}, i18n: {{ {
+    "saveFailed": _("Failed to save the repository."),
+    "connectFailed": _("Unable to connect."),
+    "loadFailed": _("Could not load deliveries."),
+    "newRepository": _("Connect a repository"),
+    "editRepository": _("Edit repository"),
+    "createRepository": _("Connect repository"),
+    "saveChanges": _("Save changes"),
+    "copy": _("Copy"),
+    "copied": _("Copied"),
+    "neverReceived": _("Never received"),
+    "statusAccepted": _("Accepted"),
+    "statusDuplicate": _("Duplicate"),
+    "statusIgnored": _("Ignored"),
+    "statusProcessed": _("Processed"),
+    "statusFailed": _("Failed")
+  } | tojson }} })'>
+
+    <div class="card" data-testid="repositories-card">
+      <div class="sp-listcard-header">
+        <div>
+          <span class="sp-listcard-title">{% trans %}Repositories{% endtrans %}</span>
+          <span class="sp-text-muted-xs-ml-sm" x-text="'(' + repositories.length + ')'"></span>
+        </div>
+        <button class="sp-btn sp-btn-primary" @click="openCreate()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14"><path d="M12 5v14M5 12h14"/></svg>
+          {% trans %}Connect a repository{% endtrans %}
+        </button>
+      </div>
+
+      <!-- Hook URL and secret, shown once, with setup steps for the provider -->
+      <template x-if="reveal">
+        <div class="sp-key-reveal sp-webhook-reveal" data-testid="repository-secret">
+          <div class="sp-key-reveal-label"><span x-text="providerLabel(reveal.provider)"></span> · <span x-text="reveal.repo"></span></div>
+          <div class="sp-repo-field">
+            <div class="sp-repo-field-label">{% trans %}Webhook URL{% endtrans %}</div>
+            <div class="sp-key-reveal-value sp-webhook-secret">
+              <code x-text="reveal.hook_url" data-testid="repository-hook-url"></code>
+              <button class="sp-btn sp-btn-sm" @click="copy('hook_url')" x-text="copied === 'hook_url' ? i18n.copied : i18n.copy"></button>
+            </div>
+          </div>
+          <div class="sp-repo-field">
+            <div class="sp-repo-field-label">{% trans %}Secret{% endtrans %}</div>
+            <div class="sp-key-reveal-value sp-webhook-secret">
+              <code x-text="reveal.secret" data-testid="repository-secret-value"></code>
+              <button class="sp-btn sp-btn-sm" @click="copy('secret')" x-text="copied === 'secret' ? i18n.copied : i18n.copy"></button>
+            </div>
+          </div>
+          <div class="sp-key-reveal-warn">{% trans %}Copy the secret now: it is not shown again.{% endtrans %}</div>
+          <div class="sp-repo-setup">
+            <template x-if="reveal.provider === 'github'">
+              <ol>
+                <li>{% trans %}In the repository on GitHub, open Settings, then Webhooks, then Add webhook.{% endtrans %}</li>
+                <li>{% trans %}Paste the webhook URL into Payload URL and set Content type to application/json.{% endtrans %}</li>
+                <li>{% trans %}Paste the secret into Secret.{% endtrans %}</li>
+                <li>{% trans %}Choose "Let me select individual events", tick Pushes and Pull requests, and save. GitHub sends a ping at once; it appears in the delivery log.{% endtrans %}</li>
+              </ol>
+            </template>
+            <template x-if="reveal.provider === 'gitlab'">
+              <ol>
+                <li>{% trans %}In the project on GitLab, open Settings, then Webhooks, then Add new webhook.{% endtrans %}</li>
+                <li>{% trans %}Paste the webhook URL into URL and the secret into Secret token.{% endtrans %}</li>
+                <li>{% trans %}Under Trigger, select Push events and Merge request events.{% endtrans %}</li>
+                <li>{% trans %}Save, then use Test, Push events to send a first delivery.{% endtrans %}</li>
+              </ol>
+            </template>
+            <template x-if="reveal.provider === 'gitea' || reveal.provider === 'forgejo'">
+              <ol>
+                <li>{% trans %}In the repository, open Settings, then Webhooks, then Add webhook, and pick the Gitea or Forgejo webhook type, matching the server.{% endtrans %}</li>
+                <li>{% trans %}Paste the webhook URL into Target URL. Keep the HTTP method POST and set the POST content type to application/json.{% endtrans %}</li>
+                <li>{% trans %}Paste the secret into Secret.{% endtrans %}</li>
+                <li>{% trans %}Under Trigger on, choose Custom events, tick Push and Pull request, then add the webhook. Test delivery sends a push.{% endtrans %}</li>
+              </ol>
+            </template>
+          </div>
+          <div class="sp-key-reveal-value sp-webhook-secret">
+            <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="reveal = null">{% trans %}Dismiss{% endtrans %}</button>
+          </div>
+        </div>
+      </template>
+
+      <template x-if="notice">
+        <div class="flash flash-info sp-webhook-notice"><span x-text="notice"></span></div>
+      </template>
+
+      <!-- Empty state -->
+      <template x-if="repositories.length === 0">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="8" r="3"/><path d="M6 9v6M18 11c0 4-6 3-9 6"/></svg>
+          <h3>{% trans %}No repositories connected{% endtrans %}</h3>
+          <p>{% trans %}Connect a GitHub, GitLab, Gitea or Forgejo repository: commits that mention an issue key, such as "Fixes KEY-12", or are pushed to a branch named after one, are linked to the issue.{% endtrans %}</p>
+          <button class="sp-btn sp-btn-primary" @click="openCreate()">{% trans %}Connect the first repository{% endtrans %}</button>
+        </div>
+      </template>
+
+      <div class="sp-webhook-list">
+        <template x-for="r in repositories" :key="r.id">
+          <div class="sp-webhook-row" :class="{ 'sp-webhook-off': !r.is_active }" data-testid="repository-row">
+            <div class="sp-webhook-main">
+              <div>
+                <span class="sp-repo-provider" x-text="providerLabel(r.provider)"></span>
+                <a class="sp-repo-name" :href="r.repo_url" target="_blank" rel="noopener noreferrer" x-text="r.repo_full_name"></a>
+              </div>
+              <div class="sp-webhook-meta">
+                <span>{% trans %}Last delivery:{% endtrans %} <span x-text="lastDelivery(r)" data-testid="repository-last-delivery"></span></span>
+                <template x-if="r.scope === 'project_and_subprojects'"><span> · {% trans %}includes subprojects{% endtrans %}</span></template>
+                <template x-if="!r.is_active"><span> · {% trans %}disabled{% endtrans %}</span></template>
+                <template x-if="r.settings && r.settings.commands_enabled"><span> · {% trans %}commit commands on{% endtrans %}</span></template>
+                <template x-if="r.settings && r.settings.merge_automation_enabled"><span> · {% trans %}merge automation on{% endtrans %}</span></template>
+              </div>
+            </div>
+            <div class="sp-webhook-actions">
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="openLog(r)" :aria-pressed="log && log.id === r.id">{% trans %}Delivery log{% endtrans %}</button>
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="rotate(r)" :disabled="busy">{% trans %}New secret{% endtrans %}</button>
+              <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="toggle(r)" :disabled="busy">
+                <span x-show="r.is_active">{% trans %}Disable{% endtrans %}</span>
+                <span x-show="!r.is_active">{% trans %}Enable{% endtrans %}</span>
+              </button>
+              <button class="action-link" @click="openEdit(r)" title="{{ _('Edit') }}" aria-label="{{ _('Edit') }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+              </button>
+              <button class="action-link danger" @click="confirmDelete(r)" title="{{ _('Delete') }}" aria-label="{{ _('Delete') }}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>
+              </button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Delivery log -->
+    <template x-if="log">
+      <div class="card sp-webhook-log" data-testid="repository-log">
+        <div class="sp-listcard-header">
+          <div>
+            <span class="sp-listcard-title">{% trans %}Delivery log{% endtrans %}</span>
+            <span class="sp-text-muted-xs-ml-sm" x-text="log.repo_full_name"></span>
+          </div>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="loadLog(offset)" :disabled="loadingLog">{% trans %}Refresh{% endtrans %}</button>
+        </div>
+        <template x-if="logError">
+          <div class="flash flash-error sp-webhook-notice"><span x-text="logError"></span></div>
+        </template>
+        <template x-if="!loadingLog && deliveries.length === 0 && !logError">
+          <div class="empty-state">
+            <h3>{% trans %}No deliveries yet{% endtrans %}</h3>
+            <p>{% trans %}Deliveries appear here once the forge sends its first webhook to this URL.{% endtrans %}</p>
+          </div>
+        </template>
+        <template x-if="deliveries.length > 0">
+          <div class="sp-webhook-log-scroll">
+            <table class="version-table">
+              <thead>
+                <tr>
+                  <th>{% trans %}Time{% endtrans %}</th>
+                  <th>{% trans %}Event{% endtrans %}</th>
+                  <th>{% trans %}Status{% endtrans %}</th>
+                  <th>{% trans %}Details{% endtrans %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <template x-for="d in deliveries" :key="d.id">
+                  <tr>
+                    <td><span class="sp-webhook-time" x-text="formatTime(d.received_at)" :title="d.delivery_id"></span></td>
+                    <td><span x-text="d.event"></span></td>
+                    <td><span :class="statusClass(d.status)" x-text="statusLabel(d.status)"></span></td>
+                    <td><span class="sp-repo-detail" x-text="d.detail || ''"></span></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </template>
+        <div class="sp-webhook-pager" x-show="hasNewer || hasOlder">
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="newer()" :disabled="!hasNewer || loadingLog">{% trans %}Newer{% endtrans %}</button>
+          <span x-text="(offset + 1) + '–' + (offset + deliveries.length) + ' / ' + total"></span>
+          <button class="sp-btn sp-btn-ghost sp-btn-sm" @click="older()" :disabled="!hasOlder || loadingLog">{% trans %}Older{% endtrans %}</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- Create / Edit Modal -->
+    <template x-if="showModal">
+      <div class="sp-scrim open" @click.self="showModal = false" x-cloak>
+        <div class="sp-modal">
+          <div class="sp-modal-header">
+            <h2 x-text="editing ? i18n.editRepository : i18n.newRepository"></h2>
+            <button class="sp-modal-close" @click="showModal = false" aria-label="{{ _('Close') }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <template x-if="error">
+              <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
+            </template>
+            <div class="form-group">
+              <label class="form-label" for="repository-provider">{% trans %}Provider{% endtrans %}</label>
+              <select class="form-input" id="repository-provider" x-model="form.provider" :disabled="editing !== null">
+                <template x-for="p in providers" :key="p">
+                  <option :value="p" x-text="providerLabel(p)" :selected="p === form.provider"></option>
+                </template>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="repository-name">{% trans %}Repository{% endtrans %}</label>
+              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository">
+              <div class="form-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="repository-url">{% trans %}Repository URL{% endtrans %}</label>
+              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="repository-scope">{% trans %}Issues commits may link to{% endtrans %}</label>
+              <select class="form-input" id="repository-scope" x-model="form.scope">
+                <option value="project">{% trans %}This project{% endtrans %}</option>
+                <option value="project_and_subprojects">{% trans %}This project and its subprojects{% endtrans %}</option>
+              </select>
+              <div class="form-hint">{% trans %}Keys of other projects in commit messages are ignored.{% endtrans %}</div>
+            </div>
+            <fieldset class="sp-repo-options" data-testid="repository-options">
+              <legend class="form-label">{% trans %}Changes to issues{% endtrans %}</legend>
+              <div class="sp-repo-warning" role="note">{% trans %}Commit commands trust the commit author email, which anyone with push access can set to any address. With commands on, anyone who can push to this repository can act as any project member whose verified email they use.{% endtrans %}</div>
+              <label class="sp-repo-check">
+                <input type="checkbox" x-model="form.commands_enabled" @change="onCommandsChange()" data-testid="repository-commands">
+                <span>{% trans %}Commit commands{% endtrans %}</span>
+              </label>
+              <div class="form-hint">{% trans %}"Fixes KEY-12" in a commit on the default branch moves the issue to the fixing status, as the Specivo user whose verified email wrote the commit. Their permissions and the workflow apply.{% endtrans %}</div>
+              <div class="form-group sp-repo-sub" x-show="form.commands_enabled">
+                <label class="form-label" for="repository-fixing-status">{% trans %}Fixing status{% endtrans %}</label>
+                <select class="form-input" id="repository-fixing-status" x-model="form.fixing_status_id">
+                  <option value="">{% trans %}Do not change the status{% endtrans %}</option>
+                  <template x-for="st in statuses" :key="st.id">
+                    <option :value="st.value" x-text="st.name" :selected="st.value === form.fixing_status_id"></option>
+                  </template>
+                </select>
+              </div>
+              <label class="sp-repo-check sp-repo-sub" x-show="form.commands_enabled">
+                <input type="checkbox" x-model="form.time_logging_enabled" data-testid="repository-time-logging">
+                <span>{% trans %}Time logging{% endtrans %}</span>
+              </label>
+              <div class="form-hint sp-repo-sub" x-show="form.commands_enabled">{% trans %}"KEY-12 @1h30m" (also @2h, @90m, @1.5h) logs the time on the issue for the commit's author, on any branch. They need permission to log time.{% endtrans %}</div>
+
+              <label class="sp-repo-check">
+                <input type="checkbox" x-model="form.merge_automation_enabled" data-testid="repository-merge-automation">
+                <span>{% trans %}Merge automation{% endtrans %}</span>
+              </label>
+              <div class="form-hint">{% trans %}When a pull or merge request that says "Fixes KEY-12" is merged into the default branch, the issue moves to the merge status. The change is made by Git, with the project role chosen here, and follows the workflow.{% endtrans %}</div>
+              <div class="sp-repo-sub" x-show="form.merge_automation_enabled">
+                <div class="form-group">
+                  <label class="form-label" for="repository-merge-status">{% trans %}Merge status{% endtrans %}</label>
+                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" data-testid="repository-merge-status">
+                    <option value="">{% trans %}Choose a status{% endtrans %}</option>
+                    <template x-for="st in statuses" :key="st.id">
+                      <option :value="st.value" x-text="st.name" :selected="st.value === form.merge_status_id"></option>
+                    </template>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="repository-git-role">{% trans %}Role of Git in this project{% endtrans %}</label>
+                  <select class="form-input" id="repository-git-role" x-model="form.automation_role_id" :disabled="!canPickRole">
+                    <template x-for="role in roles" :key="role.id">
+                      <option :value="role.value" x-text="role.name" :selected="role.value === form.automation_role_id"></option>
+                    </template>
+                  </select>
+                  <div class="form-hint">{% trans %}The Automation role may edit issues but has no workflow transitions until an administrator grants them. Changing the role needs permission to manage members.{% endtrans %}</div>
+                </div>
+              </div>
+
+              <label class="sp-repo-check">
+                <input type="checkbox" x-model="form.ignore_external_pull_requests" data-testid="repository-ignore-external">
+                <span>{% trans %}Ignore pull requests from forks and outsiders{% endtrans %}</span>
+              </label>
+              <div class="form-hint">{% trans %}Requests from another repository, or on GitHub by someone who is not a collaborator, are not linked to issues until they are merged.{% endtrans %}</div>
+            </fieldset>
+            <template x-if="!editing">
+              <div class="form-hint">{% trans %}A webhook URL and a secret are generated and shown once after the repository is connected.{% endtrans %}</div>
+            </template>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="!canSave" data-testid="repository-save">
+              <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
+              <span x-show="!saving" x-text="editing ? i18n.saveChanges : i18n.createRepository"></span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- Delete confirmation modal -->
+    <template x-if="showDeleteModal">
+      <div class="sp-scrim open" @click.self="showDeleteModal = false" x-cloak>
+        <div class="sp-modal sp-modal--xs">
+          <div class="sp-modal-header">
+            <h2>{% trans %}Disconnect repository{% endtrans %}</h2>
+            <button class="sp-modal-close" @click="showDeleteModal = false" aria-label="{{ _('Close') }}">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-18"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div class="sp-modal-body">
+            <p class="sp-modal-lead">{% trans %}Disconnect this repository? Its webhook URL stops working and its delivery log is deleted. Commit notes already on issues stay.{% endtrans %} <strong x-text="deleting?.repo_full_name"></strong></p>
+          </div>
+          <div class="sp-modal-footer">
+            <button class="sp-btn sp-btn-ghost" @click="showDeleteModal = false">{% trans %}Cancel{% endtrans %}</button>
+            <button class="sp-btn sp-btn-danger" @click="doDelete()" :disabled="busy">{% trans %}Disconnect{% endtrans %}</button>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Branch names (Repositories tab) -->
+  <div x-show="tab === 'repositories'" x-cloak x-data='projectBranchName({ projectKey: {{ project.key | tojson }}, settings: {{ branch_name_data | tojson }}, trackers: {{ trackers_data | tojson }}, i18n: {{ {
+    "saved": _("Saved"),
+    "saveFailed": _("Could not save the branch name settings."),
+    "connectFailed": _("Unable to connect.")
+  } | tojson }} })'>
+    <div class="card sp-branch-settings" data-testid="branch-name-settings">
+      <div class="sp-listcard-header">
+        <span class="sp-listcard-title">{% trans %}Branch names{% endtrans %}</span>
+      </div>
+      <p class="form-hint">{% trans %}The "Copy branch name" button on an issue builds the name from this format. {key} is the issue key and must be there; {type} comes from the tracker; {slug} is the subject in lower case, at most 40 characters. Branches named this way link their commits to the issue.{% endtrans %}</p>
+      <div class="form-group">
+        <label class="form-label" for="branch-name-format">{% trans %}Format{% endtrans %}</label>
+        <input class="form-input sp-branch-format" id="branch-name-format" type="text" maxlength="100" x-model="format" placeholder="{type}/{key}-{slug}">
+        <div class="form-hint">{% trans %}Example:{% endtrans %} <code x-text="preview"></code></div>
+      </div>
+      <div class="sp-branch-types">
+        <template x-for="t in trackers" :key="t.name">
+          <div class="form-group">
+            <label class="form-label" :for="'branch-type-' + t.name" x-text="t.name"></label>
+            <input class="form-input" type="text" maxlength="30" :id="'branch-type-' + t.name" x-model="t.type" :placeholder="defaultType">
+          </div>
+        </template>
+        <div class="form-group">
+          <label class="form-label" for="branch-type-default">{% trans %}Other trackers{% endtrans %}</label>
+          <input class="form-input" id="branch-type-default" type="text" maxlength="30" x-model="defaultType">
+        </div>
+      </div>
+      <template x-if="error">
+        <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
+      </template>
+      <div class="sp-branch-actions">
+        <span class="sp-branch-saved" role="status" aria-live="polite" x-text="message"></span>
+        <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving" data-testid="branch-name-save">{% trans %}Save{% endtrans %}</button>
+      </div>
+    </div>
   </div>
 
   <!-- Search tab -->

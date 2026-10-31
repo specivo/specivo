@@ -156,6 +156,21 @@ async def second_user(db_session: AsyncSession) -> User:
 
 
 @pytest_asyncio.fixture
+async def second_user_member(db_session: AsyncSession, second_user: User, project: Project) -> User:
+    """``second_user`` as a member who can see the project's issues, so notifications reach them."""
+    from specivo.models.member import Member, MemberRole
+    from specivo.models.role import Role
+
+    role = Role(name="Trb Viewer", permissions=["view_issues"], builtin=0, issues_visibility="default")
+    member = Member(user_id=second_user.id, project_id=project.id)
+    db_session.add_all([role, member])
+    await db_session.flush()
+    db_session.add(MemberRole(member_id=member.id, role_id=role.id))
+    await db_session.commit()
+    return second_user
+
+
+@pytest_asyncio.fixture
 async def second_token(second_user: User, client: AsyncClient) -> str:
     return await _login(client, second_user.login)
 
@@ -375,6 +390,7 @@ async def test_mentions_work_without_pro(
     admin_user: User,
     admin_token: str,
     second_user: User,
+    second_user_member: User,
     project: Project,
     tracker: Tracker,
     open_status: IssueStatus,
@@ -428,6 +444,7 @@ async def test_in_app_notifications_created_without_pro(
     admin_user: User,
     admin_token: str,
     second_user: User,
+    second_user_member: User,
     project: Project,
     tracker: Tracker,
     open_status: IssueStatus,

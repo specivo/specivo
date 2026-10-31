@@ -332,6 +332,17 @@ class NestedSetService:
             return False
         return issue.lft < potential_descendant.lft and potential_descendant.rgt < issue.rgt
 
+    async def _subtree_height(self, session: AsyncSession, issue: Issue) -> int:
+        """Return how many levels lie below *issue* (0 for a leaf), from one descendants query."""
+        open_rgts: list[int] = []
+        height = 0
+        for node in await self.get_descendants(session, issue):
+            while open_rgts and open_rgts[-1] < node.lft:
+                open_rgts.pop()
+            open_rgts.append(node.rgt)
+            height = max(height, len(open_rgts))
+        return height
+
     async def is_descendant_of(self, session: AsyncSession, issue: Issue, potential_ancestor: Issue) -> bool:
         """Check if issue is a descendant of potential_ancestor."""
         return await self.is_ancestor_of(session, potential_ancestor, issue)
@@ -346,7 +357,8 @@ class NestedSetService:
         Raises ValidationError if:
         - parent is the issue itself (self-reference)
         - parent is a descendant of issue (would create a cycle)
-        - the resulting depth would exceed MAX_DEPTH
+        - the resulting depth of the issue or of its deepest descendant
+          (the subtree moves with it) would exceed MAX_DEPTH
         """
         if parent.id == issue.id:
             raise ValidationError(
@@ -363,8 +375,9 @@ class NestedSetService:
 
         # Check max depth
         ancestors = await self.get_ancestors(session, parent)
-        # New depth = parent's depth + 1 (parent's ancestors + parent itself)
-        new_depth = len(ancestors) + 1
+        # New depth = parent's depth + 1 (parent's ancestors + parent itself),
+        # plus the height of the subtree that moves along
+        new_depth = len(ancestors) + 1 + await self._subtree_height(session, issue)
         if new_depth >= MAX_DEPTH:
             raise ValidationError(
                 message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",

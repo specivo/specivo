@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, Query, Request, status
@@ -15,21 +16,27 @@ from specivo.models.user import User
 from specivo.schemas.common import IdName
 from specivo.schemas.time_entry import (
     ActivityOut,
+    ReplacedTimerOut,
     TimeEntryCreate,
     TimeEntryListResponse,
     TimeEntryOut,
     TimeEntryUpdate,
     TimerOut,
+    TimerStartOut,
     TimerStartRequest,
     TimerStopRequest,
 )
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
+from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 from specivo.services.time_entry_service import TimeEntryService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["time-entries"])
 _service = TimeEntryService()
 _project_service = ProjectService()
+_audit = SecurityAuditService()
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +244,7 @@ async def get_timer(
 
 @router.post(
     "/timer/start/",
-    response_model=TimerOut,
+    response_model=TimerStartOut,
     status_code=status.HTTP_201_CREATED,
 )
 async def start_timer(
@@ -245,13 +252,16 @@ async def start_timer(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
-) -> TimerOut:
-    """Start a timer. Auto-stops existing timer if any.
+) -> TimerStartOut:
+    """Start a timer. A timer already running is stopped first.
 
     Requires ``log_time`` in the project (404 for a project or issue the
-    caller cannot see, 403 without the permission).
+    caller cannot see, 403 without the permission). The running timer's time
+    is logged with the default activity, or the timer is discarded when the
+    caller may no longer log time where it ran; ``replaced`` says which
+    (``None`` when no timer was running).
     """
-    timer = await _service.start_timer(
+    timer, replaced = await _service.start_timer_replacing(
         db,
         current_user,
         project_id=data.project_id,
@@ -259,7 +269,18 @@ async def start_timer(
         comments=data.comments,
         request=request,
     )
-    return _timer_out(timer)
+    replaced_out = None
+    if replaced is not None:
+        replaced_out = ReplacedTimerOut(
+            outcome="logged" if replaced.entry is not None else "discarded",
+            project_id=replaced.project_id,
+            project_key=replaced.project_key,
+            issue_id=replaced.issue_id,
+            issue_key=replaced.issue_key,
+            hours=replaced.entry.hours if replaced.entry is not None else None,
+            entry_id=replaced.entry.id if replaced.entry is not None else None,
+        )
+    return TimerStartOut(**_timer_out(timer).model_dump(), replaced=replaced_out)
 
 
 @router.post(
@@ -278,7 +299,38 @@ async def stop_timer(
     Permissions are checked again: a timer the caller may no longer log is
     discarded and the request refused (404 or 403).
     """
-    entry = await _service.stop_timer(db, current_user, data.activity_id, request=request)
+    entry = await _service.stop_timer(db, current_user, data.activity_id, data.comments, request=request)
     entry = await _service.get_by_id(db, entry.id)
     await db.commit()  # commit before response to avoid reload race condition
     return _entry_out(entry)
+
+
+@router.post(
+    "/timer/discard/",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def discard_timer(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Discard the current timer without logging time; 404 when none runs.
+
+    Only the caller's own timer is ever touched. The discard is recorded in
+    the security audit log.
+    """
+    timer = await _service.discard_timer(db, current_user)
+    elapsed = int((utcnow() - timer.started_at).total_seconds())
+    try:
+        await _audit.log_event(
+            session=db,
+            event_type=AuditEvent.TIMER_DISCARDED,
+            user_id=current_user.id,
+            project_id=timer.project_id,
+            resource_type="active_timer",
+            resource_id=timer.id,
+            details={"issue_id": timer.issue_id, "elapsed_seconds": max(0, elapsed)},
+            request=request,
+        )
+    except Exception:
+        logger.warning("Audit write failed for a discarded timer", exc_info=True)

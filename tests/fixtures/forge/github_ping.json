@@ -1,0 +1,28 @@
+{
+  "zen": "Keep it logically awesome.",
+  "hook_id": 30,
+  "hook": {
+    "type": "Repository",
+    "id": 30,
+    "name": "web",
+    "active": true,
+    "events": ["push"],
+    "config": {
+      "content_type": "json",
+      "insecure_ssl": "0",
+      "url": "https://specivo.example.com/hooks/github/00000000-0000-0000-0000-000000000000/"
+    }
+  },
+  "repository": {
+    "id": 186853002,
+    "name": "widgets",
+    "full_name": "example-org/widgets",
+    "html_url": "https://github.example.com/example-org/widgets",
+    "default_branch": "main"
+  },
+  "sender": {
+    "login": "alex-example",
+    "id": 21031067,
+    "type": "User"
+  }
+}

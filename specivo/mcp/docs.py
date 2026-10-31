@@ -16,17 +16,18 @@ if TYPE_CHECKING:
 _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_whoami": "Return authenticated user identity (user_id, login, etc.)",
     "specivo_list_projects": "List all visible projects",
-    "specivo_list_issues": "List issues (with their tags) with status/sprint/metadata filters, sorting, pagination",
-    "specivo_show_issue": "Show issue details incl. tags; use search= for section extraction",
-    "specivo_create_issue": "Create an issue (call list_lookups first for IDs)",
-    "specivo_update_issue": "Update issue fields; lock_version handled automatically",
+    "specivo_list_issues": "List issues (with tags); filter by status/sprint/metadata/parent, sort, paginate",
+    "specivo_show_issue": "Issue details incl. parent, children, tags, commits, pull requests; search= for a section",
+    "specivo_create_issue": "Create an issue, optionally with parent_ref and tags (call list_lookups first for IDs)",
+    "specivo_update_issue": "Update issue fields or re-parent (parent_ref); lock_version handled automatically",
+    "specivo_move_issue": "Move an issue to another project (new KEY-N; the old ref still resolves)",
     "specivo_edit_description": "Search-and-replace in issue description (token-efficient)",
     "specivo_add_comment": "Add a journal comment to an issue",
     "specivo_list_comments": "List comments on an issue, paginated; include_changes=true adds named field changes",
     "specivo_search": "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'",
     "specivo_list_wiki_pages": "List wiki pages for a project",
     "specivo_read_wiki": "Read a wiki page by slug",
-    "specivo_create_wiki": "Create a new wiki page (slug auto-derived from title)",
+    "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
     "specivo_delete_wiki": "Soft-delete a wiki page (moves to trash)",
     "specivo_restore_wiki": "Restore a wiki page from trash",
@@ -40,19 +41,34 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_create_metadata_schema": "Create a metadata schema (manage_project; audited)",
     "specivo_update_metadata_schema": "Patch a metadata schema (manage_project; audited)",
     "specivo_delete_metadata_schema": "Delete a metadata schema, safe-delete (manage_project; audited)",
+    "specivo_metadata": "Get, set or delete one metadata key on an issue or wiki page",
+    "specivo_list_tags": "List a project's tags with usage counts -- call before tagging and reuse names",
+    "specivo_tag": "Get, add, remove or set the tags on an issue (ACME-12) or wiki page (wiki:ACME/<slug>)",
+    "specivo_create_tag": "Create a project tag with an optional color (manage_project)",
+    "specivo_update_tag": "Rename or recolor a tag (manage_project)",
+    "specivo_delete_tag": "Delete a tag and detach it everywhere (manage_project)",
     "specivo_list_relations": "List relations for an issue",
     "specivo_add_relation": "Create a relation between two issues",
     "specivo_remove_relation": "Remove a relation by ID",
     "specivo_log_time": "Log time against a project or issue",
+    "specivo_timer": "Your own timer: op='get', 'start' (issue_ref), 'stop' (activity, comments) or 'discard'",
     "specivo_list_versions": "List versions/milestones",
+    "specivo_list_version_issues": "List the issues of a version, or unversioned issues (version_id=0)",
     "specivo_create_version": "Create a version/milestone",
     "specivo_update_version": "Update a version/milestone",
     "specivo_delete_version": "Delete a version (fails if issues reference it)",
     "specivo_list_sprints": "List sprints/iterations for a project",
+    "specivo_list_sprint_issues": "List the issues of a sprint, or backlog issues (sprint_id=0)",
     "specivo_create_sprint": "Create a new sprint (starts as planned)",
     "specivo_update_sprint": "Update sprint name, goal, or dates",
     "specivo_start_sprint": "Start a planned sprint (one active per project)",
     "specivo_complete_sprint": "Complete an active sprint with velocity snapshot",
+    "specivo_list_recurring_patterns": "List recurring task patterns with rule and next occurrence",
+    "specivo_create_recurring_pattern": "Create a recurring task pattern that generates issues on a schedule",
+    "specivo_update_recurring_pattern": "Update a recurring task pattern",
+    "specivo_delete_recurring_pattern": "Delete a recurring task pattern",
+    "specivo_skip_recurrence_occurrence": "Skip one scheduled occurrence of a recurring pattern",
+    "specivo_list_recurrence_occurrences": "Preview upcoming occurrences of a recurring pattern",
     "specivo_setup_guide": "Return this setup guide",
 }
 
@@ -86,7 +102,9 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 
 ### Find context before coding
 1. `specivo_search(query, project_key)` -- relevant issues/wiki (default `mode="hybrid"`)
-2. `specivo_show_issue(issue_ref)` -- read issue details (includes `Tags:` and `Comments: N`)
+2. `specivo_show_issue(issue_ref)` -- read issue details (includes `Parent:`, `Children:`, `Tags:` and
+   `Comments: N`, and `Commits: N` with the newest linked commits and `Pull requests: N` with their state
+   when a connected repository referenced the issue)
 3. `specivo_list_comments(issue_ref)` -- page through comment history when `Comments: N` > 0
 4. `specivo_read_wiki(project_key, slug)` -- read knowledge base
 
@@ -106,10 +124,36 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 2. `specivo_list_members(project_key)` -- get assigned_to_id
 3. `specivo_create_issue(project_key, tracker_id, subject, ...)`
 
+### Sub-issues (parent and children)
+- `specivo_create_issue(..., parent_ref="ACME-12")` -- create a child of `ACME-12`
+- `specivo_update_issue(issue_ref, parent_ref="ACME-7")` -- re-parent; `parent_ref=""` makes it top-level;
+  omit `parent_ref` to leave the parent alone
+- `specivo_list_issues(project_key, parent_ref="ACME-12")` -- the direct children
+- Use a parent for "part of" structure, not a `relates` relation. Cycles and the depth limit are refused
+  with an error and nothing changes.
+
+### Tags
+Tags are flat labels shared by a project's issues and wiki pages; agents and people filter by them.
+1. `specivo_list_tags(project_key)` -- read the existing vocabulary first and reuse its names:
+   `add` creates any name it does not know, so a typo or a synonym becomes a new tag.
+2. Use a few short, lowercase, hyphenated tags (`backend`, `needs-review`), not sentences.
+3. Tag at creation: `specivo_create_issue(..., tags=["backend"])` or
+   `specivo_create_wiki(..., tags=["runbook"])` -- one call, like `metadata`.
+4. Tag later: `specivo_tag("ACME-12", op="add", value=["backend", "needs-review"])`, or
+   `specivo_tag("wiki:ACME/<slug>", op="add", value="runbook")` for a wiki page.
+   `op="remove"` detaches, `op="set"` replaces the full set, `op="get"` reads them.
+
 ### Update issue when done
 1. `specivo_list_lookups()` -- get status_id for resolved/closed
 2. `specivo_update_issue(issue_ref, status_id=N, done_ratio=100, notes="...")`
 3. `specivo_log_time(project_key, hours, activity_id, issue_ref)`
+
+### Time work with the timer
+1. `specivo_timer(op="start", issue_ref="ACME-12")` -- one timer per user; a running one is stopped
+   and logged first (the reply gives its entry ID)
+2. `specivo_timer(op="get")` -- what runs and for how long
+3. `specivo_timer(op="stop", activity="Development", comments="...")` -- logs the time (activity name
+   or ID; the default activity when omitted), or `op="discard"` to drop it without logging
 
 ### Patch description or wiki
 1. `specivo_show_issue(issue_ref, search="keyword")` -- find exact text
@@ -123,6 +167,23 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 ### Read and update specific wiki sections
 1. `specivo_read_wiki_section(project_key, slug, heading="## Design")` -- read one section
 2. `specivo_replace_wiki_section(project_key, slug, heading="## Design", text="...")` -- replace body
+
+### Diagrams (Mermaid)
+Issue descriptions, comments and wiki pages are Markdown, and a fenced block with the `mermaid`
+language renders as a diagram (flowchart, sequence, class, state, ER, Gantt and the other Mermaid
+types). Use it instead of ASCII art for architecture, flows and state machines:
+
+````
+```mermaid
+flowchart LR
+    Push[git push] --> Hook[Specivo webhook] --> Issue[ACME-12 moves to Resolved]
+```
+````
+
+Diagrams render with Mermaid's strict security level: HTML labels, `click` callbacks and
+`%%{{init}}%%` overrides of security or theme settings are ignored, so keep labels plain text. A
+diagram that fails to parse shows its source and an error instead, so check the syntax. The source
+stays in the text, so search, `specivo_read_wiki` and `specivo_show_issue` return it unchanged.
 
 ### Filter issues by metadata
 `specivo_list_issues` accepts `metadata_filters=["key=value", ...]`. Pairs are
@@ -184,8 +245,8 @@ the security audit log. Notable cases:
   audit event tagged with `source=mcp`.
 - Issue and wiki mutations require the matching `add_*` / `edit_*`
   permission and emit `ISSUE_*` / `WIKI_*` audit events.
-- `specivo_log_time` requires **`log_time`** on the project. Reading logged
-  time needs **`view_time_entries`**; the seeded Agent role has both.
+- `specivo_log_time` and `specivo_timer` (`start`, `stop`) require **`log_time`** on the project.
+  Reading logged time needs **`view_time_entries`**; the seeded Agent role has both.
 - `specivo_create_issue` follows the tracker's private-by-default setting
   unless `is_private` is passed, which needs **`set_issues_private`**.
 
@@ -201,6 +262,10 @@ in the project security log.
 - Do NOT call `log_time` without a valid `activity_id` from `list_lookups`.
 - Do NOT use `X-Api-Key` or `?key=` for REST API auth -- only `Authorization: Bearer spv_...` works.
 - Do NOT omit the trailing slash on REST API URLs -- FastAPI requires it.
+- Do NOT write tags or other tracked properties (status, assignee, metadata) into an issue description
+  or wiki page -- no YAML frontmatter, no `> **Tags**: ...` line. Use `tags=` / `specivo_tag`,
+  `specivo_update_issue` and `metadata=` / `specivo_metadata`; text in the body is not searchable as
+  a property and goes stale.
 {footer}"""
 
 

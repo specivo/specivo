@@ -21,7 +21,12 @@
   extraParamKeys: {{ extra_param_keys | tojson }},
   callbackTemplate: {{ callback_template | tojson }},
   backchannelTemplate: {{ backchannel_template | tojson }},
+  scim: {{ scim | tojson }},
   i18n: {
+    scimFailed: {{ _("The SCIM settings could not be changed.") | tojson }},
+    scimConfirmRotate: {{ _("Replace the SCIM token? The current token stops working at once, until the new one is entered at the identity provider.") | tojson }},
+    scimConfirmRevoke: {{ _("Revoke the SCIM token? Provisioning stops until a new token is generated. Accounts and groups already provisioned stay.") | tojson }},
+    never: {{ _("Never") | tojson }},
     saved: {{ _("Saved.") | tojson }},
     savedSessionsEnded: {{ _("Saved. Sessions ended: {count}.") | tojson }},
     saveFailed: {{ _("Failed to save.") | tojson }},
@@ -52,7 +57,17 @@
       client_secret_unreadable: {{ _("The stored client secret cannot be read: enter it again.") | tojson }},
       client_secret_env_unset: {{ _("The client secret environment variable is not set.") | tojson }},
       client_secret_env_not_allowed: {{ _("The client secret environment variable name is not allowed.") | tojson }},
-      client_secret_missing: {{ _("No client secret is set.") | tojson }}
+      client_secret_missing: {{ _("No client secret is set.") | tojson }},
+      refresh_grant_not_advertised: {{ _("Session check is on, but the provider does not advertise the refresh_token grant.") | tojson }},
+      session_recheck_no_refresh_token: {{ _("The last sign-in returned no refresh token, so sessions are not checked at the provider. Some providers need the offline_access scope.") | tojson }},
+      session_recheck_refresh_refused: {{ _("The provider refused the refresh token right after sign-in, so sessions are not checked at the provider. Allow the refresh_token grant for this client.") | tojson }}
+    },
+    recheckStatus: {
+      ok: {{ _("Works: sessions are checked at the provider") | tojson }},
+      no_refresh_token: {{ _("Not available: the provider sent no refresh token") | tojson }},
+      refresh_refused: {{ _("Not available: the provider refused the refresh token") | tojson }},
+      unknown: {{ _("Not known yet: no sign-in since it was turned on") | tojson }},
+      off: {{ _("Off") | tojson }}
     }
   }
 })'>
@@ -95,6 +110,10 @@
         <dt>{% trans %}Client authentication{% endtrans %}</dt><dd x-text="listText(testResult.token_endpoint_auth_methods)"></dd>
         <dt>{% trans %}Back-channel logout{% endtrans %}</dt>
         <dd x-text="yesNo(testResult.backchannel_logout_supported)"></dd>
+        <dt>{% trans %}Refresh token grant{% endtrans %}</dt>
+        <dd x-text="yesNo(testResult.refresh_grant_advertised)"></dd>
+        <dt>{% trans %}Session check at the provider{% endtrans %}</dt>
+        <dd x-text="recheckText(testResult)" data-testid="sso-test-recheck"></dd>
         <dt>{% trans %}Signing keys{% endtrans %}</dt>
         <dd x-text="testResult.jwks_key_count === null ? '-' : testResult.jwks_key_count + ' (' + listText(testResult.jwks_key_ids) + ')'"></dd>
       </dl>
@@ -235,7 +254,7 @@
       <label class="form-label" for="sso-session-age">{% trans %}Maximum session length (hours){% endtrans %}</label>
       <input id="sso-session-age" class="form-input" type="number" min="1" max="168" x-model="form.session_max_age_hours">
       <div class="form-hint">{% trans %}After this, people sign in at the provider again.{% endtrans %}
-        {% trans %}At most 168 hours (one week). An account disabled at the provider keeps its Specivo session until then: turn on back-channel logout to end it at once.{% endtrans %}</div>
+        {% trans %}At most 168 hours (one week). With the session check below, an account disabled at the provider loses its Specivo session within minutes; without it, only back-channel logout ends it sooner.{% endtrans %}</div>
     </div>
   </div>
 
@@ -255,6 +274,9 @@
       <div class="form-group"><label class="form-label" for="sso-c-groups">{% trans %}Groups claim{% endtrans %}</label>
         <input id="sso-c-groups" class="form-input" type="text" x-model="form.groups_claim" placeholder="groups">
         <div class="form-hint">{% trans %}A dotted path, for example realm_access.roles.{% endtrans %}</div></div>
+      <div class="form-group"><label class="form-label" for="sso-c-scim-ext">{% trans %}SCIM externalId claim{% endtrans %}</label>
+        <input id="sso-c-scim-ext" class="form-input" type="text" x-model="form.scim_external_id_claim" placeholder="oid">
+        <div class="form-hint">{% trans %}Optional. Only a claim the provider guarantees to equal the externalId it sends over SCIM (Microsoft Entra ID: oid). It then connects a provisioned account at the first sign-in without a trusted email.{% endtrans %}</div></div>
     </div>
     <label class="sp-sso-check"><input type="checkbox" x-model="form.use_userinfo">
       <span>{% trans %}Also read claims from the userinfo endpoint{% endtrans %}</span></label>
@@ -278,7 +300,8 @@
     <label class="sp-sso-check"><input type="checkbox" x-model="form.sync_admin_flag">
       <span>{% trans %}Set the administrator flag from the administrator groups at every sign-in{% endtrans %}</span></label>
     <label class="sp-sso-check"><input type="checkbox" x-model="form.sync_groups">
-      <span>{% trans %}Update Specivo group memberships from the mappings below at every sign-in{% endtrans %}</span></label>
+      <span>{% trans %}Update Specivo group memberships from the mappings below at every sign-in{% endtrans %}
+        <span class="form-hint" x-show="scim && scim.enabled">{% trans %}Skipped while SCIM provisioning is on: the provider then manages group memberships through SCIM.{% endtrans %}</span></span></label>
     <label class="sp-sso-check"><input type="checkbox" x-model="form.deactivate_on_access_loss">
       <span>{% trans %}Deactivate the Specivo account when a sign-in is refused by the required groups or allowed email domains{% endtrans %}
         <span class="form-hint">{% trans %}Deactivation signs the user out everywhere and switches off their API keys. Without it, only the sessions started through this provider end.{% endtrans %}</span></span></label>
@@ -308,6 +331,26 @@
     {% endif %}
   </div>
 
+  {# --- Session check --- #}
+  <div class="card sp-sso-section">
+    <h2>{% trans %}Session check{% endtrans %}</h2>
+    <p class="sp-sso-section-intro">{% trans %}Specivo renews a session every few minutes. With the check on, it first asks the provider whether the person may still sign in, so someone disabled, deleted or signed out there loses their Specivo session within one renewal.{% endtrans %}</p>
+    <label class="sp-sso-check"><input type="checkbox" x-model="form.verify_session_at_idp">
+      <span>{% trans %}Check sessions at the provider when they are renewed{% endtrans %}
+        <span class="form-hint">{% trans %}Needs a refresh token from the provider. Providers that send none, or refuse it, keep the sessions as before: Test connection shows which.{% endtrans %}</span></span></label>
+    <p class="sp-mb-md" x-show="provider && form.verify_session_at_idp">
+      <span class="sp-sso-badge" :class="recheckBadgeClass" x-text="recheckText(provider)" data-testid="sso-recheck-status"></span>
+    </p>
+    <div class="form-group" x-show="form.verify_session_at_idp">
+      <label class="form-label" for="sso-check-failure">{% trans %}If the provider cannot be reached{% endtrans %}</label>
+      <select id="sso-check-failure" class="form-input" x-model="form.idp_check_failure">
+        <option value="allow">{% trans %}Keep the session and ask again at the next renewal{% endtrans %}</option>
+        <option value="deny">{% trans %}End the session{% endtrans %}</option>
+      </select>
+      <div class="form-hint">{% trans %}Ending sessions signs everybody from this provider out while it is down. Local sign-in keeps working.{% endtrans %}</div>
+    </div>
+  </div>
+
   {# --- Logout --- #}
   <div class="card sp-sso-section">
     <h2>{% trans %}Logout{% endtrans %}</h2>
@@ -316,9 +359,76 @@
     <label class="sp-sso-check"><input type="checkbox" x-model="form.backchannel_logout_enabled">
       <span>{% trans %}Accept back-channel logout from the provider{% endtrans %}
         <span class="form-hint">{% trans %}Register the back-channel logout URI above at the provider.{% endtrans %}</span></span></label>
+    <div class="form-group" x-show="form.backchannel_logout_enabled">
+      <label class="form-label" for="sso-backchannel-action">{% trans %}When the provider ends a session{% endtrans %}</label>
+      <select id="sso-backchannel-action" class="form-input" x-model="form.backchannel_action">
+        <option value="revoke_session">{% trans %}End the matching Specivo session{% endtrans %}</option>
+        <option value="revoke_all_sessions">{% trans %}End every session of that person from this provider{% endtrans %}</option>
+        <option value="deprovision">{% trans %}End all of their sessions and switch off their API keys{% endtrans %}</option>
+      </select>
+      <div class="form-hint">{% trans %}The provider sends the same message when someone signs out as when they are disabled. Switching off API keys applies only to accounts without a password, and never deactivates the account: a later sign-in works, but the keys stay off.{% endtrans %}</div>
+    </div>
   </div>
 
   {% if provider %}
+  {# --- Provisioning (SCIM) --- #}
+  <div class="card sp-sso-section" data-testid="sso-scim-section">
+    <h2>{% trans %}Provisioning (SCIM){% endtrans %}</h2>
+    <p class="sp-sso-section-intro">{% trans %}The provider creates, updates and deactivates Specivo accounts and groups through SCIM, so people exist before their first sign-in and lose access as soon as they are disabled at the provider.{% endtrans %}</p>
+
+    <label class="form-label">{% trans %}SCIM base URL{% endtrans %}</label>
+    <div class="sp-sso-copy sp-mb-md">
+      <code x-text="scim.base_url">{{ scim.base_url }}</code>
+      <button type="button" class="sp-btn-sm" @click="copy('scim')">
+        <span x-show="copied !== 'scim'">{% trans %}Copy{% endtrans %}</span>
+        <span x-show="copied === 'scim'">{% trans %}Copied{% endtrans %}</span>
+      </button>
+    </div>
+
+    <div class="sp-sso-report sp-mb-md">
+      <dl>
+        <dt>{% trans %}Token{% endtrans %}</dt>
+        <dd>
+          <span class="sp-sso-badge" :class="scim.token_configured ? 'sp-sso-badge-ok' : 'sp-sso-badge-off'"
+            x-text="scimTokenLabel"></span>
+        </dd>
+        <dt>{% trans %}Last request{% endtrans %}</dt>
+        <dd x-text="dateText(scim.last_request_at)" data-testid="sso-scim-last-request"></dd>
+        <dt>{% trans %}Provisioned users{% endtrans %}</dt><dd x-text="scim.user_count"></dd>
+        <dt>{% trans %}Provisioned groups{% endtrans %}</dt><dd x-text="scim.group_count"></dd>
+      </dl>
+    </div>
+
+    <template x-if="newToken">
+      <div class="sp-sso-token" data-testid="sso-scim-token">
+        <strong>{% trans %}Copy this token now and enter it at the provider. It is not shown again.{% endtrans %}</strong>
+        <div class="sp-sso-copy">
+          <code x-text="newToken"></code>
+          <button type="button" class="sp-btn-sm" @click="copy('token')">
+            <span x-show="copied !== 'token'">{% trans %}Copy{% endtrans %}</span>
+            <span x-show="copied === 'token'">{% trans %}Copied{% endtrans %}</span>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <label class="sp-sso-check">
+      <input type="checkbox" :checked="scim.enabled" :disabled="scimBusy || !scim.token_configured" @change="setScim($event.target.checked)" data-testid="sso-scim-enabled">
+      <span>{% trans %}Accept provisioning from this provider{% endtrans %}
+        <span class="form-hint" x-show="!scim.token_configured">{% trans %}Generate a token first.{% endtrans %}</span>
+        <span class="form-hint" x-show="provider && !provider.enabled" data-testid="sso-scim-provider-off">{% trans %}The provider is switched off: SCIM requests are refused until it is enabled again.{% endtrans %}</span></span></label>
+
+    <div class="sp-sso-actions">
+      <button type="button" class="sp-btn" @click="generateToken()" :disabled="scimBusy" x-show="!scim.token_configured">{% trans %}Generate token{% endtrans %}</button>
+      <button type="button" class="sp-btn" @click="generateToken()" :disabled="scimBusy" x-show="scim.token_configured">{% trans %}Rotate token{% endtrans %}</button>
+      <button type="button" class="sp-btn sp-btn-danger" @click="revokeToken()" :disabled="scimBusy" x-show="scim.token_configured">{% trans %}Revoke token{% endtrans %}</button>
+    </div>
+    <div x-show="scimError" class="sp-msg-danger-mb-sm" x-text="scimError"></div>
+
+    <p class="form-hint">{% trans %}Deactivating or deleting a person at the provider deactivates their Specivo account at once: every session ends and their API keys are switched off. The account itself stays, so issues and history keep their author. Administrators and service accounts are never deactivated through SCIM, and an account deactivated in Specivo is not reactivated by the provider.{% endtrans %}</p>
+    <p class="form-hint">{% trans %}An existing Specivo account with the same email is linked instead of a new one being created, except administrators, service accounts and accounts another provider manages.{% endtrans %}</p>
+  </div>
+
   <div class="sp-modal-overlay" x-show="showDelete" x-cloak
     @click.self="showDelete = false" @keydown.escape.window="showDelete = false">
     <div class="sp-modal sp-modal--sm" @click.stop>

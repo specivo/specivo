@@ -400,17 +400,21 @@ class ImportPipeline:
 
         Either way the session does not index content as it is written: the
         search backfill phase indexes everything once, after the references in
-        imported text have been rewritten.
+        imported text have been rewritten. Nor does it send outgoing webhook
+        events: an import is not a stream of user changes.
         """
         from specivo.services.search_index_service import defer_search_index
+        from specivo.services.webhook_events import suppress_webhook_events
 
         if shared is not None:
             defer_search_index(shared)
+            suppress_webhook_events(shared)
             yield shared
             return
 
         async with self._session_factory() as session:
             defer_search_index(session)
+            suppress_webhook_events(session)
             try:
                 yield session
                 await session.commit()

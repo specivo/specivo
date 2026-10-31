@@ -143,8 +143,8 @@ class ApiKeyService:
         - Without ``api_key_scopes``: scopes are silently ignored.
         """
         owner = (await session.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
-        if owner is not None and owner.is_anonymous:
-            raise AnonymousUserProtectedError("The anonymous user cannot hold API keys.")
+        if owner is not None and owner.is_system_principal:
+            raise AnonymousUserProtectedError("System accounts cannot hold API keys.")
         if owner is not None and await sso_api_keys_refused(session, owner):
             raise sso_api_keys_refused_error()
 
@@ -233,8 +233,9 @@ class ApiKeyService:
         # Per spec: locked accounts can still use API keys.
         # Locking is brute-force protection targeting password login.
         # Only deactivated accounts (admin action) block all auth methods. The
-        # anonymous user is refused explicitly as well: it never holds a key.
-        if user.is_anonymous or user.status == "deactivated":
+        # anonymous user and the other ``$`` system accounts are refused
+        # explicitly as well: they never hold a key.
+        if user.is_system_principal or user.status == "deactivated":
             raise AppError(
                 code="api_key_invalid",
                 message=_("Invalid API key"),

@@ -10,6 +10,7 @@ the password hasher and import source plugin hooks, and that the plugin contract
 the direct Redmine import (imports now go through bundles, see `docs/import-bundle/v1.md`); recorded the `sso_idp`
 marker.
 **Revised:** 2026-10-29 — recorded how an API key's project limit is enforced (§7).
+**Revised:** 2026-10-31 — recorded the SSO session check at the IdP and its session columns (§7).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -261,7 +262,7 @@ Implemented in `specivo.core.security`:
 **JWT specifics:**
 - Algorithm: HS256 (from `specivo.core.constants.JWT_ALGORITHM`).
 - Redis blocklist for revoked tokens (`jwt_blocklist:{jti}`).
-- `sid` claim = `refresh_tokens.session_id`. A session (one login) keeps its id across refresh rotation; rotation copies every session column (`session_id`, `auth_method`, `user_identity_id`, `idp_sid`, `id_token_encrypted`, `absolute_expires_at`) and refuses to refresh past `absolute_expires_at`.
+- `sid` claim = `refresh_tokens.session_id`. A session (one login) keeps its id across refresh rotation; rotation copies every session column (`session_id`, `auth_method`, `user_identity_id`, `idp_sid`, `id_token_encrypted`, `idp_refresh_token_encrypted`, `idp_checked_at`, `absolute_expires_at`) and refuses to refresh past `absolute_expires_at`. An SSO session is renewed only after its IdP accepted the stored refresh token (`specivo.services.sso.session_check`, at most once per `SSO_IDP_RECHECK_MINUTES`); that token is sealed for the issuer, token endpoint and client that issued it and is never sent anywhere else. The IdP is asked before the session is locked, with the read transaction already committed (no pooled connection, advisory lock or claimed row is held during network I/O), under a Redis guard per refresh row (`sso_idp_recheck:{row id}`) so the IdP's refresh token is presented once; its answer is applied only after the row was claimed. Never call an external service while holding the session lock.
 - Session revocation goes through one primitive, `SessionService.revoke(db, session_ids, reason=...)` (`specivo.services.session_service`): it deletes the session's refresh rows and sets `revoked_session:{sid}` in Redis for one access-token lifetime, so the session's access tokens are refused on the next request. Logout (web and API), logout-all, `DELETE /auth/sessions/{id}` and the password-change sweep use it; `revoke_user_sessions`, `revoke_by_idp_sid` and `revoke_by_identity` cover bulk and SSO cases. Do not delete `refresh_tokens` rows directly to end a session. Refresh and revocation both take a per-session advisory lock (`SessionService.lock_sessions`); refresh claims the old row with `DELETE ... RETURNING` and is refused when that finds nothing or when `revoked_session:{sid}` is set (fail closed). Sign-out acts on an access token's `sid` only if the token is unexpired or belongs to the user of the refresh token presented with it.
 - `_authenticate_jwt` checks `jwt_blocklist:{jti}` and `revoked_session:{sid}` in one `EXISTS`. A token without `sid` (minted before the claim existed) is checked by `jti` only and stays valid until it expires.
 - Fail-closed on Redis unavailability (denies JWT auth, API key auth remains available).
@@ -404,7 +405,7 @@ Human-readable format in debug mode. `request_id` is propagated from the `Reques
 
 Celery + Redis for background jobs in `specivo/tasks/`. Constants in `specivo.core.constants`:
 - `CELERY_MAX_RETRIES = 3`
-- Per-task retry delays: email 60s, webhook 30s, embedding 30s, link graph 15s.
+- Per-task retry delays: email 60s, embedding 30s, link graph 15s. Outgoing webhook deliveries retry on their own schedule (`WEBHOOK_*` constants, see `specivo.services.webhook_delivery`).
 
 Task types: email notifications, webhook delivery, embedding generation, wiki link graph updates, partition management.
 

@@ -329,10 +329,11 @@ async def _authenticate_jwt(token: str, db: AsyncSession) -> User:
             status_code=401,
         )
 
-    # Nobody signs in as the anonymous user, so no genuine token names it.
-    # Refused explicitly rather than through its deactivated status below,
+    # Nobody signs in as the anonymous user or another ``$`` system account
+    # such as ``$git``, so no genuine token names one. Refused explicitly
+    # rather than through the anonymous user's deactivated status below,
     # which this check must not depend on.
-    if user.is_anonymous:
+    if user.is_system_principal:
         raise AppError(
             code="auth_token_invalid",
             message="Invalid access token",
@@ -521,11 +522,11 @@ async def authenticate_request(
             raw_key=token,
             client_ip=client_ip,
         )
-        # No API key can name the anonymous row: it has no password, it is
-        # deactivated, and ApiKeyService refuses deactivated users. Refused
-        # again here so that "get_current_user never returns the anonymous
-        # principal" does not quietly depend on all three staying true.
-        if user.is_anonymous:
+        # No API key can name the anonymous row or another ``$`` system
+        # account: ApiKeyService refuses to create or accept one. Refused again
+        # here so that "get_current_user never returns a system principal"
+        # does not quietly depend on that staying true.
+        if user.is_system_principal:
             raise AppError(code="api_key_invalid", message="Invalid API key", status_code=401)
 
         # A project-limited key reaches only its projects for the rest of the

@@ -36,6 +36,7 @@ from specivo.web.deps import (
 from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
+    from specivo.models.issue import Issue
     from specivo.models.user import User
 
 router = APIRouter(tags=["web-issues"], include_in_schema=False)
@@ -108,6 +109,21 @@ async def _resolve_issue_project_for_reader(
     except (NotFoundError, AnonymousAccessDeniedError):
         return None
     return project, issue
+
+
+def _retired_ref_redirect(request: Request, issue_ref: str, issue: Issue, suffix: str = "") -> Response | None:
+    """Redirect a retired ``KEY-N`` (project renamed, issue moved) to the issue's current URL.
+
+    Only called once the issue is resolved and visible, so it tells the
+    reader nothing a 404 would not. The query string is kept.
+    """
+    current = issue.display_key
+    if "-" not in issue_ref or issue_ref.upper() == current:
+        return None
+    url = f"/issue/{current}/{suffix}"
+    if request.url.query:
+        url = f"{url}?{request.url.query}"
+    return RedirectResponse(url, status_code=302)
 
 
 async def _get_lookups(db: AsyncSession) -> dict:
@@ -334,6 +350,8 @@ async def issue_detail(
     if resolved is None:
         return refuse_anonymous_web(request)
     project, issue = resolved
+    if redirect := _retired_ref_redirect(request, issue_ref, issue):
+        return redirect
 
     from specivo.core.constants import ACTIVITY_DEFAULT_PER_PAGE, ACTIVITY_PER_PAGE_OPTIONS
     from specivo.schemas.metadata_schema import MetadataSchemaOut
@@ -502,6 +520,22 @@ async def issue_detail(
     # Relations count (list already loaded via gather above)
     relation_count = len(relations)
 
+    # Branch name and development activity. Neither is shown to a visitor
+    # without an account: commit authors and forge logins are not theirs to read.
+    branch_name = None
+    development = None
+    if not anonymous:
+        from specivo.services.branch_name import BranchNameSettings, make_branch_name
+        from specivo.services.repository_service import development_for_issue
+
+        branch_name = make_branch_name(
+            BranchNameSettings.from_project_settings(project.settings),
+            tracker_name=issue.tracker.name if issue.tracker else "",
+            display_key=issue.display_key,
+            subject=issue.subject,
+        )
+        development = await development_for_issue(db, issue.id)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -522,6 +556,8 @@ async def issue_detail(
             "reactions_by_journal": reactions_by_journal,
             **tab_ctx,
             "relation_count": relation_count,
+            "branch_name": branch_name,
+            "development": development,
             "current_sprint": current_sprint,
             "relations": relations,
             "can_manage_relations": can_manage_relations,
@@ -563,6 +599,8 @@ async def issue_edit_form(
     user = cast("User", user_obj)
 
     project, issue = await _resolve_issue_project(db, issue_ref, user)
+    if redirect := _retired_ref_redirect(request, issue_ref, issue, "edit/"):
+        return redirect
 
     lookups = await _get_lookups(db)
     members = await _project_svc.list_members(db, project)

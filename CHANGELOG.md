@@ -3,6 +3,45 @@
 All notable changes to Specivo are documented here, one line per change.
 Each release also has a blog post with the details.
 
+## [0.12.0] - 2026-10-31
+
+### Added
+- Added repository integrations per project for GitHub, GitLab, Gitea and Forgejo: commits, branches and pull or merge requests link to the issues they mention
+- Added a Development panel on the issue page and `GET /api/v1/issues/{ref}/development/` listing linked commits, branches and pull requests
+- Added commit commands (`Fixes KEY-1` moves the issue, `KEY-1 @1h30m` logs time) and merge automation, both off by default per repository
+- Added a "Copy branch name" button on the issue page with a per-project branch name format
+- Added outgoing webhooks for issue and wiki events, with a settings tab, signed payloads, retries and a delivery log
+- Added SCIM 2.0 provisioning per SSO provider: the identity provider creates, updates and deactivates accounts and groups
+- Added SSO session checks at the identity provider: a person disabled, deleted or signed out there loses their Specivo session within minutes
+- Added a back-channel logout action per SSO provider: end one session, all sessions, or also switch off the person's API keys
+- Added Mermaid diagrams in wiki pages, issue descriptions, comments and the editor preview
+- Added a working timer: start it on the issue page, see it tick in the header, stop and log it or discard it, also over MCP with `specivo_timer`
+- Added `parent_ref` to the MCP issue tools and `tags` to `specivo_create_issue` and `specivo_create_wiki`; the setup guide now lists every tool, the tag workflow and Mermaid
+- Added the user guide in Simplified Chinese, a Chinese README, and guide pages for repository integrations, outgoing webhooks, Gitea and Forgejo issue links, and SCIM
+- Added the release image on the GitHub Container Registry as `ghcr.io/specivo/specivo`; set `SPECIVO_IMAGE` to pull from there
+
+### Changed
+- Replaced the global `/hooks/github` and `/hooks/gitlab` endpoints with per-repository URLs set up under the project's Repositories tab; reconnect each repository, including its pull or merge request events
+- Changed notification emails to one stable subject per issue with threading headers, so mail clients group them; `SMTP_MESSAGE_ID_DOMAIN` sets the domain of the message ids
+- Changed `POST /api/v1/timer/start/` to report a running timer it replaced, logged or discarded
+- Changed the bundled `proxy` network to hand out automatic addresses only from `SPECIVO_PROXY_IP_RANGE`, so nginx always gets its fixed address
+- Changed old issue references after a project key rename (`OLD-12`) to keep working everywhere; the issue page redirects to the current key
+- Changed wide Mermaid diagrams to scroll sideways on phones
+
+### Fixed
+- Fixed time entries on issues the reader cannot see being listed and counted in totals, reports and billing
+- Fixed notifications and emails reaching watchers and assignees who can no longer see the issue
+- Fixed the bundled nginx failing to start because the api took its address
+- Fixed missing and outdated interface translations in Chinese, Russian, French, Spanish and Thai
+- Fixed moving an issue under a new parent when its subtree would then exceed the depth limit
+
+### Security
+- Fixed a hidden moved issue revealing its id in the not-found message
+
+### Internal
+- Database migrations 0044 to 0051: webhook outbox, repository integrations, pull requests, SSO session checks and SCIM
+- Added a CI job that starts the default `docker-compose.yml` and checks nginx answers; catalogues are extracted sorted by file
+
 ## [0.11.0] - 2026-10-29
 
 ### Added

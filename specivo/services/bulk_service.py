@@ -196,7 +196,7 @@ class BulkService:
                     )
                     continue
 
-                await self._issue_service.delete(session, issue)
+                await self._issue_service.delete(session, issue, actor=user)
 
                 succeeded.append(
                     BulkResultItem(

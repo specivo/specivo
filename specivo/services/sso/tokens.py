@@ -1,4 +1,4 @@
-"""Token endpoint client (authorization code exchange) and userinfo fetch.
+"""Token endpoint client (authorization code exchange, refresh) and userinfo fetch.
 
 Implements OpenID Connect Core 1.0, section 3.1.3 (token request and
 response) and 5.3 (userinfo, including the rule in 5.3.2 that the userinfo
@@ -15,14 +15,21 @@ response) and 5.3 (userinfo, including the rule in 5.3.2 that the userinfo
   (sanitised); ``error_description`` is logged truncated and scrubbed, and is
   never shown to users.
 
+:func:`refresh_at_idp` presents the IdP's refresh token (RFC 6749, section
+6) to find out whether the IdP still accepts the session: a disabled,
+deleted or signed-out user's refresh token is refused with ``invalid_grant``.
+Only the outcome and a rotated refresh token are returned; the new access
+and ID tokens are discarded.
+
 All requests go through :func:`specivo.services.sso.http.create_sso_client`.
 The token POST never follows redirects. The IdP's access and refresh tokens
-are returned to the caller and never stored or logged here.
+are returned to the caller and never logged here.
 """
 
 from __future__ import annotations
 
 import base64
+import hashlib
 import hmac
 import os
 import re
@@ -49,11 +56,28 @@ from specivo.services.sso.log import logger, sanitize_idp_text
 
 __all__ = [
     "CLIENT_SECRET_PURPOSE",
+    "IdpRefreshResult",
     "TokenResponse",
     "exchange_code",
     "fetch_userinfo",
+    "idp_refresh_token_purpose",
+    "refresh_at_idp",
     "resolve_client_secret",
 ]
+
+
+def idp_refresh_token_purpose(issuer: str, token_endpoint: str, client_id: str) -> str:
+    """``secret_box`` purpose of ``RefreshToken.idp_refresh_token_encrypted``.
+
+    Bound to the issuer, the token endpoint and the client the token was
+    issued to: a token sealed for one of them cannot even be decrypted for
+    another, so it can never be sent to an endpoint that did not issue it
+    (the provider's issuer or client changed, or discovery now names another
+    token endpoint).
+    """
+    binding = "\n".join((issuer, token_endpoint, client_id)).encode("utf-8")
+    return "sso-idp-rt-" + hashlib.sha256(binding).hexdigest()[:40]
+
 
 #: ``secret_box`` purpose of ``SsoProvider.client_secret_encrypted``.
 CLIENT_SECRET_PURPOSE = "sso-client-secret"
@@ -71,6 +95,15 @@ class TokenResponse:
     token_type: str = "Bearer"
     expires_in: int | None = None
     scope: str | None = None
+    #: Present when the IdP issues refresh tokens for this client and scope.
+    refresh_token: str | None = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class IdpRefreshResult:
+    """The IdP accepted a refresh token. ``refresh_token`` is the rotated one, if it sent one."""
+
+    refresh_token: str | None = field(default=None, repr=False)
 
 
 def resolve_client_secret(provider: SsoProvider) -> str | None:
@@ -117,18 +150,21 @@ def _scrub(text: str, secrets: tuple[str | None, ...]) -> str:
     return text
 
 
-def _token_failure(response: httpx.Response, provider: SsoProvider, scrub: tuple[str | None, ...]) -> Exception:
+def _token_failure(
+    response: httpx.Response, provider: SsoProvider, scrub: tuple[str | None, ...], *, what: str = "token"
+) -> Exception:
     body = parse_json_object(response.content)
     raw_error = body.get("error") if body else None
     if raw_error is None:
         logger.warning(
-            "sso.token.failed provider=%s status=%s reason=unexpected_status", provider.slug, response.status_code
+            "sso.%s.failed provider=%s status=%s reason=unexpected_status", what, provider.slug, response.status_code
         )
         return SsoTokenExchangeFailedError("unexpected_status")
     error = raw_error if isinstance(raw_error, str) and _ERROR_CODE_RE.fullmatch(raw_error) else "invalid_error_code"
     description = body.get("error_description") if body else None
     logger.warning(
-        "sso.token.failed provider=%s status=%s error=%s description=%s",
+        "sso.%s.failed provider=%s status=%s error=%s description=%s",
+        what,
         provider.slug,
         response.status_code,
         error,
@@ -152,13 +188,28 @@ def _parse_token_response(content: bytes) -> TokenResponse:
         raise SsoTokenInvalidError(TokenRejection.TOKEN_RESPONSE_INVALID, detail="token_type")
     expires_in = body.get("expires_in")
     scope = body.get("scope")
+    refresh_token = body.get("refresh_token")
     return TokenResponse(
         id_token=id_token,
         access_token=access_token,
         token_type=token_type,
         expires_in=expires_in if isinstance(expires_in, int) and not isinstance(expires_in, bool) else None,
         scope=scope if isinstance(scope, str) else None,
+        refresh_token=refresh_token if isinstance(refresh_token, str) and refresh_token else None,
     )
+
+
+def _authenticate(provider: SsoProvider, form: dict[str, str], headers: dict[str, str]) -> str | None:
+    """Add the client authentication to a token request; returns the secret (to scrub from logs)."""
+    secret = resolve_client_secret(provider)
+    method = provider.token_endpoint_auth_method
+    if method == "client_secret_basic" and secret is not None:
+        headers["Authorization"] = _basic_credentials(provider.client_id, secret)
+    else:
+        form["client_id"] = provider.client_id
+        if method == "client_secret_post" and secret is not None:
+            form["client_secret"] = secret
+    return secret
 
 
 async def exchange_code(
@@ -178,9 +229,6 @@ async def exchange_code(
     ``sso_token_invalid`` (a 200 response without a usable ID token).
     """
     settings = settings or get_settings()
-    secret = resolve_client_secret(provider)
-    method = provider.token_endpoint_auth_method
-
     form: dict[str, str] = {
         "grant_type": "authorization_code",
         "code": code,
@@ -188,12 +236,7 @@ async def exchange_code(
         "code_verifier": code_verifier,
     }
     headers = {"Accept": "application/json"}
-    if method == "client_secret_basic" and secret is not None:
-        headers["Authorization"] = _basic_credentials(provider.client_id, secret)
-    else:
-        form["client_id"] = provider.client_id
-        if method == "client_secret_post" and secret is not None:
-            form["client_secret"] = secret
+    secret = _authenticate(provider, form, headers)
 
     try:
         async with create_sso_client(settings) as client:
@@ -214,6 +257,47 @@ async def exchange_code(
         raise
     logger.info("sso.token.exchanged provider=%s", provider.slug)
     return result
+
+
+async def refresh_at_idp(
+    provider: SsoProvider,
+    metadata: ProviderMetadata,
+    refresh_token: str,
+    *,
+    settings: Settings | None = None,
+) -> IdpRefreshResult:
+    """Present ``refresh_token`` at the token endpoint (``grant_type=refresh_token``).
+
+    Returns the rotated refresh token when the IdP sends one. Raises
+    ``sso_token_exchange_failed`` when the IdP refuses (``idp_error`` is
+    ``invalid_grant`` when the user or the IdP session is gone),
+    ``sso_idp_unreachable`` (transport failure, 5xx, 429, or a 200 that is not
+    a token response) and ``sso_provider_misconfigured`` (unreadable secret).
+    No ``scope`` is sent, so the IdP keeps the scopes of the original grant.
+    """
+    settings = settings or get_settings()
+    form: dict[str, str] = {"grant_type": "refresh_token", "refresh_token": refresh_token}
+    headers = {"Accept": "application/json"}
+    secret = _authenticate(provider, form, headers)
+
+    try:
+        async with create_sso_client(settings) as client:
+            response = await client.post(metadata.token_endpoint, data=form, headers=headers, follow_redirects=False)
+    except httpx.HTTPError as exc:
+        raise unreachable_from(exc, what="refresh") from None
+
+    status = response.status_code
+    if status >= 500 or status == 429:
+        logger.warning("sso.refresh.unreachable provider=%s reason=http_%s", provider.slug, status)
+        raise SsoIdpUnreachableError(f"http_{status}")
+    if status != 200:
+        raise _token_failure(response, provider, (refresh_token, secret), what="refresh")
+    body = parse_json_object(response.content)
+    if body is None or not isinstance(body.get("access_token"), str):
+        logger.warning("sso.refresh.unreachable provider=%s reason=invalid_response", provider.slug)
+        raise SsoIdpUnreachableError("invalid_response")
+    rotated = body.get("refresh_token")
+    return IdpRefreshResult(refresh_token=rotated if isinstance(rotated, str) and rotated else None)
 
 
 def _userinfo_rejected(detail: str) -> SsoTokenInvalidError:

@@ -82,14 +82,17 @@ jobs:
           format: table
           exit-code: '1'
 
-  # Build and push Docker image to Docker Hub
+  # Build the image once and push it to Docker Hub and to the GitHub Container
+  # Registry under the same tags, so both registries serve identical digests.
+  # GHCR is a second pull source where Docker Hub is unreachable.
   build-and-push:
     needs: [ci, scan-image]
     runs-on: ubuntu-latest
-    # The image goes to Docker Hub with the Docker Hub secrets, not to GHCR,
-    # so the GitHub token only needs to read the repository.
+    # packages: write lets the job's own GITHUB_TOKEN push to ghcr.io; Docker
+    # Hub uses its own secrets.
     permissions:
       contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
 
@@ -100,10 +103,20 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # The metadata action also sets org.opencontainers.image.source, which
+      # links the GHCR package to this repository.
       - uses: docker/metadata-action@v6
         id: meta
         with:
-          images: specivo/specivo
+          images: |
+            specivo/specivo
+            ghcr.io/specivo/specivo
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
@@ -169,6 +182,11 @@ jobs:
             **Online (Docker Hub):**
             ```bash
             docker pull specivo/specivo:${{ steps.version.outputs.VERSION }}
+            ```
+
+            **Online (GitHub Container Registry), the same image:**
+            ```bash
+            docker pull ghcr.io/specivo/specivo:${{ steps.version.outputs.VERSION }}
             ```
 
             **Offline / Airgapped:**

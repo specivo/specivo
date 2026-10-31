@@ -5,7 +5,8 @@ off, for every user (password, SSO, service account): the admin API, the
 admin user page and a refused SSO sign-in with ``deactivate_on_access_loss``
 all go through it. In the caller's transaction it
 
-1. sets ``status="deactivated"``;
+1. sets ``status="deactivated"`` and ``deactivation_reason`` (who may undo
+   it: SCIM only reactivates what SCIM deactivated);
 2. revokes every session of the account (``SessionService``): the refresh
    rows are deleted and the access tokens already issued are refused on the
    next request;
@@ -34,7 +35,7 @@ from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
 from specivo.models.auth import ApiKey
 from specivo.models.user import User
-from specivo.services.anonymous_user_service import refuse_anonymous_user
+from specivo.services.anonymous_user_service import refuse_system_user
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.session_service import SessionService
 
@@ -174,11 +175,12 @@ class UserService:
         administrator. Deactivating an account that already is deactivated
         sweeps again (anything left over is revoked) and logs again.
         """
-        refuse_anonymous_user(user)
+        refuse_system_user(user)
         if user.is_admin and user.status == "active" and not await another_active_admin_exists(db, user.id):
             raise LastActiveAdminError()
 
         user.status = "deactivated"
+        user.deactivation_reason = reason[:64]
         await db.flush()
         sessions = await SessionService().revoke_user_sessions(
             db, user.id, reason=DEACTIVATION_REVOKE_REASON, actor_id=actor_id
@@ -202,10 +204,11 @@ class UserService:
         Only a deactivated account changes; any other status (locked, waiting
         for email verification) is left alone, so this never skips a check.
         """
-        refuse_anonymous_user(user)
+        refuse_system_user(user)
         changed = user.status == "deactivated"
         if changed:
             user.status = "active"
+            user.deactivation_reason = None
             user.locked_until = None
             user.failed_login_count = 0
             await db.flush()

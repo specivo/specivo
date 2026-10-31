@@ -264,6 +264,7 @@ async def test_project_settings_tabs_receive_thai_strings(admin_client: AsyncCli
     )
     _assert_x_data_carries(html, "projectComputedMetadata", ["Duplicate field name: %(name)s"])
     _assert_x_data_carries(html, "projectTagsSettings", ["Failed to save tag."])
+    _assert_x_data_carries(html, "projectWebhooks", ["Failed to save webhook.", "Issue created", "Succeeded"])
     _assert_x_data_carries(html, "ftsReindex", ["Reindex started.", "%(count)s chunks"])
 
 

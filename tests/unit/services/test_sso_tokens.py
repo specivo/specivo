@@ -25,9 +25,11 @@ from specivo.services.sso.errors import (
     TokenRejection,
 )
 from specivo.services.sso.tokens import (
+    IdpRefreshResult,
     TokenResponse,
     exchange_code,
     fetch_userinfo,
+    refresh_at_idp,
     resolve_client_secret,
 )
 from specivo.testing.oidc_mock import MockIdP, override_transport, pkce_pair
@@ -353,6 +355,93 @@ class TestExchangeCode:
 # ---------------------------------------------------------------------------
 # Userinfo
 # ---------------------------------------------------------------------------
+
+
+class TestRefreshAtIdp:
+    async def test_code_exchange_returns_the_refresh_token(self, mock_idp: MockIdP) -> None:
+        code, verifier = _code(mock_idp)
+        result = await exchange_code(
+            make_provider(mock_idp), _meta(mock_idp), code=code, redirect_uri=REDIRECT_URI, code_verifier=verifier
+        )
+        assert result.refresh_token
+        assert result.refresh_token not in repr(result)
+
+    async def test_no_refresh_token_issued(self, mock_idp: MockIdP) -> None:
+        mock_idp.issue_refresh_tokens = False
+        code, verifier = _code(mock_idp)
+        result = await exchange_code(
+            make_provider(mock_idp), _meta(mock_idp), code=code, redirect_uri=REDIRECT_URI, code_verifier=verifier
+        )
+        assert result.refresh_token is None
+
+    async def test_accepted_without_rotation(self, mock_idp: MockIdP) -> None:
+        recorder = _Recorder(mock_idp.transport)
+        token = mock_idp.issue_refresh_token()
+        with override_transport(recorder):
+            result = await refresh_at_idp(make_provider(mock_idp), _meta(mock_idp), token)
+        assert result == IdpRefreshResult(refresh_token=token)
+        form = parse_qs(recorder.requests[0].content.decode())
+        assert form == {"grant_type": ["refresh_token"], "refresh_token": [token]}
+        assert recorder.requests[0].headers["Authorization"].startswith("Basic ")
+
+    async def test_rotation_returns_the_new_token(self, mock_idp: MockIdP) -> None:
+        mock_idp.rotate_refresh_tokens = True
+        token = mock_idp.issue_refresh_token()
+        result = await refresh_at_idp(make_provider(mock_idp), _meta(mock_idp), token)
+        assert result.refresh_token and result.refresh_token != token
+        assert token not in repr(result) and result.refresh_token not in repr(result)
+
+    async def test_client_secret_post(self) -> None:
+        idp = MockIdP(token_endpoint_auth_method="client_secret_post")
+        recorder = _Recorder(idp.transport)
+        with override_transport(recorder):
+            await refresh_at_idp(make_provider(idp), _meta(idp), idp.issue_refresh_token())
+        form = parse_qs(recorder.requests[0].content.decode())
+        assert form["client_secret"] == [idp.client_secret]
+        assert "Authorization" not in recorder.requests[0].headers
+
+    async def test_revoked_token_is_invalid_grant(self, mock_idp: MockIdP) -> None:
+        token = mock_idp.issue_refresh_token()
+        mock_idp.revoke_refresh_tokens()
+        with pytest.raises(SsoTokenExchangeFailedError) as exc:
+            await refresh_at_idp(make_provider(mock_idp), _meta(mock_idp), token)
+        assert exc.value.idp_error == "invalid_grant"
+
+    async def test_wrong_secret_is_invalid_client(self, mock_idp: MockIdP) -> None:
+        provider = make_provider(mock_idp)
+        token = mock_idp.issue_refresh_token()
+        mock_idp.client_secret = "rotated-at-the-idp"
+        with pytest.raises(SsoTokenExchangeFailedError) as exc:
+            await refresh_at_idp(provider, _meta(mock_idp), token)
+        assert exc.value.idp_error == "invalid_client"
+
+    @pytest.mark.parametrize("fault", [{"status": 500}, {"status": 429}, {"timeout": True}])
+    async def test_unreachable(self, mock_idp: MockIdP, fault: dict[str, Any]) -> None:
+        mock_idp.set_fault("token", **fault)
+        with pytest.raises(SsoIdpUnreachableError):
+            await refresh_at_idp(make_provider(mock_idp), _meta(mock_idp), mock_idp.issue_refresh_token())
+
+    @pytest.mark.parametrize("content", [b"not json", b"[]", b'{"token_type": "Bearer"}'])
+    async def test_unusable_success_is_unreachable(self, content: bytes) -> None:
+        idp = MockIdP()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/token"):
+                return httpx.Response(200, content=content)
+            return idp.transport.handle_request(request)
+
+        with override_transport(httpx.MockTransport(handler)):
+            with pytest.raises(SsoIdpUnreachableError) as exc:
+                await refresh_at_idp(make_provider(idp), _meta(idp), "a-refresh-token")
+        assert exc.value.reason == "invalid_response"
+
+    async def test_refusal_never_logs_the_token(self, mock_idp: MockIdP, caplog: pytest.LogCaptureFixture) -> None:
+        token = mock_idp.issue_refresh_token()
+        mock_idp.revoke_refresh_tokens()
+        with pytest.raises(SsoTokenExchangeFailedError):
+            await refresh_at_idp(make_provider(mock_idp), _meta(mock_idp), token)
+        assert token not in caplog.text
+        assert "sso.refresh.failed" in caplog.text
 
 
 class TestUserinfo:

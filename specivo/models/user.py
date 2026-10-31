@@ -65,6 +65,13 @@ class User(Base, TimestampMixin):
             " AND password_hash IS NULL AND NOT must_change_password)",
             name="ck_users_anonymous_inert",
         ),
+        # Logins starting with ``$`` are system principals (``$anonymous``,
+        # ``$git``): they never hold a password or administrator rights, so
+        # nobody can sign in as one or act through one beyond what it is given.
+        CheckConstraint(
+            "login NOT LIKE '$%' OR (password_hash IS NULL AND NOT is_admin)",
+            name="ck_users_system_principal_inert",
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
@@ -89,6 +96,10 @@ class User(Base, TimestampMixin):
 
     # --- Account state ---
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    # Why the account is deactivated (``UserService.deactivate``'s ``reason``:
+    # ``admin``, ``scim_deprovision`` ...); cleared on reactivation. SCIM only
+    # reactivates an account SCIM deactivated.
+    deactivation_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     is_service_account: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="false")
     # Set when somebody other than the account owner chose the current password
@@ -111,6 +122,11 @@ class User(Base, TimestampMixin):
 
     # --- User preferences (global defaults, per-project prefs on members table) ---
     preferences: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
+
+    @property
+    def is_system_principal(self) -> bool:
+        """The anonymous user or another reserved ``$`` login such as ``$git``: never signs in."""
+        return self.is_anonymous or self.login.startswith("$")
 
     def __repr__(self) -> str:
         return f"<User id={self.id} login={self.login!r} status={self.status!r}>"

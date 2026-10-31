@@ -10,13 +10,28 @@ provisioning rules" of the SSO design):
 2. **link intent** (a signed-in user pressed "Connect"): link the identity
    to that user (``linked_via="user_link"``), unless they already have an
    identity at this provider (``sso_provider_already_linked``).
+3a. **an account this provider's SCIM provisioned** (any link policy):
+   link to it when it is the one live SCIM user of this provider with the
+   trusted, verified email (as in rule 3), and it is not an admin, a service
+   account or the anonymous user and has no identity at this provider
+   (``linked_via="scim"``). The username claim alone never links: when it
+   equals a SCIM ``userName`` (case-insensitive) that the trusted, verified
+   email does not confirm (no email, another one, an untrusted one), sign-in
+   ends with ``sso_account_not_provisioned`` and rules 3 and 4 are not tried,
+   so no second account is made for that person. Optionally (off by default),
+   ``claim_config["scim_external_id_claim"]`` names a claim the IdP
+   guarantees to equal the SCIM ``externalId`` (Entra ID: ``oid``); exactly
+   one live SCIM user with that ``externalId`` is linked without an email.
+   Otherwise the ``externalId`` is never compared with anything (it is not
+   assumed to be ``sub``). Rules 3 and 3a are the only code paths that select an account by
+   email.
 3. **``link_policy="auto_verified_email"``**: link to the user with the
    token's email only if *all* hold: ``trust_email_verified`` is on; the
    ``email_verified`` claim is the boolean ``true`` (not the string); exactly
    one user has that email, case-insensitively; that user is not an admin,
    a service account or the anonymous user, has a verified email
-   (``email_verified_at`` set) and has no identity at this provider. This
-   is the only code path that selects an account by email.
+   (``email_verified_at`` set), has no identity at this provider and is not
+   managed by another provider's SCIM.
 4. **JIT provisioning** when the provider allows it: a new active user
    without a password (``sso_email_missing`` without an email,
    ``sso_email_conflict`` when another account has it: never linked). Its
@@ -53,12 +68,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
 from specivo.core.utils import utcnow
+from specivo.models.scim import ScimResource
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user import User
 from specivo.services.sso import events
@@ -86,6 +102,7 @@ __all__ = [
     "resolve_user",
     "sanitize_login",
     "subject_hash",
+    "unique_login",
 ]
 
 #: What :func:`resolve_user` did: signed in an existing identity, linked one
@@ -254,6 +271,11 @@ async def _unique_login(db: AsyncSession, base: str) -> str:
     return f"{base}-{n}"
 
 
+async def unique_login(db: AsyncSession, base: str) -> str:
+    """A free login made from ``base`` (``base``, ``base-2`` ...); for other account creators (SCIM)."""
+    return await _unique_login(db, base)
+
+
 def _new_identity(user: User, provider: SsoProvider, id_token: IdTokenClaims, linked_via: str) -> UserIdentity:
     return UserIdentity(
         user_id=user.id,
@@ -393,7 +415,83 @@ async def _auto_link_target(
     if await _has_identity_at(db, target.id, provider):
         skip("already_linked_at_provider")
         return None
+    if await _scim_provider_of(db, target.id) not in (None, provider.id):
+        # Another provider's SCIM manages this account: it decides who it is.
+        skip("managed_by_other_provider")
+        return None
     return target
+
+
+async def _scim_provider_of(db: AsyncSession, user_id: int) -> int | None:
+    """The provider whose SCIM manages ``user_id`` (also after a SCIM delete), or ``None``."""
+    return await db.scalar(select(ScimResource.provider_id).where(ScimResource.user_id == user_id))
+
+
+async def _scim_link_target(
+    db: AsyncSession, *, provider: SsoProvider, claims: Mapping[str, Any], sub_hash: str
+) -> User | None:
+    """Rule 3a: the account this provider's SCIM provisioned for this login, or ``None``.
+
+    Raises :class:`SsoAccountNotProvisionedError` when the username claim names
+    a provisioned account that nothing else confirms.
+    """
+
+    def skip(reason: str) -> None:
+        logger.info("sso.account.scim_link_skipped provider=%s sub=%s reason=%s", provider.slug, sub_hash, reason)
+
+    async def scim_users(condition: Any) -> list[User]:
+        rows = await db.execute(
+            select(User)
+            .join(ScimResource, ScimResource.user_id == User.id)
+            .where(
+                ScimResource.provider_id == provider.id,
+                ScimResource.resource_type == "User",
+                ScimResource.deleted_at.is_(None),
+                condition,
+            )
+        )
+        return list(rows.scalars().unique().all())
+
+    async def accept(target: User) -> User | None:
+        if target.is_admin or target.is_service_account or target.is_anonymous:
+            skip("protected_account")
+            return None
+        if await _has_identity_at(db, target.id, provider):
+            skip("already_linked_at_provider")
+            return None
+        return target
+
+    # Optional strong match, off by default: a claim the admin says the IdP
+    # guarantees to equal the SCIM externalId (exact comparison).
+    external_claim = (provider.claim_config or {}).get("scim_external_id_claim")
+    external_id = claims.get(external_claim) if isinstance(external_claim, str) and external_claim else None
+    if isinstance(external_id, str) and external_id:
+        by_external_id = await scim_users(ScimResource.external_id == external_id)
+        if len(by_external_id) == 1:
+            return await accept(by_external_id[0])
+
+    email = _email_from(claims, provider) if _trusted_verified_email(provider, claims) else None
+    username = _text_claim(claims, provider, "username_claim", 255)
+    conditions = []
+    if email is not None:
+        conditions.append(func.lower(User.email) == email.lower())
+    if username is not None:
+        conditions.append(func.lower(ScimResource.user_name) == username.lower())
+    if not conditions:
+        return None
+    matches = await scim_users(or_(*conditions))
+    if not matches:
+        return None
+    confirmed = [m for m in matches if email is not None and m.email.lower() == email.lower()]
+    if len(matches) != 1 or len(confirmed) != 1:
+        # The username claim names a provisioned account the trusted, verified
+        # email does not confirm (no email, another one, an untrusted one): a
+        # user who can choose their username must not reach someone else's
+        # account. Stop here, so rule 3 and JIT never make a second account.
+        reason = "email_not_confirmed" if len(matches) == 1 else "no_single_match"
+        logger.info("sso.account.scim_link_refused provider=%s sub=%s reason=%s", provider.slug, sub_hash, reason)
+        raise SsoAccountNotProvisionedError("scim_" + reason)
+    return await accept(confirmed[0])
 
 
 async def _provision(
@@ -536,21 +634,25 @@ async def resolve_user(
 
     groups = read_groups(claims, provider)
 
-    # 3. Link by verified email, under every precondition.
-    target = await _auto_link_target(db, provider=provider, claims=claims, sub_hash=sub_hash)
+    # 3a. The account this provider's SCIM provisioned; 3. link by verified email.
+    target = await _scim_link_target(db, provider=provider, claims=claims, sub_hash=sub_hash)
+    method: Literal["scim", "auto_email"] = "scim"
+    if target is None:
+        target = await _auto_link_target(db, provider=provider, claims=claims, sub_hash=sub_hash)
+        method = "auto_email"
     if target is not None:
         _check_status(target, provider, sub_hash, now)
         await enforce_access(
             db, provider=provider, claims=claims, groups=groups, email=email, subject=id_token.subject, user=target
         )
-        identity = _new_identity(target, provider, id_token, "auto_email")
+        identity = _new_identity(target, provider, id_token, method)
         db.add(identity)
         await db.flush()
         events.account_linked(
             provider_slug=provider.slug,
             user_id=target.id,
             subject=id_token.subject,
-            method="auto_email",
+            method=method,
             issuer=provider.issuer,
         )
         await _refresh_profile(db, target, provider, claims, sub_hash)

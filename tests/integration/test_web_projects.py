@@ -242,3 +242,30 @@ async def test_project_detail_shows_subprojects(
     assert resp.status_code == 200
     assert "Subprojects" in resp.text
     assert "DetailChild" in resp.text
+
+
+@pytest.mark.integration
+async def test_project_settings_webhooks_tab_lists_webhooks_without_secrets(
+    admin_client: AsyncClient,
+    db_session: AsyncSession,
+):
+    """The Webhooks tab is seeded with the project's webhooks; no secret reaches the page."""
+    from specivo.services.webhook_service import WebhookService
+
+    user = admin_client.state.user
+    project = await _create_project(db_session, user, key="WSWH", identifier="web-settings-webhooks")
+    webhook, secret = await WebhookService().register(
+        db_session, project.id, "https://hooks.example.com/settings-tab", events=["issue.created"]
+    )
+    await db_session.commit()
+
+    resp = await admin_client.get(
+        f"/projects/{project.key}/settings/",
+        cookies={"access_token": admin_client.state.token},
+    )
+    assert resp.status_code == 200
+    assert "projectWebhooks(" in resp.text
+    assert "https://hooks.example.com/settings-tab" in resp.text
+    assert "wiki.page.updated" in resp.text
+    assert secret not in resp.text
+    assert webhook.secret not in resp.text

@@ -1,5 +1,6 @@
 """Application configuration via pydantic-settings."""
 
+import re
 from datetime import UTC, datetime
 from functools import lru_cache
 from importlib.metadata import version as _pkg_version
@@ -18,6 +19,18 @@ def _default_available_languages() -> list[str]:
     from specivo.core.locales import get_available_locales
 
     return get_available_locales()
+
+
+# A plain ASCII host name: dot-separated labels of letters, digits and inner
+# hyphens. Used for the domain part of Message-IDs and List-Id.
+_MAIL_DOMAIN_RE = re.compile(
+    r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$"
+)
+
+
+def is_mail_domain(value: str) -> bool:
+    """Whether *value* (lowercase) is a host name usable in a Message-ID."""
+    return bool(_MAIL_DOMAIN_RE.match(value))
 
 
 _ALLOWED_FTS_LANGUAGES: frozenset[str] = frozenset(
@@ -132,6 +145,9 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from: str = "noreply@specivo.dev"
     smtp_tls: bool = True
+    # Domain in the Message-ID and List-Id of outgoing mail. Empty: the
+    # domain of SMTP_FROM.
+    smtp_message_id_domain: str = ""
 
     # Kill switch — emergency token for mobile/unauthenticated kill
     kill_token: str = ""
@@ -231,6 +247,22 @@ class Settings(BaseSettings):
     smtp_timeout: int = 30
     webhook_timeout: int = 30
 
+    # Incoming repository webhooks (``/hooks/{provider}/{public_id}/``): the
+    # largest body accepted, and requests per minute per integration and, for
+    # hook URLs that match no integration, per client address.
+    git_hook_max_body_bytes: int = Field(default=5 * 1024 * 1024, ge=1024)
+    git_hook_rate_limit_per_minute: int = Field(default=120, ge=1)
+    git_hook_unknown_rate_limit_per_minute: int = Field(default=30, ge=1)
+
+    # SCIM provisioning (``/scim/v2/{provider_slug}/``): the largest request
+    # body, requests per minute per provider (and per client address for
+    # requests that fail authentication), and the most resources one list
+    # response returns (``count`` is capped at it).
+    scim_max_body_bytes: int = Field(default=1024 * 1024, ge=1024)
+    scim_rate_limit_per_minute: int = Field(default=600, ge=1)
+    scim_unauthenticated_rate_limit_per_minute: int = Field(default=30, ge=1)
+    scim_max_results: int = Field(default=200, ge=1, le=1000)
+
     # SSO (OpenID Connect). Providers are configured in the database; these
     # are the instance-wide limits every provider shares.
     # Break-glass: always show the local login form, whatever the
@@ -243,6 +275,24 @@ class Settings(BaseSettings):
     # Leeway for exp / iat / nbf when validating ID and logout tokens.
     # Values above the cap are lowered to it.
     sso_clock_skew_seconds: int = Field(default=60, ge=0)
+    # How often a renewed SSO session is re-checked at the IdP, at most, in
+    # minutes. Unset: one access-token lifetime (ACCESS_TOKEN_EXPIRE_MINUTES).
+    sso_idp_recheck_minutes: int | None = Field(default=None, ge=0)
+
+    @property
+    def sso_idp_recheck_interval_minutes(self) -> int:
+        """``sso_idp_recheck_minutes``, or the access-token lifetime when unset."""
+        if self.sso_idp_recheck_minutes is not None:
+            return self.sso_idp_recheck_minutes
+        return self.access_token_expire_minutes
+
+    @field_validator("smtp_message_id_domain")
+    @classmethod
+    def validate_smtp_message_id_domain(cls, v: str) -> str:
+        v = v.strip().lower()
+        if v and not is_mail_domain(v):
+            raise ValueError(f"SMTP_MESSAGE_ID_DOMAIN: {v!r} is not a plain host name such as mail.example.com")
+        return v
 
     @field_validator("search_fts_language")
     @classmethod

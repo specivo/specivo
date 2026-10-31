@@ -694,6 +694,81 @@ async def test_starting_a_timer_discards_a_running_one_that_can_no_longer_be_log
     assert timer is not None and timer.project_id == world["other"].id
 
 
+async def test_timer_start_reports_no_replaced_timer_when_none_ran(client: AsyncClient, world: dict) -> None:
+    resp = await client.post(
+        "/api/v1/timer/start/", json={"project_id": world["other"].id}, headers=await _headers(client, "ttp_logger")
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["replaced"] is None
+
+
+async def test_timer_start_reports_a_replaced_timer_that_was_logged(
+    client: AsyncClient, db_session: AsyncSession, world: dict
+) -> None:
+    user = world["users"]["logger"]
+    db_session.add(
+        ActiveTimerFactory.build(
+            user_id=user.id,
+            project_id=world["project"].id,
+            issue_id=world["issue"].id,
+            started_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+    )
+    await db_session.commit()
+
+    resp = await client.post(
+        "/api/v1/timer/start/", json={"project_id": world["other"].id}, headers=await _headers(client, "ttp_logger")
+    )
+
+    assert resp.status_code == 201, resp.text
+    replaced = resp.json()["replaced"]
+    entry = (
+        await db_session.execute(select(TimeEntry).where(TimeEntry.user_id == user.id, TimeEntry.comments.is_(None)))
+    ).scalar_one()
+    assert replaced == {
+        "outcome": "logged",
+        "project_id": world["project"].id,
+        "project_key": "TTPRV",
+        "issue_id": world["issue"].id,
+        "issue_key": world["issue"].display_key,
+        "hours": "1.00",
+        "entry_id": entry.id,
+    }
+
+
+async def test_timer_start_reports_a_replaced_timer_that_was_discarded(
+    client: AsyncClient, db_session: AsyncSession, world: dict
+) -> None:
+    user = world["users"]["logger"]
+    db_session.add(
+        ActiveTimerFactory.build(
+            user_id=user.id,
+            project_id=world["project"].id,
+            issue_id=world["issue"].id,
+            started_at=datetime.now(UTC) - timedelta(hours=1),
+        )
+    )
+    world["roles"]["logger"].permissions = ["view_issues"]
+    await db_session.commit()
+    before = await _entry_count(db_session, user)
+
+    resp = await client.post(
+        "/api/v1/timer/start/", json={"project_id": world["other"].id}, headers=await _headers(client, "ttp_logger")
+    )
+
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["replaced"] == {
+        "outcome": "discarded",
+        "project_id": world["project"].id,
+        "project_key": "TTPRV",
+        "issue_id": world["issue"].id,
+        "issue_key": world["issue"].display_key,
+        "hours": None,
+        "entry_id": None,
+    }
+    assert await _entry_count(db_session, user) == before
+
+
 async def test_seeded_agent_role_reads_back_its_own_time(
     client: AsyncClient, db_session: AsyncSession, world: dict, activity: TimeEntryActivity
 ) -> None:

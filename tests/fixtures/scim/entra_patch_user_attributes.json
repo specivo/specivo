@@ -1,0 +1,25 @@
+{
+  "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+  "Operations": [
+    {
+      "op": "Replace",
+      "path": "emails[type eq \"work\"].value",
+      "value": "updatedEmail@example.com"
+    },
+    {
+      "op": "Replace",
+      "path": "name.familyName",
+      "value": "updatedFamilyName"
+    },
+    {
+      "op": "Add",
+      "path": "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User:department",
+      "value": "Sales"
+    },
+    {
+      "op": "Replace",
+      "path": "displayName",
+      "value": "givenName updatedFamilyName"
+    }
+  ]
+}

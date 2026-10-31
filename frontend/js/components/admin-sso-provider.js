@@ -8,7 +8,7 @@
  */
 
 var LIST_FIELDS = ['allowed_email_domains', 'required_groups', 'admin_groups'];
-var CLAIM_FIELDS = ['username_claim', 'email_claim', 'name_claim', 'groups_claim', 'locale_claim'];
+var CLAIM_FIELDS = ['username_claim', 'email_claim', 'name_claim', 'groups_claim', 'locale_claim', 'scim_external_id_claim'];
 
 function linesToList(text) {
     return (text || '').split('\n').map(function (s) { return s.trim(); }).filter(function (s) { return s; });
@@ -35,6 +35,9 @@ function formFromProvider(p, extraKeys) {
         deactivate_on_access_loss: p ? p.deactivate_on_access_loss : false,
         rp_logout_enabled: p ? p.rp_logout_enabled : true,
         backchannel_logout_enabled: p ? p.backchannel_logout_enabled : false,
+        backchannel_action: p ? p.backchannel_action : 'revoke_session',
+        verify_session_at_idp: p ? p.verify_session_at_idp : true,
+        idp_check_failure: p ? p.idp_check_failure : 'allow',
         session_max_age_hours: p ? p.session_max_age_hours : 24,
         extra: {}
     };
@@ -87,7 +90,13 @@ export function adminSsoProvider(initial) {
 
         copied: '',
         copy(which) {
-            var text = which === 'backchannel' ? this.backchannelUri : this.redirectUri;
+            var texts = {
+                backchannel: this.backchannelUri,
+                redirect: this.redirectUri,
+                scim: this.scim ? this.scim.base_url : '',
+                token: this.newToken
+            };
+            var text = texts[which] || '';
             if (navigator.clipboard) navigator.clipboard.writeText(text);
             this.copied = which;
             var self = this;
@@ -121,6 +130,9 @@ export function adminSsoProvider(initial) {
                 deactivate_on_access_loss: !!f.deactivate_on_access_loss,
                 rp_logout_enabled: !!f.rp_logout_enabled,
                 backchannel_logout_enabled: !!f.backchannel_logout_enabled,
+                backchannel_action: f.backchannel_action,
+                verify_session_at_idp: !!f.verify_session_at_idp,
+                idp_check_failure: f.idp_check_failure,
                 session_max_age_hours: parseInt(f.session_max_age_hours, 10) || 24,
                 extra_auth_params: {}
             };
@@ -220,6 +232,23 @@ export function adminSsoProvider(initial) {
             return value ? (i18n.yes || 'Yes') : (i18n.no || 'No');
         },
 
+        get recheckBadgeClass() {
+            var status = this.provider && this.provider.session_recheck_status;
+            if (status === 'ok') return 'sp-sso-badge-ok';
+            if (status === 'no_refresh_token' || status === 'refresh_refused') return 'sp-sso-badge-bad';
+            return '';
+        },
+
+        // Session check state, from a provider or a self-test result.
+        recheckText(source) {
+            var labels = i18n.recheckStatus || {};
+            if (!source) return '';
+            var enabled = 'session_recheck_enabled' in source ? source.session_recheck_enabled : source.verify_session_at_idp;
+            if (!enabled) return labels.off || 'Off';
+            var status = source.session_recheck_status || 'unknown';
+            return labels[status] || status;
+        },
+
         warningText(code) {
             return (i18n.warnings || {})[code] || code;
         },
@@ -271,6 +300,74 @@ export function adminSsoProvider(initial) {
                 this.mappingsError = this._readError(err, i18n.saveFailed || 'Failed to save.');
             }
             this.mappingsSaving = false;
+        },
+
+        // ---------------------------------------------------------------
+        // Provisioning (SCIM): settings come from and go to
+        // /api/v1/admin/sso/providers/{id}/scim/. The token is shown once,
+        // right after it was generated, and is dropped when the page goes.
+        // ---------------------------------------------------------------
+
+        scim: initial.scim || null,
+        newToken: '',
+        scimBusy: false,
+        scimError: '',
+
+        get scimTokenLabel() {
+            if (!this.scim || !this.scim.token_configured) return (i18n.secretStatus || {}).missing || 'Not set';
+            return this.scim.token_prefix + '...';
+        },
+
+        dateText(value) {
+            if (!value) return i18n.never || 'Never';
+            return spFormatDate(value, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        },
+
+        _scimUrl(tail) {
+            return '/api/v1/admin/sso/providers/' + this.provider.id + '/scim/' + (tail || '');
+        },
+
+        async _scimCall(method, tail, body) {
+            this.scimBusy = true;
+            this.scimError = '';
+            var options = { method: method, headers: { 'Content-Type': 'application/json' } };
+            if (body !== undefined) options.body = JSON.stringify(body);
+            var res = await spFetch(this._scimUrl(tail), options);
+            this.scimBusy = false;
+            if (!res.ok) {
+                var err = await res.json().catch(function () { return {}; });
+                this.scimError = this._readError(err, i18n.scimFailed || 'The SCIM settings could not be changed.');
+                return null;
+            }
+            return res.status === 204 ? {} : await res.json();
+        },
+
+        async _reloadScim() {
+            var res = await spFetch(this._scimUrl(''));
+            if (res.ok) this.scim = await res.json();
+        },
+
+        async generateToken() {
+            if (this.scim.token_configured && !window.confirm(i18n.scimConfirmRotate)) return;
+            var result = await this._scimCall('POST', 'token/');
+            if (!result) return;
+            this.newToken = result.token;
+            delete result.token;
+            this.scim = result;
+        },
+
+        async revokeToken() {
+            if (!window.confirm(i18n.scimConfirmRevoke)) return;
+            if (await this._scimCall('DELETE', 'token/')) {
+                this.newToken = '';
+                await this._reloadScim();
+            }
+        },
+
+        async setScim(enabled) {
+            var result = await this._scimCall('PATCH', '', { enabled: enabled });
+            if (result) this.scim = result;
+            else await this._reloadScim();
         },
 
         // ---------------------------------------------------------------

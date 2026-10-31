@@ -1,0 +1,55 @@
+{
+  "action": "opened",
+  "number": 4,
+  "pull_request": {
+    "id": 21,
+    "url": "https://gitea.example.com/example-org/widgets/pulls/4",
+    "number": 4,
+    "user": {"id": 1, "login": "alex-example", "username": "alex-example", "email": "alex@example.com"},
+    "title": "Add the login form",
+    "body": "Resolves ACME-3",
+    "labels": [],
+    "milestone": null,
+    "assignees": null,
+    "state": "open",
+    "is_locked": false,
+    "comments": 0,
+    "html_url": "https://gitea.example.com/example-org/widgets/pulls/4",
+    "diff_url": "https://gitea.example.com/example-org/widgets/pulls/4.diff",
+    "patch_url": "https://gitea.example.com/example-org/widgets/pulls/4.patch",
+    "mergeable": true,
+    "merged": false,
+    "merged_at": null,
+    "merge_commit_sha": null,
+    "merged_by": null,
+    "draft": false,
+    "base": {
+      "label": "main",
+      "ref": "main",
+      "sha": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+      "repo_id": 1
+    },
+    "head": {
+      "label": "feat/ACME-3-login-form",
+      "ref": "feat/ACME-3-login-form",
+      "sha": "59b20b8d5c6ff8d09518454d4dd8b7b30f095ab5",
+      "repo_id": 1
+    },
+    "merge_base": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+    "due_date": null,
+    "created_at": "2026-10-01T09:00:00Z",
+    "updated_at": "2026-10-01T09:00:00Z",
+    "closed_at": null
+  },
+  "repository": {
+    "id": 1,
+    "owner": {"id": 2, "login": "example-org", "username": "example-org"},
+    "name": "widgets",
+    "full_name": "example-org/widgets",
+    "private": false,
+    "html_url": "https://gitea.example.com/example-org/widgets",
+    "default_branch": "main"
+  },
+  "sender": {"id": 1, "login": "alex-example", "username": "alex-example"},
+  "review": null
+}

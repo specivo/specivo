@@ -77,13 +77,56 @@ DEFAULT_PROJECT_COLORS = [
     "#EA580C",  # orange
 ]
 
-# Webhooks
+# Outgoing webhooks
+# Response body kept on a delivery for the log (an excerpt, in characters).
 WEBHOOK_RESPONSE_MAX_BYTES = 4096
+# Attempts per delivery before it is marked failed.
+WEBHOOK_MAX_ATTEMPTS = 8
+# Whole send-and-read budget for one attempt, on top of httpx's per-phase timeout,
+# so a receiver trickling bytes cannot hold a worker and the row lock.
+WEBHOOK_ATTEMPT_DEADLINE_SECONDS = 60
+# Retry n waits BASE * 2**(n-1) seconds, capped at MAX, plus up to 25% jitter.
+WEBHOOK_BACKOFF_BASE_SECONDS = 30
+WEBHOOK_BACKOFF_MAX_SECONDS = 3600
+# A queued delivery is left to its task for this long before the sweeper queues it again.
+WEBHOOK_LEASE_SECONDS = 300
+# How often the sweeper looks for due pending deliveries, and how many it queues per run.
+WEBHOOK_SWEEP_INTERVAL_SECONDS = 60
+WEBHOOK_SWEEP_BATCH = 200
+# How long a project's active-webhook list is cached in Redis.
+WEBHOOK_SUBSCRIPTION_CACHE_SECONDS = 60
+# Settled delivery log rows older than this are deleted by the scheduled cleanup,
+# at most WEBHOOK_PURGE_BATCH per transaction and WEBHOOK_PURGE_MAX_BATCHES
+# transactions per run, so a large backlog is worked off over several runs
+# instead of outliving the cleanup lock.
+WEBHOOK_DELIVERY_RETENTION_DAYS = 30
+WEBHOOK_PURGE_BATCH = 1000
+WEBHOOK_PURGE_MAX_BATCHES = 50
+
+# Incoming repository webhooks (see specivo.services.repository_hooks)
+# Commit messages are stored up to this many characters.
+REPOSITORY_COMMIT_MESSAGE_MAX_CHARS = 10_000
+# References taken from one commit (message plus branch name); the rest are ignored,
+# so one commit cannot fan out into thousands of journals.
+REPOSITORY_MAX_REFS_PER_COMMIT = 20
+# Delivery log rows older than this are deleted by the scheduled cleanup.
+REPOSITORY_DELIVERY_RETENTION_DAYS = 30
+# An accepted delivery not processed after this long is queued again by the sweeper.
+REPOSITORY_SWEEP_AGE_SECONDS = 300
+# How often the sweeper runs, and how many deliveries it queues per run.
+REPOSITORY_SWEEP_INTERVAL_SECONDS = 300
+REPOSITORY_SWEEP_BATCH = 200
+# Commits handled per database round trip while processing a push.
+REPOSITORY_COMMIT_BATCH = 500
+# Linked commits listed by specivo_show_issue before "and N more".
+REPOSITORY_MCP_COMMIT_LIMIT = 10
+# Linked commits and pull requests the issue Development panel and API return.
+DEVELOPMENT_COMMIT_LIMIT = 50
+DEVELOPMENT_PULL_REQUEST_LIMIT = 100
 
 # Celery tasks
 CELERY_MAX_RETRIES = 3
 CELERY_RETRY_DELAY_EMAIL = 60
-CELERY_RETRY_DELAY_WEBHOOK = 30
 CELERY_RETRY_DELAY_EMBEDDING = 30
 CELERY_RETRY_DELAY_LINK_GRAPH = 15
 CELERY_RETRY_DELAY_RECURRING = 120

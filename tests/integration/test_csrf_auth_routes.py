@@ -11,8 +11,8 @@ remembered to test:
 - every other mutating route under ``/api/v1/auth/`` refuses a
   cookie-authenticated request that carries no CSRF token, so a route added
   there later is protected by default;
-- the exempt pattern matches exactly one served route (back-channel logout)
-  and nothing next to it;
+- each exempt pattern matches exactly one served route (SSO back-channel
+  logout, the repository webhook endpoint) and nothing next to it;
 - change-password, the cookie-authenticated endpoint that started this,
   refuses a forged request and leaves the password alone.
 """
@@ -121,10 +121,15 @@ async def test_exempt_paths_accept_cookie_requests_without_csrf(client: AsyncCli
 
 
 # ---------------------------------------------------------------------------
-# The exempt pattern (SSO back-channel logout) against the routing table
+# The exempt patterns (SSO back-channel logout, repository webhooks) against
+# the routing table
 # ---------------------------------------------------------------------------
 
 _BACKCHANNEL_ROUTE = "/auth/oidc/{slug}/backchannel-logout/"
+_REPOSITORY_HOOK_ROUTE = "/hooks/{provider_name}/{public_id}/"
+_HOOK_ID = "3f2b8c1e-5d4a-4e6f-9a7b-0c1d2e3f4a5b"
+# Sample values for path parameters, so each exempt route can match its pattern.
+_SAMPLE_PARAMS = {"slug": "test-idp", "provider_name": "gitea", "public_id": _HOOK_ID}
 
 
 def _mutating_routes() -> set[tuple[str, str]]:
@@ -133,17 +138,23 @@ def _mutating_routes() -> set[tuple[str, str]]:
 
 def test_exempt_patterns_are_the_set_that_was_reviewed() -> None:
     """Spelled out so widening the exemption shows up as a change to this file too."""
-    assert _CSRF_EXEMPT_PATTERNS == (r"/auth/oidc/[a-z0-9-]{2,40}/backchannel-logout/",)
+    assert _CSRF_EXEMPT_PATTERNS == (
+        r"/auth/oidc/[a-z0-9-]{2,40}/backchannel-logout/",
+        r"/hooks/(?:github|gitlab|gitea|forgejo)/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/",
+    )
 
 
-def test_exempt_pattern_matches_only_the_backchannel_route() -> None:
-    """Every mutating route, with sample values for its parameters, against the pattern."""
+def _sample(path: str) -> str:
+    return _PATH_PARAM.sub(lambda m: _SAMPLE_PARAMS.get(m.group(0)[1:-1], "test-idp"), path)
+
+
+def test_each_exempt_pattern_matches_exactly_one_route() -> None:
+    """Every mutating route, with sample values for its parameters, against each pattern."""
     matching = {
-        (method, path)
-        for method, path in _mutating_routes()
-        if any(re.fullmatch(p + "?", _PATH_PARAM.sub("test-idp", path)) for p in _CSRF_EXEMPT_PATTERNS)
+        pattern: {(method, path) for method, path in _mutating_routes() if re.fullmatch(pattern + "?", _sample(path))}
+        for pattern in _CSRF_EXEMPT_PATTERNS
     }
-    assert matching == {("POST", _BACKCHANNEL_ROUTE)}
+    assert list(matching.values()) == [{("POST", _BACKCHANNEL_ROUTE)}, {("POST", _REPOSITORY_HOOK_ROUTE)}]
 
 
 @pytest.mark.parametrize(
@@ -177,6 +188,31 @@ def test_backchannel_logout_is_exempt(path: str) -> None:
     ],
 )
 def test_paths_next_to_backchannel_logout_need_csrf(path: str) -> None:
+    assert _middleware()._needs_csrf(path, _COOKIE_HEADERS)
+
+
+@pytest.mark.parametrize("provider", ["github", "gitlab", "gitea", "forgejo"])
+def test_repository_hook_is_exempt(provider: str) -> None:
+    assert not _middleware()._needs_csrf(f"/hooks/{provider}/{_HOOK_ID}/", _COOKIE_HEADERS)
+    assert not _middleware()._needs_csrf(f"/hooks/{provider}/{_HOOK_ID}", _COOKIE_HEADERS)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/hooks/bitbucket/{_HOOK_ID}/",
+        f"/hooks/github/{_HOOK_ID}/extra/",
+        f"/hooks/github/{_HOOK_ID.upper()}/",
+        f"/hooks/github/{_HOOK_ID.replace('-', '')}/",
+        "/hooks/github/not-a-uuid/",
+        "/hooks/github/push/",
+        f"/hooks/github/{_HOOK_ID}//",
+        f"/prefix/hooks/github/{_HOOK_ID}/",
+        f"/hooks/github/{_HOOK_ID}/\n",
+        f"/api/v1/hooks/github/{_HOOK_ID}/",
+    ],
+)
+def test_paths_next_to_repository_hook_need_csrf(path: str) -> None:
     assert _middleware()._needs_csrf(path, _COOKIE_HEADERS)
 
 

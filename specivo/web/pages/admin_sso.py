@@ -22,6 +22,7 @@ from specivo.core.exceptions import AppError, NotFoundError
 from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.sso import EXTRA_AUTH_PARAM_KEYS, AuthSettingsUpdate
+from specivo.services.scim.config_service import ScimConfigService
 from specivo.services.sso.auth_settings import update_auth_settings
 from specivo.services.sso.flow import backchannel_logout_uri_for, redirect_uri_for
 from specivo.services.sso.provider_service import ProviderService
@@ -30,6 +31,7 @@ from specivo.web.pages.admin import require_admin, require_admin_session
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 _service = ProviderService()
+_scim = ScimConfigService()
 
 
 async def _user_groups(db: AsyncSession) -> list[dict[str, object]]:
@@ -54,7 +56,14 @@ async def admin_sso_providers(
     )
 
 
-def _render_form(request: Request, user: User, provider: dict[str, object] | None, groups, mappings) -> Response:
+def _render_form(
+    request: Request,
+    user: User,
+    provider: dict[str, object] | None,
+    groups,
+    mappings,
+    scim: dict[str, object] | None = None,
+) -> Response:
     return get_templates().TemplateResponse(
         request,
         "pages/admin/sso_provider_detail.html",
@@ -64,6 +73,8 @@ def _render_form(request: Request, user: User, provider: dict[str, object] | Non
             "provider": provider,
             "user_groups": groups,
             "group_mappings": mappings,
+            # SCIM settings of a saved provider (never the token).
+            "scim": scim,
             "extra_param_keys": sorted(EXTRA_AUTH_PARAM_KEYS),
             # For the URL preview while the slug of a new provider is typed.
             "callback_template": redirect_uri_for("__slug__"),
@@ -89,7 +100,7 @@ async def admin_sso_provider_detail(
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,
 ) -> Response:
-    """Render one provider's form, its URLs to copy, and its group mappings."""
+    """Render one provider's form, its URLs to copy, its group mappings and its SCIM settings."""
     try:
         provider = await _service.get(db, provider_id)
     except NotFoundError:
@@ -102,6 +113,7 @@ async def admin_sso_provider_detail(
         out.model_dump(mode="json"),
         await _user_groups(db),
         [m.model_dump() for m in mappings],
+        (await _scim.settings_out(db, provider)).model_dump(mode="json"),
     )
 
 

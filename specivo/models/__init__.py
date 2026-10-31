@@ -20,8 +20,17 @@ from specivo.models.reaction import Mention, Reaction
 from specivo.models.recurrence_exception import RecurrenceException
 from specivo.models.recurring_pattern import RecurringPattern
 from specivo.models.relation import IssueRelation
+from specivo.models.repository import (
+    IssueCommitLink,
+    IssuePullRequestLink,
+    PullRequest,
+    RepositoryCommit,
+    RepositoryDelivery,
+    RepositoryIntegration,
+)
 from specivo.models.role import Role
 from specivo.models.saved_filter import SavedFilter
+from specivo.models.scim import ScimResource
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, ProjectEmbeddingConfig, SearchChunk, SearchSource
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.setting import Setting
@@ -53,12 +62,18 @@ __all__ = [
     "Attachment",
     "ImportIdMapping",
     "Issue",
+    "IssueCommitLink",
+    "IssuePullRequestLink",
+    "PullRequest",
     "Journal",
     "JournalDetail",
     "IssueCategory",
     "IssuePriority",
     "IssueStatus",
     "IssueRelation",
+    "RepositoryCommit",
+    "RepositoryDelivery",
+    "RepositoryIntegration",
     "Mention",
     "Reaction",
     "RecurrenceException",
@@ -67,6 +82,7 @@ __all__ = [
     "Notification",
     "NotificationPreference",
     "SavedFilter",
+    "ScimResource",
     "ChunkEmbedding",
     "EmbeddingModel",
     "ProjectEmbeddingConfig",

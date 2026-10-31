@@ -1,0 +1,187 @@
+{
+  "ref": "refs/heads/main",
+  "before": "28e1879d029cb852e4844d9c718537df08844e03",
+  "after": "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d",
+  "compare_url": "https://forgejo.example.org/example-org/widgets/compare/28e1879d029cb852e4844d9c718537df08844e03...9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d",
+  "commits": [
+    {
+      "id": "4c2b4f7a7d0b0d4e6a5c3e1f9d8b7a6c5e4d3c2b",
+      "message": "Write the import guide\n\nRefs ACME-1",
+      "url": "https://forgejo.example.org/example-org/widgets/commit/4c2b4f7a7d0b0d4e6a5c3e1f9d8b7a6c5e4d3c2b",
+      "author": {
+        "name": "Alex Example",
+        "email": "alex@example.com",
+        "username": "alex-example"
+      },
+      "committer": {
+        "name": "Alex Example",
+        "email": "alex@example.com",
+        "username": "alex-example"
+      },
+      "verification": null,
+      "timestamp": "2024-03-04T13:50:00+07:00",
+      "added": [
+        "docs/new.md"
+      ],
+      "removed": [],
+      "modified": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d",
+      "message": "Fix the importer, closes ACME-2",
+      "url": "https://forgejo.example.org/example-org/widgets/commit/9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d",
+      "author": {
+        "name": "Sam Sample",
+        "email": "sam@example.org",
+        "username": "sam-sample"
+      },
+      "committer": {
+        "name": "Sam Sample",
+        "email": "sam@example.org",
+        "username": "sam-sample"
+      },
+      "verification": null,
+      "timestamp": "2024-03-04T13:55:00+07:00",
+      "added": [
+        "docs/new.md"
+      ],
+      "removed": [],
+      "modified": [
+        "README.md"
+      ]
+    }
+  ],
+  "total_commits": 2,
+  "head_commit": {
+    "id": "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d",
+    "message": "Fix the importer, closes ACME-2",
+    "url": "https://forgejo.example.org/example-org/widgets/commit/9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f1e0d",
+    "author": {
+      "name": "Sam Sample",
+      "email": "sam@example.org",
+      "username": "sam-sample"
+    },
+    "committer": {
+      "name": "Sam Sample",
+      "email": "sam@example.org",
+      "username": "sam-sample"
+    },
+    "verification": null,
+    "timestamp": "2024-03-04T13:55:00+07:00",
+    "added": [
+      "docs/new.md"
+    ],
+    "removed": [],
+    "modified": [
+      "README.md"
+    ]
+  },
+  "repository": {
+    "id": 140,
+    "owner": {
+      "id": 1,
+      "login": "example-org",
+      "login_name": "",
+      "full_name": "Example Org",
+      "email": "owner@example.com",
+      "avatar_url": "https://forgejo.example.org/avatars/1",
+      "language": "",
+      "is_admin": false,
+      "last_login": "0001-01-01T00:00:00Z",
+      "created": "2024-01-02T10:00:00Z",
+      "restricted": false,
+      "active": false,
+      "prohibit_login": false,
+      "location": "",
+      "website": "",
+      "description": "",
+      "visibility": "public",
+      "followers_count": 0,
+      "following_count": 0,
+      "starred_repos_count": 0,
+      "username": "example-org"
+    },
+    "name": "widgets",
+    "full_name": "example-org/widgets",
+    "description": "",
+    "empty": false,
+    "private": false,
+    "fork": false,
+    "template": false,
+    "parent": null,
+    "mirror": false,
+    "size": 42,
+    "language": "",
+    "languages_url": "https://forgejo.example.org/api/v1/repos/example-org/widgets/languages",
+    "html_url": "https://forgejo.example.org/example-org/widgets",
+    "url": "https://forgejo.example.org/api/v1/repos/example-org/widgets",
+    "link": "",
+    "ssh_url": "git@forgejo.example.org:example-org/widgets.git",
+    "clone_url": "https://forgejo.example.org/example-org/widgets.git",
+    "original_url": "",
+    "website": "",
+    "stars_count": 0,
+    "forks_count": 0,
+    "watchers_count": 1,
+    "open_issues_count": 0,
+    "open_pr_counter": 0,
+    "release_counter": 0,
+    "default_branch": "main",
+    "archived": false,
+    "created_at": "2024-01-02T10:00:00Z",
+    "updated_at": "2024-03-04T12:00:00Z",
+    "has_issues": true,
+    "has_wiki": true,
+    "has_pull_requests": true,
+    "internal": false,
+    "object_format_name": "sha1"
+  },
+  "pusher": {
+    "id": 1,
+    "login": "alex-example",
+    "login_name": "",
+    "full_name": "Alex Example",
+    "email": "alex@example.com",
+    "avatar_url": "https://forgejo.example.org/avatars/1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2024-01-02T10:00:00Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "alex-example"
+  },
+  "sender": {
+    "id": 1,
+    "login": "alex-example",
+    "login_name": "",
+    "full_name": "Alex Example",
+    "email": "alex@example.com",
+    "avatar_url": "https://forgejo.example.org/avatars/1",
+    "language": "",
+    "is_admin": false,
+    "last_login": "0001-01-01T00:00:00Z",
+    "created": "2024-01-02T10:00:00Z",
+    "restricted": false,
+    "active": false,
+    "prohibit_login": false,
+    "location": "",
+    "website": "",
+    "description": "",
+    "visibility": "public",
+    "followers_count": 0,
+    "following_count": 0,
+    "starred_repos_count": 0,
+    "username": "alex-example"
+  }
+}

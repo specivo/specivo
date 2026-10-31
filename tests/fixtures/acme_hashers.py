@@ -1,6 +1,6 @@
 """The example password hasher plugin from the guide, kept here so it is tested.
 
-``docs/guide/install/password-hasher-plugins.md`` shows this module verbatim. A
+``docs/guide/en/install/password-hasher-plugins.md`` shows this module verbatim. A
 hypothetical source system stores ``md5(salt + password)``; the plugin teaches
 Specivo to verify it, wrapped in bcrypt. Change the two in step.
 """

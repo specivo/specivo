@@ -10,14 +10,17 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
 from mcp.server.mcpserver.exceptions import ToolError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.mcp import server
 from specivo.mcp.auth import mcp_raw_key_var
+from specivo.models.time_entry import ActiveTimer, TimeEntry
 from specivo.services.api_key_scope import current_project_scope
 from tests.integration.test_api_key_project_scope import World, build_world
 
@@ -183,3 +186,27 @@ async def test_search_refuses_every_unreachable_project_like_a_missing_one(
 
     monkeypatch.setattr(tools._project_svc, "require_project_access", forbid)
     assert await refusal(w.limited_raw, a_key) == missing
+
+
+async def test_the_timer_outside_the_limit_is_out_of_reach(
+    use_test_session, client: AsyncClient, db_session: AsyncSession
+) -> None:
+    w = await _world(db_session, client, "KMT")
+    owner_id, b_id = w.owner.id, w.b.id
+    db_session.add(
+        ActiveTimer(user_id=owner_id, project_id=b_id, issue_id=w.b_issue["id"], started_at=datetime.now(UTC))
+    )
+    await db_session.commit()
+    _as(w.limited_raw)
+
+    assert "No timer is running" in await server.specivo_timer(op="get")
+    assert "No active timer" in await _refused(server.specivo_timer(op="stop"))
+    assert "No active timer" in await _refused(server.specivo_timer(op="discard"))
+    assert "not found" in (await _refused(server.specivo_timer(op="start", issue_ref=w.b_issue["key"]))).lower()
+    assert "cannot reach" in await _refused(server.specivo_timer(op="start", issue_ref=w.a_issue["key"]))
+
+    timer = (await db_session.execute(select(ActiveTimer).where(ActiveTimer.user_id == owner_id))).scalar_one()
+    assert timer.project_id == b_id
+    entries = (await db_session.execute(select(TimeEntry).where(TimeEntry.user_id == owner_id))).scalars().all()
+    assert [e.id for e in entries] == [w.b_entry_id]
+    assert current_project_scope() is None

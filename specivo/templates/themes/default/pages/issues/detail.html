@@ -49,6 +49,7 @@
           <span class="key">{{ issue.display_key }}</span>
           {{ tracker_badge(issue.tracker.name if issue.tracker else '') }}
           {{ status_badge(issue.status.name if issue.status else '') }}
+          {% if can_log_time %}{% include "pages/issues/_timer_start.html" %}{% endif %}
         </div>
         <h1 class="issue-title" x-show="!editing">{{ issue.subject }}</h1>
         <div x-show="editing" x-cloak class="sp-issue-title-edit">
@@ -258,6 +259,8 @@
       </div>
     </div>
     {% endif %}
+
+    {% include "pages/issues/_development.html" %}
 
     {# Activity tabs #}
     <div class="activity-tabs" x-data="{ tab: 'activity' }">
