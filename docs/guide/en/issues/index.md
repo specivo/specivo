@@ -7,8 +7,11 @@ description: What an issue is in Specivo — the unit of work, the four trackers
 An **issue** is the unit of work in Specivo. Every bug to fix, feature to build, task to do, or
 question to answer lives as one issue with its own page, its own number, and its own history. Issues
 belong to a [project](../projects/index.md) and are numbered per project: the first issue in the
-`ACME` project is `ACME-1`, the next is `ACME-2`, and so on. That key never changes, so you can paste
-`ACME-42` into a chat or a commit message and everyone knows exactly which issue you mean.
+`ACME` project is `ACME-1`, the next is `ACME-2`, and so on. You can paste `ACME-42` into a chat or
+a commit message and everyone knows exactly which issue you mean. An administrator can
+[rename a project's key](../projects/index.md#renaming-a-project-key); the issues are re-keyed, and
+old references (links, `OLD-12` in text, commit messages) keep working and lead to the issue under its
+new key.
 
 ![The issue detail page](../../assets/img/issue-detail.webp)
 

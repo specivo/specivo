@@ -16,7 +16,7 @@ inside one.
 | Field | What it holds |
 |---|---|
 | **Name** | The human-readable title, shown in lists and headers |
-| **Key** | A short **uppercase** prefix like `ACME` that brands every issue (`ACME-1`, `ACME-42`). It never changes. |
+| **Key** | A short **uppercase** prefix like `ACME` that brands every issue (`ACME-1`, `ACME-42`). An administrator can rename it; see [Renaming a project key](#renaming-a-project-key). |
 | **Identifier** | The URL slug used in links, e.g. `/projects/acme/` |
 | **Parent** | An optional parent project, so you can nest related projects under one umbrella |
 | **Visibility** | **Public** (anyone who can reach the site can read it) or **private** (members only) |
@@ -25,6 +25,14 @@ inside one.
 The **key** is the part you'll type and paste most. Once people learn that `ACME-42` is an issue in
 the ACME project, that reference works everywhere — in chat, in commit messages, and in
 [search](../issues/finding.md).
+
+### Renaming a project key
+
+An administrator can rename a project's key, for example from `OLD` to `ACME`, through the REST API:
+`POST /api/v1/admin/projects/OLD/rename/` with `{"new_key": "ACME"}`. Every issue in the project is
+re-keyed, so `OLD-12` becomes `ACME-12`. Old references keep working and lead to the issue under its
+new key: links to `/issue/OLD-12/`, `OLD-12` written in descriptions and comments, and `OLD-12` in
+commit messages. The old key stays reserved for this project, so no other project can take it.
 
 ## Member roles
 
