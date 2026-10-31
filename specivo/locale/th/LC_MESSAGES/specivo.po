@@ -66,7 +66,7 @@ msgstr "ไม่พบเซสชันของเอเจนต์"
 
 #: specivo/services/api_key_scope.py:147
 msgid "This API key is limited to specific projects and cannot do this."
-msgstr ""
+msgstr "คีย์ API นี้จำกัดไว้เฉพาะบางโปรเจกต์และไม่สามารถทำสิ่งนี้ได้"
 
 #: specivo/services/api_key_service.py:61
 #: specivo/services/api_key_service.py:69
@@ -4832,14 +4832,18 @@ msgstr "เริ่มตัวจับเวลาไม่สำเร็จ
 msgid ""
 "The timer on %(target)s was stopped and %(hours)s h were logged with the "
 "default activity."
-msgstr "ตัวจับเวลาที่ %(target)s หยุดแล้ว และบันทึกเวลา %(hours)s ชม. ด้วยกิจกรรมเริ่มต้น"
+msgstr ""
+"ตัวจับเวลาที่ %(target)s หยุดแล้ว และบันทึกเวลา %(hours)s ชม. "
+"ด้วยกิจกรรมเริ่มต้น"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:16
 #, python-format
 msgid ""
 "The timer on %(target)s was discarded without logging time: you may no "
 "longer log time there."
-msgstr "ตัวจับเวลาที่ %(target)s ถูกยกเลิกโดยไม่บันทึกเวลา เพราะคุณไม่มีสิทธิ์บันทึกเวลาที่นั่นแล้ว"
+msgstr ""
+"ตัวจับเวลาที่ %(target)s ถูกยกเลิกโดยไม่บันทึกเวลา "
+"เพราะคุณไม่มีสิทธิ์บันทึกเวลาที่นั่นแล้ว"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"

@@ -27,9 +27,9 @@ msgid "You do not have permission to change this file."
 msgstr "No tienes permiso para modificar este archivo."
 
 #: specivo/core/notification_templates.py:19
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Assigned to you by {actor_name}"
-msgstr "[{issue_key}] Asignada a ti por {actor_name}"
+msgstr "{actor_name} te la ha asignado"
 
 #: specivo/core/notification_templates.py:20
 #, python-brace-format
@@ -37,9 +37,9 @@ msgid "[{issue_key}] Assigned to you by {actor_name}"
 msgstr "[{issue_key}] Asignada a ti por {actor_name}"
 
 #: specivo/core/notification_templates.py:23
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "Updated by {actor_name}"
-msgstr "[{issue_key}] Actualizada por {actor_name}"
+msgstr "Actualizada por {actor_name}"
 
 #: specivo/core/notification_templates.py:24
 #, python-brace-format
@@ -47,9 +47,9 @@ msgid "[{issue_key}] Updated by {actor_name}"
 msgstr "[{issue_key}] Actualizada por {actor_name}"
 
 #: specivo/core/notification_templates.py:27
-#, fuzzy, python-brace-format
+#, python-brace-format
 msgid "{actor_name} commented"
-msgstr "[{issue_key}] {actor_name} comentó"
+msgstr "{actor_name} comentó"
 
 #: specivo/core/notification_templates.py:28
 #, python-brace-format
@@ -66,7 +66,7 @@ msgstr "Sesión de agente no encontrada"
 
 #: specivo/services/api_key_scope.py:147
 msgid "This API key is limited to specific projects and cannot do this."
-msgstr ""
+msgstr "Esta clave API está limitada a proyectos concretos y no puede hacer esto."
 
 #: specivo/services/api_key_service.py:61
 #: specivo/services/api_key_service.py:69
@@ -344,6 +344,8 @@ msgstr "Regla de campo de flujo de trabajo no encontrada"
 #: specivo/templates/themes/default/base.html:18
 msgid "This diagram could not be drawn. Its source is shown below."
 msgstr ""
+"No se pudo dibujar este diagrama. Su código fuente se muestra a "
+"continuación."
 
 #: specivo/templates/themes/default/base.html:39
 msgid "You are reading a public project. Sign in to take part."
@@ -385,15 +387,15 @@ msgstr "Tamaño de fuente"
 
 #: specivo/templates/themes/default/components/header.html:31
 msgid "Could not load the activities."
-msgstr ""
+msgstr "No se pudieron cargar las actividades."
 
 #: specivo/templates/themes/default/components/header.html:32
 msgid "Could not stop the timer."
-msgstr ""
+msgstr "No se pudo detener el temporizador."
 
 #: specivo/templates/themes/default/components/header.html:33
 msgid "Could not discard the timer."
-msgstr ""
+msgstr "No se pudo descartar el temporizador."
 
 #: specivo/templates/themes/default/components/header.html:34
 #: specivo/templates/themes/default/pages/_fts_i18n.html:9
@@ -421,7 +423,7 @@ msgstr "No se pudo conectar."
 #: specivo/templates/themes/default/components/header.html:39
 #, python-format
 msgid "Timer running on %(target)s"
-msgstr ""
+msgstr "Temporizador en marcha en %(target)s"
 
 #: specivo/templates/themes/default/components/header.html:48
 #: specivo/templates/themes/default/components/sidebar.html:67
@@ -521,7 +523,7 @@ msgstr "Cancelar"
 
 #: specivo/templates/themes/default/components/header.html:84
 msgid "Discard the timer? The time is not logged."
-msgstr ""
+msgstr "¿Descartar el temporizador? El tiempo no se registrará."
 
 #: specivo/templates/themes/default/components/header.html:107
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
@@ -4612,45 +4614,45 @@ msgstr "p. ej. Acuerdo sobre el enfoque"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:7
 msgid "Draft"
-msgstr ""
+msgstr "Borrador"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:7
 msgid "Merged"
-msgstr ""
+msgstr "Fusionada"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:9
 msgid "Development"
-msgstr ""
+msgstr "Desarrollo"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:13
 msgid "Pull requests"
-msgstr ""
+msgstr "Pull requests"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:26
 msgid "Says it fixes this issue"
-msgstr ""
+msgstr "Indica que corrige esta incidencia"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:26
 msgid "fixes"
-msgstr ""
+msgstr "corrige"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:37
 msgid "Branches"
-msgstr ""
+msgstr "Ramas"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:57
 msgid "Commits"
-msgstr ""
+msgstr "Commits"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:74
 #, python-format
 msgid "Show %(count)s more"
-msgstr ""
+msgstr "Mostrar %(count)s más"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:77
 #, python-format
 msgid "The newest %(shown)s of %(total)s commits."
-msgstr ""
+msgstr "Los %(shown)s commits más recientes de %(total)s."
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:21
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:87
@@ -4761,15 +4763,15 @@ msgstr "Dejar de seguir"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:346
 msgid "Press Ctrl+C to copy"
-msgstr ""
+msgstr "Pulsa Ctrl+C para copiar"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:348
 msgid "Branch name"
-msgstr ""
+msgstr "Nombre de la rama"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:351
 msgid "Copy branch name"
-msgstr ""
+msgstr "Copiar nombre de la rama"
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:359
 msgid "Move"
@@ -4890,7 +4892,7 @@ msgstr "¿Seguro que quieres eliminar"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:13
 msgid "Could not start the timer."
-msgstr ""
+msgstr "No se pudo iniciar el temporizador."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:15
 #, python-format
@@ -4908,11 +4910,11 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"
-msgstr ""
+msgstr "Iniciar temporizador"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:26
 msgid "A timer is already running"
-msgstr ""
+msgstr "Ya hay un temporizador en marcha"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:27
 #, python-format
@@ -4920,14 +4922,16 @@ msgid ""
 "A timer is already running on %(target)s. Log its time (with the default "
 "activity) or discard it before starting a new one."
 msgstr ""
+"Ya hay un temporizador en marcha en %(target)s. Registra su tiempo (con "
+"la actividad predeterminada) o descártalo antes de iniciar uno nuevo."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:29
 msgid "Log it and start"
-msgstr ""
+msgstr "Registrar e iniciar"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:30
 msgid "Discard it and start"
-msgstr ""
+msgstr "Descartar e iniciar"
 
 #: specivo/templates/themes/default/pages/issues/description_diff.html:4
 msgid "Description Changes"
@@ -6227,12 +6231,12 @@ msgstr "Miembros"
 #: specivo/templates/themes/default/pages/projects/settings.html:30
 #: specivo/templates/themes/default/pages/projects/settings.html:1041
 msgid "Webhooks"
-msgstr ""
+msgstr "Webhooks"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:31
 #: specivo/templates/themes/default/pages/projects/settings.html:1276
 msgid "Repositories"
-msgstr ""
+msgstr "Repositorios"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:36
 #: specivo/templates/themes/default/pages/projects/settings.html:827
@@ -6745,289 +6749,283 @@ msgstr ""
 "se puede deshacer."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1015
-#, fuzzy
 msgid "Issue created"
-msgstr "Emisor declarado"
+msgstr "Incidencia creada"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1016
-#, fuzzy
 msgid "Issue updated"
-msgstr "Plantilla de incidencia"
+msgstr "Incidencia actualizada"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1017
-#, fuzzy
 msgid "Issue commented"
-msgstr "incidencias cerradas"
+msgstr "Incidencia comentada"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1018
-#, fuzzy
 msgid "Issue deleted"
-msgstr "Archivo eliminado"
+msgstr "Incidencia eliminada"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1019
-#, fuzzy
 msgid "Wiki page updated"
-msgstr "Página de wiki"
+msgstr "Página wiki actualizada"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1020
 msgid "Test event"
-msgstr ""
+msgstr "Evento de prueba"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1022
-#, fuzzy
 msgid "Failed to save webhook."
-msgstr "No se pudo guardar."
+msgstr "No se pudo guardar el webhook."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1024
 #: specivo/templates/themes/default/pages/projects/settings.html:1258
-#, fuzzy
 msgid "Could not load deliveries."
-msgstr "No se pudieron guardar los cambios."
+msgstr "No se pudieron cargar las entregas."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1025
 msgid "Test event queued. Open the delivery log to see the result."
 msgstr ""
+"Evento de prueba en cola. Abre el registro de entregas para ver el "
+"resultado."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1026
-#, fuzzy
 msgid "Could not send the test event."
-msgstr "No se pudo cambiar la contraseña."
+msgstr "No se pudo enviar el evento de prueba."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1027
 #: specivo/templates/themes/default/pages/projects/settings.html:1046
 msgid "New webhook"
-msgstr ""
+msgstr "Nuevo webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1028
 msgid "Edit webhook"
-msgstr ""
+msgstr "Editar webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1029
-#, fuzzy
 msgid "Create webhook"
-msgstr "Creado el"
+msgstr "Crear webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1033
-#, fuzzy
 msgid "Pending"
-msgstr "Enviando..."
+msgstr "Pendiente"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1034
 msgid "Succeeded"
-msgstr ""
+msgstr "Correcto"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1035
 #: specivo/templates/themes/default/pages/projects/settings.html:1270
-#, fuzzy
 msgid "Failed"
-msgstr "ARCHIVO"
+msgstr "Fallido"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1053
-#, fuzzy
 msgid "Signing secret"
-msgstr "Claves de firma"
+msgstr "Secreto de firma"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1059
 msgid ""
 "Copy it now: it is not shown again. Receivers check the X-Specivo-"
 "Signature header (HMAC-SHA256 of the body) with it."
 msgstr ""
+"Cópialo ahora: no se volverá a mostrar. Los receptores comprueban con él "
+"la cabecera X-Specivo-Signature (HMAC-SHA256 del cuerpo)."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1071
-#, fuzzy
 msgid "No webhooks yet"
-msgstr "Aún no hay versiones"
+msgstr "Aún no hay webhooks"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1072
 msgid ""
 "A webhook sends a signed HTTPS request to another system when issues or "
 "wiki pages in this project change."
 msgstr ""
+"Un webhook envía una solicitud HTTPS firmada a otro sistema cuando "
+"cambian incidencias o páginas wiki de este proyecto."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1073
-#, fuzzy
 msgid "Create first webhook"
-msgstr "Crear la primera versión"
+msgstr "Crear el primer webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1084
 msgid "includes private content"
-msgstr ""
+msgstr "incluye contenido privado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1089
 #: specivo/templates/themes/default/pages/projects/settings.html:1112
 #: specivo/templates/themes/default/pages/projects/settings.html:1367
 #: specivo/templates/themes/default/pages/projects/settings.html:1390
-#, fuzzy
 msgid "Delivery log"
-msgstr "URL de descubrimiento"
+msgstr "Registro de entregas"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1090
-#, fuzzy
 msgid "Send test"
 msgstr "Enviar prueba"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1122
 #: specivo/templates/themes/default/pages/projects/settings.html:1400
-#, fuzzy
 msgid "No deliveries yet"
-msgstr "Aún no hay versiones"
+msgstr "Aún no hay entregas"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1123
 msgid ""
 "Deliveries appear here when a subscribed event happens, or when you send "
 "a test event."
 msgstr ""
+"Las entregas aparecen aquí cuando ocurre un evento suscrito o cuando "
+"envías un evento de prueba."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1132
 #: specivo/templates/themes/default/pages/projects/settings.html:1410
-#, fuzzy
 msgid "Event"
-msgstr "Eventos de bloqueo"
+msgstr "Evento"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1134
-#, fuzzy
 msgid "Attempts"
-msgstr "Adjuntos"
+msgstr "Intentos"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1135
 msgid "Response code"
-msgstr ""
+msgstr "Código de respuesta"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1136
-#, fuzzy
 msgid "Response"
-msgstr "Motivo"
+msgstr "Respuesta"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1158
 #: specivo/templates/themes/default/pages/projects/settings.html:1429
-#, fuzzy
 msgid "Newer"
-msgstr "Nunca"
+msgstr "Más recientes"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1160
 #: specivo/templates/themes/default/pages/projects/settings.html:1431
-#, fuzzy
 msgid "Older"
-msgstr "Rol"
+msgstr "Más antiguos"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1180
 msgid "Payload URL"
-msgstr ""
+msgstr "URL de destino"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1182
 msgid ""
 "HTTPS only. Addresses inside private networks are refused when the "
 "request is sent."
 msgstr ""
+"Solo HTTPS. Las direcciones de redes privadas se rechazan al enviar la "
+"solicitud."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1185
-#, fuzzy
 msgid "Events"
-msgstr "Eventos de bloqueo"
+msgstr "Eventos"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1199
-#, fuzzy
 msgid "Include private issues and private notes"
-msgstr "Las nuevas incidencias son privadas"
+msgstr "Incluir incidencias privadas y notas privadas"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1201
 msgid "Off by default: the receiver then never learns about private content."
-msgstr ""
+msgstr "Desactivado por defecto: así el receptor nunca recibe contenido privado."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1204
 msgid ""
 "Private issues and private notes are not sent. Only an administrator can "
 "change that."
 msgstr ""
+"Las incidencias privadas y las notas privadas no se envían. Solo un "
+"administrador puede cambiarlo."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1208
-#, fuzzy
 msgid "Generate a new secret"
-msgstr "Generar contraseña"
+msgstr "Generar un nuevo secreto"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1209
 msgid "The old secret stops working at once."
-msgstr ""
+msgstr "El secreto anterior deja de funcionar de inmediato."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1213
 msgid "A signing secret is generated and shown once after the webhook is created."
 msgstr ""
+"Se genera un secreto de firma que se muestra una sola vez tras crear el "
+"webhook."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1232
 #: specivo/templates/themes/default/pages/projects/settings.html:1242
-#, fuzzy
 msgid "Delete webhook"
-msgstr "Eliminar versión"
+msgstr "Eliminar webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1238
 msgid "Delete this webhook and its delivery log? Nothing more is sent to:"
 msgstr ""
+"¿Eliminar este webhook y su registro de entregas? No se enviará nada más "
+"a:"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1256
 msgid "Failed to save the repository."
-msgstr ""
+msgstr "No se pudo guardar el repositorio."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1259
 #: specivo/templates/themes/default/pages/projects/settings.html:1281
 msgid "Connect a repository"
-msgstr ""
+msgstr "Conectar un repositorio"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1260
 msgid "Edit repository"
-msgstr ""
+msgstr "Editar repositorio"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1261
 msgid "Connect repository"
-msgstr ""
+msgstr "Conectar repositorio"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1265
 msgid "Never received"
-msgstr ""
+msgstr "Nunca recibido"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1266
 msgid "Accepted"
-msgstr ""
+msgstr "Aceptado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1267
 msgid "Duplicate"
-msgstr ""
+msgstr "Duplicado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1268
 msgid "Ignored"
-msgstr ""
+msgstr "Ignorado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1269
 msgid "Processed"
-msgstr ""
+msgstr "Procesado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1290
 msgid "Webhook URL"
-msgstr ""
+msgstr "URL del webhook"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1297
 msgid "Secret"
-msgstr ""
+msgstr "Secreto"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1303
 msgid "Copy the secret now: it is not shown again."
-msgstr ""
+msgstr "Copia el secreto ahora: no se volverá a mostrar."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1307
 msgid ""
 "In the repository on GitHub, open Settings, then Webhooks, then Add "
 "webhook."
 msgstr ""
+"En el repositorio de GitHub, abre Settings, luego Webhooks y luego Add "
+"webhook."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1308
 msgid ""
 "Paste the webhook URL into Payload URL and set Content type to "
 "application/json."
 msgstr ""
+"Pega la URL del webhook en Payload URL y pon Content type en "
+"application/json."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1309
 #: specivo/templates/themes/default/pages/projects/settings.html:1325
 msgid "Paste the secret into Secret."
-msgstr ""
+msgstr "Pega el secreto en Secret."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1310
 msgid ""
@@ -7035,46 +7033,57 @@ msgid ""
 "requests, and save. GitHub sends a ping at once; it appears in the "
 "delivery log."
 msgstr ""
+"Elige «Let me select individual events», marca Pushes y Pull requests, y "
+"guarda. GitHub envía un ping al momento; aparece en el registro de "
+"entregas."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1315
 msgid ""
 "In the project on GitLab, open Settings, then Webhooks, then Add new "
 "webhook."
 msgstr ""
+"En el proyecto de GitLab, abre Settings, luego Webhooks y luego Add new "
+"webhook."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1316
 msgid "Paste the webhook URL into URL and the secret into Secret token."
-msgstr ""
+msgstr "Pega la URL del webhook en URL y el secreto en Secret token."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1317
 msgid "Under Trigger, select Push events and Merge request events."
-msgstr ""
+msgstr "En Trigger, selecciona Push events y Merge request events."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1318
 msgid "Save, then use Test, Push events to send a first delivery."
-msgstr ""
+msgstr "Guarda y luego usa Test, Push events para enviar una primera entrega."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1323
 msgid ""
 "In the repository, open Settings, then Webhooks, then Add webhook, and "
 "pick the Gitea or Forgejo webhook type, matching the server."
 msgstr ""
+"En el repositorio, abre Settings, luego Webhooks y luego Add webhook, y "
+"elige el tipo de webhook Gitea o Forgejo según el servidor."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1324
 msgid ""
 "Paste the webhook URL into Target URL. Keep the HTTP method POST and set "
 "the POST content type to application/json."
 msgstr ""
+"Pega la URL del webhook en Target URL. Deja el método HTTP en POST y pon "
+"el POST content type en application/json."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1326
 msgid ""
 "Under Trigger on, choose Custom events, tick Push and Pull request, then "
 "add the webhook. Test delivery sends a push."
 msgstr ""
+"En Trigger on, elige Custom events, marca Push y Pull request y añade el "
+"webhook. Test delivery envía un push."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1344
 msgid "No repositories connected"
-msgstr ""
+msgstr "No hay repositorios conectados"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1345
 msgid ""
@@ -7082,34 +7091,39 @@ msgid ""
 "mention an issue key, such as \"Fixes KEY-12\", or are pushed to a branch"
 " named after one, are linked to the issue."
 msgstr ""
+"Conecta un repositorio de GitHub, GitLab, Gitea o Forgejo: los commits "
+"que mencionan una clave de incidencia, como «Fixes KEY-12», o que se "
+"envían a una rama con su nombre, se vinculan a la incidencia."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1346
 msgid "Connect the first repository"
-msgstr ""
+msgstr "Conectar el primer repositorio"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1359
 msgid "Last delivery:"
-msgstr ""
+msgstr "Última entrega:"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1360
 msgid "includes subprojects"
-msgstr ""
+msgstr "incluye subproyectos"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1362
 msgid "commit commands on"
-msgstr ""
+msgstr "comandos de commit activados"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1363
 msgid "merge automation on"
-msgstr ""
+msgstr "automatización de fusiones activada"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1368
 msgid "New secret"
-msgstr ""
+msgstr "Nuevo secreto"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1401
 msgid "Deliveries appear here once the forge sends its first webhook to this URL."
 msgstr ""
+"Las entregas aparecen aquí en cuanto la forja envíe su primer webhook a "
+"esta URL."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1412
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
@@ -7121,37 +7135,39 @@ msgstr "Detalles"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1459
 msgid "Repository"
-msgstr ""
+msgstr "Repositorio"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1461
 msgid ""
 "The full name as the forge shows it, owner and repository. Deliveries "
 "that name another repository are ignored."
 msgstr ""
+"El nombre completo tal como lo muestra la forja: propietario y "
+"repositorio. Las entregas que indican otro repositorio se ignoran."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1464
 msgid "Repository URL"
-msgstr ""
+msgstr "URL del repositorio"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1468
 msgid "Issues commits may link to"
-msgstr ""
+msgstr "Incidencias a las que pueden vincularse los commits"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1470
 msgid "This project"
-msgstr ""
+msgstr "Este proyecto"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1471
 msgid "This project and its subprojects"
-msgstr ""
+msgstr "Este proyecto y sus subproyectos"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1473
 msgid "Keys of other projects in commit messages are ignored."
-msgstr ""
+msgstr "Las claves de otros proyectos en los mensajes de commit se ignoran."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1476
 msgid "Changes to issues"
-msgstr ""
+msgstr "Cambios en incidencias"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1477
 msgid ""
@@ -7160,10 +7176,15 @@ msgid ""
 "this repository can act as any project member whose verified email they "
 "use."
 msgstr ""
+"Los comandos de commit confían en el correo del autor del commit, que "
+"cualquiera con permiso de push puede poner con cualquier dirección. Con "
+"los comandos activados, cualquiera que pueda hacer push a este "
+"repositorio puede actuar como cualquier miembro del proyecto cuyo correo "
+"verificado use."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1480
 msgid "Commit commands"
-msgstr ""
+msgstr "Comandos de commit"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1482
 msgid ""
@@ -7171,28 +7192,35 @@ msgid ""
 " fixing status, as the Specivo user whose verified email wrote the "
 "commit. Their permissions and the workflow apply."
 msgstr ""
+"«Fixes KEY-12» en un commit de la rama predeterminada mueve la incidencia"
+" al estado de corrección, como el usuario de Specivo cuyo correo "
+"verificado escribió el commit. Se aplican sus permisos y el flujo de "
+"trabajo."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1484
 msgid "Fixing status"
-msgstr ""
+msgstr "Estado de corrección"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1486
 msgid "Do not change the status"
-msgstr ""
+msgstr "No cambiar el estado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1494
 msgid "Time logging"
-msgstr ""
+msgstr "Registro de tiempo"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1496
 msgid ""
 "\"KEY-12 @1h30m\" (also @2h, @90m, @1.5h) logs the time on the issue for "
 "the commit's author, on any branch. They need permission to log time."
 msgstr ""
+"«KEY-12 @1h30m» (también @2h, @90m, @1.5h) registra el tiempo en la "
+"incidencia para el autor del commit, en cualquier rama. Necesita permiso "
+"para registrar tiempo."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1500
 msgid "Merge automation"
-msgstr ""
+msgstr "Automatización de fusiones"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1502
 msgid ""
@@ -7200,18 +7228,22 @@ msgid ""
 "the default branch, the issue moves to the merge status. The change is "
 "made by Git, with the project role chosen here, and follows the workflow."
 msgstr ""
+"Cuando una pull request o merge request que dice «Fixes KEY-12» se "
+"fusiona en la rama predeterminada, la incidencia pasa al estado de "
+"fusión. El cambio lo hace Git, con el rol de proyecto elegido aquí, y "
+"sigue el flujo de trabajo."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1505
 msgid "Merge status"
-msgstr ""
+msgstr "Estado de fusión"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1507
 msgid "Choose a status"
-msgstr ""
+msgstr "Elige un estado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1514
 msgid "Role of Git in this project"
-msgstr ""
+msgstr "Rol de Git en este proyecto"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1520
 msgid ""
@@ -7219,32 +7251,42 @@ msgid ""
 " an administrator grants them. Changing the role needs permission to "
 "manage members."
 msgstr ""
+"El rol Automation puede editar incidencias, pero no tiene transiciones de"
+" flujo de trabajo hasta que un administrador se las conceda. Cambiar el "
+"rol requiere permiso para gestionar miembros."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1526
 msgid "Ignore pull requests from forks and outsiders"
-msgstr ""
+msgstr "Ignorar pull requests de forks y personas externas"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1528
 msgid ""
 "Requests from another repository, or on GitHub by someone who is not a "
 "collaborator, are not linked to issues until they are merged."
 msgstr ""
+"Las solicitudes de otro repositorio, o en GitHub de alguien que no es "
+"colaborador, no se vinculan a incidencias hasta que se fusionan."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1531
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
 msgstr ""
+"Se generan una URL de webhook y un secreto que se muestran una sola vez "
+"tras conectar el repositorio."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1550
 msgid "Disconnect repository"
-msgstr ""
+msgstr "Desconectar repositorio"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1556
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
 msgstr ""
+"¿Desconectar este repositorio? Su URL de webhook deja de funcionar y se "
+"elimina su registro de entregas. Las notas de commits ya presentes en las"
+" incidencias se conservan."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1569
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
@@ -7253,11 +7295,11 @@ msgstr "Guardado"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1570
 msgid "Could not save the branch name settings."
-msgstr ""
+msgstr "No se pudo guardar la configuración de nombres de rama."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1575
 msgid "Branch names"
-msgstr ""
+msgstr "Nombres de rama"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1577
 #, python-brace-format
@@ -7267,18 +7309,23 @@ msgid ""
 "tracker; {slug} is the subject in lower case, at most 40 characters. "
 "Branches named this way link their commits to the issue."
 msgstr ""
+"El botón «Copiar nombre de la rama» de una incidencia construye el nombre"
+" con este formato. {key} es la clave de la incidencia y es obligatoria; "
+"{type} viene del tipo de seguimiento; {slug} es el asunto en minúsculas, "
+"de 40 caracteres como máximo. Los commits de las ramas con este nombre se"
+" vinculan a la incidencia."
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1579
 msgid "Format"
-msgstr ""
+msgstr "Formato"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1581
 msgid "Example:"
-msgstr ""
+msgstr "Ejemplo:"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1591
 msgid "Other trackers"
-msgstr ""
+msgstr "Otros tipos de seguimiento"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1610
 msgid "Search indexing"
