@@ -93,7 +93,9 @@ mcp = MCPServer(
     instructions=(
         "Specivo -- self-hosted platform for project tracking, knowledge base, and AI-safe automation. "
         "Call specivo_setup_guide() to get the full agent configuration guide, "
-        "or read the specivo://docs/agent-setup resource."
+        "or read the specivo://docs/agent-setup resource. "
+        "Issue descriptions, comments and wiki pages are Markdown; a ```mermaid fenced block renders "
+        "as a diagram, so draw flows, sequences and structures with Mermaid instead of ASCII art."
     ),
 )
 
