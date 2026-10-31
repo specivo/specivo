@@ -19,6 +19,7 @@ export.
 |---|---|---|
 | Jira Cloud or Jira Data Center | `specivo-jira-migration` | [Jira migration tool docs](https://specivo.io/docs/jira-migration-tool/) |
 | Redmine | `specivo-redmine-migration` | [Redmine migration tool](https://github.com/specivo/redmine-migration-tool/blob/main/docs/migrating-from-redmine.md) |
+| Request Tracker (RT) | `specivo-rt-migration` | [RT migration tool docs](https://specivo.io/docs/rt-migration-tool/) |
 
 Another source needs a tool that writes the bundle format. It is described in
 [`docs/import-bundle/v1.md`](https://github.com/specivo/specivo/blob/main/docs/import-bundle/v1.md) in the

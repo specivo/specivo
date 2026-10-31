@@ -4,6 +4,8 @@
 
 # Specivo
 
+**English** | [简体中文](README.zh-CN.md)
+
 Your team's knowledge, finally findable.
 
 Self-hosted project tracker with wiki and semantic search. Open source. No per-seat pricing. Built for teams that also use AI agents.
@@ -56,6 +58,22 @@ Step-by-step self-hosting guide: [Self-host Specivo with Docker](https://specivo
 **Single sign-on** — OpenID Connect with Keycloak, authentik, Microsoft Entra ID or any OIDC provider. Several providers at once, accounts created on first sign-in, group and admin mapping, sign-out at the provider and back-channel logout, with a break-glass way back in.
 
 **i18n** — ships with English, Russian, Chinese, French, Spanish and Thai. Per-user language and workspace default. Extensible via `.po` files.
+
+## Moving from another tracker
+
+Bring your projects, issues, history, wiki pages and attachments with you. A separate migration
+tool reads the old system and writes an import bundle; Specivo checks the bundle, lets you rehearse
+the import, and loads it.
+
+| Moving from | Tool |
+|---|---|
+| Jira Cloud or Jira Data Center | [jira-migration-tool](https://github.com/specivo/jira-migration-tool) ([docs](https://specivo.io/docs/jira-migration-tool/)) |
+| Redmine | [redmine-migration-tool](https://github.com/specivo/redmine-migration-tool) |
+| Request Tracker (RT) | [rt-migration-tool](https://github.com/specivo/rt-migration-tool) ([docs](https://specivo.io/docs/rt-migration-tool/)) |
+
+For any other system, [migration-sdk](https://github.com/specivo/migration-sdk) writes the
+[bundle format](docs/import-bundle/v1.md) for you. The Specivo side of an import is described in
+[Importing from another tracker](https://specivo.io/docs/specivo/install/importing/).
 
 ## Tech
 
