@@ -7,7 +7,7 @@ description: Attaching files to issues, wiki pages, and comments in Specivo — 
 You can attach files to **issues**, **wiki pages**, and **comments** — screenshots, logs, design
 files, spreadsheets, anything that helps explain or document the work.
 
-![Attachments on an issue](../assets/img/issue-attachments.webp)
+![Attachments on an issue](../../assets/img/issue-attachments.webp)
 
 ## Attach a file
 

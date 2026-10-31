@@ -7,7 +7,7 @@ description: Commenting on issues in Specivo — Markdown, @mentions to notify t
 Comments are how the conversation around an issue happens. Each comment is a permanent journal entry on
 the issue, so the discussion stays with the work it's about.
 
-![Comments on an issue](../assets/img/issue-comments.webp)
+![Comments on an issue](../../assets/img/issue-comments.webp)
 
 ## Write a comment
 

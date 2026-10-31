@@ -15,7 +15,7 @@ that access away again.
 3. Copy the key when it's shown. It looks like `spv_your_api_key_here` — a string that always
    starts with `spv_`.
 
-![Your API keys page](../assets/img/my-api-keys.webp)
+![Your API keys page](../../assets/img/my-api-keys.webp)
 
 !!! warning "Copy the key now"
     The full key value is shown only once, at creation. Specivo stores it hashed and cannot display

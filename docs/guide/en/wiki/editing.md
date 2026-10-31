@@ -23,14 +23,14 @@ That's the whole minimum — a title and some content.
     automatically, and slugs are normalized so links resolve regardless of casing or separators. See
     [Wiki overview](index.md#slugs-are-normalized).
 
-![A wiki page](../assets/img/wiki-page.webp)
+![A wiki page](../../assets/img/wiki-page.webp)
 
 ## Edit a page
 
 Open any editable page and click **Edit**. You get the Markdown source in an editor; change what you
 need and **Save**.
 
-![Editing a wiki page](../assets/img/wiki-edit.webp)
+![Editing a wiki page](../../assets/img/wiki-edit.webp)
 
 !!! note "Protected pages are read-only"
     If a page is marked **protected**, the **Edit** action is unavailable until its protected state is

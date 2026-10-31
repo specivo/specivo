@@ -11,12 +11,12 @@ This page walks you through the everyday happy path. It assumes someone has alre
 
 Open your team's Specivo URL and sign in with the username (or email) and password you were given.
 
-![The Specivo sign-in screen](../assets/img/login.webp)
+![The Specivo sign-in screen](../../assets/img/login.webp)
 
 After signing in you land on your **dashboard** — a personal overview of issues assigned to you and recent
 activity across your projects.
 
-![The dashboard after signing in](../assets/img/dashboard.webp)
+![The dashboard after signing in](../../assets/img/dashboard.webp)
 
 ## 2. Open your project
 

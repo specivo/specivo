@@ -7,7 +7,7 @@ description: How to create an issue in Specivo — click New issue, pick a track
 Creating an issue takes seconds. The only things Specivo insists on are a **subject** and a
 **tracker** — everything else is optional and easy to add later.
 
-![The new issue form](../assets/img/issue-new.webp)
+![The new issue form](../../assets/img/issue-new.webp)
 
 ## Steps
 

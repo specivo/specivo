@@ -7,7 +7,7 @@ description: Finding issues in Specivo — the filterable issue list, the board 
 There are three ways to get to the issue you want: the **list**, the **board**, and **search**. Pick
 whichever matches what you're doing.
 
-![The issues list](../assets/img/issues-list.webp)
+![The issues list](../../assets/img/issues-list.webp)
 
 ## The issue list
 
@@ -31,7 +31,7 @@ columns as their [status](statuses-workflow.md) changes.
 
 Press <kbd>⌘K</kbd> (<kbd>Ctrl+K</kbd> on Windows/Linux) anywhere in Specivo to jump to search and start typing.
 
-![Search](../assets/img/search.webp)
+![Search](../../assets/img/search.webp)
 
 Specivo uses **hybrid search** — it combines exact **keyword** matching with **semantic** (meaning-based)
 matching, so it finds the right work even when the wording differs. (The semantic half needs an

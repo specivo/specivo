@@ -40,7 +40,7 @@ Only the three roadmap trackers — **Bug**, **Feature**, and **Task** — appea
 The **Roadmap** lists the project's versions and shows progress for each: how many of its issues are
 done versus still open. It's the at-a-glance answer to "what's left before we ship?".
 
-![The project roadmap](../assets/img/roadmap.webp)
+![The project roadmap](../../assets/img/roadmap.webp)
 
 ### Order and completed versions
 

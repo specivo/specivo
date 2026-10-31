@@ -109,4 +109,4 @@ across the project.
     reveal work on hidden issues. Time logged on the project itself, without an issue, is not
     affected. Your own entries always stay visible to you, even on an issue you can no longer see.
 
-![The project time entries](../assets/img/time-entries.webp)
+![The project time entries](../../assets/img/time-entries.webp)

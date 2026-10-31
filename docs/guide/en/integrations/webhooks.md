@@ -26,7 +26,7 @@ After you save, Specivo shows the **Signing secret** once. Copy it into the rece
 not shown again. To replace it, open the webhook with **Edit** and choose **Generate a new
 secret**; the old secret stops working at once.
 
-![The Webhooks tab](../assets/img/project-settings-webhooks.webp)
+![The Webhooks tab](../../assets/img/project-settings-webhooks.webp)
 
 Each webhook has these actions: **Delivery log**, **Send test** (sends a `ping` event, even to a
 disabled webhook), **Disable** / **Enable**, **Edit** and **Delete** (which also deletes its
@@ -317,7 +317,7 @@ event and delete it. Wiki events are never private.
 | **Response code** | The HTTP status of the last answer; `–` when there was none. |
 | **Response** | Why the last attempt failed, and the start of the receiver's answer. |
 
-![The delivery log of a webhook](../assets/img/webhook-delivery-log.webp)
+![The delivery log of a webhook](../../assets/img/webhook-delivery-log.webp)
 
 Messages you may see under **Response**:
 

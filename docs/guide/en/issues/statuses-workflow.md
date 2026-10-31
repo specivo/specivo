@@ -7,7 +7,7 @@ description: Specivo's default issue statuses and their categories, the typical 
 An issue's **status** says where it sits in its lifecycle. Specivo ships with a set of sensible
 defaults, and each status belongs to a **category** that drives the board columns and reports.
 
-![The issues board](../assets/img/issues-board.webp)
+![The issues board](../../assets/img/issues-board.webp)
 
 ## The default statuses
 

@@ -12,7 +12,7 @@ from specivo.services.sso.identity_service import LastSignInMethodError
 
 pytestmark = pytest.mark.unit
 
-GUIDE = Path(__file__).resolve().parents[2] / "docs" / "guide" / "install" / "single-sign-on" / "index.md"
+GUIDE = Path(__file__).resolve().parents[2] / "docs" / "guide" / "en" / "install" / "single-sign-on" / "index.md"
 
 # The base class's code is never raised on its own.
 _NOT_RAISED = {"sso_error"}
