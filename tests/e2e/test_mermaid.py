@@ -219,3 +219,48 @@ def test_drawing_never_removes_page_elements_by_id(admin_page: Page, api_client:
 
     expect(admin_page.locator(".wiki-content .sp-mermaid-diagram svg")).to_have_count(2, timeout=15000)
     expect(admin_page.locator(".wiki-content h2")).to_have_count(6)
+
+
+WIDE_FLOWCHART = (
+    "```mermaid\nflowchart LR\n"
+    "    A[Collect the requirements] --> B[Write the design document] --> C[Review the design together]\n"
+    "    C --> D[Build the first version] --> E[Test it on every platform] --> F[Release it to everyone]\n"
+    "```"
+)
+
+_SIZES = """e => {
+    const svg = e.querySelector('svg');
+    return {
+        scrollWidth: e.scrollWidth,
+        clientWidth: e.clientWidth,
+        svgWidth: svg.getBoundingClientRect().width,
+        naturalWidth: svg.viewBox.baseVal.width,
+    };
+}"""
+
+
+def test_wide_diagram_scrolls_sideways_on_a_phone(admin_page: Page, api_client: httpx.Client) -> None:
+    admin_page.set_viewport_size({"width": 375, "height": 812})
+    admin_page.goto(_wiki_page(api_client, WIDE_FLOWCHART))
+
+    figure = admin_page.locator(".wiki-content .sp-mermaid-diagram")
+    expect(figure.locator("svg")).to_be_visible(timeout=15000)
+    sizes = figure.evaluate(_SIZES)
+    assert sizes["naturalWidth"] > sizes["clientWidth"], sizes
+    assert sizes["scrollWidth"] > sizes["clientWidth"], sizes
+    assert sizes["svgWidth"] >= sizes["naturalWidth"] - 1, sizes
+    assert figure.evaluate("e => getComputedStyle(e).overflowX") == "auto"
+
+    figure.evaluate("e => { e.scrollLeft = e.scrollWidth; }")
+    assert figure.evaluate("e => e.scrollLeft") > 0
+
+
+def test_wide_diagram_fits_the_page_on_a_desktop(admin_page: Page, api_client: httpx.Client) -> None:
+    admin_page.set_viewport_size({"width": 1280, "height": 900})
+    admin_page.goto(_wiki_page(api_client, WIDE_FLOWCHART))
+
+    figure = admin_page.locator(".wiki-content .sp-mermaid-diagram")
+    expect(figure.locator("svg")).to_be_visible(timeout=15000)
+    sizes = figure.evaluate(_SIZES)
+    assert sizes["svgWidth"] <= sizes["clientWidth"] + 1, sizes
+    assert sizes["scrollWidth"] <= sizes["clientWidth"] + 1, sizes

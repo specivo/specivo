@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -85,6 +86,29 @@ class TimerOut(BaseModel):
     started_at: datetime
     comments: str | None
     elapsed_seconds: int
+
+
+class ReplacedTimerOut(BaseModel):
+    """What became of the timer that was running when another one was started.
+
+    ``outcome`` is ``logged`` when its time was logged (with the default
+    activity) as entry ``entry_id`` of ``hours``, or ``discarded`` when the
+    user may no longer log time where it ran, so nothing was logged.
+    """
+
+    outcome: Literal["logged", "discarded"]
+    project_id: int
+    project_key: str
+    issue_id: int | None
+    issue_key: str | None
+    hours: Decimal | None
+    entry_id: int | None
+
+
+class TimerStartOut(TimerOut):
+    """The started timer, and the one it replaced (``None`` when no timer was running)."""
+
+    replaced: ReplacedTimerOut | None = None
 
 
 class ActivityOut(BaseModel):

@@ -1996,7 +1996,6 @@ async def _timer(
         if not issue_ref:
             raise ValidationError(message="op='start' needs issue_ref", field="issue_ref")
         issue = await _issue_svc.get_by_display_key(session, issue_ref, user=user)
-        previous = await _time_entry_svc.timer_summary(session, user)
         timer, replaced = await _time_entry_svc.start_timer_replacing(
             session, user, issue.project_id, issue.id, comments
         )
@@ -2010,7 +2009,7 @@ async def _timer(
         )
         result = f"Started a timer on {issue.display_key}."
         if replaced is not None:
-            target = (previous.issue_key or previous.project_key) if previous is not None else "another issue"
+            target = replaced.issue_key or replaced.project_key
             if replaced.entry is not None:
                 result += (
                     f"\nThe timer that was running was stopped first. Logged {replaced.entry.hours}h on {target} "

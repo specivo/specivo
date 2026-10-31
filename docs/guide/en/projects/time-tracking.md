@@ -67,8 +67,10 @@ it and start** writes its time with the default activity, **Discard it and start
 then the new timer starts. To log the old one with another activity or a comment, stop it from the
 header first.
 
-A running timer is checked again when you stop it: if you have lost the right to log time on its
-project or issue in the meantime, the timer is discarded and no time is written. If you can no
+A running timer is checked again when you stop it or start another one: if you have lost the right
+to log time on its project or issue in the meantime, the timer is discarded and no time is written.
+After **Log it and start**, a short notice on the issue page says what happened to the old timer:
+how many hours were logged on which issue, or that it was discarded. If you can no
 longer see the issue, the header still shows its key but not its title.
 
 AI agents can drive the same timer through the `specivo_timer` tool (see

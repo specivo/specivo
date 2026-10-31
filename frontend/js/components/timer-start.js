@@ -4,8 +4,42 @@
 // logs it with the default activity before it starts the new one) or to
 // discard it. Configured through data attributes so it works with the Alpine
 // CSP build.
+//
+// The server reports what became of the running timer (``replaced``: logged,
+// or discarded when the user may no longer log time where it ran). The page
+// reloads after a start, so the notice is kept in sessionStorage for the
+// reloaded page of the same issue to show once.
 
 import { readI18n } from './header-timer';
+
+var NOTICE_KEY = 'sp-timer-replaced';
+
+export function replacedNotice(replaced, i18n) {
+    if (!replaced) return '';
+    var target = replaced.issue_key || replaced.project_key || '';
+    if (replaced.outcome === 'logged') {
+        return i18n.replacedLogged.replace('%(target)s', target).replace('%(hours)s', String(replaced.hours));
+    }
+    return i18n.replacedDiscarded.replace('%(target)s', target);
+}
+
+function storeNotice(issueId, text) {
+    try {
+        window.sessionStorage.setItem(NOTICE_KEY, JSON.stringify({issueId: issueId, text: text}));
+    } catch (_e) { /* storage unavailable: the notice is skipped */ }
+}
+
+function takeNotice(issueId) {
+    try {
+        var raw = window.sessionStorage.getItem(NOTICE_KEY);
+        if (!raw) return '';
+        window.sessionStorage.removeItem(NOTICE_KEY);
+        var data = JSON.parse(raw);
+        return data && data.issueId === issueId ? String(data.text || '') : '';
+    } catch (_e) {
+        return '';
+    }
+}
 
 export function timerStart() {
     return {
@@ -16,19 +50,26 @@ export function timerStart() {
         confirming: false,
         busy: false,
         error: '',
+        notice: '',
 
         init() {
             var data = this.$el.dataset;
             this.i18n = readI18n(this.$el, {
                 startFailed: 'Could not start the timer.',
-                connectFailed: 'Unable to connect.'
+                connectFailed: 'Unable to connect.',
+                replacedLogged: 'The timer on %(target)s was stopped and %(hours)s h were logged with the default activity.',
+                replacedDiscarded: 'The timer on %(target)s was discarded without logging time: you may no longer log time there.'
             });
             this.projectId = parseInt(data.projectId, 10) || 0;
             this.issueId = parseInt(data.issueId, 10) || 0;
             this.running = data.running || 'none';
+            this.notice = takeNotice(this.issueId);
         },
 
         get hasError() { return this.error !== ''; },
+        get hasNotice() { return this.notice !== ''; },
+
+        dismissNotice() { this.notice = ''; },
 
         start() {
             this.error = '';
@@ -78,6 +119,9 @@ export function timerStart() {
                     body: JSON.stringify({project_id: this.projectId, issue_id: this.issueId})
                 });
                 if (res.ok) {
+                    var started = await res.json().catch(function () { return {}; });
+                    var text = replacedNotice(started.replaced, this.i18n);
+                    if (text) storeNotice(this.issueId, text);
                     window.location.reload();
                     return;
                 }

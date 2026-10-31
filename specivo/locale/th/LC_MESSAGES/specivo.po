@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-31 13:04+0100\n"
+"POT-Creation-Date: 2026-10-31 13:56+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -225,15 +225,15 @@ msgstr "สปรินต์นี้ไม่ได้อยู่ในโป
 msgid "Cannot assign issues to a completed sprint"
 msgstr "ไม่สามารถมอบหมายงานให้สปรินต์ที่เสร็จสิ้นแล้วได้"
 
-#: specivo/services/issue_service.py:946
+#: specivo/services/issue_service.py:998
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "งานถูกแก้ไขโดยคำขออื่น กรุณาโหลดใหม่แล้วลองอีกครั้ง"
 
-#: specivo/services/issue_service.py:1099
+#: specivo/services/issue_service.py:1151
 msgid "Issue is already in this project."
 msgstr "งานนี้อยู่ในโปรเจกต์นี้อยู่แล้ว"
 
-#: specivo/services/issue_service.py:1108
+#: specivo/services/issue_service.py:1160
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -241,12 +241,12 @@ msgstr ""
 "ไม่สามารถย้ายงานที่อยู่ในลำดับชั้นได้ กรุณาแยกงานนี้ออกจากงานหลัก "
 "และย้ายหรือแยกงานย่อยของงานนี้ออกก่อน"
 
-#: specivo/services/issue_service.py:1159
+#: specivo/services/issue_service.py:1211
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "ย้ายจาก {old} ไปยัง {new}"
 
-#: specivo/services/issue_service.py:1233
+#: specivo/services/issue_service.py:1285
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -333,7 +333,7 @@ msgid "You are reading a public project. Sign in to take part."
 msgstr "คุณกำลังอ่านโปรเจกต์สาธารณะ เข้าสู่ระบบเพื่อมีส่วนร่วม"
 
 #: specivo/templates/themes/default/base.html:40
-#: specivo/templates/themes/default/components/header.html:132
+#: specivo/templates/themes/default/components/header.html:135
 #: specivo/templates/themes/default/pages/auth/login.html:3
 #: specivo/templates/themes/default/pages/auth/login.html:67
 #: specivo/templates/themes/default/pages/auth/login.html:157
@@ -401,32 +401,32 @@ msgstr "ยกเลิกตัวจับเวลาไม่สำเร็
 msgid "Unable to connect."
 msgstr "ไม่สามารถเชื่อมต่อได้"
 
-#: specivo/templates/themes/default/components/header.html:36
+#: specivo/templates/themes/default/components/header.html:39
 #, python-format
 msgid "Timer running on %(target)s"
 msgstr "กำลังจับเวลาที่ %(target)s"
 
-#: specivo/templates/themes/default/components/header.html:45
+#: specivo/templates/themes/default/components/header.html:48
 #: specivo/templates/themes/default/components/sidebar.html:67
 msgid "Time Tracking"
 msgstr "บันทึกเวลา"
 
-#: specivo/templates/themes/default/components/header.html:46
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:17
+#: specivo/templates/themes/default/components/header.html:49
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:19
 msgid "Timer running"
 msgstr "จับเวลาอยู่"
 
-#: specivo/templates/themes/default/components/header.html:61
+#: specivo/templates/themes/default/components/header.html:64
 msgid "Stop & log"
 msgstr "หยุดและบันทึก"
 
-#: specivo/templates/themes/default/components/header.html:62
-#: specivo/templates/themes/default/components/header.html:83
+#: specivo/templates/themes/default/components/header.html:65
+#: specivo/templates/themes/default/components/header.html:86
 #: specivo/templates/themes/default/pages/issues/detail.html:253
 msgid "Discard"
 msgstr "ยกเลิก"
 
-#: specivo/templates/themes/default/components/header.html:66
+#: specivo/templates/themes/default/components/header.html:69
 #: specivo/templates/themes/default/pages/issues/detail.html:268
 #: specivo/templates/themes/default/pages/issues/detail.html:351
 #: specivo/templates/themes/default/pages/issues/detail.html:388
@@ -434,7 +434,7 @@ msgstr "ยกเลิก"
 msgid "Activity"
 msgstr "กิจกรรม"
 
-#: specivo/templates/themes/default/components/header.html:72
+#: specivo/templates/themes/default/components/header.html:75
 #: specivo/templates/themes/default/pages/issues/description_diff.html:74
 #: specivo/templates/themes/default/pages/issues/detail.html:389
 #: specivo/templates/themes/default/pages/issues/detail.html:544
@@ -443,18 +443,18 @@ msgstr "กิจกรรม"
 msgid "Comment"
 msgstr "ความคิดเห็น"
 
-#: specivo/templates/themes/default/components/header.html:73
+#: specivo/templates/themes/default/components/header.html:76
 #: specivo/templates/themes/default/pages/issues/detail.html:367
 msgid "Comment (optional)"
 msgstr "ความคิดเห็น (ไม่บังคับ)"
 
-#: specivo/templates/themes/default/components/header.html:75
+#: specivo/templates/themes/default/components/header.html:78
 #: specivo/templates/themes/default/pages/issues/detail.html:329
 msgid "Log time"
 msgstr "บันทึกเวลา"
 
-#: specivo/templates/themes/default/components/header.html:76
-#: specivo/templates/themes/default/components/header.html:84
+#: specivo/templates/themes/default/components/header.html:79
+#: specivo/templates/themes/default/components/header.html:87
 #: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:46
 #: specivo/templates/themes/default/pages/admin/groups.html:98
 #: specivo/templates/themes/default/pages/admin/groups.html:123
@@ -471,7 +471,7 @@ msgstr "บันทึกเวลา"
 #: specivo/templates/themes/default/pages/issues/_activity.html:133
 #: specivo/templates/themes/default/pages/issues/_activity.html:208
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:29
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:31
 #: specivo/templates/themes/default/pages/issues/detail.html:106
 #: specivo/templates/themes/default/pages/issues/detail.html:328
 #: specivo/templates/themes/default/pages/issues/detail.html:466
@@ -502,11 +502,11 @@ msgstr "บันทึกเวลา"
 msgid "Cancel"
 msgstr "ยกเลิก"
 
-#: specivo/templates/themes/default/components/header.html:81
+#: specivo/templates/themes/default/components/header.html:84
 msgid "Discard the timer? The time is not logged."
 msgstr "ยกเลิกตัวจับเวลาหรือไม่? เวลาจะไม่ถูกบันทึก"
 
-#: specivo/templates/themes/default/components/header.html:104
+#: specivo/templates/themes/default/components/header.html:107
 #: specivo/templates/themes/default/pages/auth/preferences.html:62
 #: specivo/templates/themes/default/pages/notifications.html:3
 #: specivo/templates/themes/default/pages/notifications.html:9
@@ -514,20 +514,20 @@ msgstr "ยกเลิกตัวจับเวลาหรือไม่? �
 msgid "Notifications"
 msgstr "การแจ้งเตือน"
 
-#: specivo/templates/themes/default/components/header.html:105
+#: specivo/templates/themes/default/components/header.html:108
 #: specivo/templates/themes/default/pages/notifications.html:16
 msgid "Mark all read"
 msgstr "อ่านทั้งหมดแล้ว"
 
-#: specivo/templates/themes/default/components/header.html:119
+#: specivo/templates/themes/default/components/header.html:122
 msgid "No notifications"
 msgstr "ไม่มีการแจ้งเตือน"
 
-#: specivo/templates/themes/default/components/header.html:123
+#: specivo/templates/themes/default/components/header.html:126
 msgid "View all notifications"
 msgstr "ดูการแจ้งเตือนทั้งหมด"
 
-#: specivo/templates/themes/default/components/header.html:153
+#: specivo/templates/themes/default/components/header.html:156
 #: specivo/templates/themes/default/pages/auth/preferences.html:9
 #: specivo/templates/themes/default/pages/auth/profile.html:3
 #: specivo/templates/themes/default/pages/auth/profile.html:9
@@ -535,7 +535,7 @@ msgstr "ดูการแจ้งเตือนทั้งหมด"
 msgid "Profile"
 msgstr "โปรไฟล์"
 
-#: specivo/templates/themes/default/components/header.html:157
+#: specivo/templates/themes/default/components/header.html:160
 #: specivo/templates/themes/default/pages/auth/preferences.html:3
 #: specivo/templates/themes/default/pages/auth/preferences.html:11
 #: specivo/templates/themes/default/pages/auth/preferences.html:14
@@ -543,7 +543,7 @@ msgstr "โปรไฟล์"
 msgid "Preferences"
 msgstr "การตั้งค่า"
 
-#: specivo/templates/themes/default/components/header.html:161
+#: specivo/templates/themes/default/components/header.html:164
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
 #: specivo/templates/themes/default/pages/auth/api_keys.html:3
 #: specivo/templates/themes/default/pages/auth/api_keys.html:9
@@ -553,7 +553,7 @@ msgstr "การตั้งค่า"
 msgid "API Keys"
 msgstr "API Keys"
 
-#: specivo/templates/themes/default/components/header.html:168
+#: specivo/templates/themes/default/components/header.html:171
 #: specivo/templates/themes/default/pages/auth/change_password.html:59
 #: specivo/templates/themes/default/pages/auth/login.html:49
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:11
@@ -3918,6 +3918,7 @@ msgid "Copy it now — you will not see it again."
 msgstr "คัดลอกตอนนี้ — คุณจะไม่เห็นอีก"
 
 #: specivo/templates/themes/default/pages/auth/api_keys.html:60
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:39
 #: specivo/templates/themes/default/pages/projects/settings.html:1057
 #: specivo/templates/themes/default/pages/projects/settings.html:1331
 msgid "Dismiss"
@@ -4826,15 +4827,29 @@ msgstr "คุณแน่ใจหรือไม่ว่าต้องกา
 msgid "Could not start the timer."
 msgstr "เริ่มตัวจับเวลาไม่สำเร็จ"
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:21
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:15
+#, python-format
+msgid ""
+"The timer on %(target)s was stopped and %(hours)s h were logged with the "
+"default activity."
+msgstr "ตัวจับเวลาที่ %(target)s หยุดแล้ว และบันทึกเวลา %(hours)s ชม. ด้วยกิจกรรมเริ่มต้น"
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:16
+#, python-format
+msgid ""
+"The timer on %(target)s was discarded without logging time: you may no "
+"longer log time there."
+msgstr "ตัวจับเวลาที่ %(target)s ถูกยกเลิกโดยไม่บันทึกเวลา เพราะคุณไม่มีสิทธิ์บันทึกเวลาที่นั่นแล้ว"
+
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"
 msgstr "เริ่มจับเวลา"
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:24
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:26
 msgid "A timer is already running"
 msgstr "มีตัวจับเวลาทำงานอยู่แล้ว"
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:25
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:27
 #, python-format
 msgid ""
 "A timer is already running on %(target)s. Log its time (with the default "
@@ -4843,11 +4858,11 @@ msgstr ""
 "มีตัวจับเวลาทำงานอยู่ที่ %(target)s แล้ว บันทึกเวลา (ด้วยกิจกรรมเริ่มต้น)"
 " หรือยกเลิกก่อนเริ่มตัวใหม่"
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:27
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:29
 msgid "Log it and start"
 msgstr "บันทึกแล้วเริ่ม"
 
-#: specivo/templates/themes/default/pages/issues/_timer_start.html:28
+#: specivo/templates/themes/default/pages/issues/_timer_start.html:30
 msgid "Discard it and start"
 msgstr "ยกเลิกแล้วเริ่ม"
 
