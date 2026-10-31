@@ -4899,14 +4899,14 @@ msgstr "No se pudo iniciar el temporizador."
 msgid ""
 "The timer on %(target)s was stopped and %(hours)s h were logged with the "
 "default activity."
-msgstr ""
+msgstr "Se detuvo el temporizador de %(target)s y se registraron %(hours)s h con la actividad predeterminada."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:16
 #, python-format
 msgid ""
 "The timer on %(target)s was discarded without logging time: you may no "
 "longer log time there."
-msgstr ""
+msgstr "Se descartó el temporizador de %(target)s sin registrar tiempo: ya no puedes registrar tiempo allí."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"

@@ -4685,14 +4685,14 @@ msgstr "无法启动计时器。"
 msgid ""
 "The timer on %(target)s was stopped and %(hours)s h were logged with the "
 "default activity."
-msgstr ""
+msgstr "%(target)s 上的计时器已停止，已按默认活动类型记录 %(hours)s 小时。"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:16
 #, python-format
 msgid ""
 "The timer on %(target)s was discarded without logging time: you may no "
 "longer log time there."
-msgstr ""
+msgstr "%(target)s 上的计时器已被放弃，未记录工时：你已无权在那里记录工时。"
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"

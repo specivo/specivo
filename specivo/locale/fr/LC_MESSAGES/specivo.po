@@ -4889,14 +4889,14 @@ msgstr "Impossible de démarrer le minuteur."
 msgid ""
 "The timer on %(target)s was stopped and %(hours)s h were logged with the "
 "default activity."
-msgstr ""
+msgstr "Le minuteur de %(target)s a été arrêté et %(hours)s h ont été saisies avec l’activité par défaut."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:16
 #, python-format
 msgid ""
 "The timer on %(target)s was discarded without logging time: you may no "
 "longer log time there."
-msgstr ""
+msgstr "Le minuteur de %(target)s a été abandonné sans saisie de temps : vous ne pouvez plus saisir de temps à cet endroit."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"
