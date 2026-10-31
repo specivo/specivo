@@ -376,6 +376,45 @@ async def test_other_idp_refusal_follows_the_failure_policy(
     assert (await _refresh(client, token)).status_code == 200
 
 
+@pytest.mark.parametrize("idp_error", ["access_denied", "consent_required", "account_disabled"])
+async def test_other_refusal_of_the_user_ends_the_session(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_provider: SsoProvider,
+    sso_login,
+    mock_idp: MockIdP,
+    idp_error: str,
+) -> None:
+    # Any definite refusal other than a configuration or availability error
+    # ends the session, even with the default ``allow`` policy.
+    user = (await _member(db_session, sso_provider, mock_idp)).id
+    token = await _sign_in(client, sso_login)
+    await _make_check_due(db_session, user)
+    mock_idp.refresh_error = idp_error
+
+    assert (await _refresh(client, token)).status_code == 401
+    assert await _row(db_session, user) is None
+
+
+@pytest.mark.parametrize(
+    "idp_error", ["temporarily_unavailable", "server_error", "unsupported_grant_type", "invalid_scope"]
+)
+async def test_configuration_or_availability_errors_follow_the_failure_policy(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    sso_provider: SsoProvider,
+    sso_login,
+    mock_idp: MockIdP,
+    idp_error: str,
+) -> None:
+    user = (await _member(db_session, sso_provider, mock_idp)).id
+    token = await _sign_in(client, sso_login)
+    await _make_check_due(db_session, user)
+    mock_idp.refresh_error = idp_error
+
+    assert (await _refresh(client, token)).status_code == 200
+
+
 async def test_password_session_never_asks_the_idp(
     client: AsyncClient, db_session: AsyncSession, sso_provider: SsoProvider, mock_idp: MockIdP
 ) -> None:

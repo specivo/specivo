@@ -302,6 +302,8 @@ class MockIdP:
         self.issue_refresh_tokens = True
         self.rotate_refresh_tokens = False
         self.refresh_grant_allowed = True
+        #: When set, every refresh request is refused with this OAuth error code.
+        self.refresh_error: str | None = None
 
         #: Requests per route name (see :data:`ROUTES`), faulted ones included.
         self.calls: Counter[str] = Counter()
@@ -788,6 +790,8 @@ class MockIdP:
         return httpx.Response(200, json=body, headers={"Cache-Control": "no-store", "Pragma": "no-cache"})
 
     def _handle_refresh(self, form: dict[str, str]) -> httpx.Response:
+        if self.refresh_error is not None:
+            raise _OAuthError(self.refresh_error)
         token = form.get("refresh_token", "")
         sub = self._refresh_tokens.get(token)
         if sub is None or not self.refresh_grant_allowed:

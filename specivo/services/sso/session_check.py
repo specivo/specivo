@@ -28,10 +28,12 @@ after that does it lock and claim the session and apply the answer:
 
 * the IdP accepts the token: the session is renewed and keeps the rotated
   token, if the IdP sent one;
-* ``invalid_grant``: the session ends (reason ``idp_refresh_rejected``), with
-  an ``SSO_SESSION_REJECTED`` audit event;
-* the IdP cannot be asked (timeout, 5xx, any other refusal, unreadable
-  configuration): ``idp_check_failure`` decides. ``allow`` (the default)
+* ``invalid_grant`` or any other refusal of the user (``access_denied``,
+  ``consent_required``, IdP-specific codes): the session ends (reason
+  ``idp_refresh_rejected``), with an ``SSO_SESSION_REJECTED`` audit event;
+* the IdP cannot be asked, or refuses the client or request rather than the
+  user (timeout, 5xx, ``invalid_client``, ``temporarily_unavailable``,
+  unreadable configuration): ``idp_check_failure`` decides. ``allow`` (the default)
   renews the session and logs ``sso.session.idp_check_failed``; the next
   renewal asks again. ``deny`` ends the session (reason ``idp_check_failed``).
 
@@ -89,6 +91,22 @@ __all__ = [
 IDP_REFRESH_REJECTED_REASON = "idp_refresh_rejected"
 #: Session revocation reason: the IdP could not be asked and the provider says ``deny``.
 IDP_CHECK_FAILED_REASON = "idp_check_failed"
+
+#: OAuth error codes on the refresh grant that say the client, the request or
+#: the IdP itself is at fault, not that the user may no longer sign in. They
+#: follow the provider's ``idp_check_failure`` policy; any other refusal ends
+#: the session like ``invalid_grant``.
+_NOT_ABOUT_THE_USER = frozenset(
+    {
+        "invalid_client",
+        "unauthorized_client",
+        "unsupported_grant_type",
+        "invalid_request",
+        "invalid_scope",
+        "server_error",
+        "temporarily_unavailable",
+    }
+)
 
 RecheckStatus = Literal["ok", "no_refresh_token", "refresh_refused"]
 
@@ -261,7 +279,7 @@ async def run_recheck(plan: RecheckPlan, *, settings: Settings | None = None) ->
     try:
         result = await refresh_at_idp(provider, metadata, token, settings=settings)
     except SsoTokenExchangeFailedError as exc:
-        if exc.idp_error == "invalid_grant":
+        if exc.idp_error and exc.idp_error not in _NOT_ABOUT_THE_USER:
             return RecheckResult(revoke_reason=IDP_REFRESH_REJECTED_REASON, idp_error=exc.idp_error)
         return _check_failed(plan, unchanged, code=exc.idp_error or exc.reason)
     except SsoError as exc:
