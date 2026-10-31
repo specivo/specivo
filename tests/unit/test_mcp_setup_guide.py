@@ -54,3 +54,15 @@ def test_the_guide_teaches_the_timer() -> None:
     assert "### Time work with the timer" in guide
     for op in ("start", "get", "stop", "discard"):
         assert f'op="{op}"' in guide
+
+
+@pytest.mark.parametrize("fmt", ["claude", "cursor", "generic"])
+def test_the_guide_teaches_mermaid_diagrams(fmt: str) -> None:
+    guide = generate_setup_guide(fmt=fmt, mcp_server=mcp)
+    assert "### Diagrams (Mermaid)" in guide
+    assert "```mermaid" in guide
+
+
+def test_the_connect_instructions_mention_mermaid() -> None:
+    """Clients show the server instructions before any tool call, so diagrams are known up front."""
+    assert "```mermaid" in (mcp.instructions or "")

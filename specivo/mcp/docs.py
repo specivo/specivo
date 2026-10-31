@@ -168,6 +168,23 @@ Tags are flat labels shared by a project's issues and wiki pages; agents and peo
 1. `specivo_read_wiki_section(project_key, slug, heading="## Design")` -- read one section
 2. `specivo_replace_wiki_section(project_key, slug, heading="## Design", text="...")` -- replace body
 
+### Diagrams (Mermaid)
+Issue descriptions, comments and wiki pages are Markdown, and a fenced block with the `mermaid`
+language renders as a diagram (flowchart, sequence, class, state, ER, Gantt and the other Mermaid
+types). Use it instead of ASCII art for architecture, flows and state machines:
+
+````
+```mermaid
+flowchart LR
+    Push[git push] --> Hook[Specivo webhook] --> Issue[ACME-12 moves to Resolved]
+```
+````
+
+Diagrams render with Mermaid's strict security level: HTML labels, `click` callbacks and
+`%%{{init}}%%` overrides of security or theme settings are ignored, so keep labels plain text. A
+diagram that fails to parse shows its source and an error instead, so check the syntax. The source
+stays in the text, so search, `specivo_read_wiki` and `specivo_show_issue` return it unchanged.
+
 ### Filter issues by metadata
 `specivo_list_issues` accepts `metadata_filters=["key=value", ...]`. Pairs are
 AND-combined. Each pair matches when the issue's metadata satisfies either:
