@@ -24,8 +24,9 @@ https://specivo.example.com/issue/ACME-12/
 
 - The key is not case-sensitive in this address: `/issue/acme-12/` opens the same issue.
 - An issue that was moved to another project still opens under its old key.
-- After an administrator **renames a project key**, issue pages answer only under the new key.
-  Update the forge's settings below when that happens.
+- After an administrator [renames a project key](../projects/index.md#renaming-a-project-key), an
+  issue page under the old key redirects to the new one, so existing links keep working. Update the
+  forge's settings below all the same, so that new links use the new key.
 - If your instance uses a `STEALTH_PREFIX`, it comes before `/issue/`.
 - The forge only builds links; Specivo decides who may see the issue. People without access get
   the sign-in page or "not found", as for any other link.

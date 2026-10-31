@@ -25,6 +25,7 @@ from specivo.models.project import Project
 from specivo.models.role import Role
 from specivo.models.time_entry import TimeEntry
 from specivo.models.user import User
+from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.workflow import WorkflowTransition
 from specivo.services.repository_hooks import process_delivery
 from specivo.services.workflow_service import WorkflowService
@@ -300,6 +301,20 @@ class TestAdministratorAsMatchedUser:
         await db.commit()
         return role
 
+    async def _group_member(self, db: AsyncSession, world: World, admin: User, permissions: list[str]) -> Role:
+        """Make *admin* a project member only through a user group holding a new role."""
+        role = Role(name="Cmd Group Role", permissions=permissions)
+        group = UserGroup(name="Cmd Release Team")
+        db.add_all([role, group])
+        await db.flush()
+        db.add(UserGroupMember(group_id=group.id, user_id=admin.id))
+        member = Member(group_id=group.id, project_id=world.project.id)
+        db.add(member)
+        await db.flush()
+        db.add(MemberRole(member_id=member.id, role_id=role.id))
+        await db.commit()
+        return role
+
     async def _transition(self, db: AsyncSession, world: World, role: Role) -> None:
         db.add(
             WorkflowTransition(
@@ -375,3 +390,29 @@ class TestAdministratorAsMatchedUser:
         assert await _entries(db_session, world.issue) == []
         assert "CMD-1 fixes: issue_not_visible" in result.detail
         assert "CMD-1 time: issue_not_visible" in result.detail
+
+    async def test_group_membership_acts_with_the_group_role(self, client, db_session, world, queued, admin):
+        role = await self._group_member(db_session, world, admin, ["view_issues", "edit_issues", "log_time"])
+        await self._transition(db_session, world, role)
+        integration = await _integration(db_session, world)
+        result = await _push(
+            client, db_session, integration, [commit("a8", "Fixes CMD-1 @2h", email=ADMIN_EMAIL)], queued
+        )
+        assert await _status(db_session, world.issue) == world.fixed.id
+        assert [(e.user_id, e.hours) for e in await _entries(db_session, world.issue)] == [(admin.id, Decimal("2.00"))]
+        assert "CMD-1 fixes: moved" in result.detail
+        assert "CMD-1 time: logged" in result.detail
+        await db_session.refresh(admin)
+        assert admin.is_admin
+
+    async def test_group_role_without_the_transition_is_refused(self, client, db_session, world, queued, admin):
+        await self._group_member(db_session, world, admin, ["view_issues", "edit_issues"])
+        await self._transition(db_session, world, world.role)  # the workflow allows it to another role only
+        integration = await _integration(db_session, world)
+        result = await _push(
+            client, db_session, integration, [commit("a9", "Fixes CMD-1 @1h", email=ADMIN_EMAIL)], queued
+        )
+        assert await _status(db_session, world.issue) == world.new.id
+        assert await _entries(db_session, world.issue) == []
+        assert "CMD-1 fixes: transition_not_allowed" in result.detail
+        assert "CMD-1 time: missing_permission:log_time" in result.detail

@@ -19,7 +19,7 @@ from specivo.models.issue import Issue, IssueRefAlias
 from specivo.models.journal import Journal
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
-from specivo.models.project import PROJECT_STATUS_ACTIVE, Project
+from specivo.models.project import PROJECT_STATUS_ACTIVE, Project, ProjectKeyAlias
 from specivo.models.role import Role
 from specivo.models.tag import TagLink
 from specivo.models.time_entry import ActiveTimer, TimeEntry
@@ -708,10 +708,13 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
-                    # Fall back to a historical reference (issue moved projects).
-                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    # Fall back to a retired reference (issue moved, project renamed).
+                    aliased_id = await self._resolve_retired_ref(session, project_key, seq)
                     if aliased_id is not None:
-                        return await self.get_by_id(session, aliased_id, user=user)
+                        try:
+                            return await self.get_by_id(session, aliased_id, user=user)
+                        except NotFoundError:
+                            pass
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -805,10 +808,13 @@ class IssueService:
                 )
                 issue = result.scalar_one_or_none()
                 if issue is None:
-                    # Fall back to a historical reference (issue moved projects).
-                    aliased_id = await self._resolve_ref_alias(session, project_key, seq)
+                    # Fall back to a retired reference (issue moved, project renamed).
+                    aliased_id = await self._resolve_retired_ref(session, project_key, seq)
                     if aliased_id is not None:
-                        return await self.get_with_relations(session, aliased_id, user=user)
+                        try:
+                            return await self.get_with_relations(session, aliased_id, user=user)
+                        except NotFoundError:
+                            pass
                     raise NotFoundError(f"Issue {display_key!r} not found")
                 if not await self._check_visible(session, issue, user):
                     raise NotFoundError(f"Issue {display_key!r} not found")
@@ -820,15 +826,48 @@ class IssueService:
             raise NotFoundError(f"Invalid issue reference: {display_key!r}")
         return await self.get_with_relations(session, issue_id, user=user)
 
-    async def _resolve_ref_alias(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
-        """Return the issue id a retired ``KEY-N`` reference points to, if any."""
+    async def _resolve_retired_ref(self, session: AsyncSession, project_key: str, seq: int) -> int | None:
+        """Return the issue id a retired ``KEY-N`` reference points to, if any.
+
+        Called only when no current issue is ``KEY-N``. A reference retires in
+        two ways: the issue moved to another project (``issue_ref_aliases``
+        records its old key), or its project was renamed
+        (``project_key_aliases`` records the old project key). The two
+        combine: under a renamed project's old key, number ``N`` names the
+        issue that has it in that project now or, when that issue moved out
+        later, the issue that left under any key the project has had. Numbers
+        are never reused within a project, so the answer is unique.
+
+        No visibility check here; the caller applies it to the issue found.
+        """
         issue_id: int | None = await session.scalar(
             select(IssueRefAlias.issue_id).where(
                 IssueRefAlias.old_project_key == project_key,
                 IssueRefAlias.old_sequence_number == seq,
             )
         )
-        return issue_id
+        if issue_id is not None:
+            return issue_id
+        project_id = await session.scalar(
+            select(ProjectKeyAlias.project_id).where(ProjectKeyAlias.old_key == project_key)
+        )
+        if project_id is None:
+            return None
+        issue_id = await session.scalar(
+            select(Issue.id).where(Issue.project_id == project_id, Issue.sequence_number == seq)
+        )
+        if issue_id is not None:
+            return issue_id
+        project_keys = union_all(
+            select(Project.key).where(Project.id == project_id),
+            select(ProjectKeyAlias.old_key).where(ProjectKeyAlias.project_id == project_id),
+        )
+        return await session.scalar(
+            select(IssueRefAlias.issue_id).where(
+                IssueRefAlias.old_project_key.in_(project_keys),
+                IssueRefAlias.old_sequence_number == seq,
+            )
+        )
 
     @staticmethod
     def _autolink_ref_pairs(texts: tuple[str | None, ...], limit: int = MAX_AUTOLINK_REFS) -> list[tuple[str, int]]:
@@ -861,8 +900,9 @@ class IssueService:
         """Return the subset of ``KEY-123`` refs in *texts* that resolve to an issue *user* may see.
 
         A reference is "known" when it matches a current issue
-        ``(project_key, sequence_number)`` or a previous reference recorded in
-        ``issue_ref_aliases`` (i.e. the issue was moved), and that issue is
+        ``(project_key, sequence_number)``, a previous reference recorded in
+        ``issue_ref_aliases`` (i.e. the issue was moved) or the same number
+        under a project's old key (``project_key_aliases``), and that issue is
         visible to *user* by the same rules as the issue list
         (``visible_issues_clause``: private issues, other projects, the
         anonymous rules and the API key project limit included). Used to
@@ -897,6 +937,18 @@ class IssueService:
         alias_rows = await session.execute(aliases)
         for key, num in alias_rows:
             known.add(f"{key}-{num}")
+
+        remaining = [(key, num) for key, num in pairs if f"{key}-{num}" not in known]
+        if remaining:
+            renamed = (
+                select(ProjectKeyAlias.old_key, Issue.sequence_number)
+                .join(Issue, Issue.project_id == ProjectKeyAlias.project_id)
+                .where(tuple_(ProjectKeyAlias.old_key, Issue.sequence_number).in_(remaining))
+            )
+            if visibility is not None:
+                renamed = renamed.where(visibility)
+            for key, num in await session.execute(renamed):
+                known.add(f"{key}-{num}")
 
         return known
 
