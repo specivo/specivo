@@ -1,0 +1,12 @@
+{
+  "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+  "Operations": [
+    {
+      "op": "replace",
+      "value": {
+        "id": "{id}",
+        "displayName": "Test SCIMv2 renamed"
+      }
+    }
+  ]
+}

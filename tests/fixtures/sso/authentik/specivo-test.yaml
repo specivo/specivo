@@ -26,6 +26,11 @@ entries:
       identifiers:
         path: system/providers-oauth2.yaml
       required: true
+  - model: authentik_blueprints.metaapplyblueprint
+    attrs:
+      identifiers:
+        path: system/providers-scim.yaml
+      required: true
 
   - model: authentik_core.group
     id: group-users
@@ -35,6 +40,11 @@ entries:
     id: group-admins
     identifiers:
       name: specivo-admins
+  # Only members of this group are provisioned over SCIM (tests/integration/sso_idp/test_scim_authentik.py).
+  - model: authentik_core.group
+    id: group-scim
+    identifiers:
+      name: specivo-scim
 
   - model: authentik_core.user
     identifiers:
@@ -125,9 +135,46 @@ entries:
       logout_uri: http://host.docker.internal:9944/auth/oidc/authentik/backchannel-logout/
       logout_method: backchannel
 
+  # SCIM provisioning into the test server. The worker calls a forwarder the
+  # sso_idp SCIM test runs on the host; while it is not running, syncs fail
+  # harmlessly. The token is the fixed test value in tests/fixtures/sso/seed.py.
+  # Scope (authentik 2026.8): users are those the backchannel application's
+  # policy bindings let in (the specivo-test-scim application below, bound to
+  # specivo-scim). Every group is pushed (no group_filters), each with its
+  # provisioned members only, so the test can create a fresh group per run.
+  - model: authentik_providers_scim.scimprovider
+    id: scim-provider
+    identifiers:
+      name: specivo-test-scim
+    attrs:
+      url: http://host.docker.internal:9945/scim/v2/authentik
+      token: spvscim_authentik-test-only-scim-token
+      verify_certificates: false
+      exclude_users_service_account: true
+      property_mappings:
+        - !Find [authentik_providers_scim.scimmapping, [managed, goauthentik.io/providers/scim/user]]
+      property_mappings_group:
+        - !Find [authentik_providers_scim.scimmapping, [managed, goauthentik.io/providers/scim/group]]
+
   - model: authentik_core.application
     identifiers:
       slug: specivo-test
     attrs:
       name: Specivo test
       provider: !KeyOf provider
+
+  # The SCIM provider's own application, so that its user scope (members of
+  # specivo-scim) leaves the OIDC application open to every test user.
+  - model: authentik_core.application
+    id: scim-application
+    identifiers:
+      slug: specivo-test-scim
+    attrs:
+      name: Specivo test SCIM
+      backchannel_providers: [!KeyOf scim-provider]
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf scim-application
+      group: !KeyOf group-scim
+    attrs:
+      order: 0

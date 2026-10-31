@@ -21,7 +21,12 @@
   extraParamKeys: {{ extra_param_keys | tojson }},
   callbackTemplate: {{ callback_template | tojson }},
   backchannelTemplate: {{ backchannel_template | tojson }},
+  scim: {{ scim | tojson }},
   i18n: {
+    scimFailed: {{ _("The SCIM settings could not be changed.") | tojson }},
+    scimConfirmRotate: {{ _("Replace the SCIM token? The current token stops working at once, until the new one is entered at the identity provider.") | tojson }},
+    scimConfirmRevoke: {{ _("Revoke the SCIM token? Provisioning stops until a new token is generated. Accounts and groups already provisioned stay.") | tojson }},
+    never: {{ _("Never") | tojson }},
     saved: {{ _("Saved.") | tojson }},
     savedSessionsEnded: {{ _("Saved. Sessions ended: {count}.") | tojson }},
     saveFailed: {{ _("Failed to save.") | tojson }},
@@ -269,6 +274,9 @@
       <div class="form-group"><label class="form-label" for="sso-c-groups">{% trans %}Groups claim{% endtrans %}</label>
         <input id="sso-c-groups" class="form-input" type="text" x-model="form.groups_claim" placeholder="groups">
         <div class="form-hint">{% trans %}A dotted path, for example realm_access.roles.{% endtrans %}</div></div>
+      <div class="form-group"><label class="form-label" for="sso-c-scim-ext">{% trans %}SCIM externalId claim{% endtrans %}</label>
+        <input id="sso-c-scim-ext" class="form-input" type="text" x-model="form.scim_external_id_claim" placeholder="oid">
+        <div class="form-hint">{% trans %}Optional. Only a claim the provider guarantees to equal the externalId it sends over SCIM (Microsoft Entra ID: oid). It then connects a provisioned account at the first sign-in without a trusted email.{% endtrans %}</div></div>
     </div>
     <label class="sp-sso-check"><input type="checkbox" x-model="form.use_userinfo">
       <span>{% trans %}Also read claims from the userinfo endpoint{% endtrans %}</span></label>
@@ -292,7 +300,8 @@
     <label class="sp-sso-check"><input type="checkbox" x-model="form.sync_admin_flag">
       <span>{% trans %}Set the administrator flag from the administrator groups at every sign-in{% endtrans %}</span></label>
     <label class="sp-sso-check"><input type="checkbox" x-model="form.sync_groups">
-      <span>{% trans %}Update Specivo group memberships from the mappings below at every sign-in{% endtrans %}</span></label>
+      <span>{% trans %}Update Specivo group memberships from the mappings below at every sign-in{% endtrans %}
+        <span class="form-hint" x-show="scim && scim.enabled">{% trans %}Skipped while SCIM provisioning is on: the provider then manages group memberships through SCIM.{% endtrans %}</span></span></label>
     <label class="sp-sso-check"><input type="checkbox" x-model="form.deactivate_on_access_loss">
       <span>{% trans %}Deactivate the Specivo account when a sign-in is refused by the required groups or allowed email domains{% endtrans %}
         <span class="form-hint">{% trans %}Deactivation signs the user out everywhere and switches off their API keys. Without it, only the sessions started through this provider end.{% endtrans %}</span></span></label>
@@ -362,6 +371,64 @@
   </div>
 
   {% if provider %}
+  {# --- Provisioning (SCIM) --- #}
+  <div class="card sp-sso-section" data-testid="sso-scim-section">
+    <h2>{% trans %}Provisioning (SCIM){% endtrans %}</h2>
+    <p class="sp-sso-section-intro">{% trans %}The provider creates, updates and deactivates Specivo accounts and groups through SCIM, so people exist before their first sign-in and lose access as soon as they are disabled at the provider.{% endtrans %}</p>
+
+    <label class="form-label">{% trans %}SCIM base URL{% endtrans %}</label>
+    <div class="sp-sso-copy sp-mb-md">
+      <code x-text="scim.base_url">{{ scim.base_url }}</code>
+      <button type="button" class="sp-btn-sm" @click="copy('scim')">
+        <span x-show="copied !== 'scim'">{% trans %}Copy{% endtrans %}</span>
+        <span x-show="copied === 'scim'">{% trans %}Copied{% endtrans %}</span>
+      </button>
+    </div>
+
+    <div class="sp-sso-report sp-mb-md">
+      <dl>
+        <dt>{% trans %}Token{% endtrans %}</dt>
+        <dd>
+          <span class="sp-sso-badge" :class="scim.token_configured ? 'sp-sso-badge-ok' : 'sp-sso-badge-off'"
+            x-text="scimTokenLabel"></span>
+        </dd>
+        <dt>{% trans %}Last request{% endtrans %}</dt>
+        <dd x-text="dateText(scim.last_request_at)" data-testid="sso-scim-last-request"></dd>
+        <dt>{% trans %}Provisioned users{% endtrans %}</dt><dd x-text="scim.user_count"></dd>
+        <dt>{% trans %}Provisioned groups{% endtrans %}</dt><dd x-text="scim.group_count"></dd>
+      </dl>
+    </div>
+
+    <template x-if="newToken">
+      <div class="sp-sso-token" data-testid="sso-scim-token">
+        <strong>{% trans %}Copy this token now and enter it at the provider. It is not shown again.{% endtrans %}</strong>
+        <div class="sp-sso-copy">
+          <code x-text="newToken"></code>
+          <button type="button" class="sp-btn-sm" @click="copy('token')">
+            <span x-show="copied !== 'token'">{% trans %}Copy{% endtrans %}</span>
+            <span x-show="copied === 'token'">{% trans %}Copied{% endtrans %}</span>
+          </button>
+        </div>
+      </div>
+    </template>
+
+    <label class="sp-sso-check">
+      <input type="checkbox" :checked="scim.enabled" :disabled="scimBusy || !scim.token_configured" @change="setScim($event.target.checked)" data-testid="sso-scim-enabled">
+      <span>{% trans %}Accept provisioning from this provider{% endtrans %}
+        <span class="form-hint" x-show="!scim.token_configured">{% trans %}Generate a token first.{% endtrans %}</span>
+        <span class="form-hint" x-show="provider && !provider.enabled" data-testid="sso-scim-provider-off">{% trans %}The provider is switched off: SCIM requests are refused until it is enabled again.{% endtrans %}</span></span></label>
+
+    <div class="sp-sso-actions">
+      <button type="button" class="sp-btn" @click="generateToken()" :disabled="scimBusy" x-show="!scim.token_configured">{% trans %}Generate token{% endtrans %}</button>
+      <button type="button" class="sp-btn" @click="generateToken()" :disabled="scimBusy" x-show="scim.token_configured">{% trans %}Rotate token{% endtrans %}</button>
+      <button type="button" class="sp-btn sp-btn-danger" @click="revokeToken()" :disabled="scimBusy" x-show="scim.token_configured">{% trans %}Revoke token{% endtrans %}</button>
+    </div>
+    <div x-show="scimError" class="sp-msg-danger-mb-sm" x-text="scimError"></div>
+
+    <p class="form-hint">{% trans %}Deactivating or deleting a person at the provider deactivates their Specivo account at once: every session ends and their API keys are switched off. The account itself stays, so issues and history keep their author. Administrators and service accounts are never deactivated through SCIM, and an account deactivated in Specivo is not reactivated by the provider.{% endtrans %}</p>
+    <p class="form-hint">{% trans %}An existing Specivo account with the same email is linked instead of a new one being created, except administrators, service accounts and accounts another provider manages.{% endtrans %}</p>
+  </div>
+
   <div class="sp-modal-overlay" x-show="showDelete" x-cloak
     @click.self="showDelete = false" @keydown.escape.window="showDelete = false">
     <div class="sp-modal sp-modal--sm" @click.stop>

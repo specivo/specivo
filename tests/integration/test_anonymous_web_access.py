@@ -718,9 +718,11 @@ _PATH_PARAM = re.compile(r"\{[^}]+\}")
 
 # Everything under these prefixes is a surface of its own with its own
 # contract: the JSON API (pinned by the API contract test), agent transport,
-# the health probe, and the incoming webhook receivers, which authenticate a
-# sending system by signature rather than a person.
-_NON_WEB_PREFIXES = ("/api/v1", "/mcp", "/health", "/hooks")
+# the health probe, the incoming webhook receivers, which authenticate a
+# sending system by signature rather than a person, and SCIM provisioning,
+# which authenticates an identity provider by its bearer token (401 for
+# everyone else; tests/integration/scim/test_scim_auth.py).
+_NON_WEB_PREFIXES = ("/api/v1", "/mcp", "/health", "/hooks", "/scim")
 
 # Single routes with the same property: called server to server, never by a
 # person, and authenticated by a signed token in the body. SSO back-channel

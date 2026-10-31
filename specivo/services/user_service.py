@@ -5,7 +5,8 @@ off, for every user (password, SSO, service account): the admin API, the
 admin user page and a refused SSO sign-in with ``deactivate_on_access_loss``
 all go through it. In the caller's transaction it
 
-1. sets ``status="deactivated"``;
+1. sets ``status="deactivated"`` and ``deactivation_reason`` (who may undo
+   it: SCIM only reactivates what SCIM deactivated);
 2. revokes every session of the account (``SessionService``): the refresh
    rows are deleted and the access tokens already issued are refused on the
    next request;
@@ -179,6 +180,7 @@ class UserService:
             raise LastActiveAdminError()
 
         user.status = "deactivated"
+        user.deactivation_reason = reason[:64]
         await db.flush()
         sessions = await SessionService().revoke_user_sessions(
             db, user.id, reason=DEACTIVATION_REVOKE_REASON, actor_id=actor_id
@@ -206,6 +208,7 @@ class UserService:
         changed = user.status == "deactivated"
         if changed:
             user.status = "active"
+            user.deactivation_reason = None
             user.locked_until = None
             user.failed_login_count = 0
             await db.flush()

@@ -30,6 +30,7 @@ from specivo.models.repository import (
 )
 from specivo.models.role import Role
 from specivo.models.saved_filter import SavedFilter
+from specivo.models.scim import ScimResource
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, ProjectEmbeddingConfig, SearchChunk, SearchSource
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.setting import Setting
@@ -81,6 +82,7 @@ __all__ = [
     "Notification",
     "NotificationPreference",
     "SavedFilter",
+    "ScimResource",
     "ChunkEmbedding",
     "EmbeddingModel",
     "ProjectEmbeddingConfig",

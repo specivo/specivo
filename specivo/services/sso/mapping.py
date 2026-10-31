@@ -40,7 +40,8 @@ mapper never removes access en masse):
 4. ``sync_admin_flag``: ``is_admin = bool(groups & admin_groups)``. The
    **last-admin guard** skips a demotion that would leave no active admin who
    can sign in, with a warning.
-5. ``sync_groups``: each ``SsoGroupMapping`` whose IdP group (exact,
+5. ``sync_groups`` (skipped while the provider's SCIM is on: SCIM then owns
+   the memberships): each ``SsoGroupMapping`` whose IdP group (exact,
    case-sensitive) is in the claim adds a membership marked
    ``managed_by_provider_id``; memberships this provider manages whose group
    is no longer mapped from the claim are removed. Memberships added by hand
@@ -270,13 +271,16 @@ async def apply_mapping(
 
     ``user`` must have an identity at ``provider`` (the callers guarantee it).
     """
-    if not isinstance(groups, Known) or not (provider.sync_admin_flag or provider.sync_groups):
+    # With SCIM on, the provider pushes group memberships itself; the token's
+    # groups claim must not rewrite them at every sign-in.
+    sync_groups = provider.sync_groups and not provider.scim_enabled
+    if not isinstance(groups, Known) or not (provider.sync_admin_flag or sync_groups):
         return False
 
     admin_before = user.is_admin
     if provider.sync_admin_flag:
         await _sync_admin_flag(db, provider, user, groups.groups, subject)
-    added, removed = await _sync_groups(db, provider, user, groups.groups) if provider.sync_groups else ([], [])
+    added, removed = await _sync_groups(db, provider, user, groups.groups) if sync_groups else ([], [])
 
     if user.is_admin == admin_before and not added and not removed:
         return False

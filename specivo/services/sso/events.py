@@ -47,7 +47,7 @@ __all__ = [
 ]
 
 #: How an identity came to be linked (``UserIdentity.linked_via`` without ``jit``).
-LinkMethod = Literal["user_link", "auto_email", "admin"]
+LinkMethod = Literal["user_link", "auto_email", "admin", "scim"]
 #: Who removed an identity.
 UnlinkedBy = Literal["user", "admin"]
 

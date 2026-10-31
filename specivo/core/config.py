@@ -254,6 +254,15 @@ class Settings(BaseSettings):
     git_hook_rate_limit_per_minute: int = Field(default=120, ge=1)
     git_hook_unknown_rate_limit_per_minute: int = Field(default=30, ge=1)
 
+    # SCIM provisioning (``/scim/v2/{provider_slug}/``): the largest request
+    # body, requests per minute per provider (and per client address for
+    # requests that fail authentication), and the most resources one list
+    # response returns (``count`` is capped at it).
+    scim_max_body_bytes: int = Field(default=1024 * 1024, ge=1024)
+    scim_rate_limit_per_minute: int = Field(default=600, ge=1)
+    scim_unauthenticated_rate_limit_per_minute: int = Field(default=30, ge=1)
+    scim_max_results: int = Field(default=200, ge=1, le=1000)
+
     # SSO (OpenID Connect). Providers are configured in the database; these
     # are the instance-wide limits every provider shares.
     # Break-glass: always show the local login form, whatever the
