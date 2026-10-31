@@ -26,7 +26,7 @@ open http://localhost:9933
 
 The setup wizard creates `.env` and `.env.local` files, initializes the data directory, and configures the admin account.
 
-## Quick Start (Docker Hub)
+## Quick Start (Docker Hub or GHCR)
 
 If you already have Docker Compose configured:
 
@@ -41,6 +41,13 @@ Pin to a specific version:
 ```bash
 # In .env or .env.local:
 SPECIVO_VERSION=0.8.0
+```
+
+The same image is published to the GitHub Container Registry. To pull from there (for example where
+Docker Hub is blocked), set this in `.env`:
+
+```bash
+SPECIVO_IMAGE=ghcr.io/specivo/specivo
 ```
 
 ## Offline / Airgapped Installation

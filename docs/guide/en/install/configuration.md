@@ -47,7 +47,8 @@ docker compose up -d
 | `COMPOSE_PROJECT_NAME` | Isolates an instance (containers, networks, volumes) so you can run several on one host. Default `specivo`. |
 | `SPECIVO_PORT` | External nginx port. Default `9933`. |
 | `SPECIVO_DATA_DIR` | Persistent data directory: database files, logs, attachments, themes. Default `./specivo-data`. |
-| `SPECIVO_VERSION` | Docker Hub image tag — `latest`, or a pinned release like `0.1.10`. |
+| `SPECIVO_VERSION` | Image tag — `latest`, or a pinned release like `0.12.0`. |
+| `SPECIVO_IMAGE` | Where the image is pulled from. Default `specivo/specivo` (Docker Hub). Set `ghcr.io/specivo/specivo` to pull the same image from the GitHub Container Registry, for example where Docker Hub is blocked. |
 | `DATABASE_URL` | `postgresql+asyncpg://specivo:specivo@db:5432/specivo`. Point it at an external database to use your own. |
 | `POSTGRES_DB` / `POSTGRES_USER` / `POSTGRES_PASSWORD` | Credentials for the bundled Postgres. |
 | `REDIS_URL` | `redis://redis:6379/0`. Point it at an external Redis if you prefer. |

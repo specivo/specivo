@@ -6,7 +6,7 @@ description: Install Specivo with Docker — clone the repo, run docker compose 
 
 This is the recommended way to run Specivo. You clone the repo (for the compose file and nginx
 config), bring the stack up, and create your first admin user. The application image is pulled from
-Docker Hub, so there is nothing to build.
+Docker Hub (or from the GitHub Container Registry, see below), so there is nothing to build.
 
 ## 1. Clone and start
 
@@ -18,6 +18,18 @@ docker compose up -d
 
 `docker compose up -d` pulls `specivo/specivo:latest` (and the Postgres, Redis, and nginx images),
 then starts every service in the background. The first run takes a moment while images download.
+
+!!! tip "Docker Hub blocked or slow?"
+    Every release is also published to the GitHub Container Registry as
+    `ghcr.io/specivo/specivo`, with the same tags and the same image digests. To pull from there,
+    put this in `.env` (next to `docker-compose.yml`) before `docker compose up -d`:
+
+    ```bash
+    SPECIVO_IMAGE=ghcr.io/specivo/specivo
+    ```
+
+    It needs no GitHub account. The Postgres, Redis and nginx images still come from Docker Hub;
+    use a registry mirror for those if Docker Hub is unreachable.
 
 You can watch it come up:
 
