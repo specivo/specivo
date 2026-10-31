@@ -146,7 +146,9 @@ that sessions are checked at the provider; if it says the provider sent no refre
 
 ## Offboarding
 
-To take someone's access away:
+With [SCIM provisioning](scim.md#authentik), deactivating or deleting the user in authentik
+deactivates the Specivo account at once, API keys included. Without it, to take someone's access
+away:
 
 1. **Deactivate the user in authentik** (or delete them). authentik refuses their refresh token at
    once, so their Specivo session ends at its next renewal, within 15 minutes, and with back-channel

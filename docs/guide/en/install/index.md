@@ -42,7 +42,8 @@ You reach Specivo at `http://your-specivo-host:9933`. Nothing else is exposed by
 
 **Docker with the published image — recommended.**
 The fastest path for almost everyone. You clone the repo for the compose file and nginx config,
-then pull the `specivo/specivo` image from Docker Hub. See
+then pull the `specivo/specivo` image from Docker Hub, or the same image from the GitHub Container
+Registry (`ghcr.io/specivo/specivo`) where Docker Hub is unreachable. See
 [Quick start with Docker](docker.md).
 
 **Air-gapped / offline.**

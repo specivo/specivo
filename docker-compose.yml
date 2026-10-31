@@ -29,7 +29,7 @@ services:
   # entered; `docker compose run --rm init-data fix-permissions --all` does,
   # with the app containers stopped.
   init-data:
-    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    image: ${SPECIVO_IMAGE:-specivo/specivo}:${SPECIVO_VERSION:-latest}
     user: "0:0"
     command: fix-permissions
     network_mode: none
@@ -38,7 +38,7 @@ services:
     restart: "no"
 
   api:
-    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    image: ${SPECIVO_IMAGE:-specivo/specivo}:${SPECIVO_VERSION:-latest}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     env_file:
@@ -77,7 +77,7 @@ services:
     restart: unless-stopped
 
   celery-worker:
-    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    image: ${SPECIVO_IMAGE:-specivo/specivo}:${SPECIVO_VERSION:-latest}
     command: celery -A specivo.tasks worker --loglevel=info
     entrypoint: []
     extra_hosts:
@@ -103,7 +103,7 @@ services:
   # process by default keeps one copy in memory. Raise
   # EMBEDDING_WORKER_CONCURRENCY to embed faster at the cost of a copy per process.
   celery-embeddings:
-    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    image: ${SPECIVO_IMAGE:-specivo/specivo}:${SPECIVO_VERSION:-latest}
     command: >-
       celery -A specivo.tasks worker --loglevel=info
       --queues=${EMBEDDING_QUEUE:-embeddings}
@@ -129,7 +129,7 @@ services:
     restart: unless-stopped
 
   celery-beat:
-    image: specivo/specivo:${SPECIVO_VERSION:-latest}
+    image: ${SPECIVO_IMAGE:-specivo/specivo}:${SPECIVO_VERSION:-latest}
     command: celery -A specivo.tasks beat --loglevel=info
     entrypoint: []
     extra_hosts:

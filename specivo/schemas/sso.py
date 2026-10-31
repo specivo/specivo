@@ -194,6 +194,10 @@ class SsoClaimConfig(BaseModel):
     #: Dotted path, e.g. ``groups``, ``realm_access.roles``.
     groups_claim: ClaimPath | None = None
     locale_claim: ClaimPath | None = None
+    #: Off by default. A claim the IdP guarantees to equal the SCIM ``externalId``
+    #: it sends (Entra ID: ``oid`` = objectId); a match links a SCIM-provisioned
+    #: account at the first sign-in without a trusted email.
+    scim_external_id_claim: ClaimPath | None = None
     use_userinfo: bool = False
 
 
@@ -468,3 +472,35 @@ class SsoSelfTestResult(BaseModel):
     jwks_key_ids: list[str] = Field(default_factory=list)
 
     warnings: list[str] = Field(default_factory=list)
+
+
+class ScimSettingsOut(BaseModel):
+    """A provider's SCIM provisioning settings. The token itself is never included."""
+
+    enabled: bool
+    #: Paste into the IdP as the SCIM base (tenant) URL.
+    base_url: str
+    token_configured: bool
+    #: The first characters of the token, to tell tokens apart.
+    token_prefix: str | None
+    token_created_at: datetime | None
+    #: The last authenticated SCIM request.
+    last_request_at: datetime | None
+    user_count: int
+    group_count: int
+    #: SCIM is on and ``sync_groups`` too: the groups claim is ignored at sign-in.
+    claim_group_sync_skipped: bool
+
+
+class ScimSettingsUpdate(BaseModel):
+    """Switch SCIM provisioning on or off; on needs a token."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+class ScimTokenOut(ScimSettingsOut):
+    """The settings plus the new token, returned once by the generate call."""
+
+    token: str

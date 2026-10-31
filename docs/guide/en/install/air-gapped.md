@@ -23,7 +23,7 @@ Pull the four images Specivo uses. Pin `specivo/specivo` to the release you inte
 ```bash
 TAG=0.1.10   # the Specivo release you want
 
-docker pull specivo/specivo:$TAG
+docker pull specivo/specivo:$TAG        # or ghcr.io/specivo/specivo:$TAG, the same image
 docker pull pgvector/pgvector:pg18
 docker pull redis:7-alpine
 docker pull nginx:1-alpine

@@ -123,6 +123,9 @@ back-channel logout as supported. For the remaining choices (accounts, JIT, grou
 
 ## Offboarding
 
+Keycloak has no built-in SCIM client, so [provisioning with SCIM](scim.md) is not available here;
+use the steps below.
+
 Keycloak sends **no** back-channel logout when you disable or delete a user. To take someone's access
 away:
 

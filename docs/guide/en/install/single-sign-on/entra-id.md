@@ -132,7 +132,9 @@ Then tick **Enabled** and save.
   **Scopes**: Entra issues refresh tokens only for it, and Specivo's
   [session check](index.md#the-session-check) needs one. Without it, disabling someone in Entra
   does not end an open Specivo session, so set a short **Maximum session length**, and deactivate
-  the user in Specivo too. See [Offboarding people](index.md#offboarding-people).
+  the user in Specivo too. See [Offboarding people](index.md#offboarding-people). Better still,
+  turn on [SCIM provisioning](scim.md#microsoft-entra-id): Entra then deactivates the Specivo
+  account in its next provisioning cycle, API keys included.
 - **Recreating the app registration changes every `sub`.** Entra's subject is unique per
   application. If you delete and recreate the registration, or move to a new one, nobody matches
   their connected account any more and everybody must connect again from their profile. Edit the

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-31 00:48+0100\n"
+"POT-Creation-Date: 2026-10-31 13:04+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <EMAIL@ADDRESS>\n"
 "Language: es\n"
@@ -294,7 +294,11 @@ msgstr ""
 "Este patrón fue modificado por otra persona. Vuelva a cargar e inténtelo "
 "de nuevo."
 
-#: specivo/services/user_service.py:72 specivo/web/pages/admin.py:233
+#: specivo/services/scim/config_service.py:102
+msgid "Generate a SCIM token before turning provisioning on."
+msgstr ""
+
+#: specivo/services/user_service.py:73 specivo/web/pages/admin.py:233
 msgid ""
 "This is the last active administrator. Make another user an administrator"
 " first."
@@ -476,7 +480,7 @@ msgstr "Registrar tiempo"
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
 #: specivo/templates/themes/default/pages/admin/projects.html:179
 #: specivo/templates/themes/default/pages/admin/settings.html:161
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:384
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:451
 #: specivo/templates/themes/default/pages/admin/users.html:160
 #: specivo/templates/themes/default/pages/admin/users.html:201
 #: specivo/templates/themes/default/pages/auth/api_keys.html:82
@@ -583,7 +587,7 @@ msgstr "Añadir más..."
 
 #: specivo/templates/themes/default/components/macros.html:95
 #: specivo/templates/themes/default/pages/admin/groups.html:100
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:75
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
 #: specivo/templates/themes/default/pages/admin/users.html:162
 #: specivo/templates/themes/default/pages/issues/form.html:299
 msgid "Create"
@@ -837,7 +841,7 @@ msgstr "Reindexando..."
 #: specivo/templates/themes/default/pages/admin/settings.html:58
 #: specivo/templates/themes/default/pages/admin/settings.html:124
 #: specivo/templates/themes/default/pages/admin/settings.html:132
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:75
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
 #: specivo/templates/themes/default/pages/auth/preferences.html:57
@@ -858,7 +862,7 @@ msgstr "Guardar"
 #: specivo/templates/themes/default/pages/admin/groups.html:126
 #: specivo/templates/themes/default/pages/admin/projects.html:182
 #: specivo/templates/themes/default/pages/admin/settings.html:131
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:76
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:28
 #: specivo/templates/themes/default/pages/issues/detail.html:123
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:335
@@ -1266,8 +1270,8 @@ msgstr "Gestiona cuentas de usuario, crea usuarios y restablece contraseñas."
 #: specivo/templates/themes/default/pages/admin/groups.html:11
 #: specivo/templates/themes/default/pages/admin/groups.html:24
 #: specivo/templates/themes/default/pages/admin/projects.html:42
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:287
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:322
 #: specivo/templates/themes/default/pages/projects/settings.html:174
 msgid "Groups"
 msgstr "Grupos"
@@ -1586,7 +1590,7 @@ msgid "Nobody is in this group yet."
 msgstr "Aún no hay nadie en este grupo."
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:310
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:319
 #: specivo/templates/themes/default/pages/issues/form.html:329
 #: specivo/templates/themes/default/pages/issues/form.html:381
 #: specivo/templates/themes/default/pages/projects/settings.html:226
@@ -1703,8 +1707,8 @@ msgstr "Editar"
 #: specivo/templates/themes/default/pages/admin/groups.html:72
 #: specivo/templates/themes/default/pages/admin/groups.html:142
 #: specivo/templates/themes/default/pages/admin/groups.html:174
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:83
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:386
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:453
 #: specivo/templates/themes/default/pages/admin/versions.html:128
 #: specivo/templates/themes/default/pages/auth/api_keys.html:132
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:63
@@ -1798,7 +1802,7 @@ msgid "This group grants no project access, so nothing is revoked."
 msgstr "Este grupo no otorga acceso a ningún proyecto, así que no se revoca nada."
 
 #: specivo/templates/themes/default/pages/admin/groups.html:175
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:387
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:454
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:134
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:118
 #: specivo/templates/themes/default/pages/projects/settings.html:465
@@ -1994,7 +1998,7 @@ msgid "Create first preset"
 msgstr "Crear el primer ajuste predefinido"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:151
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:156
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:30
 msgid "Slug"
 msgstr "Slug"
@@ -2398,7 +2402,7 @@ msgid "Setting updated."
 msgstr "Ajuste actualizado."
 
 #: specivo/templates/themes/default/pages/admin/settings.html:130
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:27
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:32
 msgid "Failed to save."
 msgstr "No se pudo guardar."
 
@@ -2415,88 +2419,113 @@ msgstr "No hay configuración establecida."
 msgid "New provider"
 msgstr "Nuevo proveedor"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:25
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:26
+#, fuzzy
+msgid "The SCIM settings could not be changed."
+msgstr "No se pudo contactar con el proveedor de identidad"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:27
+msgid ""
+"Replace the SCIM token? The current token stops working at once, until "
+"the new one is entered at the identity provider."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:28
+msgid ""
+"Revoke the SCIM token? Provisioning stops until a new token is generated."
+" Accounts and groups already provisioned stay."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:29
+#: specivo/templates/themes/default/pages/admin/user_detail.html:21
+#: specivo/templates/themes/default/pages/admin/user_detail.html:152
+#: specivo/templates/themes/default/pages/admin/users.html:25
+#: specivo/templates/themes/default/pages/auth/profile.html:142
+msgid "Never"
+msgstr "Nunca"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:30
 msgid "Saved."
 msgstr "Guardado."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:26
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:31
 #, python-brace-format
 msgid "Saved. Sessions ended: {count}."
 msgstr "Guardado. Sesiones cerradas: {count}."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:28
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:33
 msgid "Failed to delete."
 msgstr "No se pudo eliminar."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:29
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:34
 msgid "The test could not run."
 msgstr "No se pudo ejecutar la prueba."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:30
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:35
 msgid "Discovery and signing keys work."
 msgstr "El descubrimiento y las claves de firma funcionan."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:31
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:36
 #: specivo/templates/themes/default/pages/issues/detail.html:120
 #: specivo/templates/themes/default/pages/issues/form.html:162
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "Yes"
 msgstr "Sí"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:32
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:37
 #: specivo/templates/themes/default/pages/issues/detail.html:121
 #: specivo/templates/themes/default/pages/issues/form.html:163
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "No"
 msgstr "No"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:34
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:39
 msgid "The identity provider could not be reached"
 msgstr "No se pudo contactar con el proveedor de identidad"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:35
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:40
 msgid "The identity provider configuration is invalid"
 msgstr "La configuración del proveedor de identidad no es válida"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:38
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:43
 msgid "Stored (encrypted)"
 msgstr "Guardado (cifrado)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:39
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:44
 msgid "Unreadable after a SECRET_KEY change: enter it again"
 msgstr "Ilegible tras un cambio de SECRET_KEY: introdúcelo de nuevo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:40
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:45
 msgid "Read from the environment variable"
 msgstr "Se lee de la variable de entorno"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:41
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:46
 msgid "The environment variable is not set"
 msgstr "La variable de entorno no está definida"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:42
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:47
 msgid "This environment variable name is not allowed"
 msgstr "Este nombre de variable de entorno no está permitido"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:43
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:48
 msgid "Not set"
 msgstr "Sin definir"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:44
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:49
 msgid "Not needed for a public client"
 msgstr "No es necesario para un cliente público"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:47
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:52
 msgid "The provider does not advertise the selected client authentication method."
 msgstr ""
 "El proveedor no anuncia el método de autenticación de cliente "
 "seleccionado."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:48
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:53
 msgid "The provider does not advertise PKCE. Specivo sends it anyway (S256)."
 msgstr "El proveedor no anuncia PKCE. Specivo lo envía de todos modos (S256)."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:49
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:54
 msgid ""
 "Sign-out at the provider is on, but the provider has no "
 "end_session_endpoint."
@@ -2504,146 +2533,146 @@ msgstr ""
 "El cierre de sesión en el proveedor está activado, pero el proveedor no "
 "tiene end_session_endpoint."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:50
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:55
 msgid "Back-channel logout is on, but the provider does not support it."
 msgstr ""
 "El cierre de sesión por canal secundario está activado, pero el proveedor"
 " no lo admite."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:51
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:56
 msgid "Userinfo is on, but the provider has no userinfo_endpoint."
 msgstr "Userinfo está activado, pero el proveedor no tiene userinfo_endpoint."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:52
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:57
 msgid "The stored client secret cannot be read: enter it again."
 msgstr "No se puede leer el secreto de cliente guardado: introdúcelo de nuevo."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:53
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:58
 msgid "The client secret environment variable is not set."
 msgstr "La variable de entorno del secreto de cliente no está definida."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:54
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:59
 msgid "The client secret environment variable name is not allowed."
 msgstr ""
 "El nombre de la variable de entorno del secreto de cliente no está "
 "permitido."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:55
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:60
 msgid "No client secret is set."
 msgstr "No hay ningún secreto de cliente definido."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:56
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:61
 #, fuzzy
 msgid ""
 "Session check is on, but the provider does not advertise the "
 "refresh_token grant."
 msgstr "Userinfo está activado, pero el proveedor no tiene userinfo_endpoint."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:57
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:62
 msgid ""
 "The last sign-in returned no refresh token, so sessions are not checked "
 "at the provider. Some providers need the offline_access scope."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:58
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:63
 msgid ""
 "The provider refused the refresh token right after sign-in, so sessions "
 "are not checked at the provider. Allow the refresh_token grant for this "
 "client."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:61
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:66
 msgid "Works: sessions are checked at the provider"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:62
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:67
 msgid "Not available: the provider sent no refresh token"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:63
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:68
 msgid "Not available: the provider refused the refresh token"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:64
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:69
 msgid "Not known yet: no sign-in since it was turned on"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:65
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:70
 #, fuzzy
 msgid "Off"
 msgstr "de"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:85
 msgid "Test connection"
 msgstr "Probar conexión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:86
 msgid "Testing..."
 msgstr "Probando..."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:95
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:100
 msgid "Discovery URL"
 msgstr "URL de descubrimiento"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:96
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:101
 msgid "Expected issuer"
 msgstr "Emisor esperado"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:97
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:102
 msgid "Issuer reported"
 msgstr "Emisor declarado"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:98
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:103
 msgid "Issuer matches"
 msgstr "El emisor coincide"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:100
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:105
 msgid "Authorization endpoint"
 msgstr "Endpoint de autorización"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:101
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:106
 msgid "Token endpoint"
 msgstr "Endpoint de token"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:102
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:107
 msgid "Userinfo endpoint"
 msgstr "Endpoint de userinfo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:103
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:108
 msgid "End session endpoint"
 msgstr "Endpoint de cierre de sesión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:104
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:109
 msgid "Signing algorithms"
 msgstr "Algoritmos de firma"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:105
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:171
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:110
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:176
 msgid "Client authentication"
 msgstr "Autenticación del cliente"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:106
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:111
 msgid "Back-channel logout"
 msgstr "Cierre de sesión por canal secundario"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:108
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:113
 msgid "Refresh token grant"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:110
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:115
 #, fuzzy
 msgid "Session check at the provider"
 msgstr "Grupo en el proveedor"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:112
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:117
 msgid "Signing keys"
 msgstr "Claves de firma"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:125
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:130
 msgid "Connection"
 msgstr "Conexión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:126
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:131
 msgid ""
 "Register Specivo at the identity provider with exactly these URLs (no "
 "wildcards), then copy its issuer and client ID here."
@@ -2651,12 +2680,14 @@ msgstr ""
 "Registra Specivo en el proveedor de identidad con exactamente estas URL "
 "(sin comodines) y copia aquí su emisor y su ID de cliente."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:128
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:133
 msgid "Redirect URI"
 msgstr "URI de redirección"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:132
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:140
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:137
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:145
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:383
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:408
 #: specivo/templates/themes/default/pages/admin/user_detail.html:34
 #: specivo/templates/themes/default/pages/auth/api_keys.html:17
 #: specivo/templates/themes/default/pages/projects/settings.html:1031
@@ -2664,77 +2695,79 @@ msgstr "URI de redirección"
 msgid "Copy"
 msgstr "Copiar"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:133
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:141
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:138
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:146
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:384
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:409
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:345
 #: specivo/templates/themes/default/pages/projects/settings.html:1032
 #: specivo/templates/themes/default/pages/projects/settings.html:1264
 msgid "Copied"
 msgstr "Copiado"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:136
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:141
 msgid "Back-channel logout URI"
 msgstr "URI de cierre de sesión por canal secundario"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:147
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:152
 msgid "Button label"
 msgstr "Texto del botón"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:153
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:158
 msgid "Part of the URLs above. Changing it means updating them at the provider."
 msgstr ""
 "Forma parte de las URL anteriores. Si lo cambias, actualízalas en el "
 "proveedor."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:157
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:162
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:32
 msgid "Issuer"
 msgstr "Emisor"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:159
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:164
 msgid "Must match the issuer the provider publishes, character for character."
 msgstr ""
 "Debe coincidir exactamente, carácter por carácter, con el emisor que "
 "publica el proveedor."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:162
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:167
 msgid "Discovery URL (optional)"
 msgstr "URL de descubrimiento (opcional)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:163
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:168
 msgid "Issuer + /.well-known/openid-configuration"
 msgstr "Emisor + /.well-known/openid-configuration"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:167
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:172
 msgid "Client ID"
 msgstr "ID de cliente"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:175
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:180
 msgid "none (public client, PKCE only)"
 msgstr "none (cliente público, solo PKCE)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:181
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:186
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:33
 msgid "Client secret"
 msgstr "Secreto de cliente"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:185
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:190
 msgid "Store it in Specivo (encrypted)"
 msgstr "Guardarlo en Specivo (cifrado)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:186
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:191
 msgid "Read it from an environment variable"
 msgstr "Leerlo de una variable de entorno"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:189
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:194
 msgid "Leave empty to keep the current secret"
 msgstr "Déjalo vacío para conservar el secreto actual"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:190
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:195
 msgid "Write-only: the secret is never shown again."
 msgstr "Solo escritura: el secreto no se vuelve a mostrar."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:194
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:199
 msgid ""
 "The name must start with SPECIVO_SSO_SECRET_ (capital letters, digits and"
 " underscores). Set the variable on every Specivo container."
@@ -2742,83 +2775,83 @@ msgstr ""
 "El nombre debe empezar por SPECIVO_SSO_SECRET_ (mayúsculas, dígitos y "
 "guiones bajos). Define la variable en todos los contenedores de Specivo."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:197
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:202
 msgid "Remove the client secret"
 msgstr "Eliminar el secreto de cliente"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:202
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:207
 msgid "Scopes"
 msgstr "Ámbitos"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:204
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:209
 msgid "Space-separated. openid is required."
 msgstr "Separados por espacios. openid es obligatorio."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:214
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:219
 msgid "Optional extra parameters for the sign-in request."
 msgstr "Parámetros adicionales opcionales para la solicitud de inicio de sesión."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:217
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:222
 msgid "Enabled (shown on the login page)"
 msgstr "Activado (se muestra en la página de inicio de sesión)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:218
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:223
 msgid "Turning it off signs out everyone who signed in through this provider."
 msgstr ""
 "Al desactivarlo se cierra la sesión de todos los que iniciaron sesión con"
 " este proveedor."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:220
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:225
 msgid "Button order"
 msgstr "Orden del botón"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:228
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:233
 msgid "Sign-in policy"
 msgstr "Política de inicio de sesión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:229
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:234
 msgid "Who may sign in, and what happens the first time someone does."
 msgstr ""
 "Quién puede iniciar sesión y qué ocurre la primera vez que alguien lo "
 "hace."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:231
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:236
 msgid "Create an account on first sign-in"
 msgstr "Crear una cuenta en el primer inicio de sesión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:233
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:238
 msgid "Existing accounts"
 msgstr "Cuentas existentes"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:235
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "Users connect their account themselves, while signed in"
 msgstr "Los usuarios conectan su cuenta por sí mismos, con la sesión iniciada"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:236
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:241
 msgid "Link automatically by verified email (never for administrators)"
 msgstr ""
 "Vincular automáticamente por correo verificado (nunca para "
 "administradores)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
 msgid "This provider really verifies email addresses"
 msgstr "Este proveedor verifica realmente las direcciones de correo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:241
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:246
 msgid "Required for automatic linking. Never turn it on for Microsoft Entra ID."
 msgstr ""
 "Necesario para la vinculación automática. No lo actives nunca para "
 "Microsoft Entra ID."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:243
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:248
 msgid "Allowed email domains"
 msgstr "Dominios de correo permitidos"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:250
 msgid "One per line. Empty allows every domain."
 msgstr "Uno por línea. Vacío permite todos los dominios."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:246
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
 msgid ""
 "Needs email verification to be trusted (the setting above): only verified"
 " addresses are checked. Google Workspace accounts are checked by their "
@@ -2828,15 +2861,15 @@ msgstr ""
 "arriba): solo se comprueban las direcciones verificadas. Las cuentas de "
 "Google Workspace se comprueban por su dominio alojado."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:249
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:254
 msgid "Maximum session length (hours)"
 msgstr "Duración máxima de la sesión (horas)"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:256
 msgid "After this, people sign in at the provider again."
 msgstr "Después, las personas vuelven a iniciar sesión en el proveedor."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:252
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:257
 #, fuzzy
 msgid ""
 "At most 168 hours (one week). With the session check below, an account "
@@ -2848,11 +2881,11 @@ msgstr ""
 "de sesión por canal secundario (back-channel) para terminarla de "
 "inmediato."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:258
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:263
 msgid "Claims"
 msgstr "Claims"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:259
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:264
 msgid ""
 "Which token claims fill the Specivo profile. Leave a field empty for the "
 "standard claim."
@@ -2860,35 +2893,47 @@ msgstr ""
 "Qué claims del token rellenan el perfil de Specivo. Deja un campo vacío "
 "para usar el claim estándar."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:261
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:266
 msgid "Username claim"
 msgstr "Claim de nombre de usuario"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:263
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:268
 msgid "Email claim"
 msgstr "Claim de correo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:270
 msgid "Name claim"
 msgstr "Claim de nombre"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:267
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:272
 msgid "Language claim"
 msgstr "Claim de idioma"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:269
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
 msgid "Groups claim"
 msgstr "Claim de grupos"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:271
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:276
 msgid "A dotted path, for example realm_access.roles."
 msgstr "Una ruta con puntos, por ejemplo realm_access.roles."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:277
+#, fuzzy
+msgid "SCIM externalId claim"
+msgstr "Claim de nombre de usuario"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
+msgid ""
+"Optional. Only a claim the provider guarantees to equal the externalId it"
+" sends over SCIM (Microsoft Entra ID: oid). It then connects a "
+"provisioned account at the first sign-in without a trusted email."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:282
 msgid "Also read claims from the userinfo endpoint"
 msgstr "Leer también los claims del endpoint userinfo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:280
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:288
 msgid ""
 "Group values from the groups claim decide who may sign in, who is an "
 "administrator, and which Specivo groups people are in. Values match "
@@ -2898,33 +2943,39 @@ msgstr ""
 " es administrador y en qué grupos de Specivo está cada persona. Los "
 "valores deben coincidir exactamente, incluidas mayúsculas."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:283
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:291
 msgid "Required groups"
 msgstr "Grupos obligatorios"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:285
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:293
 msgid "One per line. Empty lets everyone from this provider in."
 msgstr ""
 "Uno por línea. Vacío permite entrar a todos los usuarios de este "
 "proveedor."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:288
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:296
 msgid "Administrator groups"
 msgstr "Grupos de administradores"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:293
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:301
 msgid "Set the administrator flag from the administrator groups at every sign-in"
 msgstr ""
 "Establecer el indicador de administrador según los grupos de "
 "administradores en cada inicio de sesión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:295
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:303
 msgid "Update Specivo group memberships from the mappings below at every sign-in"
 msgstr ""
 "Actualizar la pertenencia a grupos de Specivo según las asignaciones de "
 "abajo en cada inicio de sesión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:297
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:304
+msgid ""
+"Skipped while SCIM provisioning is on: the provider then manages group "
+"memberships through SCIM."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:306
 msgid ""
 "Deactivate the Specivo account when a sign-in is refused by the required "
 "groups or allowed email domains"
@@ -2932,7 +2983,7 @@ msgstr ""
 "Desactivar la cuenta de Specivo cuando los grupos requeridos o los "
 "dominios de correo permitidos rechacen un inicio de sesión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:298
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:307
 msgid ""
 "Deactivation signs the user out everywhere and switches off their API "
 "keys. Without it, only the sessions started through this provider end."
@@ -2941,42 +2992,42 @@ msgstr ""
 "claves API. Sin ella, solo terminan las sesiones iniciadas con este "
 "proveedor."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:301
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:310
 msgid "Group mappings"
 msgstr "Asignaciones de grupos"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:304
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
 msgid "Group at the provider"
 msgstr "Grupo en el proveedor"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:305
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:314
 msgid "Specivo group"
 msgstr "Grupo de Specivo"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:322
 msgid "Create a Specivo group first."
 msgstr "Crea primero un grupo de Specivo."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:315
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:324
 msgid "+ Add mapping"
 msgstr "+ Añadir asignación"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:316
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:325
 msgid "Save mappings"
 msgstr "Guardar asignaciones"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:321
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
 msgid "Group mappings can be added once the provider is saved."
 msgstr ""
 "Las asignaciones de grupos se pueden añadir cuando el proveedor esté "
 "guardado."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:327
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:336
 #, fuzzy
 msgid "Session check"
 msgstr "Sesiones"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:328
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:337
 msgid ""
 "Specivo renews a session every few minutes. With the check on, it first "
 "asks the provider whether the person may still sign in, so someone "
@@ -2984,72 +3035,72 @@ msgid ""
 "one renewal."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:339
 msgid "Check sessions at the provider when they are renewed"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:331
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:340
 msgid ""
 "Needs a refresh token from the provider. Providers that send none, or "
 "refuse it, keep the sessions as before: Test connection shows which."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:336
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:345
 #, fuzzy
 msgid "If the provider cannot be reached"
 msgstr "No se pudo contactar con el proveedor de identidad"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:338
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:347
 msgid "Keep the session and ask again at the next renewal"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:339
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:348
 #, fuzzy
 msgid "End the session"
 msgstr "Sesiones de agentes"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:350
 msgid ""
 "Ending sessions signs everybody from this provider out while it is down. "
 "Local sign-in keeps working."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:347
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:356
 msgid "Logout"
 msgstr "Cierre de sesión"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:349
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:358
 msgid "Signing out of Specivo also signs out at the provider"
 msgstr "Cerrar sesión en Specivo también la cierra en el proveedor"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:351
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:360
 msgid "Accept back-channel logout from the provider"
 msgstr "Aceptar el cierre de sesión por canal secundario del proveedor"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:352
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:361
 msgid "Register the back-channel logout URI above at the provider."
 msgstr ""
 "Registra en el proveedor la URI de cierre de sesión por canal secundario "
 "indicada arriba."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:354
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:363
 msgid "When the provider ends a session"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:356
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:365
 msgid "End the matching Specivo session"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:357
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:366
 #, fuzzy
 msgid "End every session of that person from this provider"
 msgstr "La versión no pertenece a este proyecto"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:358
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:367
 msgid "End all of their sessions and switch off their API keys"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:360
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:369
 msgid ""
 "The provider sends the same message when someone signs out as when they "
 "are disabled. Switching off API keys applies only to accounts without a "
@@ -3057,11 +3108,99 @@ msgid ""
 "the keys stay off."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:368
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:376
+msgid "Provisioning (SCIM)"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:377
+msgid ""
+"The provider creates, updates and deactivates Specivo accounts and groups"
+" through SCIM, so people exist before their first sign-in and lose access"
+" as soon as they are disabled at the provider."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:379
+msgid "SCIM base URL"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:390
+#, fuzzy
+msgid "Token"
+msgstr "abiertas"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:395
+#, fuzzy
+msgid "Last request"
+msgstr "Último uso"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:397
+#, fuzzy
+msgid "Provisioned users"
+msgstr "Usuarios vinculados"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:398
+#, fuzzy
+msgid "Provisioned groups"
+msgstr "Grupos obligatorios"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:404
+#, fuzzy
+msgid "Copy this token now and enter it at the provider. It is not shown again."
+msgstr "Copia esta clave ahora. No se volverá a mostrar."
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:417
+#, fuzzy
+msgid "Accept provisioning from this provider"
+msgstr "Aceptar el cierre de sesión por canal secundario del proveedor"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:418
+#, fuzzy
+msgid "Generate a token first."
+msgstr "Generar contraseña"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:419
+msgid ""
+"The provider is switched off: SCIM requests are refused until it is "
+"enabled again."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:422
+#, fuzzy
+msgid "Generate token"
+msgstr "Generar"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:423
+#, fuzzy
+msgid "Rotate token"
+msgstr "Rotación"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:424
+#, fuzzy
+msgid "Revoke token"
+msgstr "Revocar"
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:428
+msgid ""
+"Deactivating or deleting a person at the provider deactivates their "
+"Specivo account at once: every session ends and their API keys are "
+"switched off. The account itself stays, so issues and history keep their "
+"author. Administrators and service accounts are never deactivated through"
+" SCIM, and an account deactivated in Specivo is not reactivated by the "
+"provider."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:429
+msgid ""
+"An existing Specivo account with the same email is linked instead of a "
+"new one being created, except administrators, service accounts and "
+"accounts another provider manages."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:435
 msgid "Delete provider"
 msgstr "Eliminar proveedor"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:371
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:438
 #, python-format
 msgid ""
 "%(count)s user signs in through this provider. Disabling it is usually "
@@ -3076,19 +3215,19 @@ msgstr[1] ""
 "%(count)s usuarios inician sesión con este proveedor. Normalmente "
 "conviene desactivarlo."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:373
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:440
 msgid "Delete anyway: unlink these users and end their sessions"
 msgstr ""
 "Eliminar de todos modos: desvincular a estos usuarios y cerrar sus "
 "sesiones"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:377
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:444
 msgid "Nobody is linked to this provider. Its group mappings are deleted with it."
 msgstr ""
 "Nadie está vinculado a este proveedor. Sus asignaciones de grupos se "
 "eliminan con él."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:380
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:447
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
 msgid_plural "%(count)s group memberships granted by this provider are removed with it."
@@ -3200,13 +3339,6 @@ msgstr "No se pudo conectar. Inténtalo de nuevo."
 #: specivo/templates/themes/default/pages/admin/user_detail.html:20
 msgid "Revoke this API key? This cannot be undone."
 msgstr "¿Revocar esta clave API? No se puede deshacer."
-
-#: specivo/templates/themes/default/pages/admin/user_detail.html:21
-#: specivo/templates/themes/default/pages/admin/user_detail.html:152
-#: specivo/templates/themes/default/pages/admin/users.html:25
-#: specivo/templates/themes/default/pages/auth/profile.html:142
-msgid "Never"
-msgstr "Nunca"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:22
 #: specivo/templates/themes/default/pages/admin/users.html:26
@@ -8287,4 +8419,15 @@ msgstr "El inicio de sesión único falló. Inténtalo de nuevo."
 
 #~ msgid "[{issue_key}] New comment: {issue_subject}"
 #~ msgstr "[{issue_key}] Nuevo comentario: {issue_subject}"
+
+#~ msgid ""
+#~ "Deactivating or deleting a person at "
+#~ "the provider deactivates their Specivo "
+#~ "account at once: every session ends "
+#~ "and their API keys are switched "
+#~ "off. The account itself stays, so "
+#~ "issues and history keep their author."
+#~ " The last active administrator is "
+#~ "never deactivated."
+#~ msgstr ""
 
