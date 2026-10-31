@@ -36,7 +36,7 @@ touch the admin area to use metadata.
     Creating, enabling, or editing schemas requires the **Manager** role. If you don't see
     **Admin → Metadata presets**, ask a project manager to set up the fields you need.
 
-![Metadata presets in the admin area](../assets/img/admin-metadata-presets.webp)
+![Metadata presets in the admin area](../../assets/img/admin-metadata-presets.webp)
 
 ## Project-derived (computed) fields
 

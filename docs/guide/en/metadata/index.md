@@ -44,7 +44,7 @@ When a schema applies to an issue, its fields show up in their own section on th
 alongside the core fields. You fill them in like any other field: type a string, pick a date, choose an enum
 value, or add items to an array. Fields you leave blank simply stay empty.
 
-![Metadata fields on an issue](../assets/img/metadata-issue.webp)
+![Metadata fields on an issue](../../assets/img/metadata-issue.webp)
 
 ## Next steps
 

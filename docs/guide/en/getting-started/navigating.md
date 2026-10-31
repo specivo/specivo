@@ -7,7 +7,7 @@ description: A tour of the Specivo interface — the left navigation sidebar, th
 Specivo has two consistent navigation areas on every page: a **sidebar** down the left for getting around,
 and a **header** across the top for search and your account.
 
-![The Specivo sidebar and header](../assets/img/nav-sidebar.webp)
+![The Specivo sidebar and header](../../assets/img/nav-sidebar.webp)
 
 ## The sidebar (left)
 
@@ -46,4 +46,4 @@ Specivo is responsive. On narrow screens the sidebar collapses behind the **menu
 header — tap it to slide the sidebar out. Every page and action is still available, just stacked for a
 smaller screen.
 
-![Specivo on a mobile screen](../assets/img/nav-mobile.webp)
+![Specivo on a mobile screen](../../assets/img/nav-mobile.webp)

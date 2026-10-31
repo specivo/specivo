@@ -7,7 +7,7 @@ description: How to edit an issue in Specivo — change status, reassign, edit t
 Issues change as work moves forward. You can edit almost any field on an issue at any time, and
 Specivo keeps a record of what changed.
 
-![Editing an issue](../assets/img/issue-edit.webp)
+![Editing an issue](../../assets/img/issue-edit.webp)
 
 ## Change the status
 
@@ -44,7 +44,7 @@ Sometimes an issue lands in the wrong place — a request filed in your inbox pr
 the team that owns it. The issue detail sidebar has a **Move** card: pick a target project, add an
 optional note explaining the move, and submit.
 
-![The Move card in the issue sidebar](../assets/img/issue-move.webp)
+![The Move card in the issue sidebar](../../assets/img/issue-move.webp)
 
 The issue keeps its internal identity but takes a **new per-project number** in the target. An issue
 that was `INB-1` becomes `HOME-1` once it lands in the `HOME` project. The **old reference still

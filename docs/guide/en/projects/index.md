@@ -9,7 +9,7 @@ its [versions](versions.md), its [sprints](sprints.md), and a member list with r
 wiki page, and time entry belongs to exactly one project. Most of what you do in Specivo happens
 inside one.
 
-![The projects list](../assets/img/projects-list.webp)
+![The projects list](../../assets/img/projects-list.webp)
 
 ## What defines a project
 
@@ -89,7 +89,7 @@ The **overview** is the project's home page. It pulls together the project's nam
 quick links to its issues, [roadmap](versions.md), [sprints](sprints.md), [wiki](../wiki/index.md),
 and time, so you can see the shape of the project at a glance and jump to the area you need.
 
-![A project overview](../assets/img/project-overview.webp)
+![A project overview](../../assets/img/project-overview.webp)
 
 From here you typically branch out to:
 

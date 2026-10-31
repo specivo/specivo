@@ -8,7 +8,7 @@ A **relation** is a typed link between two issues. Relations capture how work fi
 blocks what, which issue duplicates another, what order things should happen in. They're informational
 links and dependency markers — they don't move issues through statuses on their own.
 
-![Relations on an issue](../assets/img/issue-relations.webp)
+![Relations on an issue](../../assets/img/issue-relations.webp)
 
 ## The relation types
 

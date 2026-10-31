@@ -11,7 +11,7 @@ is ever lost.
 
 There is **one wiki per project**. Open it from the project's **Wiki** tab.
 
-![The project wiki home](../assets/img/wiki-home.webp)
+![The project wiki home](../../assets/img/wiki-home.webp)
 
 ## What a wiki page is
 

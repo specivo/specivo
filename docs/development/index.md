@@ -15,5 +15,7 @@ Related, elsewhere in the repo:
 
 - `docs/adr/` — architecture decision records. Read these first when a design
   choice looks arbitrary; the reason is usually written down.
-- `docs/guide/` — the published user and operator guide.
+- `docs/guide/` — the published user and operator guide: English pages in
+  `en/`, translations in a folder per language with the same file names (for
+  example `zh-cn/`), and screenshots shared by all languages in `assets/`.
 - `CLAUDE.md` — repo conventions, branch workflow and release process.

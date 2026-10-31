@@ -10,7 +10,7 @@ belong to a [project](../projects/index.md) and are numbered per project: the fi
 `ACME` project is `ACME-1`, the next is `ACME-2`, and so on. That key never changes, so you can paste
 `ACME-42` into a chat or a commit message and everyone knows exactly which issue you mean.
 
-![The issue detail page](../assets/img/issue-detail.webp)
+![The issue detail page](../../assets/img/issue-detail.webp)
 
 ## Trackers — the four issue types
 

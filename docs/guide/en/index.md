@@ -12,7 +12,7 @@ This guide is for the people who use Specivo every day — creating and tracking
 pages, and connecting AI assistants. If you want to install and operate Specivo, jump to
 [Installing Specivo](install/index.md). Moving from another tracker, such as Jira? See [Importing from another tracker](install/importing.md).
 
-![The Specivo dashboard](assets/img/hero-dashboard.webp)
+![The Specivo dashboard](../assets/img/hero-dashboard.webp)
 
 ## Three things Specivo does
 

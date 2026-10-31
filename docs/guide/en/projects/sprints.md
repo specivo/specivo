@@ -51,7 +51,7 @@ The **backlog** is the pool of issues that aren't yet committed to a sprint. Thi
 review what's waiting, decide what fits the next iteration, and assign issues to a sprint. An issue's
 **sprint** field is the link — set it (from the backlog or the issue itself) to pull the issue in.
 
-![The backlog](../assets/img/backlog.webp)
+![The backlog](../../assets/img/backlog.webp)
 
 ## The sprint board
 
@@ -60,7 +60,7 @@ Progress, Resolved, and so on — so the team can see the state of the iteration
 The columns follow the status categories (backlog, active, done), the same ones that drive the
 [issue board](../issues/index.md).
 
-![The sprint board](../assets/img/sprint-board.webp)
+![The sprint board](../../assets/img/sprint-board.webp)
 
 Use the board during the sprint for the day-to-day flow, and the [roadmap](versions.md) when you need
 the longer view across releases.

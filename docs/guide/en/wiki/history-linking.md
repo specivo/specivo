@@ -12,7 +12,7 @@ your issues — so knowledge stays connected instead of scattered.
 Every time a page is saved, Specivo stores a **version** with its author and the optional edit comment.
 Open a page's **History** to see the full list of versions in order.
 
-![A wiki page's version history](../assets/img/wiki-history.webp)
+![A wiki page's version history](../../assets/img/wiki-history.webp)
 
 From the history you can:
 
