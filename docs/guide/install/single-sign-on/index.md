@@ -381,11 +381,14 @@ the access-token lifetime, 15 minutes):
 
 - the IdP accepts it: the session is renewed (and keeps the new refresh token, if the IdP rotates
   it);
-- the IdP refuses it (`invalid_grant`): the person was disabled, deleted or signed out there, or
-  their IdP session expired. The Specivo session ends at once, and the next page they open is the
-  login page. The security audit log records `sso_session_rejected`;
-- the IdP cannot be reached or answers with another error: **If the provider cannot be reached**
-  decides, and the log has an `sso.session.idp_check_failed` line.
+- the IdP refuses the person (`invalid_grant`, `access_denied` or any other refusal of the user):
+  they were disabled, deleted or signed out there, or their IdP session expired. The Specivo
+  session ends at once, and the next page they open is the login page. The security audit log
+  records `sso_session_rejected`;
+- the IdP cannot be reached, or refuses Specivo itself rather than the person (`invalid_client`,
+  `unauthorized_client`, `invalid_scope`, `invalid_request`, `unsupported_grant_type`,
+  `server_error`, `temporarily_unavailable`): **If the provider cannot be reached** decides, and
+  the log has an `sso.session.idp_check_failed` line.
 
 This works with any OpenID Connect IdP that issues refresh tokens, without back-channel logout.
 API keys are not affected by it.
