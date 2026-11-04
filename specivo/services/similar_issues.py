@@ -22,7 +22,7 @@ SIMILAR_ISSUES_SETTING_KEY = "similar_issues_enabled"
 SIMILAR_ISSUES_PROJECT_KEY = "similar_issues"
 
 # ``similarity(subject, q)`` a suggestion must exceed.
-SIMILAR_ISSUES_MIN_SCORE = 0.12
+SIMILAR_ISSUES_MIN_SCORE = 0.2
 # Full-text candidates, best ``ts_rank`` first, that the similarity rerank sees.
 CANDIDATE_LIMIT = 50
 # Issues, newest first, scored for a title in a script written without spaces.
