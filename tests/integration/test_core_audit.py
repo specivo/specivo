@@ -514,3 +514,81 @@ class TestCoreAuditGate:
 
         events = await _get_audit_events(db_session, "search_query")
         assert len(events) >= 1, "search_query must be written in core-only mode"
+
+
+# ---------------------------------------------------------------------------
+# Sprint lifecycle
+# ---------------------------------------------------------------------------
+
+
+class TestSprintLifecycleAudit:
+    """Starting and completing a sprint is audited, through REST and MCP alike."""
+
+    @pytest.fixture
+    def audit_on(self):
+        """Register the enterprise audit feature (the autouse snapshot fixture removes it again)."""
+        from specivo.main import get_plugin_manager
+
+        get_plugin_manager().feature_registry.register("security_audit_log", "test")
+        yield
+
+    @pytest.mark.parametrize("via", ["rest", "mcp"])
+    async def test_sprint_start_and_complete_are_audited(
+        self, client: AsyncClient, db_session: AsyncSession, audit_on: None, via: str
+    ):
+        from specivo.mcp.tools import _complete_sprint, _start_sprint
+        from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
+        from specivo.models.sprint import Sprint
+        from specivo.services.permission_service import clear_role_cache
+        from tests.factories.lookups import DoneStatusFactory
+        from tests.integration.test_issue_visibility_listings import _bearer, _issue, build_world
+
+        clear_role_cache(db_session)
+        w = await build_world(db_session, "AUS" if via == "rest" else "AUM")
+        done = DoneStatusFactory.build(name=f"{via} audit done", position=9, category="done")
+        db_session.add(done)
+        await db_session.flush()
+        w.sprint.status = "completed"
+        sprint = Sprint(project_id=w.p.id, name="Sprint Audit", status="planned")
+        target = Sprint(project_id=w.p.id, name="Sprint Audit Next", status="planned")
+        db_session.add_all([sprint, target])
+        await db_session.flush()
+        lookups = (
+            await db_session.get(Tracker, w.pub.tracker_id),
+            await db_session.get(IssueStatus, w.pub.status_id),
+            await db_session.get(IssuePriority, w.pub.priority_id),
+        )
+        finished = await _issue(db_session, w.p, lookups, w.manager, "Audit subject finished", sprint=sprint)
+        finished.status_id = done.id
+        await _issue(db_session, w.p, lookups, w.manager, "Audit subject pending", sprint=sprint)
+        await _issue(db_session, w.p, lookups, w.manager, "Audit subject private", sprint=sprint, is_private=True)
+        await db_session.commit()
+        sprint_id, target_id, project_id, manager_id = sprint.id, target.id, w.p.id, w.manager.id
+
+        if via == "rest":
+            headers = await _bearer(client, w.manager)
+            base = f"/api/v1/projects/{w.p.key}/sprints/{sprint_id}"
+            assert (await client.post(f"{base}/start/", headers=headers)).status_code == 200
+            resp = await client.post(
+                f"{base}/complete/", headers=headers, json={"move_incomplete_to_sprint_id": target_id}
+            )
+            assert resp.status_code == 200, resp.text
+        else:
+            await _start_sprint(db_session, w.manager, w.p.key, sprint_id)
+            await _complete_sprint(db_session, w.manager, w.p.key, sprint_id, target_id)
+            await db_session.commit()
+
+        started = [e for e in await _get_audit_events(db_session, "sprint_started") if e.resource_id == sprint_id]
+        completed = [e for e in await _get_audit_events(db_session, "sprint_completed") if e.resource_id == sprint_id]
+        assert len(started) == 1 and len(completed) == 1
+        for event in (started[0], completed[0]):
+            assert (event.resource_type, event.project_id, event.user_id) == ("sprint", project_id, manager_id)
+            assert "Audit subject" not in str(event.details)
+        assert started[0].details == {"name": "Sprint Audit", "issue_count": 3}
+        assert completed[0].details == {
+            "name": "Sprint Audit",
+            "issue_count": 3,
+            "completed_count": 1,
+            "moved_count": 2,
+            "move_to_sprint_id": target_id,
+        }

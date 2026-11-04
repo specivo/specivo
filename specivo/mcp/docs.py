@@ -61,8 +61,11 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_list_sprint_issues": "List the issues of a sprint, or backlog issues (sprint_id=0)",
     "specivo_create_sprint": "Create a new sprint (starts as planned)",
     "specivo_update_sprint": "Update sprint name, goal, or dates",
-    "specivo_start_sprint": "Start a planned sprint (one active per project)",
-    "specivo_complete_sprint": "Complete an active sprint with velocity snapshot",
+    "specivo_start_sprint": "Start a planned sprint (one active per project); noted in each issue's history",
+    "specivo_complete_sprint": (
+        "Complete an active sprint with velocity snapshot; unfinished issues move to backlog or another "
+        "open sprint of the project, and each issue's history notes it"
+    ),
     "specivo_list_recurring_patterns": "List recurring task patterns with rule and next occurrence",
     "specivo_create_recurring_pattern": "Create a recurring task pattern that generates issues on a schedule",
     "specivo_update_recurring_pattern": "Update a recurring task pattern",

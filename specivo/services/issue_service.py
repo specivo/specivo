@@ -192,8 +192,14 @@ class IssueService:
                 status_code=422,
             )
 
-    async def _validate_sprint(self, session: AsyncSession, sprint_id: int, project_id: int) -> None:
-        """Validate that sprint_id belongs to the same project and is active or planned."""
+    async def validate_sprint(self, session: AsyncSession, sprint_id: int, project_id: int) -> None:
+        """Validate that issues of *project_id* may be put in sprint *sprint_id*.
+
+        The sprint must exist, belong to the project and be active or planned:
+        a completed sprint's membership never grows. Raises a 422 ``AppError``
+        otherwise. Used by issue create and update, and by
+        ``SprintService.complete_sprint`` for the sprint it moves issues to.
+        """
         from specivo.models.sprint import Sprint
 
         result = await session.execute(select(Sprint).where(Sprint.id == sprint_id))
@@ -563,7 +569,7 @@ class IssueService:
 
         # Validate sprint_id if provided
         if data.sprint_id is not None:
-            await self._validate_sprint(session, data.sprint_id, project.id)
+            await self.validate_sprint(session, data.sprint_id, project.id)
 
         # Strip project-derived (computed) metadata so it is never stored on the
         # issue — it is overlaid on read instead. This makes the field
@@ -1038,9 +1044,11 @@ class IssueService:
             issue.done_ratio = data.done_ratio
         if data.is_private is not None:
             issue.is_private = data.is_private
-        if "sprint_id" in data.model_fields_set:
+        # Re-sending the sprint the issue is already in is not a change, so it
+        # passes even when that sprint is completed.
+        if "sprint_id" in data.model_fields_set and data.sprint_id != issue.sprint_id:
             if data.sprint_id is not None:
-                await self._validate_sprint(session, data.sprint_id, issue.project_id)
+                await self.validate_sprint(session, data.sprint_id, issue.project_id)
             issue.sprint_id = data.sprint_id
         if data.metadata is not None:
             # Strip project-derived (computed) metadata — it is never stored and

@@ -194,7 +194,7 @@ async def test_adding_files_to_a_comment_takes_the_note_editing_rights(
 
 
 async def _complete(db: AsyncSession, w: World) -> None:
-    await _sprints.complete_sprint(db, w.sprint)
+    await _sprints.complete_sprint(db, w.sprint, w.manager)
     await db.commit()
 
 

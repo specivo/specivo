@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-04 16:49+0000\n"
+"POT-Creation-Date: 2026-11-04 22:45+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.app>\n"
 "Language: fr\n"
@@ -221,28 +221,29 @@ msgstr "La version n'appartient pas à ce projet"
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "Impossible d'assigner des tickets à une version %(status)s"
 
-#: specivo/services/issue_service.py:204
+#: specivo/services/issue_service.py:210
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "Sprint %(id)s introuvable"
 
-#: specivo/services/issue_service.py:210
+#: specivo/services/issue_service.py:216
 msgid "Sprint does not belong to this project"
 msgstr "Le sprint n'appartient pas à ce projet"
 
-#: specivo/services/issue_service.py:216
+#: specivo/services/issue_service.py:222
 msgid "Cannot assign issues to a completed sprint"
 msgstr "Impossible d'assigner des tickets à un sprint terminé"
 
-#: specivo/services/issue_service.py:998
+#: specivo/services/issue_service.py:1004
+#: specivo/services/sprint_service.py:307
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "Le ticket a été modifié par une autre requête. Rechargez et réessayez."
 
-#: specivo/services/issue_service.py:1151
+#: specivo/services/issue_service.py:1159
 msgid "Issue is already in this project."
 msgstr "Le ticket se trouve déjà dans ce projet."
 
-#: specivo/services/issue_service.py:1160
+#: specivo/services/issue_service.py:1168
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -251,12 +252,12 @@ msgstr ""
 "Détachez-le de son parent, et déplacez ou détachez d'abord ses tickets "
 "enfants."
 
-#: specivo/services/issue_service.py:1211
+#: specivo/services/issue_service.py:1219
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Déplacé de {old} vers {new}."
 
-#: specivo/services/issue_service.py:1285
+#: specivo/services/issue_service.py:1293
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -265,11 +266,11 @@ msgstr ""
 "Filtre de statut inconnu « {value} ». Utilisez 'open', 'closed', 'all', "
 "un identifiant de statut ou l'une des valeurs suivantes : {known}"
 
-#: specivo/services/journal_service.py:312
+#: specivo/services/journal_service.py:311
 msgid "The history entry does not belong to this issue."
 msgstr "Cette entrée d'historique n'appartient pas à ce ticket."
 
-#: specivo/services/journal_service.py:418
+#: specivo/services/journal_service.py:462
 msgid "Cannot reply to a journal on a different issue"
 msgstr "Impossible de répondre à un journal sur un autre ticket"
 
@@ -291,6 +292,10 @@ msgstr "Ce modèle a été modifié par quelqu'un d'autre. Rechargez et réessay
 
 #: specivo/services/scim/config_service.py:102
 msgid "Generate a SCIM token before turning provisioning on."
+msgstr ""
+
+#: specivo/services/sprint_service.py:270
+msgid "Cannot move issues to the sprint being completed"
 msgstr ""
 
 #: specivo/services/user_service.py:73 specivo/web/pages/admin.py:233
@@ -480,8 +485,8 @@ msgstr "Consigner le temps"
 #: specivo/templates/themes/default/pages/admin/users.html:201
 #: specivo/templates/themes/default/pages/auth/api_keys.html:82
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
-#: specivo/templates/themes/default/pages/issues/_activity.html:133
-#: specivo/templates/themes/default/pages/issues/_activity.html:208
+#: specivo/templates/themes/default/pages/issues/_activity.html:144
+#: specivo/templates/themes/default/pages/issues/_activity.html:219
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:31
 #: specivo/templates/themes/default/pages/issues/detail.html:106
@@ -1161,6 +1166,51 @@ msgstr "Désactivée"
 msgid "Agent Groups"
 msgstr "Groupes d'agents"
 
+#: specivo/templates/themes/default/pages/admin/agent_groups.html:8
+#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:7
+#: specivo/templates/themes/default/pages/admin/dashboard.html:8
+#: specivo/templates/themes/default/pages/admin/email.html:7
+#: specivo/templates/themes/default/pages/admin/group_detail.html:7
+#: specivo/templates/themes/default/pages/admin/groups.html:7
+#: specivo/templates/themes/default/pages/admin/kill_switch.html:8
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:8
+#: specivo/templates/themes/default/pages/admin/projects.html:7
+#: specivo/templates/themes/default/pages/admin/roles.html:7
+#: specivo/templates/themes/default/pages/admin/settings.html:7
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:8
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:7
+#: specivo/templates/themes/default/pages/admin/trackers.html:7
+#: specivo/templates/themes/default/pages/admin/user_detail.html:8
+#: specivo/templates/themes/default/pages/admin/users.html:8
+#: specivo/templates/themes/default/pages/admin/versions.html:7
+#: specivo/templates/themes/default/pages/admin/workflows.html:7
+#: specivo/templates/themes/default/pages/auth/api_keys.html:7
+#: specivo/templates/themes/default/pages/auth/preferences.html:7
+#: specivo/templates/themes/default/pages/auth/profile.html:7
+#: specivo/templates/themes/default/pages/notifications.html:7
+#: specivo/templates/themes/default/pages/projects/detail.html:8
+#: specivo/templates/themes/default/pages/projects/list.html:8
+#: specivo/templates/themes/default/pages/projects/roadmap.html:8
+#: specivo/templates/themes/default/pages/projects/settings.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_analytics.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_detail.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:8
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:8
+#: specivo/templates/themes/default/pages/search.html:8
+#: specivo/templates/themes/default/pages/time/form.html:7
+#: specivo/templates/themes/default/pages/time/list.html:8
+#: specivo/templates/themes/default/pages/wiki/diff.html:8
+#: specivo/templates/themes/default/pages/wiki/edit.html:10
+#: specivo/templates/themes/default/pages/wiki/edit.html:18
+#: specivo/templates/themes/default/pages/wiki/history.html:8
+#: specivo/templates/themes/default/pages/wiki/index.html:7
+#: specivo/templates/themes/default/pages/wiki/show.html:8
+#: specivo/templates/themes/default/pages/wiki/trash.html:7
+msgid "Home"
+msgstr "Accueil"
+
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:28
 #: specivo/templates/themes/default/pages/admin/dashboard.html:61
 #: specivo/templates/themes/default/pages/admin/dashboard.html:71
@@ -1654,7 +1704,7 @@ msgstr "Groupe"
 #: specivo/templates/themes/default/pages/admin/groups.html:117
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:187
 #: specivo/templates/themes/default/pages/admin/projects.html:132
-#: specivo/templates/themes/default/pages/issues/_activity.html:56
+#: specivo/templates/themes/default/pages/issues/_activity.html:67
 #: specivo/templates/themes/default/pages/issues/form.html:114
 #: specivo/templates/themes/default/pages/projects/detail.html:188
 #: specivo/templates/themes/default/pages/projects/list.html:58
@@ -1848,6 +1898,11 @@ msgstr "ID"
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:45
 msgid "Level"
 msgstr "Niveau"
+
+#: specivo/templates/themes/default/pages/admin/kill_switch.html:46
+#: specivo/templates/themes/default/pages/dashboard.html:174
+msgid "Target"
+msgstr "Cible"
 
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:47
 msgid "Triggered By"
@@ -4351,7 +4406,7 @@ msgstr "a commenté"
 
 #: specivo/templates/themes/default/pages/dashboard.html:130
 #: specivo/templates/themes/default/pages/dashboard.html:259
-#: specivo/templates/themes/default/pages/issues/_activity.html:56
+#: specivo/templates/themes/default/pages/issues/_activity.html:67
 msgid "updated"
 msgstr "a mis à jour"
 
@@ -4385,11 +4440,6 @@ msgstr "En cours"
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:147
 msgid "Completed"
 msgstr "Terminé"
-
-#: specivo/templates/themes/default/pages/admin/kill_switch.html:46
-#: specivo/templates/themes/default/pages/dashboard.html:174
-msgid "Target"
-msgstr "Cible"
 
 #: specivo/templates/themes/default/pages/dashboard.html:175
 #: specivo/templates/themes/default/pages/dashboard.html:211
@@ -4464,7 +4514,7 @@ msgid "Go back"
 msgstr "Retour"
 
 #: specivo/templates/themes/default/pages/issues/_activity.html:18
-#: specivo/templates/themes/default/pages/issues/_activity.html:107
+#: specivo/templates/themes/default/pages/issues/_activity.html:118
 #: specivo/templates/themes/default/pages/issues/detail.html:399
 #: specivo/templates/themes/default/pages/wiki/history.html:48
 msgid "Unknown"
@@ -4474,143 +4524,153 @@ msgstr "Inconnu"
 msgid "Agent"
 msgstr "Agent"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:38
+#: specivo/templates/themes/default/pages/issues/_activity.html:41
 msgid "Created from recurring pattern"
 msgstr "Créé à partir d'un modèle récurrent"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:42
+#: specivo/templates/themes/default/pages/issues/_activity.html:49
+#, python-format
+msgid "Sprint %(sprint)s completed"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html:49
+#, python-format
+msgid "Sprint %(sprint)s started"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html:53
 msgid "Added"
 msgstr "Ajouté"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:42
-#: specivo/templates/themes/default/pages/issues/_activity.html:44
+#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:55
 msgid "relation to"
 msgstr "relation avec"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:44
+#: specivo/templates/themes/default/pages/issues/_activity.html:55
 msgid "Removed"
 msgstr "Supprimée"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:51
+#: specivo/templates/themes/default/pages/issues/_activity.html:62
 #, python-format
 msgid "File %(name)s deleted"
 msgstr "Fichier %(name)s supprimé"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:51
+#: specivo/templates/themes/default/pages/issues/_activity.html:62
 #, python-format
 msgid "File %(name)s added"
 msgstr "Fichier %(name)s ajouté"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:64
 msgid "File deleted"
 msgstr "Fichier supprimé"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:64
 msgid "File added"
 msgstr "Fichier ajouté"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:59
+#: specivo/templates/themes/default/pages/issues/_activity.html:70
 msgid "View changes"
 msgstr "Voir les modifications"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:65
+#: specivo/templates/themes/default/pages/issues/_activity.html:76
 msgid "Issue Metadata"
 msgstr "Métadonnées du ticket"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:68
-#: specivo/templates/themes/default/pages/issues/_activity.html:89
+#: specivo/templates/themes/default/pages/issues/_activity.html:79
+#: specivo/templates/themes/default/pages/issues/_activity.html:100
 msgid "changed from"
 msgstr "modifié de"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:69
-#: specivo/templates/themes/default/pages/issues/_activity.html:90
+#: specivo/templates/themes/default/pages/issues/_activity.html:80
+#: specivo/templates/themes/default/pages/issues/_activity.html:101
 msgid "to"
 msgstr "à"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:71
+#: specivo/templates/themes/default/pages/issues/_activity.html:82
 msgid "set to"
 msgstr "défini sur"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:73
+#: specivo/templates/themes/default/pages/issues/_activity.html:84
 msgid "removed"
 msgstr "supprimé"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:89
-#: specivo/templates/themes/default/pages/issues/_activity.html:90
+#: specivo/templates/themes/default/pages/issues/_activity.html:100
+#: specivo/templates/themes/default/pages/issues/_activity.html:101
 msgid "(none)"
 msgstr "(aucun)"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:107
+#: specivo/templates/themes/default/pages/issues/_activity.html:118
 #, python-format
 msgid "Resolved by %(name)s"
 msgstr "Résolu par %(name)s"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:118
+#: specivo/templates/themes/default/pages/issues/_activity.html:129
 msgid "↩ Reply"
 msgstr "↩ Répondre"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:124
+#: specivo/templates/themes/default/pages/issues/_activity.html:135
 msgid "Unresolve"
 msgstr "Rouvrir"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:126
-#: specivo/templates/themes/default/pages/issues/_activity.html:209
+#: specivo/templates/themes/default/pages/issues/_activity.html:137
+#: specivo/templates/themes/default/pages/issues/_activity.html:220
 msgid "Resolve"
 msgstr "Résoudre"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:131
+#: specivo/templates/themes/default/pages/issues/_activity.html:142
 msgid "Write a reply..."
 msgstr "Écrire une réponse..."
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:134
+#: specivo/templates/themes/default/pages/issues/_activity.html:145
 msgid "Reply"
 msgstr "Répondre"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:156
+#: specivo/templates/themes/default/pages/issues/_activity.html:167
 msgid "React"
 msgstr "Réagir"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:159
+#: specivo/templates/themes/default/pages/issues/_activity.html:170
 msgid "Thumbs up"
 msgstr "Pouce levé"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:160
+#: specivo/templates/themes/default/pages/issues/_activity.html:171
 msgid "Thumbs down"
 msgstr "Pouce baissé"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:161
+#: specivo/templates/themes/default/pages/issues/_activity.html:172
 msgid "Heart"
 msgstr "Cœur"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:162
+#: specivo/templates/themes/default/pages/issues/_activity.html:173
 msgid "Rocket"
 msgstr "Fusée"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:163
+#: specivo/templates/themes/default/pages/issues/_activity.html:174
 msgid "Eyes"
 msgstr "Yeux"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:164
+#: specivo/templates/themes/default/pages/issues/_activity.html:175
 msgid "Tada"
 msgstr "Tada"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:186
+#: specivo/templates/themes/default/pages/issues/_activity.html:197
 msgid "No activity yet."
 msgstr "Aucune activité pour l'instant."
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:198
+#: specivo/templates/themes/default/pages/issues/_activity.html:209
 msgid "Resolve Thread"
 msgstr "Résoudre le fil"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:202
+#: specivo/templates/themes/default/pages/issues/_activity.html:213
 msgid "Mark this discussion thread as resolved."
 msgstr "Marquer ce fil de discussion comme résolu."
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:203
+#: specivo/templates/themes/default/pages/issues/_activity.html:214
 msgid "Summary (optional)"
 msgstr "Résumé (facultatif)"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:204
+#: specivo/templates/themes/default/pages/issues/_activity.html:215
 msgid "e.g. Agreed on approach"
 msgstr "p. ex. Approche validée"
 
@@ -4833,6 +4893,14 @@ msgstr "FICHIER"
 #, python-format
 msgid "Uploaded by %(name)s, %(date)s"
 msgstr "Ajouté par %(name)s, le %(date)s"
+
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:14
+#: specivo/templates/themes/default/pages/issues/detail.html:277
+#: specivo/templates/themes/default/pages/issues/form.html:394
+#: specivo/templates/themes/default/pages/search.html:50
+#: specivo/templates/themes/default/pages/wiki/show.html:104
+msgid "Attachments"
+msgstr "Pièces jointes"
 
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:19
 #: specivo/templates/themes/default/pages/wiki/show.html:110
@@ -5105,10 +5173,24 @@ msgstr "%(opt)s par page"
 msgid "Showing %(from)s–%(to)s of %(total)s"
 msgstr "Affichage de %(from)s–%(to)s sur %(total)s"
 
+#: specivo/templates/themes/default/pages/issues/detail.html:309
+#: specivo/templates/themes/default/pages/issues/list.html:205
+#: specivo/templates/themes/default/pages/notifications.html:76
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:192
+msgid "Previous"
+msgstr "Précédent"
+
 #: specivo/templates/themes/default/pages/issues/detail.html:311
 #, python-format
 msgid "Page %(page)s of %(total)s"
 msgstr "Page %(page)s sur %(total)s"
+
+#: specivo/templates/themes/default/pages/issues/detail.html:313
+#: specivo/templates/themes/default/pages/issues/list.html:217
+#: specivo/templates/themes/default/pages/notifications.html:79
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:204
+msgid "Next"
+msgstr "Suivant"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:325
 msgid "Enter at least 1 minute"
@@ -5319,6 +5401,12 @@ msgstr "Créer le ticket"
 msgid "+ Create and Continue"
 msgstr "+ Créer et continuer"
 
+#: specivo/templates/themes/default/pages/issues/list.html:44
+#: specivo/templates/themes/default/pages/projects/version_detail.html:83
+#: specivo/templates/themes/default/pages/search.html:46
+msgid "All"
+msgstr "Tous"
+
 #: specivo/templates/themes/default/pages/issues/list.html:48
 msgid "All Trackers"
 msgstr "Tous les trackers"
@@ -5406,51 +5494,6 @@ msgstr "Aucun ticket trouvé"
 msgid "Create your first issue to get started."
 msgstr "Créez votre premier ticket pour commencer."
 
-#: specivo/templates/themes/default/pages/admin/agent_groups.html:8
-#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:7
-#: specivo/templates/themes/default/pages/admin/dashboard.html:8
-#: specivo/templates/themes/default/pages/admin/email.html:7
-#: specivo/templates/themes/default/pages/admin/group_detail.html:7
-#: specivo/templates/themes/default/pages/admin/groups.html:7
-#: specivo/templates/themes/default/pages/admin/kill_switch.html:8
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:8
-#: specivo/templates/themes/default/pages/admin/projects.html:7
-#: specivo/templates/themes/default/pages/admin/roles.html:7
-#: specivo/templates/themes/default/pages/admin/settings.html:7
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:8
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:7
-#: specivo/templates/themes/default/pages/admin/trackers.html:7
-#: specivo/templates/themes/default/pages/admin/user_detail.html:8
-#: specivo/templates/themes/default/pages/admin/users.html:8
-#: specivo/templates/themes/default/pages/admin/versions.html:7
-#: specivo/templates/themes/default/pages/admin/workflows.html:7
-#: specivo/templates/themes/default/pages/auth/api_keys.html:7
-#: specivo/templates/themes/default/pages/auth/preferences.html:7
-#: specivo/templates/themes/default/pages/auth/profile.html:7
-#: specivo/templates/themes/default/pages/notifications.html:7
-#: specivo/templates/themes/default/pages/projects/detail.html:8
-#: specivo/templates/themes/default/pages/projects/list.html:8
-#: specivo/templates/themes/default/pages/projects/roadmap.html:8
-#: specivo/templates/themes/default/pages/projects/settings.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_analytics.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_detail.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:8
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:8
-#: specivo/templates/themes/default/pages/search.html:8
-#: specivo/templates/themes/default/pages/time/form.html:7
-#: specivo/templates/themes/default/pages/time/list.html:8
-#: specivo/templates/themes/default/pages/wiki/diff.html:8
-#: specivo/templates/themes/default/pages/wiki/edit.html:10
-#: specivo/templates/themes/default/pages/wiki/edit.html:18
-#: specivo/templates/themes/default/pages/wiki/history.html:8
-#: specivo/templates/themes/default/pages/wiki/index.html:7
-#: specivo/templates/themes/default/pages/wiki/show.html:8
-#: specivo/templates/themes/default/pages/wiki/trash.html:7
-msgid "Home"
-msgstr "Accueil"
-
 #: specivo/templates/themes/default/pages/notifications.html:26
 #, python-format
 msgid "All (%(count)s)"
@@ -5460,20 +5503,6 @@ msgstr "Toutes (%(count)s)"
 #, python-format
 msgid "Unread (%(count)s)"
 msgstr "Non lues (%(count)s)"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:309
-#: specivo/templates/themes/default/pages/issues/list.html:205
-#: specivo/templates/themes/default/pages/notifications.html:76
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:192
-msgid "Previous"
-msgstr "Précédent"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:313
-#: specivo/templates/themes/default/pages/issues/list.html:217
-#: specivo/templates/themes/default/pages/notifications.html:79
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:204
-msgid "Next"
-msgstr "Suivant"
 
 #: specivo/templates/themes/default/pages/notifications.html:85
 msgid "No notifications."
@@ -7945,25 +7974,11 @@ msgstr "Hybride"
 msgid "Keyword"
 msgstr "Mot-clé"
 
-#: specivo/templates/themes/default/pages/issues/list.html:44
-#: specivo/templates/themes/default/pages/projects/version_detail.html:83
-#: specivo/templates/themes/default/pages/search.html:46
-msgid "All"
-msgstr "Tous"
-
 #: specivo/templates/themes/default/pages/search.html:49
 #: specivo/templates/themes/default/pages/time/form.html:46
 #: specivo/templates/themes/default/pages/time/list.html:59
 msgid "Comments"
 msgstr "Commentaires"
-
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:14
-#: specivo/templates/themes/default/pages/issues/detail.html:277
-#: specivo/templates/themes/default/pages/issues/form.html:394
-#: specivo/templates/themes/default/pages/search.html:50
-#: specivo/templates/themes/default/pages/wiki/show.html:104
-msgid "Attachments"
-msgstr "Pièces jointes"
 
 #: specivo/templates/themes/default/pages/search.html:69
 #, python-format

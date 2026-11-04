@@ -1618,7 +1618,8 @@ async def specivo_start_sprint(
     """Start a planned sprint (transitions to 'active').
 
     Only one sprint per project can be active at a time.
-    Fails if another sprint is already active.
+    Fails if another sprint is already active. Each issue in the sprint gets a
+    "sprint started" entry in its history, by the calling user.
     """
     async with _get_session_and_user() as (session, user):
         return await _start_sprint(session, user, project_key, sprint_id)
@@ -1629,13 +1630,21 @@ async def specivo_complete_sprint(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     sprint_id: Annotated[int, Field(description="Sprint ID to complete.")],
     move_incomplete_to_sprint_id: Annotated[
-        int | None, Field(description="Sprint ID to move incomplete issues to. Null = move to backlog.")
+        int | None,
+        Field(
+            description="Sprint ID to move incomplete issues to: another active or planned sprint of the same "
+            "project. Null = move to backlog."
+        ),
     ] = None,
 ) -> str:
     """Complete an active sprint (transitions to 'completed').
 
     Incomplete issues are moved to the specified sprint, or to the backlog if null.
-    Builds a velocity snapshot with total and completed issue counts.
+    The target must be another active or planned sprint of the same project; an
+    unknown, completed or other-project sprint, or the sprint itself, is refused
+    and nothing changes. Builds a velocity snapshot with total and completed issue
+    counts. Issues that stay get a "sprint completed" history entry and moved
+    issues a sprint change, by the calling user.
     """
     async with _get_session_and_user() as (session, user):
         return await _complete_sprint(session, user, project_key, sprint_id, move_incomplete_to_sprint_id)
