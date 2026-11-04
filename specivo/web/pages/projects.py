@@ -499,6 +499,17 @@ async def project_settings(
 
     anonymous_access_enabled = user.is_admin and await is_anonymous_access_enabled(db)
 
+    from specivo.models.setting import Setting
+    from specivo.services.similar_issues import (
+        SIMILAR_ISSUES_SETTING_KEY,
+        instance_setting_enabled,
+        project_setting_enabled,
+    )
+
+    similar_issues_instance = instance_setting_enabled(
+        await db.scalar(select(Setting.value).where(Setting.key == SIMILAR_ISSUES_SETTING_KEY))
+    )
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -535,6 +546,8 @@ async def project_settings(
             "can_manage_tags": can_manage_tags,
             "computed_metadata": computed_values(project.settings),
             "anonymous_access_enabled": anonymous_access_enabled,
+            "similar_issues": project_setting_enabled(project.settings),
+            "similar_issues_instance": similar_issues_instance,
             "webhooks_data": webhooks_data,
             "webhook_events": webhook_events,
             "automation_roles": automation_roles,

@@ -32,7 +32,7 @@
   </div>
 
   <!-- General tab -->
-  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, i18n: {{ {
+  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, i18n: {{ {
     "saved": _("Saved successfully."),
     "errorWithMessage": _("Error: %(message)s"),
     "saveFailed": _("Failed to save"),
@@ -63,6 +63,17 @@
       <div class="form-group sp-form-group-mb-md">
         <label class="form-label">{% trans %}Description{% endtrans %}</label>
         <textarea class="form-input" rows="4" x-model="description"></textarea>
+      </div>
+      <div class="form-group sp-form-group-mb-md">
+        <label class="checkbox-row" for="project-similar-issues">
+          <input type="checkbox" id="project-similar-issues" x-model="similarIssues" class="sp-checkbox-accent-pointer">
+          {% trans %}Suggest similar issues on the new issue form{% endtrans %}
+        </label>
+        {% if similar_issues_instance %}
+        <div class="form-hint">{% trans %}While someone types a subject, issues of this project with a similar subject are listed, to help avoid duplicates.{% endtrans %}</div>
+        {% else %}
+        <div class="form-hint" data-testid="similar-issues-instance-off">{% trans %}This setting has no effect while similar issues are turned off for the whole instance.{% endtrans %}{% if user.is_admin %} <a href="/admin/settings/">{% trans %}Instance settings{% endtrans %}</a>{% endif %}</div>
+        {% endif %}
       </div>
       <div x-show="message" class="flash sp-mb-md" x-text="message"></div>
       <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">{% trans %}Save{% endtrans %}</button>

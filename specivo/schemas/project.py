@@ -136,6 +136,8 @@ class ProjectUpdate(BaseModel):
     computed_metadata: dict | None = None
     # The "Copy branch name" format and tracker types; replaces the stored one.
     branch_name: BranchNameConfig | None = None
+    # Suggest similar issues on the new issue form (on unless set to false).
+    similar_issues: bool | None = None
     # parent_id: use model_fields_set to detect whether this field was provided.
     # - Not in payload          → not in model_fields_set  → do not change parent
     # - parent_id=null in JSON  → in model_fields_set, value is None  → move to root
@@ -211,6 +213,9 @@ class ProjectOut(BaseModel):
     # The "Copy branch name" settings in effect (defaults when none are
     # stored). Like ``computed_metadata``, left ``None`` in list responses.
     branch_name: BranchNameConfig | None = None
+    # Whether the project suggests similar issues on the new issue form (the
+    # instance switch can still turn it off). ``None`` in list responses.
+    similar_issues: bool | None = None
 
 
 # ---------------------------------------------------------------------------

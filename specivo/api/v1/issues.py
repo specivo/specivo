@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
-from specivo.core.rate_limit import rate_limit
+from specivo.core.rate_limit import enforce_rate_limit, rate_limit
 from specivo.core.security import get_current_user, get_reader
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal
@@ -26,6 +26,7 @@ from specivo.schemas.issue import (
     IssueUpdateOut,
     IssueWithChildren,
     MetadataFieldOut,
+    SimilarIssueOut,
     issue_out,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
@@ -46,6 +47,7 @@ from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
 from specivo.services.repository_service import development_for_issue
 from specivo.services.saved_filter_service import SavedFilterService
+from specivo.services.similar_issue_service import SimilarIssueService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.workflow_service import WorkflowService
 
@@ -61,6 +63,10 @@ _workflow_service = WorkflowService()
 _notification_service = NotificationService()
 _mention_service = MentionService()
 _reaction_svc = ReactionService()
+_similar_service = SimilarIssueService()
+
+# Per user: the new issue form asks at most once a second while someone types.
+_SIMILAR_ISSUES_RATE_LIMIT = ("similar_issues", 60, 60)
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +257,48 @@ async def list_issues(
         limit=limit,
         items=[_issue_out(i, project_computed) for i in issues],
     )
+
+
+@router.get("/projects/{project_key}/issues/similar/", response_model=list[SimilarIssueOut])
+async def similar_issues(
+    project_key: str,
+    request: Request,
+    response: Response,
+    q: str = Query(..., min_length=1, max_length=255, description="The title being typed."),
+    limit: int = Query(5, ge=1, le=10),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> list[SimilarIssueOut]:
+    """Issues of the project whose subject resembles *q*, most similar first.
+
+    For the new issue form, to spot a duplicate before filing it, so it needs
+    ``add_issues``. Only issues the caller may see are returned. An empty list
+    when the feature is off for the instance or the project, when nothing is
+    similar enough, or when the search ran out of time.
+    """
+    # Bucketed per user: the plain ``rate_limit()`` dependency runs before
+    # authentication and would count every user behind one address together.
+    request.state.rate_limit_user_id = current_user.id
+    await enforce_rate_limit(request, response, *_SIMILAR_ISSUES_RATE_LIMIT)
+
+    project = await _project_service.get_by_key(db, project_key.upper())
+    await _project_service.require_project_access(db, project, current_user)
+    if not await check_permission(current_user, project.id, Permission.ADD_ISSUES, db, request=request):
+        raise PermissionDeniedError("You do not have permission to create issues in this project")
+    if not await _similar_service.is_enabled(db, project):
+        return []
+
+    found = await _similar_service.find(db, project, current_user, q, limit)
+    return [
+        SimilarIssueOut(
+            key=item.key,
+            subject=item.subject,
+            status=IdName(id=item.status_id, name=item.status_name),
+            is_closed=item.is_closed,
+            score=round(item.score, 3),
+        )
+        for item in found
+    ]
 
 
 # ---------------------------------------------------------------------------

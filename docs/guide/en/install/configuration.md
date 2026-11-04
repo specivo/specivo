@@ -98,6 +98,15 @@ ships 0.8). Once you
 point the URLs elsewhere, you can remove the `db` and `redis` services from `docker-compose.yml` —
 they are declared as optional dependencies, so the app starts without them.
 
+It also needs the **pg_trgm** extension, which the similar issue suggestions use. The database
+migrations create it, as they do pgvector, and stop if they cannot:
+
+- `pg_trgm` is a trusted extension, so a database role with `CREATE` on the database can install it.
+- AWS RDS lists it among its supported extensions.
+- On Google Cloud SQL, the role needs `cloudsqlsuperuser`.
+- On Azure Database for PostgreSQL flexible server, an extension must first be added to the
+  `azure.extensions` server parameter; check that list for `pg_trgm` before you migrate.
+
 ## The data directory
 
 Everything that must survive a container restart lives under `SPECIVO_DATA_DIR` (default

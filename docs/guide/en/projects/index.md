@@ -82,6 +82,14 @@ their other roles say.
 For users, any role on any of their projects with *All active users* is enough; a person without
 any project role follows the built-in **Non member** role. Administrators always see everything.
 
+### Similar issue suggestions
+
+The **General** tab of a project's settings has a **Suggest similar issues on the new issue form**
+box, ticked by default. While someone types the subject of a new issue, the form lists issues of
+the project with a similar subject (see [Similar issues](../issues/creating.md#similar-issues)).
+Untick it to turn the list off for this project. When an administrator has turned the suggestions
+off for the whole instance, the box has no effect and says so.
+
 ## Project status
 
 A project is in one of three states:
