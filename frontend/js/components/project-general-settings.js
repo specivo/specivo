@@ -12,6 +12,7 @@ export function projectGeneralSettings(initial) {
             projectKey: initial.projectKey || '',
             parentId: initial.parentId !== undefined ? initial.parentId : null,
             availableParents: initial.availableParents || [],
+            similarIssues: initial.similarIssues !== false,
             saving: false,
             message: '',
 
@@ -22,7 +23,8 @@ export function projectGeneralSettings(initial) {
                     var payload = {
                         name: this.name,
                         description: this.description,
-                        parent_id: this.parentId
+                        parent_id: this.parentId,
+                        similar_issues: this.similarIssues
                     };
                     var res = await spFetch('/api/v1/projects/' + this.projectKey + '/', {
                         method: 'PATCH',

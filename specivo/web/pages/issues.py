@@ -310,6 +310,12 @@ async def issue_create_form(
     metadata_schemas_data = [MetadataSchemaOut.model_validate(s).model_dump(mode="json") for s in metadata_schemas]
     can_manage_relations = await check_permission(user, project.id, Permission.MANAGE_ISSUE_RELATIONS, db)
     can_set_private = await check_permission(user, project.id, Permission.SET_ISSUES_PRIVATE, db)
+    # Similar-issue suggestions need add_issues, as the endpoint does.
+    from specivo.services.similar_issue_service import SimilarIssueService
+
+    similar_issues_enabled = await check_permission(
+        user, project.id, Permission.ADD_ISSUES, db
+    ) and await SimilarIssueService().is_enabled(db, project)
 
     templates = get_templates()
     return templates.TemplateResponse(
@@ -324,6 +330,7 @@ async def issue_create_form(
             "mode": "create",
             "can_manage_relations": can_manage_relations,
             "can_set_private": can_set_private,
+            "similar_issues_enabled": similar_issues_enabled,
             "members": members,
             "versions": versions,
             "metadata_schemas_data": metadata_schemas_data,

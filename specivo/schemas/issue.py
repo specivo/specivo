@@ -189,6 +189,19 @@ class IssueListResponse(PaginatedResponse[IssueOut]):
     pass
 
 
+class SimilarIssueOut(BaseModel):
+    """An issue whose subject resembles a title being typed (``GET .../issues/similar/``).
+
+    ``score`` is the trigram similarity of the subject to the title, from 0 to 1.
+    """
+
+    key: str
+    subject: str
+    status: IdName
+    is_closed: bool
+    score: float
+
+
 class MetadataFieldOut(BaseModel):
     """One field of an issue's metadata, as people read it.
 

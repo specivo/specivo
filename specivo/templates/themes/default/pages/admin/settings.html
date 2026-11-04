@@ -55,6 +55,14 @@
       <div class="form-hint">{% trans %}Full-text search analyzer language for the whole instance. Projects can override this. Changing it does not update already-indexed content until you reindex.{% endtrans %}</div>
       {% include "pages/_fts_reindex.html" %}
     </div>
+    <div class="form-group">
+      <input type="hidden" name="similar_issues_enabled" value="false">
+      <label class="checkbox-row" for="similar_issues_enabled">
+        <input type="checkbox" name="similar_issues_enabled" id="similar_issues_enabled" value="true"{{ ' checked' if similar_issues_enabled }} class="sp-checkbox-accent-pointer">
+        {% trans %}Suggest similar issues on the new issue form{% endtrans %}
+      </label>
+      <div class="form-hint">{% trans %}While someone types a subject, up to five issues of the same project with a similar subject are listed, to help avoid duplicates. Projects can turn it off for themselves.{% endtrans %}</div>
+    </div>
     <button type="submit" class="sp-btn sp-btn-primary" style="margin-top: var(--sp-space-md);">{% trans %}Save{% endtrans %}</button>
   </form>
 </div>

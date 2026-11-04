@@ -7,6 +7,9 @@ buttons, or broken layouts.
 Uses a dedicated seed project (RTEST) from conftest.responsive_project.
 """
 
+import json
+import re
+
 import pytest
 from playwright.sync_api import Page, expect
 
@@ -70,6 +73,39 @@ class TestResponsiveProjectDetail:
         responsive_page.goto(f"/projects/{responsive_project}/")
         responsive_page.wait_for_load_state("networkidle")
         _buttons_within_viewport(responsive_page, ".page-header-actions .sp-btn", viewport_size["width"])
+
+
+class TestResponsiveSimilarIssues:
+    """The similar-issues list under the new issue form's subject, with long rows."""
+
+    def test_five_rows_fit(self, responsive_page: Page, responsive_project: str, viewport_size: dict):
+        long_subject = ("Login page timeout error on a very long subject line " * 6)[:300]
+        items = [
+            {
+                "key": f"{responsive_project}-{n}",
+                "subject": long_subject if n == 1 else f"Login page fails with timeout error {n}",
+                "status": {"id": 1, "name": "Closed" if n == 5 else "New"},
+                "is_closed": n == 5,
+                "score": 0.5,
+            }
+            for n in range(1, 6)
+        ]
+        responsive_page.route(
+            re.compile(r"/issues/similar/"),
+            lambda route: route.fulfill(status=200, content_type="application/json", body=json.dumps(items)),
+        )
+        responsive_page.clock.install()
+        responsive_page.goto(f"/projects/{responsive_project}/issues/new/")
+        responsive_page.wait_for_function("() => window.Alpine !== undefined")
+        responsive_page.clock.pause_at(responsive_page.evaluate("Date.now()") + 10)
+        responsive_page.locator("#subject").fill("Login page fails with timeout error")
+        responsive_page.clock.run_for(1000)
+        responsive_page.wait_for_timeout(150)
+        responsive_page.clock.run_for(50)  # x-show applies on the next animation frame
+
+        expect(responsive_page.locator("[data-testid=similar-issue]")).to_have_count(5)
+        assert _no_horizontal_overflow(responsive_page), "New issue form has horizontal overflow"
+        _buttons_within_viewport(responsive_page, ".sp-similar-issues-mark", viewport_size["width"])
 
 
 class TestResponsiveIssuesList:

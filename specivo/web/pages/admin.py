@@ -641,11 +641,15 @@ async def admin_settings(
 
     anonymous_access_enabled = await is_anonymous_access_enabled(db)
     anonymous_access_projects = await list_projects_with_anonymous_permissions(db)
+    # The similar-issues switch is a checkbox in the Defaults card.
+    from specivo.services.similar_issues import SIMILAR_ISSUES_SETTING_KEY, instance_setting_enabled
+
+    similar_issues_enabled = instance_setting_enabled(settings.get(SIMILAR_ISSUES_SETTING_KEY))
     # The sso.* authentication settings have their own card (and API) too.
     from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS, get_auth_settings
     from specivo.services.sso.provider_service import ProviderService
 
-    hidden_keys = AUTH_SETTING_KEYS | {ANONYMOUS_ACCESS_SETTING_KEY}
+    hidden_keys = AUTH_SETTING_KEYS | {ANONYMOUS_ACCESS_SETTING_KEY, SIMILAR_ISSUES_SETTING_KEY}
     generic_settings = {k: v for k, v in settings.items() if k not in hidden_keys}
     auth_settings = await get_auth_settings(db)
     sso_providers, _ = await ProviderService().list_providers(db)
@@ -667,6 +671,7 @@ async def admin_settings(
             "fts_language": fts_language,
             "fts_allowed": sorted(_ALLOWED_FTS_LANGUAGES),
             "fts_reindex_needed": fts_reindex_needed,
+            "similar_issues_enabled": similar_issues_enabled,
             "auth_settings": auth_settings,
             "sso_providers": [
                 {"slug": p.slug, "display_name": p.display_name, "enabled": p.enabled} for p in sso_providers
@@ -684,9 +689,10 @@ async def admin_settings_defaults(
     default_language: str = Form(""),
     default_timezone: str = Form(""),
     fts_language: str = Form(""),
+    similar_issues_enabled: str = Form(""),
 ) -> Response:
     """Persist the workspace defaults (UI language, timezone, FTS analyzer
-    language) in a single save.
+    language, similar-issue suggestions) in a single save.
 
     Each field is validated independently — language against the installed
     locales, timezone against the IANA database, FTS language against the
@@ -715,6 +721,14 @@ async def admin_settings_defaults(
         to_set["search_fts_language"] = fts
         if fts != current_fts:
             to_set[reindex_needed_key(None)] = "1"
+
+    # The checkbox follows a hidden "false" input of the same name, so a ticked
+    # box arrives as "true" (the last value wins) and an unticked one as "false".
+    # Any other value, or none, leaves the switch unchanged.
+    if similar_issues_enabled in ("true", "false"):
+        from specivo.services.similar_issues import SIMILAR_ISSUES_SETTING_KEY
+
+        to_set[SIMILAR_ISSUES_SETTING_KEY] = similar_issues_enabled
 
     if to_set:
         await _settings_svc.set_many(db, to_set)

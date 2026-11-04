@@ -44,6 +44,8 @@
        displayKey: {{ (issue.display_key if issue else "") | tojson }},
        lockVersion: {{ issue.lock_version if issue else 0 }},
        tags: {{ (issue_tags if issue_tags is defined else []) | tojson }},
+       similarEnabled: {{ "true" if (mode == 'create' and similar_issues_enabled) else "false" }},
+       canManageRelations: {{ "true" if can_manage_relations else "false" }},
        i18n: {{ {
          "relationTypes": {
            "relates": _("Relates to"),
@@ -62,6 +64,28 @@
     <div class="form-group">
       <label class="modal-label" for="subject">{% trans %}Subject{% endtrans %}</label>
       <input type="text" id="subject" class="input-subject" x-model="subject" placeholder="{{ _('Brief summary of the issue...') }}" autofocus>
+      {% if mode == 'create' and similar_issues_enabled %}
+      {# Always in the DOM, so screen readers announce the list when it fills. #}
+      <div class="sp-similar-issues" aria-live="polite" data-testid="similar-issues">
+        <div class="sp-similar-issues-panel" x-show="similarIssues.length" x-cloak>
+          <p class="sp-similar-issues-title">{% trans %}Similar issues{% endtrans %}</p>
+          <ul class="sp-similar-issues-list">
+            <template x-for="item in similarIssues" :key="item.key">
+              <li class="sp-similar-issues-row" data-testid="similar-issue">
+                <a class="sp-similar-issues-link" :href="'/issue/' + item.key + '/'" target="_blank" rel="noopener">
+                  <span class="sp-similar-issues-key" x-text="item.key"></span>
+                  <span class="sp-similar-issues-subject" x-text="item.subject"></span>
+                </a>
+                <span class="sp-similar-issues-status" :class="{ 'sp-similar-issues-status-closed': item.is_closed }" x-text="item.status.name"></span>
+                {% if can_manage_relations %}
+                <button type="button" class="sp-btn sp-btn-ghost sp-btn-auto sp-similar-issues-mark" @click="markDuplicate(item)">{% trans %}Mark as duplicate{% endtrans %}</button>
+                {% endif %}
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+      {% endif %}
     </div>
 
     {# Tracker #}

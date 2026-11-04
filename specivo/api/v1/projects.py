@@ -29,6 +29,7 @@ from specivo.services.computed_metadata_service import computed_values
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
 from specivo.services.security_audit_service import MemberAction, SecurityAuditService
+from specivo.services.similar_issues import project_setting_enabled
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 _service = ProjectService()
@@ -107,6 +108,7 @@ def _project_out(
     return ProjectOut(
         computed_metadata=computed_metadata,
         branch_name=_branch_name(project) if detail else None,
+        similar_issues=project_setting_enabled(project.settings) if detail else None,
         id=project.id,
         name=project.name,
         identifier=project.identifier,

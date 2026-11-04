@@ -34,6 +34,7 @@ from specivo.services.permission_service import (
     member_principal_clause,
     projects_granting,
 )
+from specivo.services.similar_issues import SIMILAR_ISSUES_PROJECT_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -448,6 +449,10 @@ class ProjectService:
         if data.branch_name is not None:
             new_settings = dict(project.settings or {})
             new_settings[BRANCH_NAME_SETTINGS_KEY] = data.branch_name.model_dump()
+            project.settings = new_settings
+        if data.similar_issues is not None:
+            new_settings = dict(project.settings or {})
+            new_settings[SIMILAR_ISSUES_PROJECT_KEY] = data.similar_issues
             project.settings = new_settings
 
         if "parent_id" in data.model_fields_set:
