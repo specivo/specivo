@@ -23,6 +23,13 @@ A file attached or removed (an ``attachment`` detail) is named by its
 attachment's file name when the reader may open that file, and otherwise by
 the name the detail stored (the file may be gone). A visitor without an
 account, who is shown no files, is shown no such change.
+
+A sprint started or completed (a ``sprint`` detail) is named by the sprint's
+current name, by the rule sprint changes follow: only when the reader may
+open the sprint's project. The detail also stores the name the sprint had,
+but that is never what is shown: a change whose sprint cannot be named (it
+was deleted, or the issue has since moved to a project whose reader may not
+open the sprint's) is left out, so the stored name cannot leak.
 """
 
 from __future__ import annotations
@@ -36,7 +43,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.models.attachment import Attachment
 from specivo.models.issue import Issue, IssueRefAlias
-from specivo.models.journal import ATTACHMENT_DETAIL, CF_USER, CF_VERSION, Journal, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, CF_USER, CF_VERSION, SPRINT_DETAIL, Journal, JournalDetail
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project, ProjectKeyAlias
 from specivo.models.sprint import Sprint
@@ -73,6 +80,8 @@ HIDDEN_PARENTS = "parent_id_hidden"
 ATTACHMENTS = "attachment"
 # The lookup map naming the custom fields of the issues' projects, ``{metadata key: field name}``.
 FIELD_LABELS = "custom_field_labels"
+# The lookup map giving the project key of each sprint named, ``{sprint id: project key}``, for links.
+SPRINT_PROJECTS = "sprint_project_key"
 # Custom field changes, whose ``prop_key`` is the field's metadata key.
 _CUSTOM_FIELD_PROPERTIES = frozenset({"cf", CF_USER, CF_VERSION})
 
@@ -112,6 +121,10 @@ class ActivityLookups(dict[str, dict[str, str]]):
             if value is None:
                 return None
             return self.get(ATTACHMENTS, {}).get(detail.prop_key) or value
+        if detail.property == SPRINT_DETAIL:
+            # Only the sprint id (the old value) is named; the new value is
+            # the stored name, never shown in place of the current one.
+            return self.sprint_name(detail) if value is not None and value == detail.old_value else None
         key = lookup_key(detail.property, detail.prop_key)
         if key is None or value is None:
             return None
@@ -126,6 +139,14 @@ class ActivityLookups(dict[str, dict[str, str]]):
     def metadata_label(self, key: str) -> str:
         """The name of the metadata field *key*: its schema's title, else the key humanised."""
         return self.get(FIELD_LABELS, {}).get(key) or humanise(key)
+
+    def sprint_name(self, detail: JournalDetail) -> str | None:
+        """The current name of the sprint a sprint started/completed change is about, or ``None``."""
+        return self.get("sprint_id", {}).get(str(detail.old_value))
+
+    def sprint_project_key(self, detail: JournalDetail) -> str | None:
+        """The key of the project the sprint of a sprint started/completed change belongs to."""
+        return self.get(SPRINT_PROJECTS, {}).get(str(detail.old_value))
 
     def attachment_name(self, detail: JournalDetail) -> str | None:
         """Return the file name of an attachment change, or ``None`` when it has none to show."""
@@ -145,6 +166,8 @@ class ActivityLookups(dict[str, dict[str, str]]):
         """
         if detail.property == ATTACHMENT_DETAIL:
             return anonymous
+        if detail.property == SPRINT_DETAIL:
+            return self.sprint_name(detail) is None
         if not names_an_issue(detail):
             return False
         if anonymous:
@@ -158,6 +181,10 @@ def referenced_ids(journals: Iterable[Journal]) -> dict[str, set[int]]:
     referenced: dict[str, set[int]] = {key: set() for key in _LOADED_ATTRIBUTES}
     for journal in journals:
         for detail in journal.details:
+            if detail.property == SPRINT_DETAIL:
+                if detail.old_value is not None and str(detail.old_value).isdigit():
+                    referenced["sprint_id"].add(int(detail.old_value))
+                continue
             key = lookup_key(detail.property, detail.prop_key)
             ids = referenced.get(key) if key is not None else None
             if ids is None:
@@ -201,12 +228,14 @@ async def activity_lookup_maps(
     readable = await _project_svc.accessible_projects_clause(db, user)
     if sprint_id is not None:
         referenced["sprint_id"].add(sprint_id)
+    sprint_names, sprint_projects = await _sprints(db, readable, referenced["sprint_id"])
 
     return ActivityLookups(
         {
             **{key: await _global_names(db, model, referenced[key]) for key, model in _GLOBAL_LOOKUPS.items()},
             "assigned_to_id": await _people(db, user, referenced["assigned_to_id"], members, by_login=people_by_login),
-            "sprint_id": await _names(db, readable, Sprint, referenced["sprint_id"]),
+            "sprint_id": sprint_names,
+            SPRINT_PROJECTS: sprint_projects,
             "fixed_version_id": await _names(db, readable, Version, referenced["fixed_version_id"]),
             "category_id": await _names(db, readable, IssueCategory, referenced["category_id"]),
             "project_id": await _projects(db, readable, referenced["project_id"]),
@@ -271,6 +300,23 @@ async def _names(db: AsyncSession, readable: ColumnElement[bool] | None, model: 
     if readable is not None:
         stmt = stmt.where(readable)
     return {str(row.id): row.name for row in (await db.execute(stmt)).all()}
+
+
+async def _sprints(
+    db: AsyncSession, readable: ColumnElement[bool] | None, ids: set[int]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Name the sprints whose project the reader may open, and give each one's project key, as :func:`_names`."""
+    if not ids:
+        return {}, {}
+    stmt = (
+        select(Sprint.id, Sprint.name, Project.key)
+        .join(Project, Project.id == Sprint.project_id)
+        .where(Sprint.id.in_(ids))
+    )
+    if readable is not None:
+        stmt = stmt.where(readable)
+    rows = (await db.execute(stmt)).all()
+    return {str(r.id): r.name for r in rows}, {str(r.id): r.key for r in rows}
 
 
 async def _hidden_parents(db: AsyncSession, user: User, journals: Iterable[Journal]) -> dict[str, str]:

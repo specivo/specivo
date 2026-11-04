@@ -28,7 +28,7 @@ from specivo.core.exceptions import (
 )
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.journal import ATTACHMENT_DETAIL, JournalDetail
+from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
 from specivo.models.security_audit import SecurityAuditLog
@@ -928,6 +928,8 @@ def _change_line(detail: JournalDetail, names: ActivityLookups) -> str:
     if detail.property == "relation":
         verb = "added" if detail.new_value and not detail.old_value else "removed"
         return f"relation {detail.prop_key} {verb}: {detail.new_value or detail.old_value}"
+    if detail.property == SPRINT_DETAIL:
+        return f"sprint {names.sprint_name(detail)} (id {detail.old_value}) {detail.prop_key}"
     if detail.property == ATTACHMENT_DETAIL:
         removed = detail.old_value is not None and detail.new_value is None
         name = names.attachment_name(detail)
@@ -2597,7 +2599,7 @@ async def _start_sprint(
     sprint = await _sprint_svc.get_by_id(session, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(message="Sprint not found in this project")
-    sprint = await _sprint_svc.start_sprint(session, sprint)
+    sprint = await _sprint_svc.start_sprint(session, sprint, user)
     await session.flush()
     await _log_tool(
         session,
@@ -2622,7 +2624,7 @@ async def _complete_sprint(
     sprint = await _sprint_svc.get_by_id(session, sprint_id)
     if sprint.project_id != project.id:
         raise NotFoundError(message="Sprint not found in this project")
-    sprint = await _sprint_svc.complete_sprint(session, sprint, move_incomplete_to_sprint_id)
+    sprint = await _sprint_svc.complete_sprint(session, sprint, user, move_to_sprint_id=move_incomplete_to_sprint_id)
     await session.flush()
     vel = (await _sprint_svc.velocity_for(session, [sprint], user))[sprint.id] or {}
     await _log_tool(

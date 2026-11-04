@@ -273,11 +273,12 @@ async def test_list_sprints_empty(
 async def test_start_sprint(
     db_session: AsyncSession,
     project: Project,
+    actor: User,
 ):
     sprint = await _create_sprint(db_session, project, "To Start")
     before = datetime.now(UTC)
 
-    started = await _svc.start_sprint(db_session, sprint)
+    started = await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
     await db_session.refresh(started)
 
@@ -289,41 +290,44 @@ async def test_start_sprint(
 async def test_start_sprint_already_active_raises(
     db_session: AsyncSession,
     project: Project,
+    actor: User,
 ):
     sprint = await _create_sprint(db_session, project, "Already Active")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
     await db_session.refresh(sprint)
 
     with pytest.raises(ConflictError):
-        await _svc.start_sprint(db_session, sprint)
+        await _svc.start_sprint(db_session, sprint, actor)
 
 
 @pytest.mark.service
 async def test_start_second_sprint_raises(
     db_session: AsyncSession,
     project: Project,
+    actor: User,
 ):
     sprint1 = await _create_sprint(db_session, project, "Active Sprint")
-    await _svc.start_sprint(db_session, sprint1)
+    await _svc.start_sprint(db_session, sprint1, actor)
     await db_session.commit()
 
     sprint2 = await _create_sprint(db_session, project, "Second Sprint")
 
     with pytest.raises(ConflictError):
-        await _svc.start_sprint(db_session, sprint2)
+        await _svc.start_sprint(db_session, sprint2, actor)
 
 
 @pytest.mark.service
 async def test_complete_sprint(
     db_session: AsyncSession,
     project: Project,
+    actor: User,
 ):
     sprint = await _create_sprint(db_session, project, "To Complete")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
-    completed = await _svc.complete_sprint(db_session, sprint)
+    completed = await _svc.complete_sprint(db_session, sprint, actor)
     await db_session.commit()
     await db_session.refresh(completed)
 
@@ -335,11 +339,12 @@ async def test_complete_sprint(
 async def test_complete_sprint_not_active_raises(
     db_session: AsyncSession,
     project: Project,
+    actor: User,
 ):
     sprint = await _create_sprint(db_session, project, "Still Planned")
 
     with pytest.raises(ConflictError):
-        await _svc.complete_sprint(db_session, sprint)
+        await _svc.complete_sprint(db_session, sprint, actor)
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +361,7 @@ async def test_complete_sprint_moves_incomplete_to_backlog(
 ):
     tracker, status_open, status_done, priority = lookups
     sprint = await _create_sprint(db_session, project, "Backlog Sprint")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     issue = await _create_issue_for_sprint(
@@ -364,7 +369,7 @@ async def test_complete_sprint_moves_incomplete_to_backlog(
         tracker=tracker, status=status_open, priority=priority,
     )
 
-    await _svc.complete_sprint(db_session, sprint)
+    await _svc.complete_sprint(db_session, sprint, actor)
     await db_session.commit()
     await db_session.refresh(issue)
 
@@ -382,7 +387,7 @@ async def test_complete_sprint_moves_incomplete_to_next_sprint(
     tracker, status_open, status_done, priority = lookups
     sprint = await _create_sprint(db_session, project, "Current Sprint")
     next_sprint = await _create_sprint(db_session, project, "Next Sprint")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     issue = await _create_issue_for_sprint(
@@ -390,7 +395,7 @@ async def test_complete_sprint_moves_incomplete_to_next_sprint(
         tracker=tracker, status=status_open, priority=priority,
     )
 
-    await _svc.complete_sprint(db_session, sprint, move_to_sprint_id=next_sprint.id)
+    await _svc.complete_sprint(db_session, sprint, actor, move_to_sprint_id=next_sprint.id)
     await db_session.commit()
     await db_session.refresh(issue)
 
@@ -406,7 +411,7 @@ async def test_complete_sprint_keeps_completed_issues(
 ):
     tracker, status_open, status_done, priority = lookups
     sprint = await _create_sprint(db_session, project, "Done Sprint")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     done_issue = await _create_issue_for_sprint(
@@ -414,7 +419,7 @@ async def test_complete_sprint_keeps_completed_issues(
         tracker=tracker, status=status_done, priority=priority,
     )
 
-    await _svc.complete_sprint(db_session, sprint)
+    await _svc.complete_sprint(db_session, sprint, actor)
     await db_session.commit()
     await db_session.refresh(done_issue)
 
@@ -436,7 +441,7 @@ async def test_complete_sprint_creates_velocity_snapshot(
 ):
     tracker, status_open, status_done, priority = lookups
     sprint = await _create_sprint(db_session, project, "Velocity Sprint")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     await _create_issue_for_sprint(
@@ -448,7 +453,7 @@ async def test_complete_sprint_creates_velocity_snapshot(
         tracker=tracker, status=status_done, priority=priority,
     )
 
-    await _svc.complete_sprint(db_session, sprint)
+    await _svc.complete_sprint(db_session, sprint, actor)
     await db_session.commit()
     await db_session.refresh(sprint)
 
@@ -492,9 +497,10 @@ async def test_delete_sprint(
 async def test_delete_active_sprint_raises(
     db_session: AsyncSession,
     project: Project,
+    actor: User,
 ):
     sprint = await _create_sprint(db_session, project, "Active No Delete")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     with pytest.raises(ConflictError):
@@ -516,7 +522,7 @@ async def test_board_data_groups_by_status(
 ):
     tracker, status_open, status_done, priority = lookups
     sprint = await _create_sprint(db_session, project, "Board Sprint")
-    await _svc.start_sprint(db_session, sprint)
+    await _svc.start_sprint(db_session, sprint, actor)
     await db_session.commit()
 
     await _create_issue_for_sprint(

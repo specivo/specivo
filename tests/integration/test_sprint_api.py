@@ -497,7 +497,8 @@ async def _seed_sprint_directly(
     svc = SprintService()
     sprint = await svc.create(db, project, SprintCreate(name=name))
     if start:
-        sprint = await svc.start_sprint(db, sprint)
+        actor = await _make_user(db, login="sprint_api_starter")
+        sprint = await svc.start_sprint(db, sprint, actor)
     await db.commit()
     return sprint.id
 
@@ -691,3 +692,117 @@ async def test_api_search_sprints_requires_auth(
 ) -> None:
     resp = await client.get(f"/api/v1/projects/{project.key}/sprints/search/")
     assert resp.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# Tests: completed sprints take no new issues
+# ---------------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def editor_client(
+    db_session: AsyncSession,
+    client: AsyncClient,
+    project: Project,
+) -> AsyncClient:
+    """Client for a member who manages sprints and edits issues."""
+    user = await _make_user(db_session, login="sprint_api_editor")
+    await _add_member_with_permissions(
+        db_session, project, user, ["view_issues", "add_issues", "edit_issues", "manage_sprints"]
+    )
+    client.headers["Authorization"] = f"Bearer {await _login(client, user.login)}"
+    return client
+
+
+async def _completed_sprint(client: AsyncClient, project_key: str, name: str) -> dict:
+    sprint = await _api_create_sprint(client, project_key, name)
+    base = f"/api/v1/projects/{project_key}/sprints/{sprint['id']}"
+    assert (await client.post(f"{base}/start/")).status_code == 200
+    assert (await client.post(f"{base}/complete/")).status_code == 200
+    return sprint
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("target", ["completed", "other_project", "same", "unknown"])
+async def test_api_complete_refuses_a_bad_target(
+    db_session: AsyncSession,
+    editor_client: AsyncClient,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssueStatus, IssuePriority],
+    target: str,
+) -> None:
+    from specivo.models.sprint import Sprint
+
+    client = editor_client
+    tracker, status_open, _status_done, priority = lookups
+    old = await _completed_sprint(client, project.key, "Sprint Old")
+    other_project = await _make_project(db_session, key="SAPX", identifier="sprint-api-other")
+    foreign = Sprint(project_id=other_project.id, name="Foreign Sprint")
+    db_session.add(foreign)
+    await db_session.commit()
+
+    sprint = await _api_create_sprint(client, project.key, "Sprint Now")
+    issue = await _api_create_issue(
+        client, project.key, tracker.id, status_open.id, priority.id, "Fix the login form", sprint_id=sprint["id"]
+    )
+    base = f"/api/v1/projects/{project.key}/sprints/{sprint['id']}"
+    assert (await client.post(f"{base}/start/")).status_code == 200
+    target_id = {"completed": old["id"], "other_project": foreign.id, "same": sprint["id"], "unknown": 987654321}[
+        target
+    ]
+
+    resp = await client.post(f"{base}/complete/", json={"move_incomplete_to_sprint_id": target_id})
+
+    assert resp.status_code == 422, resp.text
+    message = resp.json()["errors"][0]["message"]
+    assert message == {
+        "completed": "Cannot assign issues to a completed sprint",
+        "other_project": "Sprint does not belong to this project",
+        "same": "Cannot move issues to the sprint being completed",
+        "unknown": f"Sprint {target_id} not found",
+    }[target]
+    assert (await client.get(f"{base}/")).json()["status"] == "active"
+    assert (await client.get(f"/api/v1/issues/{issue['key']}/")).json()["sprint_id"] == sprint["id"]
+
+
+@pytest.mark.integration
+async def test_api_patch_issue_into_completed_sprint_is_refused(
+    editor_client: AsyncClient,
+    project: Project,
+    lookups: tuple[Tracker, IssueStatus, IssueStatus, IssuePriority],
+) -> None:
+    client = editor_client
+    tracker, status_open, _status_done, priority = lookups
+    old = await _completed_sprint(client, project.key, "Sprint Old")
+    issue = await _api_create_issue(client, project.key, tracker.id, status_open.id, priority.id, "Backlog item")
+
+    resp = await client.patch(
+        f"/api/v1/issues/{issue['key']}/",
+        json={"lock_version": issue["lock_version"], "sprint_id": old["id"]},
+    )
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["errors"][0]["message"] == "Cannot assign issues to a completed sprint"
+
+
+@pytest.mark.integration
+async def test_api_search_sprints_leaves_out_completed(
+    editor_client: AsyncClient,
+    project: Project,
+) -> None:
+    client = editor_client
+    await _completed_sprint(client, project.key, "Sprint Finished")
+    running = await _api_create_sprint(client, project.key, "Sprint Running")
+    await client.post(f"/api/v1/projects/{project.key}/sprints/{running['id']}/start/")
+    await _api_create_sprint(client, project.key, "Sprint Planned")
+
+    for query in ("", "?q=Sprint", "?q=finished"):
+        resp = await client.get(f"/api/v1/projects/{project.key}/sprints/search/{query}")
+        assert resp.status_code == 200, resp.text
+        names = {s["name"] for s in resp.json()}
+        assert "Sprint Finished" not in names
+        if query != "?q=finished":
+            assert names == {"Sprint Running", "Sprint Planned"}
+    # The list keeps it.
+    listed = await client.get(f"/api/v1/projects/{project.key}/sprints/")
+    assert "Sprint Finished" in {s["name"] for s in listed.json()}

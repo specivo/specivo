@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-31 13:56+0100\n"
+"POT-Creation-Date: 2026-11-04 17:10+0000\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -206,50 +206,50 @@ msgstr "该版本不属于此项目"
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "无法将工作项分配到状态为 %(status)s 的版本"
 
-#: specivo/services/issue_service.py:204
+#: specivo/services/issue_service.py:210
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "未找到冲刺 %(id)s"
 
-#: specivo/services/issue_service.py:210
+#: specivo/services/issue_service.py:216
 msgid "Sprint does not belong to this project"
 msgstr "该冲刺不属于此项目"
 
-#: specivo/services/issue_service.py:216
+#: specivo/services/issue_service.py:222
 msgid "Cannot assign issues to a completed sprint"
 msgstr "无法将工作项分配到已完成的冲刺"
 
-#: specivo/services/issue_service.py:998
+#: specivo/services/issue_service.py:1004
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "该工作项已被其他请求修改，请重新加载后再试。"
 
-#: specivo/services/issue_service.py:1151
+#: specivo/services/issue_service.py:1159
 msgid "Issue is already in this project."
 msgstr "工作项已在此项目中。"
 
-#: specivo/services/issue_service.py:1160
+#: specivo/services/issue_service.py:1168
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr "无法移动处于层级结构中的工作项。请先将其与父工作项解除关联，并移动其子工作项或解除它们的关联。"
 
-#: specivo/services/issue_service.py:1211
+#: specivo/services/issue_service.py:1219
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "已从 {old} 移动到 {new}。"
 
-#: specivo/services/issue_service.py:1285
+#: specivo/services/issue_service.py:1293
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
 "id, or one of: {known}"
 msgstr "未知的状态筛选条件“{value}”。请使用 'open'、'closed'、'all'、状态 ID，或以下之一：{known}"
 
-#: specivo/services/journal_service.py:312
+#: specivo/services/journal_service.py:311
 msgid "The history entry does not belong to this issue."
 msgstr "该历史记录不属于此工作项。"
 
-#: specivo/services/journal_service.py:418
+#: specivo/services/journal_service.py:462
 msgid "Cannot reply to a journal on a different issue"
 msgstr "无法回复其他工作项的日志记录"
 
@@ -269,6 +269,10 @@ msgstr "此重复模板已被他人修改。请重新加载后重试。"
 
 #: specivo/services/scim/config_service.py:102
 msgid "Generate a SCIM token before turning provisioning on."
+msgstr ""
+
+#: specivo/services/sprint_service.py:268
+msgid "Cannot move issues to the sprint being completed"
 msgstr ""
 
 #: specivo/services/user_service.py:73 specivo/web/pages/admin.py:233
@@ -456,8 +460,8 @@ msgstr "记录工时"
 #: specivo/templates/themes/default/pages/admin/users.html:201
 #: specivo/templates/themes/default/pages/auth/api_keys.html:82
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
-#: specivo/templates/themes/default/pages/issues/_activity.html:133
-#: specivo/templates/themes/default/pages/issues/_activity.html:208
+#: specivo/templates/themes/default/pages/issues/_activity.html:144
+#: specivo/templates/themes/default/pages/issues/_activity.html:219
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:31
 #: specivo/templates/themes/default/pages/issues/detail.html:106
@@ -1598,7 +1602,7 @@ msgstr "用户组"
 #: specivo/templates/themes/default/pages/admin/groups.html:117
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:187
 #: specivo/templates/themes/default/pages/admin/projects.html:132
-#: specivo/templates/themes/default/pages/issues/_activity.html:56
+#: specivo/templates/themes/default/pages/issues/_activity.html:67
 #: specivo/templates/themes/default/pages/issues/form.html:90
 #: specivo/templates/themes/default/pages/projects/detail.html:188
 #: specivo/templates/themes/default/pages/projects/list.html:58
@@ -4137,7 +4141,7 @@ msgstr "评论了"
 
 #: specivo/templates/themes/default/pages/dashboard.html:130
 #: specivo/templates/themes/default/pages/dashboard.html:259
-#: specivo/templates/themes/default/pages/issues/_activity.html:56
+#: specivo/templates/themes/default/pages/issues/_activity.html:67
 msgid "updated"
 msgstr "更新了"
 
@@ -4250,7 +4254,7 @@ msgid "Go back"
 msgstr "返回"
 
 #: specivo/templates/themes/default/pages/issues/_activity.html:18
-#: specivo/templates/themes/default/pages/issues/_activity.html:107
+#: specivo/templates/themes/default/pages/issues/_activity.html:118
 #: specivo/templates/themes/default/pages/issues/detail.html:399
 #: specivo/templates/themes/default/pages/wiki/history.html:48
 msgid "Unknown"
@@ -4260,143 +4264,153 @@ msgstr "未知"
 msgid "Agent"
 msgstr "代理"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:38
+#: specivo/templates/themes/default/pages/issues/_activity.html:41
 msgid "Created from recurring pattern"
 msgstr "从重复模板创建"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:42
+#: specivo/templates/themes/default/pages/issues/_activity.html:49
+#, python-format
+msgid "Sprint %(sprint)s completed"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html:49
+#, python-format
+msgid "Sprint %(sprint)s started"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html:53
 msgid "Added"
 msgstr "已添加"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:42
-#: specivo/templates/themes/default/pages/issues/_activity.html:44
+#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:55
 msgid "relation to"
 msgstr "与……的关系"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:44
+#: specivo/templates/themes/default/pages/issues/_activity.html:55
 msgid "Removed"
 msgstr "已移除"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:51
+#: specivo/templates/themes/default/pages/issues/_activity.html:62
 #, python-format
 msgid "File %(name)s deleted"
 msgstr "已删除文件 %(name)s"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:51
+#: specivo/templates/themes/default/pages/issues/_activity.html:62
 #, python-format
 msgid "File %(name)s added"
 msgstr "已添加文件 %(name)s"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:64
 msgid "File deleted"
 msgstr "已删除文件"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:64
 msgid "File added"
 msgstr "已添加文件"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:59
+#: specivo/templates/themes/default/pages/issues/_activity.html:70
 msgid "View changes"
 msgstr "查看变更"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:65
+#: specivo/templates/themes/default/pages/issues/_activity.html:76
 msgid "Issue Metadata"
 msgstr "工作项元数据"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:68
-#: specivo/templates/themes/default/pages/issues/_activity.html:89
+#: specivo/templates/themes/default/pages/issues/_activity.html:79
+#: specivo/templates/themes/default/pages/issues/_activity.html:100
 msgid "changed from"
 msgstr "由以下值更改"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:69
-#: specivo/templates/themes/default/pages/issues/_activity.html:90
+#: specivo/templates/themes/default/pages/issues/_activity.html:80
+#: specivo/templates/themes/default/pages/issues/_activity.html:101
 msgid "to"
 msgstr "至"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:71
+#: specivo/templates/themes/default/pages/issues/_activity.html:82
 msgid "set to"
 msgstr "设为"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:73
+#: specivo/templates/themes/default/pages/issues/_activity.html:84
 msgid "removed"
 msgstr "已移除"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:89
-#: specivo/templates/themes/default/pages/issues/_activity.html:90
+#: specivo/templates/themes/default/pages/issues/_activity.html:100
+#: specivo/templates/themes/default/pages/issues/_activity.html:101
 msgid "(none)"
 msgstr "（无）"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:107
+#: specivo/templates/themes/default/pages/issues/_activity.html:118
 #, python-format
 msgid "Resolved by %(name)s"
 msgstr "由 %(name)s 解决"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:118
+#: specivo/templates/themes/default/pages/issues/_activity.html:129
 msgid "↩ Reply"
 msgstr "↩ 回复"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:124
+#: specivo/templates/themes/default/pages/issues/_activity.html:135
 msgid "Unresolve"
 msgstr "取消解决"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:126
-#: specivo/templates/themes/default/pages/issues/_activity.html:209
+#: specivo/templates/themes/default/pages/issues/_activity.html:137
+#: specivo/templates/themes/default/pages/issues/_activity.html:220
 msgid "Resolve"
 msgstr "解决"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:131
+#: specivo/templates/themes/default/pages/issues/_activity.html:142
 msgid "Write a reply..."
 msgstr "撰写回复……"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:134
+#: specivo/templates/themes/default/pages/issues/_activity.html:145
 msgid "Reply"
 msgstr "回复"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:156
+#: specivo/templates/themes/default/pages/issues/_activity.html:167
 msgid "React"
 msgstr "回应"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:159
+#: specivo/templates/themes/default/pages/issues/_activity.html:170
 msgid "Thumbs up"
 msgstr "赞"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:160
+#: specivo/templates/themes/default/pages/issues/_activity.html:171
 msgid "Thumbs down"
 msgstr "踩"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:161
+#: specivo/templates/themes/default/pages/issues/_activity.html:172
 msgid "Heart"
 msgstr "爱心"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:162
+#: specivo/templates/themes/default/pages/issues/_activity.html:173
 msgid "Rocket"
 msgstr "火箭"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:163
+#: specivo/templates/themes/default/pages/issues/_activity.html:174
 msgid "Eyes"
 msgstr "关注"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:164
+#: specivo/templates/themes/default/pages/issues/_activity.html:175
 msgid "Tada"
 msgstr "庆祝"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:186
+#: specivo/templates/themes/default/pages/issues/_activity.html:197
 msgid "No activity yet."
 msgstr "暂无动态。"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:198
+#: specivo/templates/themes/default/pages/issues/_activity.html:209
 msgid "Resolve Thread"
 msgstr "解决讨论串"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:202
+#: specivo/templates/themes/default/pages/issues/_activity.html:213
 msgid "Mark this discussion thread as resolved."
 msgstr "将此讨论串标记为已解决。"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:203
+#: specivo/templates/themes/default/pages/issues/_activity.html:214
 msgid "Summary (optional)"
 msgstr "摘要（可选）"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:204
+#: specivo/templates/themes/default/pages/issues/_activity.html:215
 msgid "e.g. Agreed on approach"
 msgstr "例如：已就方案达成一致"
 

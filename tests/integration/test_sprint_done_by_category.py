@@ -139,7 +139,7 @@ async def test_burndown_counts_a_renamed_done_status(db_session: AsyncSession, s
 
 async def test_completing_a_sprint_keeps_done_issues_and_moves_the_rest(db_session: AsyncSession, setup: Setup) -> None:
     s = setup
-    await _svc.complete_sprint(db_session, s.sprint)
+    await _svc.complete_sprint(db_session, s.sprint, s.admin)
     await db_session.commit()
     await db_session.refresh(s.done_issue)
     await db_session.refresh(s.open_issue)

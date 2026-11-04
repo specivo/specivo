@@ -339,3 +339,111 @@ def test_complete_sprint(admin_page: Page, api_client: httpx.Client) -> None:
 
     # Verify: the issue should be back in the backlog (sprint_id cleared)
     expect(admin_page.locator(".backlog-issue", has_text=subject)).to_be_visible()
+
+
+# ---------------------------------------------------------------------------
+# Tests — completed sprints take no new issues; lifecycle in issue history
+# ---------------------------------------------------------------------------
+
+
+def _complete_sprint(api: httpx.Client, project_key: str, sprint_id: int) -> dict:
+    resp = api.post(f"/api/v1/projects/{project_key}/sprints/{sprint_id}/complete/")
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+def _finished_sprint(api: httpx.Client, project_key: str, name: str) -> dict:
+    sprint = _create_sprint(api, project_key, name)
+    _start_sprint(api, project_key, sprint["id"])
+    return _complete_sprint(api, project_key, sprint["id"])
+
+
+def _sprint_picker(page: Page):
+    return page.locator(".sp-ac", has=page.locator("input[placeholder='-- No sprint --']"))
+
+
+def test_sidebar_sprint_picker_leaves_out_completed_sprints(admin_page: Page, api_client: httpx.Client) -> None:
+    project = _create_project(api_client)
+    finished = _finished_sprint(api_client, project["key"], f"Finished {unique_key()}")
+    planned = _create_sprint(api_client, project["key"], f"Planned {unique_key()}")
+    issue = _create_issue_in_project(api_client, project["key"], f"Picker {unique_key()}")
+
+    admin_page.goto(f"/issue/{issue['key']}/")
+    picker = _sprint_picker(admin_page)
+    picker.locator("input").click()
+
+    menu = picker.locator(".sp-ac-menu")
+    expect(menu.locator(".sp-ac-row", has_text=planned["name"])).to_be_visible()
+    expect(menu.locator(".sp-ac-row", has_text=finished["name"])).to_have_count(0)
+
+
+def test_issue_in_completed_sprint_keeps_it_and_can_move_out(admin_page: Page, api_client: httpx.Client) -> None:
+    project = _create_project(api_client)
+    sprint = _create_sprint(api_client, project["key"], f"Closed {unique_key()}")
+    issue = _create_issue_in_project(api_client, project["key"], f"Stays {unique_key()}")
+    issue = _assign_issue_to_sprint(api_client, issue["key"], sprint["id"], issue["lock_version"])
+    # Resolved (done category), so completing the sprint keeps it there.
+    admin_page.goto(f"/issue/{issue['key']}/")
+    done_id = int(admin_page.locator("select option", has_text="Resolved").first.get_attribute("value") or 0)
+    resp = api_client.patch(
+        f"/api/v1/issues/{issue['key']}/", json={"status_id": done_id, "lock_version": issue["lock_version"]}
+    )
+    assert resp.status_code == 200, resp.text
+    _start_sprint(api_client, project["key"], sprint["id"])
+    _complete_sprint(api_client, project["key"], sprint["id"])
+    target = _create_sprint(api_client, project["key"], f"Next {unique_key()}")
+
+    admin_page.goto(f"/issue/{issue['key']}/")
+    picker = _sprint_picker(admin_page)
+    expect(picker.locator("input")).to_have_value(sprint["name"])
+    picker.locator("input").click()
+    current = picker.locator(".sp-ac-row", has_text=sprint["name"])
+    expect(current).to_be_visible()
+    expect(current.locator(".sp-ac-suffix")).to_have_text("(completed)")
+
+    picker.locator(".sp-ac-row", has_text=target["name"]).click()
+    expect(picker.locator("input")).to_have_value(target["name"])
+    resp = api_client.get(f"/api/v1/issues/{issue['key']}/")
+    assert resp.json()["sprint_id"] == target["id"]
+
+
+def test_backlog_and_board_pickers_leave_out_completed_sprints(admin_page: Page, api_client: httpx.Client) -> None:
+    project = _create_project(api_client)
+    finished = _finished_sprint(api_client, project["key"], f"Finished {unique_key()}")
+    active = _create_sprint(api_client, project["key"], f"Active {unique_key()}")
+    _start_sprint(api_client, project["key"], active["id"])
+    planned = _create_sprint(api_client, project["key"], f"Planned {unique_key()}")
+    subject = f"Backlog {unique_key()}"
+    _create_issue_in_project(api_client, project["key"], subject)
+
+    admin_page.goto(f"/projects/{project['key']}/backlog/")
+    row = admin_page.locator(".backlog-issue", has_text=subject)
+    row.locator(".backlog-assign-btn").click()
+    dropdown = row.locator(".sprint-picker-dropdown")
+    expect(dropdown.locator(".sprint-picker-item", has_text=planned["name"])).to_be_visible()
+    expect(dropdown.locator(".sprint-picker-item", has_text=finished["name"])).to_have_count(0)
+
+    admin_page.goto(f"/projects/{project['key']}/sprints/{active['id']}/board/")
+    admin_page.locator("button", has_text="Complete Sprint").first.click()
+    options = admin_page.locator("select[x-model='moveToSprint'] option")
+    expect(options.filter(has_text=planned["name"])).to_have_count(1)
+    expect(options.filter(has_text=finished["name"])).to_have_count(0)
+
+
+def test_completing_from_the_board_shows_on_the_activity_tab(admin_page: Page, api_client: httpx.Client) -> None:
+    project = _create_project(api_client)
+    sprint = _create_sprint(api_client, project["key"], f"Board {unique_key()}")
+    issue = _create_issue_in_project(api_client, project["key"], f"Moves {unique_key()}")
+    _assign_issue_to_sprint(api_client, issue["key"], sprint["id"], issue["lock_version"])
+    _start_sprint(api_client, project["key"], sprint["id"])
+
+    admin_page.goto(f"/projects/{project['key']}/sprints/{sprint['id']}/board/")
+    admin_page.locator("button", has_text="Complete Sprint").first.click()
+    admin_page.locator(".sp-modal button", has_text="Complete").last.click()
+    admin_page.wait_for_url(f"**/projects/{project['key']}/backlog/")
+
+    admin_page.goto(f"/issue/{issue['key']}/")
+    started = admin_page.locator(".sp-journal-sprint[data-sprint-event='started']")
+    expect(started).to_contain_text(sprint["name"])
+    expect(started.locator("a")).to_have_attribute("href", f"/projects/{project['key']}/sprints/{sprint['id']}/")
+    expect(admin_page.locator(".sp-change-old", has_text=sprint["name"])).to_be_visible()

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-31 13:56+0100\n"
+"POT-Creation-Date: 2026-11-04 17:10+0000\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.local>\n"
 "Language: ru\n"
@@ -217,30 +217,30 @@ msgstr "Версия не относится к этому проекту"
 msgid "Cannot assign issues to a %(status)s version"
 msgstr "Нельзя назначать задачи версии со статусом «%(status)s»"
 
-#: specivo/services/issue_service.py:204
+#: specivo/services/issue_service.py:210
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr "Спринт %(id)s не найден"
 
-#: specivo/services/issue_service.py:210
+#: specivo/services/issue_service.py:216
 msgid "Sprint does not belong to this project"
 msgstr "Спринт не относится к этому проекту"
 
-#: specivo/services/issue_service.py:216
+#: specivo/services/issue_service.py:222
 msgid "Cannot assign issues to a completed sprint"
 msgstr "Нельзя назначать задачи завершённому спринту"
 
-#: specivo/services/issue_service.py:998
+#: specivo/services/issue_service.py:1004
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 "Задача была изменена другим запросом. Обновите страницу и повторите "
 "попытку."
 
-#: specivo/services/issue_service.py:1151
+#: specivo/services/issue_service.py:1159
 msgid "Issue is already in this project."
 msgstr "Задача уже находится в этом проекте."
 
-#: specivo/services/issue_service.py:1160
+#: specivo/services/issue_service.py:1168
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -248,12 +248,12 @@ msgstr ""
 "Нельзя переместить задачу, входящую в иерархию. Сначала отвяжите её от "
 "родительской задачи и переместите или отвяжите её подзадачи."
 
-#: specivo/services/issue_service.py:1211
+#: specivo/services/issue_service.py:1219
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Перемещено из {old} в {new}."
 
-#: specivo/services/issue_service.py:1285
+#: specivo/services/issue_service.py:1293
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -262,11 +262,11 @@ msgstr ""
 "Неизвестный фильтр статуса «{value}». Используйте 'open', 'closed', "
 "'all', ID статуса или одно из значений: {known}"
 
-#: specivo/services/journal_service.py:312
+#: specivo/services/journal_service.py:311
 msgid "The history entry does not belong to this issue."
 msgstr "Эта запись истории не относится к этой задаче."
 
-#: specivo/services/journal_service.py:418
+#: specivo/services/journal_service.py:462
 msgid "Cannot reply to a journal on a different issue"
 msgstr "Нельзя ответить на запись журнала из другой задачи"
 
@@ -290,6 +290,10 @@ msgstr ""
 
 #: specivo/services/scim/config_service.py:102
 msgid "Generate a SCIM token before turning provisioning on."
+msgstr ""
+
+#: specivo/services/sprint_service.py:268
+msgid "Cannot move issues to the sprint being completed"
 msgstr ""
 
 #: specivo/services/user_service.py:73 specivo/web/pages/admin.py:233
@@ -479,8 +483,8 @@ msgstr "Учесть время"
 #: specivo/templates/themes/default/pages/admin/users.html:201
 #: specivo/templates/themes/default/pages/auth/api_keys.html:82
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
-#: specivo/templates/themes/default/pages/issues/_activity.html:133
-#: specivo/templates/themes/default/pages/issues/_activity.html:208
+#: specivo/templates/themes/default/pages/issues/_activity.html:144
+#: specivo/templates/themes/default/pages/issues/_activity.html:219
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:131
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:31
 #: specivo/templates/themes/default/pages/issues/detail.html:106
@@ -1650,7 +1654,7 @@ msgstr "Группа"
 #: specivo/templates/themes/default/pages/admin/groups.html:117
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:187
 #: specivo/templates/themes/default/pages/admin/projects.html:132
-#: specivo/templates/themes/default/pages/issues/_activity.html:56
+#: specivo/templates/themes/default/pages/issues/_activity.html:67
 #: specivo/templates/themes/default/pages/issues/form.html:90
 #: specivo/templates/themes/default/pages/projects/detail.html:188
 #: specivo/templates/themes/default/pages/projects/list.html:58
@@ -4319,7 +4323,7 @@ msgstr "прокомментировал"
 
 #: specivo/templates/themes/default/pages/dashboard.html:130
 #: specivo/templates/themes/default/pages/dashboard.html:259
-#: specivo/templates/themes/default/pages/issues/_activity.html:56
+#: specivo/templates/themes/default/pages/issues/_activity.html:67
 msgid "updated"
 msgstr "обновил"
 
@@ -4432,7 +4436,7 @@ msgid "Go back"
 msgstr "Назад"
 
 #: specivo/templates/themes/default/pages/issues/_activity.html:18
-#: specivo/templates/themes/default/pages/issues/_activity.html:107
+#: specivo/templates/themes/default/pages/issues/_activity.html:118
 #: specivo/templates/themes/default/pages/issues/detail.html:399
 #: specivo/templates/themes/default/pages/wiki/history.html:48
 msgid "Unknown"
@@ -4442,143 +4446,153 @@ msgstr "Неизвестно"
 msgid "Agent"
 msgstr "Агент"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:38
+#: specivo/templates/themes/default/pages/issues/_activity.html:41
 msgid "Created from recurring pattern"
 msgstr "Создано из повторяющегося шаблона"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:42
+#: specivo/templates/themes/default/pages/issues/_activity.html:49
+#, python-format
+msgid "Sprint %(sprint)s completed"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html:49
+#, python-format
+msgid "Sprint %(sprint)s started"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/_activity.html:53
 msgid "Added"
 msgstr "Добавлено"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:42
-#: specivo/templates/themes/default/pages/issues/_activity.html:44
+#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:55
 msgid "relation to"
 msgstr "связь с"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:44
+#: specivo/templates/themes/default/pages/issues/_activity.html:55
 msgid "Removed"
 msgstr "Удалено"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:51
+#: specivo/templates/themes/default/pages/issues/_activity.html:62
 #, python-format
 msgid "File %(name)s deleted"
 msgstr "Файл %(name)s удалён"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:51
+#: specivo/templates/themes/default/pages/issues/_activity.html:62
 #, python-format
 msgid "File %(name)s added"
 msgstr "Файл %(name)s добавлен"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:64
 msgid "File deleted"
 msgstr "Файл удалён"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:53
+#: specivo/templates/themes/default/pages/issues/_activity.html:64
 msgid "File added"
 msgstr "Файл добавлен"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:59
+#: specivo/templates/themes/default/pages/issues/_activity.html:70
 msgid "View changes"
 msgstr "Посмотреть изменения"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:65
+#: specivo/templates/themes/default/pages/issues/_activity.html:76
 msgid "Issue Metadata"
 msgstr "Метаданные задачи"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:68
-#: specivo/templates/themes/default/pages/issues/_activity.html:89
+#: specivo/templates/themes/default/pages/issues/_activity.html:79
+#: specivo/templates/themes/default/pages/issues/_activity.html:100
 msgid "changed from"
 msgstr "изменено с"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:69
-#: specivo/templates/themes/default/pages/issues/_activity.html:90
+#: specivo/templates/themes/default/pages/issues/_activity.html:80
+#: specivo/templates/themes/default/pages/issues/_activity.html:101
 msgid "to"
 msgstr "на"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:71
+#: specivo/templates/themes/default/pages/issues/_activity.html:82
 msgid "set to"
 msgstr "установлено в"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:73
+#: specivo/templates/themes/default/pages/issues/_activity.html:84
 msgid "removed"
 msgstr "удалено"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:89
-#: specivo/templates/themes/default/pages/issues/_activity.html:90
+#: specivo/templates/themes/default/pages/issues/_activity.html:100
+#: specivo/templates/themes/default/pages/issues/_activity.html:101
 msgid "(none)"
 msgstr "(нет)"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:107
+#: specivo/templates/themes/default/pages/issues/_activity.html:118
 #, python-format
 msgid "Resolved by %(name)s"
 msgstr "Решено: %(name)s"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:118
+#: specivo/templates/themes/default/pages/issues/_activity.html:129
 msgid "↩ Reply"
 msgstr "↩ Ответить"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:124
+#: specivo/templates/themes/default/pages/issues/_activity.html:135
 msgid "Unresolve"
 msgstr "Снять решение"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:126
-#: specivo/templates/themes/default/pages/issues/_activity.html:209
+#: specivo/templates/themes/default/pages/issues/_activity.html:137
+#: specivo/templates/themes/default/pages/issues/_activity.html:220
 msgid "Resolve"
 msgstr "Решить"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:131
+#: specivo/templates/themes/default/pages/issues/_activity.html:142
 msgid "Write a reply..."
 msgstr "Напишите ответ..."
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:134
+#: specivo/templates/themes/default/pages/issues/_activity.html:145
 msgid "Reply"
 msgstr "Ответить"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:156
+#: specivo/templates/themes/default/pages/issues/_activity.html:167
 msgid "React"
 msgstr "Реакция"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:159
+#: specivo/templates/themes/default/pages/issues/_activity.html:170
 msgid "Thumbs up"
 msgstr "Палец вверх"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:160
+#: specivo/templates/themes/default/pages/issues/_activity.html:171
 msgid "Thumbs down"
 msgstr "Палец вниз"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:161
+#: specivo/templates/themes/default/pages/issues/_activity.html:172
 msgid "Heart"
 msgstr "Сердце"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:162
+#: specivo/templates/themes/default/pages/issues/_activity.html:173
 msgid "Rocket"
 msgstr "Ракета"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:163
+#: specivo/templates/themes/default/pages/issues/_activity.html:174
 msgid "Eyes"
 msgstr "Глаза"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:164
+#: specivo/templates/themes/default/pages/issues/_activity.html:175
 msgid "Tada"
 msgstr "Праздник"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:186
+#: specivo/templates/themes/default/pages/issues/_activity.html:197
 msgid "No activity yet."
 msgstr "Пока нет активности."
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:198
+#: specivo/templates/themes/default/pages/issues/_activity.html:209
 msgid "Resolve Thread"
 msgstr "Закрыть обсуждение"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:202
+#: specivo/templates/themes/default/pages/issues/_activity.html:213
 msgid "Mark this discussion thread as resolved."
 msgstr "Отметить эту ветку обсуждения как решённую."
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:203
+#: specivo/templates/themes/default/pages/issues/_activity.html:214
 msgid "Summary (optional)"
 msgstr "Итог (необязательно)"
 
-#: specivo/templates/themes/default/pages/issues/_activity.html:204
+#: specivo/templates/themes/default/pages/issues/_activity.html:215
 msgid "e.g. Agreed on approach"
 msgstr "например, Договорились о подходе"
 
@@ -4869,14 +4883,18 @@ msgstr "Не удалось запустить таймер."
 msgid ""
 "The timer on %(target)s was stopped and %(hours)s h were logged with the "
 "default activity."
-msgstr "Таймер для %(target)s остановлен, записано %(hours)s ч с активностью по умолчанию."
+msgstr ""
+"Таймер для %(target)s остановлен, записано %(hours)s ч с активностью по "
+"умолчанию."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:16
 #, python-format
 msgid ""
 "The timer on %(target)s was discarded without logging time: you may no "
 "longer log time there."
-msgstr "Таймер для %(target)s отменён без записи времени: у вас больше нет права записывать там время."
+msgstr ""
+"Таймер для %(target)s отменён без записи времени: у вас больше нет права "
+"записывать там время."
 
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:23
 msgid "Start timer"

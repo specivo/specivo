@@ -68,6 +68,11 @@ class AuditEvent(StrEnum):
     VERSION_CREATED = "version_created"
     VERSION_UPDATED = "version_updated"
     VERSION_DELETED = "version_deleted"
+    # A sprint was started or completed. Details hold the sprint's name and
+    # issue counts (and, on completion, where unfinished issues went); never
+    # issue subjects.
+    SPRINT_STARTED = "sprint_started"
+    SPRINT_COMPLETED = "sprint_completed"
     RECURRING_PATTERNS_LISTED = "recurring_patterns_listed"
     RECURRING_PATTERN_CREATED = "recurring_pattern_created"
     RECURRING_PATTERN_UPDATED = "recurring_pattern_updated"

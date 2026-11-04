@@ -8,16 +8,21 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.exc import StaleDataError
 
-from specivo.core.exceptions import ConflictError, NotFoundError
+from specivo.core.exceptions import AppError, ConflictError, NotFoundError
+from specivo.core.i18n import gettext as _
 from specivo.models.issue import Issue
 from specivo.models.project import Project
 from specivo.models.sprint import Sprint
 from specivo.schemas.sprint import SprintCreate, SprintUpdate
 from specivo.services.api_key_scope import project_in_scope
+from specivo.services.journal_service import JournalService
+from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
+from specivo.services.webhook_events import emit_issue_updated
 
 if TYPE_CHECKING:
     from sqlalchemy.sql import Select
@@ -26,6 +31,9 @@ if TYPE_CHECKING:
     from specivo.models.user import User
 
 logger = logging.getLogger(__name__)
+
+_journal = JournalService()
+_audit = SecurityAuditService()
 
 
 async def _visibility(session: AsyncSession, user: User) -> ColumnElement[bool] | None:
@@ -109,14 +117,19 @@ class SprintService:
         query: str | None = None,
         limit: int = 20,
     ) -> list[Sprint]:
-        """Search sprints for a project.
+        """Search the sprints of a project an issue may be put in, for the issue sidebar picker.
 
-        - Empty query returns the 10 most recent sprints ordered by
-          ``start_date DESC NULLS LAST, name DESC`` regardless of status.
+        Completed sprints are left out: they take no new issues
+        (``IssueService.validate_sprint``). The picker still shows the sprint
+        an issue is already in, from the page. Read views use
+        :meth:`list_for_project`, which keeps every status.
+
+        - Empty query returns the 10 most recent active or planned sprints
+          ordered by ``start_date DESC NULLS LAST, name DESC``.
         - Non-empty query performs a case-insensitive substring match on name,
           capped at ``limit`` rows.
         """
-        stmt = select(Sprint).where(Sprint.project_id == project_id)
+        stmt = select(Sprint).where(Sprint.project_id == project_id, Sprint.status != "completed")
         q = (query or "").strip()
         if q:
             stmt = stmt.where(Sprint.name.ilike(f"%{q}%"))
@@ -171,12 +184,18 @@ class SprintService:
         self,
         session: AsyncSession,
         sprint: Sprint,
+        actor: User,
+        api_key_id: int | None = None,
     ) -> Sprint:
         """Transition a planned sprint to active.
 
         Raises ConflictError if:
         - Sprint is not in ``planned`` status
         - Another sprint in the same project is already active
+
+        Each issue in the sprint gets a "sprint started" history entry by
+        *actor*, and the start is audited (``SPRINT_STARTED``). Nothing is
+        written when the start is refused.
         """
         if sprint.status != "planned":
             raise ConflictError("Only planned sprints can be started")
@@ -196,6 +215,21 @@ class SprintService:
             sprint.start_date = date.today()
         session.add(sprint)
         await session.flush()
+
+        issues = await self._issues_in(session, sprint)
+        for issue in issues:
+            await _journal.record_sprint_event(session, issue, actor, sprint, "started", api_key_id=api_key_id)
+
+        await _audit.log_event(
+            session,
+            AuditEvent.SPRINT_STARTED,
+            user_id=actor.id,
+            resource_type="sprint",
+            resource_id=sprint.id,
+            project_id=sprint.project_id,
+            details={"name": sprint.name, "issue_count": len(issues)},
+        )
+        await session.flush()
         await session.refresh(sprint)
         return sprint
 
@@ -203,7 +237,9 @@ class SprintService:
         self,
         session: AsyncSession,
         sprint: Sprint,
+        actor: User,
         move_to_sprint_id: int | None = None,
+        api_key_id: int | None = None,
     ) -> Sprint:
         """Transition an active sprint to completed.
 
@@ -212,54 +248,102 @@ class SprintService:
         - Incomplete issues are moved to *move_to_sprint_id* or backlog (NULL)
         - Builds velocity_snapshot with total_issues and completed_issues
         - Sets end_date to today if None
+
+        *move_to_sprint_id* must be another active or planned sprint of the
+        same project (``IssueService.validate_sprint``); anything else is
+        refused with a 422 before anything changes. An issue edited while this
+        runs raises ``ConflictError`` and nothing is saved.
+
+        Each issue that stays gets a "sprint completed" history entry by
+        *actor*; each moved issue gets a normal ``sprint_id`` change, set
+        through the ORM so its ``lock_version`` and ``updated_at`` advance, and
+        emits ``issue.updated`` as any sprint change does. The completion is
+        audited (``SPRINT_COMPLETED``). No notification is sent.
         """
         if sprint.status != "active":
             raise ConflictError("Only active sprints can be completed")
 
-        # Fetch all issues in this sprint with their status loaded
-        stmt = (
-            select(Issue)
-            .where(Issue.sprint_id == sprint.id)
-            .options(selectinload(Issue.status))
-        )
-        result = await session.execute(stmt)
-        issues = list(result.scalars().all())
+        if move_to_sprint_id is not None:
+            if move_to_sprint_id == sprint.id:
+                raise AppError(
+                    code="validation_error",
+                    message=_("Cannot move issues to the sprint being completed"),
+                    status_code=422,
+                )
+            from specivo.services.issue_service import IssueService
 
-        total = len(issues)
-        completed = 0
-        incomplete_ids = []
+            await IssueService().validate_sprint(session, move_to_sprint_id, sprint.project_id)
 
-        for issue in issues:
-            if issue.status.category in ("done", "closed"):
-                completed += 1
-            else:
-                incomplete_ids.append(issue.id)
-
-        # Move incomplete issues
-        if incomplete_ids:
-            target_sprint_id = move_to_sprint_id  # None means backlog
-            await session.execute(
-                update(Issue)
-                .where(Issue.id.in_(incomplete_ids))
-                .values(sprint_id=target_sprint_id)
-            )
+        issues = await self._issues_in(session, sprint)
+        stay = [issue for issue in issues if issue.status.is_done]
+        moved = [issue for issue in issues if not issue.status.is_done]
 
         # The ids let each reader be shown only the issues they may see
         # (``velocity_for``); the counts are what was committed overall.
         sprint.velocity_snapshot = {
-            "total_issues": total,
-            "completed_issues": completed,
+            "total_issues": len(issues),
+            "completed_issues": len(stay),
             "issue_ids": sorted(issue.id for issue in issues),
-            "completed_issue_ids": sorted(set(i.id for i in issues) - set(incomplete_ids)),
+            "completed_issue_ids": sorted(issue.id for issue in stay),
         }
         sprint.status = "completed"
         if sprint.end_date is None:
             sprint.end_date = date.today()
-
         session.add(sprint)
+
+        # Issues in id order: each journal takes the issue's advisory lock
+        # until commit, so a fixed order keeps two writers from deadlocking.
+        for issue in issues:
+            if issue.status.is_done:
+                await _journal.record_sprint_event(session, issue, actor, sprint, "completed", api_key_id=api_key_id)
+                continue
+            was_private = issue.is_private
+            issue.sprint_id = move_to_sprint_id
+            try:
+                await session.flush()
+            except StaleDataError as exc:
+                # Someone edited the issue after it was loaded above. The whole
+                # completion rolls back, so it can simply be run again.
+                raise ConflictError(_("Issue was modified by another request. Reload and retry.")) from exc
+            journal = await _journal.record_change(
+                session,
+                issue,
+                actor,
+                {"sprint_id": sprint.id},
+                {"sprint_id": move_to_sprint_id},
+                api_key_id=api_key_id,
+            )
+            if journal is not None:
+                await emit_issue_updated(session, issue, journal, actor, was_private=was_private)
+
+        await _audit.log_event(
+            session,
+            AuditEvent.SPRINT_COMPLETED,
+            user_id=actor.id,
+            resource_type="sprint",
+            resource_id=sprint.id,
+            project_id=sprint.project_id,
+            details={
+                "name": sprint.name,
+                "issue_count": len(issues),
+                "completed_count": len(stay),
+                "moved_count": len(moved),
+                "move_to_sprint_id": move_to_sprint_id,
+            },
+        )
         await session.flush()
         await session.refresh(sprint)
         return sprint
+
+    async def _issues_in(self, session: AsyncSession, sprint: Sprint) -> list[Issue]:
+        """Every issue in *sprint*, whoever may see it, in id order, with its status loaded."""
+        stmt = (
+            select(Issue)
+            .where(Issue.sprint_id == sprint.id)
+            .options(selectinload(Issue.status))
+            .order_by(Issue.id.asc())
+        )
+        return list((await session.execute(stmt)).scalars().all())
 
     # ------------------------------------------------------------------
     # Board & backlog
@@ -309,9 +393,7 @@ class SprintService:
         if visibility is not None:
             base_where.append(visibility)
 
-        count_result = await session.execute(
-            select(func.count(Issue.id)).where(*base_where)
-        )
+        count_result = await session.execute(select(func.count(Issue.id)).where(*base_where))
         total = count_result.scalar_one()
 
         stmt = (
@@ -492,14 +574,14 @@ class SprintService:
             current = sprint.start_date
             day_index = 0
             while current <= end:
-                ideal = total_estimated - (
-                    total_estimated * Decimal(day_index) / Decimal(total_days)
+                ideal = total_estimated - (total_estimated * Decimal(day_index) / Decimal(total_days))
+                data_points.append(
+                    {
+                        "date": current,
+                        "remaining": remaining,
+                        "ideal": ideal,
+                    }
                 )
-                data_points.append({
-                    "date": current,
-                    "remaining": remaining,
-                    "ideal": ideal,
-                })
                 current += timedelta(days=1)
                 day_index += 1
 

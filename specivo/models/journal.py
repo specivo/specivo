@@ -178,6 +178,11 @@ CF_VERSION = "cf_version"
 # value when the file was added, the old value when it was removed, kept so
 # history can name a file that is gone.
 ATTACHMENT_DETAIL = "attachment"
+# ``JournalDetail.property`` of a sprint the issue is in being started or
+# completed. ``prop_key`` is the event (one of :data:`SPRINT_EVENTS`), the old
+# value the sprint's id and the new value its name at the time.
+SPRINT_DETAIL = "sprint"
+SPRINT_EVENTS = ("started", "completed")
 
 
 class JournalDetail(Base):
@@ -194,6 +199,8 @@ class JournalDetail(Base):
     - ``"cf_version"`` — imported custom field naming a version: values are version ids
     - ``"attachment"`` — file attached or removed (see :data:`ATTACHMENT_DETAIL`)
     - ``"relation"``   — issue relation added or removed
+    - ``"recurring"``  — issue generated from a recurring pattern
+    - ``"sprint"``     — the issue's sprint was started or completed (see :data:`SPRINT_DETAIL`)
 
     A ``cf_user`` / ``cf_version`` value that is not an id is the source's text
     for a record that was not imported, shown as stored.
