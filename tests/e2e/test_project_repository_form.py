@@ -119,7 +119,8 @@ def test_empty_repository_and_url_are_shown_on_the_fields(admin_page: Page, proj
     save.click()
     _expect_invalid(admin_page, name, "repository-name-error", "Enter the repository as owner/name.")
     _expect_invalid(admin_page, url, "repository-url-error", "Enter the repository's http(s) address.")
-    expect(name).to_be_focused()
+    # Repository URL comes first in the form, so it gets the focus.
+    expect(url).to_be_focused()
     # The hint stays linked next to the message.
     assert "repository-name-hint" in (name.get_attribute("aria-describedby") or "").split()
     assert sent == []

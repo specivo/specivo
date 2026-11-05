@@ -26,14 +26,47 @@ You need the **Manage project settings** permission in the project. Open the pro
 
 | Field | What to enter |
 |---|---|
-| **Provider** | GitHub, GitLab, Gitea or Forgejo. It cannot be changed later; connect the repository again instead. |
+| **Repository URL** | The repository's address. Paste its web page or its clone address; Provider and Repository are filled in from it (see [Filling the form from the URL](#filling-the-form-from-the-url)). Stored as the web address, `http://` or `https://`, and used for the links to branches. |
+| **Provider** | GitHub, GitLab, Gitea or Forgejo. It can be [changed later](#change-the-provider). |
 | **Repository** | The full name as the forge shows it, `owner/repository` (GitLab: the full path, groups included, such as `example-org/web/website`). Deliveries that name another repository are ignored. Compared without regard to case. |
-| **Repository URL** | The repository's web address, `http://` or `https://`. Used for the links to branches. |
 | **Issues commits may link to** | **This project**, or **This project and its subprojects**. Keys of other projects in commit messages are ignored. |
+
+A field that is missing or wrong is outlined in red with the reason under it, and **Connect
+repository** moves you to the first one instead of sending the form. Provider, Repository and URL
+must agree:
+
+- On **github.com**, **gitlab.com** and **codeberg.org** the provider must be the host's (GitHub,
+  GitLab, and Forgejo or Gitea for Codeberg), and Repository must be the repository the URL names.
+- On any other host (your own forge), Repository must appear in the URL's path. A forge served under
+  a sub-path, such as `https://example.org/git/owner/repository`, is fine.
 
 The other options, under **Changes to issues**, are described in
 [Commit commands](#commit-commands), [Merge automation](#merge-automation) and
 [Pull requests from forks](#pull-requests-from-forks-and-outsiders).
+
+### Filling the form from the URL
+
+Type or paste the address into **Repository URL** and Specivo fills in the rest, with a note such as
+*Detected GitHub repository example-org/widgets*. **Undo** in the note puts back what the fields held
+before.
+
+- **github.com**, **gitlab.com** and **codeberg.org** (with or without `www.`) set the provider:
+  GitHub, GitLab and Forgejo. Repository is `owner/repository`, or for GitLab the whole path with its
+  groups.
+- Links to a page inside the repository work too: `/tree/main`, `/blob/…`, `/pulls`, `/issues`, and
+  on GitLab anything after `/-/`, such as `/-/merge_requests` or `/-/tree/main`. A trailing `/` and a
+  `.git` ending are dropped.
+- Clone addresses work: `git@github.com:owner/repository.git` and
+  `ssh://git@gitlab.com/group/repository.git` become the repository's `https://` web address.
+- For any other host, the provider you chose stays: Specivo cannot tell a Gitea server from a
+  GitLab one by its name. Repository is taken from the path: everything before `/-/` with GitLab,
+  the first two parts with the others.
+- A field you changed yourself is left alone. Pasting another address later changes only the
+  fields that still hold what was filled in.
+
+On github.com, gitlab.com and codeberg.org the URL is stored as the repository's main page, so a link
+to a sub-page is cut back. An address on another host is stored as you entered it, except that a
+clone address becomes the web address.
 
 After you save, Specivo shows the **Webhook URL** and the **Secret**, with the setup steps for the
 provider you picked. **Copy the secret now: it is not shown again.** The secret is 64 random
@@ -55,12 +88,35 @@ Each connected repository has these actions:
 The row also shows the **Last delivery** time ("Never received" until the forge has sent
 something), and whether subprojects, commit commands or merge automation are on.
 
+### Change the provider
+
+When a repository moves to another forge, edit its integration instead of connecting it again:
+paste the new address into **Repository URL** (or pick the **Provider** yourself) and save. Editing
+fills the form from the URL the same way as connecting does.
+
+The webhook URL names the provider, so a new provider means a new integration address:
+
+- The old webhook URL stops working at once; the old forge's deliveries get **404**.
+- A **new secret** is generated. Specivo shows the new webhook URL and secret once, with the setup
+  steps for the new forge. **Set the webhook up again on the new forge**; the old webhook can be
+  deleted there.
+- Commits and pull requests already linked stay on their issues, as history. A pull request keeps the
+  forge it came from, so a request with the same number on the new forge is a separate one.
+- The delivery log keeps the provider each delivery came from: older entries still say the old
+  forge. A delivery that was still waiting to be processed when the provider changed is ignored.
+- The change is written to the [security audit log](../install/audit-log.md) as
+  `repository_provider_changed`, with the old and new provider and repository.
+
+It needs the same permission as any other edit: **Manage project settings**.
+
 The same repository can be connected to several projects. Each connection has its own webhook URL
 and secret, so the forge needs one webhook per project.
 
 The REST API offers the same under `/api/v1/projects/{key}/repositories/` (list, create, read,
 update, delete, `rotate-secret/` and `deliveries/`), with the same permission. The secret is in the
-response to create and to `rotate-secret/` only.
+response to create, to `rotate-secret/` and to an update that changes `provider`, and only there. A
+mismatch between provider, repository and URL is answered `422` with `field` naming the field at
+fault (`provider`, `repo_full_name` or `repo_url`).
 
 ## Set up the webhook on the forge
 
@@ -352,7 +408,7 @@ contributions early.
 ## Troubleshooting with the delivery log
 
 **Delivery log** on a repository's row lists every delivery the forge sent, newest first: when it
-arrived, the event, the status and the details. Hover over the time to see the forge's delivery
+arrived, the provider and event, the status and the details. Hover over the time to see the forge's delivery
 id. Entries are kept for 30 days.
 
 ![The delivery log of a repository](../../assets/img/repository-delivery-log.webp)
@@ -380,6 +436,7 @@ A delivery id seen before is answered `{"status": "duplicate"}` and adds no new 
 | Event *name* is not handled. | Ignored | The webhook sends events Specivo does not use. Untick them on the forge. |
 | The payload names repository *X*, not *Y*. | Ignored | The **Repository** field does not match the forge's full name, or the URL and secret are used by another repository. |
 | The integration is disabled. | Ignored | It was disabled after the delivery arrived. |
+| Received from *old*; the integration now uses *new*. | Ignored | The provider changed while the delivery waited to be processed. |
 | The body is not a JSON object. | Failed | Set the content type on the forge to `application/json`. |
 | Processing failed: *error*. | Failed | An error inside Specivo; *error* is its kind, and the server log has the details. Redeliver from the forge to try again. |
 | Pull request #*N* (*state*) references no issue. | Processed | No in-scope key in the title, description or branch. |

@@ -146,6 +146,7 @@ async def record_delivery(
         .values(
             integration_id=integration.id,
             delivery_id=delivery_id,
+            provider=integration.provider,
             event=event[:_EVENT_MAX_LENGTH],
             status=status,
             detail=_truncate(detail, _DETAIL_MAX_LENGTH),
@@ -243,6 +244,13 @@ async def process_delivery(session: AsyncSession, delivery_row_id: int) -> Proce
     delivery_pk, forge_delivery_id, integration_id = delivery.id, delivery.delivery_id, integration.id
     if not integration.is_active:
         result = ProcessResult(DELIVERY_IGNORED, "The integration is disabled.")
+    elif delivery.provider != integration.provider:
+        # Queued before the provider changed: the payload is the old forge's
+        # and names the old repository, so it is not read as the new one's.
+        result = ProcessResult(
+            DELIVERY_IGNORED,
+            f"Received from {delivery.provider}; the integration now uses {integration.provider}.",
+        )
     else:
         try:
             if delivery.event == "pull_request":

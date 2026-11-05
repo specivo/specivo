@@ -61,6 +61,7 @@ async def seeded(db_session: AsyncSession):
         commits.append(c)
     pr = PullRequest(
         integration_id=integration.id,
+        provider=integration.provider,
         number=7,
         title="Add the login form",
         url="https://forge.example.com/example-org/widgets/pull/7",

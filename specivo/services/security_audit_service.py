@@ -55,6 +55,8 @@ class AuditEvent(StrEnum):
     ATTACHMENT_DELETED = "attachment_deleted"
     ATTACHMENT_UPDATED = "attachment_description_updated"
     PROJECT_KEY_RENAMED = "project_key_renamed"
+    # A connected repository moved to another forge: new hook URL, new secret.
+    REPOSITORY_PROVIDER_CHANGED = "repository_provider_changed"
     ISSUE_CREATED = "issue_created"
     ISSUE_UPDATED = "issue_updated"
     ISSUE_READ = "issue_read"
@@ -251,6 +253,7 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
     **dict.fromkeys(
         [
             AuditEvent.PROJECT_KEY_RENAMED,
+            AuditEvent.REPOSITORY_PROVIDER_CHANGED,
             AuditEvent.METADATA_SCHEMA_CREATED,
             AuditEvent.METADATA_SCHEMA_UPDATED,
             AuditEvent.METADATA_SCHEMA_DELETED,
@@ -1128,6 +1131,45 @@ class SecurityAuditService:
             request_id=info["request_id"],
             user_agent=info["user_agent"],
             details={"project_key": project_key, "old": old, "new": new, "reason": str(reason)},
+        )
+
+    async def log_repository_provider_change(
+        self,
+        session: AsyncSession,
+        user_id: int,
+        project_id: int,
+        integration_id: int,
+        old_provider: str,
+        new_provider: str,
+        old_repository: str,
+        new_repository: str,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a repository integration moving to another provider. Core feature.
+
+        The change gives the integration a new hook URL and secret, so the old
+        forge's webhook stops working at once; the row keeps which forge and
+        repository it pointed at before and after. The secret is never logged.
+        """
+        info = self.request_info(request) if request is not None else current_request_info()
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=AuditEvent.REPOSITORY_PROVIDER_CHANGED,
+            user_id=user_id,
+            resource_type="repository_integration",
+            resource_id=integration_id,
+            project_id=project_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={
+                "old_provider": old_provider,
+                "new_provider": new_provider,
+                "old_repository": old_repository,
+                "new_repository": new_repository,
+                "secret_rotated": True,
+            },
         )
 
     async def log_anonymous_access_switch_change(

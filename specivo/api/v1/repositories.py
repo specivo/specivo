@@ -2,7 +2,7 @@
 
 Every route needs ``manage_project``. A private project the caller cannot
 reach answers 404, like every project route. The secret is returned only by
-create and rotate-secret.
+create, rotate-secret and an update that changes the provider.
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ from specivo.schemas.repository import (
     RepositoryIntegrationOut,
     RepositoryIntegrationSecretOut,
     RepositoryIntegrationUpdate,
+    RepositoryIntegrationUpdateOut,
 )
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import ProjectService
@@ -108,7 +109,7 @@ async def get_repository(
     return integration_out(integration, await git_role_id(db, project.id))
 
 
-@router.patch("/{integration_id}/", response_model=RepositoryIntegrationOut)
+@router.patch("/{integration_id}/", response_model=RepositoryIntegrationUpdateOut)
 async def update_repository(
     project_key: str,
     integration_id: int,
@@ -116,8 +117,12 @@ async def update_repository(
     request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
-) -> RepositoryIntegrationOut:
-    """Change the repository name or URL, the scope, the settings, or enable/disable it.
+) -> RepositoryIntegrationUpdateOut:
+    """Change the provider, repository name or URL, the scope, the settings, or enable/disable it.
+
+    A new ``provider`` gives the integration a new ``hook_url`` (the old one
+    answers 404 at once) and a new ``secret``, returned in this response only;
+    the webhook must be set up again on the new forge.
 
     Turning ``settings.merge_automation_enabled`` on gives ``$git`` a project
     role: ``automation_role_id`` (needs ``manage_members`` unless it is the
@@ -125,10 +130,11 @@ async def update_repository(
     """
     project = await _managed_project(project_key, current_user, db)
     await _check_role_choice(data.automation_role_id, project, current_user, db)
-    integration = await _service.update(
+    integration, secret = await _service.update(
         db, integration_id, project.id, data.model_dump(exclude_unset=True), actor=current_user, request=request
     )
-    return integration_out(integration, await git_role_id(db, project.id))
+    out = integration_out(integration, await git_role_id(db, project.id))
+    return RepositoryIntegrationUpdateOut(**out.model_dump(), secret=secret)
 
 
 @router.delete("/{integration_id}/", status_code=status.HTTP_204_NO_CONTENT)
