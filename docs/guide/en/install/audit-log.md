@@ -19,7 +19,7 @@ The viewer groups event types into categories:
 
 | Category | What it holds |
 |---|---|
-| Sign-in | Password sign-ins and failures, refused credentials (`auth_failure`), password resets and changes. |
+| Sign-in | Password sign-ins and failures, refused credentials (`auth_failure`), password resets and changes, email address changes. |
 | Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
 | Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
@@ -92,12 +92,24 @@ A failed sign-in records the login only when it names an existing account; other
 the address the same way: it is stored only when it matches an account, otherwise the row says
 `email_known: false`.
 
+### Email address changes
+
+| Event | Account | Details |
+|---|---|---|
+| `email_change_requested` | the person | `new_email`, `address_in_use` (another account uses it: no link was sent), `resend` |
+| `email_change_failed` | the person | `reason`: a wrong password, a missing fresh sign-in at the identity provider, or a confirmation link that was used, replaced, cancelled, expired, or whose address another account took meanwhile |
+| `email_changed` | the person, or the administrator | `by` (`user` or `admin`), `target_user_id`, `target_login`, `old_email`, `new_email`; a change by the person adds `revoked_sessions` |
+
+A confirmation link that matches no request writes nothing. See [Your profile](../getting-started/your-profile.md#changing-your-email-address).
+
 ## Personal data
 
 The audit log holds personal data, readable by every instance administrator:
 
 - **Client addresses (IP)** and **user agents** of the people and agents it records.
 - **Logins** of the accounts that acted or were acted on.
+- **Email addresses** in email change events: the old and the new address, and the address a
+  change was requested for.
 - **Search text** people and agents entered (up to 500 characters).
 
 Keep the retention period no longer than you need, mention the log in your privacy notice, and

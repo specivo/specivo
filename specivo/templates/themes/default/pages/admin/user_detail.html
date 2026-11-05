@@ -80,6 +80,19 @@
       <span class="sp-info-label">{% trans %}Email{% endtrans %}</span>
       <span class="sp-info-value" x-text="targetUser.email"></span>
     </div>
+    {% if not target_user.is_service_account %}
+    <form method="post" action="/admin/users/{{ target_user.id }}/email/" class="sp-admin-email-form" style="display: flex; flex-wrap: wrap; gap: var(--sp-space-sm); align-items: flex-end; margin: var(--sp-space-sm) 0 var(--sp-space-md);">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div style="flex: 1; min-width: 220px;">
+        <label class="form-label" for="sp-admin-new-email">{% trans %}Change email address{% endtrans %}</label>
+        <input id="sp-admin-new-email" class="form-input" type="email" name="email" maxlength="255" required>
+      </div>
+      <button type="submit" class="sp-btn">{% trans %}Change email{% endtrans %}</button>
+    </form>
+    <p style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-bottom: var(--sp-space-md); line-height: 1.5;">
+      {% trans %}The new address is used at once and marked verified, without a confirmation link. The old and the new address both get a notice.{% endtrans %}
+    </p>
+    {% endif %}
     <div class="sp-info-row">
       <span class="sp-info-label">{% trans %}Created{% endtrans %}</span>
       <span class="sp-info-value" x-text="formatDate(targetUser.created_at)"></span>

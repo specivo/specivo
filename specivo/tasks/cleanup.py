@@ -68,6 +68,13 @@ async def _cleanup_async() -> None:
                 used_result = await session.execute(used_stmt)
                 used_count = used_result.rowcount
 
+                # Email change links, a week after they expired (used or not)
+                from specivo.models.auth import EmailChangeToken
+
+                await session.execute(
+                    delete(EmailChangeToken).where(EmailChangeToken.expires_at < now - timedelta(days=7))
+                )
+
                 # Delete expired refresh tokens
                 refresh_stmt = delete(RefreshToken).where(RefreshToken.expires_at < now)
                 refresh_result = await session.execute(refresh_stmt)

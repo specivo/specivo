@@ -1,4 +1,4 @@
-"""Auth-related models: refresh tokens, API keys."""
+"""Auth-related models: refresh tokens, password reset and email change tokens, API keys."""
 
 import uuid
 from datetime import datetime
@@ -113,6 +113,60 @@ class PasswordResetToken(Base, TimestampMixin):
 
     def __repr__(self) -> str:
         return f"<PasswordResetToken id={self.id} user_id={self.user_id}>"
+
+
+#: Why an email change link stopped being valid before it was used.
+EMAIL_CHANGE_INVALIDATION_REASONS = ("superseded", "cancelled", "address_taken")
+
+
+class EmailChangeToken(Base, TimestampMixin):
+    """A pending self-service email change and the link that confirms it.
+
+    The person asked to move their account to ``new_email``; the link sent
+    there carries a random token of which only the SHA-256 hash is stored,
+    like ``PasswordResetToken``. The account keeps its current address until
+    the link is used (``confirmed_at``). A new request, a resend or a cancel
+    ends the earlier row (``invalidated_at`` with a reason), so only the
+    latest link works, and at most one row per user is live at a time
+    (``uq_email_change_tokens_user_live``).
+
+    The pending address is never the account's email: nothing that looks
+    users up by email (sign-in, password reset, commit matching) sees it.
+    """
+
+    __tablename__ = "email_change_tokens"
+
+    __table_args__ = (
+        Index("ix_email_change_tokens_user_id", "user_id"),
+        Index(
+            "uq_email_change_tokens_user_live",
+            "user_id",
+            unique=True,
+            postgresql_where=text("confirmed_at IS NULL AND invalidated_at IS NULL"),
+        ),
+        CheckConstraint(
+            f"invalidation_reason IS NULL OR invalidation_reason IN {EMAIL_CHANGE_INVALIDATION_REASONS!r}",
+            name="ck_email_change_tokens_invalidation_reason",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    new_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    # SHA-256 hex digest of the raw token sent in the link
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    # Set when the link was used and the address changed.
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set when the row stopped being valid without being used.
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    invalidation_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<EmailChangeToken id={self.id} user_id={self.user_id}>"
 
 
 class ApiKey(Base, TimestampMixin):

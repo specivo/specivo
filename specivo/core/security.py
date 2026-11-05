@@ -216,6 +216,42 @@ def access_token_session(token: str | None) -> AccessTokenSession | None:
         return None
 
 
+async def request_session(request: Request, db: AsyncSession) -> tuple[int, uuid.UUID] | None:
+    """``(user id, session id)`` of the session this request carries, or ``None`` (an API key, no session).
+
+    Read from a live access token: the one the silent refresh just minted,
+    else the ``Authorization: Bearer`` JWT, else the ``access_token`` cookie.
+    The signature is verified and an expired token does not count. Without
+    one, the session of the ``refresh_token`` cookie is used. Revocation is
+    not checked here: callers use the answer to *spare* a session or to key
+    something to it, never to authenticate.
+    """
+    refreshed = getattr(request.state, "refreshed_tokens", None)
+    token: str | None = refreshed.get("access_token") if isinstance(refreshed, dict) else None
+    if token is None:
+        header = request.headers.get("Authorization", "")
+        bearer = header[len("Bearer ") :] if header.startswith("Bearer ") else ""
+        token = bearer if bearer and not bearer.startswith(API_KEY_PREFIX) else request.cookies.get("access_token")
+    found = access_token_session(token)
+    if found is not None and not found.expired and found.user_id is not None:
+        return found.user_id, found.session_id
+    refresh_raw = request.cookies.get("refresh_token")
+    if not refresh_raw:
+        return None
+    import hashlib
+
+    from specivo.services.session_service import SessionService
+
+    row = await SessionService().session_for_refresh_token(db, hashlib.sha256(refresh_raw.encode()).hexdigest())
+    return (row[1], row[0]) if row is not None else None
+
+
+async def request_session_id(request: Request, db: AsyncSession, user_id: int) -> uuid.UUID | None:
+    """The session ``user_id`` made this request with (:func:`request_session`), or ``None``."""
+    found = await request_session(request, db)
+    return found[1] if found is not None and found[0] == user_id else None
+
+
 # ---------------------------------------------------------------------------
 # Forced password change
 # ---------------------------------------------------------------------------

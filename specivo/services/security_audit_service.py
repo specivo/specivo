@@ -105,6 +105,12 @@ class AuditEvent(StrEnum):
     PASSWORD_CHANGED = "password_changed"
     PASSWORD_CHANGE_FAILED = "password_change_failed"
     PASSWORD_HASH_UPGRADED = "password_hash_upgraded"
+    # Self-service email change: requested (details: the new address and
+    # whether another account uses it), refused (``reason``), and done, by the
+    # person or by an administrator (old and new address, ``by``).
+    EMAIL_CHANGE_REQUESTED = "email_change_requested"
+    EMAIL_CHANGE_FAILED = "email_change_failed"
+    EMAIL_CHANGED = "email_changed"
     PROJECT_ANONYMOUS_PERMISSIONS_CHANGED = "project_anonymous_permissions_changed"
     ANONYMOUS_ACCESS_SWITCH_CHANGED = "anonymous_access_switch_changed"
     # Single sign-on. Details hold the provider slug, the issuer, the hashed
@@ -172,6 +178,9 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.PASSWORD_CHANGED,
             AuditEvent.PASSWORD_CHANGE_FAILED,
             AuditEvent.PASSWORD_HASH_UPGRADED,
+            AuditEvent.EMAIL_CHANGE_REQUESTED,
+            AuditEvent.EMAIL_CHANGE_FAILED,
+            AuditEvent.EMAIL_CHANGED,
         ],
         AuditCategory.SIGN_IN,
     ),

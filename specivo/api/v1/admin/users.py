@@ -1,4 +1,4 @@
-"""Admin users API — list, create, reset password, lock/unlock, deactivate/reactivate."""
+"""Admin users API — list, create, change email, reset password, lock/unlock, deactivate/reactivate."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from specivo.services.anonymous_user_service import real_users_clause, refuse_sy
 from specivo.services.api_key_scope import project_keys_by_api_key
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.auth_utils import hash_password
+from specivo.services.email_change_service import EmailChangeService
 from specivo.services.security_audit_service import AuditEvent, SecurityAuditService
 from specivo.services.session_service import SessionService
 from specivo.services.sso.identity_service import IdentityService
@@ -230,6 +231,41 @@ async def reset_password(
         pass
 
     return {"detail": "Password reset successfully"}
+
+
+class AdminEmailChange(BaseModel):
+    """Body of ``PATCH /admin/users/{id}/email/``."""
+
+    email: str = Field(max_length=320)
+
+
+@router.patch(
+    "/admin/users/{user_id}/email/",
+    response_model=UserOut,
+    summary="Change a user's email address directly (admin only, signed-in session)",
+    responses={
+        400: {"description": "The address is the current one"},
+        409: {"description": "Another account uses the address"},
+        422: {"description": "Not a valid email address"},
+    },
+)
+async def change_user_email(
+    user_id: int,
+    body: AdminEmailChange,
+    admin: Annotated[User, Depends(require_admin_session_api)],
+    db: AsyncSession = DB_SESSION,
+) -> UserOut:
+    """Set the address and mark it verified, without a confirmation link.
+
+    Session-only: the address receives password reset links, so setting it
+    hands out a way to sign in. The change is audited (``email_changed``,
+    ``by: admin``) and both the old and the new address get a notice.
+    """
+    target = await _get_user_or_404(db, user_id)
+    await EmailChangeService().admin_set_email(db, target, body.email, admin=admin)
+    await db.commit()
+    await db.refresh(target)
+    return UserOut.model_validate(target)
 
 
 # ---------------------------------------------------------------------------

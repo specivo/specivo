@@ -174,11 +174,22 @@ async def test_api_key_for_a_user_is_session_only(key_client: AsyncClient, db_se
     assert keys == []
 
 
+async def test_email_change_is_session_only(key_client: AsyncClient, db_session: AsyncSession) -> None:
+    """The address receives password reset links: setting it is a way to sign in."""
+    target = await _user(db_session, email="gate-before@example.com")
+    _assert_refused(
+        await key_client.patch(f"/api/v1/admin/users/{target.id}/email/", json={"email": "gate-after@example.com"})
+    )
+    await db_session.refresh(target)
+    assert target.email == "gate-before@example.com"
+
+
 #: Every admin route that needs a session, as (module, method, path). The kill
 #: switch and credential broker routers are mounted by the enterprise edition
 #: only, so they are checked here by their dependencies rather than over HTTP.
 SESSION_ONLY_ROUTES: list[tuple[str, str, str]] = [
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/reset-password/"),
+    ("specivo.api.v1.admin.users", "PATCH", "/admin/users/{user_id}/email/"),
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/unlock/"),
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/reactivate/"),
     ("specivo.api.v1.admin.users", "POST", "/admin/users/{user_id}/api-keys/"),

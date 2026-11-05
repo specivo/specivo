@@ -88,6 +88,7 @@ from specivo.services.sso.errors import (
     SsoEmailMissingError,
     SsoIdentityInUseError,
     SsoProviderAlreadyLinkedError,
+    SsoReauthMismatchError,
 )
 from specivo.services.sso.events import subject_hash
 from specivo.services.sso.flow import Intent
@@ -98,6 +99,7 @@ from specivo.services.sso.mapping import apply_mapping, enforce_access
 __all__ = [
     "Outcome",
     "ResolvedAccount",
+    "confirm_reauth",
     "map_locale",
     "resolve_user",
     "sanitize_login",
@@ -676,3 +678,33 @@ async def resolve_user(
     # 5. Nothing else may create or pick an account.
     logger.info("sso.account.not_provisioned provider=%s sub=%s", provider.slug, sub_hash)
     raise SsoAccountNotProvisionedError("no_identity")
+
+
+async def confirm_reauth(
+    db: AsyncSession,
+    *,
+    provider: SsoProvider,
+    id_token: IdTokenClaims,
+    user_id: int | None,
+) -> UserIdentity:
+    """The identity a ``reauth`` sign-in came back with, which must be ``user_id``'s at ``provider``.
+
+    Looked up by ``(iss, sub)`` only, never by email, like a login. Another
+    user's identity, an unknown one or one of another provider is
+    ``sso_reauth_mismatch``; the account must still be allowed to sign in
+    (:func:`_check_status`). Nothing is linked, created, mapped or updated.
+    """
+    sub_hash = subject_hash(id_token.subject)
+    row = (
+        await db.execute(
+            select(UserIdentity, User)
+            .join(User, User.id == UserIdentity.user_id)
+            .where(UserIdentity.issuer == id_token.issuer, UserIdentity.subject == id_token.subject)
+        )
+    ).first()
+    if row is None or row[0].provider_id != provider.id or row[1].id != user_id:
+        logger.warning("sso.reauth.refused provider=%s sub=%s reason=identity_mismatch", provider.slug, sub_hash)
+        raise SsoReauthMismatchError("identity_mismatch")
+    identity, user = row
+    _check_status(user, provider, sub_hash, utcnow())
+    return identity

@@ -115,6 +115,85 @@
 
 </div>
 
+{% if email_show_section %}
+<section class="card sp-connected sp-email-change" aria-labelledby="sp-email-change-heading">
+  <h2 id="sp-email-change-heading" class="sp-connected-title">{% trans %}Email address{% endtrans %}</h2>
+
+  {% if email_message %}
+  <div class="sp-connected-notice sp-connected-notice-ok" role="status">{{ email_message }}</div>
+  {% endif %}
+  {% if email_error_text %}
+  <div class="sp-connected-notice sp-connected-notice-error" role="alert">{{ email_error_text }}</div>
+  {% endif %}
+
+  <p class="sp-email-change-current">
+    <span class="sp-email-change-label">{% trans %}Current address{% endtrans %}</span>
+    <span class="sp-email-change-value">{{ email_state.email }}</span>
+  </p>
+
+  {% if email_state.managed_by_idp %}
+  <p class="sp-connected-intro">{% trans %}Your email address is managed by your identity provider. Change it at your identity provider.{% endtrans %}</p>
+  {% else %}
+
+  {% if email_state.pending %}
+  <div class="sp-email-change-pending" data-testid="email-change-pending">
+    <p>
+      {% trans address=email_state.pending.new_email %}Change to %(address)s pending.{% endtrans %}
+      {% if email_state.pending.expired %}
+      {% trans %}The link has expired: send a new one.{% endtrans %}
+      {% else %}
+      {% trans %}Open the link we sent to that address to confirm it.{% endtrans %}
+      {% endif %}
+    </p>
+    <div class="sp-connected-actions">
+      <form method="post" action="/my/profile/email/resend/">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Resend link{% endtrans %}</button>
+      </form>
+      <form method="post" action="/my/profile/email/cancel/">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="sp-btn-sm danger">{% trans %}Cancel change{% endtrans %}</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if email_state.requires_reauth and not email_state.reauthenticated %}
+  <p class="sp-connected-intro">{% trans %}Your account has no password. To change your email address, first sign in again with your identity provider. You then have five minutes to request the change.{% endtrans %}</p>
+  {% if email_reauth_providers %}
+  <div class="sp-connected-actions">
+    {% for provider in email_reauth_providers %}
+    <form method="post" action="/auth/oidc/{{ provider.slug }}/reauth/">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="sp-btn sp-btn-ghost">{% trans name=provider.name %}Sign in again with %(name)s{% endtrans %}</button>
+    </form>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="sp-connected-empty">{% trans %}None of your identity providers is enabled. Ask an administrator to change your address.{% endtrans %}</p>
+  {% endif %}
+  {% else %}
+  <p class="sp-connected-intro">{% trans %}We send a link to the new address. Your current address stays in use until you open it.{% endtrans %}</p>
+  <form method="post" action="/my/profile/email/" class="sp-email-change-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-group">
+      <label class="form-label" for="sp-new-email">{% trans %}New email address{% endtrans %}</label>
+      <input id="sp-new-email" class="form-input" type="email" name="new_email" autocomplete="email" maxlength="255" required>
+    </div>
+    {% if not email_state.requires_reauth %}
+    <div class="form-group">
+      <label class="form-label" for="sp-email-current-password">{% trans %}Current password{% endtrans %}</label>
+      <input id="sp-email-current-password" class="form-input" type="password" name="current_password" autocomplete="current-password" required>
+    </div>
+    {% endif %}
+    <button type="submit" class="sp-btn sp-btn-primary">{% trans %}Change email{% endtrans %}</button>
+  </form>
+  {% endif %}
+
+  {% endif %}
+</section>
+{% endif %}
+
 {% if sso_enabled %}
 <section class="card sp-connected" aria-labelledby="sp-connected-heading">
   <h2 id="sp-connected-heading" class="sp-connected-title">{% trans %}Connected accounts{% endtrans %}</h2>

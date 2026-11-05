@@ -198,3 +198,63 @@ class ChangePasswordResponse(BaseModel):
 
     detail: str
     revoked_sessions: int
+
+
+# ---------------------------------------------------------------------------
+# Email change schemas
+# ---------------------------------------------------------------------------
+
+
+class EmailChangeRequest(BaseModel):
+    """Request body for POST /auth/me/email/.
+
+    ``current_password`` is required for an account with a password. An
+    account without one (single sign-on only) signs in again at its identity
+    provider first, from the profile page, and leaves it out.
+    """
+
+    new_email: str = Field(max_length=320)
+    current_password: str | None = Field(default=None, max_length=1024)
+
+
+class PendingEmailChangeOut(BaseModel):
+    """A requested change waiting for its confirmation link to be used."""
+
+    new_email: str
+    requested_at: datetime
+    expires_at: datetime
+    expired: bool = Field(description="The link has expired; resend to get a new one.")
+
+
+class EmailChangeStateOut(BaseModel):
+    """The account's address and its pending change (GET /auth/me/email/)."""
+
+    email: str
+    pending: PendingEmailChangeOut | None
+    managed_by_idp: bool = Field(description="The identity provider manages the address (SCIM); change it there.")
+    requires_reauth: bool = Field(
+        description="The account has no password: sign in again at the identity provider before a request."
+    )
+    reauthenticated: bool = Field(description="This session signed in again at the identity provider recently.")
+    available: bool = Field(description="The account can change its address here at all.")
+
+
+class EmailChangeAccepted(BaseModel):
+    """Answer to a request or a resend: a link is on its way to the new address."""
+
+    detail: str
+    pending: PendingEmailChangeOut
+
+
+class EmailChangeConfirmRequest(BaseModel):
+    """Request body for POST /auth/confirm-email/: the token from the link."""
+
+    token: str = Field(max_length=256)
+
+
+class EmailChangeConfirmed(BaseModel):
+    """The address was changed."""
+
+    detail: str
+    email: str
+    revoked_sessions: int

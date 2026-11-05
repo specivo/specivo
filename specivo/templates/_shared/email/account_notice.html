@@ -1,0 +1,10 @@
+{% extends "email/base_email.html" %}
+{% block content %}
+<p>{{ greeting }}</p>
+{% for paragraph in paragraphs %}
+<p>{{ paragraph }}</p>
+{% if action_url and loop.index == action_after %}
+<p><a href="{{ action_url }}" style="display: inline-block; padding: 10px 20px; background-color: #2563EB; color: #ffffff; text-decoration: none; border-radius: 4px;">{{ action_label }}</a></p>
+{% endif %}
+{% endfor %}
+{% endblock %}
