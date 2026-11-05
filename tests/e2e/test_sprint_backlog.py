@@ -401,7 +401,10 @@ def test_issue_in_completed_sprint_keeps_it_and_can_move_out(admin_page: Page, a
     expect(current).to_be_visible()
     expect(current.locator(".sp-ac-suffix")).to_have_text("(completed)")
 
-    picker.locator(".sp-ac-row", has_text=target["name"]).click()
+    # The picker shows the choice before the save finishes, so wait for the save itself.
+    with admin_page.expect_response(lambda r: r.request.method == "PATCH" and issue["key"] in r.url) as saved:
+        picker.locator(".sp-ac-row", has_text=target["name"]).click()
+    assert saved.value.ok
     expect(picker.locator("input")).to_have_value(target["name"])
     resp = api_client.get(f"/api/v1/issues/{issue['key']}/")
     assert resp.json()["sprint_id"] == target["id"]
