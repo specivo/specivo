@@ -18,7 +18,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from specivo.core.locks import LockUnavailableError, TokenLock
+from specivo.core.locks import LockLostError, LockUnavailableError, TokenLock
 from specivo.core.redis import get_redis
 from specivo.models.relation import IssueRelation
 from specivo.models.user import User
@@ -177,6 +177,47 @@ class TestTask:
             await _full_rebuild_async("task-bad", 987002, None, report)
         assert await lock.holder() is None
         assert stored[-1]["status"] == "failed" and "parser exploded" in stored[-1]["error"]
+
+    async def test_a_run_whose_lock_is_taken_over_stops(self, fake_work, monkeypatch):
+        _calls, stored = fake_work
+        redis = await get_redis()
+        lock = TokenLock(redis, rebuild_lock_key(987004))
+        assert await lock.acquire("task-run", 300)
+
+        async def work(factory, project_id, *, triggered_by=None, progress=None):
+            await redis.set(rebuild_lock_key(987004), "task-intruder")
+            await progress(1, 2)
+            return {"status": "success"}
+
+        monkeypatch.setattr("specivo.services.link_graph_admin_service.run_full_rebuild", work)
+
+        async def report(processed, total):
+            return None
+
+        with pytest.raises(LockLostError):
+            await _full_rebuild_async("task-run", 987004, None, report)
+        assert stored[-1]["status"] == "failed"
+        assert await lock.holder() == "task-intruder"
+
+    async def test_an_expired_lock_is_taken_again(self, fake_work, monkeypatch):
+        redis = await get_redis()
+        lock = TokenLock(redis, rebuild_lock_key(987005))
+        assert await lock.acquire("task-slow", 300)
+        seen: list[str | None] = []
+
+        async def work(factory, project_id, *, triggered_by=None, progress=None):
+            await redis.delete(rebuild_lock_key(987005))
+            await progress(1, 2)
+            seen.append(await lock.holder())
+            return {"status": "success"}
+
+        monkeypatch.setattr("specivo.services.link_graph_admin_service.run_full_rebuild", work)
+
+        async def report(processed, total):
+            return None
+
+        assert await _full_rebuild_async("task-slow", 987005, None, report) == {"status": "success"}
+        assert seen == ["task-slow"] and await lock.holder() is None
 
     async def test_another_run_holding_the_project_makes_it_a_no_op(self, db_session, fake_work):
         calls, _stored = fake_work

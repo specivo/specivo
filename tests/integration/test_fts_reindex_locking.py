@@ -21,7 +21,7 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.locks import LockUnavailableError, TokenLock
+from specivo.core.locks import LockLostError, LockUnavailableError, TokenLock
 from specivo.core.redis import get_redis
 from specivo.models.project import Project
 from specivo.models.user import User
@@ -301,3 +301,85 @@ class TestInstanceWait:
         with pytest.raises(RuntimeError):
             await _locked_reindex("fts-instance-2", None, lambda counts: None)
         assert await marker.holder() is None and await lock.holder() is None
+
+
+class TestInstanceWaitKeepsItsLocks:
+    """The waiting instance run checks on every pass that it still holds its lock and the marker."""
+
+    @pytest.fixture
+    def fast(self, monkeypatch):
+        monkeypatch.setattr("specivo.tasks.search.FTS_INSTANCE_WAIT_FIRST_DELAY", 0.05)
+        monkeypatch.setattr("specivo.tasks.search.FTS_INSTANCE_WAIT_MAX_DELAY", 0.05)
+
+    @pytest.fixture
+    async def projects_running(self, db_session):
+        await db_session.execute(select(func.pg_advisory_lock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        yield
+        await db_session.execute(select(func.pg_advisory_unlock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+
+    async def test_an_expired_marker_is_taken_again_and_still_refuses_projects(
+        self, db_session, work, fast, projects, admin_client, queued
+    ):
+        calls, _ = work
+        redis = await get_redis()
+        lock, marker = TokenLock(redis, fts_lock_key(None)), TokenLock(redis, FTS_INSTANCE_PENDING_KEY)
+        assert await lock.acquire("fts-wait", 300) and await marker.acquire("fts-wait", 300)
+        await db_session.execute(select(func.pg_advisory_lock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        run = asyncio.create_task(_locked_reindex("fts-wait", None, lambda counts: None))
+        try:
+            await asyncio.sleep(0.15)
+            await redis.delete(FTS_INSTANCE_PENDING_KEY, fts_lock_key(None))  # both expire mid-wait
+            await asyncio.sleep(0.2)
+            assert await marker.holder() == "fts-wait" and await lock.holder() == "fts-wait"
+            resp = await admin_client.post(_project_url(projects[0]))
+            assert resp.status_code == 409 and queued == []
+        finally:
+            await db_session.execute(select(func.pg_advisory_unlock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        assert await asyncio.wait_for(run, 10) == {"status": "success"}
+        assert calls == [None]
+        assert await marker.holder() is None and await lock.holder() is None
+
+    async def test_a_marker_taken_by_another_run_stops_the_wait(self, work, fast, projects_running):
+        calls, stored = work
+        redis = await get_redis()
+        lock, marker = TokenLock(redis, fts_lock_key(None)), TokenLock(redis, FTS_INSTANCE_PENDING_KEY)
+        assert await lock.acquire("fts-mine", 300)
+        assert await marker.acquire("fts-theirs", 300)
+        result = await asyncio.wait_for(_locked_reindex("fts-mine", None, lambda counts: None), 10)
+        assert result["status"] == "failed" and "took over" in result["error"] and stored == [result]
+        assert calls == []
+        # Ours is released; theirs is left alone.
+        assert await lock.holder() is None and await marker.holder() == "fts-theirs"
+
+    async def test_a_redelivered_task_sets_the_marker_itself(self, db_session, work, fast):
+        """A message delivered again finds no marker (it was cleared, or expired) and sets it while it waits."""
+        calls, _ = work
+        redis = await get_redis()
+        marker = TokenLock(redis, FTS_INSTANCE_PENDING_KEY)
+        assert await TokenLock(redis, fts_lock_key(None)).acquire("fts-again", 300)
+        await db_session.execute(select(func.pg_advisory_lock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        run = asyncio.create_task(_locked_reindex("fts-again", None, lambda counts: None))
+        try:
+            await asyncio.sleep(0.2)
+            assert await marker.holder() == "fts-again"
+        finally:
+            await db_session.execute(select(func.pg_advisory_unlock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        assert await asyncio.wait_for(run, 10) == {"status": "success"}
+        assert calls == [None] and await marker.holder() is None
+
+    async def test_a_run_whose_lock_is_taken_over_stops(self, work, monkeypatch):
+        _, stored = work
+        redis = await get_redis()
+        lock = TokenLock(redis, fts_lock_key(987107))
+        assert await lock.acquire("fts-run", 300)
+
+        async def reindex(project_id, progress_cb):
+            await redis.set(fts_lock_key(987107), "fts-intruder")
+            await progress_cb({"issues": 1})
+            return {"status": "success"}
+
+        monkeypatch.setattr("specivo.tasks.search._reindex_async", reindex)
+        with pytest.raises(LockLostError):
+            await _locked_reindex("fts-run", 987107, lambda counts: None)
+        assert stored[-1]["status"] == "failed"
+        assert await lock.holder() == "fts-intruder"

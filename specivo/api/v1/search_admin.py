@@ -41,7 +41,6 @@ from specivo.services.settings_service import SettingsService
 from specivo.tasks import celery_app
 from specivo.tasks.search import (
     FTS_INSTANCE_PENDING_KEY,
-    FTS_INSTANCE_WAIT_TIMEOUT,
     FTS_PROJECT_LOCK_PATTERN,
     FTS_REINDEX_LOCK_TTL,
     fts_lock_key,
@@ -172,7 +171,8 @@ async def _take_run_lock(redis: Redis, project_id: int | None, task_id: str) -> 
     if not await _project_runs_active(redis):
         return "PENDING"
     await clear_if_finished(marker, _task_state)
-    await marker.acquire(task_id, FTS_INSTANCE_WAIT_TIMEOUT + FTS_REINDEX_LOCK_TTL)
+    # Lives as long as the run lock; the waiting task extends both on every check.
+    await marker.acquire(task_id, FTS_REINDEX_LOCK_TTL)
     return "PENDING_INSTANCE"
 
 

@@ -65,7 +65,8 @@ FTS_PROJECT_LOCK_PATTERN = "fts:reindex:project:*"
 FTS_INSTANCE_PENDING_KEY = "fts:reindex:instance-pending"
 #: Seconds an instance reindex waits for project reindexes before it gives up.
 FTS_INSTANCE_WAIT_TIMEOUT = 1800
-#: First and longest delay (seconds) between its checks.
+#: First and longest delay (seconds) between its checks; well under ``FTS_REINDEX_LOCK_TTL``, the
+#: lifetime of the run lock and the pending marker, which every check extends.
 FTS_INSTANCE_WAIT_FIRST_DELAY = 1.0
 FTS_INSTANCE_WAIT_MAX_DELAY = 30.0
 
@@ -113,7 +114,7 @@ async def _locked_reindex(task_id: str | None, project_id: int | None, progress_
     from sqlalchemy.pool import NullPool
 
     from specivo.core.config import get_settings
-    from specivo.core.locks import TokenLock, try_advisory_locks
+    from specivo.core.locks import LockLostError, TokenLock, try_advisory_locks
     from specivo.core.redis import get_redis
 
     redis = await get_redis()
@@ -132,7 +133,10 @@ async def _locked_reindex(task_id: str | None, project_id: int | None, progress_
 
                     async def report(counts: dict[str, int]) -> None:
                         progress_cb(counts)
-                        await lock.refresh(token, FTS_REINDEX_LOCK_TTL)
+                        if not await _keep(lock, token):
+                            # Another reindex holds our scope's run lock now: stop
+                            # (the transaction rolls back) rather than run unguarded.
+                            raise LockLostError(f"The run lock {lock.key} was taken over")
 
                     try:
                         return await _reindex_async(project_id, report)
@@ -159,14 +163,41 @@ async def _locked_reindex(task_id: str | None, project_id: int | None, progress_
                 return summary
             if waiting_cb is not None:
                 waiting_cb()
-            await lock.refresh(token, FTS_REINDEX_LOCK_TTL)
-            await marker.refresh(token, FTS_INSTANCE_WAIT_TIMEOUT + FTS_REINDEX_LOCK_TTL)
+            # Hold the instance lock and the pending marker on every pass, and
+            # take them (again) when they expired, or were never set (a
+            # redelivered message): without them project runs could start and
+            # the wait might never end. Held by another reindex: stop.
+            if not await _keep(lock, token) or not await _keep(marker, token):
+                summary = {
+                    "status": "failed",
+                    "error": "Another instance reindex took over while this one waited for project reindexes",
+                }
+                logger.warning("FTS instance reindex %s stopped: its run lock or marker is held by another", token)
+                await _store_result(None, summary)
+                await lock.release(token)
+                return summary
             await asyncio.sleep(delay)
             delay = min(delay * 2, FTS_INSTANCE_WAIT_MAX_DELAY)
     finally:
         if project_id is None:
             await marker.release(token)
         await engine.dispose()
+
+
+async def _keep(lock, token: str) -> bool:  # type: ignore[no-untyped-def]
+    """Hold *lock* for *token* (``TokenLock.hold``); False when another token holds it.
+
+    While Redis cannot be asked nobody can take the lock either (dispatches
+    fail closed), so the holder carries on and takes it again once Redis is
+    back.
+    """
+    from specivo.core.locks import LockUnavailableError
+
+    try:
+        return bool(await lock.hold(token, FTS_REINDEX_LOCK_TTL))
+    except LockUnavailableError:
+        logger.warning("Could not reach Redis to hold %s; carrying on", lock.key)
+        return True
 
 
 async def _reindex_async(project_id: int | None, progress_cb) -> dict:  # type: ignore[no-untyped-def]

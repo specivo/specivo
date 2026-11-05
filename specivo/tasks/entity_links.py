@@ -70,7 +70,7 @@ async def _full_rebuild_async(task_id: str | None, project_id: int | None, trigg
     from sqlalchemy.pool import NullPool
 
     from specivo.core.config import get_settings
-    from specivo.core.locks import TokenLock, try_advisory_lock
+    from specivo.core.locks import LockLostError, LockUnavailableError, TokenLock, try_advisory_lock
     from specivo.core.redis import get_redis
     from specivo.core.utils import utcnow
     from specivo.services.link_graph_admin_service import (
@@ -95,7 +95,18 @@ async def _full_rebuild_async(task_id: str | None, project_id: int | None, trigg
 
             async def report(processed: int, total: int) -> None:
                 await progress(processed, total)
-                await lock.refresh(token, LINK_REBUILD_LOCK_TTL)
+                try:
+                    held = await lock.hold(token, LINK_REBUILD_LOCK_TTL)
+                except LockUnavailableError:
+                    # Nobody can take it while Redis is away (dispatch fails
+                    # closed); it is taken again on the next batch.
+                    logger.warning("Could not reach Redis to hold %s; carrying on", lock.key)
+                    held = True
+                if not held:
+                    # Another rebuild holds this scope's run lock now: stop
+                    # rather than carry on unguarded (each source is committed
+                    # on its own, so what was rebuilt stays rebuilt).
+                    raise LockLostError(f"The run lock {lock.key} was taken over")
 
             try:
                 return await run_full_rebuild(factory, project_id, triggered_by=triggered_by, progress=report)

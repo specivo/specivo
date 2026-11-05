@@ -58,6 +58,10 @@ class LockUnavailableError(RuntimeError):
     """Redis could not be asked; callers must treat the lock as not acquired (fail closed)."""
 
 
+class LockLostError(RuntimeError):
+    """A run lock is now held by somebody else; the holder must stop."""
+
+
 class TokenLock:
     """A Redis lock owned by a token (for example the id of the task doing the work)."""
 
@@ -104,6 +108,18 @@ class TokenLock:
         except RedisError as exc:
             logger.warning("Could not refresh lock %s: %s", self.key, type(exc).__name__)
             return False
+
+    async def hold(self, token: str, ttl: int) -> bool:
+        """Keep the lock for *token*: extend it, or take it again if it expired; False if another token holds it.
+
+        For long-running holders (a heartbeat). A lock lost to expiry or a Redis
+        restart is re-taken at once; one somebody else now holds is not, and
+        the caller must stop rather than carry on unprotected. Raises
+        ``LockUnavailableError`` when Redis cannot be asked.
+        """
+        if await self.refresh(token, ttl):
+            return True
+        return await self.acquire(token, ttl)
 
     async def release(self, token: str) -> bool:
         """Delete the lock if *token* still holds it; never raises."""
