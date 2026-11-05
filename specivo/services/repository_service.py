@@ -3,8 +3,10 @@
 Each integration gets its own hook URL (``/hooks/{provider}/{public_id}/``)
 and secret. The secret is generated here (32 random bytes, hex), stored as a
 ``secret_box`` token (purpose ``repo-integration-secret``) and returned in
-clear only by the call that set it: create and rotate. Rotation replaces it at
-once; there is no grace period for the old one.
+clear only by the call that set it: create, rotate, and an update that
+changes the provider (the hook URL names the provider, so the forge's webhook
+has to be set up again anyway). Rotation replaces it at once; there is no
+grace period for the old one.
 """
 
 from __future__ import annotations
@@ -22,6 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from specivo.core import secret_box
 from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError, ValidationError
+from specivo.hooks.repo_url import (
+    COMPATIBLE_PROVIDERS,
+    KNOWN_HOSTS,
+    is_ssh_address,
+    parse_repo_address,
+    repo_name_in_path,
+)
 from specivo.models.lookups import IssueStatus
 from specivo.models.member import Member, MemberRole
 from specivo.models.repository import (
@@ -94,6 +103,44 @@ def integration_secret_out(
     integration: RepositoryIntegration, secret: str, git_role_id: int | None = None
 ) -> RepositoryIntegrationSecretOut:
     return RepositoryIntegrationSecretOut(**integration_out(integration, git_role_id).model_dump(), secret=secret)
+
+
+_PROVIDER_LABELS = {"github": "GitHub", "gitlab": "GitLab", "gitea": "Gitea", "forgejo": "Forgejo"}
+
+
+def check_repository_address(provider: str, repo_full_name: str, repo_url: str) -> str:
+    """Check that provider, repository and URL agree; returns the URL to store.
+
+    Read with ``specivo.hooks.repo_url``. On a known host (github.com,
+    gitlab.com, codeberg.org) the provider must be the host's and the
+    repository the one the URL names, and the URL is stored cut back to the
+    repository root. On another host the repository must appear in the URL
+    path; the URL is stored as given, except that an SSH address becomes the
+    web URL. A mismatch is a 422 naming the field at fault.
+    """
+    address = parse_repo_address(repo_url, provider)
+    if address is None:
+        raise ValidationError(
+            "The URL does not point at a repository: use its web address, such as https://example.org/owner/repository.",
+            field="repo_url",
+        )
+    if address.known_host:
+        host_provider = KNOWN_HOSTS[address.host]
+        if provider not in COMPATIBLE_PROVIDERS[host_provider]:
+            raise ValidationError(
+                f"{address.host} repositories use the {_PROVIDER_LABELS[host_provider]} provider.", field="provider"
+            )
+        if address.repo_full_name.lower() != repo_full_name.lower():
+            raise ValidationError(
+                f"The repository does not match the URL, which names {address.repo_full_name}.",
+                field="repo_full_name",
+            )
+        return address.url
+    if not repo_name_in_path(repo_full_name, address.path):
+        raise ValidationError(
+            f"The repository does not match the URL: {repo_full_name} is not in its path.", field="repo_full_name"
+        )
+    return address.url if is_ssh_address(repo_url) else repo_url.strip()
 
 
 class RepositoryAlreadyConnectedError(AppError):
@@ -263,13 +310,14 @@ class RepositoryIntegrationService:
         request: Request | None = None,
     ) -> tuple[RepositoryIntegration, str]:
         """Connect a repository; returns the integration and its secret in clear."""
+        repo_url = check_repository_address(data.provider, data.repo_full_name, data.repo_url)
         await self._validate_settings(session, data.settings)
         raw_secret = generate_secret()
         integration = RepositoryIntegration(
             project_id=project_id,
             provider=data.provider,
             repo_full_name=data.repo_full_name,
-            repo_url=data.repo_url,
+            repo_url=repo_url,
             secret_encrypted=secret_box.encrypt(raw_secret, REPO_INTEGRATION_SECRET_PURPOSE),
             scope=data.scope,
             settings=data.settings.model_dump(),
@@ -311,18 +359,40 @@ class RepositoryIntegrationService:
         *,
         actor: User,
         request: Request | None = None,
-    ) -> RepositoryIntegration:
+    ) -> tuple[RepositoryIntegration, str | None]:
         """Apply a partial update (``RepositoryIntegrationUpdate`` fields that were set).
+
+        Returns the integration and, when the provider changed, its new secret
+        in clear (else None).
 
         The actor becomes the integration's ``created_by``: whoever last
         configured it is the one whose rights bound its subproject scope, so
         editing an administrator's integration never borrows their rights.
+
+        Provider, repository and URL are checked together whenever one of them
+        is sent. A provider change moves the hook URL (it names the provider,
+        so the old one answers 404 at once), rotates the secret and writes a
+        ``repository_provider_changed`` audit row. Commits and pull requests
+        already linked stay; deliveries and pull requests keep the provider
+        they came from.
         """
         integration = await self.get(session, integration_id, project_id)
         integration.created_by_id = actor.id
-        for field in ("repo_full_name", "repo_url", "scope", "is_active"):
+        old_provider, old_repository = integration.provider, integration.repo_full_name
+        if any(data.get(f) is not None for f in ("provider", "repo_full_name", "repo_url")):
+            provider = data.get("provider") or integration.provider
+            data["repo_url"] = check_repository_address(
+                provider,
+                data.get("repo_full_name") or integration.repo_full_name,
+                data.get("repo_url") or integration.repo_url,
+            )
+        for field in ("provider", "repo_full_name", "repo_url", "scope", "is_active"):
             if data.get(field) is not None:
                 setattr(integration, field, data[field])
+        raw_secret: str | None = None
+        if integration.provider != old_provider:
+            raw_secret = generate_secret()
+            integration.secret_encrypted = secret_box.encrypt(raw_secret, REPO_INTEGRATION_SECRET_PURPOSE)
         if data.get("settings") is not None:
             settings = RepositorySettings.model_validate(data["settings"])
             await self._validate_settings(session, settings)
@@ -332,8 +402,46 @@ class RepositoryIntegrationService:
             await self._sync_git_membership(
                 session, project_id, data.get("automation_role_id"), actor=actor, request=request
             )
+        if raw_secret is not None:
+            await self._audit_provider_change(
+                session, integration, old_provider, old_repository, actor=actor, request=request
+            )
+            logger.info(
+                "Repository integration %d moved from %s to %s; secret rotated",
+                integration.id,
+                old_provider,
+                integration.provider,
+            )
         await session.refresh(integration)
-        return integration
+        return integration, raw_secret
+
+    async def _audit_provider_change(
+        self,
+        session: AsyncSession,
+        integration: RepositoryIntegration,
+        old_provider: str,
+        old_repository: str,
+        *,
+        actor: User,
+        request: Request | None,
+    ) -> None:
+        """The audit row of a provider change; a failed audit never fails the change."""
+        from specivo.services.security_audit_service import SecurityAuditService
+
+        try:
+            await SecurityAuditService().log_repository_provider_change(
+                session,
+                user_id=actor.id,
+                project_id=integration.project_id,
+                integration_id=integration.id,
+                old_provider=old_provider,
+                new_provider=integration.provider,
+                old_repository=old_repository,
+                new_repository=integration.repo_full_name,
+                request=request,
+            )
+        except Exception:
+            logger.warning("Audit of the provider change of integration %d failed", integration.id, exc_info=True)
 
     async def rotate_secret(
         self, session: AsyncSession, integration_id: int, project_id: int, *, actor: User
@@ -482,7 +590,8 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
                 merged_at=pr.merged_at,
                 closing=closing,
                 repository=integration.repo_full_name,
-                provider=integration.provider,
+                # The forge the request is on, which stays when the integration's provider changes.
+                provider=pr.provider,
             )
         )
     commits_out = []

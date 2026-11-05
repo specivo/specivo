@@ -13,7 +13,32 @@
  * `manage_members` (`initial.canPickRole`). `ignore_external_pull_requests`
  * (on unless the stored settings say false) skips pull requests from forks
  * and outsiders until they are merged.
+ *
+ * Validation is shown on the fields: a field's message appears once it has
+ * been left (blur/change) or after a submit attempt, never on a pristine
+ * form. Save stays enabled; a click with errors marks every field, focuses
+ * the first one that failed and sends nothing. A 422/409 from the server
+ * that names a `field` is shown on that field the same way, until its value
+ * changes.
+ *
+ * Repository URL comes first: typing or pasting an address fills Provider
+ * (known hosts only) and Repository, read with `parseRepoAddress` (the
+ * browser half of specivo/hooks/repo_url.py). A field is filled only while
+ * the person has not changed it by hand, or while it still holds the last
+ * value filled in. A note says what was filled, with Undo. Leaving the field
+ * (or pasting) rewrites a known host's or an SSH address as the repository's
+ * web URL.
+ *
+ * Editing may change the provider. The server then gives the integration a
+ * new hook URL and secret, revealed once like on create, with a note that the
+ * webhook must be set up again on the new forge.
  */
+import { isSshAddress, parseRepoAddress } from '../lib/repo-url';
+
+// Read by tests/e2e/test_repository_url_autofill.py, which runs the shared case
+// table (tests/fixtures/repo_urls.json) against the parser the browser uses.
+window.spParseRepoAddress = parseRepoAddress;
+
 export function projectRepositories(initial) {
     var i18n = Object.assign({
         saveFailed: 'Failed to save the repository.',
@@ -30,7 +55,14 @@ export function projectRepositories(initial) {
         statusDuplicate: 'Duplicate',
         statusIgnored: 'Ignored',
         statusProcessed: 'Processed',
-        statusFailed: 'Failed'
+        statusFailed: 'Failed',
+        errRepoName: 'Enter the repository as owner/name.',
+        errRepoUrl: "Enter the repository's http(s) address.",
+        errMergeStatus: 'Choose a merge status, or turn merge automation off.',
+        detected: 'Detected {provider} repository {repo}',
+        filledRepo: 'Filled in repository {repo} from the URL',
+        providerChanging: 'Changing the provider gives this repository a new webhook URL and secret. The current webhook stops working at once; set it up again on {provider}.',
+        providerChanged: 'The provider changed from {old} to {new}. The old webhook URL no longer works: set the webhook up again on {new} with this URL and secret.'
     }, initial.i18n || {});
     var PAGE = 20;
     var defaultRoleId = initial.defaultRoleId || null;
@@ -49,6 +81,30 @@ export function projectRepositories(initial) {
             ignore_external_pull_requests: true,
             automation_role_id: defaultRoleId === null ? '' : String(defaultRoleId)
         };
+    }
+
+    // Mirrors the server's checks in specivo/schemas/repository.py.
+    var REPO_NAME = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
+    var REPO_URL = /^https?:\/\/[^\s\/?#]+/i;
+
+    // Fields in the order they appear in the form; the first failed one gets focus.
+    var FIELDS = [
+        {name: 'repo_url', id: 'repository-url'},
+        {name: 'provider', id: 'repository-provider'},
+        {name: 'repo_full_name', id: 'repository-name'},
+        {name: 'merge_status_id', id: 'repository-merge-status'}
+    ];
+    // Server error `field` values and the form field they belong to.
+    var SERVER_FIELDS = {
+        provider: 'provider',
+        repo_full_name: 'repo_full_name',
+        repo_url: 'repo_url',
+        'settings.merge_status_id': 'merge_status_id'
+    };
+
+    function validName(value) {
+        var v = value.trim().replace(/^\/+|\/+$/g, '');
+        return REPO_NAME.test(v) && v.split('/').every(function (p) { return p !== '.' && p !== '..'; });
     }
 
     function idOrNull(value) {
@@ -74,6 +130,15 @@ export function projectRepositories(initial) {
         error: '',
         notice: '',
         form: blankForm('github'),
+        // Fields the person has left, a submit attempt, and the server's field errors.
+        touched: {},
+        submitted: false,
+        serverErrors: {},
+        // URL auto-fill: the last values filled in, fields changed by hand, and the note with Undo.
+        autoFilled: {provider: null, repo_full_name: null},
+        manual: {provider: false, repo_full_name: false},
+        fillNote: null,
+        _pasted: false,
         reveal: null,
         copied: '',
         log: null,
@@ -83,9 +148,170 @@ export function projectRepositories(initial) {
         loadingLog: false,
         logError: '',
 
-        get canSave() {
-            if (this.saving || this.form.repo_full_name.trim() === '' || this.form.repo_url.trim() === '') return false;
-            return !(this.form.merge_automation_enabled && this.form.merge_status_id === '');
+        /** What is wrong with the form now, field by field, whether shown yet or not. */
+        get clientErrors() {
+            var f = this.form;
+            var errors = {};
+            if (!validName(f.repo_full_name)) errors.repo_full_name = i18n.errRepoName;
+            if (!REPO_URL.test(f.repo_url.trim())) errors.repo_url = i18n.errRepoUrl;
+            if (f.merge_automation_enabled && f.merge_status_id === '') errors.merge_status_id = i18n.errMergeStatus;
+            return errors;
+        },
+
+        /** The message shown under *field*, or '' while it is valid or still pristine. */
+        errorFor(field) {
+            var message = this.clientErrors[field];
+            if (message && (this.touched[field] || this.submitted)) return message;
+            var server = this.serverErrors[field];
+            // A server error stands until the value it was about changes.
+            if (server && String(this.form[field]) === server.value) return server.message;
+            return '';
+        },
+
+        /** `aria-invalid` for *field*: "true" while its error shows, else no attribute. */
+        invalid(field) {
+            return this.errorFor(field) ? 'true' : null;
+        },
+
+        /** `aria-describedby` for *field*: its hint (if any) and its message while one shows. */
+        describedBy(field, hintId) {
+            var ids = hintId ? [hintId] : [];
+            if (this.errorFor(field)) ids.push(this.fieldId(field) + '-error');
+            return ids.length ? ids.join(' ') : null;
+        },
+
+        fieldId(field) {
+            var found = FIELDS.find(function (x) { return x.name === field; });
+            return found ? found.id : field;
+        },
+
+        touch(field) {
+            this.touched[field] = true;
+        },
+
+        _resetValidation() {
+            this.touched = {};
+            this.submitted = false;
+            this.serverErrors = {};
+            this.autoFilled = {provider: null, repo_full_name: null};
+            this.manual = {provider: false, repo_full_name: false};
+            this.fillNote = null;
+        },
+
+        /** Whether auto-fill may set *field*: not changed by hand, or still what was filled in last. */
+        _mayFill(field) {
+            if (!this.manual[field]) return true;
+            return this.autoFilled[field] !== null && this.form[field] === this.autoFilled[field];
+        },
+
+        /** Fill Provider and Repository from the URL, where allowed; note what changed. */
+        _autoFill() {
+            var found = parseRepoAddress(this.form.repo_url, this.form.provider);
+            if (!found) return;
+            var before = {provider: this.form.provider, repo_full_name: this.form.repo_full_name};
+            var changed = false;
+            if (found.knownHost && found.provider !== this.form.provider && this.providers.indexOf(found.provider) !== -1 && this._mayFill('provider')) {
+                this.form.provider = found.provider;
+                this.autoFilled.provider = found.provider;
+                changed = true;
+            }
+            if (found.repoFullName !== this.form.repo_full_name && this._mayFill('repo_full_name')) {
+                this.form.repo_full_name = found.repoFullName;
+                this.autoFilled.repo_full_name = found.repoFullName;
+                changed = true;
+            }
+            if (!changed) return;
+            var text = found.knownHost
+                ? i18n.detected.replace('{provider}', this.providerLabel(this.form.provider))
+                : i18n.filledRepo;
+            this.fillNote = {
+                text: text.replace('{repo}', this.form.repo_full_name),
+                // Undo goes back to before the first fill of a run (typing fills on every key).
+                previous: this.fillNote ? this.fillNote.previous : before
+            };
+        },
+
+        onUrlInput() {
+            // The input event of a paste: the pasted text is in the model now.
+            if (this._pasted) {
+                this._pasted = false;
+                this.onUrlCommit();
+                return;
+            }
+            this._autoFill();
+        },
+
+        /** On leaving the field or a paste: a known host's or an SSH address becomes the web URL of the repository. */
+        onUrlCommit() {
+            var raw = this.form.repo_url;
+            var found = parseRepoAddress(raw, this.form.provider);
+            if (found && (found.knownHost || isSshAddress(raw)) && found.url !== raw) this.form.repo_url = found.url;
+            this._autoFill();
+        },
+
+        onUrlPaste() {
+            this._pasted = true;
+        },
+
+        /** A change by hand: auto-fill leaves the field alone from now on, and the note goes. */
+        onManualChange(field) {
+            this.manual[field] = true;
+            this.fillNote = null;
+            if (field === 'provider') this._autoFill();
+        },
+
+        undoFill() {
+            if (!this.fillNote) return;
+            this.form.provider = this.fillNote.previous.provider;
+            this.form.repo_full_name = this.fillNote.previous.repo_full_name;
+            this.manual = {provider: true, repo_full_name: true};
+            this.autoFilled = {provider: null, repo_full_name: null};
+            this.fillNote = null;
+        },
+
+        /** Editing, with another provider picked than the integration has. */
+        get providerChanging() {
+            return this.editing !== null && this.form.provider !== this.editing.provider;
+        },
+
+        providerChangingText() {
+            return i18n.providerChanging.replace('{provider}', this.providerLabel(this.form.provider));
+        },
+
+        providerChangedText() {
+            if (!this.reveal || !this.reveal.previousProvider) return '';
+            var labelNew = this.providerLabel(this.reveal.provider);
+            return i18n.providerChanged
+                .replace('{old}', this.providerLabel(this.reveal.previousProvider))
+                .split('{new}').join(labelNew);
+        },
+
+        /** Move to the first field showing an error: scroll it into view and focus it. */
+        _focusFirstError() {
+            var self = this;
+            this.$nextTick(function () {
+                var first = FIELDS.find(function (x) { return self.errorFor(x.name); });
+                var el = first ? document.getElementById(first.id) : null;
+                if (!el) return;
+                el.scrollIntoView({block: 'center'});
+                el.focus({preventScroll: true});
+            });
+        },
+
+        /** Put the field errors of a 422/409 body on their fields; true when at least one landed. */
+        _serverFieldErrors(body) {
+            var found = false;
+            var self = this;
+            (body.errors || []).forEach(function (err) {
+                var field = SERVER_FIELDS[err.field];
+                if (!field || !err.message) return;
+                self.serverErrors[field] = {
+                    message: String(err.message).replace(/^Value error, /, ''),
+                    value: String(self.form[field])
+                };
+                found = true;
+            });
+            return found;
         },
 
         statusName(id) {
@@ -148,6 +374,7 @@ export function projectRepositories(initial) {
         openCreate() {
             this.editing = null;
             this.error = '';
+            this._resetValidation();
             this.form = blankForm(this.providers[0] || 'github');
             this.showModal = true;
         },
@@ -155,6 +382,7 @@ export function projectRepositories(initial) {
         openEdit(r) {
             this.editing = r;
             this.error = '';
+            this._resetValidation();
             var settings = r.settings || {};
             var form = blankForm(r.provider);
             form.repo_full_name = r.repo_full_name;
@@ -171,7 +399,7 @@ export function projectRepositories(initial) {
             this.showModal = true;
         },
 
-        _store(saved) {
+        _store(saved, previousProvider) {
             var secret = saved.secret;
             delete saved.secret;
             var idx = this.repositories.findIndex(function (r) { return r.id === saved.id; });
@@ -188,6 +416,7 @@ export function projectRepositories(initial) {
             if (secret) {
                 this.reveal = {
                     provider: saved.provider,
+                    previousProvider: previousProvider && previousProvider !== saved.provider ? previousProvider : null,
                     repo: saved.repo_full_name,
                     hook_url: saved.hook_url,
                     secret: secret
@@ -197,7 +426,13 @@ export function projectRepositories(initial) {
         },
 
         async save() {
-            if (!this.canSave) return;
+            if (this.saving) return;
+            this.submitted = true;
+            this.serverErrors = {};
+            if (Object.keys(this.clientErrors).length > 0) {
+                this._focusFirstError();
+                return;
+            }
             this.saving = true;
             this.error = '';
             var f = this.form;
@@ -217,15 +452,21 @@ export function projectRepositories(initial) {
             if (f.merge_automation_enabled && this.canPickRole && idOrNull(f.automation_role_id) !== null) {
                 payload.automation_role_id = idOrNull(f.automation_role_id);
             }
-            if (!this.editing) payload.provider = f.provider;
+            payload.provider = f.provider;
             var url = this.editing ? this.base() + this.editing.id + '/' : this.base();
+            var previousProvider = this.editing ? this.editing.provider : null;
             try {
                 var res = await this._send(url, this.editing ? 'PATCH' : 'POST', payload);
                 if (res.ok) {
-                    this._store(await res.json());
+                    this._store(await res.json(), previousProvider);
                     this.showModal = false;
                 } else {
-                    this.error = await this._error(res, i18n.saveFailed);
+                    var body = await res.json().catch(function () { return {}; });
+                    if (this._serverFieldErrors(body)) {
+                        this._focusFirstError();
+                    } else {
+                        this.error = (body.errors && body.errors[0] && body.errors[0].message) || i18n.saveFailed;
+                    }
                 }
             } catch (_e) {
                 this.error = i18n.connectFailed;

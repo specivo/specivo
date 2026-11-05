@@ -1310,7 +1310,14 @@
     "statusDuplicate": _("Duplicate"),
     "statusIgnored": _("Ignored"),
     "statusProcessed": _("Processed"),
-    "statusFailed": _("Failed")
+    "statusFailed": _("Failed"),
+    "errRepoName": _("Enter the repository as owner/name."),
+    "errRepoUrl": _("Enter the repository's http(s) address."),
+    "errMergeStatus": _("Choose a merge status, or turn merge automation off."),
+    "detected": _("Detected {provider} repository {repo}"),
+    "filledRepo": _("Filled in repository {repo} from the URL"),
+    "providerChanging": _("Changing the provider gives this repository a new webhook URL and secret. The current webhook stops working at once; set it up again on {provider}."),
+    "providerChanged": _("The provider changed from {old} to {new}. The old webhook URL no longer works: set the webhook up again on {new} with this URL and secret.")
   } | tojson }} })'>
 
     <div class="card" data-testid="repositories-card">
@@ -1329,6 +1336,9 @@
       <template x-if="reveal">
         <div class="sp-key-reveal sp-webhook-reveal" data-testid="repository-secret">
           <div class="sp-key-reveal-label"><span x-text="providerLabel(reveal.provider)"></span> · <span x-text="reveal.repo"></span></div>
+          <template x-if="reveal.previousProvider">
+            <div class="sp-repo-warning" role="note" data-testid="repository-provider-changed" x-text="providerChangedText()"></div>
+          </template>
           <div class="sp-repo-field">
             <div class="sp-repo-field-label">{% trans %}Webhook URL{% endtrans %}</div>
             <div class="sp-key-reveal-value sp-webhook-secret">
@@ -1459,7 +1469,7 @@
                 <template x-for="d in deliveries" :key="d.id">
                   <tr>
                     <td><span class="sp-webhook-time" x-text="formatTime(d.received_at)" :title="d.delivery_id"></span></td>
-                    <td><span x-text="d.event"></span></td>
+                    <td><span class="sp-repo-provider" x-text="providerLabel(d.provider)" data-testid="repository-delivery-provider"></span> <span x-text="d.event"></span></td>
                     <td><span :class="statusClass(d.status)" x-text="statusLabel(d.status)"></span></td>
                     <td><span class="sp-repo-detail" x-text="d.detail || ''"></span></td>
                   </tr>
@@ -1491,21 +1501,34 @@
               <div class="flash flash-error sp-mb-lg"><span x-text="error"></span></div>
             </template>
             <div class="form-group">
+              <label class="form-label" for="repository-url">{% trans %}Repository URL{% endtrans %}</label>
+              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository" @input="onUrlInput()" @paste="onUrlPaste()" @change="onUrlCommit()" @blur="touch('repo_url')" :aria-invalid="invalid('repo_url')" :aria-describedby="describedBy('repo_url', 'repository-url-hint')" data-testid="repository-url">
+              <div class="form-error" id="repository-url-error" x-show="errorFor('repo_url')" x-text="errorFor('repo_url')" data-testid="repository-url-error"></div>
+              <div class="form-hint" id="repository-url-hint">{% trans %}Paste the address of the repository's page, or its clone address. Provider and Repository are filled in from it.{% endtrans %}</div>
+              <template x-if="fillNote">
+                <div class="sp-repo-fill-note" role="status" data-testid="repository-fill-note">
+                  <span x-text="fillNote.text"></span>
+                  <button type="button" class="sp-btn sp-btn-ghost sp-btn-sm" @click="undoFill()" data-testid="repository-fill-undo">{% trans %}Undo{% endtrans %}</button>
+                </div>
+              </template>
+            </div>
+            <div class="form-group">
               <label class="form-label" for="repository-provider">{% trans %}Provider{% endtrans %}</label>
-              <select class="form-input" id="repository-provider" x-model="form.provider" :disabled="editing !== null">
+              <select class="form-input" id="repository-provider" x-model="form.provider" @change="onManualChange('provider')" :aria-invalid="invalid('provider')" :aria-describedby="describedBy('provider')" data-testid="repository-provider">
                 <template x-for="p in providers" :key="p">
                   <option :value="p" x-text="providerLabel(p)" :selected="p === form.provider"></option>
                 </template>
               </select>
+              <div class="form-error" id="repository-provider-error" x-show="errorFor('provider')" x-text="errorFor('provider')" data-testid="repository-provider-error"></div>
+              <template x-if="providerChanging">
+                <div class="sp-repo-warning" role="note" data-testid="repository-provider-warning" x-text="providerChangingText()"></div>
+              </template>
             </div>
             <div class="form-group">
               <label class="form-label" for="repository-name">{% trans %}Repository{% endtrans %}</label>
-              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository">
-              <div class="form-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="repository-url">{% trans %}Repository URL{% endtrans %}</label>
-              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository">
+              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository" @input="onManualChange('repo_full_name')" @blur="touch('repo_full_name')" :aria-invalid="invalid('repo_full_name')" :aria-describedby="describedBy('repo_full_name', 'repository-name-hint')" data-testid="repository-name">
+              <div class="form-error" id="repository-name-error" x-show="errorFor('repo_full_name')" x-text="errorFor('repo_full_name')" data-testid="repository-name-error"></div>
+              <div class="form-hint" id="repository-name-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
             </div>
             <div class="form-group">
               <label class="form-label" for="repository-scope">{% trans %}Issues commits may link to{% endtrans %}</label>
@@ -1546,12 +1569,13 @@
               <div class="sp-repo-sub" x-show="form.merge_automation_enabled">
                 <div class="form-group">
                   <label class="form-label" for="repository-merge-status">{% trans %}Merge status{% endtrans %}</label>
-                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" data-testid="repository-merge-status">
+                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" @change="touch('merge_status_id')" @blur="touch('merge_status_id')" :aria-invalid="invalid('merge_status_id')" :aria-describedby="describedBy('merge_status_id')" data-testid="repository-merge-status">
                     <option value="">{% trans %}Choose a status{% endtrans %}</option>
                     <template x-for="st in statuses" :key="st.id">
                       <option :value="st.value" x-text="st.name" :selected="st.value === form.merge_status_id"></option>
                     </template>
                   </select>
+                  <div class="form-error" id="repository-merge-status-error" x-show="errorFor('merge_status_id')" x-text="errorFor('merge_status_id')" data-testid="repository-merge-status-error"></div>
                 </div>
                 <div class="form-group">
                   <label class="form-label" for="repository-git-role">{% trans %}Role of Git in this project{% endtrans %}</label>
@@ -1576,7 +1600,7 @@
           </div>
           <div class="sp-modal-footer">
             <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
-            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="!canSave" data-testid="repository-save">
+            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving" data-testid="repository-save">
               <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
               <span x-show="!saving" x-text="editing ? i18n.saveChanges : i18n.createRepository"></span>
             </button>

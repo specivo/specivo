@@ -23,7 +23,7 @@ The viewer groups event types into categories:
 | Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
 | Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
-| Administration | Project key renames, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
+| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
 | Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
 | Provisioning | SCIM user and group changes, refused SCIM requests, SCIM token changes. |
 | Sessions | Revoked sessions, single sign-on logouts (including back-channel), sessions the identity provider refused to renew. |
@@ -101,6 +101,16 @@ the address the same way: it is stored only when it matches an account, otherwis
 | `email_changed` | the person, or the administrator | `by` (`user` or `admin`), `target_user_id`, `target_login`, `old_email`, `new_email`; a change by the person adds `revoked_sessions` |
 
 A confirmation link that matches no request writes nothing. See [Your profile](../getting-started/your-profile.md#changing-your-email-address).
+
+### Repository provider changes
+
+| Event | Account | Details |
+|---|---|---|
+| `repository_provider_changed` | the person who saved the change | `old_provider`, `new_provider`, `old_repository`, `new_repository`, `secret_rotated`; the row names the project and the integration (`repository_integration` and its id) |
+
+Changing an integration's provider gives it a new webhook URL and a new secret; the secret itself is
+never logged. Other edits of a repository integration are not audit events. See
+[Repository integrations](../integrations/repositories.md#change-the-provider).
 
 ### Currencies
 

@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from specivo.hooks.repo_url import is_ssh_address
+
 Provider = Literal["github", "gitlab", "gitea", "forgejo"]
 Scope = Literal["project", "project_and_subprojects"]
 
@@ -28,6 +30,9 @@ def _validate_repo_url(v: str) -> str:
     v = v.strip()
     if len(v) > 2048:
         raise ValueError("repo_url must be 2048 characters or fewer")
+    if is_ssh_address(v):
+        # Converted to the repository's web URL when the integration is saved.
+        return v
     parsed = urlparse(v)
     # Shown as a link in the UI: only web URLs, never javascript: or data:.
     if parsed.scheme not in ("http", "https") or not parsed.hostname:
@@ -68,7 +73,12 @@ class RepositorySettings(BaseModel):
 
 
 class RepositoryIntegrationCreate(BaseModel):
-    """A new integration. The secret is always generated and returned once."""
+    """A new integration. The secret is always generated and returned once.
+
+    ``repo_url`` may be a web URL or an SSH address; it is stored as the
+    repository's web URL. Provider, URL and repository must agree (see
+    ``specivo.hooks.repo_url``), else 422 naming the field at fault.
+    """
 
     provider: Provider
     repo_full_name: str
@@ -83,8 +93,15 @@ class RepositoryIntegrationCreate(BaseModel):
 
 
 class RepositoryIntegrationUpdate(BaseModel):
-    """Partial update. The provider cannot change: connect the repository again instead."""
+    """Partial update.
 
+    Changing ``provider`` moves the integration to another forge: its hook URL
+    changes (the old one answers 404 at once) and a new secret is generated
+    and returned once. Provider, URL and repository are checked together
+    whenever one of them is sent.
+    """
+
+    provider: Provider | None = None
     repo_full_name: str | None = None
     repo_url: str | None = None
     scope: Scope | None = None
@@ -133,13 +150,20 @@ class RepositoryIntegrationSecretOut(RepositoryIntegrationOut):
     secret: str
 
 
+class RepositoryIntegrationUpdateOut(RepositoryIntegrationOut):
+    """An updated integration; ``secret`` is set, once, only when the provider changed."""
+
+    secret: str | None = None
+
+
 class RepositoryDeliveryOut(BaseModel):
-    """One webhook delivery received for an integration."""
+    """One webhook delivery received for an integration, with the provider it came from."""
 
     model_config = {"from_attributes": True}
 
     id: int
     delivery_id: str
+    provider: str
     event: str
     status: str
     detail: str | None

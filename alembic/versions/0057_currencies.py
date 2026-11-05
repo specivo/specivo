@@ -1,8 +1,8 @@
 """Add the ISO 4217 currencies table, the reporting currency setting and the project override.
 
 Create Date: 2026-11-06
-Revision ID: 0056
-Revises: 0055
+Revision ID: 0057
+Revises: 0056
 
 ``currencies`` is seeded from the committed ``specivo/data/iso4217.csv``:
 national currencies active, funds, metals, test and special codes inactive.
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0056"
-down_revision = "0055"
+revision = "0057"
+down_revision = "0056"
 branch_labels = None
 depends_on = None
 

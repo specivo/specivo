@@ -1,4 +1,4 @@
-"""Migration 0056: the currencies table, its seed, the reporting currency setting and the project column; round-trips.
+"""Migration 0057: the currencies table, its seed, the reporting currency setting and the project column; round-trips.
 
 Runs Alembic in a subprocess against the test database, so it changes schema
 shared by every test and is marked ``serial``. The upgrade always ends at head,
@@ -63,7 +63,7 @@ async def test_downgrade_drops_and_upgrade_reseeds() -> None:
     assert await _table_exists("currencies")
 
     try:
-        _alembic("downgrade", "0055")
+        _alembic("downgrade", "0056")
         assert not await _table_exists("currencies")
         assert "reporting_currency_code" not in await _project_columns()
         assert await _reporting_setting() == []
@@ -79,7 +79,7 @@ async def test_downgrade_drops_and_upgrade_reseeds() -> None:
 
 async def test_upgrade_keeps_an_existing_reporting_currency() -> None:
     try:
-        _alembic("downgrade", "0055")
+        _alembic("downgrade", "0056")
         await _execute(
             "INSERT INTO settings (key, value) VALUES ('reporting_currency', 'EUR') "
             "ON CONFLICT (key) DO UPDATE SET value = 'EUR'"

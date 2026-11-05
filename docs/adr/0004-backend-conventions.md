@@ -14,7 +14,7 @@ marker.
 **Revised:** 2026-11-05 — recorded that metadata schemas and workflow field rules judge the change a
 write makes, not the state of the issue (§6).
 **Revised:** 2026-11-05 — recorded the email change audit events and what their details hold (§18).
-**Revised:** 2026-11-06 — recorded the money convention (§4) and the currency audit events (§18).
+**Revised:** 2026-11-06 — recorded the money convention (§4), the currency audit events and the repository provider change audit event (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -581,6 +581,14 @@ confirmation link that matches no request is not audited.
 **Currency events.** `CURRENCY_TOGGLED` (details: `code`, `is_active`) and `REPORTING_CURRENCY_CHANGED`
 (`scope` = `instance` or `project`, `project_key` for a project, `old`, `new`; a project's `null` means it follows
 the instance) are written by `CurrencyService` in the transaction of the change, only when the value changes.
+
+**Repository provider change.** `REPOSITORY_PROVIDER_CHANGED` (category Administration) is written by
+`RepositoryIntegrationService.update` when an integration moves to another forge, which also moves its
+hook URL and rotates its secret. Actor: whoever saved the change. `resource_type` is
+`repository_integration` with the integration's id, and `project_id` is set. Details: `old_provider`,
+`new_provider`, `old_repository`, `new_repository` (full names) and `secret_rotated: true`; never the
+secret. Other edits of an integration are project settings, not audit events. Like every audit write,
+a failure is logged and never fails the change (it runs in a savepoint).
 
 **Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
 configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line

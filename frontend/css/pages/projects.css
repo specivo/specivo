@@ -102,6 +102,8 @@
 .sp-repo-options { border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); padding: var(--sp-space-md); margin: var(--sp-space-md) 0; min-width: 0; }
 .sp-repo-options legend { padding: 0 var(--sp-space-xs); margin-bottom: 0; }
 .sp-repo-warning { background: var(--sp-warning-subtle); color: var(--sp-text-primary); border-left: 3px solid var(--sp-warning); border-radius: var(--sp-border-radius); padding: var(--sp-space-sm) var(--sp-space-md); font-size: var(--sp-font-size-sm); margin-bottom: var(--sp-space-md); }
+.sp-repo-fill-note { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-space-sm); margin-top: var(--sp-space-xs); font-size: var(--sp-font-size-xs); color: var(--sp-text-secondary); }
+.sp-modal-body .form-group .sp-repo-warning { margin: var(--sp-space-xs) 0 0; }
 .sp-repo-check { display: flex; align-items: center; gap: var(--sp-space-sm); font-size: var(--sp-font-size-sm); font-weight: 600; margin-top: var(--sp-space-md); cursor: pointer; }
 .sp-repo-check input { width: 16px; height: 16px; flex-shrink: 0; }
 .sp-repo-sub { margin-left: calc(16px + var(--sp-space-sm)); }

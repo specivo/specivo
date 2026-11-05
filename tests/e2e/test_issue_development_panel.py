@@ -23,9 +23,9 @@ async def _seed(issue_id, integration_id):
     conn = await asyncpg.connect(sys.argv[1])
     try:
         pr_id = await conn.fetchval(
-            "INSERT INTO pull_requests (integration_id, number, title, url, state, source_branch, target_branch,"
-            " author_login) VALUES ($1, 7, 'Add the login form', $2, 'open', 'feat/login-form', 'main',"
-            " 'alex-example') RETURNING id",
+            "INSERT INTO pull_requests (integration_id, provider, number, title, url, state, source_branch,"
+            " target_branch, author_login) VALUES ($1, 'github', 7, 'Add the login form', $2, 'open',"
+            " 'feat/login-form', 'main', 'alex-example') RETURNING id",
             integration_id, "https://github.example.com/example-org/widgets/pull/7",
         )
         await conn.execute(
