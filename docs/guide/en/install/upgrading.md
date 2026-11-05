@@ -68,6 +68,34 @@ docker compose up -d
 - Read the release notes for the version you are moving to before you pull.
 - After upgrading, do a quick smoke test: sign in, open an issue, run a search.
 
+## Upgrading to 0.13.0
+
+### Metadata values are validated
+
+Metadata schemas now refuse values that do not match them, from the issue page, the REST API and AI
+agents. Only what a save changes is checked: an issue that already holds a value that breaks its schema
+stays editable, but a write to that field is refused until it matches (for a list, such as `commits`,
+that includes appending to it). [What is refused](../metadata/values.md#what-is-refused) has the
+details. Agents that wrote short or malformed values now get an error that names the field.
+
+Nothing has to be fixed before upgrading. Afterwards, list the issues that hold values not matching
+their schemas, and fix them so people and agents can keep writing to those fields:
+
+```bash
+docker compose exec api python -m specivo.cli.admin metadata-check
+docker compose exec api python -m specivo.cli.admin metadata-check --project ACME
+```
+
+It prints, per project and schema, how many issues fail, which fields, and the issue keys. It never
+prints values and changes nothing. Run it again after tightening a schema.
+
+### Workflow field rules apply
+
+Field rules created through the admin API (required or read-only fields per status) are enforced now,
+on every save of an issue, judging only what the save changes. An instance without rules sees no
+change. A rule naming an unknown field is refused. See
+[Field rules](../issues/statuses-workflow.md#field-rules).
+
 ## Upgrading to 0.11.0
 
 Version 0.11.0 moves the Redmine import out of Specivo. Specivo now only loads import bundles;

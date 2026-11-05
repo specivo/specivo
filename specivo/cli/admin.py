@@ -1,4 +1,4 @@
-"""Admin user management, password hashers and the import identifier map.
+"""Admin user management, password hashers, the import identifier map and the metadata check.
 
 Usage::
 
@@ -34,6 +34,9 @@ Usage::
     # After cut-over: forget a scope's rows (a dry run without --yes); no delta import after that
     uv run python -m specivo.cli.admin import-map purge --system redmine --instance tracker.example.com --yes
 
+    # Issues whose stored metadata does not match their schemas (read-only; keys, never values)
+    uv run python -m specivo.cli.admin metadata-check [--project KEY]
+
 The ``create`` subcommand is idempotent: existing admins are skipped,
 non-admin users are promoted.  When no CLI args are given it reads the
 bootstrap file and deletes it after success: ``/app/data/state/bootstrap.json``,
@@ -65,6 +68,7 @@ from specivo.importers.load.pending_links import LinksOutcome, resolve_links_fil
 from specivo.models.user import User
 from specivo.services.anonymous_user_service import RESERVED_LOGIN_PREFIX, is_reserved_login
 from specivo.services.auth_utils import hash_password, legacy_hashes_expired
+from specivo.services.metadata_schema_service import InvalidIssues, MetadataSchemaService
 from specivo.services.password_hashers import (
     BCRYPT_PREFIXES,
     CredentialImportError,
@@ -713,6 +717,51 @@ def _add_import_map_commands(sub: argparse._SubParsersAction) -> None:  # type: 
     purge.add_argument("--yes", action="store_true", help="Actually delete the rows")
 
 
+def format_metadata_check(reports: list[InvalidIssues]) -> str:
+    """Return the ``metadata-check`` report: per project and schema, counts, key names and issue keys.
+
+    Never prints a value: stored metadata can hold anything.
+    """
+    if not reports:
+        return "No issue holds metadata that breaks its schemas."
+    lines: list[str] = []
+    for report in sorted(reports, key=lambda r: (r.project_key, r.schema_name)):
+        lines.append(f'{report.project_key}, schema "{report.schema_name}": {len(report.issue_keys)} issue(s)')
+        keys = sorted(report.keys.items(), key=lambda item: (-item[1], item[0]))
+        lines.append("  keys:   " + ", ".join(f"{name or '(whole object)'} ({count})" for name, count in keys))
+        lines.append("  issues: " + ", ".join(report.issue_keys))
+        lines.append("")
+    total = len({key for report in reports for key in report.issue_keys})
+    lines.append(f"{total} issue(s) in all. They stay editable; a write to a listed key is refused until it is fixed.")
+    return "\n".join(lines)
+
+
+async def print_metadata_check(session: AsyncSession, project_key: str | None) -> int:
+    """Print the ``metadata-check`` report for one project (by key) or all of them. Read-only."""
+    from specivo.models.project import Project
+
+    project_id = None
+    if project_key:
+        project_id = (
+            await session.execute(select(Project.id).where(func.upper(Project.key) == project_key.upper()))
+        ).scalar_one_or_none()
+        if project_id is None:
+            print(f"No project with key {project_key.upper()}.", file=sys.stderr)
+            return 1
+    reports = await MetadataSchemaService().find_invalid_issues(session, project_id)
+    print(format_metadata_check(reports))
+    return 0
+
+
+async def _run_metadata_check(args: argparse.Namespace) -> int:
+    factory, engine = _session_factory()
+    try:
+        async with factory() as session:
+            return await print_metadata_check(session, args.project)
+    finally:
+        await engine.dispose()
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Specivo admin management")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -750,6 +799,12 @@ def build_parser() -> argparse.ArgumentParser:
     legacy_expire.add_argument("--yes", action="store_true", help="Actually do it (otherwise only count)")
 
     _add_import_map_commands(sub)
+
+    check_parser = sub.add_parser(
+        "metadata-check",
+        help="List issues whose stored metadata does not match their schemas (read-only, prints no values)",
+    )
+    check_parser.add_argument("--project", help="Only this project, by key")
     return parser
 
 
@@ -777,6 +832,8 @@ def main() -> None:
         asyncio.run(_run_legacy_report(args))
     elif args.command == "import-map":
         sys.exit(asyncio.run(_IMPORT_MAP_RUNNERS[args.import_map_command](args)))
+    elif args.command == "metadata-check":
+        sys.exit(asyncio.run(_run_metadata_check(args)))
 
 
 if __name__ == "__main__":

@@ -34,12 +34,6 @@ _UPDATABLE_FIELDS = frozenset(
         "done_ratio",
         "is_private",
         "metadata",
-    }
-)
-
-# Fields that are applied directly on the Issue model (not via IssueUpdate).
-_DIRECT_FIELDS = frozenset(
-    {
         "fixed_version_id",
     }
 )
@@ -116,16 +110,6 @@ class BulkService:
 
                 # Apply update via IssueService (handles workflow, journals, etc.)
                 issue = await self._issue_service.update(session, issue, data, user)
-
-                # Handle direct fields not in IssueUpdate (e.g. fixed_version_id)
-                direct_changed = False
-                for field in _DIRECT_FIELDS:
-                    if field in updates:
-                        setattr(issue, field, updates[field])
-                        direct_changed = True
-
-                if direct_changed:
-                    await session.flush()
 
                 succeeded.append(
                     BulkResultItem(

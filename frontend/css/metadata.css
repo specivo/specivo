@@ -209,6 +209,7 @@ a.sp-tag-name:hover { text-decoration: underline; color: var(--sp-accent); }
 .sp-metadata-content .sp-metadata-grid { padding-top: var(--sp-space-xl); }
 .sp-metadata-save { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-space-sm); padding-top: var(--sp-space-lg); margin-top: var(--sp-space-lg); border-top: 1px solid var(--sp-border); }
 .sp-save-hint { font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); margin-right: auto; }
+.sp-metadata-error { font-size: var(--sp-font-size-xs); color: var(--sp-danger); margin-right: auto; overflow-wrap: anywhere; }
 .sp-meta-toggle-row { display: flex; align-items: center; gap: var(--sp-space-sm); }
 
 /* ----------------------------------------------------------------------- */

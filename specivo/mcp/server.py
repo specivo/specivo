@@ -268,7 +268,16 @@ async def specivo_list_issues(
     """
     async with _get_session_and_user() as (session, user):
         return await _list_issues(
-            session, user, project_key, status, sort, offset, limit, sprint_id, metadata_filters, parent_ref,
+            session,
+            user,
+            project_key,
+            status,
+            sort,
+            offset,
+            limit,
+            sprint_id,
+            metadata_filters,
+            parent_ref,
         )
 
 
@@ -336,10 +345,7 @@ async def specivo_create_issue(
     parent_ref: Annotated[
         str | None,
         Field(
-            description=(
-                "Parent issue's display key, e.g. ACME-12, to create a sub-issue. "
-                "Omit for a top-level issue."
-            )
+            description=("Parent issue's display key, e.g. ACME-12, to create a sub-issue. Omit for a top-level issue.")
         ),
     ] = None,
     tags: Annotated[
@@ -924,6 +930,12 @@ async def specivo_metadata(
     all other ops require edit_issues. Use specivo_list_metadata_schemas
     first to discover available fields. Recoverable errors are returned
     as 'Error: ...' strings.
+
+    The new value of the key is checked against the issue's schemas; one
+    that does not match (wrong type, a choice not listed, a list item that
+    breaks the pattern, a key the schema does not allow) returns an error
+    naming the key, and nothing is written. Only the key you change is
+    checked, so old values under other keys never block the call.
     """
     async with _get_session_and_user() as (session, user):
         return await _metadata(session, user, target_ref, key, op, value)
@@ -1209,8 +1221,7 @@ async def specivo_tag(
         str,
         Field(
             description=(
-                "Entity to tag: an issue ref ('ACME-12' or 'issue:ACME-12') "
-                "or a wiki page ('wiki:ACME/some-slug')."
+                "Entity to tag: an issue ref ('ACME-12' or 'issue:ACME-12') or a wiki page ('wiki:ACME/some-slug')."
             ),
         ),
     ],
@@ -1284,9 +1295,7 @@ async def specivo_create_recurring_pattern(
             )
         ),
     ],
-    rrule_interval: Annotated[
-        int, Field(description="Interval between occurrences (e.g. 2 = every other week).")
-    ] = 1,
+    rrule_interval: Annotated[int, Field(description="Interval between occurrences (e.g. 2 = every other week).")] = 1,
     byday: Annotated[
         str | None,
         Field(
@@ -1296,9 +1305,7 @@ async def specivo_create_recurring_pattern(
             )
         ),
     ] = None,
-    rrule_count: Annotated[
-        int | None, Field(description="Total number of occurrences before the series ends.")
-    ] = None,
+    rrule_count: Annotated[int | None, Field(description="Total number of occurrences before the series ends.")] = None,
     rrule_raw: Annotated[
         str | None,
         Field(
@@ -1352,16 +1359,12 @@ async def specivo_create_recurring_pattern(
     template_priority_id: Annotated[
         int | None, Field(description="Priority ID for generated issues (from specivo_list_lookups).")
     ] = None,
-    template_assigned_to_id: Annotated[
-        int | None, Field(description="User ID to assign generated issues to.")
-    ] = None,
+    template_assigned_to_id: Annotated[int | None, Field(description="User ID to assign generated issues to.")] = None,
     creation_lead_time_days: Annotated[
         int,
         Field(description="How many days ahead occurrences are materialised into issues."),
     ] = 30,
-    enabled: Annotated[
-        bool, Field(description="Whether the pattern actively generates issues.")
-    ] = True,
+    enabled: Annotated[bool, Field(description="Whether the pattern actively generates issues.")] = True,
 ) -> str:
     """Create a recurring task pattern that generates issues on a schedule.
 
@@ -1408,37 +1411,23 @@ async def specivo_update_recurring_pattern(
     project_key: Annotated[str, Field(description="Uppercase project identifier, e.g. ACME.")],
     pattern_id: Annotated[int, Field(description="Pattern ID from specivo_list_recurring_patterns.")],
     name: Annotated[str | None, Field(description="New pattern name.")] = None,
-    template_subject: Annotated[
-        str | None, Field(description="New subject for generated issues.")
-    ] = None,
-    template_description: Annotated[
-        str | None, Field(description="New description for generated issues.")
-    ] = None,
-    freq: Annotated[
-        str | None, Field(description="New frequency: daily, weekly, monthly, or yearly.")
-    ] = None,
+    template_subject: Annotated[str | None, Field(description="New subject for generated issues.")] = None,
+    template_description: Annotated[str | None, Field(description="New description for generated issues.")] = None,
+    freq: Annotated[str | None, Field(description="New frequency: daily, weekly, monthly, or yearly.")] = None,
     rrule_interval: Annotated[int | None, Field(description="New interval between occurrences.")] = None,
     byday: Annotated[
         str | None,
         Field(description="New comma-separated weekday tokens, e.g. 'MO,WE,FR'."),
     ] = None,
     rrule_count: Annotated[int | None, Field(description="New total occurrence count.")] = None,
-    rrule_raw: Annotated[
-        str | None, Field(description="New raw RFC 5545 RRULE string (overrides BY* fields).")
-    ] = None,
-    anchor_mode: Annotated[
-        str | None, Field(description="New anchor mode: 'fixed' or 'flexible'.")
-    ] = None,
+    rrule_raw: Annotated[str | None, Field(description="New raw RFC 5545 RRULE string (overrides BY* fields).")] = None,
+    anchor_mode: Annotated[str | None, Field(description="New anchor mode: 'fixed' or 'flexible'.")] = None,
     base_date_strategy: Annotated[
         str | None, Field(description="New base-date strategy: 'scheduled' or 'completion'.")
     ] = None,
-    dtstart: Annotated[
-        str | None, Field(description="New ISO-8601 series anchor datetime.")
-    ] = None,
+    dtstart: Annotated[str | None, Field(description="New ISO-8601 series anchor datetime.")] = None,
     timezone: Annotated[str | None, Field(description="New IANA timezone.")] = None,
-    creation_lead_time_days: Annotated[
-        int | None, Field(description="New look-ahead window in days.")
-    ] = None,
+    creation_lead_time_days: Annotated[int | None, Field(description="New look-ahead window in days.")] = None,
     enabled: Annotated[bool | None, Field(description="Enable or disable the pattern.")] = None,
 ) -> str:
     """Update a recurring task pattern. Only pass fields you want to change.

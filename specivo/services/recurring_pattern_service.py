@@ -200,17 +200,13 @@ class RecurringPatternService:
 
     async def get_by_id(self, session: AsyncSession, pattern_id: int) -> RecurringPattern:
         """Return a pattern by PK; raises NotFoundError if missing."""
-        result = await session.execute(
-            select(RecurringPattern).where(RecurringPattern.id == pattern_id)
-        )
+        result = await session.execute(select(RecurringPattern).where(RecurringPattern.id == pattern_id))
         pattern = result.scalar_one_or_none()
         if pattern is None:
             raise NotFoundError(f"Recurring pattern {pattern_id} not found")
         return pattern
 
-    async def list_for_project(
-        self, session: AsyncSession, project_id: int
-    ) -> list[RecurringPattern]:
+    async def list_for_project(self, session: AsyncSession, project_id: int) -> list[RecurringPattern]:
         """List patterns for a project, newest first."""
         result = await session.execute(
             select(RecurringPattern)
@@ -253,10 +249,7 @@ class RecurringPatternService:
         check_markdown_length(data.template_description, "template_description")
         if data.lock_version != pattern.lock_version:
             raise ConflictError(
-                message=_(
-                    "This pattern was changed by someone else. "
-                    "Reload and try again."
-                ),
+                message=_("This pattern was changed by someone else. Reload and try again."),
                 details={"current_lock_version": pattern.lock_version},
             )
 
@@ -264,12 +257,19 @@ class RecurringPatternService:
         # SQLAlchemy's ``version_id_col``; it is never a writable field.
         updates = data.model_dump(exclude_unset=True, exclude={"lock_version"})
 
-        # Validate metadata if the template metadata or tracker changed.
+        # Validate the template keys this update changes, against the schemas
+        # of the effective tracker. As for issues, keys left as they were are
+        # not judged, so a schema tightened since the pattern was saved does
+        # not block an unrelated edit.
         if "template_metadata" in updates or "template_tracker_id" in updates:
             tracker_id = updates.get("template_tracker_id", pattern.template_tracker_id)
             metadata = updates.get("template_metadata", pattern.template_metadata)
             await self._metadata_schema_service.validate_metadata(
-                session, pattern.project_id, tracker_id, metadata
+                session,
+                pattern.project_id,
+                tracker_id,
+                metadata or {},
+                previous=pattern.template_metadata or {},
             )
 
         # Anchor a newly-supplied naive dtstart to the effective timezone (the
@@ -419,8 +419,7 @@ class RecurringPatternService:
                 default=None,
             )
             if max_occ is not None and (
-                pattern.last_generated_occurrence_at is None
-                or max_occ > pattern.last_generated_occurrence_at
+                pattern.last_generated_occurrence_at is None or max_occ > pattern.last_generated_occurrence_at
             ):
                 pattern.last_generated_occurrence_at = max_occ
         session.add(pattern)
@@ -560,9 +559,7 @@ class RecurringPatternService:
             return bool(carry.get(group, True))
 
         description = pattern.template_description if carried("description") else None
-        estimated_hours: Decimal | None = (
-            pattern.template_estimated_hours if carried("estimated_hours") else None
-        )
+        estimated_hours: Decimal | None = pattern.template_estimated_hours if carried("estimated_hours") else None
         metadata: dict = dict(pattern.template_metadata) if carried("metadata") else {}
 
         # Reset checklist: if the template metadata carries checklist-style
@@ -646,12 +643,13 @@ class RecurringPatternService:
             original_occurrence_at=occurrence,
             # The pattern's privacy was resolved, and authorised, when it was saved.
             check_privacy_permission=False,
+            # So was its template metadata: a schema tightened since then must
+            # not stop the series. Later edits of the issue are judged as usual.
+            validate_metadata=False,
         )
 
         # Record provenance in the activity log: "Created from recurring pattern".
-        await self._journal_service.record_recurring_source(
-            session, issue, author, pattern.id, pattern.name
-        )
+        await self._journal_service.record_recurring_source(session, issue, author, pattern.id, pattern.name)
 
         # If this occurrence had an override exception row, link the new issue.
         if override is not None:
@@ -669,9 +667,7 @@ class RecurringPatternService:
             tz = ZoneInfo("UTC")
         return occurrence.astimezone(tz).date()
 
-    def _compute_dates(
-        self, pattern: RecurringPattern, occurrence: datetime
-    ) -> tuple[Any, Any]:
+    def _compute_dates(self, pattern: RecurringPattern, occurrence: datetime) -> tuple[Any, Any]:
         """Derive (start_date, due_date) calendar dates from an occurrence.
 
         See the module docstring for the offset rules. The occurrence's *local*
@@ -740,9 +736,7 @@ class RecurringPatternService:
         the occurrence was already materialised, the payload is applied to that
         issue immediately via :meth:`IssueService.update`.
         """
-        exc = await self._upsert_exception(
-            session, pattern, occurrence_at, kind="override", payload=payload
-        )
+        exc = await self._upsert_exception(session, pattern, occurrence_at, kind="override", payload=payload)
 
         existing = await self._issue_for_occurrence(session, pattern.id, occurrence_at)
         if existing is not None:
@@ -884,9 +878,7 @@ class RecurringPatternService:
     ) -> tuple[set[datetime], dict[datetime, RecurrenceException]]:
         """Return (skip EXDATE set, {occurrence_at: override exception})."""
         result = await session.execute(
-            select(RecurrenceException).where(
-                RecurrenceException.recurring_pattern_id == pattern_id
-            )
+            select(RecurrenceException).where(RecurrenceException.recurring_pattern_id == pattern_id)
         )
         exdates: set[datetime] = set()
         overrides: dict[datetime, RecurrenceException] = {}
@@ -897,9 +889,7 @@ class RecurringPatternService:
                 overrides[exc.occurrence_at] = exc
         return exdates, overrides
 
-    async def _existing_occurrences(
-        self, session: AsyncSession, pattern_id: int
-    ) -> set[datetime]:
+    async def _existing_occurrences(self, session: AsyncSession, pattern_id: int) -> set[datetime]:
         """Set of occurrence instants that already have a materialised issue."""
         result = await session.execute(
             select(Issue.original_occurrence_at).where(

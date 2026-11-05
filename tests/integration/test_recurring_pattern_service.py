@@ -137,9 +137,7 @@ def _daily_create(
 
 async def _issues_for(db: AsyncSession, pattern_id: int) -> list[Issue]:
     result = await db.execute(
-        select(Issue)
-        .where(Issue.recurring_pattern_id == pattern_id)
-        .order_by(Issue.original_occurrence_at.asc())
+        select(Issue).where(Issue.recurring_pattern_id == pattern_id).order_by(Issue.original_occurrence_at.asc())
     )
     return list(result.scalars().all())
 
@@ -228,7 +226,7 @@ async def test_rotation_user_ids_filtered_to_members(
 
 
 @pytest.mark.asyncio
-async def test_metadata_validation_on_create(
+async def test_recurring_pattern_saved_with_invalid_template_is_refused(
     db_session: AsyncSession,
     service: RecurringPatternService,
     project: Project,
@@ -237,16 +235,8 @@ async def test_metadata_validation_on_create(
     priority: IssuePriority,
     author: User,
 ) -> None:
-    """template_metadata is validated against project/tracker schemas.
-
-    Registers the enterprise validation feature so the (otherwise no-op)
-    metadata validation actually runs, then creates a schema requiring a
-    'severity' string and asserts a bad value is rejected.
-    """
-    from specivo.main import get_plugin_manager
+    """template_metadata is validated against the project/tracker schemas when saved."""
     from specivo.models.metadata_schema import MetadataSchema
-
-    get_plugin_manager().feature_registry.register("metadata_schema_validation", "test")
 
     schema = MetadataSchema(
         project_id=project.id,
@@ -268,8 +258,70 @@ async def test_metadata_validation_on_create(
         dtstart=datetime(2026, 1, 1, 9, 0, tzinfo=UTC),
         template_metadata={"severity": "not-a-valid-value"},
     )
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError) as refused:
         await service.create(db_session, project, data, author)
+    assert refused.value.field == "metadata.severity"
+
+    # Saving it with a valid value works; changing the value later is judged too.
+    data.template_metadata = {"severity": "low"}
+    pattern = await service.create(db_session, project, data, author)
+    await db_session.commit()
+    with pytest.raises(ValidationError):
+        await service.update(
+            db_session,
+            pattern,
+            RecurringPatternUpdate(template_metadata={"severity": "urgent"}, lock_version=pattern.lock_version),
+            author,
+        )
+
+
+@pytest.mark.asyncio
+async def test_recurring_generation_survives_a_tightened_schema(
+    db_session: AsyncSession,
+    service: RecurringPatternService,
+    project: Project,
+    tracker: Tracker,
+    status_open: IssueStatus,
+    priority: IssuePriority,
+    author: User,
+) -> None:
+    """A schema tightened after the pattern was saved does not stop its runs.
+
+    The pattern was valid when saved; its generated issues carry its template
+    as it is, and the schema applies to later edits of those issues.
+    """
+    from specivo.models.metadata_schema import MetadataSchema
+
+    data = _daily_create(
+        tracker,
+        status_open,
+        priority,
+        dtstart=datetime(2026, 1, 1, 9, 0, tzinfo=UTC),
+        template_metadata={"severity": "medium"},
+    )
+    pattern = await service.create(db_session, project, data, author)
+    await db_session.commit()
+
+    db_session.add(
+        MetadataSchema(
+            project_id=project.id,
+            tracker_id=None,
+            content_type="issue",
+            name="tightened",
+            schema_definition={
+                "type": "object",
+                "required": ["owner"],
+                "properties": {"severity": {"enum": ["low", "high"]}, "owner": {"type": "string"}},
+            },
+        )
+    )
+    await db_session.commit()
+
+    created = await service.materialize(db_session, pattern, datetime(2026, 1, 3, 12, 0, tzinfo=UTC))
+    await db_session.commit()
+
+    assert created
+    assert all(issue.issue_metadata == {"severity": "medium"} for issue in created)
 
 
 # ---------------------------------------------------------------------------
@@ -905,9 +957,7 @@ async def test_materialize_records_recurring_provenance(
 
     dtstart = datetime(2026, 6, 18, 9, 0, tzinfo=UTC)
     now = dtstart + timedelta(hours=1)
-    data = _daily_create(
-        tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1
-    )
+    data = _daily_create(tracker, status_open, priority, dtstart=dtstart, creation_lead_time_days=1)
     pattern = await service.create(db_session, project, data, author)
     await db_session.commit()
 

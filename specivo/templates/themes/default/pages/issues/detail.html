@@ -121,7 +121,8 @@
       "no": _("No"),
       "countFields": _("%(filled)s/%(total)s fields"),
       "saving": _("Saving..."),
-      "saveMetadata": _("Save Metadata")
+      "saveMetadata": _("Save Metadata"),
+      "saveFailed": _("The metadata could not be saved.")
     } | tojson }} })'>
       {# Toggle header (always visible) #}
       <button class="sp-metadata-toggle" :class="{ open: expanded }" @click="expanded = !expanded" type="button">
@@ -248,8 +249,9 @@
         </div>
 
         {# Save bar #}
-        <div class="sp-metadata-save" x-show="dirty">
-          <span class="sp-save-hint" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-right:auto">{% trans %}You have unsaved metadata changes{% endtrans %}</span>
+        <div class="sp-metadata-save" x-show="dirty || error">
+          <span class="sp-save-hint" x-show="!error" style="font-size:var(--sp-font-size-xs);color:var(--sp-text-muted);margin-right:auto">{% trans %}You have unsaved metadata changes{% endtrans %}</span>
+          <span class="sp-metadata-error" x-show="error" x-text="error" role="alert"></span>
           <button class="sp-btn sp-btn-ghost sp-btn-sm" type="button" @click="revert()">{% trans %}Discard{% endtrans %}</button>
           <button class="sp-btn sp-btn-primary sp-btn-sm" type="button" :disabled="saving" @click="save()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>

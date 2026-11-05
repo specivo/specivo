@@ -9,7 +9,7 @@ Issue references:
 - -- Features moved from Pro to CE (threaded comments, reactions,
           mentions, bulk, saved filters)
 - -- In-app notifications moved from Pro to CE
-- -- Metadata validation / workflow field rules moved to Enterprise
+- -- Metadata validation / workflow field rules apply in core
 - -- API key limit raised from 5 to 20
 
 Expected failures (RED):
@@ -559,7 +559,7 @@ async def test_notification_bell_not_feature_gated(
 
 
 @pytest.mark.asyncio
-async def test_metadata_validation_requires_enterprise(
+async def test_metadata_validation_applies_without_a_plugin(
     client: AsyncClient,
     db_session: AsyncSession,
     admin_user: User,
@@ -569,12 +569,7 @@ async def test_metadata_validation_requires_enterprise(
     open_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Without enterprise plugin, metadata is stored but NOT validated.
-
-    Even if a metadata schema exists, core-only should accept any metadata
-    and store it as-is (no 422 from schema validation).
-    """
-    # Create a metadata schema that would normally enforce validation
+    """Core alone validates metadata against the project's schemas, admins included."""
     from specivo.models.metadata_schema import MetadataSchema
 
     schema = MetadataSchema(
@@ -592,9 +587,6 @@ async def test_metadata_validation_requires_enterprise(
     db_session.add(schema)
     await db_session.commit()
 
-    # Create issue with metadata that VIOLATES the schema (missing "severity")
-    # In core-only mode: should succeed (200/201), metadata stored as-is
-    # With enterprise: would return 422 for missing required field
     body: dict = {
         "project_key": project.key,
         "tracker_id": tracker.id,
@@ -608,17 +600,15 @@ async def test_metadata_validation_requires_enterprise(
         json=body,
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    # Core-only: must NOT reject with 422 for metadata validation
-    assert resp.status_code == 201, (
-        f"Expected 201 (metadata stored without validation in core-only), got {resp.status_code}: {resp.text}"
-    )
+    assert resp.status_code == 422, resp.text
+    error = resp.json()["errors"][0]
+    assert (error["code"], error["field"]) == ("validation_error", "metadata.severity")
 
 
 @pytest.mark.asyncio
-async def test_workflow_field_rules_require_enterprise(
+async def test_workflow_field_rules_apply_without_a_plugin(
     client: AsyncClient,
     db_session: AsyncSession,
-    admin_user: User,
     admin_token: str,
     project: Project,
     tracker: Tracker,
@@ -626,82 +616,55 @@ async def test_workflow_field_rules_require_enterprise(
     in_progress_status: IssueStatus,
     priority: IssuePriority,
 ) -> None:
-    """Without enterprise, field rules are not enforced (200 not 422).
-
-    Currently workflow_field_rules feature gate is checked and returns
-    early (no-op) when the feature is not registered.  This test confirms
-    that behaviour is preserved -- field rules only take effect with the
-    enterprise plugin.
-    """
+    """Core alone enforces field rules for a non-admin member."""
     from specivo.models.member import Member, MemberRole
     from specivo.models.role import Role
 
-    # Set up role and membership (get-or-create to avoid seed collision)
-    result = await db_session.execute(select(Role).where(Role.name == "Developer"))
-    role = result.scalar_one_or_none()
-    if not role:
-        role = Role(name="Developer", position=1)
-        db_session.add(role)
-        await db_session.commit()
-        await db_session.refresh(role)
-
-    member = Member(
-        user_id=admin_user.id,
-        project_id=project.id,
+    role = Role(
+        name="TierFieldRules",
+        position=41,
+        builtin=0,
+        permissions=["view_issues", "add_issues", "edit_issues"],
+        issues_visibility="default",
+        settings={},
     )
+    member_user = UserFactory.build(login="tier_field_rules", status="active")
+    db_session.add_all([role, member_user])
+    await db_session.flush()
+    member = Member(user_id=member_user.id, project_id=project.id)
     db_session.add(member)
     await db_session.flush()
-
-    member_role = MemberRole(
-        member_id=member.id,
-        role_id=role.id,
+    db_session.add(MemberRole(member_id=member.id, role_id=role.id))
+    db_session.add(
+        WorkflowTransition(
+            tracker_id=tracker.id,
+            role_id=role.id,
+            old_status_id=open_status.id,
+            new_status_id=in_progress_status.id,
+        )
     )
-    db_session.add(member_role)
-
-    # Set up workflow transition: New -> In Progress
-    transition = WorkflowTransition(
-        tracker_id=tracker.id,
-        role_id=role.id,
-        old_status_id=open_status.id,
-        new_status_id=in_progress_status.id,
+    db_session.add(
+        WorkflowFieldRule(
+            tracker_id=tracker.id,
+            role_id=role.id,
+            status_id=in_progress_status.id,
+            field_name="assigned_to_id",
+            rule="required",
+        )
     )
-    db_session.add(transition)
-
-    # Add a field rule: assigned_to_id required when transitioning to In Progress
-    rule = WorkflowFieldRule(
-        tracker_id=tracker.id,
-        role_id=role.id,
-        status_id=in_progress_status.id,
-        field_name="assigned_to_id",
-        rule="required",
-    )
-    db_session.add(rule)
     await db_session.commit()
 
+    token = await _login(client, member_user.login)
     issue = await _create_issue(
-        client,
-        admin_token,
-        project.key,
-        tracker.id,
-        open_status.id,
-        priority.id,
-        subject="Field rules test",
+        client, token, project.key, tracker.id, open_status.id, priority.id, subject="Field rules test"
     )
-
-    # Transition to In Progress WITHOUT assigned_to_id
-    # Without enterprise: field rule is ignored -> 200
-    # With enterprise: field rule enforced -> 422
     resp = await client.patch(
         f"/api/v1/issues/{issue['key']}/",
-        json={
-            "status_id": in_progress_status.id,
-            "lock_version": issue["lock_version"],
-        },
-        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"status_id": in_progress_status.id, "lock_version": issue["lock_version"]},
+        headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 200, (
-        f"Expected 200 (field rules not enforced without enterprise), got {resp.status_code}: {resp.text}"
-    )
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["errors"][0]["code"] == "workflow_field_required"
 
 
 # ---------------------------------------------------------------------------

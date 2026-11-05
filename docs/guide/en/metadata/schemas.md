@@ -26,6 +26,15 @@ in the issue's history, in search filters, in the REST API and over MCP. Without
 field's key made readable. Titles can use any script. A field can also be marked as holding a person or a
 version, in which case its values are shown by that person's or version's name.
 
+## How schemas are enforced
+
+A schema decides which values are accepted, not only which fields appear: a value that breaks it is
+refused when someone saves it, from any client. Specivo checks only what a save changes, so tightening
+a schema later (a new required field, a narrower list of choices, no extra keys) never locks existing
+issues: their old values stay until someone edits those fields. New issues must fill required fields
+from then on. [What is refused](values.md#what-is-refused) has the details, including how to find the
+issues that hold values from before.
+
 ## Who manages schemas
 
 Schemas are defined and enabled by **Managers** in **Admin → Metadata presets**

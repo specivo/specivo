@@ -49,6 +49,12 @@ Specivo loads them:
 - **Text** is Markdown. References to issues, people and attachments are rewritten into links once every
   record exists, using the issue's new Specivo key.
 
+- **Custom field values are kept as the source has them**, even when one does not match the field's
+  schema here (a value from before the source added a check, or a field the source made required
+  later). The report lists each such issue and field as "Custom field value does not match its schema;
+  kept". The issue stays editable; a later change to that field has to match. See
+  [What is refused](../metadata/values.md#what-is-refused).
+
 Anything the tool could not carry is listed in the import report, so nothing disappears silently.
 
 ## Step 1: put the bundle where Specivo can read it
