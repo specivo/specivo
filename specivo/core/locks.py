@@ -34,6 +34,18 @@ if redis.call('get', KEYS[1]) == ARGV[1] then
 end
 return 0
 """
+# Take KEYS[1] for ARGV[1] (TTL ARGV[2]) unless one of the other KEYS exists: -1 blocked, 1 taken, 0 held.
+_ACQUIRE_UNLESS_SCRIPT = """
+for i = 2, #KEYS do
+    if redis.call('exists', KEYS[i]) == 1 then
+        return -1
+    end
+end
+if redis.call('set', KEYS[1], ARGV[1], 'NX', 'EX', ARGV[2]) then
+    return 1
+end
+return 0
+"""
 _REFRESH_SCRIPT = """
 if redis.call('get', KEYS[1]) == ARGV[1] then
     return redis.call('expire', KEYS[1], ARGV[2])
@@ -59,6 +71,21 @@ class TokenLock:
             return bool(await self.redis.set(self.key, token, nx=True, ex=ttl))
         except RedisError as exc:
             raise LockUnavailableError(f"Could not take lock {self.key}: {type(exc).__name__}") from exc
+
+    async def acquire_unless(self, token: str, ttl: int, blockers: list[str]) -> int:
+        """Take the lock unless one of the *blockers* keys exists, in one atomic step.
+
+        Returns 1 when taken, 0 when the lock is held, -1 when a blocker
+        exists (and nothing was taken). Raises ``LockUnavailableError`` if
+        Redis fails.
+        """
+        try:
+            result = await self.redis.eval(  # type: ignore[misc]
+                _ACQUIRE_UNLESS_SCRIPT, 1 + len(blockers), self.key, *blockers, token, str(ttl)
+            )
+        except RedisError as exc:
+            raise LockUnavailableError(f"Could not take lock {self.key}: {type(exc).__name__}") from exc
+        return int(result)
 
     async def holder(self) -> str | None:
         """The token holding the lock, or None. Raises ``LockUnavailableError`` if Redis fails."""
@@ -89,6 +116,13 @@ class TokenLock:
 
 #: Celery task states after which a run lock still naming the task is stale.
 FINISHED_TASK_STATES = frozenset({"SUCCESS", "FAILURE", "REVOKED"})
+
+
+async def clear_if_finished(lock: TokenLock, task_state: Callable[[str], str]) -> None:
+    """Release *lock* if the task holding it has finished (a stale lock); compare-and-delete, so only that holder's."""
+    holder = await lock.holder()
+    if holder and task_state(holder) in FINISHED_TASK_STATES:
+        await lock.release(holder)
 
 
 async def acquire_run_lock(lock: TokenLock, token: str, ttl: int, task_state: Callable[[str], str]) -> bool:

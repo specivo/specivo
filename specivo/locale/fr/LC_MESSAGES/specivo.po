@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-05 21:22+0100\n"
+"POT-Creation-Date: 2026-11-05 21:52+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.app>\n"
 "Language: fr\n"
@@ -951,40 +951,46 @@ msgid "Reindex started."
 msgstr "Réindexation lancée."
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:11
+msgid ""
+"Reindex queued: it starts when the project reindexes in progress have "
+"finished."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_fts_i18n.html:12
 msgid "Failed to start reindex."
 msgstr "Échec du lancement de la réindexation."
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:12
+#: specivo/templates/themes/default/pages/_fts_i18n.html:13
 msgid "Reindex complete."
 msgstr "Réindexation terminée."
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:13
+#: specivo/templates/themes/default/pages/_fts_i18n.html:14
 msgid "Reindex failed."
 msgstr "La réindexation a échoué."
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:14
+#: specivo/templates/themes/default/pages/_fts_i18n.html:15
 #: specivo/templates/themes/default/pages/projects/settings.html:598
 #, python-format
 msgid "%(count)s issues"
 msgstr "Tickets : %(count)s"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:15
+#: specivo/templates/themes/default/pages/_fts_i18n.html:16
 #, python-format
 msgid "%(count)s wiki"
 msgstr "Wiki : %(count)s"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:16
+#: specivo/templates/themes/default/pages/_fts_i18n.html:17
 #, python-format
 msgid "%(count)s chunks"
 msgstr "Fragments : %(count)s"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:17
+#: specivo/templates/themes/default/pages/_fts_i18n.html:18
 #: specivo/templates/themes/default/pages/_link_graph_card.html:30
 #: specivo/web/deps.py:219
 msgid "just now"
 msgstr "à l'instant"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:18
+#: specivo/templates/themes/default/pages/_fts_i18n.html:19
 #: specivo/templates/themes/default/pages/_link_graph_card.html:31
 #: specivo/templates/themes/default/pages/admin/user_detail.html:23
 #: specivo/templates/themes/default/pages/admin/users.html:27
@@ -993,13 +999,13 @@ msgstr "à l'instant"
 msgid "%(count)s min ago"
 msgstr "il y a %(count)s min"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:19
+#: specivo/templates/themes/default/pages/_fts_i18n.html:20
 #: specivo/templates/themes/default/pages/_link_graph_card.html:32
 #, python-format
 msgid "%(count)s h ago"
 msgstr "il y a %(count)s h"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:20
+#: specivo/templates/themes/default/pages/_fts_i18n.html:21
 #: specivo/templates/themes/default/pages/_link_graph_card.html:33
 #, python-format
 msgid "%(count)s d ago"

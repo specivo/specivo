@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-05 21:22+0100\n"
+"POT-Creation-Date: 2026-11-05 21:52+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -924,40 +924,46 @@ msgid "Reindex started."
 msgstr "已开始重建索引。"
 
 #: specivo/templates/themes/default/pages/_fts_i18n.html:11
+msgid ""
+"Reindex queued: it starts when the project reindexes in progress have "
+"finished."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/_fts_i18n.html:12
 msgid "Failed to start reindex."
 msgstr "启动重建索引失败。"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:12
+#: specivo/templates/themes/default/pages/_fts_i18n.html:13
 msgid "Reindex complete."
 msgstr "重建索引已完成。"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:13
+#: specivo/templates/themes/default/pages/_fts_i18n.html:14
 msgid "Reindex failed."
 msgstr "重建索引失败。"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:14
+#: specivo/templates/themes/default/pages/_fts_i18n.html:15
 #: specivo/templates/themes/default/pages/projects/settings.html:598
 #, python-format
 msgid "%(count)s issues"
 msgstr "%(count)s 个工作项"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:15
+#: specivo/templates/themes/default/pages/_fts_i18n.html:16
 #, python-format
 msgid "%(count)s wiki"
 msgstr "%(count)s 个维基页面"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:16
+#: specivo/templates/themes/default/pages/_fts_i18n.html:17
 #, python-format
 msgid "%(count)s chunks"
 msgstr "%(count)s 个片段"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:17
+#: specivo/templates/themes/default/pages/_fts_i18n.html:18
 #: specivo/templates/themes/default/pages/_link_graph_card.html:30
 #: specivo/web/deps.py:219
 msgid "just now"
 msgstr "刚刚"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:18
+#: specivo/templates/themes/default/pages/_fts_i18n.html:19
 #: specivo/templates/themes/default/pages/_link_graph_card.html:31
 #: specivo/templates/themes/default/pages/admin/user_detail.html:23
 #: specivo/templates/themes/default/pages/admin/users.html:27
@@ -966,13 +972,13 @@ msgstr "刚刚"
 msgid "%(count)s min ago"
 msgstr "%(count)s 分钟前"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:19
+#: specivo/templates/themes/default/pages/_fts_i18n.html:20
 #: specivo/templates/themes/default/pages/_link_graph_card.html:32
 #, python-format
 msgid "%(count)s h ago"
 msgstr "%(count)s 小时前"
 
-#: specivo/templates/themes/default/pages/_fts_i18n.html:20
+#: specivo/templates/themes/default/pages/_fts_i18n.html:21
 #: specivo/templates/themes/default/pages/_link_graph_card.html:33
 #, python-format
 msgid "%(count)s d ago"

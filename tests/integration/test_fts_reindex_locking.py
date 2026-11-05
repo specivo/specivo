@@ -2,14 +2,19 @@
 
 ``POST .../search/reindex/`` takes a Redis run lock (``SET NX EX`` holding the
 task id) before queueing, so two requests at once queue a single task and the
-other gets 409. An instance reindex and a project reindex exclude each other
-(they rewrite the same rows), while two projects may run side by side. The task
-takes advisory locks in its own namespace (instance: key 0 exclusive; project:
-key 0 shared plus its id) and is a no-op when they are held; it releases the
-run lock (compare-and-delete) on success and on failure.
+other gets 409. An instance reindex and a project reindex never run together
+(they rewrite the same rows), while two projects may run side by side. An
+instance request is never refused because projects are being reindexed (a
+project manager must not be able to starve it): it is queued with a pending
+marker that refuses new project runs, and its task waits for the running ones.
+The task takes advisory locks in its own namespace (instance: key 0 exclusive;
+project: key 0 shared plus its id); a project run is a no-op when they are
+held. Locks and the marker are released on success, failure and timeout.
 """
 
 from __future__ import annotations
+
+import asyncio
 
 import pytest
 from httpx import AsyncClient
@@ -20,7 +25,12 @@ from specivo.core.locks import LockUnavailableError, TokenLock
 from specivo.core.redis import get_redis
 from specivo.models.project import Project
 from specivo.models.user import User
-from specivo.tasks.search import FTS_REINDEX_LOCK_NAMESPACE, _locked_reindex, fts_lock_key
+from specivo.tasks.search import (
+    FTS_INSTANCE_PENDING_KEY,
+    FTS_REINDEX_LOCK_NAMESPACE,
+    _locked_reindex,
+    fts_lock_key,
+)
 from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, AdminUserFactory
 
@@ -74,6 +84,25 @@ def _project_url(project: Project) -> str:
 _INSTANCE_URL = "/api/v1/admin/search/reindex/"
 
 
+@pytest.fixture
+def work(monkeypatch):
+    """Stand-ins for the reindex itself and the stored result (written on the task's own connection)."""
+    calls: list[int | None] = []
+    stored: list[dict] = []
+
+    async def reindex(project_id, progress_cb):
+        calls.append(project_id)
+        await progress_cb({"issues": 1})
+        return {"status": "success"}
+
+    async def store(project_id, summary):
+        stored.append(summary)
+
+    monkeypatch.setattr("specivo.tasks.search._reindex_async", reindex)
+    monkeypatch.setattr("specivo.tasks.search._store_result", store)
+    return calls, stored
+
+
 class TestDispatch:
     async def test_a_double_dispatch_queues_one_task(self, admin_client, projects, queued):
         project, _ = projects
@@ -100,16 +129,37 @@ class TestDispatch:
         assert resp.status_code == 202
         assert await lock.holder() == resp.json()["task_id"]
 
-    async def test_instance_and_project_reindexes_exclude_each_other(self, admin_client, projects, queued):
+    async def test_project_runs_cannot_starve_an_instance_reindex(self, admin_client, projects, queued):
         first, second = projects
         assert (await admin_client.post(_project_url(first))).status_code == 202
         # Another project may run alongside...
         assert (await admin_client.post(_project_url(second))).status_code == 202
-        # ...but not the whole instance, which rewrites their rows too.
+        # ...and the instance request is queued to wait for them, not refused.
         instance = await admin_client.post(_INSTANCE_URL)
-        assert instance.status_code == 409
-        assert await TokenLock(await get_redis(), fts_lock_key(None)).holder() is None
-        assert len(queued) == 2
+        assert instance.status_code == 202, instance.text
+        assert instance.json()["state"] == "PENDING_INSTANCE"
+        redis = await get_redis()
+        assert await TokenLock(redis, FTS_INSTANCE_PENDING_KEY).holder() == instance.json()["task_id"]
+        assert len(queued) == 3
+        # From now on no project run may start, so the ones going can only drain.
+        await TokenLock(redis, fts_lock_key(first.id)).release(queued[0][1])
+        again = await admin_client.post(_project_url(first))
+        assert again.status_code == 409
+        assert "instance-wide" in again.json()["errors"][0]["message"]
+        assert len(queued) == 3
+
+    async def test_the_pending_marker_alone_refuses_project_runs(self, admin_client, projects, queued):
+        redis = await get_redis()
+        assert await TokenLock(redis, FTS_INSTANCE_PENDING_KEY).acquire("instance-waiting", 300)
+        resp = await admin_client.post(_project_url(projects[0]))
+        assert resp.status_code == 409
+        assert await TokenLock(redis, fts_lock_key(projects[0].id)).holder() is None
+        assert queued == []
+
+    async def test_an_instance_request_without_project_runs_starts_at_once(self, admin_client, queued):
+        resp = await admin_client.post(_INSTANCE_URL)
+        assert resp.status_code == 202 and resp.json()["state"] == "PENDING"
+        assert await TokenLock(await get_redis(), FTS_INSTANCE_PENDING_KEY).holder() is None
 
     async def test_a_running_instance_reindex_refuses_projects(self, admin_client, projects, queued):
         project, _ = projects
@@ -123,7 +173,11 @@ class TestDispatch:
         async def unavailable(self, token, ttl):
             raise LockUnavailableError("down")
 
+        async def unavailable_unless(self, token, ttl, blockers):
+            raise LockUnavailableError("down")
+
         monkeypatch.setattr(TokenLock, "acquire", unavailable)
+        monkeypatch.setattr(TokenLock, "acquire_unless", unavailable_unless)
         resp = await admin_client.post(_project_url(projects[0]))
         assert resp.status_code == 503
         assert resp.json()["errors"][0]["code"] == "lock_unavailable"
@@ -131,24 +185,6 @@ class TestDispatch:
 
 
 class TestTask:
-    @pytest.fixture
-    def work(self, monkeypatch):
-        """Stand-ins for the reindex itself and the stored result (written on the task's own connection)."""
-        calls: list[int | None] = []
-        stored: list[dict] = []
-
-        async def reindex(project_id, progress_cb):
-            calls.append(project_id)
-            await progress_cb({"issues": 1})
-            return {"status": "success"}
-
-        async def store(project_id, summary):
-            stored.append(summary)
-
-        monkeypatch.setattr("specivo.tasks.search._reindex_async", reindex)
-        monkeypatch.setattr("specivo.tasks.search._store_result", store)
-        return calls, stored
-
     async def test_releases_the_run_lock_on_success(self, work):
         calls, _ = work
         lock = TokenLock(await get_redis(), fts_lock_key(987101))
@@ -177,7 +213,6 @@ class TestTask:
         [
             (987103, False, 987103),  # the same project (a redelivered message)
             (0, False, 987104),  # an instance reindex
-            (0, True, None),  # a project reindex, for an instance run
         ],
     )
     async def test_is_a_no_op_while_the_scope_is_held(self, db_session, work, held, shared, project_id):
@@ -204,3 +239,65 @@ class TestTask:
             await db_session.execute(select(func.pg_advisory_unlock(FTS_REINDEX_LOCK_NAMESPACE, 987105)))
             await db_session.execute(select(func.pg_advisory_unlock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
         assert calls == [987106]
+
+
+class TestInstanceWait:
+    """An instance run waits for project runs, then clears the pending marker whatever happens."""
+
+    @pytest.fixture
+    def fast(self, monkeypatch):
+        monkeypatch.setattr("specivo.tasks.search.FTS_INSTANCE_WAIT_FIRST_DELAY", 0.05)
+        monkeypatch.setattr("specivo.tasks.search.FTS_INSTANCE_WAIT_MAX_DELAY", 0.1)
+
+    @pytest.fixture
+    async def held_instance(self):
+        redis = await get_redis()
+        lock = TokenLock(redis, fts_lock_key(None))
+        marker = TokenLock(redis, FTS_INSTANCE_PENDING_KEY)
+        assert await lock.acquire("fts-instance", 300)
+        assert await marker.acquire("fts-instance", 300)
+        return lock, marker
+
+    async def test_proceeds_once_project_runs_have_finished(self, db_session, work, fast, held_instance):
+        calls, _ = work
+        lock, marker = held_instance
+        await db_session.execute(select(func.pg_advisory_lock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        waits: list[int] = []
+        run = asyncio.create_task(_locked_reindex("fts-instance", None, lambda counts: None, lambda: waits.append(1)))
+        await asyncio.sleep(0.3)
+        assert not run.done() and calls == [] and waits
+        assert await marker.holder() == "fts-instance"
+        await db_session.execute(select(func.pg_advisory_unlock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        assert await asyncio.wait_for(run, 10) == {"status": "success"}
+        assert calls == [None]
+        assert await marker.holder() is None and await lock.holder() is None
+
+    async def test_gives_up_after_the_timeout_and_clears_everything(
+        self, db_session, work, fast, held_instance, monkeypatch
+    ):
+        calls, stored = work
+        lock, marker = held_instance
+        monkeypatch.setattr("specivo.tasks.search.FTS_INSTANCE_WAIT_TIMEOUT", 0.2)
+        await db_session.execute(select(func.pg_advisory_lock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        try:
+            result = await _locked_reindex("fts-instance", None, lambda counts: None)
+        finally:
+            await db_session.execute(select(func.pg_advisory_unlock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        assert result["status"] == "failed" and stored == [result]
+        assert calls == []
+        assert await marker.holder() is None and await lock.holder() is None
+
+    async def test_clears_the_marker_on_success_and_on_failure(self, work, fast, held_instance, monkeypatch):
+        lock, marker = held_instance
+        assert await _locked_reindex("fts-instance", None, lambda counts: None) == {"status": "success"}
+        assert await marker.holder() is None and await lock.holder() is None
+
+        async def broken(project_id, progress_cb):
+            raise RuntimeError("tokenizer exploded")
+
+        monkeypatch.setattr("specivo.tasks.search._reindex_async", broken)
+        assert await lock.acquire("fts-instance-2", 300)
+        assert await marker.acquire("fts-instance-2", 300)
+        with pytest.raises(RuntimeError):
+            await _locked_reindex("fts-instance-2", None, lambda counts: None)
+        assert await marker.holder() is None and await lock.holder() is None

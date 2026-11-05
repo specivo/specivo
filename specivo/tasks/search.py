@@ -16,8 +16,16 @@ One run at a time per scope, and never an instance run alongside a project run
   instance run key 0 exclusively, a project run key 0 *shared* plus its own
   project id exclusively. So project runs of different projects proceed side by
   side, and an instance run excludes them all and is excluded by any of them.
-  When the locks are held elsewhere (a redelivered message, or a run of the
-  other scope dispatched in the same instant) the task does nothing.
+  When they are held elsewhere a project run does nothing (a redelivered
+  message, or a run dispatched while an instance run holds the scope), and an
+  instance run waits for the project runs to finish.
+
+A project manager must not be able to keep an instance reindex out by
+starting project runs: an instance request is never refused because projects
+are being reindexed. It takes the instance lock and, if project runs are
+going, sets ``FTS_INSTANCE_PENDING_KEY``; from then on new project requests
+are refused (atomically, see ``TokenLock.acquire_unless``) and the instance
+task waits for the running ones to drain.
 """
 
 from __future__ import annotations
@@ -53,6 +61,13 @@ def fts_lock_key(project_id: int | None) -> str:
 
 
 FTS_PROJECT_LOCK_PATTERN = "fts:reindex:project:*"
+#: Set while an instance reindex waits for project reindexes to finish; refuses new project runs.
+FTS_INSTANCE_PENDING_KEY = "fts:reindex:instance-pending"
+#: Seconds an instance reindex waits for project reindexes before it gives up.
+FTS_INSTANCE_WAIT_TIMEOUT = 1800
+#: First and longest delay (seconds) between its checks.
+FTS_INSTANCE_WAIT_FIRST_DELAY = 1.0
+FTS_INSTANCE_WAIT_MAX_DELAY = 30.0
 
 
 def fts_advisory_keys(project_id: int | None) -> list[tuple[int, int, bool]]:
@@ -74,11 +89,26 @@ def reindex_fts_task(self, project_id: int | None = None):  # type: ignore[no-un
     def progress(counts: dict[str, int]) -> None:
         self.update_state(state="PROGRESS", meta=counts)
 
-    return run_async(_locked_reindex(self.request.id, project_id, progress))
+    def waiting() -> None:
+        self.update_state(state="WAITING", meta={"waiting_for": "project reindexes"})
+
+    return run_async(_locked_reindex(self.request.id, project_id, progress, waiting))
 
 
-async def _locked_reindex(task_id: str | None, project_id: int | None, progress_cb) -> dict:  # type: ignore[no-untyped-def]
-    """Run the reindex under the scope's advisory locks, refreshing and finally releasing the Redis run lock."""
+async def _locked_reindex(task_id: str | None, project_id: int | None, progress_cb, waiting_cb=None) -> dict:  # type: ignore[no-untyped-def]
+    """Run the reindex under the scope's advisory locks, refreshing and finally releasing the Redis run lock.
+
+    A project run that finds its scope held does nothing. An instance run
+    waits instead, polling with a growing delay, for the project runs that
+    were going when it was asked for: new ones cannot start meanwhile (the
+    instance lock and the pending marker refuse them), so the wait ends. After
+    ``FTS_INSTANCE_WAIT_TIMEOUT`` it gives up and records a failed result. The
+    pending marker is cleared once the instance run holds its lock, and in any
+    case when the task ends: on success, failure or timeout.
+    """
+    import asyncio
+    import time
+
     from sqlalchemy.ext.asyncio import create_async_engine
     from sqlalchemy.pool import NullPool
 
@@ -86,31 +116,56 @@ async def _locked_reindex(task_id: str | None, project_id: int | None, progress_
     from specivo.core.locks import TokenLock, try_advisory_locks
     from specivo.core.redis import get_redis
 
-    lock = TokenLock(await get_redis(), fts_lock_key(project_id))
+    redis = await get_redis()
+    lock = TokenLock(redis, fts_lock_key(project_id))
+    marker = TokenLock(redis, FTS_INSTANCE_PENDING_KEY)
     token = task_id or ""
     engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+    deadline = time.monotonic() + FTS_INSTANCE_WAIT_TIMEOUT
+    delay = FTS_INSTANCE_WAIT_FIRST_DELAY
     try:
-        async with try_advisory_locks(engine, fts_advisory_keys(project_id)) as acquired:
-            if not acquired:
-                # The scope (or the other scope) is being reindexed: by this
-                # very message redelivered, or by a run dispatched alongside.
-                # Its Redis lock is not ours to touch.
+        while True:
+            async with try_advisory_locks(engine, fts_advisory_keys(project_id)) as acquired:
+                if acquired:
+                    if project_id is None:
+                        await marker.release(token)
+
+                    async def report(counts: dict[str, int]) -> None:
+                        progress_cb(counts)
+                        await lock.refresh(token, FTS_REINDEX_LOCK_TTL)
+
+                    try:
+                        return await _reindex_async(project_id, report)
+                    except Exception as exc:
+                        logger.exception("FTS reindex failed (project_id=%s)", project_id)
+                        await _store_result(project_id, {"status": "failed", "error": str(exc)})
+                        raise
+                    finally:
+                        await lock.release(token)
+            if project_id is not None:
+                # The scope (or the instance) is being reindexed: by this very
+                # message redelivered, or by a run dispatched alongside. Its
+                # Redis lock is not ours to touch.
                 logger.info("FTS reindex of project %s skipped: another reindex holds the scope", project_id)
                 return {"status": "skipped"}
-
-            async def report(counts: dict[str, int]) -> None:
-                progress_cb(counts)
-                await lock.refresh(token, FTS_REINDEX_LOCK_TTL)
-
-            try:
-                return await _reindex_async(project_id, report)
-            except Exception as exc:
-                logger.exception("FTS reindex failed (project_id=%s)", project_id)
-                await _store_result(project_id, {"status": "failed", "error": str(exc)})
-                raise
-            finally:
+            if time.monotonic() >= deadline:
+                summary = {
+                    "status": "failed",
+                    "error": "Timed out waiting for the project reindexes in progress to finish",
+                }
+                logger.warning("FTS instance reindex gave up waiting for project reindexes")
+                await _store_result(None, summary)
                 await lock.release(token)
+                return summary
+            if waiting_cb is not None:
+                waiting_cb()
+            await lock.refresh(token, FTS_REINDEX_LOCK_TTL)
+            await marker.refresh(token, FTS_INSTANCE_WAIT_TIMEOUT + FTS_REINDEX_LOCK_TTL)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, FTS_INSTANCE_WAIT_MAX_DELAY)
     finally:
+        if project_id is None:
+            await marker.release(token)
         await engine.dispose()
 
 
