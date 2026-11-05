@@ -754,7 +754,7 @@ async def get_reader(
 AUTH_FAILURE_AUDIT_WINDOW_SECONDS = 60
 
 
-async def _first_auth_failure_in_window(ip: str | None, reason: str) -> bool:
+async def first_auth_failure_in_window(ip: str | None, reason: str) -> bool:
     """Whether this is the first refusal for *ip* and *reason* in the window.
 
     A ``SET NX EX`` in Redis, so a script retrying a bad token or key writes
@@ -789,7 +789,7 @@ async def _log_auth_failure(db: AsyncSession, reason: str, request: Request) -> 
 
         audit = SecurityAuditService()
         info = audit.request_info(request)
-        if not await _first_auth_failure_in_window(info["ip_address"], reason):
+        if not await first_auth_failure_in_window(info["ip_address"], reason):
             return
         await audit.log_event(
             session=db,

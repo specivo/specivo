@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -613,3 +614,156 @@ async def test_mcp_tool_call_over_http_records_where_it_came_from(mcp_key, db_en
     finally:
         async with db_engine.begin() as conn:
             await conn.execute(delete(SecurityAuditLog).where(SecurityAuditLog.user_id == user_id))
+
+
+async def _refused_mcp_rows(db_engine) -> list[Any]:
+    async with db_engine.connect() as conn:
+        stmt = select(SecurityAuditLog.details, SecurityAuditLog.ip_address, SecurityAuditLog.user_agent).where(
+            SecurityAuditLog.event_type == AuditEvent.AUTH_FAILURE.value,
+            SecurityAuditLog.details["source"].astext == "mcp",
+        )
+        return list((await conn.execute(stmt)).all())
+
+
+@asynccontextmanager
+async def _mcp_http(db_engine):
+    """A client on the real MCP transport; clears the refusals it causes."""
+    from sqlalchemy import delete
+
+    from specivo.core.redis import get_redis
+    from specivo.main import create_app
+    from specivo.mcp.mount import get_mcp_session_manager
+
+    app = create_app()
+    manager = get_mcp_session_manager()
+    assert manager is not None
+    # The throttle remembers refusals for a minute, across tests.
+    redis = await get_redis()
+    async for key in redis.scan_iter(match="audit:auth_failure:*"):
+        await redis.delete(key)
+    try:
+        async with manager.run():
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+                yield http
+    finally:
+        async with db_engine.begin() as conn:
+            await conn.execute(
+                delete(SecurityAuditLog).where(SecurityAuditLog.event_type == AuditEvent.AUTH_FAILURE.value)
+            )
+
+
+async def _mcp_initialize(http: AsyncClient, token: str | None) -> Any:
+    from tests.integration.test_mcp_protocol import _ACCEPT
+    from tests.integration.test_mcp_transport import _INIT_PARAMS
+
+    headers = {"Accept": _ACCEPT, "User-Agent": "refused-agent/1"}
+    if token is not None:
+        headers["Authorization"] = f"Bearer {token}"
+    return await http.post(
+        "/mcp/", headers=headers, json={"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": _INIT_PARAMS}
+    )
+
+
+async def _mcp_whoami(http: AsyncClient, token: str) -> dict[str, Any]:
+    """Open a session with *token* and call a tool; return the tool's result."""
+    from tests.integration.test_mcp_protocol import _ACCEPT, _sse_json
+
+    init = await _mcp_initialize(http, token)
+    assert init.status_code == 200, init.text
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": _ACCEPT,
+        "User-Agent": "refused-agent/1",
+        "Mcp-Session-Id": init.headers["mcp-session-id"],
+        "Mcp-Protocol-Version": "2025-03-26",
+    }
+    await http.post("/mcp/", headers=headers, json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    called = await http.post(
+        "/mcp/",
+        headers=headers,
+        json={"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "specivo_whoami", "arguments": {}}},
+    )
+    return _sse_json(called.text)["result"]
+
+
+@pytest.mark.serial
+async def test_unknown_key_on_mcp_writes_auth_failure(db_engine) -> None:
+    unknown = "spv_" + "q" * 43
+    async with _mcp_http(db_engine) as http:
+        result = await _mcp_whoami(http, unknown)
+        assert result["isError"] is True
+
+        [row] = await _refused_mcp_rows(db_engine)
+        assert row.details == {"reason": "api_key_invalid", "source": "mcp"}
+        assert (row.ip_address, row.user_agent) == ("127.0.0.1", "refused-agent/1")
+        assert unknown not in str(row)
+
+
+@pytest.mark.serial
+async def test_unknown_key_opening_a_session_writes_auth_failure(db_engine) -> None:
+    """The session store checks the owner when a session opens, before any tool call."""
+    from specivo.mcp.auth import resolve_key_owner
+
+    async with _mcp_http(db_engine):
+        assert await resolve_key_owner("spv_" + "s" * 43) is None
+
+        [row] = await _refused_mcp_rows(db_engine)
+        assert row.details == {"reason": "api_key_invalid", "source": "mcp"}
+
+
+@pytest.mark.serial
+async def test_malformed_token_on_mcp_writes_auth_failure(db_engine) -> None:
+    async with _mcp_http(db_engine) as http:
+        resp = await _mcp_initialize(http, "not-a-specivo-key")
+        assert resp.status_code == 401, resp.text
+
+        [row] = await _refused_mcp_rows(db_engine)
+        assert row.details == {"reason": "api_key_invalid", "source": "mcp"}
+        assert (row.ip_address, row.user_agent) == ("127.0.0.1", "refused-agent/1")
+
+
+@pytest.mark.serial
+async def test_mcp_without_credentials_writes_nothing(db_engine) -> None:
+    async with _mcp_http(db_engine) as http:
+        resp = await _mcp_initialize(http, None)
+        assert resp.status_code == 401, resp.text
+
+        assert await _refused_mcp_rows(db_engine) == []
+
+
+@pytest.mark.serial
+async def test_repeated_mcp_refusals_write_one_row(db_engine) -> None:
+    async with _mcp_http(db_engine) as http:
+        for _ in range(3):
+            await _mcp_whoami(http, "spv_" + "r" * 43)
+
+        assert len(await _refused_mcp_rows(db_engine)) == 1
+
+
+@pytest.mark.serial
+async def test_mcp_refusal_does_not_hide_a_rest_refusal(db_engine) -> None:
+    """The two paths throttle apart: one from each in a minute means two rows."""
+    from specivo.core.security import first_auth_failure_in_window
+
+    async with _mcp_http(db_engine) as http:
+        await _mcp_initialize(http, "not-a-specivo-key")
+        assert await first_auth_failure_in_window("127.0.0.1", "api_key_invalid") is True
+
+
+@pytest.mark.serial
+async def test_key_deactivated_mid_session_writes_auth_failure(mcp_key, db_engine) -> None:  # noqa: F811
+    from sqlalchemy import update
+
+    from specivo.models.auth import ApiKey
+
+    raw_key, _user_id, key_id = mcp_key
+    async with _mcp_http(db_engine) as http:
+        assert (await _mcp_whoami(http, raw_key))["isError"] is False
+        assert await _refused_mcp_rows(db_engine) == []
+        async with db_engine.begin() as conn:
+            await conn.execute(update(ApiKey).where(ApiKey.id == key_id).values(is_active=False))
+
+        assert (await _mcp_whoami(http, raw_key))["isError"] is True
+
+        [row] = await _refused_mcp_rows(db_engine)
+        assert row.details == {"reason": "api_key_inactive", "source": "mcp"}

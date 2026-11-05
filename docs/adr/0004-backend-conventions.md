@@ -541,6 +541,8 @@ edits to issues and wiki pages are not audit events: they live in issue and wiki
 - `auth_failure` for a request without credentials, or for an expired token on the cookie path. A presented
   credential that is refused (a bad bearer token, an invalid, inactive or expired API key) is written, at
   most once a minute per client address and reason (Redis `SET NX EX 60`; written anyway when Redis is down).
+  MCP refusals (a malformed token, or a key refused when a session opens or a tool runs) are written the same
+  way with `source: mcp`, throttled apart from REST, in their own session because the tool's rolls back.
 - A failed sign-in stores `login_hint` only as the login of the account the attempt named, otherwise
   `login_known: false`: a password typed into the login field must not become readable.
   A password reset request stores the address only when it matches an account, otherwise
