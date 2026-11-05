@@ -368,8 +368,36 @@ async def test_an_ordinary_word_before_the_number_still_finds_it(
 
 
 @pytest.mark.parametrize("mode", MODES)
-async def test_a_word_naming_another_system_does_not_pin(db_session: AsyncSession, world: World, mode: str) -> None:
-    assert world.visible.display_key not in _titles(await _search(db_session, mode, "jira #123", world.reader))
+async def test_a_word_naming_a_system_prefers_that_system(db_session: AsyncSession, world: World, mode: str) -> None:
+    tracker = await db_session.get(Tracker, world.visible.tracker_id)
+    status = await db_session.get(IssueStatus, world.visible.status_id)
+    priority = await db_session.get(IssuePriority, world.visible.priority_id)
+    project = await db_session.get(Project, world.visible.project_id)
+    other = await _issue(db_session, (tracker, status, priority), world.admin, project, "Scanner fails at boot")
+    db_session.add(_ref(other, "123", system="jira"))
+    await db_session.commit()
+
+    jira = _titles(await _search(db_session, mode, "jira #123", world.reader))
+    assert jira[0] == other.display_key
+    assert world.visible.display_key not in jira
+    rt = _titles(await _search(db_session, mode, "RT #123", world.reader))
+    assert rt[0] == world.visible.display_key
+    assert other.display_key not in rt
+
+
+@pytest.mark.parametrize("mode", MODES)
+async def test_a_hidden_issue_does_not_change_how_a_word_is_read(
+    db_session: AsyncSession, world: World, mode: str
+) -> None:
+    """If a hidden match could suppress the visible one, the results would reveal it."""
+    before = _titles(await _search(db_session, mode, "secret #123", world.reader))
+    db_session.add(_ref(world.hidden, "123", "Secret #123", system="secret"))
+    await db_session.commit()
+
+    after = _titles(await _search(db_session, mode, "secret #123", world.reader))
+
+    assert after == before
+    assert after[0] == world.visible.display_key
 
 
 @pytest.mark.parametrize("mode", MODES)
