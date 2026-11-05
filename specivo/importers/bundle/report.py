@@ -44,6 +44,7 @@ class ProblemCode(StrEnum):
     SIZE_MISMATCH = "size_mismatch"
     UNREFERENCED_FILE = "unreferenced_file"
     COUNT_MISMATCH = "count_mismatch"
+    DUPLICATE_SOURCE_NUMBER = "duplicate_source_number"
 
 
 @dataclass(frozen=True, slots=True)

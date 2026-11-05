@@ -12,6 +12,7 @@ insert too.
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -23,11 +24,13 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, text
 
 from specivo.cli.import_data import parse_args, run_validation
 from specivo.importers.bundle import BundleInvalidError
-from specivo.importers.core.id_map import ImportIdMap
+from specivo.importers.bundle.adapter import BundleSourceAdapter
+from specivo.importers.bundle.report import ProblemCode
+from specivo.importers.core.id_map import ImportIdMap, purge_scope, rename_scope
 from specivo.importers.core.ir import EntityType
 from specivo.importers.core.links_file import LinksStore, PendingText, links_signing_key, text_sha256
 from specivo.importers.core.pipeline import PhaseFailedError
@@ -36,6 +39,7 @@ from specivo.importers.load.pending_links import resolve_links_file
 from specivo.models.attachment import Attachment
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
+from specivo.models.issue_source_ref import IssueSourceRef
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.lookups import IssueCategory, IssueStatus, Tracker
 from specivo.models.member import Member, MemberRole
@@ -1781,3 +1785,255 @@ class TestInvalidBundle:
 
         assert await _count(db_session, User) == users_before
         assert await _count(db_session, ImportIdMapping) == 0
+
+
+class TestSourceRefs:
+    """What an import remembers of the number an issue had, for readers rather than for re-running."""
+
+    @staticmethod
+    async def _refs(session) -> list[tuple[str, str, str, str, bool]]:
+        rows = await session.execute(
+            select(
+                Issue.subject,
+                IssueSourceRef.source_system,
+                IssueSourceRef.ref,
+                IssueSourceRef.label,
+                IssueSourceRef.is_primary,
+            )
+            .join(IssueSourceRef, IssueSourceRef.issue_id == Issue.id)
+            .order_by(Issue.subject, IssueSourceRef.ref)
+        )
+        return [tuple(row) for row in rows]
+
+    @staticmethod
+    def _bundle(root: Path, issues: list[dict], *, label: str | None = "RT", version: str = "1.1") -> Path:
+        source = {"system": "rt", "instance": "tracker.example.com"}
+        if label is not None:
+            source["label"] = label
+        return write_bundle(
+            root,
+            manifest_data=manifest(format_version=version, source=source),
+            projects=[project()],
+            issues=issues,
+        )
+
+    async def test_import_records_source_ref_with_label(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "b", [issue("123")])).run()
+        assert await self._refs(db_session) == [("Issue 123", "rt", "123", "RT #123", True)]
+
+    async def test_a_dry_run_keeps_no_numbers(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "b", [issue("123")]), dry_run=True).run()
+        assert await self._refs(db_session) == []
+
+    async def test_the_label_defaults_to_the_system_with_an_initial_capital(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        await build_bundle_import(self._bundle(tmp_path / "b", [issue("123")], label=None)).run()
+        assert await self._refs(db_session) == [("Issue 123", "rt", "123", "Rt #123", True)]
+
+    async def test_source_key_overrides_source_ref(self, db_session, build_bundle_import, tmp_path):
+        bundle = self._bundle(tmp_path / "b", [issue("10001", source_key="PROJ-7")], label="Jira")
+        await build_bundle_import(bundle).run()
+        assert await self._refs(db_session) == [("Issue 10001", "rt", "PROJ-7", "PROJ-7", True)]
+
+    async def test_aliases_resolve_to_the_issue(self, db_session, build_bundle_import, tmp_path):
+        bundle = self._bundle(tmp_path / "b", [issue("123", source_aliases=["120", "OLD-9", "123", "120"])])
+        await build_bundle_import(bundle).run()
+        assert await self._refs(db_session) == [
+            ("Issue 123", "rt", "120", "RT #120", False),
+            ("Issue 123", "rt", "123", "RT #123", True),
+            ("Issue 123", "rt", "OLD-9", "OLD-9", False),
+        ]
+
+    async def test_rerun_updates_label_without_duplicates(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "one", [issue("123")], label=None)).run()
+        updated_at = (await _issue(db_session, "Issue 123")).updated_at
+        again = self._bundle(tmp_path / "two", [issue("123", source_aliases=["120"])])
+
+        summary = await build_bundle_import(again, continue_import=True).run()
+
+        assert summary.created.get(EntityType.ISSUE, 0) == 0
+        assert await self._refs(db_session) == [
+            ("Issue 123", "rt", "120", "RT #120", False),
+            ("Issue 123", "rt", "123", "RT #123", True),
+        ]
+        assert (await _issue(db_session, "Issue 123")).updated_at == updated_at
+
+    async def test_rerun_replaces_an_internal_id_with_the_key_people_know(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        """What an import from before this format gets: the id goes, since nobody knows it."""
+        await build_bundle_import(self._bundle(tmp_path / "one", [issue("10001")])).run()
+        again = self._bundle(tmp_path / "two", [issue("10001", source_key="PROJ-7")])
+        await build_bundle_import(again, continue_import=True).run()
+        assert await self._refs(db_session) == [("Issue 10001", "rt", "PROJ-7", "PROJ-7", True)]
+
+    async def test_a_key_that_changed_stays_as_an_alias(self, db_session, build_bundle_import, tmp_path):
+        """An issue moved in the source between exports: the old key still means it."""
+        await build_bundle_import(self._bundle(tmp_path / "one", [issue("10001", source_key="OLD-1")])).run()
+        again = self._bundle(tmp_path / "two", [issue("10001", source_key="NEW-2")])
+        await build_bundle_import(again, continue_import=True).run()
+        assert await self._refs(db_session) == [
+            ("Issue 10001", "rt", "NEW-2", "NEW-2", True),
+            ("Issue 10001", "rt", "OLD-1", "OLD-1", False),
+        ]
+
+    async def test_rerun_skips_an_issue_deleted_since(self, db_session, build_bundle_import, tmp_path):
+        """The map still names it, and no foreign key may stop the rest of the import."""
+        bundle = self._bundle(tmp_path / "b", [issue("1"), issue("2")])
+        await build_bundle_import(bundle).run()
+        await db_session.delete(await _issue(db_session, "Issue 1"))
+        await db_session.flush()
+
+        await build_bundle_import(bundle, continue_import=True).run()
+
+        assert await self._refs(db_session) == [("Issue 2", "rt", "2", "RT #2", True)]
+
+    async def test_purge_keeps_source_refs(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "b", [issue("123")])).run()
+        assert await purge_scope(db_session, "rt", "tracker.example.com") > 0
+        assert await self._refs(db_session) == [("Issue 123", "rt", "123", "RT #123", True)]
+
+    async def test_rename_scope_updates_system(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "b", [issue("123", source_aliases=["120"])])).run()
+        other = (await _issue(db_session, "Issue 123")).project_id
+        native = Issue(
+            project_id=other,
+            project_key=(await _issue(db_session, "Issue 123")).project_key,
+            sequence_number=99,
+            tracker_id=(await _issue(db_session, "Issue 123")).tracker_id,
+            status_id=(await _issue(db_session, "Issue 123")).status_id,
+            priority_id=(await _issue(db_session, "Issue 123")).priority_id,
+            author_id=(await _issue(db_session, "Issue 123")).author_id,
+            subject="Another install's 123",
+        )
+        db_session.add(native)
+        await db_session.flush()
+        # The same system from another installation stays where it is.
+        db_session.add(
+            IssueSourceRef(issue_id=native.id, source_system="rt", ref="123", label="RT #123", is_primary=True)
+        )
+        await db_session.flush()
+
+        await rename_scope(
+            db_session,
+            from_system="rt",
+            from_instance="tracker.example.com",
+            to_system="tickets",
+            to_instance="tracker.example.com",
+        )
+
+        assert await self._refs(db_session) == [
+            ("Another install's 123", "rt", "123", "RT #123", True),
+            ("Issue 123", "tickets", "120", "RT #120", False),
+            ("Issue 123", "tickets", "123", "RT #123", True),
+        ]
+
+    async def test_rename_dry_run_changes_nothing(self, db_session, build_bundle_import, tmp_path):
+        await build_bundle_import(self._bundle(tmp_path / "b", [issue("123")])).run()
+        await rename_scope(
+            db_session,
+            from_system="rt",
+            from_instance="tracker.example.com",
+            to_system="tickets",
+            to_instance="tracker.example.com",
+            dry_run=True,
+        )
+        assert await self._refs(db_session) == [("Issue 123", "rt", "123", "RT #123", True)]
+
+    async def test_bundle_1_0_still_loads(self, db_session, build_bundle_import, tmp_path):
+        bundle = write_bundle(tmp_path / "b", projects=[project()], issues=[issue("7")])
+        assert json.loads((bundle / "manifest.json").read_text())["format_version"] == "1.0"
+        await build_bundle_import(bundle).run()
+        assert await self._refs(db_session) == [("Issue 7", "sample", "7", "Sample #7", True)]
+
+    async def test_a_bundle_newer_than_this_reader_loads_with_a_warning(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        """As a 1.0 reader takes a 1.1 bundle: the next properties it does not know are warnings."""
+        bundle = write_bundle(
+            tmp_path / "b",
+            manifest_data=manifest(
+                format_version="1.99",
+                source={"system": "rt", "instance": "tracker.example.com", "future": True},
+            ),
+            projects=[project()],
+            issues=[issue("7", future_field="ignored")],
+        )
+        await build_bundle_import(bundle).run()
+        assert await self._refs(db_session) == [("Issue 7", "rt", "7", "Rt #7", True)]
+        report = await BundleSourceAdapter(bundle).validate()
+        warnings = [p.message for p in report.warnings]
+        assert any("newer than this Specivo" in message for message in warnings)
+        assert any("future_field" in message for message in warnings)
+
+    async def test_migration_backfill_from_id_map(self, db_session, build_bundle_import, tmp_path):
+        path = Path(__file__).parents[3] / "alembic" / "versions" / "0053_issue_source_refs.py"
+        spec = importlib.util.spec_from_file_location("migration_0053", path)
+        migration = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(migration)
+
+        await build_bundle_import(self._bundle(tmp_path / "b", [issue("123"), issue("PROJ-7")])).run()
+        await db_session.execute(delete(IssueSourceRef))
+        target = (await _issue(db_session, "Issue 123")).id
+        run_id = uuid.uuid4()
+        for source_id, target_id in ((("999"), 2_000_000_000), ("9", target)):
+            db_session.add(
+                ImportIdMapping(
+                    import_run_id=run_id,
+                    source_system="redmine",
+                    source_instance="other.example.com",
+                    entity_type="issue",
+                    source_id=source_id,
+                    target_table="issues",
+                    target_id=target_id,
+                )
+            )
+        await db_session.flush()
+
+        await db_session.execute(text(migration.BACKFILL_SQL))
+        await db_session.execute(text(migration.BACKFILL_SQL))  # safe to run twice
+
+        assert await self._refs(db_session) == [
+            ("Issue 123", "rt", "123", "Rt #123", True),
+            ("Issue 123", "redmine", "9", "Redmine #9", True),
+            ("Issue PROJ-7", "rt", "PROJ-7", "PROJ-7", True),
+        ]
+
+    async def test_scan_warns_about_a_number_two_issues_claim(self, tmp_path):
+        bundle = self._bundle(
+            tmp_path / "b",
+            [
+                issue("1", source_aliases=["5"]),
+                issue("2", source_aliases=["5"]),
+                issue("3", source_key="KEY-1"),
+                issue("4", source_aliases=["key-1"]),
+            ],
+        )
+        report = await BundleSourceAdapter(bundle).validate()
+        assert report.ok
+        messages = [p.message for p in report.warnings if p.code == ProblemCode.DUPLICATE_SOURCE_NUMBER]
+        assert len(messages) == 2
+        assert any("'5'" in message for message in messages)
+        assert any("key-1" in message.lower() for message in messages)
+
+    @pytest.mark.parametrize(
+        "fields",
+        [
+            {"source_key": ""},
+            {"source_key": "has space"},
+            {"source_key": "x\u0000y"},
+            {"source_key": "k" * 256},
+            {"source_aliases": [""]},
+            {"source_aliases": "120"},
+            {"source_aliases": ["a\u0000"]},
+        ],
+    )
+    async def test_scan_refuses_a_number_that_could_not_be_stored(self, tmp_path, fields):
+        report = await BundleSourceAdapter(self._bundle(tmp_path / "b", [issue("1", **fields)])).validate()
+        assert not report.ok
+
+    @pytest.mark.parametrize("label", ["", "x" * 41, "a\u0000b", "a\nb"])
+    async def test_scan_refuses_a_label_that_could_not_be_shown(self, tmp_path, label):
+        report = await BundleSourceAdapter(self._bundle(tmp_path / "b", [issue("1")], label=label)).validate()
+        assert not report.ok

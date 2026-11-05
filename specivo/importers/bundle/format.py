@@ -33,7 +33,7 @@ from specivo.importers.core.ir import (
 
 FORMAT_NAME = "specivo-import-bundle"
 FORMAT_MAJOR = 1
-FORMAT_MINOR = 0
+FORMAT_MINOR = 1
 FORMAT_VERSION = f"{FORMAT_MAJOR}.{FORMAT_MINOR}"
 
 MANIFEST = "manifest.json"

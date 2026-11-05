@@ -414,6 +414,10 @@ class IRIssue:
     status_ref: str
     priority_ref: str
     subject: str
+    # The number people know the issue by, when it is not source_ref.
+    source_key: str | None = None
+    # Other numbers that now mean this issue: merged tickets, keys it used to have.
+    source_aliases: list[str] = field(default_factory=list)
     author_ref: str | None = None
     assigned_to_ref: str | None = None
     description: str | None = None

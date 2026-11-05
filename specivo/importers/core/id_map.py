@@ -27,7 +27,9 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.importers.core.ir import EntityType
 from specivo.models.import_id_map import ImportIdMapping
+from specivo.models.issue_source_ref import IssueSourceRef
 
 logger = logging.getLogger(__name__)
 
@@ -366,6 +368,21 @@ async def rename_scope(
     if dry_run:
         return moving
 
+    if to_system != from_system:
+        # What readers see of these issues follows; other imports of the old
+        # system keep their name. Before the map moves, while it names the scope.
+        scope_issues = select(ImportIdMapping.target_id).where(
+            ImportIdMapping.source_system == from_system,
+            ImportIdMapping.source_instance == from_instance,
+            ImportIdMapping.entity_type == EntityType.ISSUE.value,
+            ImportIdMapping.target_table == "issues",
+        )
+        await session.execute(
+            update(IssueSourceRef)
+            .where(IssueSourceRef.source_system == from_system, IssueSourceRef.issue_id.in_(scope_issues))
+            .values(source_system=to_system)
+            .execution_options(synchronize_session=False)
+        )
     result = await session.execute(
         update(ImportIdMapping)
         .where(

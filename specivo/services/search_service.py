@@ -147,6 +147,11 @@ def rrf_fuse(fts_ids: list[int], sem_ids: list[int], k: int = RRF_K) -> list[int
 IDENTIFIER_PATTERN = r"(?<![A-Za-z0-9_])([A-Za-z][A-Za-z0-9_]{0,63})-([0-9]{1,18})(?![A-Za-z0-9_])"
 _IDENTIFIER_RE = re.compile(IDENTIFIER_PATTERN)
 
+# A number from the system an issue was imported from, as a reader writes it:
+# ``RT #123`` or ``#123``. A hash glued to other text (``repo#123``, ``&#123;``)
+# is something else, and a bare ``123`` would pin noise on every number search.
+_SOURCE_NUMBER_RE = re.compile(r"(?<![\w&#-])(?:([^\W\d_][\w-]{0,63})\s+)?(?<![\w&#])#([0-9]{1,18})(?!\w)")
+
 # Bounds the per-query lookup; further tokens are searched as plain text.
 MAX_QUERY_IDENTIFIERS = 10
 # Longest search query (characters) parsed; the rest is ignored. Every term of
@@ -167,6 +172,24 @@ def extract_identifiers(query: str) -> list[str]:
         ident = f"{match.group(1)}-{match.group(2)}".upper()
         if ident not in seen:
             seen.append(ident)
+            if len(seen) == MAX_QUERY_IDENTIFIERS:
+                break
+    return seen
+
+
+def extract_source_numbers(query: str) -> list[tuple[str | None, str]]:
+    """Return the distinct ``(word, number)`` pairs in *query*, the word lower-cased or None.
+
+    They are only looked up: free text keeps these tokens, so full-text results
+    still follow the issues they pin.
+    """
+    seen: list[tuple[str | None, str]] = []
+    for match in _SOURCE_NUMBER_RE.finditer(query[:MAX_QUERY_CHARS]):
+        word = match.group(1)
+        # ``ACME-42 #7`` is two references; ACME-42 names no system.
+        pair = (None if word is None or _IDENTIFIER_RE.fullmatch(word) else word.lower(), match.group(2))
+        if pair not in seen:
+            seen.append(pair)
             if len(seen) == MAX_QUERY_IDENTIFIERS:
                 break
     return seen
@@ -733,26 +756,40 @@ class SearchService:
         project_id: int | None = None,
         project_ids: list[int] | None = None,
         filters: SearchFilters | None = None,
+        source_numbers: list[tuple[str | None, str]] | None = None,
     ) -> list[SearchResult]:
         """Resolve identifier tokens to the issues they name, in query order.
 
         A ``KEY-N`` token names an issue by its current reference, by a
         reference it had before moving to another project
-        (``issue_ref_aliases``), or under a renamed project's retired key
-        (``project_key_aliases``). The hits go through the same visibility,
-        project and metadata filters as full-text results, so a reference
-        the user cannot see resolves to nothing.
+        (``issue_ref_aliases``), under a renamed project's retired key
+        (``project_key_aliases``), or by the key it had in the system it was
+        imported from (``issue_source_refs``). *source_numbers* name imported
+        issues the same way: with a word, the system or a word of the label
+        must match it; without one, or with a word that names no system and
+        no label of that number ("bug #123"), any system does. The hits go through the
+        same visibility, project and metadata filters as full-text results,
+        so a reference the user cannot see resolves to nothing.
+
+        For one token an issue of this instance comes before an imported one,
+        which may be why a project with the same key exists.
         """
         # Narrow to the authenticating API key's project limit, if any.
         project_id, project_ids = scope_project_ids(project_id, project_ids)
-        refs = [(key, int(num)) for key, _, num in (ident.rpartition("-") for ident in identifiers)]
-        refs = [(key, num) for key, num in refs if num <= _PG_INT_MAX]
-        if not refs:
+        source_numbers = source_numbers or []
+        if not identifiers and not source_numbers:
             return []
+        refs = [(key, int(num)) for key, _, num in (ident.rpartition("-") for ident in identifiers)]
+        # Too large to be a sequence number, but it can still be a source key.
+        refs = [(key, num) for key, num in refs if num <= _PG_INT_MAX]
 
         params: dict[str, Any] = {
             "ref_keys": [key for key, _ in refs],
             "ref_seqs": [num for _, num in refs],
+            "source_keys": [ident.lower() for ident in identifiers],
+            "number_words": [word for word, _ in source_numbers],
+            "number_values": [number for _, number in source_numbers],
+            "number_ord_base": len(identifiers),
         }
         params.update(await self._visibility_params(session, user))
 
@@ -772,18 +809,46 @@ class SearchService:
                 FROM unnest(CAST(:ref_keys AS text[]), CAST(:ref_seqs AS integer[]))
                      WITH ORDINALITY AS t(key, seq, ord)
             ),
+            source_keys AS (
+                SELECT t.token, t.ord
+                FROM unnest(CAST(:source_keys AS text[])) WITH ORDINALITY AS t(token, ord)
+            ),
+            source_numbers AS (
+                SELECT t.word, t.number, t.ord + CAST(:number_ord_base AS bigint) AS ord
+                FROM unnest(CAST(:number_words AS text[]), CAST(:number_values AS text[]))
+                     WITH ORDINALITY AS t(word, number, ord)
+            ),
             resolved AS (
-                SELECT ri.id AS issue_id, refs.ord
+                SELECT ri.id AS issue_id, refs.ord, 0 AS foreign_rank
                 FROM refs JOIN issues ri ON ri.project_key = refs.key AND ri.sequence_number = refs.seq
                 UNION ALL
-                SELECT a.issue_id, refs.ord
+                SELECT a.issue_id, refs.ord, 0
                 FROM refs JOIN issue_ref_aliases a
                     ON a.old_project_key = refs.key AND a.old_sequence_number = refs.seq
                 UNION ALL
-                SELECT ri.id, refs.ord
+                SELECT ri.id, refs.ord, 0
                 FROM refs
                 JOIN project_key_aliases pka ON pka.old_key = refs.key
                 JOIN issues ri ON ri.project_id = pka.project_id AND ri.sequence_number = refs.seq
+                UNION ALL
+                SELECT sr.issue_id, sk.ord, 1
+                FROM source_keys sk JOIN issue_source_refs sr ON lower(sr.ref) = sk.token
+                UNION ALL
+                SELECT sr.issue_id, sn.ord, 1
+                FROM source_numbers sn JOIN issue_source_refs sr ON lower(sr.ref) = sn.number
+                WHERE sn.word IS NULL
+                   OR sr.source_system = sn.word
+                   OR sn.word = ANY(string_to_array(lower(sr.label), ' '))
+                   -- A word that names no system and no label of this number is
+                   -- ordinary text ("bug #123"), so the number stands alone.
+                   OR (
+                       NOT EXISTS (SELECT 1 FROM issue_source_refs x WHERE x.source_system = sn.word)
+                       AND NOT EXISTS (
+                           SELECT 1 FROM issue_source_refs x
+                           WHERE lower(x.ref) = sn.number
+                             AND sn.word = ANY(string_to_array(lower(x.label), ' '))
+                       )
+                   )
             )
         """
         with_clause = f"{cte_prefix}, {ref_ctes}" if cte_prefix else f"WITH {ref_ctes}"
@@ -795,7 +860,8 @@ class SearchService:
                    i.subject AS subtitle,
                    left(coalesce(i.description, ''), {SEARCH_SNIPPET_MAX_CHARS}) AS snippet,
                    i.project_key,
-                   MIN(r.ord) AS ord
+                   MIN(r.ord) AS ord,
+                   MIN(r.foreign_rank) AS foreign_rank
             FROM resolved r
             JOIN issues i ON i.id = r.issue_id
             WHERE 1=1
@@ -803,7 +869,7 @@ class SearchService:
             {self._issue_visibility_cte_clause(user, alias="i")}
             {issue_filter_sql}
             GROUP BY i.id
-            ORDER BY ord
+            ORDER BY ord, foreign_rank, i.id
         """
         result = await session.execute(text(sql), params)
         return [
@@ -912,9 +978,16 @@ class SearchService:
         # Issues the query names by reference lead the results, and are kept
         # out of the ranked issue rows and their count so they appear once.
         pinned: list[SearchResult] = []
-        if resolve_identifiers and parsed.identifiers and scope in ("all", "issues"):
+        source_numbers = extract_source_numbers(query)
+        if resolve_identifiers and (parsed.identifiers or source_numbers) and scope in ("all", "issues"):
             pinned = await self._identifier_hits(
-                session, parsed.identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+                session,
+                parsed.identifiers,
+                user,
+                project_id=project_id,
+                project_ids=project_ids,
+                filters=filters,
+                source_numbers=source_numbers,
             )
         pinned_exclusion = ""
         if pinned:
@@ -1434,9 +1507,16 @@ class SearchService:
         pinned: list[SearchResult] = []
         if resolve_identifiers:
             identifiers = extract_identifiers(query)
-            if identifiers:
+            source_numbers = extract_source_numbers(query)
+            if identifiers or source_numbers:
                 pinned = await self._identifier_hits(
-                    session, identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+                    session,
+                    identifiers,
+                    user,
+                    project_id=project_id,
+                    project_ids=project_ids,
+                    filters=filters,
+                    source_numbers=source_numbers,
                 )
         pinned_slice, ranked_offset, ranked_limit = _page_window(len(pinned), offset, limit)
 
@@ -1772,9 +1852,16 @@ class SearchService:
         project_id, project_ids = scope_project_ids(project_id, project_ids)
         pinned: list[SearchResult] = []
         identifiers = extract_identifiers(query)
-        if identifiers and scope in ("all", "issues"):
+        source_numbers = extract_source_numbers(query)
+        if (identifiers or source_numbers) and scope in ("all", "issues"):
             pinned = await self._identifier_hits(
-                session, identifiers, user, project_id=project_id, project_ids=project_ids, filters=filters
+                session,
+                identifiers,
+                user,
+                project_id=project_id,
+                project_ids=project_ids,
+                filters=filters,
+                source_numbers=source_numbers,
             )
 
         # Get both result sets (unpaginated for RRF merging).
