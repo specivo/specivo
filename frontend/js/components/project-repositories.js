@@ -13,6 +13,13 @@
  * `manage_members` (`initial.canPickRole`). `ignore_external_pull_requests`
  * (on unless the stored settings say false) skips pull requests from forks
  * and outsiders until they are merged.
+ *
+ * Validation is shown on the fields: a field's message appears once it has
+ * been left (blur/change) or after a submit attempt, never on a pristine
+ * form. Save stays enabled; a click with errors marks every field, focuses
+ * the first one that failed and sends nothing. A 422/409 from the server
+ * that names a `field` is shown on that field the same way, until its value
+ * changes.
  */
 export function projectRepositories(initial) {
     var i18n = Object.assign({
@@ -30,7 +37,10 @@ export function projectRepositories(initial) {
         statusDuplicate: 'Duplicate',
         statusIgnored: 'Ignored',
         statusProcessed: 'Processed',
-        statusFailed: 'Failed'
+        statusFailed: 'Failed',
+        errRepoName: 'Enter the repository as owner/name.',
+        errRepoUrl: "Enter the repository's http(s) address.",
+        errMergeStatus: 'Choose a merge status, or turn merge automation off.'
     }, initial.i18n || {});
     var PAGE = 20;
     var defaultRoleId = initial.defaultRoleId || null;
@@ -49,6 +59,28 @@ export function projectRepositories(initial) {
             ignore_external_pull_requests: true,
             automation_role_id: defaultRoleId === null ? '' : String(defaultRoleId)
         };
+    }
+
+    // Mirrors the server's checks in specivo/schemas/repository.py.
+    var REPO_NAME = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+$/;
+    var REPO_URL = /^https?:\/\/[^\s\/?#]+/i;
+
+    // Fields in the order they appear in the form; the first failed one gets focus.
+    var FIELDS = [
+        {name: 'repo_full_name', id: 'repository-name'},
+        {name: 'repo_url', id: 'repository-url'},
+        {name: 'merge_status_id', id: 'repository-merge-status'}
+    ];
+    // Server error `field` values and the form field they belong to.
+    var SERVER_FIELDS = {
+        repo_full_name: 'repo_full_name',
+        repo_url: 'repo_url',
+        'settings.merge_status_id': 'merge_status_id'
+    };
+
+    function validName(value) {
+        var v = value.trim().replace(/^\/+|\/+$/g, '');
+        return REPO_NAME.test(v) && v.split('/').every(function (p) { return p !== '.' && p !== '..'; });
     }
 
     function idOrNull(value) {
@@ -74,6 +106,10 @@ export function projectRepositories(initial) {
         error: '',
         notice: '',
         form: blankForm('github'),
+        // Fields the person has left, a submit attempt, and the server's field errors.
+        touched: {},
+        submitted: false,
+        serverErrors: {},
         reveal: null,
         copied: '',
         log: null,
@@ -83,9 +119,79 @@ export function projectRepositories(initial) {
         loadingLog: false,
         logError: '',
 
-        get canSave() {
-            if (this.saving || this.form.repo_full_name.trim() === '' || this.form.repo_url.trim() === '') return false;
-            return !(this.form.merge_automation_enabled && this.form.merge_status_id === '');
+        /** What is wrong with the form now, field by field, whether shown yet or not. */
+        get clientErrors() {
+            var f = this.form;
+            var errors = {};
+            if (!validName(f.repo_full_name)) errors.repo_full_name = i18n.errRepoName;
+            if (!REPO_URL.test(f.repo_url.trim())) errors.repo_url = i18n.errRepoUrl;
+            if (f.merge_automation_enabled && f.merge_status_id === '') errors.merge_status_id = i18n.errMergeStatus;
+            return errors;
+        },
+
+        /** The message shown under *field*, or '' while it is valid or still pristine. */
+        errorFor(field) {
+            var message = this.clientErrors[field];
+            if (message && (this.touched[field] || this.submitted)) return message;
+            var server = this.serverErrors[field];
+            // A server error stands until the value it was about changes.
+            if (server && String(this.form[field]) === server.value) return server.message;
+            return '';
+        },
+
+        /** `aria-invalid` for *field*: "true" while its error shows, else no attribute. */
+        invalid(field) {
+            return this.errorFor(field) ? 'true' : null;
+        },
+
+        /** `aria-describedby` for *field*: its hint (if any) and its message while one shows. */
+        describedBy(field, hintId) {
+            var ids = hintId ? [hintId] : [];
+            if (this.errorFor(field)) ids.push(this.fieldId(field) + '-error');
+            return ids.length ? ids.join(' ') : null;
+        },
+
+        fieldId(field) {
+            var found = FIELDS.find(function (x) { return x.name === field; });
+            return found ? found.id : field;
+        },
+
+        touch(field) {
+            this.touched[field] = true;
+        },
+
+        _resetValidation() {
+            this.touched = {};
+            this.submitted = false;
+            this.serverErrors = {};
+        },
+
+        /** Move to the first field showing an error: scroll it into view and focus it. */
+        _focusFirstError() {
+            var self = this;
+            this.$nextTick(function () {
+                var first = FIELDS.find(function (x) { return self.errorFor(x.name); });
+                var el = first ? document.getElementById(first.id) : null;
+                if (!el) return;
+                el.scrollIntoView({block: 'center'});
+                el.focus({preventScroll: true});
+            });
+        },
+
+        /** Put the field errors of a 422/409 body on their fields; true when at least one landed. */
+        _serverFieldErrors(body) {
+            var found = false;
+            var self = this;
+            (body.errors || []).forEach(function (err) {
+                var field = SERVER_FIELDS[err.field];
+                if (!field || !err.message) return;
+                self.serverErrors[field] = {
+                    message: String(err.message).replace(/^Value error, /, ''),
+                    value: String(self.form[field])
+                };
+                found = true;
+            });
+            return found;
         },
 
         statusName(id) {
@@ -148,6 +254,7 @@ export function projectRepositories(initial) {
         openCreate() {
             this.editing = null;
             this.error = '';
+            this._resetValidation();
             this.form = blankForm(this.providers[0] || 'github');
             this.showModal = true;
         },
@@ -155,6 +262,7 @@ export function projectRepositories(initial) {
         openEdit(r) {
             this.editing = r;
             this.error = '';
+            this._resetValidation();
             var settings = r.settings || {};
             var form = blankForm(r.provider);
             form.repo_full_name = r.repo_full_name;
@@ -197,7 +305,13 @@ export function projectRepositories(initial) {
         },
 
         async save() {
-            if (!this.canSave) return;
+            if (this.saving) return;
+            this.submitted = true;
+            this.serverErrors = {};
+            if (Object.keys(this.clientErrors).length > 0) {
+                this._focusFirstError();
+                return;
+            }
             this.saving = true;
             this.error = '';
             var f = this.form;
@@ -225,7 +339,12 @@ export function projectRepositories(initial) {
                     this._store(await res.json());
                     this.showModal = false;
                 } else {
-                    this.error = await this._error(res, i18n.saveFailed);
+                    var body = await res.json().catch(function () { return {}; });
+                    if (this._serverFieldErrors(body)) {
+                        this._focusFirstError();
+                    } else {
+                        this.error = (body.errors && body.errors[0] && body.errors[0].message) || i18n.saveFailed;
+                    }
                 }
             } catch (_e) {
                 this.error = i18n.connectFailed;

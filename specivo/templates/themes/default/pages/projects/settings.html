@@ -1300,7 +1300,10 @@
     "statusDuplicate": _("Duplicate"),
     "statusIgnored": _("Ignored"),
     "statusProcessed": _("Processed"),
-    "statusFailed": _("Failed")
+    "statusFailed": _("Failed"),
+    "errRepoName": _("Enter the repository as owner/name."),
+    "errRepoUrl": _("Enter the repository's http(s) address."),
+    "errMergeStatus": _("Choose a merge status, or turn merge automation off.")
   } | tojson }} })'>
 
     <div class="card" data-testid="repositories-card">
@@ -1490,12 +1493,14 @@
             </div>
             <div class="form-group">
               <label class="form-label" for="repository-name">{% trans %}Repository{% endtrans %}</label>
-              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository">
-              <div class="form-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
+              <input class="form-input" id="repository-name" type="text" x-model="form.repo_full_name" maxlength="255" placeholder="owner/repository" @blur="touch('repo_full_name')" :aria-invalid="invalid('repo_full_name')" :aria-describedby="describedBy('repo_full_name', 'repository-name-hint')" data-testid="repository-name">
+              <div class="form-error" id="repository-name-error" x-show="errorFor('repo_full_name')" x-text="errorFor('repo_full_name')" data-testid="repository-name-error"></div>
+              <div class="form-hint" id="repository-name-hint">{% trans %}The full name as the forge shows it, owner and repository. Deliveries that name another repository are ignored.{% endtrans %}</div>
             </div>
             <div class="form-group">
               <label class="form-label" for="repository-url">{% trans %}Repository URL{% endtrans %}</label>
-              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository">
+              <input class="form-input" id="repository-url" type="url" x-model="form.repo_url" maxlength="2048" placeholder="https://example.com/owner/repository" @blur="touch('repo_url')" :aria-invalid="invalid('repo_url')" :aria-describedby="describedBy('repo_url')" data-testid="repository-url">
+              <div class="form-error" id="repository-url-error" x-show="errorFor('repo_url')" x-text="errorFor('repo_url')" data-testid="repository-url-error"></div>
             </div>
             <div class="form-group">
               <label class="form-label" for="repository-scope">{% trans %}Issues commits may link to{% endtrans %}</label>
@@ -1536,12 +1541,13 @@
               <div class="sp-repo-sub" x-show="form.merge_automation_enabled">
                 <div class="form-group">
                   <label class="form-label" for="repository-merge-status">{% trans %}Merge status{% endtrans %}</label>
-                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" data-testid="repository-merge-status">
+                  <select class="form-input" id="repository-merge-status" x-model="form.merge_status_id" @change="touch('merge_status_id')" @blur="touch('merge_status_id')" :aria-invalid="invalid('merge_status_id')" :aria-describedby="describedBy('merge_status_id')" data-testid="repository-merge-status">
                     <option value="">{% trans %}Choose a status{% endtrans %}</option>
                     <template x-for="st in statuses" :key="st.id">
                       <option :value="st.value" x-text="st.name" :selected="st.value === form.merge_status_id"></option>
                     </template>
                   </select>
+                  <div class="form-error" id="repository-merge-status-error" x-show="errorFor('merge_status_id')" x-text="errorFor('merge_status_id')" data-testid="repository-merge-status-error"></div>
                 </div>
                 <div class="form-group">
                   <label class="form-label" for="repository-git-role">{% trans %}Role of Git in this project{% endtrans %}</label>
@@ -1566,7 +1572,7 @@
           </div>
           <div class="sp-modal-footer">
             <button class="sp-btn sp-btn-ghost" @click="showModal = false">{% trans %}Cancel{% endtrans %}</button>
-            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="!canSave" data-testid="repository-save">
+            <button class="sp-btn sp-btn-primary" @click="save()" :disabled="saving" data-testid="repository-save">
               <span x-show="saving">{% trans %}Saving...{% endtrans %}</span>
               <span x-show="!saving" x-text="editing ? i18n.saveChanges : i18n.createRepository"></span>
             </button>
