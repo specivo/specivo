@@ -90,6 +90,15 @@ the project with a similar subject (see [Similar issues](../issues/creating.md#s
 Untick it to turn the list off for this project. When an administrator has turned the suggestions
 off for the whole instance, the box has no effect and says so.
 
+### Reporting currency
+
+Money reports for a project, such as AI spend, are shown in the instance's reporting currency. To
+use another one for this project, open the **General** tab of its settings, pick a currency under
+**Reporting currency** and click **Save**. **Instance default** follows the instance setting again.
+Only currencies an administrator has enabled are offered; see
+[Currencies and the reporting currency](../install/currencies.md). Changing it needs the *Manage
+project* permission and is recorded in the audit log.
+
 ## Project status
 
 A project is in one of three states:

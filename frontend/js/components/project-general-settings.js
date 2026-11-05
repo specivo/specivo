@@ -13,6 +13,7 @@ export function projectGeneralSettings(initial) {
             parentId: initial.parentId !== undefined ? initial.parentId : null,
             availableParents: initial.availableParents || [],
             similarIssues: initial.similarIssues !== false,
+            reportingCurrency: initial.reportingCurrency || '',
             saving: false,
             message: '',
 
@@ -24,7 +25,8 @@ export function projectGeneralSettings(initial) {
                         name: this.name,
                         description: this.description,
                         parent_id: this.parentId,
-                        similar_issues: this.similarIssues
+                        similar_issues: this.similarIssues,
+                        reporting_currency_code: this.reportingCurrency || null
                     };
                     var res = await spFetch('/api/v1/projects/' + this.projectKey + '/', {
                         method: 'PATCH',

@@ -147,6 +147,12 @@ class AuditEvent(StrEnum):
     # The admin generated, rotated or revoked a provider's SCIM token, or switched SCIM.
     SCIM_CONFIG_CHANGED = "scim_config_changed"
     SESSIONS_REVOKED = "sessions_revoked"
+    # Money. A currency switched on or off for pickers (details: ``code``,
+    # ``is_active``); the instance or a project reporting currency changed
+    # (``scope`` instance/project, ``project_key``, ``old``, ``new``; a
+    # project's ``None`` means it follows the instance setting).
+    CURRENCY_TOGGLED = "currency_toggled"
+    REPORTING_CURRENCY_CHANGED = "reporting_currency_changed"
 
 
 _VALID_EVENTS = frozenset(e.value for e in AuditEvent)
@@ -258,6 +264,8 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.METADATA_SCHEMA_UPDATED,
             AuditEvent.METADATA_SCHEMA_DELETED,
             AuditEvent.USER_DEPROVISIONED,
+            AuditEvent.CURRENCY_TOGGLED,
+            AuditEvent.REPORTING_CURRENCY_CHANGED,
         ],
         AuditCategory.ADMINISTRATION,
     ),
@@ -1204,6 +1212,37 @@ class SecurityAuditService:
             event_type=AuditEvent.ANONYMOUS_ACCESS_SWITCH_CHANGED,
             user_id=user_id,
             resource_type="setting",
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
+        )
+
+    async def log_currency_change(
+        self,
+        session: AsyncSession,
+        event_type: AuditEvent,
+        user_id: int | None,
+        details: dict[str, Any],
+        project_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a currency switched on or off, or a reporting currency change. Core feature.
+
+        Written in the caller's transaction (in a savepoint, so a failed audit
+        insert cannot undo the change), so the change and its record commit
+        together.
+        """
+        if event_type not in (AuditEvent.CURRENCY_TOGGLED, AuditEvent.REPORTING_CURRENCY_CHANGED):
+            raise ValueError(f"Not a currency event: {event_type!r}")
+        info = self.request_info(request) if request is not None else current_request_info()
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=event_type,
+            user_id=user_id,
+            resource_type="currency" if event_type is AuditEvent.CURRENCY_TOGGLED else "setting",
+            project_id=project_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
             user_agent=info["user_agent"],

@@ -23,7 +23,7 @@ The viewer groups event types into categories:
 | Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
 | Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
 | Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
-| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
+| Administration | Project key renames, repository integrations moved to another provider, metadata schema changes, deactivated accounts, currencies switched on or off, reporting currency changes. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
 | Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
 | Provisioning | SCIM user and group changes, refused SCIM requests, SCIM token changes. |
 | Sessions | Revoked sessions, single sign-on logouts (including back-channel), sessions the identity provider refused to renew. |
@@ -111,6 +111,16 @@ A confirmation link that matches no request writes nothing. See [Your profile](.
 Changing an integration's provider gives it a new webhook URL and a new secret; the secret itself is
 never logged. Other edits of a repository integration are not audit events. See
 [Repository integrations](../integrations/repositories.md#change-the-provider).
+
+### Currencies
+
+| Event | Account | Details |
+|---|---|---|
+| `currency_toggled` | the administrator | `code`, `is_active` |
+| `reporting_currency_changed` | the administrator, or the project manager | `scope` (`instance` or `project`), `project_key` for a project, `old`, `new`; a project's `null` means it follows the instance |
+
+Saving the value that is already set writes nothing. See
+[Currencies and the reporting currency](currencies.md).
 
 ## Personal data
 

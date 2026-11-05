@@ -25,6 +25,7 @@ from specivo.api.v1.agent_sessions import router as agent_sessions_router
 from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
+from specivo.api.v1.currencies import router as currencies_router
 from specivo.api.v1.issues import router as issues_router
 from specivo.api.v1.link_graph_admin import router as link_graph_admin_router
 from specivo.api.v1.links import router as links_router
@@ -65,6 +66,7 @@ api_router.include_router(time_entries_router)
 api_router.include_router(webhooks_router)
 api_router.include_router(repositories_router)
 api_router.include_router(admin_settings_router)
+api_router.include_router(currencies_router)
 api_router.include_router(wiki_router)
 api_router.include_router(search_router)
 api_router.include_router(search_admin_router)

@@ -641,6 +641,129 @@ async def admin_tracker_update(
 
 
 # ---------------------------------------------------------------------------
+# Currencies and the reporting currency
+# ---------------------------------------------------------------------------
+
+_CURRENCY_FILTERS = ("all", "active", "inactive")
+_CURRENCY_ERRORS = frozenset({"currency_unknown", "currency_inactive"})
+
+
+@router.get("/admin/currencies/", response_class=HTMLResponse)
+async def admin_currencies(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    show: str = Query("all"),
+    q: str = Query(""),
+    error: str = Query(""),
+) -> Response:
+    """Render the currencies page: the instance reporting currency and each currency's switch."""
+    from specivo.core.i18n import get_locale
+    from specivo.core.money import currency_display_name, currency_display_symbol
+    from specivo.services.currency_service import CurrencyService
+
+    service = CurrencyService()
+    locale = get_locale()
+    show = show if show in _CURRENCY_FILTERS else "all"
+    needle = q.strip().lower()
+
+    all_currencies = await service.list_currencies(db)
+    reporting_currency = await service.get_instance_reporting_currency(db)
+    rows = []
+    for c in all_currencies:
+        name = currency_display_name(c.code, locale, fallback=c.name)
+        if show == "active" and not c.is_active:
+            continue
+        if show == "inactive" and c.is_active:
+            continue
+        if needle and needle not in c.code.lower() and needle not in name.lower() and needle not in c.name.lower():
+            continue
+        rows.append(
+            {
+                "code": c.code,
+                "name": name,
+                "iso_name": c.name,
+                "symbol": currency_display_symbol(c.code, locale),
+                "minor_units": c.minor_units,
+                "kind": c.kind,
+                "is_active": c.is_active,
+                "is_reporting": c.code == reporting_currency,
+            }
+        )
+    reporting_choices = [
+        {"code": c.code, "name": currency_display_name(c.code, locale, fallback=c.name)}
+        for c in all_currencies
+        if c.is_active or c.code == reporting_currency
+    ]
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/currencies.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "currencies": rows,
+            "reporting_currency": reporting_currency,
+            "reporting_choices": reporting_choices,
+            "show": show,
+            "q": q.strip(),
+            "active_count": sum(1 for c in all_currencies if c.is_active),
+            "total_count": len(all_currencies),
+            "error": error if error in _CURRENCY_ERRORS else "",
+        },
+    )
+
+
+def _currencies_redirect(show: str, q: str, error: str = "") -> RedirectResponse:
+    params = {k: v for k, v in (("show", show), ("q", q.strip()), ("error", error)) if v and v != "all"}
+    url = "/admin/currencies/" + (f"?{urlencode(params)}" if params else "")
+    return RedirectResponse(url, status_code=303)
+
+
+@router.post("/admin/currencies/reporting/", response_model=None)
+async def admin_currencies_reporting(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    code: str = Form(""),
+) -> Response:
+    """Set the instance reporting currency; an unknown or disabled code is refused with a notice."""
+    from specivo.core.exceptions import AppError
+    from specivo.services.currency_service import CurrencyService
+
+    try:
+        await CurrencyService().set_instance_reporting_currency(db, code, user, request=request)
+    except AppError as exc:
+        return _currencies_redirect("all", "", exc.code)
+    await db.commit()
+    return _currencies_redirect("all", "")
+
+
+@router.post("/admin/currencies/{code}/", response_model=None)
+async def admin_currency_toggle(
+    code: str,
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    is_active: str = Form(""),
+    show: str = Form("all"),
+    q: str = Form(""),
+) -> Response:
+    """Enable (``is_active=1``) or disable a currency in pickers, then return to the same view."""
+    from fastapi import HTTPException
+
+    from specivo.core.exceptions import NotFoundError
+    from specivo.services.currency_service import CurrencyService
+
+    try:
+        await CurrencyService().set_active(db, code, is_active == "1", user, request=request)
+    except NotFoundError:
+        raise HTTPException(status_code=404, detail="Currency not found")
+    await db.commit()
+    return _currencies_redirect(show if show in _CURRENCY_FILTERS else "all", q)
+
+
+# ---------------------------------------------------------------------------
 # Settings
 # ---------------------------------------------------------------------------
 
@@ -688,11 +811,17 @@ async def admin_settings(
     from specivo.services.similar_issues import SIMILAR_ISSUES_SETTING_KEY, instance_setting_enabled
 
     similar_issues_enabled = instance_setting_enabled(settings.get(SIMILAR_ISSUES_SETTING_KEY))
-    # The sso.* authentication settings have their own card (and API) too.
+    # The sso.* authentication settings have their own card (and API) too, and
+    # the reporting currency is set on the currencies page.
+    from specivo.services.currency_service import REPORTING_CURRENCY_SETTING_KEY
     from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS, get_auth_settings
     from specivo.services.sso.provider_service import ProviderService
 
-    hidden_keys = AUTH_SETTING_KEYS | {ANONYMOUS_ACCESS_SETTING_KEY, SIMILAR_ISSUES_SETTING_KEY}
+    hidden_keys = AUTH_SETTING_KEYS | {
+        ANONYMOUS_ACCESS_SETTING_KEY,
+        SIMILAR_ISSUES_SETTING_KEY,
+        REPORTING_CURRENCY_SETTING_KEY,
+    }
     generic_settings = {k: v for k, v in settings.items() if k not in hidden_keys}
     auth_settings = await get_auth_settings(db)
     sso_providers, _ = await ProviderService().list_providers(db)

@@ -138,6 +138,10 @@ class ProjectUpdate(BaseModel):
     branch_name: BranchNameConfig | None = None
     # Suggest similar issues on the new issue form (on unless set to false).
     similar_issues: bool | None = None
+    # Currency the project's money reports use. Only applied when present in
+    # the payload: a code sets the override (it must be an enabled currency),
+    # null or "" clears it so the instance reporting currency applies.
+    reporting_currency_code: str | None = None
     # parent_id: use model_fields_set to detect whether this field was provided.
     # - Not in payload          → not in model_fields_set  → do not change parent
     # - parent_id=null in JSON  → in model_fields_set, value is None  → move to root
@@ -160,6 +164,18 @@ class ProjectUpdate(BaseModel):
                 raise ValueError("name must not be empty")
             if len(v) > 255:
                 raise ValueError("name must be 255 characters or fewer")
+        return v
+
+    @field_validator("reporting_currency_code")
+    @classmethod
+    def validate_reporting_currency_code(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        v = v.strip().upper()
+        if not v:
+            return None
+        if not re.fullmatch(r"[A-Z]{3}", v):
+            raise ValueError("reporting_currency_code must be a three-letter ISO 4217 code")
         return v
 
     @field_validator("status")
@@ -216,6 +232,12 @@ class ProjectOut(BaseModel):
     # Whether the project suggests similar issues on the new issue form (the
     # instance switch can still turn it off). ``None`` in list responses.
     similar_issues: bool | None = None
+    # The project's own reporting currency; ``None`` means it follows the
+    # instance setting. Left ``None`` for anonymous visitors.
+    reporting_currency_code: str | None = None
+    # The reporting currency in effect (the override, else the instance
+    # setting). ``None`` in list responses and for anonymous visitors.
+    reporting_currency: str | None = None
 
 
 # ---------------------------------------------------------------------------

@@ -510,6 +510,20 @@ async def project_settings(
         await db.scalar(select(Setting.value).where(Setting.key == SIMILAR_ISSUES_SETTING_KEY))
     )
 
+    # Reporting currency override: enabled currencies, plus the project's
+    # current one if it was disabled since, with names in the reader's language.
+    from specivo.core.i18n import get_locale
+    from specivo.core.money import currency_display_name
+    from specivo.services.currency_service import CurrencyService
+
+    _currency_svc = CurrencyService()
+    _locale = get_locale()
+    currency_choices = [
+        {"code": c.code, "name": currency_display_name(c.code, _locale, fallback=c.name)}
+        for c in await _currency_svc.list_currencies(db, active_only=True, include=project.reporting_currency_code)
+    ]
+    instance_reporting_currency = await _currency_svc.get_instance_reporting_currency(db)
+
     templates = get_templates()
     return templates.TemplateResponse(
         request,
@@ -548,6 +562,8 @@ async def project_settings(
             "anonymous_access_enabled": anonymous_access_enabled,
             "similar_issues": project_setting_enabled(project.settings),
             "similar_issues_instance": similar_issues_instance,
+            "currency_choices": currency_choices,
+            "instance_reporting_currency": instance_reporting_currency,
             "webhooks_data": webhooks_data,
             "webhook_events": webhook_events,
             "automation_roles": automation_roles,

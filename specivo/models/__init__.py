@@ -7,6 +7,7 @@ from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
+from specivo.models.currency import Currency
 from specivo.models.entity_link import EntityLink
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
@@ -62,6 +63,7 @@ __all__ = [
     "ApiKey",
     "RefreshToken",
     "Attachment",
+    "Currency",
     "ImportIdMapping",
     "IssueSourceRef",
     "Issue",

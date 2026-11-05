@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}{% trans %}Currencies{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}Currencies{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}Currencies{% endtrans %}</h1>
+
+{% if error == "currency_inactive" %}
+<div class="flash flash-error" role="alert" data-testid="currency-error">{% trans %}That currency is disabled. Enable it below before choosing it as the reporting currency.{% endtrans %}</div>
+{% elif error == "currency_unknown" %}
+<div class="flash flash-error" role="alert" data-testid="currency-error">{% trans %}Unknown currency code.{% endtrans %}</div>
+{% endif %}
+
+<div class="card sp-card-pad-mb" id="reporting-currency" data-testid="reporting-currency-card">
+  <h3 class="sp-card-h3">{% trans %}Reporting currency{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans %}Money reports are shown in this currency unless a project chooses its own in its settings.{% endtrans %}</p>
+  <form method="post" action="/admin/currencies/reporting/" class="sp-currency-reporting-form">
+    <label class="form-label" for="reporting_currency_code">{% trans %}Reporting currency{% endtrans %}</label>
+    <select id="reporting_currency_code" name="code" class="form-input sp-currency-select">
+      {% for c in reporting_choices %}
+      <option value="{{ c.code }}" {{ 'selected' if c.code == reporting_currency else '' }}>{{ c.code }} · {{ c.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Save{% endtrans %}</button>
+  </form>
+</div>
+
+<div class="card sp-card-pad" data-testid="currencies-card">
+  <h3 class="sp-card-h3">{% trans %}Enabled currencies{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans count=active_count, total=total_count %}{{ count }} of {{ total }} ISO 4217 currencies are offered in pickers. Disabling a currency only hides it from pickers: amounts and settings that already use it keep working.{% endtrans %}</p>
+
+  <form method="get" action="/admin/currencies/" class="sp-currency-filter sp-mb-md">
+    <input class="form-input sp-flex-1" type="search" name="q" value="{{ q }}" placeholder="{{ _('Search by code or name') }}" aria-label="{{ _('Search by code or name') }}">
+    <select name="show" class="form-input sp-currency-select" aria-label="{{ _('Show') }}">
+      <option value="all" {{ 'selected' if show == 'all' else '' }}>{% trans %}All currencies{% endtrans %}</option>
+      <option value="active" {{ 'selected' if show == 'active' else '' }}>{% trans %}Enabled{% endtrans %}</option>
+      <option value="inactive" {{ 'selected' if show == 'inactive' else '' }}>{% trans %}Disabled{% endtrans %}</option>
+    </select>
+    <button type="submit" class="sp-btn-sm">{% trans %}Filter{% endtrans %}</button>
+  </form>
+
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="currencies-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Code{% endtrans %}</th>
+          <th>{% trans %}Name{% endtrans %}</th>
+          <th>{% trans %}Symbol{% endtrans %}</th>
+          <th>{% trans %}Decimals{% endtrans %}</th>
+          <th>{% trans %}Kind{% endtrans %}</th>
+          <th>{% trans %}Status{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in currencies %}
+        <tr data-code="{{ c.code }}">
+          <td><code>{{ c.code }}</code></td>
+          <td>
+            {{ c.name }}
+            {% if c.name != c.iso_name %}<span class="sp-text-muted-xs-ml-sm">{{ c.iso_name }}</span>{% endif %}
+            {% if c.is_reporting %}<span class="sp-badge-info">{% trans %}Reporting currency{% endtrans %}</span>{% endif %}
+          </td>
+          <td>{{ c.symbol }}</td>
+          <td>{{ c.minor_units if c.minor_units is not none else '–' }}</td>
+          <td>
+            {% if c.kind == 'national' %}{% trans %}Currency{% endtrans %}
+            {% elif c.kind == 'fund' %}{% trans %}Fund{% endtrans %}
+            {% elif c.kind == 'metal' %}{% trans %}Precious metal{% endtrans %}
+            {% elif c.kind == 'test' %}{% trans %}Testing code{% endtrans %}
+            {% else %}{% trans %}Special code{% endtrans %}{% endif %}
+          </td>
+          <td>{% if c.is_active %}{% trans %}Enabled{% endtrans %}{% else %}<span class="sp-text-muted">{% trans %}Disabled{% endtrans %}</span>{% endif %}</td>
+          <td>
+            <form method="post" action="/admin/currencies/{{ c.code }}/">
+              <input type="hidden" name="is_active" value="{{ '0' if c.is_active else '1' }}">
+              <input type="hidden" name="show" value="{{ show }}">
+              <input type="hidden" name="q" value="{{ q }}">
+              <button type="submit" class="sp-btn-sm">{% if c.is_active %}{% trans %}Disable{% endtrans %}{% else %}{% trans %}Enable{% endtrans %}{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="sp-text-muted">{% trans %}No currencies match.{% endtrans %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

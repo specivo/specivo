@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    CHAR,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -51,6 +52,7 @@ class Project(Base, TimestampMixin):
         Index("ix_projects_path_gist", "path", postgresql_using="gist"),
         Index("ix_projects_identifier", "identifier"),
         Index("ix_projects_parent_id", "parent_id"),
+        Index("ix_projects_reporting_currency_code", "reporting_currency_code"),
         CheckConstraint(
             "key ~ '^[A-Z][A-Z0-9]{1,127}$'",
             name="ck_projects_key_format",
@@ -123,6 +125,14 @@ class Project(Base, TimestampMixin):
     # Optional per-project full-text-search analyzer language (a Postgres
     # regconfig name like "russian"). NULL = inherit the instance-wide default.
     fts_language: Mapped[str | None] = mapped_column(String(32), nullable=True)
+
+    # Currency this project's money reports are shown in. NULL = the instance
+    # setting ``reporting_currency`` (see ``CurrencyService.reporting_currency_for``).
+    reporting_currency_code: Mapped[str | None] = mapped_column(
+        CHAR(3),
+        ForeignKey("currencies.code", ondelete="RESTRICT"),
+        nullable=True,
+    )
 
     # Extensible JSONB settings bag
     settings: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")

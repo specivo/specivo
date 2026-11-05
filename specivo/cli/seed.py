@@ -428,11 +428,13 @@ async def seed_settings(session: AsyncSession) -> None:
     import json
 
     from specivo.core.constants import DEFAULT_AVATAR_PALETTE
+    from specivo.core.currency_data import DEFAULT_REPORTING_CURRENCY
     from specivo.models.setting import Setting
 
     defaults = {
         "brand_name": "Specivo",
         "avatar_color_palette": json.dumps(DEFAULT_AVATAR_PALETTE),
+        "reporting_currency": DEFAULT_REPORTING_CURRENCY,
     }
     for key, value in defaults.items():
         result = await session.execute(select(Setting).where(Setting.key == key))

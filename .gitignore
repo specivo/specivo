@@ -47,6 +47,8 @@ __pycache__/
 .ruff_cache/
 .pytest_cache/
 data/
+# Committed reference data (ISO 4217 list), not runtime data.
+!/specivo/data/
 specivo-data/
 htmlcov/
 specivo/static/models/
