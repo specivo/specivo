@@ -10,6 +10,13 @@
 .form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--sp-border); border-radius: var(--sp-border-radius); background: var(--sp-bg-surface); font-family: var(--sp-font-body); font-size: var(--sp-font-size-base); color: var(--sp-text-primary); outline: none; transition: border-color 0.15s, box-shadow 0.15s; }
 .form-input:focus { border-color: var(--sp-border-focus); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
 .form-input::placeholder { color: var(--sp-text-muted); }
+/* A field that failed validation: aria-invalid="true" is the one switch, so
+   assistive tech and the red border never disagree. The message under it uses
+   .form-error and is linked to the field with aria-describedby. */
+.form-input[aria-invalid="true"] { border-color: var(--sp-danger); }
+.form-input[aria-invalid="true"]:focus { border-color: var(--sp-danger); box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2); }
+.form-error { display: flex; align-items: center; gap: var(--sp-space-xs); margin-top: var(--sp-space-xs); font-size: var(--sp-font-size-xs); color: var(--sp-danger); }
+.form-error svg { width: 14px; height: 14px; flex-shrink: 0; }
 .form-checkbox { display: flex; align-items: center; gap: var(--sp-space-sm); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); cursor: pointer; }
 .form-checkbox input { accent-color: var(--sp-accent); width: 15px; height: 15px; }
 .form-link { font-size: var(--sp-font-size-sm); color: var(--sp-text-link); }
