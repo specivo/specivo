@@ -26,6 +26,7 @@ from specivo.schemas.project import (
 from specivo.services.api_key_scope import is_global_admin
 from specivo.services.branch_name import BranchNameSettings
 from specivo.services.computed_metadata_service import computed_values
+from specivo.services.currency_service import reporting_currency_for
 from specivo.services.permission_service import Permission, check_permission
 from specivo.services.project_service import Principal, ProjectService
 from specivo.services.security_audit_service import MemberAction, SecurityAuditService
@@ -103,12 +104,19 @@ def _branch_name(project) -> BranchNameConfig:
 
 
 def _project_out(
-    project, parent_key: str | None, computed_metadata: dict | None = None, *, detail: bool = False
+    project,
+    parent_key: str | None,
+    computed_metadata: dict | None = None,
+    *,
+    detail: bool = False,
+    reporting_currency: str | None = None,
 ) -> ProjectOut:
     return ProjectOut(
         computed_metadata=computed_metadata,
         branch_name=_branch_name(project) if detail else None,
         similar_issues=project_setting_enabled(project.settings) if detail else None,
+        reporting_currency_code=project.reporting_currency_code,
+        reporting_currency=reporting_currency,
         id=project.id,
         name=project.name,
         identifier=project.identifier,
@@ -206,7 +214,13 @@ async def create_project(
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # Creation is admin-only, so the creator may always see the map.
-    return _project_out(project, parent_key, computed_values(project.settings), detail=True)
+    return _project_out(
+        project,
+        parent_key,
+        computed_values(project.settings),
+        detail=True,
+        reporting_currency=await reporting_currency_for(db, project),
+    )
 
 
 @router.get("/{key}/", response_model=ProjectOut)
@@ -220,7 +234,9 @@ async def get_project(
 
     parent_key = await _service.get_parent_key(db, project)
     computed = await _disclosed_computed_metadata(project, current_user, db)
-    return _project_out(project, parent_key, computed, detail=True)
+    return _project_out(
+        project, parent_key, computed, detail=True, reporting_currency=await reporting_currency_for(db, project)
+    )
 
 
 @router.patch("/{key}/", response_model=ProjectOut)
@@ -238,7 +254,13 @@ async def update_project(
     await db.commit()  # commit before response to avoid reload race condition
     parent_key = await _service.get_parent_key(db, project)
     # _require_manage passed, so the caller may always see the map.
-    return _project_out(project, parent_key, computed_values(project.settings), detail=True)
+    return _project_out(
+        project,
+        parent_key,
+        computed_values(project.settings),
+        detail=True,
+        reporting_currency=await reporting_currency_for(db, project),
+    )
 
 
 @router.delete("/{key}/", status_code=status.HTTP_204_NO_CONTENT)

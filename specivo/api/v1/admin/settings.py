@@ -10,12 +10,14 @@ from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError
 from specivo.models.user import User
 from specivo.schemas.anonymous_access import AnonymousAccessOut, AnonymousAccessProject, AnonymousAccessUpdate
+from specivo.schemas.money import ReportingCurrencyOut, ReportingCurrencyUpdate
 from specivo.services.anonymous_access_service import (
     ANONYMOUS_ACCESS_SETTING_KEY,
     is_anonymous_access_enabled,
     list_projects_with_anonymous_permissions,
     set_anonymous_access_enabled,
 )
+from specivo.services.currency_service import REPORTING_CURRENCY_SETTING_KEY, CurrencyService
 from specivo.services.settings_service import SettingsService
 from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS
 
@@ -26,6 +28,7 @@ _service = SettingsService()
 # or an audit entry the generic key/value PATCH cannot provide.
 _MANAGED_SETTINGS = {
     ANONYMOUS_ACCESS_SETTING_KEY: "/api/v1/admin/settings/anonymous-access/",
+    REPORTING_CURRENCY_SETTING_KEY: "/api/v1/admin/settings/reporting-currency/",
     **dict.fromkeys(sorted(AUTH_SETTING_KEYS), "/api/v1/admin/settings/authentication/"),
 }
 
@@ -49,8 +52,8 @@ async def update_settings(
 
     Keys not in the request body are left unchanged.
     Pass ``null`` as a value to clear a setting. Settings that have their own
-    endpoint (the anonymous access switch, the ``sso.*`` authentication
-    settings) are refused with 422.
+    endpoint (the anonymous access switch, the reporting currency, the
+    ``sso.*`` authentication settings) are refused with 422.
     """
     for key in sorted(updates):
         if key in _MANAGED_SETTINGS:
@@ -114,3 +117,29 @@ async def update_anonymous_access(
     )
     await db.commit()
     return await _anonymous_access_out(db)
+
+
+@router.get("/admin/settings/reporting-currency/", response_model=ReportingCurrencyOut)
+async def get_reporting_currency(
+    current_user: User = Depends(require_admin_api),
+    db: AsyncSession = DB_SESSION,
+) -> ReportingCurrencyOut:
+    """Return the instance reporting currency (admin only). Projects may override it."""
+    return ReportingCurrencyOut(code=await CurrencyService().get_instance_reporting_currency(db))
+
+
+@router.patch("/admin/settings/reporting-currency/", response_model=ReportingCurrencyOut)
+async def update_reporting_currency(
+    data: ReportingCurrencyUpdate,
+    request: Request,
+    current_user: User = Depends(require_admin_api),
+    db: AsyncSession = DB_SESSION,
+) -> ReportingCurrencyOut:
+    """Set the instance reporting currency (admin only).
+
+    The code must name a currency enabled on the instance (422
+    ``currency_unknown`` / ``currency_inactive`` otherwise). Projects with an
+    override of their own keep it. Audited.
+    """
+    code = await CurrencyService().set_instance_reporting_currency(db, data.code, current_user, request=request)
+    return ReportingCurrencyOut(code=code)

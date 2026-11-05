@@ -454,6 +454,12 @@ class ProjectService:
             new_settings = dict(project.settings or {})
             new_settings[SIMILAR_ISSUES_PROJECT_KEY] = data.similar_issues
             project.settings = new_settings
+        if "reporting_currency_code" in data.model_fields_set:
+            from specivo.services.currency_service import CurrencyService
+
+            await CurrencyService().set_project_reporting_currency(
+                session, project, data.reporting_currency_code, actor, request=request
+            )
 
         if "parent_id" in data.model_fields_set:
             project = await self._reparent(session, project, data.parent_id)

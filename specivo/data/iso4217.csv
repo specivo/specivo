@@ -1,0 +1,179 @@
+code,numeric_code,name,minor_units,symbol,kind,is_active
+AED,784,UAE Dirham,2,,national,true
+AFN,971,Afghani,2,,national,true
+ALL,8,Lek,2,,national,true
+AMD,51,Armenian Dram,2,,national,true
+AOA,973,Kwanza,2,,national,true
+ARS,32,Argentine Peso,2,,national,true
+AUD,36,Australian Dollar,2,A$,national,true
+AWG,533,Aruban Florin,2,,national,true
+AZN,944,Azerbaijan Manat,2,,national,true
+BAM,977,Convertible Mark,2,,national,true
+BBD,52,Barbados Dollar,2,,national,true
+BDT,50,Taka,2,,national,true
+BHD,48,Bahraini Dinar,3,,national,true
+BIF,108,Burundi Franc,0,,national,true
+BMD,60,Bermudian Dollar,2,,national,true
+BND,96,Brunei Dollar,2,,national,true
+BOB,68,Boliviano,2,,national,true
+BOV,984,Mvdol,2,,fund,false
+BRL,986,Brazilian Real,2,R$,national,true
+BSD,44,Bahamian Dollar,2,,national,true
+BTN,64,Ngultrum,2,,national,true
+BWP,72,Pula,2,,national,true
+BYN,933,Belarusian Ruble,2,,national,true
+BZD,84,Belize Dollar,2,,national,true
+CAD,124,Canadian Dollar,2,CA$,national,true
+CDF,976,Congolese Franc,2,,national,true
+CHE,947,WIR Euro,2,,fund,false
+CHF,756,Swiss Franc,2,,national,true
+CHW,948,WIR Franc,2,,fund,false
+CLF,990,Unidad de Fomento,4,,fund,false
+CLP,152,Chilean Peso,0,,national,true
+CNY,156,Yuan Renminbi,2,CN¥,national,true
+COP,170,Colombian Peso,2,,national,true
+COU,970,Unidad de Valor Real,2,,fund,false
+CRC,188,Costa Rican Colon,2,,national,true
+CUP,192,Cuban Peso,2,,national,true
+CVE,132,Cabo Verde Escudo,2,,national,true
+CZK,203,Czech Koruna,2,,national,true
+DJF,262,Djibouti Franc,0,,national,true
+DKK,208,Danish Krone,2,,national,true
+DOP,214,Dominican Peso,2,,national,true
+DZD,12,Algerian Dinar,2,,national,true
+EGP,818,Egyptian Pound,2,,national,true
+ERN,232,Nakfa,2,,national,true
+ETB,230,Ethiopian Birr,2,,national,true
+EUR,978,Euro,2,€,national,true
+FJD,242,Fiji Dollar,2,,national,true
+FKP,238,Falkland Islands Pound,2,,national,true
+GBP,826,Pound Sterling,2,£,national,true
+GEL,981,Lari,2,,national,true
+GHS,936,Ghana Cedi,2,,national,true
+GIP,292,Gibraltar Pound,2,,national,true
+GMD,270,Dalasi,2,,national,true
+GNF,324,Guinean Franc,0,,national,true
+GTQ,320,Quetzal,2,,national,true
+GYD,328,Guyana Dollar,2,,national,true
+HKD,344,Hong Kong Dollar,2,HK$,national,true
+HNL,340,Lempira,2,,national,true
+HTG,332,Gourde,2,,national,true
+HUF,348,Forint,2,,national,true
+IDR,360,Rupiah,2,,national,true
+ILS,376,New Israeli Sheqel,2,₪,national,true
+INR,356,Indian Rupee,2,₹,national,true
+IQD,368,Iraqi Dinar,3,,national,true
+IRR,364,Iranian Rial,2,,national,true
+ISK,352,Iceland Krona,0,,national,true
+JMD,388,Jamaican Dollar,2,,national,true
+JOD,400,Jordanian Dinar,3,,national,true
+JPY,392,Yen,0,¥,national,true
+KES,404,Kenyan Shilling,2,,national,true
+KGS,417,Som,2,,national,true
+KHR,116,Riel,2,,national,true
+KMF,174,Comorian Franc,0,,national,true
+KPW,408,North Korean Won,2,,national,true
+KRW,410,Won,0,₩,national,true
+KWD,414,Kuwaiti Dinar,3,,national,true
+KYD,136,Cayman Islands Dollar,2,,national,true
+KZT,398,Tenge,2,,national,true
+LAK,418,Lao Kip,2,,national,true
+LBP,422,Lebanese Pound,2,,national,true
+LKR,144,Sri Lanka Rupee,2,,national,true
+LRD,430,Liberian Dollar,2,,national,true
+LSL,426,Loti,2,,national,true
+LYD,434,Libyan Dinar,3,,national,true
+MAD,504,Moroccan Dirham,2,,national,true
+MDL,498,Moldovan Leu,2,,national,true
+MGA,969,Malagasy Ariary,2,,national,true
+MKD,807,Denar,2,,national,true
+MMK,104,Kyat,2,,national,true
+MNT,496,Tugrik,2,,national,true
+MOP,446,Pataca,2,,national,true
+MRU,929,Ouguiya,2,,national,true
+MUR,480,Mauritius Rupee,2,,national,true
+MVR,462,Rufiyaa,2,,national,true
+MWK,454,Malawi Kwacha,2,,national,true
+MXN,484,Mexican Peso,2,MX$,national,true
+MXV,979,Mexican Unidad de Inversion (UDI),2,,fund,false
+MYR,458,Malaysian Ringgit,2,,national,true
+MZN,943,Mozambique Metical,2,,national,true
+NAD,516,Namibia Dollar,2,,national,true
+NGN,566,Naira,2,,national,true
+NIO,558,Cordoba Oro,2,,national,true
+NOK,578,Norwegian Krone,2,,national,true
+NPR,524,Nepalese Rupee,2,,national,true
+NZD,554,New Zealand Dollar,2,NZ$,national,true
+OMR,512,Rial Omani,3,,national,true
+PAB,590,Balboa,2,,national,true
+PEN,604,Sol,2,,national,true
+PGK,598,Kina,2,,national,true
+PHP,608,Philippine Peso,2,₱,national,true
+PKR,586,Pakistan Rupee,2,,national,true
+PLN,985,Zloty,2,,national,true
+PYG,600,Guarani,0,,national,true
+QAR,634,Qatari Rial,2,,national,true
+RON,946,Romanian Leu,2,,national,true
+RSD,941,Serbian Dinar,2,,national,true
+RUB,643,Russian Ruble,2,,national,true
+RWF,646,Rwanda Franc,0,,national,true
+SAR,682,Saudi Riyal,2,,national,true
+SBD,90,Solomon Islands Dollar,2,,national,true
+SCR,690,Seychelles Rupee,2,,national,true
+SDG,938,Sudanese Pound,2,,national,true
+SEK,752,Swedish Krona,2,,national,true
+SGD,702,Singapore Dollar,2,,national,true
+SHP,654,Saint Helena Pound,2,,national,true
+SLE,925,Leone,2,,national,true
+SOS,706,Somali Shilling,2,,national,true
+SRD,968,Surinam Dollar,2,,national,true
+SSP,728,South Sudanese Pound,2,,national,true
+STN,930,Dobra,2,,national,true
+SVC,222,El Salvador Colon,2,,national,true
+SYP,760,Syrian Pound,2,,national,true
+SZL,748,Lilangeni,2,,national,true
+THB,764,Baht,2,,national,true
+TJS,972,Somoni,2,,national,true
+TMT,934,Turkmenistan New Manat,2,,national,true
+TND,788,Tunisian Dinar,3,,national,true
+TOP,776,Pa’anga,2,,national,true
+TRY,949,Turkish Lira,2,,national,true
+TTD,780,Trinidad and Tobago Dollar,2,,national,true
+TWD,901,New Taiwan Dollar,2,NT$,national,true
+TZS,834,Tanzanian Shilling,2,,national,true
+UAH,980,Hryvnia,2,,national,true
+UGX,800,Uganda Shilling,0,,national,true
+USD,840,US Dollar,2,$,national,true
+USN,997,US Dollar (Next day),2,,fund,false
+UYI,940,Uruguay Peso en Unidades Indexadas (UI),0,,fund,false
+UYU,858,Peso Uruguayo,2,,national,true
+UYW,927,Unidad Previsional,4,,fund,false
+UZS,860,Uzbekistan Sum,2,,national,true
+VED,926,Bolívar Soberano,2,,national,true
+VES,928,Bolívar Soberano,2,,national,true
+VND,704,Dong,0,₫,national,true
+VUV,548,Vatu,0,,national,true
+WST,882,Tala,2,,national,true
+XAD,396,Arab Accounting Dinar,2,,fund,false
+XAF,950,CFA Franc BEAC,0,FCFA,national,true
+XAG,961,Silver,,,metal,false
+XAU,959,Gold,,,metal,false
+XBA,955,Bond Markets Unit European Composite Unit (EURCO),,,special,false
+XBB,956,Bond Markets Unit European Monetary Unit (E.M.U.-6),,,special,false
+XBC,957,Bond Markets Unit European Unit of Account 9 (E.U.A.-9),,,special,false
+XBD,958,Bond Markets Unit European Unit of Account 17 (E.U.A.-17),,,special,false
+XCD,951,East Caribbean Dollar,2,EC$,national,true
+XCG,532,Caribbean Guilder,2,Cg.,national,true
+XDR,960,SDR (Special Drawing Right),,,special,false
+XOF,952,CFA Franc BCEAO,0,F CFA,national,true
+XPD,964,Palladium,,,metal,false
+XPF,953,CFP Franc,0,CFPF,national,true
+XPT,962,Platinum,,,metal,false
+XSU,994,Sucre,,,special,false
+XTS,963,Codes specifically reserved for testing purposes,,,test,false
+XUA,965,ADB Unit of Account,,,special,false
+XXX,999,The codes assigned for transactions where no currency is involved,,¤,special,false
+YER,886,Yemeni Rial,2,,national,true
+ZAR,710,Rand,2,,national,true
+ZMW,967,Zambian Kwacha,2,,national,true
+ZWG,924,Zimbabwe Gold,2,,national,true

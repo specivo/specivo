@@ -32,7 +32,7 @@
   </div>
 
   <!-- General tab -->
-  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, i18n: {{ {
+  <div x-show="tab === 'general'" x-data='projectGeneralSettings({ name: {{ project.name | tojson }}, description: {{ (project.description or "") | tojson }}, projectKey: {{ project.key | tojson }}, parentId: {{ project.parent_id | tojson }}, availableParents: {{ available_parents | tojson }}, similarIssues: {{ similar_issues | tojson }}, reportingCurrency: {{ (project.reporting_currency_code or "") | tojson }}, i18n: {{ {
     "saved": _("Saved successfully."),
     "errorWithMessage": _("Error: %(message)s"),
     "saveFailed": _("Failed to save"),
@@ -74,6 +74,16 @@
         {% else %}
         <div class="form-hint" data-testid="similar-issues-instance-off">{% trans %}This setting has no effect while similar issues are turned off for the whole instance.{% endtrans %}{% if user.is_admin %} <a href="/admin/settings/">{% trans %}Instance settings{% endtrans %}</a>{% endif %}</div>
         {% endif %}
+      </div>
+      <div class="form-group sp-form-group-mb-md">
+        <label class="form-label" for="project-reporting-currency">{% trans %}Reporting currency{% endtrans %}</label>
+        <select class="form-input" id="project-reporting-currency" x-model="reportingCurrency" data-testid="project-reporting-currency">
+          <option value="">{% trans code=instance_reporting_currency %}Instance default ({{ code }}){% endtrans %}</option>
+          {% for c in currency_choices %}
+          <option value="{{ c.code }}">{{ c.code }} · {{ c.name }}</option>
+          {% endfor %}
+        </select>
+        <div class="form-hint">{% trans %}The currency this project's money reports are shown in.{% endtrans %}{% if user.is_admin %} <a href="/admin/currencies/">{% trans %}Currencies{% endtrans %}</a>{% endif %}</div>
       </div>
       <div x-show="message" class="flash sp-mb-md" x-text="message"></div>
       <button class="sp-btn sp-btn-primary sp-btn-auto" @click="save()" :disabled="saving">{% trans %}Save{% endtrans %}</button>
