@@ -170,7 +170,7 @@ async def test_members_x_data_attribute_survives_html_parsing(admin_client: Asyn
     assert resp.status_code == 200
 
     attr = _x_data(resp.text, "projectMembers(")
-    for key in ("members:", "projectKey:", "roles:", "allGroups:", "i18n:", "kindUser:"):
+    for key in ("members:", "projectKey:", "roles:", "allGroups:", "canCreateUsers:", "i18n:", "createFailed:"):
         assert key in attr, f"{key} missing from the x-data attribute — it was truncated"
     assert attr.rstrip().endswith("})"), "the x-data expression is not closed"
 
@@ -199,3 +199,69 @@ async def test_access_summary_labels_its_counts_instead_of_pluralising(
     # The count-first phrasings cannot agree in every locale.
     for banned in ("</span> groups", "</span> direct members", "</span> people with access"):
         assert banned not in resp.text, f"count-first phrasing {banned!r} is back in the summary"
+
+
+# ---------------------------------------------------------------------------
+# Adding someone who has no account yet
+#
+# Only existing accounts can be added, and the form used to give no sign of
+# that: a name with no match left Add disabled with no message. An
+# administrator can now create the account from the picker; a manager who is
+# not an administrator cannot create users and is told whom to ask.
+# ---------------------------------------------------------------------------
+
+
+async def _grant_manage_project(db: AsyncSession, project, user: User) -> None:
+    from specivo.services.permission_service import clear_role_cache
+
+    role = Role(name=_name("Manager"), permissions=["*"], builtin=0, issues_visibility="default")
+    db.add(role)
+    await db.flush()
+    member = Member(project_id=project.id, user_id=user.id)
+    db.add(member)
+    await db.flush()
+    db.add(MemberRole(member_id=member.id, role_id=role.id))
+    await db.commit()
+    clear_role_cache(db)
+
+
+async def test_admin_can_create_a_user_from_the_members_tab(admin_client: AsyncClient, db_session: AsyncSession):
+    project = await _create_project(db_session, admin_client.state.user, key="MTC", identifier="members-tab-create")
+
+    resp = await admin_client.get(
+        f"/projects/{project.key}/settings/",
+        cookies={"access_token": admin_client.state.token},
+    )
+    assert resp.status_code == 200
+
+    assert "canCreateUsers: true" in _x_data(resp.text, "projectMembers(")
+    assert 'data-testid="member-create-user"' in resp.text
+    # The shared New User modal, the same one Admin > Users renders.
+    assert 'x-show="showCreate"' in resp.text
+    assert 'x-model="newUser.login"' in resp.text
+
+
+async def test_manager_who_is_not_admin_is_told_to_ask_an_administrator(
+    admin_client: AsyncClient, auth_client: AsyncClient, db_session: AsyncSession
+):
+    project = await _create_project(db_session, admin_client.state.user, key="MTN", identifier="members-tab-nonadmin")
+    await _grant_manage_project(db_session, project, auth_client.state.user)
+
+    resp = await auth_client.get(
+        f"/projects/{project.key}/settings/",
+        cookies={"access_token": auth_client.state.token},
+    )
+    assert resp.status_code == 200
+
+    assert "canCreateUsers: false" in _x_data(resp.text, "projectMembers(")
+    assert 'data-testid="member-create-user"' not in resp.text
+    assert 'x-model="newUser.login"' not in resp.text
+    assert "ask an administrator to create one" in resp.text
+
+
+async def test_admin_users_page_still_renders_the_shared_create_modal(admin_client: AsyncClient):
+    resp = await admin_client.get("/admin/users/", cookies={"access_token": admin_client.state.token})
+    assert resp.status_code == 200
+    assert 'x-show="showCreate"' in resp.text
+    assert 'x-model="newUser.login"' in resp.text
+    assert '@click="createUser()"' in resp.text

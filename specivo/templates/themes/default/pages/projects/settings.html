@@ -110,6 +110,7 @@
     projectKey: {{ project.key | tojson }},
     roles: {{ roles | tojson }},
     allGroups: {{ all_groups | tojson }},
+    canCreateUsers: {{ user.is_admin | tojson }},
     i18n: {
       onePerson: {{ _("1 person") | tojson }},
       nPeople: {{ _("%d people") | tojson }},
@@ -119,7 +120,12 @@
       confirmRemoveUser: {{ _("Remove %s from this project?") | tojson }},
       confirmRemoveGroup: {{ _("Remove the group %s? %d people lose the access it grants.") | tojson }},
       kindGroup: {{ _("Group") | tojson }},
-      kindUser: {{ _("User") | tojson }}
+      kindUser: {{ _("User") | tojson }},
+      noMatch: {{ _("No user or group matches “%s”.") | tojson }},
+      createUserFor: {{ _("Create user “%s”…") | tojson }},
+      userCreated: {{ _("%s created. Choose a role and click Add.") | tojson }},
+      passwordRequired: {{ _("Password: required for regular users.") | tojson }},
+      createFailed: {{ _("Failed to create user.") | tojson }}
     }
   })'>
 
@@ -127,7 +133,7 @@
     <div class="card sp-card-pad-mb-md">
       <h3 class="sp-card-h3">{% trans %}Add Member{% endtrans %}</h3>
       <p class="sp-text-muted-xs sp-mb-md">
-        {% trans %}Grant access to one person, or to a group so everyone in it gets the same roles.{% endtrans %}
+        {% trans %}Grant access to one person, or to a group so everyone in it gets the same roles. Start typing and pick an existing user or group from the list.{% endtrans %}
       </p>
       <div class="sp-form-row-end-wrap">
         <div class="sp-suggest-field">
@@ -136,7 +142,7 @@
             x-model="userQuery" @input.debounce.300ms="searchPrincipals()" @focus="searchPrincipals()"
             @input="clearSelection()"
             @click.outside="showSuggestions = false" autocomplete="off">
-          <div class="sp-suggest-panel" x-show="showSuggestions && suggestions.length > 0" x-cloak>
+          <div class="sp-suggest-panel" x-show="showSuggestions" x-cloak data-testid="member-suggestions">
             <template x-for="s in suggestions" :key="suggestionKey(s)">
               <div class="sp-suggest-item" @click="selectPrincipal(s)">
                 <span class="sp-principal-kind" :class="s.kind === 'group' ? 'sp-principal-kind-group' : 'sp-principal-kind-user'"
@@ -145,6 +151,17 @@
                 <span class="sp-text-muted" x-text="s.subtitle"></span>
               </div>
             </template>
+            <div class="sp-suggest-empty" x-show="noMatches" data-testid="member-no-match">
+              <span x-text="noMatchText()"></span>
+              {% if not user.is_admin %}
+              <span class="sp-suggest-empty-hint">{% trans %}Only existing users can be added. If they have no account yet, ask an administrator to create one.{% endtrans %}</span>
+              {% endif %}
+            </div>
+            {% if user.is_admin %}
+            <button type="button" class="sp-suggest-item sp-suggest-create" @click="startCreateUser()" data-testid="member-create-user">
+              <span x-text="createUserLabel()"></span>
+            </button>
+            {% endif %}
           </div>
         </div>
         <div class="sp-field-min-160">
@@ -163,9 +180,14 @@
           </button>
         </div>
       </div>
+      <div class="sp-suggest-hint" x-show="needsPick" x-cloak data-testid="member-pick-hint">{% trans %}Pick a user or group from the list to enable Add.{% endtrans %}</div>
       <div x-show="addError" class="sp-msg-danger" x-text="addError"></div>
       <div x-show="addSuccess" class="sp-msg-success" x-text="addSuccess"></div>
     </div>
+
+    {% if user.is_admin %}
+    {% include "pages/admin/_user_create_modal.html" %}
+    {% endif %}
 
     <!--
       The access table lists membership *rows*: one per user or group that has

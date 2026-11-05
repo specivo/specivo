@@ -24,6 +24,11 @@
 .sp-btn svg { width: 14px; height: 14px; }
 .sp-btn-primary { background: var(--sp-accent); color: var(--sp-accent-text); }
 .sp-btn-primary:hover { background: var(--sp-accent-hover); box-shadow: 0 0 20px rgba(196, 154, 60, 0.25); text-decoration: none; }
+/* A disabled button must look disabled: without this it kept its colour and
+   pointer cursor, so a click that could not fire read as a broken button.
+   Hover rules are neutralised so it does not light up either. */
+.sp-btn:disabled, .sp-btn[disabled] { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+.sp-btn-primary:disabled:hover, .sp-btn-primary[disabled]:hover { background: var(--sp-accent); }
 .sp-btn-ghost { background: transparent; color: var(--sp-text-secondary); border: 1px solid var(--sp-border); }
 .sp-btn-ghost:hover { background: var(--sp-bg-input); text-decoration: none; }
 .sp-btn-danger { background: var(--sp-danger); color: white; }
