@@ -58,6 +58,7 @@ docker compose up -d
 | `REGISTRATION_MODE` | `open` lets anyone self-register. Use a closed mode to require invites. |
 | `CAPTCHA_ENABLED` | Captcha on the registration form. |
 | `CORS_ORIGINS` | Allowed browser origins, e.g. `["https://specivo.example.com"]`. |
+| `AUDIT_LOG_RETENTION_MONTHS` | Whole months of the [security audit log](audit-log.md) kept before the current month; older months are dropped daily. Default `12`. `0` keeps everything. |
 | `TRUSTED_PROXIES` | Address of the reverse proxy allowed to name the client in `X-Forwarded-For`, as a JSON list of addresses or networks. Default `[]` (the connection's address is the client); the bundled stack sets the bundled nginx, `["10.213.47.2/32"]`. See [Client addresses behind a proxy](#client-addresses-behind-a-proxy). |
 | `TRUSTED_PROXY_HOPS` | How many proxies in a row stand in front of Specivo. Default `1`. |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_TLS` / `SMTP_USER` / `SMTP_PASSWORD` | Outbound email (optional). |

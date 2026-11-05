@@ -44,10 +44,14 @@ an agent: give it read-only roles where it should only look, write roles only wh
 
 ## Every write is audited
 
-Each write an agent makes is recorded in the **security audit log**, tagged `source=mcp`, alongside
-the account that made it and when. Project managers can review this log to see exactly what an agent
-changed. Issue edits also show up in the normal issue history and comment journal, the same as a
-person's edits — nothing an agent does is hidden.
+Each MCP tool call an agent makes, read or write, is recorded in the
+[security audit log](../install/audit-log.md), tagged `source=mcp`, with the account that made it,
+when, and the client address it came from. Administrators review it under **Admin → Audit log** to
+see exactly what an agent did. Issue edits also show up in the normal issue history and comment
+journal, the same as a person's edits — nothing an agent does is hidden.
+
+The log covers MCP. An agent that calls the REST API with its key is treated like a person: its
+issue and wiki edits are in their history, not in the audit log.
 
 ## File uploads go through the REST API
 

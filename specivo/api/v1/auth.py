@@ -126,10 +126,13 @@ async def login(
             from specivo.services.security_audit_service import SecurityAuditService
 
             audit = SecurityAuditService()
+            # Only the login of an account the attempt named, never the typed text:
+            # a password typed into the login field must not reach the audit log.
+            named = await _service.find_account(db, body.login)
             await audit.log_login_failure(
                 session=db,
                 request=request,
-                login_hint=body.login,
+                login_hint=named.login if named is not None else None,
                 reason=exc.code,
             )
             await db.commit()

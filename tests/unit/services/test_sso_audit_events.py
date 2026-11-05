@@ -1,10 +1,8 @@
 """SSO account and configuration events: one log line and one audit event each.
 
 Every function in :mod:`specivo.services.sso.events` writes a ``specivo.sso``
-log line (in every edition) and records an ``AuditEvent`` into the audit
-buffer bound to the current request. The buffer only receives the event when
-the enterprise ``security_audit_log`` feature is registered; the log line is
-there either way. Details carry the provider slug, the issuer, the hashed
+log line and records an ``AuditEvent`` into the audit buffer bound to the
+current request. Details carry the provider slug, the issuer, the hashed
 subject, ids and counts, never the raw subject.
 """
 
@@ -18,7 +16,6 @@ import pytest
 
 from specivo.services.security_audit_service import (
     AuditEvent,
-    SecurityAuditService,
     bind_audit_context,
     current_request_id,
     record_event,
@@ -32,16 +29,6 @@ pytestmark = pytest.mark.unit
 
 SUB = "raw-subject-0f3c9a"
 ISS = "https://idp.example.com/realms/test"
-
-
-@pytest.fixture
-def audit_on(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(SecurityAuditService, "_audit_enabled", staticmethod(lambda: True))
-
-
-@pytest.fixture
-def audit_off(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(SecurityAuditService, "_audit_enabled", staticmethod(lambda: False))
 
 
 @pytest.fixture
@@ -198,8 +185,7 @@ _CASES: list[tuple[str, Callable[[], None], AuditEvent, int | None, dict[str, An
 
 
 @pytest.mark.parametrize(("name", "call", "event", "actor", "details"), _CASES, ids=[c[0] for c in _CASES])
-def test_event_is_recorded_and_logged_when_audit_is_on(
-    audit_on: None,
+def test_event_is_recorded_and_logged(
     buffer: list[dict[str, Any]],
     caplog: pytest.LogCaptureFixture,
     name: str,
@@ -227,25 +213,7 @@ def test_event_is_recorded_and_logged_when_audit_is_on(
     assert SUB not in repr(record.__dict__)
 
 
-@pytest.mark.parametrize(("name", "call", "event", "actor", "details"), _CASES, ids=[c[0] for c in _CASES])
-def test_only_the_log_line_without_the_audit_feature(
-    audit_off: None,
-    buffer: list[dict[str, Any]],
-    caplog: pytest.LogCaptureFixture,
-    name: str,
-    call: Callable[[], None],
-    event: AuditEvent,
-    actor: int | None,
-    details: dict[str, Any],
-) -> None:
-    caplog.set_level(logging.DEBUG, logger="specivo.sso")
-    call()
-
-    assert buffer == []
-    assert [r for r in _sso_records(caplog) if getattr(r, "event", None) == event.value]
-
-
-def test_without_a_bound_context_the_event_is_only_logged(audit_on: None, caplog: pytest.LogCaptureFixture) -> None:
+def test_without_a_bound_context_the_event_is_only_logged(caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG, logger="specivo.sso")
     events.user_provisioned(provider_slug="idp", user_id=7, subject=SUB)
     assert [r for r in _sso_records(caplog) if getattr(r, "event", None) == "sso_user_provisioned"]
@@ -253,7 +221,6 @@ def test_without_a_bound_context_the_event_is_only_logged(audit_on: None, caplog
 
 
 def test_a_failing_audit_write_never_breaks_the_caller(
-    audit_on: None,
     buffer: list[dict[str, Any]],
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
@@ -271,12 +238,12 @@ def test_a_failing_audit_write_never_breaks_the_caller(
     assert any(m.startswith("sso.audit.failed ") for m in messages)
 
 
-def test_record_event_rejects_unknown_types(audit_on: None, buffer: list[dict[str, Any]]) -> None:
+def test_record_event_rejects_unknown_types(buffer: list[dict[str, Any]]) -> None:
     with pytest.raises(ValueError):
         record_event("not_an_event")
 
 
-def test_request_id_is_truncated_to_the_column(audit_on: None) -> None:
+def test_request_id_is_truncated_to_the_column() -> None:
     rows: list[dict[str, Any]] = []
     token = bind_audit_context(rows, state={"request_id": "x" * 80})
     try:

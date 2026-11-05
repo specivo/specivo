@@ -13,7 +13,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -22,7 +21,6 @@ from httpx import AsyncClient
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.main import get_plugin_manager
 from specivo.models.issue import Issue
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
@@ -152,13 +150,6 @@ async def world(db_session: AsyncSession) -> dict:
     db_session.add(issue)
     await db_session.commit()
     return {"project": project, "issue": issue, "logger": logger, "reader": reader, "other": other}
-
-
-@pytest.fixture
-def audit_on() -> Iterator[None]:
-    """Register the enterprise audit feature (the autouse snapshot fixture removes it again)."""
-    get_plugin_manager().feature_registry.register("security_audit_log", "test")
-    yield
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +295,7 @@ async def test_the_issue_page_knows_the_timer_runs_elsewhere(
 
 
 async def test_discard_deletes_the_timer_without_an_entry_and_audits(
-    client: AsyncClient, db_session: AsyncSession, world: dict, audit_on: None
+    client: AsyncClient, db_session: AsyncSession, world: dict
 ) -> None:
     user = world["logger"]
     await _start(db_session, user, world["project"], world["issue"])

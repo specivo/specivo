@@ -1,0 +1,105 @@
+---
+description: The security audit log — what Specivo records and what it does not, how long it keeps it, how admins read it, and the personal data it holds.
+---
+
+# Security audit log
+
+Specivo keeps a security audit log of sign-ins, access changes, administration, single sign-on and
+provisioning, and everything AI agents do over MCP. Every install records it; there is nothing to
+turn on. Administrators read it under **Admin → Audit log** or through the API.
+
+## What is recorded
+
+Each row has a time, an **event type** (a code such as `login_failure` or `scim_user_created`), the
+account that acted, and where the request came from: the client address, the request id and the
+browser or client name (user agent). Rows about a project or an object name those as well. The
+**details** hold ids, keys, counts and short names; see [What the details hold](#what-the-details-hold).
+
+The viewer groups event types into categories:
+
+| Category | What it holds |
+|---|---|
+| Sign-in | Password sign-ins and failures, refused credentials (`auth_failure`), password resets and changes. |
+| Access | Refused permission checks (`access_denied`), resource views through the API, searches, project membership and group changes, anonymous access settings. |
+| Agents | What only agents do over MCP: reading and listing issues, wiki pages, projects, members and versions, and creating or changing issues, comments, wiki pages, versions, relations, recurring patterns and time entries. |
+| Issues and wiki | Attachments, wiki page deletion and restore, sprint start and completion, tags, discarded timers. Rows written by an agent are marked **MCP**. |
+| Administration | Project key renames, metadata schema changes, deactivated accounts. Admin actions on users (created, locked, password reset, API keys) are under Access as `member_change`. |
+| Single sign-on | Single sign-on sign-ins and failures, accounts created, linked or unlinked, role sync, provider configuration. |
+| Provisioning | SCIM user and group changes, refused SCIM requests, SCIM token changes. |
+| Sessions | Revoked sessions, single sign-on logouts (including back-channel), sessions the identity provider refused to renew. |
+
+Every MCP tool call is recorded with `source: mcp` in its details, including the client address,
+request id and user agent of the call.
+
+## What is not recorded
+
+- **People's edits to issues and wiki pages.** Editing an issue, commenting or changing a wiki page
+  in the web interface or through the REST API is not an audit event. Those changes are in the
+  issue's history and the wiki page's versions, with who made them and when. The same edits made by
+  an agent over MCP are in both places.
+- **Successful permission checks.** Opening a page you are allowed to see writes nothing; a refused
+  check does (`access_denied`).
+- **Requests without credentials.** A signed-out browser tab, a crawler or a port scanner calling
+  the API writes nothing, and neither does a browser session that simply expired.
+- **Repeated refusals.** A credential that is presented and refused (a bad token, or an invalid,
+  inactive or expired API key) is recorded as `auth_failure` once a minute per client address and
+  reason, not once per request.
+- **Anonymous reading** of public projects.
+
+## Reading it
+
+**Admin → Audit log** (`/admin/audit-log/`) lists events newest first. Filter by category, event
+type, user login, project key, a date range and client address; the dates are days in your
+timezone and the page starts with the last 30 days. Times are shown in your timezone. **Show** on a
+row opens its details, the request id and the user agent. A user or project that has been deleted
+since shows as `#` and its id.
+
+The same data is at `GET /api/v1/admin/audit-logs/`, with the filters `event_type`, `event_types`
+(repeat it for several), `user_id`, `login`, `project_id`, `ip_address`, `after`, `before`,
+`offset` and `limit`. Each item carries `user_login` and `project_key`. An unknown event type or
+login answers `422`.
+
+Only instance administrators can read the log. An administrator's API key works for the API; a key
+limited to some projects does not.
+
+## Retention
+
+Rows are kept for **12 months** by default, counted in whole calendar months: on 4 November 2026
+the oldest kept day is 1 November 2025. A daily job (also run when a worker starts) drops older
+months. Change it with an environment variable, then restart the stack:
+
+| Variable | Meaning |
+|---|---|
+| `AUDIT_LOG_RETENTION_MONTHS` | Whole months of audit log to keep before the current one. Default `12`. `0` keeps everything. |
+
+The setting is deliberately not in the admin pages: how long security evidence is kept should not
+be changeable from an administrator's session or API key.
+
+The log is stored in monthly partitions of the `security_audit_logs` table, so dropping a month is
+quick. If the job cannot get a lock on the table within five seconds it gives up and tries again
+the next day. The log is part of the database, so the [backup](backup-restore.md) includes it.
+
+## What the details hold
+
+Ids, keys, slugs, names and titles of objects (file names, page titles, sprint names), codes,
+counts, logins of accounts, group names, and search text cut to 500 characters. Never tokens,
+secrets or anything typed as a password, and never the text of issues, comments, descriptions or
+wiki pages.
+
+A failed sign-in records the login only when it names an existing account; otherwise the row says
+`login_known: false`, so a password typed into the login field by mistake is not stored. A password reset request treats
+the address the same way: it is stored only when it matches an account, otherwise the row says
+`email_known: false`.
+
+## Personal data
+
+The audit log holds personal data, readable by every instance administrator:
+
+- **Client addresses (IP)** and **user agents** of the people and agents it records.
+- **Logins** of the accounts that acted or were acted on.
+- **Search text** people and agents entered (up to 500 characters).
+
+Keep the retention period no longer than you need, mention the log in your privacy notice, and
+include it when you answer a request for someone's data. Behind a reverse proxy, set
+[`TRUSTED_PROXIES`](configuration.md#client-addresses-behind-a-proxy) so the log records the
+client's address rather than the proxy's.

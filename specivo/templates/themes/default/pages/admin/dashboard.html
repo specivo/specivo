@@ -161,6 +161,16 @@
       <span class="manage-link">{% trans %}Manage{% endtrans %} &rarr;</span>
     </div>
   </a>
+  <a href="/admin/audit-log/" class="admin-card" style="text-decoration:none;color:inherit;">
+    <div class="admin-card-icon muted">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8m8 4H8m2-8H8"/></svg>
+    </div>
+    <div class="admin-card-body">
+      <h3>{% trans %}Audit log{% endtrans %}</h3>
+      <p>{% trans %}Sign-ins, access and administration changes, and everything agents do.{% endtrans %}</p>
+      <span class="manage-link">{% trans %}View{% endtrans %} &rarr;</span>
+    </div>
+  </a>
   {% if has_feature("agent_groups") %}
   <a href="/admin/agent-groups/" class="admin-card" style="text-decoration:none;color:inherit;">
     <div class="admin-card-icon violet">

@@ -1,19 +1,17 @@
 """Integration tests for core audit logging (login attempts, search queries, password reset).
 
-These features are CE (core) — they must work without the enterprise plugin.
-The test environment runs with INSTALLED_PLUGINS=[] (core-only mode).
+The test environment runs with INSTALLED_PLUGINS=[]: every event is written without a plugin.
 
 Tests cover:
 - Login success creates login_success audit event
 - Login failure creates login_failure audit event with reason
-- Login failure stores login_hint and IP
+- Login failure stores the login of the account it named (never typed text) and the IP
 - Multiple failure reasons (invalid_credentials, account_locked, account_deactivated)
 - Search query creates search_query audit event with per-type counts
 - Search audit works from both API and web endpoints
 - Password reset requested creates password_reset_requested audit event
 - Password reset completed creates password_reset_completed audit event
 - Password reset failure creates password_reset_failed audit event
-- All audit events bypass the enterprise feature gate
 """
 
 from __future__ import annotations
@@ -106,7 +104,7 @@ class TestLoginFailureAudit:
         assert event.details["reason"] == "auth_invalid_credentials"
 
     async def test_unknown_user_creates_failure_event(self, client: AsyncClient, db_session: AsyncSession):
-        """Login with nonexistent user must create a login_failure event."""
+        """Login with nonexistent user must create a login_failure event without the typed text."""
         resp = await _login(client, "no_such_user_xyz", "anypassword1")
         assert resp.status_code == 401
 
@@ -114,11 +112,10 @@ class TestLoginFailureAudit:
         assert len(events) >= 1
 
         event = events[0]
-        assert event.details["reason"] == "auth_invalid_credentials"
-        assert event.details.get("login_hint") == "no_such_user_xyz"
+        assert event.details == {"reason": "auth_invalid_credentials", "login_known": False}
 
     async def test_failure_stores_login_hint(self, client: AsyncClient, db_session: AsyncSession):
-        """Login failure event must store the attempted login/email as login_hint."""
+        """Login failure event must store the login of the account the attempt named as login_hint."""
         await _create_user(db_session, login="audit_hint")
         resp = await _login(client, "audit_hint", "wrongpassword123")
         assert resp.status_code == 401
@@ -306,7 +303,9 @@ class TestPasswordResetRequestedAudit:
 
         event = events[0]
         assert event.user_id is None  # no matching user
-        assert event.details.get("email_hint") == "nobody_at_all@example.com"
+        # What was typed for an unknown address may not be an address at all.
+        assert "email_hint" not in event.details
+        assert event.details.get("email_known") is False
 
     async def test_reset_request_stores_ip_address(self, client: AsyncClient, db_session: AsyncSession):
         """Password reset request audit event must capture IP address."""
@@ -474,33 +473,22 @@ class TestPasswordResetFailedAudit:
 
 
 # ---------------------------------------------------------------------------
-# Core gate — audit must work without enterprise
+# Core audit: written with no plugin installed
 # ---------------------------------------------------------------------------
 
 
-class TestCoreAuditGate:
-    """Verify audit events are written in core-only mode (no enterprise plugin)."""
+class TestCoreAudit:
+    """Audit events are written with no plugin installed."""
 
-    async def test_login_audit_works_without_enterprise(self, client: AsyncClient, db_session: AsyncSession):
-        """Login audit must write events even when security_audit_log feature is not registered."""
-        from specivo.core.features import has_feature
-
-        # In core-only test mode, enterprise features should not be registered
-        assert not has_feature("security_audit_log"), "Test expects core-only mode (no enterprise plugin)"
-
+    async def test_login_audit_works(self, client: AsyncClient, db_session: AsyncSession):
         await _create_user(db_session, login="core_gate_user")
         resp = await _login(client, "core_gate_user", TEST_PASSWORD)
         assert resp.status_code == 200
 
         events = await _get_audit_events(db_session, "login_success")
-        assert len(events) >= 1, "login_success must be written in core-only mode"
+        assert len(events) >= 1, "login_success must be written"
 
-    async def test_search_audit_works_without_enterprise(self, client: AsyncClient, db_session: AsyncSession):
-        """Search audit must write events even when security_audit_log feature is not registered."""
-        from specivo.core.features import has_feature
-
-        assert not has_feature("security_audit_log")
-
+    async def test_search_audit_works(self, client: AsyncClient, db_session: AsyncSession):
         user = await _create_user(db_session, login="core_gate_search")
         resp = await _login(client, "core_gate_search", TEST_PASSWORD)
         token = resp.json()["access_token"]
@@ -513,7 +501,7 @@ class TestCoreAuditGate:
         assert resp.status_code == 200
 
         events = await _get_audit_events(db_session, "search_query")
-        assert len(events) >= 1, "search_query must be written in core-only mode"
+        assert len(events) >= 1, "search_query must be written"
 
 
 # ---------------------------------------------------------------------------
@@ -524,18 +512,8 @@ class TestCoreAuditGate:
 class TestSprintLifecycleAudit:
     """Starting and completing a sprint is audited, through REST and MCP alike."""
 
-    @pytest.fixture
-    def audit_on(self):
-        """Register the enterprise audit feature (the autouse snapshot fixture removes it again)."""
-        from specivo.main import get_plugin_manager
-
-        get_plugin_manager().feature_registry.register("security_audit_log", "test")
-        yield
-
     @pytest.mark.parametrize("via", ["rest", "mcp"])
-    async def test_sprint_start_and_complete_are_audited(
-        self, client: AsyncClient, db_session: AsyncSession, audit_on: None, via: str
-    ):
+    async def test_sprint_start_and_complete_are_audited(self, client: AsyncClient, db_session: AsyncSession, via: str):
         from specivo.mcp.tools import _complete_sprint, _start_sprint
         from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
         from specivo.models.sprint import Sprint

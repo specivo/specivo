@@ -1,13 +1,10 @@
-"""SSO audit events end to end: the right rows when the audit feature is on, log lines always.
+"""SSO audit events end to end: the right rows and a log line for each.
 
-* With the enterprise ``security_audit_log`` feature registered, each SSO flow
-  writes its ``AuditEvent`` (flushed by ``AuditBatchMiddleware`` after the
+* Each SSO flow writes its ``AuditEvent`` (flushed by ``AuditBatchMiddleware`` after the
   response) with ids, counts, the provider slug, the issuer and the hashed
   subject. The actor is the user for their own actions, the admin for admin
   actions and nobody for what the IdP starts (back-channel logout).
-* Without it nothing is persisted (except the login success/failure rows,
-  which are core events like the password login ones) and every event is
-  still a ``specivo.sso`` log line.
+* Every event is also a ``specivo.sso`` log line.
 * No log record and no audit row ever holds the client secret, the
   authorization code, the PKCE verifier, a JWT or the raw subject.
 * A failing audit write never breaks the login.
@@ -17,7 +14,6 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -25,7 +21,6 @@ from httpx import AsyncClient, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.main import get_plugin_manager
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.sso import SsoProvider, UserIdentity
 from specivo.models.user import User
@@ -44,18 +39,6 @@ _JWT_RE = re.compile(r"eyJ[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]+")
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def audit_on() -> Iterator[None]:
-    """Register the enterprise audit feature (the autouse snapshot fixture removes it again)."""
-    get_plugin_manager().feature_registry.register("security_audit_log", "test")
-    yield
-
-
-@pytest.fixture
-def audit_off() -> None:
-    assert not get_plugin_manager().feature_registry.has_feature("security_audit_log")
 
 
 class Captured:
@@ -180,7 +163,6 @@ async def test_sso_login_writes_sso_login_success_not_the_generic_event(
     sso_provider: SsoProvider,
     sso_login: SsoLoginDriver,
     mock_idp: MockIdP,
-    audit_off: None,
 ) -> None:
     user = await _user(db_session)
     await link_identity(db_session, user, sso_provider, subject=mock_idp.default_sub)
@@ -203,7 +185,6 @@ async def test_sso_login_failure_records_the_error_code(
     db_session: AsyncSession,
     sso_provider: SsoProvider,
     sso_login: SsoLoginDriver,
-    audit_off: None,
 ) -> None:
     response = await sso_login(client, error="access_denied")
     assert "sso_error=sso_idp_error" in response.headers["location"]
@@ -225,7 +206,6 @@ async def test_a_failing_login_audit_write_does_not_break_the_login(
     sso_provider: SsoProvider,
     sso_login: SsoLoginDriver,
     mock_idp: MockIdP,
-    audit_on: None,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sso_provider.allow_jit_provisioning = True
@@ -252,13 +232,12 @@ async def test_a_failing_login_audit_write_does_not_break_the_login(
 # ---------------------------------------------------------------------------
 
 
-async def test_jit_provisioning_is_audited_when_the_feature_is_on(
+async def test_jit_provisioning_is_audited(
     client: AsyncClient,
     db_session: AsyncSession,
     sso_provider: SsoProvider,
     sso_login: SsoLoginDriver,
     mock_idp: MockIdP,
-    audit_on: None,
 ) -> None:
     sso_provider.allow_jit_provisioning = True
     await db_session.flush()
@@ -274,30 +253,11 @@ async def test_jit_provisioning_is_audited_when_the_feature_is_on(
     assert row.details["user_id"] == user_id
 
 
-async def test_without_the_feature_only_log_lines_remain(
-    client: AsyncClient,
-    db_session: AsyncSession,
-    sso_provider: SsoProvider,
-    sso_login: SsoLoginDriver,
-    audit_off: None,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    sso_provider.allow_jit_provisioning = True
-    await db_session.flush()
-
-    with caplog.at_level(logging.INFO):
-        await _sso_login(client, sso_login, claims={"email": "audit-jit-off@example.com"})
-
-    assert [r.event_type for r in await _rows(db_session)] == [AuditEvent.SSO_LOGIN_SUCCESS.value]
-    assert AuditEvent.SSO_USER_PROVISIONED.value in _sso_events(caplog)
-
-
 async def test_link_and_unlink_are_audited_with_the_user_as_actor(
     client: AsyncClient,
     db_session: AsyncSession,
     sso_provider: SsoProvider,
     mock_idp: MockIdP,
-    audit_on: None,
 ) -> None:
     user = await _user(db_session, login="auditlinker", email="audit-linker@example.com")
     await db_session.commit()
@@ -332,7 +292,6 @@ async def test_admin_unlink_has_the_admin_as_actor(
     admin_client: AsyncClient,
     db_session: AsyncSession,
     sso_provider: SsoProvider,
-    audit_on: None,
 ) -> None:
     target = await _user(db_session, login="audittarget", email="audit-target@example.com")
     identity = await link_identity(db_session, target, sso_provider, subject="audit-admin-unlink-subject")
@@ -361,7 +320,6 @@ async def test_rp_logout_and_session_revocation_are_audited(
     sso_provider: SsoProvider,
     sso_login: SsoLoginDriver,
     mock_idp: MockIdP,
-    audit_on: None,
 ) -> None:
     user = await _user(db_session)
     await link_identity(db_session, user, sso_provider, subject=mock_idp.default_sub)
@@ -388,7 +346,6 @@ async def test_backchannel_logout_is_audited_without_an_actor(
     sso_provider: SsoProvider,
     sso_login: SsoLoginDriver,
     mock_idp: MockIdP,
-    audit_on: None,
 ) -> None:
     sso_provider.backchannel_logout_enabled = True
     user = await _user(db_session)
@@ -420,7 +377,7 @@ async def test_backchannel_logout_is_audited_without_an_actor(
 
 
 async def test_provider_crud_is_audited_with_the_admin_as_actor(
-    admin_client: AsyncClient, db_session: AsyncSession, audit_on: None, caplog: pytest.LogCaptureFixture
+    admin_client: AsyncClient, db_session: AsyncSession, caplog: pytest.LogCaptureFixture
 ) -> None:
     secret = "audit-provider-secret-0001"
     caplog.set_level(logging.DEBUG)
@@ -464,11 +421,10 @@ async def test_provider_crud_is_audited_with_the_admin_as_actor(
 
 
 # ---------------------------------------------------------------------------
-# The guarantee: a full cycle leaks nothing, with and without the feature
+# The guarantee: a full cycle leaks nothing
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("feature", [True, False], ids=["audit-on", "audit-off"])
 async def test_full_cycle_never_leaks_secrets(
     client: AsyncClient,
     db_session: AsyncSession,
@@ -477,10 +433,7 @@ async def test_full_cycle_never_leaks_secrets(
     mock_idp: MockIdP,
     captured: Captured,
     caplog: pytest.LogCaptureFixture,
-    feature: bool,
 ) -> None:
-    if feature:
-        get_plugin_manager().feature_registry.register("security_audit_log", "test")
     sso_provider.allow_jit_provisioning = True
     sso_provider.backchannel_logout_enabled = True
     await db_session.flush()
@@ -522,10 +475,7 @@ async def test_full_cycle_never_leaks_secrets(
     persisted = {r.event_type for r in rows}
     # Login rows are core events; the cycle has SSO logins and one password login.
     core = {AuditEvent.SSO_LOGIN_SUCCESS.value, AuditEvent.LOGIN_SUCCESS.value}
-    if feature:
-        assert {e.value for e in expected} | core | {AuditEvent.SESSIONS_REVOKED.value} <= persisted
-    else:
-        assert persisted == core
+    assert {e.value for e in expected} | core | {AuditEvent.SESSIONS_REVOKED.value} <= persisted
 
     denylist = [
         mock_idp.client_secret or "",

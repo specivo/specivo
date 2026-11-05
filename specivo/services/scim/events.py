@@ -1,10 +1,9 @@
 """SCIM events: one function per event, the single place each one is recorded.
 
-Each function writes one ``specivo.scim`` log line in every edition and, for
-an audit event, appends it to the request's audit buffer
-(:func:`specivo.services.security_audit_service.record_event`, persisted only
-with the enterprise ``security_audit_log`` feature). A failing audit write is
-logged and never reaches the caller.
+Each function writes one ``specivo.scim`` log line and, for an audit event,
+appends it to the request's audit buffer
+(:func:`specivo.services.security_audit_service.record_event`). A failing
+audit write is logged and never reaches the caller.
 
 The actor (``user_id``) of a change made through SCIM is nobody: the identity
 provider made it. Details carry ``source: scim``, the provider slug, the SCIM

@@ -1,0 +1,24 @@
+/* Admin > Audit log: filter form, event table, details as escaped JSON. */
+
+.sp-audit-intro { font-size: var(--sp-font-size-sm); color: var(--sp-text-muted); max-width: 72ch; margin-bottom: var(--sp-space-lg); }
+
+.sp-audit-filters { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); align-items: end; gap: var(--sp-space-md); padding: var(--sp-space-lg); margin-bottom: var(--sp-space-lg); text-align: left; }
+.sp-audit-field { display: flex; flex-direction: column; align-items: stretch; min-width: 0; margin: 0; }
+.sp-audit-field .form-label { margin-bottom: var(--sp-space-xs); }
+.sp-audit-field .filter-select,
+.sp-audit-field .filter-input { width: 100%; min-width: 0; }
+.sp-audit-actions { display: flex; gap: var(--sp-space-sm); }
+
+.sp-audit-card { padding: 0; overflow: hidden; margin-bottom: var(--sp-space-lg); }
+.sp-audit-table td { vertical-align: top; }
+.sp-audit-time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-audit-code { font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); white-space: nowrap; }
+.sp-audit-sub { margin-top: 2px; font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); overflow-wrap: anywhere; }
+.sp-audit-missing { color: var(--sp-text-muted); }
+.sp-audit-details { min-width: 220px; }
+.sp-audit-details summary { cursor: pointer; color: var(--sp-text-link); font-size: var(--sp-font-size-xs); }
+.sp-audit-json { margin: var(--sp-space-xs) 0 0; padding: var(--sp-space-sm); max-width: 520px; max-height: 320px; overflow: auto; background: var(--sp-bg-input); border: 1px solid var(--sp-border); border-radius: 6px; font-family: var(--sp-font-mono); font-size: var(--sp-font-size-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .sp-audit-filters { grid-template-columns: 1fr 1fr; padding: var(--sp-space-md); gap: var(--sp-space-sm); }
+}

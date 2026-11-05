@@ -282,7 +282,7 @@ All middleware uses **raw ASGI** (not `BaseHTTPMiddleware`) to avoid event loop 
 
 1. `RequestIDMiddleware` -- generates/propagates `X-Request-ID`, adds security headers (CSP, X-Frame-Options, X-Content-Type-Options, etc.).
 2. `CSRFMiddleware` -- double-submit cookie CSRF protection: sets a signed, non-HttpOnly `csrf_token` cookie on GET responses and requires a matching `X-CSRF-Token` header on POST/PATCH/PUT/DELETE. Exempt: requests carrying an `X-API-Key` or `Authorization` header (not cookie-based); the exact auth endpoints `login/`, `refresh/`, `forgot-password/` and `reset-password/` (listed one by one in `_CSRF_EXEMPT_PATHS`, never as an `/api/v1/auth/` prefix, so a new auth route is protected by default); and the MCP mount, which accepts Bearer API keys only.
-3. `AuditBatchMiddleware` -- initializes `scope["state"]["audit_events"]` list; flushes collected audit events in a single batch INSERT after the response (only when enterprise plugin provides `security_audit_log` feature).
+3. `AuditBatchMiddleware` -- initializes `scope["state"]["audit_events"]` list and binds the request's audit context (client address, user agent, request id); flushes collected audit events in a single batch INSERT after the response, in a session of its own. A failed flush is logged and never fails the response.
 4. `SQLDebugMiddleware` -- per-request SQL profiler adding `X-SQL-Query-Count` and friends. Registered only when `settings.debug`; the middleware itself does not check the flag.
 5. `RateLimitHeaderMiddleware` -- copies `X-RateLimit-*` headers from `request.state` onto the ASGI response (survives endpoints that return custom `JSONResponse`).
 6. `TokenRefreshMiddleware` -- when `get_current_user_optional()` has transparently rotated an expired access token using the refresh cookie, it parks the new pair on `scope["state"]["refreshed_tokens"]`; this middleware appends the `Set-Cookie` headers for them.
@@ -497,17 +497,44 @@ await audit.log_member_change(session=db, action="added", ...)
 **Rules:**
 - Failed permission attempts must be logged before raising 403.
 - Audit writes in error paths must `commit()` before re-raising, otherwise `get_db` rollback discards them.
-- All events go to `security_audit_logs` (partitioned by month, with a default catch-all partition).
+- All events go to `security_audit_logs` (partitioned by month, with a default catch-all partition). The
+  daily `ensure_audit_partitions` task (also run at worker start) creates months ahead and drops those older
+  than `AUDIT_LOG_RETENTION_MONTHS` (default 12, `0` keeps everything; an environment setting on purpose).
+- Every install records every event; there is no feature flag.
 - An audit write never breaks the action it records: catch and log the failure.
 - Code that cannot await (SSO events, session revocation) calls `record_event(...)`, which appends to the
   request's audit buffer (bound by `AuditBatchMiddleware`, flushed after the response). Outside a request,
-  wrap the work in `async with audit_scope(session):`. Both are skipped unless the enterprise
-  `security_audit_log` feature is registered, like `log_event`.
+  wrap the work in `async with audit_scope(session):`.
+- Client-sent values are cut to their columns on every write path (`bounded_log` /
+  `SecurityAuditService._persist`): `request_id` 36, `user_agent` 512, `ip_address` 45, and
+  `details.query` 500 characters. A new write path goes through them, never `SecurityAuditLog(...)` directly.
+- `log_event` fills `ip_address`, `request_id` and `user_agent` from `request`, or from the bound audit
+  context, when not given.
+
+**Scope.** Security and administrative events, and everything agents do through MCP. People's ordinary
+edits to issues and wiki pages are not audit events: they live in issue and wiki history.
+
+**Noise rules.** Each of these was one row per routine request, so it is not written:
+- `access_granted` (the enum value stays so old rows read). `access_denied` is written, only where the
+  caller passes `request`; anonymous paths pass none.
+- `auth_failure` for a request without credentials, or for an expired token on the cookie path. A presented
+  credential that is refused (a bad bearer token, an invalid, inactive or expired API key) is written, at
+  most once a minute per client address and reason (Redis `SET NX EX 60`; written anyway when Redis is down).
+- A failed sign-in stores `login_hint` only as the login of the account the attempt named, otherwise
+  `login_known: false`: a password typed into the login field must not become readable.
+  A password reset request stores the address only when it matches an account, otherwise
+  `email_known: false`, for the same reason.
+
+**What `details` may hold:** ids, keys, slugs, names and titles of objects (file names, page titles, sprint
+and schema names), enum values and codes, counts, flags, logins of accounts, group names, and search text
+(capped at 500 characters). **Never:** tokens, codes, verifiers, secrets or any password material; issue,
+comment, wiki or description body text; claim sets; request facts that have columns of their own
+(`request_id`, `user_agent`). The admin viewer (`/admin/audit-log/`) shows `details` as escaped JSON, never
+rendered as Markdown or HTML.
 
 **Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
 configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line
-(`extra`: `event`, `request_id`, `audit`) in every edition, so a Community install keeps a trail without the
-audit feature.
+(`extra`: `event`, `request_id`, `audit`), so the trail also reaches the application log.
 
 | Event | Actor (`user_id`) | Details |
 |-------|-------------------|---------|
@@ -524,8 +551,7 @@ audit feature.
 | `USER_DEPROVISIONED` | the admin, or none | `provider`, `user_id`, `reason`, `sessions_revoked` |
 | `SESSIONS_REVOKED` | `actor_id` passed to `SessionService` | `reason`, `user_ids`, `session_count`, `row_count` |
 
-`SSO_LOGIN_SUCCESS` / `SSO_LOGIN_FAILURE` replace the generic login events for SSO and, like them, are core
-events persisted in every edition. `sub_hash` is the first 16 hex characters of SHA-256 of the subject. Details
+`SSO_LOGIN_SUCCESS` / `SSO_LOGIN_FAILURE` replace the generic login events for SSO. `sub_hash` is the first 16 hex characters of SHA-256 of the subject. Details
 never hold tokens, codes, verifiers, secrets, claim sets or group names.
 
 ## Consequences

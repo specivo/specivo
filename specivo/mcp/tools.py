@@ -31,7 +31,6 @@ from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
-from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
@@ -50,7 +49,7 @@ from specivo.services.recurrence import expand_occurrences
 from specivo.services.recurring_pattern_service import RecurringPatternService
 from specivo.services.relation_service import RelationService
 from specivo.services.search_service import SearchService
-from specivo.services.security_audit_service import AuditEvent
+from specivo.services.security_audit_service import AuditEvent, bounded_log, current_request_info
 from specivo.services.sprint_service import SprintService
 from specivo.services.tag_service import TagService
 from specivo.services.time_entry_service import TimeEntryService
@@ -80,15 +79,18 @@ async def _log_tool(
     details: dict | None = None,
     project_id: int | None = None,
 ) -> None:
-    """Log an MCP tool call. Core feature — always persisted, no enterprise gate."""
+    """Log an MCP tool call, with where the call came from when the request's audit context reaches it."""
     log_details = {"tool": tool_name, "source": "mcp"}
     if details:
         log_details.update(details)
-    log = SecurityAuditLog(
-        event_type=str(event_type),
-        user_id=user.id,
-        project_id=project_id,
-        details=log_details,
+    log = bounded_log(
+        {
+            "event_type": str(event_type),
+            "user_id": user.id,
+            "project_id": project_id,
+            "details": log_details,
+            **current_request_info(),
+        }
     )
     session.add(log)
     await session.flush()

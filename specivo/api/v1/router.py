@@ -1,16 +1,16 @@
 """API v1 router — aggregates all sub-routers.
 
-Core routes include: auth, issues, journals, reactions, saved filters, bulk
+Routes include: auth, issues, journals, reactions, saved filters, bulk
 operations, notifications (inbox + preferences), wiki, search, outgoing
-webhooks, and admin.
+webhooks, and admin (including the security audit log).
 
-Enterprise-only routes (admin agent groups, credentials, kill switch, audit logs,
-model costs, agent costs, admin metadata_schemas) are NOT included here.
-They are mounted by the EnterprisePlugin via ``get_routers()``.
+A router module that is not included here (such as ``agent_costs``) is not
+served; a plugin may add routes of its own through ``get_routers()``.
 """
 
 from fastapi import APIRouter
 
+from specivo.api.v1.admin.audit import router as admin_audit_router
 from specivo.api.v1.admin.email import router as admin_email_router
 from specivo.api.v1.admin.embedding_models import router as admin_embedding_models_router
 from specivo.api.v1.admin.metadata_presets import router as admin_metadata_presets_router
@@ -76,6 +76,7 @@ api_router.include_router(admin_user_groups_router)
 api_router.include_router(admin_sso_router)
 api_router.include_router(admin_projects_router)
 api_router.include_router(admin_email_router)
+api_router.include_router(admin_audit_router)
 api_router.include_router(admin_metadata_presets_router)
 api_router.include_router(admin_metadata_schemas_router)
 api_router.include_router(metadata_router)

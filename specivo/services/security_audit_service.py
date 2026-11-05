@@ -6,14 +6,22 @@ calls :func:`record_event`, which appends the event to the audit buffer of
 the current request: :class:`specivo.core.middleware.AuditBatchMiddleware`
 binds that buffer (:func:`bind_audit_context`) and flushes it after the
 response. Outside a request, :func:`audit_scope` binds a buffer and writes it
-through a DB session. Both paths are skipped unless the enterprise
-``security_audit_log`` feature is registered.
+through a DB session.
+
+The log holds security and administrative events and everything agents do;
+people's ordinary edits live in issue and wiki history instead. What an
+event's ``details`` may hold is set out in ADR-0004 §18: ids, keys, slugs,
+enum values, counts, account logins, group names and capped search text,
+never tokens, secrets, password material, body text or claim sets.
+
+Client-sent values are cut to their columns by :func:`_bounded` on every
+write path, so an oversized ``X-Request-ID`` or ``User-Agent`` loses no event.
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Mapping, Sequence
 from contextlib import asynccontextmanager
 from contextvars import ContextVar, Token
 from dataclasses import dataclass, field
@@ -22,7 +30,7 @@ from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.client_ip import get_client_ip
@@ -133,9 +141,210 @@ class AuditEvent(StrEnum):
     SESSIONS_REVOKED = "sessions_revoked"
 
 
-#: Width of ``security_audit_logs.request_id``; a longer client-sent id is cut.
-_REQUEST_ID_MAX = 36
 _VALID_EVENTS = frozenset(e.value for e in AuditEvent)
+
+
+class AuditCategory(StrEnum):
+    """The groups the admin viewer filters by; every :class:`AuditEvent` belongs to one."""
+
+    SIGN_IN = "sign_in"
+    ACCESS = "access"
+    AGENTS = "agents"
+    ISSUES_AND_WIKI = "issues_and_wiki"
+    ADMINISTRATION = "administration"
+    SSO = "sso"
+    PROVISIONING = "provisioning"
+    SESSIONS = "sessions"
+
+
+#: The category of each event. "Agents" holds the events only MCP tools write;
+#: what agents do through actions people can take as well (tags, wiki deletes,
+#: timers) sits in that action's category, with ``details.source = "mcp"``.
+EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
+    **dict.fromkeys(
+        [
+            AuditEvent.LOGIN_SUCCESS,
+            AuditEvent.LOGIN_FAILURE,
+            AuditEvent.AUTH_FAILURE,
+            AuditEvent.PASSWORD_RESET_REQUESTED,
+            AuditEvent.PASSWORD_RESET_COMPLETED,
+            AuditEvent.PASSWORD_RESET_FAILED,
+            AuditEvent.PASSWORD_CHANGED,
+            AuditEvent.PASSWORD_CHANGE_FAILED,
+            AuditEvent.PASSWORD_HASH_UPGRADED,
+        ],
+        AuditCategory.SIGN_IN,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.ACCESS_GRANTED,
+            AuditEvent.ACCESS_DENIED,
+            AuditEvent.RESOURCE_ACCESS,
+            AuditEvent.SEARCH_QUERY,
+            AuditEvent.MEMBER_CHANGE,
+            AuditEvent.GROUP_CHANGE,
+            AuditEvent.PROJECT_ANONYMOUS_PERMISSIONS_CHANGED,
+            AuditEvent.ANONYMOUS_ACCESS_SWITCH_CHANGED,
+        ],
+        AuditCategory.ACCESS,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.ISSUE_CREATED,
+            AuditEvent.ISSUE_UPDATED,
+            AuditEvent.ISSUE_READ,
+            AuditEvent.ISSUE_LISTED,
+            AuditEvent.WIKI_READ,
+            AuditEvent.WIKI_UPDATED,
+            AuditEvent.WIKI_LISTED,
+            AuditEvent.WIKI_CREATED,
+            AuditEvent.COMMENT_ADDED,
+            AuditEvent.PROJECTS_LISTED,
+            AuditEvent.MEMBERS_LISTED,
+            AuditEvent.LOOKUPS_READ,
+            AuditEvent.TIME_LOGGED,
+            AuditEvent.TIMER_STARTED,
+            AuditEvent.VERSIONS_LISTED,
+            AuditEvent.VERSION_CREATED,
+            AuditEvent.VERSION_UPDATED,
+            AuditEvent.VERSION_DELETED,
+            AuditEvent.RECURRING_PATTERNS_LISTED,
+            AuditEvent.RECURRING_PATTERN_CREATED,
+            AuditEvent.RECURRING_PATTERN_UPDATED,
+            AuditEvent.RECURRING_PATTERN_DELETED,
+            AuditEvent.RECURRENCE_OCCURRENCE_SKIPPED,
+            AuditEvent.RECURRENCE_OCCURRENCES_LISTED,
+            AuditEvent.TAGS_LISTED,
+            AuditEvent.RELATION_LISTED,
+            AuditEvent.RELATION_ADDED,
+            AuditEvent.RELATION_REMOVED,
+        ],
+        AuditCategory.AGENTS,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.ATTACHMENT_UPLOADED,
+            AuditEvent.ATTACHMENT_DELETED,
+            AuditEvent.ATTACHMENT_UPDATED,
+            AuditEvent.WIKI_DELETED,
+            AuditEvent.WIKI_RESTORED,
+            AuditEvent.TIMER_DISCARDED,
+            AuditEvent.SPRINT_STARTED,
+            AuditEvent.SPRINT_COMPLETED,
+            AuditEvent.TAG_CREATED,
+            AuditEvent.TAG_UPDATED,
+            AuditEvent.TAG_DELETED,
+            AuditEvent.TAG_ADDED,
+            AuditEvent.TAG_REMOVED,
+        ],
+        AuditCategory.ISSUES_AND_WIKI,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.PROJECT_KEY_RENAMED,
+            AuditEvent.METADATA_SCHEMA_CREATED,
+            AuditEvent.METADATA_SCHEMA_UPDATED,
+            AuditEvent.METADATA_SCHEMA_DELETED,
+            AuditEvent.USER_DEPROVISIONED,
+        ],
+        AuditCategory.ADMINISTRATION,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.SSO_LOGIN_SUCCESS,
+            AuditEvent.SSO_LOGIN_FAILURE,
+            AuditEvent.SSO_USER_PROVISIONED,
+            AuditEvent.SSO_ACCOUNT_LINKED,
+            AuditEvent.SSO_ACCOUNT_UNLINKED,
+            AuditEvent.SSO_ROLES_SYNCED,
+            AuditEvent.SSO_GROUPS_OVERAGE,
+            AuditEvent.SSO_PROVIDER_CREATED,
+            AuditEvent.SSO_PROVIDER_UPDATED,
+            AuditEvent.SSO_PROVIDER_DELETED,
+            AuditEvent.SSO_PROVIDER_SECRET_CHANGED,
+        ],
+        AuditCategory.SSO,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.SCIM_USER_CREATED,
+            AuditEvent.SCIM_USER_UPDATED,
+            AuditEvent.SCIM_USER_DEPROVISIONED,
+            AuditEvent.SCIM_GROUP_CREATED,
+            AuditEvent.SCIM_GROUP_UPDATED,
+            AuditEvent.SCIM_GROUP_DELETED,
+            AuditEvent.SCIM_REQUEST_REFUSED,
+            AuditEvent.SCIM_CONFIG_CHANGED,
+        ],
+        AuditCategory.PROVISIONING,
+    ),
+    **dict.fromkeys(
+        [
+            AuditEvent.SESSIONS_REVOKED,
+            AuditEvent.SSO_LOGOUT,
+            AuditEvent.SSO_BACKCHANNEL_LOGOUT,
+            AuditEvent.SSO_SESSION_REJECTED,
+        ],
+        AuditCategory.SESSIONS,
+    ),
+}
+
+
+def events_in(category: AuditCategory) -> list[str]:
+    """The event type values of *category*, in declaration order."""
+    return [event.value for event, cat in EVENT_CATEGORIES.items() if cat is category]
+
+
+def is_audit_event(value: str) -> bool:
+    """Whether *value* is an :class:`AuditEvent` value."""
+    return value in _VALID_EVENTS
+
+
+#: Widths of the ``security_audit_logs`` columns a client's headers end up in.
+_REQUEST_ID_MAX = 36
+_USER_AGENT_MAX = 512
+_IP_ADDRESS_MAX = 45
+#: The longest search text kept in ``details.query``.
+SEARCH_QUERY_MAX = 500
+
+
+def _cut(value: Any, width: int) -> str | None:
+    return str(value).replace("\x00", "")[:width] if value else None
+
+
+def _without_nul(value: Any) -> Any:
+    """*value* with NUL characters removed from every string in it; JSONB refuses them."""
+    if isinstance(value, str):
+        return value.replace("\x00", "")
+    if isinstance(value, dict):
+        return {_without_nul(k): _without_nul(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [_without_nul(v) for v in value]
+    return value
+
+
+def _bounded(event: dict[str, Any]) -> dict[str, Any]:
+    """``event`` with the client-sent columns cut to their widths, search text capped and NUL removed.
+
+    Applied on every write path: a longer value or a NUL would fail the INSERT,
+    and with it every other event of the batch (or the transaction it shares).
+    """
+    details = _without_nul(event.get("details") or {})
+    query = details.get("query")
+    if isinstance(query, str) and len(query) > SEARCH_QUERY_MAX:
+        details = {**details, "query": query[:SEARCH_QUERY_MAX]}
+    return {
+        **event,
+        "request_id": _cut(event.get("request_id"), _REQUEST_ID_MAX),
+        "user_agent": _cut(event.get("user_agent"), _USER_AGENT_MAX),
+        "ip_address": _cut(event.get("ip_address"), _IP_ADDRESS_MAX),
+        "details": details,
+    }
+
+
+def bounded_log(event: dict[str, Any]) -> SecurityAuditLog:
+    """A :class:`SecurityAuditLog` for the event dict, client-sent columns cut to fit."""
+    return SecurityAuditLog(**_bounded(event))
 
 
 @dataclass(slots=True)
@@ -151,8 +360,7 @@ class _AuditContext:
 
     @property
     def request_id(self) -> str | None:
-        value = self.state.get("request_id")
-        return str(value)[:_REQUEST_ID_MAX] if value else None
+        return _cut(self.state.get("request_id"), _REQUEST_ID_MAX)
 
 
 _audit_context: ContextVar[_AuditContext | None] = ContextVar("security_audit_context", default=None)
@@ -173,7 +381,7 @@ def bind_audit_context(
         _AuditContext(
             events=events,
             ip_address=ip_address,
-            user_agent=user_agent[:512] if user_agent else None,
+            user_agent=_cut(user_agent, _USER_AGENT_MAX),
             state=state if state is not None else {},
         )
     )
@@ -190,6 +398,18 @@ def current_request_id() -> str | None:
     return context.request_id if context is not None else None
 
 
+def current_request_info() -> dict[str, str | None]:
+    """Where the request being handled came from: ``ip_address``, ``request_id``, ``user_agent``.
+
+    All ``None`` when no audit context is bound (a CLI command, a job, or a
+    call the request's context does not reach).
+    """
+    context = _audit_context.get()
+    if context is None:
+        return {"ip_address": None, "request_id": None, "user_agent": None}
+    return {"ip_address": context.ip_address, "request_id": context.request_id, "user_agent": context.user_agent}
+
+
 def record_event(
     event_type: AuditEvent,
     *,
@@ -200,15 +420,12 @@ def record_event(
 ) -> bool:
     """Append an event to the bound audit buffer; ``True`` when it was buffered.
 
-    Synchronous, for code that cannot await. Nothing is buffered when the
-    ``security_audit_log`` feature is not registered or no buffer is bound
-    (the caller's log line is then the only trail). Raises ``ValueError`` for
-    a value that is not an :class:`AuditEvent`.
+    Synchronous, for code that cannot await. Nothing is buffered when no
+    buffer is bound (the caller's log line is then the only trail). Raises
+    ``ValueError`` for a value that is not an :class:`AuditEvent`.
     """
     if str(event_type) not in _VALID_EVENTS:
         raise ValueError(f"Unknown audit event type: {event_type!r}. Use AuditEvent enum.")
-    if not SecurityAuditService._audit_enabled():
-        return False
     context = _audit_context.get()
     if context is None:
         return False
@@ -247,11 +464,11 @@ async def audit_scope(session: AsyncSession) -> AsyncIterator[None]:
         yield
     finally:
         reset_audit_context(token)
-    if not events or not SecurityAuditService._audit_enabled():
+    if not events:
         return
     try:
         async with session.begin_nested():
-            session.add_all(SecurityAuditLog(**event) for event in events)
+            session.add_all(bounded_log(event) for event in events)
     except Exception:
         logger.warning("Security audit write failed for %d event(s)", len(events), exc_info=True)
 
@@ -288,19 +505,21 @@ class SecurityAuditService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _audit_enabled() -> bool:
-        """Return True if the security_audit_log feature is available.
+    async def _persist(session: AsyncSession, *, savepoint: bool = False, **fields: Any) -> SecurityAuditLog:
+        """Write one event now, in the caller's transaction.
 
-        When the enterprise plugin is not loaded, all audit writes are
-        silently skipped — both batch (via AuditBatchMiddleware) and direct
-        INSERT paths.
+        With *savepoint* the insert runs in a savepoint, so a failing audit
+        write cannot poison the transaction of the work it records.
         """
-        try:
-            from specivo.core.features import has_feature
-
-            return has_feature("security_audit_log")
-        except (RuntimeError, ImportError):
-            return False
+        fields.setdefault("details", {})
+        log = bounded_log(fields)
+        if savepoint:
+            async with session.begin_nested():
+                session.add(log)
+        else:
+            session.add(log)
+            await session.flush()
+        return log
 
     async def log_event(
         self,
@@ -323,28 +542,30 @@ class SecurityAuditService:
         the event is appended to the buffer for batch INSERT by AuditBatchMiddleware.
         Otherwise, falls back to a direct INSERT (e.g. CLI or Celery contexts).
 
-        When the enterprise plugin is not loaded (``security_audit_log`` feature
-        is not registered), all writes are silently skipped.
+        ``ip_address``, ``request_id`` and ``user_agent`` not given are taken
+        from ``request``, or else from the bound audit context.
         """
         if str(event_type) not in _VALID_EVENTS:
             raise ValueError(f"Unknown audit event type: {event_type!r}. Use AuditEvent enum.")
+        origin = self.request_info(request) if request is not None else current_request_info()
+        ip_address = ip_address or origin["ip_address"]
+        request_id = request_id or origin["request_id"]
+        user_agent = user_agent or origin["user_agent"]
 
-        event_data = {
-            "event_type": str(event_type),
-            "user_id": user_id,
-            "resource_type": resource_type,
-            "resource_id": resource_id,
-            "project_id": project_id,
-            "permission": permission,
-            "ip_address": ip_address,
-            "request_id": request_id,
-            "user_agent": user_agent,
-            "details": details or {},
-        }
-
-        # Skip all audit writes when enterprise is not loaded.
-        if not self._audit_enabled():
-            return SecurityAuditLog(**event_data)
+        event_data = _bounded(
+            {
+                "event_type": str(event_type),
+                "user_id": user_id,
+                "resource_type": resource_type,
+                "resource_id": resource_id,
+                "project_id": project_id,
+                "permission": permission,
+                "ip_address": ip_address,
+                "request_id": request_id,
+                "user_agent": user_agent,
+                "details": details or {},
+            }
+        )
 
         # Batch mode: append to request buffer for later flush.
         # Check for list type specifically to avoid MagicMock false positives.
@@ -354,17 +575,14 @@ class SecurityAuditService:
             return SecurityAuditLog(**event_data)
 
         # Direct INSERT fallback (no request context)
-        log = SecurityAuditLog(**event_data)
-        session.add(log)
-        await session.flush()
-        return log
+        return await self._persist(session, **event_data)
 
     @classmethod
     async def flush_events(cls, session: AsyncSession, events: list[dict[str, Any]]) -> list[SecurityAuditLog]:
         """Batch INSERT a list of event dicts into the database."""
         logs = []
         for event_data in events:
-            log = SecurityAuditLog(**event_data)
+            log = bounded_log(event_data)
             session.add(log)
             logs.append(log)
         await session.flush()
@@ -374,48 +592,18 @@ class SecurityAuditService:
     # Convenience methods
     # ------------------------------------------------------------------
 
-    def _extract_request_info(self, request: Request | None) -> dict[str, str | None]:
-        """Extract ip_address, request_id, and user_agent from a FastAPI Request."""
+    @staticmethod
+    def request_info(request: Request | None) -> dict[str, str | None]:
+        """Where *request* came from: ``ip_address``, ``request_id``, ``user_agent``, cut to their columns."""
         if request is None:
             return {"ip_address": None, "request_id": None, "user_agent": None}
-        ip = get_client_ip(request)
-        request_id = request.headers.get("x-request-id")
-        user_agent = request.headers.get("user-agent")
-        return {"ip_address": ip, "request_id": request_id, "user_agent": user_agent}
-
-    async def log_access_granted(
-        self,
-        session: AsyncSession,
-        user_id: int,
-        request: Request | None = None,
-        resource: str | None = None,
-        resource_id: int | None = None,
-        project_id: int | None = None,
-        permission: str | None = None,
-    ) -> SecurityAuditLog:
-        """Log a successful access grant."""
-        info = self._extract_request_info(request)
-        details: dict[str, Any] = {}
-        if info["request_id"]:
-            details["request_id"] = info["request_id"]
-        if info["user_agent"]:
-            details["user_agent"] = info["user_agent"]
-        if resource:
-            details["resource"] = resource
-        if resource_id is not None:
-            details["resource_id"] = resource_id
-        return await self.log_event(
-            session=session,
-            event_type=AuditEvent.ACCESS_GRANTED,
-            user_id=user_id,
-            resource_type=resource,
-            resource_id=resource_id,
-            project_id=project_id,
-            permission=permission,
-            ip_address=info["ip_address"],
-            details=details,
-            request=request,
-        )
+        # The id RequestIDMiddleware settled on (the client's or a new one), as on the response.
+        request_id = getattr(request.state, "request_id", None) or request.headers.get("x-request-id")
+        return {
+            "ip_address": _cut(get_client_ip(request), _IP_ADDRESS_MAX),
+            "request_id": _cut(request_id, _REQUEST_ID_MAX),
+            "user_agent": _cut(request.headers.get("user-agent"), _USER_AGENT_MAX),
+        }
 
     async def log_access_denied(
         self,
@@ -427,13 +615,14 @@ class SecurityAuditService:
         project_id: int | None = None,
         permission: str | None = None,
     ) -> SecurityAuditLog:
-        """Log an access denial."""
-        info = self._extract_request_info(request)
+        """Log an access denial.
+
+        Successful checks are not logged (``access_granted`` is kept only so
+        old rows stay readable): they say nothing a resource view or history
+        does not, and would be one row per page view.
+        """
+        info = self.request_info(request)
         details: dict[str, Any] = {}
-        if info["request_id"]:
-            details["request_id"] = info["request_id"]
-        if info["user_agent"]:
-            details["user_agent"] = info["user_agent"]
         if resource:
             details["resource"] = resource
         if resource_id is not None:
@@ -449,6 +638,8 @@ class SecurityAuditService:
             project_id=project_id,
             permission=permission,
             ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
             details=details,
             request=request,
         )
@@ -482,11 +673,12 @@ class SecurityAuditService:
         details: dict[str, Any] | None = None,
     ) -> SecurityAuditLog:
         """Log a successful login. Core feature — always persisted."""
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         merged: dict[str, Any] = {"method": "password"}
         if details:
             merged.update(details)
-        log = SecurityAuditLog(
+        return await self._persist(
+            session,
             event_type=AuditEvent.LOGIN_SUCCESS,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -494,9 +686,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=merged,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_login_failure(
         self,
@@ -505,12 +694,21 @@ class SecurityAuditService:
         login_hint: str | None = None,
         reason: str = "invalid_credentials",
     ) -> SecurityAuditLog:
-        """Log a failed login attempt. Core feature — always persisted."""
-        info = self._extract_request_info(request)
+        """Log a failed login attempt. Core feature — always persisted.
+
+        *login_hint* is the login of the account the attempt named, and only
+        that: what was typed is never stored, because a password typed into
+        the login field would otherwise become readable by admins. Without one
+        the row records ``login_known: false``.
+        """
+        info = self.request_info(request)
         details: dict[str, Any] = {"reason": reason}
         if login_hint:
             details["login_hint"] = login_hint
-        log = SecurityAuditLog(
+        else:
+            details["login_known"] = False
+        return await self._persist(
+            session,
             event_type=AuditEvent.LOGIN_FAILURE,
             user_id=None,
             ip_address=info["ip_address"],
@@ -518,9 +716,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=details,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_sso_login_success(
         self,
@@ -571,20 +766,18 @@ class SecurityAuditService:
         details: dict[str, Any],
         request: Request | None,
     ) -> SecurityAuditLog:
-        info = self._extract_request_info(request)
-        request_id = current_request_id() or info["request_id"]
-        log = SecurityAuditLog(
+        info = self.request_info(request)
+        # A savepoint: a failed audit insert must not poison the login's transaction.
+        return await self._persist(
+            session,
+            savepoint=True,
             event_type=event,
             user_id=user_id,
             ip_address=info["ip_address"],
-            request_id=request_id[:_REQUEST_ID_MAX] if request_id else None,
-            user_agent=info["user_agent"][:512] if info["user_agent"] else None,
+            request_id=current_request_id() or info["request_id"],
+            user_agent=info["user_agent"],
             details=details,
         )
-        # A savepoint: a failed audit insert must not poison the login's transaction.
-        async with session.begin_nested():
-            session.add(log)
-        return log
 
     async def log_member_change(
         self,
@@ -613,7 +806,7 @@ class SecurityAuditService:
         holder is named by ``target_user_id``/``target_login`` for a user or
         ``target_group_id``/``target_group_name`` for a group.
         """
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         details: dict[str, Any] = {"action": str(action)}
         if target_group_id is not None:
             details["principal_type"] = "group"
@@ -625,7 +818,8 @@ class SecurityAuditService:
             details["target_login"] = target_login or ""
         if roles:
             details["roles"] = roles
-        log = SecurityAuditLog(
+        return await self._persist(
+            session,
             event_type=AuditEvent.MEMBER_CHANGE,
             user_id=user_id,
             project_id=project_id,
@@ -634,9 +828,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=details,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_group_change(
         self,
@@ -662,7 +853,7 @@ class SecurityAuditService:
         carries action-specific facts — the old name on a rename, and what the
         group was granting on a delete, which cannot be recovered afterwards.
         """
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         details: dict[str, Any] = {
             "action": str(action),
             "group_id": group_id,
@@ -674,7 +865,8 @@ class SecurityAuditService:
             details["target_login"] = target_login
         if extra:
             details.update(extra)
-        log = SecurityAuditLog(
+        return await self._persist(
+            session,
             event_type=AuditEvent.GROUP_CHANGE,
             user_id=user_id,
             resource_type="user_group",
@@ -684,9 +876,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=details,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_search_query(
         self,
@@ -701,7 +890,7 @@ class SecurityAuditService:
         request: Request | None = None,
     ) -> SecurityAuditLog:
         """Log a search query. Core feature — always persisted."""
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         details: dict[str, Any] = {
             "query": query,
             "mode": mode,
@@ -713,7 +902,8 @@ class SecurityAuditService:
             details["filters"] = filters
         if type_counts:
             details["type_counts"] = type_counts
-        log = SecurityAuditLog(
+        return await self._persist(
+            session,
             event_type=AuditEvent.SEARCH_QUERY,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -721,9 +911,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=details,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_resource_viewed(
         self,
@@ -736,7 +923,7 @@ class SecurityAuditService:
         request: Request | None = None,
     ) -> SecurityAuditLog:
         """Log a resource view (issue, wiki page)."""
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         details: dict[str, Any] = {
             "resource": resource,
             "resource_key": resource_key,
@@ -750,6 +937,7 @@ class SecurityAuditService:
             project_id=project_id,
             ip_address=info["ip_address"],
             request_id=info["request_id"],
+            user_agent=info["user_agent"],
             details=details,
         )
 
@@ -763,12 +951,17 @@ class SecurityAuditService:
         """Log a password reset request. Core feature — always persisted.
 
         *user_id* is set when the email matched a real account, None otherwise.
+        Text that matched no account is not stored: it may be anything, including
+        a password typed into the wrong field.
         """
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         details: dict[str, Any] = {}
-        if email_hint:
+        if user_id is None:
+            details["email_known"] = False
+        elif email_hint:
             details["email_hint"] = email_hint
-        log = SecurityAuditLog(
+        return await self._persist(
+            session,
             event_type=AuditEvent.PASSWORD_RESET_REQUESTED,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -776,9 +969,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=details,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_password_reset_completed(
         self,
@@ -787,8 +977,9 @@ class SecurityAuditService:
         request: Request | None = None,
     ) -> SecurityAuditLog:
         """Log a successful password reset. Core feature — always persisted."""
-        info = self._extract_request_info(request)
-        log = SecurityAuditLog(
+        info = self.request_info(request)
+        return await self._persist(
+            session,
             event_type=AuditEvent.PASSWORD_RESET_COMPLETED,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -796,9 +987,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details={},
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_password_reset_failed(
         self,
@@ -808,9 +996,10 @@ class SecurityAuditService:
         user_id: int | None = None,
     ) -> SecurityAuditLog:
         """Log a failed password reset attempt. Core feature — always persisted."""
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         details: dict[str, Any] = {"reason": reason}
-        log = SecurityAuditLog(
+        return await self._persist(
+            session,
             event_type=AuditEvent.PASSWORD_RESET_FAILED,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -818,9 +1007,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=details,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_password_changed(
         self,
@@ -834,8 +1020,9 @@ class SecurityAuditService:
         *revoked_sessions* records how many of the user's other sessions were
         revoked as part of the change. No password material is ever recorded.
         """
-        info = self._extract_request_info(request)
-        log = SecurityAuditLog(
+        info = self.request_info(request)
+        return await self._persist(
+            session,
             event_type=AuditEvent.PASSWORD_CHANGED,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -843,9 +1030,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details={"revoked_sessions": revoked_sessions},
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_password_hash_upgraded(
         self,
@@ -860,8 +1044,9 @@ class SecurityAuditService:
         outdated hash and re-hashed it. *from_algorithm* is the id it was
         stored under; the hash itself is never recorded.
         """
-        info = self._extract_request_info(request)
-        log = SecurityAuditLog(
+        info = self.request_info(request)
+        return await self._persist(
+            session,
             event_type=AuditEvent.PASSWORD_HASH_UPGRADED,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -869,9 +1054,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details={"from_algorithm": from_algorithm},
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_password_change_failed(
         self,
@@ -885,8 +1067,9 @@ class SecurityAuditService:
         *reason* is the ``AppError`` code of the rejection — never the
         submitted password or any part of it.
         """
-        info = self._extract_request_info(request)
-        log = SecurityAuditLog(
+        info = self.request_info(request)
+        return await self._persist(
+            session,
             event_type=AuditEvent.PASSWORD_CHANGE_FAILED,
             user_id=user_id,
             ip_address=info["ip_address"],
@@ -894,9 +1077,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details={"reason": reason},
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_project_anonymous_permissions_change(
         self,
@@ -915,8 +1095,9 @@ class SecurityAuditService:
         project being made private, or an import carrying the setting over. *user_id* is None only when the change
         was made outside a request by nobody in particular.
         """
-        info = self._extract_request_info(request)
-        log = SecurityAuditLog(
+        info = self.request_info(request)
+        return await self._persist(
+            session,
             event_type=AuditEvent.PROJECT_ANONYMOUS_PERMISSIONS_CHANGED,
             user_id=user_id,
             resource_type="project",
@@ -927,9 +1108,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details={"project_key": project_key, "old": old, "new": new, "reason": str(reason)},
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     async def log_anonymous_access_switch_change(
         self,
@@ -949,7 +1127,7 @@ class SecurityAuditService:
         the keys the administrator confirmed when turning the switch on, and is
         omitted when turning it off.
         """
-        info = self._extract_request_info(request)
+        info = self.request_info(request)
         details: dict[str, Any] = {
             "setting": setting_key,
             "old": old,
@@ -958,7 +1136,8 @@ class SecurityAuditService:
         }
         if confirmed_projects is not None:
             details["confirmed_projects"] = confirmed_projects
-        log = SecurityAuditLog(
+        return await self._persist(
+            session,
             event_type=AuditEvent.ANONYMOUS_ACCESS_SWITCH_CHANGED,
             user_id=user_id,
             resource_type="setting",
@@ -967,9 +1146,6 @@ class SecurityAuditService:
             user_agent=info["user_agent"],
             details=details,
         )
-        session.add(log)
-        await session.flush()
-        return log
 
     # ------------------------------------------------------------------
     # Query
@@ -985,33 +1161,73 @@ class SecurityAuditService:
         before: datetime | None = None,
         offset: int = 0,
         limit: int = 25,
+        *,
+        event_types: Sequence[str] | None = None,
+        ip_address: str | None = None,
     ) -> tuple[list[SecurityAuditLog], int]:
-        """Query audit logs with optional filters. Returns (items, total_count)."""
-        stmt = select(SecurityAuditLog)
-        count_stmt = select(func.count(SecurityAuditLog.id))
+        """Query audit logs with optional filters, newest first. Returns (items, total_count).
 
+        ``event_type`` and ``event_types`` both narrow the event type (a row
+        must match each one given); an empty ``event_types`` matches nothing.
+        ``after`` is inclusive and ``before`` exclusive; a time range lets
+        PostgreSQL skip the partitions outside it.
+        """
+        conditions: list[ColumnElement[bool]] = []
         if event_type is not None:
-            stmt = stmt.where(SecurityAuditLog.event_type == event_type)
-            count_stmt = count_stmt.where(SecurityAuditLog.event_type == event_type)
+            conditions.append(SecurityAuditLog.event_type == event_type)
+        if event_types is not None:
+            conditions.append(SecurityAuditLog.event_type.in_(list(event_types)))
         if user_id is not None:
-            stmt = stmt.where(SecurityAuditLog.user_id == user_id)
-            count_stmt = count_stmt.where(SecurityAuditLog.user_id == user_id)
+            conditions.append(SecurityAuditLog.user_id == user_id)
         if project_id is not None:
-            stmt = stmt.where(SecurityAuditLog.project_id == project_id)
-            count_stmt = count_stmt.where(SecurityAuditLog.project_id == project_id)
+            conditions.append(SecurityAuditLog.project_id == project_id)
+        if ip_address is not None:
+            conditions.append(SecurityAuditLog.ip_address == ip_address)
         if after is not None:
-            stmt = stmt.where(SecurityAuditLog.created_at >= after)
-            count_stmt = count_stmt.where(SecurityAuditLog.created_at >= after)
+            conditions.append(SecurityAuditLog.created_at >= after)
         if before is not None:
-            stmt = stmt.where(SecurityAuditLog.created_at < before)
-            count_stmt = count_stmt.where(SecurityAuditLog.created_at < before)
+            conditions.append(SecurityAuditLog.created_at < before)
 
-        stmt = stmt.order_by(SecurityAuditLog.created_at.desc()).offset(offset).limit(limit)
-
-        result = await session.execute(stmt)
-        items = list(result.scalars().all())
-
-        count_result = await session.execute(count_stmt)
-        total = count_result.scalar_one()
-
+        stmt = (
+            select(SecurityAuditLog)
+            .where(*conditions)
+            .order_by(SecurityAuditLog.created_at.desc(), SecurityAuditLog.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        items = list((await session.execute(stmt)).scalars().all())
+        total = (
+            await session.execute(select(func.count()).select_from(SecurityAuditLog).where(*conditions))
+        ).scalar_one()
         return items, total
+
+    @staticmethod
+    async def user_id_for_login(session: AsyncSession, login: str) -> int | None:
+        """The id of the user with *login* (case-insensitive), or ``None``."""
+        from specivo.models.user import User
+
+        return await session.scalar(select(User.id).where(func.lower(User.login) == login.strip().lower()))
+
+    @staticmethod
+    async def names_for(
+        session: AsyncSession, logs: Sequence[SecurityAuditLog]
+    ) -> tuple[dict[int, str], dict[int, str]]:
+        """The logins of the users and the keys of the projects *logs* name, one query each.
+
+        ``user_id`` and ``project_id`` are not foreign keys: a user or project
+        deleted since is simply missing from the maps.
+        """
+        from specivo.models.project import Project
+        from specivo.models.user import User
+
+        user_ids = {log.user_id for log in logs if log.user_id is not None}
+        project_ids = {log.project_id for log in logs if log.project_id is not None}
+        logins: dict[int, str] = {}
+        keys: dict[int, str] = {}
+        if user_ids:
+            rows = await session.execute(select(User.id, User.login).where(User.id.in_(user_ids)))
+            logins = {row.id: row.login for row in rows}
+        if project_ids:
+            rows = await session.execute(select(Project.id, Project.key).where(Project.id.in_(project_ids)))
+            keys = {row.id: row.key for row in rows}
+        return logins, keys

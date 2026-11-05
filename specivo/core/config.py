@@ -188,6 +188,11 @@ class Settings(BaseSettings):
     # Agent sessions
     agent_session_timeout: int = 1800
 
+    # Security audit log: whole months kept, 0 keeps everything. An environment
+    # setting on purpose, not an admin setting: how long security evidence is
+    # kept must not be changeable from an admin session or key.
+    audit_log_retention_months: int = Field(default=12, ge=0)
+
     # MCP transport session metadata (Redis-backed).
     # Sliding TTL refreshed on every session access; entries are dropped
     # automatically after this many seconds of inactivity.
