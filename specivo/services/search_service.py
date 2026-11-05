@@ -766,8 +766,9 @@ class SearchService:
         (``project_key_aliases``), or by the key it had in the system it was
         imported from (``issue_source_refs``). *source_numbers* name imported
         issues the same way: with a word, the system or a word of the label
-        must match it; without one, or with a word that names no system and
-        no label of that number ("bug #123"), any system does. The hits go through the
+        should match it; without one, any system does. When no issue the
+        reader can see matches the word exactly ("bug #123"), the number is
+        matched alone. The hits go through the
         same visibility, project and metadata filters as full-text results,
         so a reference the user cannot see resolves to nothing.
 
@@ -819,57 +820,65 @@ class SearchService:
                      WITH ORDINALITY AS t(word, number, ord)
             ),
             resolved AS (
-                SELECT ri.id AS issue_id, refs.ord, 0 AS foreign_rank
+                SELECT ri.id AS issue_id, refs.ord, 0 AS foreign_rank, 0 AS loose
                 FROM refs JOIN issues ri ON ri.project_key = refs.key AND ri.sequence_number = refs.seq
                 UNION ALL
-                SELECT a.issue_id, refs.ord, 0
+                SELECT a.issue_id, refs.ord, 0, 0
                 FROM refs JOIN issue_ref_aliases a
                     ON a.old_project_key = refs.key AND a.old_sequence_number = refs.seq
                 UNION ALL
-                SELECT ri.id, refs.ord, 0
+                SELECT ri.id, refs.ord, 0, 0
                 FROM refs
                 JOIN project_key_aliases pka ON pka.old_key = refs.key
                 JOIN issues ri ON ri.project_id = pka.project_id AND ri.sequence_number = refs.seq
                 UNION ALL
-                SELECT sr.issue_id, sk.ord, 1
+                SELECT sr.issue_id, sk.ord, 1, 0
                 FROM source_keys sk JOIN issue_source_refs sr ON lower(sr.ref) = sk.token
                 UNION ALL
-                SELECT sr.issue_id, sn.ord, 1
+                -- loose = 1: the word before the hash names neither this number's
+                -- system nor a word of its label ("bug #123"). Such a match counts
+                -- only when no exact one is visible; see the final SELECT.
+                SELECT sr.issue_id, sn.ord, 1,
+                       CASE WHEN sn.word IS NULL
+                                 OR sr.source_system = sn.word
+                                 OR sn.word = ANY(string_to_array(lower(sr.label), ' '))
+                            THEN 0 ELSE 1 END
                 FROM source_numbers sn JOIN issue_source_refs sr ON lower(sr.ref) = sn.number
-                WHERE sn.word IS NULL
-                   OR sr.source_system = sn.word
-                   OR sn.word = ANY(string_to_array(lower(sr.label), ' '))
-                   -- A word that names no system and no label of this number is
-                   -- ordinary text ("bug #123"), so the number stands alone.
-                   OR (
-                       NOT EXISTS (SELECT 1 FROM issue_source_refs x WHERE x.source_system = sn.word)
-                       AND NOT EXISTS (
-                           SELECT 1 FROM issue_source_refs x
-                           WHERE lower(x.ref) = sn.number
-                             AND sn.word = ANY(string_to_array(lower(x.label), ' '))
-                       )
-                   )
             )
         """
         with_clause = f"{cte_prefix}, {ref_ctes}" if cte_prefix else f"WITH {ref_ctes}"
 
+        # Visibility is applied in ``hits`` before choosing between exact and
+        # loose matches, so that choice can't depend on issues the reader
+        # can't see: it would otherwise tell them such an issue exists.
         sql = f"""
-            {with_clause}
+            {with_clause},
+            hits AS (
+                SELECT i.id, r.ord, r.foreign_rank, r.loose
+                FROM resolved r
+                JOIN issues i ON i.id = r.issue_id
+                WHERE 1=1
+                {project_filter}
+                {self._issue_visibility_cte_clause(user, alias="i")}
+                {issue_filter_sql}
+            ),
+            kept AS (
+                SELECT h.id, MIN(h.ord) AS ord, MIN(h.foreign_rank) AS foreign_rank
+                FROM hits h
+                WHERE h.loose = 0
+                   OR NOT EXISTS (SELECT 1 FROM hits exact WHERE exact.ord = h.ord AND exact.loose = 0)
+                GROUP BY h.id
+            )
             SELECT i.id,
                    i.project_key || '-' || i.sequence_number AS title,
                    i.subject AS subtitle,
                    left(coalesce(i.description, ''), {SEARCH_SNIPPET_MAX_CHARS}) AS snippet,
                    i.project_key,
-                   MIN(r.ord) AS ord,
-                   MIN(r.foreign_rank) AS foreign_rank
-            FROM resolved r
-            JOIN issues i ON i.id = r.issue_id
-            WHERE 1=1
-            {project_filter}
-            {self._issue_visibility_cte_clause(user, alias="i")}
-            {issue_filter_sql}
-            GROUP BY i.id
-            ORDER BY ord, foreign_rank, i.id
+                   k.ord,
+                   k.foreign_rank
+            FROM kept k
+            JOIN issues i ON i.id = k.id
+            ORDER BY k.ord, k.foreign_rank, i.id
         """
         result = await session.execute(text(sql), params)
         return [
