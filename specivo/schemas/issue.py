@@ -217,10 +217,21 @@ class MetadataFieldOut(BaseModel):
     value_names: dict[str, str] = Field(default_factory=dict)
 
 
+class ImportedFromOut(BaseModel):
+    """The number an imported issue had in its source system, and the others that now mean it."""
+
+    system: str
+    ref: str
+    label: str
+    aliases: list[str] = Field(default_factory=list)
+
+
 class IssueWithChildren(IssueOut):
     """IssueOut extended with optional included relations, and the metadata fields named."""
 
     metadata_fields: list[MetadataFieldOut] = Field(default_factory=list)
+    # The detail endpoint only: IssueOut also serves lists.
+    imported_from: ImportedFromOut | None = None
 
     children: list[IssueOut] = Field(default_factory=list)
     journals: list | None = Field(default=None)

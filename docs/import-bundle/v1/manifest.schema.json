@@ -19,7 +19,7 @@
     "format_version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+$",
-      "description": "MAJOR.MINOR. This schema is version 1.0."
+      "description": "MAJOR.MINOR. This schema is version 1.1."
     },
     "source": {
       "type": "object",
@@ -46,6 +46,13 @@
             "null"
           ],
           "description": "The source product's version, if known."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "pattern": "^[^\\u0000-\\u001f]+$",
+          "description": "Since 1.1. How to name the source to readers, e.g. RT. Shown beside each imported issue's number, so no host name. Default: the system with an initial capital."
         }
       }
     },

@@ -38,6 +38,7 @@ from specivo.services.attachment_service import AttachmentService
 from specivo.services.bulk_service import BulkService
 from specivo.services.computed_metadata_service import computed_values, load_project_settings
 from specivo.services.issue_service import IssueService
+from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
 from specivo.services.mention_service import MentionService
 from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
@@ -472,6 +473,7 @@ async def get_issue(
     return IssueWithChildren(
         **out.model_dump(),
         metadata_fields=await _metadata_fields(db, current_user, issue, out.metadata),
+        imported_from=await imported_from(db, issue.id),
         children=children,
         journals=journals_out,
         watchers=watchers_out,

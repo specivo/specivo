@@ -41,6 +41,7 @@ from specivo.schemas.version import VersionCreate, VersionUpdate
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.computed_metadata_service import load_project_settings, merge_computed
 from specivo.services.issue_service import IssueService
+from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
 from specivo.services.metadata_fields import field_labels, humanise, issue_schemas
 from specivo.services.permission_service import Permission, check_permission
@@ -297,6 +298,9 @@ async def _show_issue(
     ]
     if issue.assigned_to:
         lines.append(f"Assigned to: {issue.assigned_to.display_name}")
+    source = await imported_from(session, issue.id)
+    if source is not None:
+        lines.append(f"Imported from: {source.label}")
     lines.append(f"Created: {issue.created_at}")
     lines.append(f"Updated: {issue.updated_at}")
     if issue.start_date:

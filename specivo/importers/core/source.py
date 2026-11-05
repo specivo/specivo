@@ -188,6 +188,11 @@ class BaseSourceAdapter:
         """
         return self.source_system
 
+    @property
+    def source_label(self) -> str:
+        """How to name the source to people reading an imported issue: the system with an initial capital."""
+        return self.id_map_system.capitalize()
+
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         """Add no options. Override to add the source's own."""

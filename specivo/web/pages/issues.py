@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -18,6 +19,7 @@ from specivo.services.activity_lookups import activity_lookup_maps, metadata_val
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
 from specivo.services.issue_service import IssueService
+from specivo.services.issue_source_ref_service import imported_from, is_plain_number, visible_issue_keys
 from specivo.services.journal_service import JournalService
 from specivo.services.project_service import ProjectService
 from specivo.services.reaction_service import ReactionService
@@ -339,6 +341,42 @@ async def issue_create_form(
     )
 
 
+@short_router.get("/imported/{system}/{ref:path}/", response_class=HTMLResponse)
+async def imported_issue_redirect(
+    system: str,
+    ref: str,
+    request: Request,
+    reader: object | None = Depends(get_web_reader, scope="function"),  # noqa: B008
+    db: AsyncSession = DB_SESSION,
+) -> Response:
+    """Send a number from the old tracker to the issue it became.
+
+    Among the issues this reader may see: one goes to that issue, several to a
+    search for the number. None answers as ``/issue/{issue_ref}/`` does for a
+    missing issue, whatever the reason, so the URL cannot probe which numbers
+    exist: a 404 when signed in, the one refusal for anybody else. The targets
+    are local paths built from display keys, never from what was typed.
+    """
+    if reader is None:
+        return refuse_anonymous_web(request)
+    user = cast("User", reader)
+
+    keys = await visible_issue_keys(db, user, system, ref)
+    if len(keys) > 1:
+        query = f"{system.lower()} #{ref}" if is_plain_number(ref) else ref
+        return RedirectResponse(f"/search/?{urlencode({'q': query})}", status_code=302)
+    if not keys:
+        if user.is_anonymous:
+            return refuse_anonymous_web(request)
+        raise HTTPException(status_code=404, detail="Issue not found")
+    # The page's own check, so the redirect never promises a page it would refuse.
+    resolved = await _resolve_issue_project_for_reader(db, keys[0], user)
+    if resolved is None:
+        return refuse_anonymous_web(request)
+    _, issue = resolved
+    return RedirectResponse(f"/issue/{issue.display_key}/", status_code=302)
+
+
 @short_router.get("/issue/{issue_ref}/", response_class=HTMLResponse)
 async def issue_detail(
     issue_ref: str,
@@ -507,6 +545,9 @@ async def issue_detail(
     # issue's own attachments that the reader may open (none for anonymous).
     attachment_map = await _attachment_svc.build_issue_attachment_map(db, issue.id, user)
 
+    # Anonymous visitors get it too: on an issue they may see, the number is no secret.
+    issue_imported_from = await imported_from(db, issue.id)
+
     # Names for the ids the activity feed's field changes hold.
     lookup_maps = await activity_lookup_maps(
         db,
@@ -560,6 +601,7 @@ async def issue_detail(
             "thread_tree": thread_tree,
             "members": members,
             "lookup_maps": lookup_maps,
+            "imported_from": issue_imported_from,
             "reactions_by_journal": reactions_by_journal,
             **tab_ctx,
             "relation_count": relation_count,

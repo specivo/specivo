@@ -937,6 +937,7 @@ def test_the_web_allowlist_is_the_set_that_was_reviewed() -> None:
         "/projects/{key}/",
         "/projects/{project_key}/issues/",
         "/issue/{issue_ref}/",
+        "/imported/{system}/{ref:path}/",
         "/projects/{project_key}/wiki/",
         "/projects/{project_key}/wiki/{slug}/",
         "/search/",

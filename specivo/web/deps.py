@@ -646,6 +646,7 @@ ANONYMOUS_WEB_ROUTES: frozenset[str] = frozenset(
         "/projects/{key}/",
         "/projects/{project_key}/issues/",
         "/issue/{issue_ref}/",
+        "/imported/{system}/{ref:path}/",
         "/projects/{project_key}/wiki/",
         "/projects/{project_key}/wiki/{slug}/",
         "/search/",

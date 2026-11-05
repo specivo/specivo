@@ -145,6 +145,48 @@ same `--links-file` each time. Whatever points at an issue that has not arrived 
 
 The file is deleted when nothing waits. Text that someone edited after the import is left alone.
 
+## Old ticket numbers keep working
+
+After an import an issue has a new key, but the number it had stays with it, so old numbers in emails, wiki
+pages and commit messages still lead somewhere:
+
+- The issue page shows it next to the dates, for example **Imported from: RT #123**. So do the issue's
+  detail in the API (`imported_from`) and the MCP tool `specivo_show_issue`.
+- [Search](../issues/finding.md#search) finds the issue by `RT #123`, `#123` or a key such as `PROJ-7`.
+- `/imported/{system}/{number}/` leads to it, for example `https://specivo.example.com/imported/rt/123/`.
+  The system is the one `import-map list` shows. When two imported issues have that number (two installations
+  of a tracker can both have a ticket 123), the link opens a search for it instead.
+
+Anyone who can see the issue sees its number. For someone who can't, a number leads nowhere, exactly as if it
+didn't exist. These numbers don't depend on the import's scope: they stay when you `purge` it.
+
+To keep the old links themselves working, point the old host name at a web server that sends them on. Only
+your web server can do this, because each tracker's URLs look different. For nginx:
+
+```nginx
+# RT: /Ticket/Display.html?id=123
+location = /Ticket/Display.html {
+    if ($arg_id !~ "^[0-9]+$") {
+        return 404;
+    }
+    return 301 https://specivo.example.com/imported/rt/$arg_id/;
+}
+
+# Redmine: /issues/45
+location ~ ^/issues/(\d+)$ {
+    return 301 https://specivo.example.com/imported/redmine/$1/;
+}
+
+# Jira: /browse/PROJ-7
+location ~ ^/browse/([A-Za-z0-9_-]+)$ {
+    return 301 https://specivo.example.com/imported/jira/$1/;
+}
+```
+
+An import made before this feature gets its numbers on upgrade, from what the import remembered. Those are the
+source's own ids, so they can be wrong for a tracker with separate keys. Run the same bundle again with
+`--continue-import`, written by a current importer, to correct them. Nothing else about the issues changes.
+
 ## Inspect and tidy up an import
 
 The `admin` command can show and manage what imports remember:
@@ -160,8 +202,8 @@ docker compose exec api python -m specivo.cli.admin import-map resolve-pending -
 | `import-map list` | Lists each scope with its row counts and when it last wrote. |
 | `import-map pending` | Counts the texts, relations and parents still waiting in a links file. Reads only. |
 | `import-map resolve-pending` | Links whatever can be linked now. Without `--yes` it only reports. |
-| `import-map rename` | Moves a scope to a new system or instance, so the next import finds its rows. |
-| `import-map purge` | Deletes a scope's rows after you have switched over. Imported records stay, but **later imports of that source would create everything again**. |
+| `import-map rename` | Moves a scope to a new system or instance, so the next import finds its rows. The issues' old numbers follow a new system name, so `/imported/{system}/...` changes with it. |
+| `import-map purge` | Deletes a scope's rows after you have switched over. Imported records and their old numbers stay, but **later imports of that source would create everything again**. |
 
 `rename` and `purge` are dry runs unless you add `--yes`.
 

@@ -378,8 +378,11 @@
 
 {% endif %}
 
-{# Footer: Created / Updated #}
+{# Footer: where it came from, Created / Updated #}
 <div style="padding: 0 var(--sp-space-sm); font-size: var(--sp-font-size-xs); color: var(--sp-text-muted); line-height: 1.8;">
+  {% if imported_from %}
+  <div data-testid="issue-imported-from" style="overflow-wrap: anywhere;">{% trans label=imported_from.label %}Imported from: %(label)s{% endtrans %}</div>
+  {% endif %}
   <div title="{{ issue.created_at | localtime(user.timezone) if issue.created_at else '' }}">
     {% trans ago=issue.created_at | timeago(user.timezone) %}Created %(ago)s{% endtrans %}{% if issue.author %} {% if anonymous %}{% trans name=issue.author.display_name %}by %(name)s{% endtrans %}{% else %}{% trans name=issue.author.display_name or issue.author.login %}by %(name)s{% endtrans %}{% endif %}{% endif %}
   </div>

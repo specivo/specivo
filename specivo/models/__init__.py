@@ -9,6 +9,7 @@ from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
+from specivo.models.issue_source_ref import IssueSourceRef
 from specivo.models.journal import Journal, JournalDetail
 from specivo.models.kill_switch import KillEvent, KillTriggerConfig
 from specivo.models.lookups import IssueCategory, IssuePriority, IssueStatus, Tracker
@@ -61,6 +62,7 @@ __all__ = [
     "RefreshToken",
     "Attachment",
     "ImportIdMapping",
+    "IssueSourceRef",
     "Issue",
     "IssueCommitLink",
     "IssuePullRequestLink",

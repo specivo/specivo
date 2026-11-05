@@ -17,7 +17,7 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_whoami": "Return authenticated user identity (user_id, login, etc.)",
     "specivo_list_projects": "List all visible projects",
     "specivo_list_issues": "List issues (with tags); filter by status/sprint/metadata/parent, sort, paginate",
-    "specivo_show_issue": "Issue details incl. parent, children, tags, commits, pull requests; search= for a section",
+    "specivo_show_issue": "Issue details: parent, children, tags, commits, PRs, source number; search= for a section",
     "specivo_create_issue": "Create an issue, optionally with parent_ref and tags (call list_lookups first for IDs)",
     "specivo_update_issue": "Update issue fields or re-parent (parent_ref); lock_version handled automatically",
     "specivo_move_issue": "Move an issue to another project (new KEY-N; the old ref still resolves)",
@@ -107,7 +107,8 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
 1. `specivo_search(query, project_key)` -- relevant issues/wiki (default `mode="hybrid"`)
 2. `specivo_show_issue(issue_ref)` -- read issue details (includes `Parent:`, `Children:`, `Tags:` and
    `Comments: N`, and `Commits: N` with the newest linked commits and `Pull requests: N` with their state
-   when a connected repository referenced the issue)
+   when a connected repository referenced the issue; an imported issue also has `Imported from: RT #123`,
+   and `specivo_search` finds it by that number: `RT #123`, `#123`, or a key such as `PROJ-7`)
 3. `specivo_list_comments(issue_ref)` -- page through comment history when `Comments: N` > 0
 4. `specivo_read_wiki(project_key, slug)` -- read knowledge base
 

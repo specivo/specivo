@@ -51,6 +51,12 @@ surface an issue you wrote about the "login sequence". It searches across:
     `DO-8795`, are found the same way. You can add other words too: `ACME-42 login` finds what
     mentions both.
 
+!!! tip "Search by an imported issue's old number"
+    An issue [imported](../install/importing.md#old-ticket-numbers-keep-working) from another tracker keeps the
+    number it had there. Type it with its hash, such as `RT #123` or `#123`, or as a key such as `PROJ-7`, in
+    any search mode, to put that issue at the top of the results. A number on its own, like `123`, is searched
+    as ordinary text. Several issues can answer, if they came from different trackers.
+
 !!! note "Semantic results not showing up?"
     Semantic search relies on an embedding model and an index that the operator sets up on the server.
     Until that's in place, keyword search still works — you just won't get the meaning-based matches.
