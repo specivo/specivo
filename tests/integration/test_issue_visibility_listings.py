@@ -205,7 +205,7 @@ async def build_world(db: AsyncSession, prefix: str) -> World:
 
     keys = ApiKeyService()
     limited, limited_raw = await keys.create_key(session=db, user_id=manager.id, name=f"{low}-limited")
-    # Stored directly: what create_key keeps when the api_key_scopes feature is on.
+    # Stored directly, by project key: a limit stored before creation resolved it to ids still holds.
     limited.scopes = {"projects": [s.key]}
     _agent_key, agent_raw = await keys.create_key(session=db, user_id=agent.id, name=f"{low}-agent")
     await db.commit()

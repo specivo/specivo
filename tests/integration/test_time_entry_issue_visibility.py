@@ -283,7 +283,7 @@ async def test_api_key_limited_to_another_project_sees_nothing(
     await db_session.flush()
     await _member(db_session, other, world["users"]["author"], world["role"])
     key, raw = await ApiKeyService().create_key(session=db_session, user_id=world["users"]["author"].id, name="tiv")
-    # Stored directly: what create_key keeps when the api_key_scopes feature is on.
+    # Stored directly, by project key: a limit stored before creation resolved it to ids still holds.
     key.scopes = {"projects": [other.key]}
     await db_session.commit()
     headers = {"Authorization": f"Bearer {raw}"}

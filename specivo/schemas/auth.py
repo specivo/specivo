@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StringConstraints, field_validator
+from pydantic import ValidationError as PydanticValidationError
+from pydantic_core import PydanticCustomError
+
+from specivo.core.i18n import gettext as _
 
 
 class LoginRequest(BaseModel):
@@ -68,13 +73,58 @@ class SessionOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+#: Most projects one key may be limited to.
+API_KEY_SCOPE_MAX_PROJECTS = 200
+
+_ProjectRef = Annotated[str, StringConstraints(strict=True, strip_whitespace=True, min_length=1, max_length=100)]
+
+
+class ApiKeyScopes(BaseModel):
+    """The project limit of an API key: ``{"projects": [...]}``, projects named by key or id.
+
+    An empty list is refused rather than read as "unlimited", and any other
+    key is refused rather than stored and ignored. ``create_key`` resolves the
+    entries to project ids and stores ``{"projects": [ids]}``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    projects: list[_ProjectRef | StrictInt] = Field(min_length=1, max_length=API_KEY_SCOPE_MAX_PROJECTS)
+
+
+def api_key_scopes_message() -> str:
+    """The refusal for a ``scopes`` value that is not a valid :class:`ApiKeyScopes`."""
+    return _('The project limit must be an object with a single "projects" list naming 1 to 200 projects by key or id.')
+
+
+def parse_api_key_scopes(value: Any) -> ApiKeyScopes | None:
+    """Return *value* as :class:`ApiKeyScopes` (None for no limit); raise ``ValueError`` when it is malformed."""
+    if value is None or isinstance(value, ApiKeyScopes):
+        return value
+    if not isinstance(value, dict):
+        raise ValueError(api_key_scopes_message())
+    try:
+        return ApiKeyScopes.model_validate(value)
+    except PydanticValidationError:
+        raise ValueError(api_key_scopes_message()) from None
+
+
 class ApiKeyCreate(BaseModel):
     """Request body for creating an API key."""
 
     name: str = Field(min_length=1, max_length=255)
-    scopes: dict | None = None
+    scopes: ApiKeyScopes | None = None
     expires_at: datetime | None = None
     ip_allowlist: list[str] | None = None
+
+    @field_validator("scopes", mode="before")
+    @classmethod
+    def _check_scopes(cls, value: Any) -> ApiKeyScopes | None:
+        # One translatable refusal on ``scopes`` itself, whatever is wrong inside.
+        try:
+            return parse_api_key_scopes(value)
+        except ValueError as exc:
+            raise PydanticCustomError("api_key_scopes", str(exc).replace("{", "{{").replace("}", "}}")) from None
 
 
 class ApiKeyCreated(BaseModel):
@@ -87,6 +137,8 @@ class ApiKeyCreated(BaseModel):
     key_prefix: str
     raw_key: str  # Only returned at creation time
     scopes: dict | None
+    #: Keys of the projects the key is limited to (None: not limited).
+    project_keys: list[str] | None = None
     expires_at: datetime | None
     created_at: datetime
 
@@ -99,7 +151,11 @@ class ApiKeyOut(BaseModel):
     id: int
     name: str
     key_prefix: str
-    scopes: dict | None
+    # A list is tolerated: a plugin may once have stored one. It does not limit the key.
+    scopes: dict | list | None
+    #: Keys of the projects the key is limited to, sorted (None: not limited). A project
+    #: that no longer exists is left out, so an empty list means the key reaches nothing.
+    project_keys: list[str] | None = None
     expires_at: datetime | None
     last_used_at: datetime | None
     is_active: bool

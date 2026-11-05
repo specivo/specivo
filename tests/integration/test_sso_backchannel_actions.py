@@ -89,7 +89,7 @@ async def _keys(db: AsyncSession, user_id: int) -> list[bool]:
 
 async def _two_keys(db: AsyncSession, user: User) -> tuple[str, str]:
     _, plain = await ApiKeyService().create_key(db, user.id, "ci")
-    _, mcp = await ApiKeyService().create_key(db, user.id, "agent", scopes=["mcp"])  # type: ignore[arg-type]
+    _, mcp = await ApiKeyService().create_key(db, user.id, "agent")
     return plain, mcp
 
 

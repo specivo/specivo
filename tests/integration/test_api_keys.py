@@ -21,7 +21,10 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.models.member import Member, MemberRole
+from specivo.models.role import Role
 from specivo.services.api_key_service import ApiKeyService
+from tests.factories.project import ProjectFactory
 from tests.factories.user import TEST_PASSWORD, UserFactory
 
 pytestmark = pytest.mark.integration
@@ -98,14 +101,24 @@ class TestCreateApiKey:
         raw_key = data["raw_key"]
         assert data["key_prefix"] == raw_key[:12]
 
-    @pytest.mark.pro
     async def test_create_key_with_scopes(self, client: AsyncClient, db_session: AsyncSession):
-        await _create_user(db_session, login="scoped_user")
+        user = await _create_user(db_session, login="scoped_user")
+        project = ProjectFactory.build(key="ACME", identifier="acme", is_public=False)
+        db_session.add(project)
+        await db_session.flush()
+        role = Role(name="Scoped Member", permissions=["view_issues"], builtin=0)
+        db_session.add(role)
+        await db_session.flush()
+        member = Member(user_id=user.id, project_id=project.id)
+        db_session.add(member)
+        await db_session.flush()
+        db_session.add(MemberRole(member_id=member.id, role_id=role.id))
+        await db_session.commit()
         token = await _login_user(client, "scoped_user")
-        scopes = {"projects": ["ACME"], "permissions": ["issues:read"]}
-        data = await _create_key(client, token, name="scoped-key", scopes=scopes)
+        data = await _create_key(client, token, name="scoped-key", scopes={"projects": ["ACME"]})
 
-        assert data["scopes"] == scopes
+        assert data["scopes"] == {"projects": [project.id]}
+        assert data["project_keys"] == ["ACME"]
 
     async def test_create_key_with_expiry(self, client: AsyncClient, db_session: AsyncSession):
         await _create_user(db_session, login="expiry_user")
