@@ -520,6 +520,7 @@ class IssueService:
         original_occurrence_at: datetime | None = None,
         check_privacy_permission: bool = True,
         limit_text_length: bool = True,
+        validate_metadata: bool = True,
     ) -> Issue:
         """Create an issue with an atomic per-project sequence number.
 
@@ -541,6 +542,11 @@ class IssueService:
 
         ``limit_text_length=False`` lets the import pipeline keep a description
         longer than ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
+
+        ``validate_metadata=False`` stores metadata without checking it against
+        the project's schemas. The import pipeline keeps history that way (and
+        reports values that do not match); recurring generation uses it because
+        the pattern's template was validated when the pattern was saved.
         """
         if limit_text_length:
             check_markdown_length(data.description, "description")
@@ -577,7 +583,8 @@ class IssueService:
         stored_metadata = strip_computed(data.metadata, project.settings)
 
         # Validate metadata against schemas (if any exist for this project/tracker)
-        await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, stored_metadata)
+        if validate_metadata:
+            await self._metadata_schema_service.validate_metadata(session, project.id, data.tracker_id, stored_metadata)
 
         # Atomic sequence increment — guarantees no duplicate sequence_numbers
         # for this project under concurrent inserts.
@@ -1008,8 +1015,9 @@ class IssueService:
         # Workflow validation — before applying changes
         if data.status_id is not None and data.status_id != issue.status_id:
             await self.workflow_service.validate_transition(session, issue, data.status_id, user)
-            # Validate field rules for the target status
-            await self.workflow_service.validate_field_rules(session, issue, data, user, data.status_id)
+        # Field rules apply on every update, for the status the issue ends up in.
+        target_status_id = data.status_id if data.status_id is not None else issue.status_id
+        await self.workflow_service.validate_field_rules(session, issue, data, user, target_status_id)
 
         # Snapshot current values BEFORE applying changes
         old_attrs: dict = {attr: getattr(issue, attr) for attr, _ in _JOURNALIZED_ATTRS}
@@ -1055,11 +1063,18 @@ class IssueService:
             # cannot be set/overridden by a client (see create()).
             project_settings = await load_project_settings(session, issue.project_id)
             stored_metadata = strip_computed(data.metadata, project_settings)
-            # Validate against schemas using the effective tracker_id
-            # (may have been changed in this same update)
+            # Validate the keys this update changes against the schemas of the
+            # effective tracker (it may change in this same update). Keys left
+            # as they were are not judged, so an old invalid value elsewhere
+            # does not block the write, and a tracker change alone re-validates
+            # nothing.
             effective_tracker_id = data.tracker_id if data.tracker_id is not None else issue.tracker_id
             await self._metadata_schema_service.validate_metadata(
-                session, issue.project_id, effective_tracker_id, stored_metadata
+                session,
+                issue.project_id,
+                effective_tracker_id,
+                stored_metadata,
+                previous=issue.issue_metadata or {},
             )
             issue.issue_metadata = stored_metadata
 

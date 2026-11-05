@@ -33,6 +33,36 @@ Edit the issue and set each field according to its type:
 Specivo validates as you go: an enum only accepts its allowed choices, and a number field rejects non-numeric
 input. Save the issue to store the values.
 
+## What is refused
+
+When you save, Specivo checks the values against the issue's [schemas](schemas.md) and refuses a value
+that does not match: a word in a number field, a choice that is not in the list, an item of a list that
+breaks the field's pattern, a key the schema does not allow. The same check applies to the issue page,
+the REST API (`422` with the code `validation_error` and the field as `metadata.<key>`) and
+[AI agents](../ai-agents/index.md), whose metadata tool answers with an error naming the field. In the
+metadata panel the message appears next to **Save Metadata**, and your edits stay so you can correct
+them.
+
+A new issue must also fill every field its schema marks as **required**.
+
+**Specivo judges the change, not the whole issue.** Only the fields a save changes are checked:
+
+- An issue that already holds a value that no longer matches (from before a schema was tightened, or
+  from an import) stays editable. You can change its status, its other fields and its other metadata.
+- Changing, adding to or removing a field that holds such a value is refused until the field matches.
+  For a list, that includes appending a good item while an old bad one is still there: fix the list as
+  a whole.
+- Removing a required field is refused; leaving an old issue without it is not.
+- Moving an issue to another project or tracker does not re-check values that stay the same.
+
+Values of a [recurring task](../projects/recurring-tasks.md) are checked when the pattern is saved, so its
+issues keep being created if a schema changes later.
+
+To find the issues that hold values not matching their schemas, an administrator can run
+`python -m specivo.cli.admin metadata-check` on the server (add `--project KEY` for one project). It
+lists the issues and the field names per schema, never the values, and changes nothing. See
+[Upgrading](../install/upgrading.md#metadata-values-are-validated).
+
 ## Editing array fields
 
 An **array** field holds a list of values — multiple branches, several tags, a set of pull requests. Add

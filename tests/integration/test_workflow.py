@@ -8,6 +8,7 @@ Covers:
 - GET /issues/{ref}/allowed-statuses endpoint
 - Required field validation on transition
 - Readonly field validation on transition
+- Field rules on every update, judged against what the request changes
 """
 
 from __future__ import annotations
@@ -390,7 +391,6 @@ async def test_allowed_statuses_endpoint(
     assert sorted(data["allowed_status_ids"]) == sorted([in_progress_status.id, rejected_status.id])
 
 
-@pytest.mark.pro
 @pytest.mark.asyncio
 async def test_required_field_on_transition(
     client: AsyncClient,
@@ -436,7 +436,6 @@ async def test_required_field_on_transition(
     assert error["field"] == "assigned_to_id"
 
 
-@pytest.mark.pro
 @pytest.mark.asyncio
 async def test_readonly_field_on_transition(
     client: AsyncClient,
@@ -492,3 +491,333 @@ async def test_readonly_field_on_transition(
     error = body["errors"][0]
     assert error["code"] == "workflow_field_readonly"
     assert error["field"] == "subject"
+
+
+# ---------------------------------------------------------------------------
+# Field rules judge the change
+# ---------------------------------------------------------------------------
+
+
+def _rule(tracker: Tracker, role: Role, status: IssueStatus, field_name: str, rule: str) -> WorkflowFieldRule:
+    return WorkflowFieldRule(
+        tracker_id=tracker.id, role_id=role.id, status_id=status.id, field_name=field_name, rule=rule
+    )
+
+
+async def _patch(client: AsyncClient, token: str, key: str, **fields) -> object:
+    resp = await client.get(f"/api/v1/issues/{key}/", headers={"Authorization": f"Bearer {token}"})
+    assert resp.status_code == 200, resp.text
+    return await client.patch(
+        f"/api/v1/issues/{key}/",
+        json={**fields, "lock_version": resp.json()["lock_version"]},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+
+@pytest_asyncio.fixture
+async def version(db_session: AsyncSession, project: Project):
+    from tests.factories.version import VersionFactory
+
+    v = VersionFactory.build(project_id=project.id, name="wf-1.0")
+    db_session.add(v)
+    await db_session.commit()
+    await db_session.refresh(v)
+    return v
+
+
+@pytest.mark.asyncio
+async def test_readonly_blocks_a_change_while_in_that_status(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    priority: IssuePriority,
+    developer_role: Role,
+    dev_user: User,
+    dev_member: Member,
+    workflow_rules: list[WorkflowTransition],
+) -> None:
+    """A read-only field is protected while the issue sits in the status, not only on the way in."""
+    db_session.add(_rule(tracker, developer_role, new_status, "subject", "readonly"))
+    await db_session.commit()
+    token = await _login(client, dev_user.login)
+    issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
+
+    resp = await _patch(client, token, issue["key"], subject="Changed while New")
+    assert resp.status_code == 422, resp.text
+    error = resp.json()["errors"][0]
+    assert (error["code"], error["field"]) == ("workflow_field_readonly", "subject")
+    # Other fields stay editable.
+    resp = await _patch(client, token, issue["key"], description="More detail")
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_readonly_allows_resending_the_same_value(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    resolved_status: IssueStatus,
+    priority: IssuePriority,
+    developer_role: Role,
+    dev_user: User,
+    dev_member: Member,
+    workflow_rules: list[WorkflowTransition],
+) -> None:
+    """The edit form sends every field: an unchanged read-only value is not a change."""
+    db_session.add(_rule(tracker, developer_role, resolved_status, "subject", "readonly"))
+    db_session.add(_rule(tracker, developer_role, resolved_status, "done_ratio", "readonly"))
+    await db_session.commit()
+    token = await _login(client, dev_user.login)
+    issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
+    resp = await _patch(client, token, issue["key"], status_id=in_progress_status.id)
+    assert resp.status_code == 200, resp.text
+
+    resp = await _patch(
+        client, token, issue["key"], status_id=resolved_status.id, subject=issue["subject"], done_ratio=0
+    )
+    assert resp.status_code == 200, resp.text
+    resp = await _patch(client, token, issue["key"], subject=issue["subject"], description="Notes")
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_required_refuses_an_explicit_clear(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    priority: IssuePriority,
+    developer_role: Role,
+    dev_user: User,
+    dev_member: Member,
+    workflow_rules: list[WorkflowTransition],
+    version,
+) -> None:
+    """Clearing a required field is refused, on a transition and while in the status."""
+    db_session.add(_rule(tracker, developer_role, in_progress_status, "fixed_version_id", "required"))
+    db_session.add(_rule(tracker, developer_role, new_status, "fixed_version_id", "required"))
+    await db_session.commit()
+    token = await _login(client, dev_user.login)
+    issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
+
+    # Old issues without the field stay editable: only clearing it is refused.
+    resp = await _patch(client, token, issue["key"], subject="Edited without a version")
+    assert resp.status_code == 200, resp.text
+    resp = await _patch(client, token, issue["key"], fixed_version_id=version.id)
+    assert resp.status_code == 200, resp.text
+
+    resp = await _patch(client, token, issue["key"], fixed_version_id=None)
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["errors"][0]["code"] == "workflow_field_required"
+
+    resp = await _patch(client, token, issue["key"], status_id=in_progress_status.id, fixed_version_id=None)
+    assert resp.status_code == 422, resp.text
+    error = resp.json()["errors"][0]
+    assert (error["code"], error["field"]) == ("workflow_field_required", "fixed_version_id")
+
+    resp = await _patch(client, token, issue["key"], status_id=in_progress_status.id)
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_unknown_field_name_in_rule_is_refused(
+    admin_client: AsyncClient,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    developer_role: Role,
+) -> None:
+    body = {"tracker_id": tracker.id, "role_id": developer_role.id, "status_id": new_status.id, "rule": "required"}
+    resp = await admin_client.post("/api/v1/admin/workflows/field-rules/", json={**body, "field_name": "asignee"})
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["errors"][0]["field"] == "field_name"
+
+    resp = await admin_client.post("/api/v1/admin/workflows/field-rules/", json={**body, "field_name": "due_date"})
+    assert resp.status_code == 201, resp.text
+
+
+@pytest.mark.asyncio
+async def test_admin_bypasses_field_rules(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    priority: IssuePriority,
+    developer_role: Role,
+    admin_user: User,
+    workflow_rules: list[WorkflowTransition],
+) -> None:
+    db_session.add(_rule(tracker, developer_role, in_progress_status, "assigned_to_id", "required"))
+    db_session.add(_rule(tracker, developer_role, new_status, "subject", "readonly"))
+    member = Member(user_id=admin_user.id, project_id=project.id)
+    db_session.add(member)
+    await db_session.flush()
+    db_session.add(MemberRole(member_id=member.id, role_id=developer_role.id))
+    await db_session.commit()
+
+    token = await _login(client, admin_user.login)
+    issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
+    resp = await _patch(client, token, issue["key"], subject="Admin edit")
+    assert resp.status_code == 200, resp.text
+    resp = await _patch(client, token, issue["key"], status_id=in_progress_status.id)
+    assert resp.status_code == 200, resp.text
+
+
+@pytest.mark.asyncio
+async def test_field_rules_add_no_query_when_no_rules_exist(
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    priority: IssuePriority,
+    dev_user: User,
+    dev_member: Member,
+) -> None:
+    """With no rules for the tracker, checking them costs at most one small query."""
+    from sqlalchemy import event
+
+    from specivo.schemas.issue import IssueCreate, IssueUpdate
+    from specivo.services.issue_service import IssueService
+    from specivo.services.workflow_service import WorkflowService
+
+    issue = await IssueService().create(
+        db_session,
+        project,
+        IssueCreate(project_key=project.key, tracker_id=tracker.id, subject="No rules"),
+        dev_user,
+    )
+    await db_session.commit()
+    statements: list[str] = []
+
+    def _record(conn, cursor, statement, *args) -> None:  # noqa: ANN001
+        # The test's own transaction may open a savepoint; that is not the check's.
+        if not statement.startswith(("SAVEPOINT", "RELEASE SAVEPOINT")):
+            statements.append(statement)
+
+    data = IssueUpdate(subject="Renamed", status_id=in_progress_status.id, lock_version=issue.lock_version)
+    engine = db_session.bind.sync_engine  # type: ignore[union-attr]
+    event.listen(engine, "before_cursor_execute", _record)
+    try:
+        await WorkflowService().validate_field_rules(db_session, issue, data, dev_user, in_progress_status.id)
+    finally:
+        event.remove(engine, "before_cursor_execute", _record)
+    assert len(statements) <= 1, statements
+
+
+async def _bulk(client: AsyncClient, token: str, issue_id: int, **updates) -> dict:
+    resp = await client.post(
+        "/api/v1/issues/bulk-update/",
+        json={"issue_ids": [issue_id], "updates": updates},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_cannot_change_a_read_only_version(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    priority: IssuePriority,
+    developer_role: Role,
+    dev_user: User,
+    dev_member: Member,
+    workflow_rules: list[WorkflowTransition],
+    version,
+) -> None:
+    db_session.add(_rule(tracker, developer_role, new_status, "fixed_version_id", "readonly"))
+    await db_session.commit()
+    token = await _login(client, dev_user.login)
+    issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
+
+    result = await _bulk(client, token, issue["id"], fixed_version_id=version.id)
+
+    assert result["failed"][0]["error"]["code"] == "workflow_field_readonly"
+    assert result["succeeded"] == []
+
+
+@pytest.mark.asyncio
+async def test_bulk_update_setting_a_required_version_with_the_status_succeeds(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    priority: IssuePriority,
+    developer_role: Role,
+    dev_user: User,
+    dev_member: Member,
+    workflow_rules: list[WorkflowTransition],
+    version,
+) -> None:
+    db_session.add(_rule(tracker, developer_role, in_progress_status, "fixed_version_id", "required"))
+    await db_session.commit()
+    token = await _login(client, dev_user.login)
+    issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
+
+    result = await _bulk(client, token, issue["id"], status_id=in_progress_status.id, fixed_version_id=version.id)
+
+    assert result["failed"] == []
+    resp = await client.get(f"/api/v1/issues/{issue['key']}/", headers={"Authorization": f"Bearer {token}"})
+    assert resp.json()["fixed_version_id"] == version.id
+
+
+@pytest.mark.asyncio
+async def test_read_only_rule_of_the_current_tracker_stops_a_tracker_change(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    priority: IssuePriority,
+    developer_role: Role,
+    dev_user: User,
+    dev_member: Member,
+    workflow_rules: list[WorkflowTransition],
+) -> None:
+    other = TrackerFactory.build(default_status_id=new_status.id)
+    db_session.add(other)
+    await db_session.flush()
+    db_session.add(_rule(tracker, developer_role, new_status, "tracker_id", "readonly"))
+    await db_session.commit()
+    token = await _login(client, dev_user.login)
+    issue = await _create_issue(client, token, project.key, tracker.id, new_status.id, priority.id)
+
+    resp = await _patch(client, token, issue["key"], tracker_id=other.id)
+
+    assert resp.status_code == 422, resp.text
+    assert resp.json()["errors"][0]["code"] == "workflow_field_readonly"
+
+
+@pytest.mark.asyncio
+async def test_transition_by_a_user_with_no_project_role_is_refused_not_a_crash(
+    db_session: AsyncSession,
+    project: Project,
+    tracker: Tracker,
+    new_status: IssueStatus,
+    in_progress_status: IssueStatus,
+    dev_user: User,
+    workflow_rules: list[WorkflowTransition],
+) -> None:
+    from types import SimpleNamespace
+
+    from specivo.core.exceptions import AppError
+    from specivo.services.workflow_service import WorkflowService
+
+    issue = SimpleNamespace(project_id=project.id, tracker_id=tracker.id, status_id=new_status.id)
+    with pytest.raises(AppError) as refused:
+        await WorkflowService().validate_transition(db_session, issue, in_progress_status.id, dev_user)
+    assert refused.value.code == "workflow_transition_denied"

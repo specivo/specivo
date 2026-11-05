@@ -1,4 +1,4 @@
-"""Workflow engine — transition tables, Redis cache, validation on status change."""
+"""Workflow engine — transition tables, Redis cache, validation on status change and field rules."""
 
 from __future__ import annotations
 
@@ -6,12 +6,11 @@ import json
 import logging
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, exists, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.exceptions import AppError, ValidationError
-from specivo.core.features import get_feature_registry
+from specivo.core.exceptions import AppError
 from specivo.core.i18n import gettext as _
 from specivo.core.redis import get_redis
 from specivo.models.issue import Issue
@@ -19,8 +18,32 @@ from specivo.models.member import Member, MemberRole
 from specivo.models.user import User
 from specivo.models.workflow import WorkflowFieldRule, WorkflowTransition
 from specivo.schemas.workflow import FieldRuleCreate, TransitionCreate
+from specivo.services.api_key_scope import admin_reaches
 
 logger = logging.getLogger(__name__)
+
+# Fields an update can clear by sending null; the others ignore a null.
+_CLEARABLE_FIELDS = frozenset({"fixed_version_id", "sprint_id"})
+
+
+def _requested_value(update_data: Any, field_name: str) -> tuple[bool, Any]:
+    """Return whether *update_data* sets *field_name*, and the value it would store.
+
+    Follows ``IssueService.update_with_journal``: ``fixed_version_id`` and
+    ``sprint_id`` count as set when present in ``model_fields_set`` (null
+    clears them); ``parent_id`` 0 means no parent; any other null means
+    "leave unchanged".
+    """
+    value = getattr(update_data, field_name, None)
+    if field_name in _CLEARABLE_FIELDS:
+        return field_name in getattr(update_data, "model_fields_set", set()), value
+    if field_name == "parent_id" and value == 0:
+        return True, None
+    return value is not None, value
+
+
+def _is_empty(value: Any) -> bool:
+    return value is None or (isinstance(value, str) and not value.strip())
 
 
 class WorkflowService:
@@ -196,9 +219,10 @@ class WorkflowService:
         role_ids = await self._get_user_role_ids(session, user, issue.project_id)
         if not role_ids:
             # No roles in project — cannot determine allowed transitions
-            raise ValidationError(
-                message=_("No project roles found for user"),
+            raise AppError(
                 code="workflow_transition_denied",
+                message=_("No project roles found for user"),
+                status_code=422,
                 details={"allowed_status_ids": []},
             )
 
@@ -214,6 +238,11 @@ class WorkflowService:
                 details={"allowed_status_ids": allowed},
             )
 
+    async def _has_field_rules(self, session: AsyncSession, tracker_id: int) -> bool:
+        """Whether any field rule exists for *tracker_id*: one small query."""
+        stmt = select(exists().where(WorkflowFieldRule.tracker_id == tracker_id))
+        return bool((await session.execute(stmt)).scalar())
+
     async def validate_field_rules(
         self,
         session: AsyncSession,
@@ -222,50 +251,64 @@ class WorkflowService:
         user: User,
         target_status_id: int,
     ) -> None:
-        """Raise ValidationError if required fields missing or readonly fields changed.
+        """Raise if *update_data* breaks the field rules of the status the issue ends up in.
 
-        Admin users bypass.
-        Without the ``workflow_field_rules`` feature, this is a no-op.
+        Called on every update, with *target_status_id* the new status, or the
+        current one when the status does not change. Judges what the request
+        changes, so an old issue stays editable:
+
+        - ``readonly``: refused only when the request sets the field to a value
+          different from the current one (the edit form resends every field).
+        - ``required``: on a status change, the value after the update must be
+          present (an explicit null for a clearable field counts as empty).
+          Without a status change, refused only when the request clears it.
+
+        An admin whose bypass reaches the project skips the rules. With no rule
+        for the tracker, this costs one query.
         """
-        registry = get_feature_registry()
-        if not registry.has_feature("workflow_field_rules"):
+        if admin_reaches(user, issue.project_id):
             return
 
-        if user.is_admin:
+        tracker_id = getattr(update_data, "tracker_id", None) or issue.tracker_id
+        leaving_tracker = issue.tracker_id if tracker_id != issue.tracker_id else None
+        if not await self._has_field_rules(session, tracker_id) and not (
+            leaving_tracker is not None and await self._has_field_rules(session, leaving_tracker)
+        ):
             return
 
         role_ids = await self._get_user_role_ids(session, user, issue.project_id)
         if not role_ids:
             return
 
-        rules = await self.get_field_rules(session, issue.tracker_id, role_ids, target_status_id)
+        rules = dict(await self.get_field_rules(session, tracker_id, role_ids, target_status_id))
+        if leaving_tracker is not None:
+            # What the current tracker protects can't be escaped by changing the tracker in the same request.
+            current = await self.get_field_rules(session, leaving_tracker, role_ids, target_status_id)
+            rules.update({name: rule for name, rule in current.items() if rule == "readonly"})
+        status_changes = target_status_id != issue.status_id
 
-        if not rules:
-            return
-
-        for field_name, rule in rules.items():
+        for field_name, rule in sorted(rules.items()):
+            requested, new_val = _requested_value(update_data, field_name)
+            current_val = getattr(issue, field_name, None)
             if rule == "required":
-                # Field must have a value after update
-                new_val = getattr(update_data, field_name, None)
-                current_val = getattr(issue, field_name, None)
-                effective_val = new_val if new_val is not None else current_val
-                if effective_val is None:
+                if status_changes:
+                    refused = _is_empty(new_val if requested else current_val)
+                else:
+                    refused = requested and _is_empty(new_val) and not _is_empty(current_val)
+                if refused:
                     raise AppError(
                         code="workflow_field_required",
                         message=_("Field '{field}' is required for this status").format(field=field_name),
                         status_code=422,
                         field=field_name,
                     )
-            elif rule == "readonly":
-                # Field must not be changed
-                new_val = getattr(update_data, field_name, None)
-                if new_val is not None:
-                    raise AppError(
-                        code="workflow_field_readonly",
-                        message=_("Field '{field}' is read-only for this status").format(field=field_name),
-                        status_code=422,
-                        field=field_name,
-                    )
+            elif rule == "readonly" and requested and new_val != current_val:
+                raise AppError(
+                    code="workflow_field_readonly",
+                    message=_("Field '{field}' is read-only for this status").format(field=field_name),
+                    status_code=422,
+                    field=field_name,
+                )
 
     # ------------------------------------------------------------------
     # Cache invalidation

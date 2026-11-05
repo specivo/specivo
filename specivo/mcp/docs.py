@@ -41,7 +41,7 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_create_metadata_schema": "Create a metadata schema (manage_project; audited)",
     "specivo_update_metadata_schema": "Patch a metadata schema (manage_project; audited)",
     "specivo_delete_metadata_schema": "Delete a metadata schema, safe-delete (manage_project; audited)",
-    "specivo_metadata": "Get, set or delete one metadata key on an issue or wiki page",
+    "specivo_metadata": "Get, set or delete one metadata key on an issue or wiki page (values checked against schemas)",
     "specivo_list_tags": "List a project's tags with usage counts -- call before tagging and reuse names",
     "specivo_tag": "Get, add, remove or set the tags on an issue (ACME-12) or wiki page (wiki:ACME/<slug>)",
     "specivo_create_tag": "Create a project tag with an optional color (manage_project)",

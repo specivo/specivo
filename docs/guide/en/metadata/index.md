@@ -21,7 +21,9 @@ because it is **typed and structured**, not free text:
   `severity = critical` or every issue touching a given branch. Free text in a description can't do that
   reliably.
 - **Validated.** An `enum` field only accepts its allowed choices; a `number` field only accepts numbers.
-  Bad values are caught as you type instead of discovered later.
+  Specivo refuses a value that does not match its schema, whether it comes from the issue page, the
+  REST API or an AI agent. It judges what a change writes, not what an issue already holds, so older
+  values never lock an issue. See [What is refused](values.md#what-is-refused).
 
 ## Field types
 

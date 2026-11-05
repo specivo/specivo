@@ -6,7 +6,8 @@ export function issueMetadataPanel(initial) {
             no: 'No',
             countFields: '%(filled)s/%(total)s fields',
             saving: 'Saving...',
-            saveMetadata: 'Save Metadata'
+            saveMetadata: 'Save Metadata',
+            saveFailed: 'The metadata could not be saved.'
         }, initial.i18n || {});
 
         function resolveFieldsFromSchemas(schemas, metadataObj) {
@@ -68,6 +69,8 @@ export function issueMetadataPanel(initial) {
             expanded: false,
             dirty: false,
             saving: false,
+            // The server's reason for refusing the last save; the panel stays editable.
+            error: '',
             fields: resolved.fields,
             schemaNames: resolved.schemaNames,
             metadata: metadataObj,
@@ -163,10 +166,12 @@ export function issueMetadataPanel(initial) {
             revert() {
                 this.metadata = JSON.parse(JSON.stringify(this.savedMetadata));
                 this.dirty = false;
+                this.error = '';
             },
 
             async save() {
                 this.saving = true;
+                this.error = '';
                 try {
                     // Build clean metadata (only filled values)
                     var clean = {};
@@ -187,9 +192,16 @@ export function issueMetadataPanel(initial) {
                         if (data.lock_version) this.lockVersion = data.lock_version;
                         this.savedMetadata = JSON.parse(JSON.stringify(this.metadata));
                         this.dirty = false;
+                    } else {
+                        // A refused value (schema, workflow rule, stale version):
+                        // show why, and keep the edits so they can be corrected.
+                        var body = null;
+                        try { body = await res.json(); } catch (_parse) { /* not JSON */ }
+                        var first = body && body.errors && body.errors[0];
+                        this.error = (first && first.message) || i18n.saveFailed;
                     }
                 } catch (_e) {
-                    /* request failed */
+                    this.error = i18n.saveFailed;
                 }
                 this.saving = false;
             }

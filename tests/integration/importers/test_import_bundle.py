@@ -687,6 +687,41 @@ class TestCustomFieldNames:
         assert '<strong class="sp-change-label">ระดับความเสี่ยง</strong>' in text
 
 
+class TestValuesNotMatchingTheirSchema:
+    async def test_value_not_matching_its_schema_keeps_the_issue_and_warns(
+        self, db_session, build_bundle_import, tmp_path
+    ):
+        """History is kept as the source has it, and the report names the issue and field."""
+        fields = [
+            {"source_ref": "cf-year", "name": "Release year", "key": "release_year", "field_format": "int",
+             "json_schema": {"type": "integer"}, "is_for_all": True, "is_required": True},
+            {"source_ref": "cf-env", "name": "Environment", "key": "environment", "field_format": "string",
+             "json_schema": {"type": "string"}, "is_for_all": True},
+        ]  # fmt: skip
+        root = write_bundle(
+            tmp_path / "b",
+            projects=[project("p1", identifier="cfbad")],
+            custom_fields=fields,
+            issues=[
+                issue("i1", custom_values=[{"field_ref": "cf-year", "key": "release_year", "value": "1999?"}]),
+                issue("i2", custom_values=[{"field_ref": "cf-env", "key": "environment", "value": "staging"}]),
+                issue("i3", custom_values=[{"field_ref": "cf-year", "key": "release_year", "value": 2001}]),
+            ],
+        )
+        summary = await build_bundle_import(root).run()
+
+        assert summary.created[EntityType.ISSUE] == 3
+        stored = {i.subject: i.issue_metadata for i in (await db_session.execute(select(Issue))).scalars()}
+        assert {"release_year": "1999?"} in stored.values()
+        mismatches = [
+            (w.context["issue"], w.context["field"])
+            for w in summary.warnings
+            if w.message == "Custom field value does not match its schema; kept"
+        ]
+        # i2 lacks the field the source later made required, which is history too.
+        assert sorted(mismatches) == [("i1", "release_year"), ("i2", "release_year")]
+
+
 class TestAdministrators:
     async def test_with_import_admins_the_sources_administrator_is_one(self, db_session, build_bundle_import):
         summary = await build_bundle_import(FULL, import_admins=True).run()

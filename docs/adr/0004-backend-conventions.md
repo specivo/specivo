@@ -11,6 +11,8 @@ the direct Redmine import (imports now go through bundles, see `docs/import-bund
 marker.
 **Revised:** 2026-10-29 — recorded how an API key's project limit is enforced (§7).
 **Revised:** 2026-10-31 — recorded the SSO session check at the IdP and its session columns (§7).
+**Revised:** 2026-11-05 — recorded that metadata schemas and workflow field rules judge the change a
+write makes, not the state of the issue (§6).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -249,6 +251,25 @@ The catalogue is the `Permission` `StrEnum` in that module; each member's value 
 `get_user_roles(session, user, project)` is the one role resolution behind permission checks, issue visibility and (mirrored in SQL) search visibility: a membership's roles; otherwise, on a public project, the seeded read-only Non member role (`roles.builtin = 1`) plus the project's transient anonymous role when the instance switch is on; for the anonymous user, only that transient role, capped at `view_issues` / `view_wiki` inside `check_permission`. Resolved roles are cached in `session.info`, so the cache lives exactly as long as a request's session. There are no hardcoded `is_public` access branches. `member_principal_clause(user_id)` is the single definition of "this `members` row grants this user access" — see §4 on principals. Any membership read that feeds an access decision uses that clause; a row looked up in order to be *edited* (add, update or remove one user's roles) must stay user-only, or the edit lands on a group and reaches everyone in it.
 
 Each role also carries `users_visibility` and `time_entries_visibility` beside `issues_visibility`, and the widest value across a user's roles wins. For time entries only roles that grant `view_time_entries` count: a user with none reads no entries in the project, their own included. Time access is decided in `TimeEntryService`, not inline in endpoints: `visible_entries_clause` / `visible_entries_clause_any` scope every reader (list, single entry, issue and version totals, billing, the dashboard feed), `require_can_log` guards every entry written on a user's behalf (timers included), and `can_edit` covers edits and deletes. `create` checks nothing itself, because the importer writes entries for their original authors.
+
+**Validation judges the change, not the state.** Metadata schemas and workflow field rules are
+enforced in the service layer on every write path (REST, web, MCP), and they look only at what the
+request changes, so an issue holding an old invalid value stays editable and tightening a rule never
+traps existing data:
+
+- `MetadataSchemaService.validate_metadata(..., previous=...)` diffs the top-level keys against the
+  stored metadata (`previous=None` means create, where every key counts and root `required` applies)
+  and keeps only `jsonschema` errors that touch a changed key. With nothing changed it reads no schema.
+  The error is a `ValidationError` with `field="metadata.<key>"`, a translated prefix and the
+  `jsonschema` reason in English.
+- `WorkflowService.validate_field_rules` runs on every update against the status the issue ends up in:
+  `readonly` refuses a requested value that differs from the current one, `required` checks the value
+  after the update on a status change and otherwise refuses only a clear. A tracker without rules costs
+  one `EXISTS` query.
+- Paths that carry values decided elsewhere skip metadata validation explicitly with
+  `IssueService.create(..., validate_metadata=False)`: the importer (history is kept, and mismatches
+  are reported as warnings) and recurring generation (the template was validated when the pattern was
+  saved). Moving an issue and changing its tracker re-validate nothing.
 
 ### 7. Authentication and Authorization
 
