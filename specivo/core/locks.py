@@ -23,7 +23,7 @@ from contextlib import asynccontextmanager
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 logger = logging.getLogger(__name__)
 
@@ -109,21 +109,52 @@ async def acquire_run_lock(lock: TokenLock, token: str, ttl: int, task_state: Ca
     return False
 
 
-@asynccontextmanager
-async def try_advisory_lock(engine: AsyncEngine, namespace: int, key: int) -> AsyncIterator[bool]:
-    """Hold ``pg_try_advisory_lock(namespace, key)`` on a dedicated connection for the block.
+AdvisoryKey = tuple[int, int, bool]
+"""``(namespace, key, shared)`` of one session-level advisory lock."""
 
-    Yields whether the lock was acquired; when it was not, the caller should do
-    nothing. The connection is kept open (and the lock held) until the block
-    ends; if the process dies the connection closes and PostgreSQL frees the
-    lock.
+
+@asynccontextmanager
+async def try_advisory_locks(engine: AsyncEngine, keys: list[AdvisoryKey]) -> AsyncIterator[bool]:
+    """Hold all of *keys* (``pg_try_advisory_lock`` / ``..._shared``) on one dedicated connection, or none.
+
+    Yields whether every lock was acquired; when one was not, those already
+    taken are released at once and the caller should do nothing. Shared locks
+    let several holders of a scope run side by side while excluding an
+    exclusive holder of the same key (an instance-wide job). The connection is
+    kept open (and the locks held) until the block ends; if the process dies
+    the connection closes and PostgreSQL frees them.
     """
     async with engine.connect() as connection:
-        acquired = bool(await connection.scalar(select(func.pg_try_advisory_lock(namespace, key))))
+        held: list[AdvisoryKey] = []
+        for namespace, key, shared in keys:
+            take = func.pg_try_advisory_lock_shared if shared else func.pg_try_advisory_lock
+            if not await connection.scalar(select(take(namespace, key))):
+                break
+            held.append((namespace, key, shared))
+        acquired = len(held) == len(keys)
+        if not acquired:
+            await _unlock(connection, held)
         await connection.commit()
         try:
             yield acquired
         finally:
             if acquired:
-                await connection.scalar(select(func.pg_advisory_unlock(namespace, key)))
+                await _unlock(connection, held)
                 await connection.commit()
+
+
+async def _unlock(connection: AsyncConnection, held: list[AdvisoryKey]) -> None:
+    for namespace, key, shared in reversed(held):
+        release = func.pg_advisory_unlock_shared if shared else func.pg_advisory_unlock
+        await connection.scalar(select(release(namespace, key)))
+
+
+@asynccontextmanager
+async def try_advisory_lock(engine: AsyncEngine, namespace: int, key: int) -> AsyncIterator[bool]:
+    """Hold ``pg_try_advisory_lock(namespace, key)`` on a dedicated connection for the block.
+
+    Yields whether the lock was acquired; when it was not, the caller should do
+    nothing. See :func:`try_advisory_locks`.
+    """
+    async with try_advisory_locks(engine, [(namespace, key, False)]) as acquired:
+        yield acquired

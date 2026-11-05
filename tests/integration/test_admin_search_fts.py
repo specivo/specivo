@@ -4,7 +4,7 @@ Covers:
 - `reindex_fts` rebuilds stored vectors with the (changed) per-project language.
 - Instance default language API (admin-gated, validated, reindex-needed flag).
 - Per-project override API (manage_project-gated, inherit semantics).
-- Reindex dispatch returns a task id (Celery task .delay stubbed).
+- Reindex dispatch returns a task id (Celery task stubbed).
 """
 
 from __future__ import annotations
@@ -219,21 +219,20 @@ class TestProjectFtsApi:
 
 
 # ---------------------------------------------------------------------------
-# Reindex dispatch (Celery .delay stubbed)
+# Reindex dispatch (Celery task stubbed)
 # ---------------------------------------------------------------------------
 
 
 class TestReindexDispatch:
     async def test_instance_reindex_returns_task_id(self, client, db_session, admin, monkeypatch):
-        class _FakeAsync:
-            id = "fake-task-123"
+        queued: list[str] = []
 
         class _FakeTask:
-            def delay(self, *args, **kwargs):
-                return _FakeAsync()
+            def apply_async(self, args=None, task_id=None, **kwargs):
+                queued.append(task_id)
 
         monkeypatch.setattr("specivo.api.v1.search_admin.reindex_fts_task", _FakeTask())
         token = await _login(client, admin.login)
         resp = await client.post("/api/v1/admin/search/reindex/", headers=_auth(token))
         assert resp.status_code == 202, resp.text
-        assert resp.json()["task_id"] == "fake-task-123"
+        assert queued == [resp.json()["task_id"]]

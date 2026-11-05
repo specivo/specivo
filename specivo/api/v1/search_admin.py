@@ -2,20 +2,28 @@
 
 Instance-level routes require global admin; per-project routes require
 ``manage_project``. Reindex runs as a background Celery task; status is polled.
+Only one reindex runs per scope, and an instance reindex never alongside a
+project one: a second request gets 409 (see ``_dispatch_reindex`` and
+``specivo.tasks.search``).
 """
 
 from __future__ import annotations
 
 import json
+import uuid
 
 from celery.result import AsyncResult
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
+from redis.asyncio import Redis
+from redis.exceptions import RedisError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import _ALLOWED_FTS_LANGUAGES
 from specivo.core.database import DB_SESSION
-from specivo.core.exceptions import PermissionDeniedError, ValidationError
+from specivo.core.exceptions import AppError, PermissionDeniedError, ValidationError
+from specivo.core.locks import FINISHED_TASK_STATES, LockUnavailableError, TokenLock, acquire_run_lock
+from specivo.core.redis import get_redis
 from specivo.core.security import get_current_user
 from specivo.models.project import Project
 from specivo.models.user import User
@@ -25,6 +33,9 @@ from specivo.services.project_service import ProjectService
 from specivo.services.settings_service import SettingsService
 from specivo.tasks import celery_app
 from specivo.tasks.search import (
+    FTS_PROJECT_LOCK_PATTERN,
+    FTS_REINDEX_LOCK_TTL,
+    fts_lock_key,
     last_result_key,
     reindex_fts_task,
     reindex_needed_key,
@@ -94,14 +105,68 @@ async def _reindex_needed(db: AsyncSession, project_id: int | None) -> bool:
     return (await _settings.get(db, reindex_needed_key(project_id))) == "1"
 
 
+def _task_state(task_id: str) -> str:
+    return str(AsyncResult(task_id, app=celery_app).state)
+
+
+async def _other_scope_running(redis: Redis, project_id: int | None) -> bool:
+    """Whether a reindex of the other scope runs: the instance for a project, any project for the instance."""
+    if project_id is not None:
+        keys = [fts_lock_key(None)]
+    else:
+        keys = [key async for key in redis.scan_iter(match=FTS_PROJECT_LOCK_PATTERN)]
+    for key in keys:
+        holder = await TokenLock(redis, key.decode() if isinstance(key, bytes) else key).holder()
+        if holder and _task_state(holder) not in FINISHED_TASK_STATES:
+            return True
+    return False
+
+
+def _already_running() -> AppError:
+    return AppError(
+        code="reindex_running",
+        message="A reindex is already running for this scope",
+        status_code=status.HTTP_409_CONFLICT,
+    )
+
+
 async def _dispatch_reindex(db: AsyncSession, project_id: int | None) -> dict:
-    running, _ = await _running(db, project_id)
-    if running:
-        raise ValidationError(message="A reindex is already running for this scope")
-    async_result = reindex_fts_task.delay(project_id)
-    await _settings.set_many(db, {running_task_key(project_id): async_result.id})
+    """Queue one reindex of the scope, unless one (or one of the other scope) runs.
+
+    The run lock is taken atomically (``SET NX EX`` holding the new task id)
+    before anything is queued, so two requests at once queue one task; the
+    other gets 409. The other scope is checked after taking the lock: an
+    instance run and a project run started together both see each other and
+    both back off, rather than both starting (the task's advisory locks would
+    still keep them apart). Without Redis nothing is queued (503).
+    """
+    task_id = str(uuid.uuid4())
+    try:
+        redis = await get_redis()
+        lock = TokenLock(redis, fts_lock_key(project_id))
+        if not await acquire_run_lock(lock, task_id, FTS_REINDEX_LOCK_TTL, _task_state):
+            raise _already_running()
+        if await _other_scope_running(redis, project_id):
+            await lock.release(task_id)
+            raise _already_running()
+    except (LockUnavailableError, RedisError) as exc:
+        raise AppError(
+            code="lock_unavailable",
+            message="Cannot start a reindex right now: the run lock is unavailable. Try again later.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        ) from exc
+    try:
+        reindex_fts_task.apply_async(args=[project_id], task_id=task_id)
+    except Exception as exc:
+        await lock.release(task_id)
+        raise AppError(
+            code="queue_unavailable",
+            message="Cannot start a reindex right now: the task queue is unavailable.",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        ) from exc
+    await _settings.set_many(db, {running_task_key(project_id): task_id})
     await db.commit()
-    return {"task_id": async_result.id, "state": "PENDING"}
+    return {"task_id": task_id, "state": "PENDING"}
 
 
 async def _status_payload(db: AsyncSession, project_id: int | None) -> dict:

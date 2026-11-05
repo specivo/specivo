@@ -1,0 +1,206 @@
+"""One search reindex at a time: the dispatch guard and the task's advisory locks.
+
+``POST .../search/reindex/`` takes a Redis run lock (``SET NX EX`` holding the
+task id) before queueing, so two requests at once queue a single task and the
+other gets 409. An instance reindex and a project reindex exclude each other
+(they rewrite the same rows), while two projects may run side by side. The task
+takes advisory locks in its own namespace (instance: key 0 exclusive; project:
+key 0 shared plus its id) and is a no-op when they are held; it releases the
+run lock (compare-and-delete) on success and on failure.
+"""
+
+from __future__ import annotations
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from specivo.core.locks import LockUnavailableError, TokenLock
+from specivo.core.redis import get_redis
+from specivo.models.project import Project
+from specivo.models.user import User
+from specivo.tasks.search import FTS_REINDEX_LOCK_NAMESPACE, _locked_reindex, fts_lock_key
+from tests.factories.project import ProjectFactory
+from tests.factories.user import TEST_PASSWORD, AdminUserFactory
+
+# Serial: the instance-scope advisory lock (key 0) is shared by every worker on the database.
+pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.serial]
+
+
+@pytest.fixture
+async def admin(db_session: AsyncSession) -> User:
+    user = AdminUserFactory.build(login="ftslock_admin", status="active")
+    db_session.add(user)
+    await db_session.commit()
+    return user
+
+
+@pytest.fixture
+async def projects(db_session: AsyncSession) -> tuple[Project, Project]:
+    first = ProjectFactory.build(key="FTSLA", name="Lock A")
+    second = ProjectFactory.build(key="FTSLB", name="Lock B")
+    db_session.add_all([first, second])
+    await db_session.commit()
+    return first, second
+
+
+@pytest.fixture
+async def admin_client(client: AsyncClient, admin: User) -> AsyncClient:
+    resp = await client.post("/api/v1/auth/login/", json={"login": admin.login, "password": TEST_PASSWORD})
+    assert resp.status_code == 200, resp.text
+    client.headers["Authorization"] = f"Bearer {resp.json()['access_token']}"
+    return client
+
+
+@pytest.fixture
+def queued(monkeypatch) -> list[tuple[list, str]]:
+    """Record queued reindex tasks; every queued task counts as still running."""
+    calls: list[tuple[list, str]] = []
+
+    class _FakeTask:
+        def apply_async(self, args=None, task_id=None, **_kwargs):
+            calls.append((args, task_id))
+
+    monkeypatch.setattr("specivo.api.v1.search_admin.reindex_fts_task", _FakeTask())
+    monkeypatch.setattr("specivo.api.v1.search_admin._task_state", lambda task_id: "STARTED")
+    return calls
+
+
+def _project_url(project: Project) -> str:
+    return f"/api/v1/projects/{project.key}/search/reindex/"
+
+
+_INSTANCE_URL = "/api/v1/admin/search/reindex/"
+
+
+class TestDispatch:
+    async def test_a_double_dispatch_queues_one_task(self, admin_client, projects, queued):
+        project, _ = projects
+        first = await admin_client.post(_project_url(project))
+        second = await admin_client.post(_project_url(project))
+        assert first.status_code == 202, first.text
+        assert second.status_code == 409
+        assert second.json()["errors"][0]["code"] == "reindex_running"
+        assert queued == [([project.id], first.json()["task_id"])]
+        holder = await TokenLock(await get_redis(), fts_lock_key(project.id)).holder()
+        assert holder == first.json()["task_id"]
+
+    async def test_a_lock_held_by_a_running_task_refuses_and_a_finished_one_is_cleared(
+        self, admin_client, projects, queued, monkeypatch
+    ):
+        project, _ = projects
+        lock = TokenLock(await get_redis(), fts_lock_key(project.id))
+        assert await lock.acquire("in-flight", 300)
+        assert (await admin_client.post(_project_url(project))).status_code == 409
+        assert queued == []
+
+        monkeypatch.setattr("specivo.api.v1.search_admin._task_state", lambda task_id: "SUCCESS")
+        resp = await admin_client.post(_project_url(project))
+        assert resp.status_code == 202
+        assert await lock.holder() == resp.json()["task_id"]
+
+    async def test_instance_and_project_reindexes_exclude_each_other(self, admin_client, projects, queued):
+        first, second = projects
+        assert (await admin_client.post(_project_url(first))).status_code == 202
+        # Another project may run alongside...
+        assert (await admin_client.post(_project_url(second))).status_code == 202
+        # ...but not the whole instance, which rewrites their rows too.
+        instance = await admin_client.post(_INSTANCE_URL)
+        assert instance.status_code == 409
+        assert await TokenLock(await get_redis(), fts_lock_key(None)).holder() is None
+        assert len(queued) == 2
+
+    async def test_a_running_instance_reindex_refuses_projects(self, admin_client, projects, queued):
+        project, _ = projects
+        assert (await admin_client.post(_INSTANCE_URL)).status_code == 202
+        resp = await admin_client.post(_project_url(project))
+        assert resp.status_code == 409
+        assert await TokenLock(await get_redis(), fts_lock_key(project.id)).holder() is None
+        assert len(queued) == 1
+
+    async def test_without_redis_nothing_is_queued(self, admin_client, projects, queued, monkeypatch):
+        async def unavailable(self, token, ttl):
+            raise LockUnavailableError("down")
+
+        monkeypatch.setattr(TokenLock, "acquire", unavailable)
+        resp = await admin_client.post(_project_url(projects[0]))
+        assert resp.status_code == 503
+        assert resp.json()["errors"][0]["code"] == "lock_unavailable"
+        assert queued == []
+
+
+class TestTask:
+    @pytest.fixture
+    def work(self, monkeypatch):
+        """Stand-ins for the reindex itself and the stored result (written on the task's own connection)."""
+        calls: list[int | None] = []
+        stored: list[dict] = []
+
+        async def reindex(project_id, progress_cb):
+            calls.append(project_id)
+            await progress_cb({"issues": 1})
+            return {"status": "success"}
+
+        async def store(project_id, summary):
+            stored.append(summary)
+
+        monkeypatch.setattr("specivo.tasks.search._reindex_async", reindex)
+        monkeypatch.setattr("specivo.tasks.search._store_result", store)
+        return calls, stored
+
+    async def test_releases_the_run_lock_on_success(self, work):
+        calls, _ = work
+        lock = TokenLock(await get_redis(), fts_lock_key(987101))
+        assert await lock.acquire("fts-ok", 300)
+        reported: list[dict] = []
+        assert await _locked_reindex("fts-ok", 987101, reported.append) == {"status": "success"}
+        assert calls == [987101] and reported == [{"issues": 1}]
+        assert await lock.holder() is None
+
+    async def test_releases_the_run_lock_on_failure(self, work, monkeypatch):
+        _, stored = work
+
+        async def broken(project_id, progress_cb):
+            raise RuntimeError("tokenizer exploded")
+
+        monkeypatch.setattr("specivo.tasks.search._reindex_async", broken)
+        lock = TokenLock(await get_redis(), fts_lock_key(987102))
+        assert await lock.acquire("fts-bad", 300)
+        with pytest.raises(RuntimeError):
+            await _locked_reindex("fts-bad", 987102, lambda counts: None)
+        assert await lock.holder() is None
+        assert stored == [{"status": "failed", "error": "tokenizer exploded"}]
+
+    @pytest.mark.parametrize(
+        ("held", "shared", "project_id"),
+        [
+            (987103, False, 987103),  # the same project (a redelivered message)
+            (0, False, 987104),  # an instance reindex
+            (0, True, None),  # a project reindex, for an instance run
+        ],
+    )
+    async def test_is_a_no_op_while_the_scope_is_held(self, db_session, work, held, shared, project_id):
+        calls, _ = work
+        lock = TokenLock(await get_redis(), fts_lock_key(project_id))
+        assert await lock.acquire("fts-dup", 300)
+        take = func.pg_advisory_lock_shared if shared else func.pg_advisory_lock
+        release = func.pg_advisory_unlock_shared if shared else func.pg_advisory_unlock
+        await db_session.execute(select(take(FTS_REINDEX_LOCK_NAMESPACE, held)))
+        try:
+            assert await _locked_reindex("fts-dup", project_id, lambda counts: None) == {"status": "skipped"}
+        finally:
+            await db_session.execute(select(release(FTS_REINDEX_LOCK_NAMESPACE, held)))
+        assert calls == []
+        assert await lock.holder() == "fts-dup"
+
+    async def test_two_projects_run_side_by_side(self, db_session, work):
+        calls, _ = work
+        await db_session.execute(select(func.pg_advisory_lock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        await db_session.execute(select(func.pg_advisory_lock(FTS_REINDEX_LOCK_NAMESPACE, 987105)))
+        try:
+            assert await _locked_reindex("fts-other", 987106, lambda counts: None) == {"status": "success"}
+        finally:
+            await db_session.execute(select(func.pg_advisory_unlock(FTS_REINDEX_LOCK_NAMESPACE, 987105)))
+            await db_session.execute(select(func.pg_advisory_unlock_shared(FTS_REINDEX_LOCK_NAMESPACE, 0)))
+        assert calls == [987106]
