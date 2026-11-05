@@ -56,6 +56,27 @@ def key_principal(raw_key: str) -> str:
     return hashlib.sha256(b"specivo-mcp-session-owner:" + raw_key.encode()).hexdigest()
 
 
+async def _audit_refused_key(reason: str) -> None:
+    """Record a refused key as ``auth_failure``, at most once a minute per address and reason.
+
+    Written in its own session: the tool call's session rolls back when the
+    key is refused. Throttled apart from REST, so a refusal on one path does
+    not hide one on the other. Never raises, and never records the key.
+    """
+    try:
+        from specivo.core.database import get_session_factory
+        from specivo.core.security import first_auth_failure_in_window
+        from specivo.services.security_audit_service import SecurityAuditService, current_request_info
+
+        if not await first_auth_failure_in_window(current_request_info()["ip_address"], f"mcp:{reason}"):
+            return
+        async with get_session_factory()() as session:
+            await SecurityAuditService().log_refused_mcp_key(session, reason)
+            await session.commit()
+    except Exception:
+        logger.warning("Security audit logging failed for a refused MCP key", exc_info=True)
+
+
 # ---------------------------------------------------------------------------
 # Transport-level auth  (MCP SDK TokenVerifier protocol)
 # ---------------------------------------------------------------------------
@@ -75,6 +96,7 @@ class SpvTokenVerifier(TokenVerifier):
     async def verify_token(self, token: str) -> AccessToken | None:
         # Quick format check — real auth happens per-tool call.
         if not token.startswith(API_KEY_PREFIX) or len(token) < API_KEY_MIN_LENGTH:
+            await _audit_refused_key("api_key_invalid")
             return None
 
         # Stash the raw key -- tool-level auth will validate against DB.
@@ -102,7 +124,8 @@ async def resolve_key_owner(raw_key: str) -> tuple[int, int] | None:
     async with get_session_factory()() as session:
         try:
             user, api_key = await _api_key_svc.authenticate(session, raw_key)
-        except AppError:
+        except AppError as exc:
+            await _audit_refused_key(exc.code)
             return None
         await session.commit()
         return api_key.id, user.id
@@ -126,5 +149,8 @@ async def authenticate_mcp_tool(session: AsyncSession) -> tuple[User, ApiKey]:
     if raw_key is None:
         raise RuntimeError("MCP request has no API key in context -- not authenticated")
 
-    user, api_key = await _api_key_svc.authenticate(session, raw_key)
-    return user, api_key
+    try:
+        return await _api_key_svc.authenticate(session, raw_key)
+    except AppError as exc:
+        await _audit_refused_key(exc.code)
+        raise

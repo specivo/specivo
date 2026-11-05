@@ -665,6 +665,18 @@ class SecurityAuditService:
             details=merged_details,
         )
 
+    async def log_refused_mcp_key(self, session: AsyncSession, reason: str) -> SecurityAuditLog:
+        """Log an API key the MCP endpoint refused, written now with where the request came from."""
+        info = current_request_info()
+        return await self._persist(
+            session,
+            event_type=AuditEvent.AUTH_FAILURE,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details={"reason": reason, "source": "mcp"},
+        )
+
     async def log_login_success(
         self,
         session: AsyncSession,

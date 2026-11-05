@@ -43,7 +43,8 @@ request id and user agent of the call.
   the API writes nothing, and neither does a browser session that simply expired.
 - **Repeated refusals.** A credential that is presented and refused (a bad token, or an invalid,
   inactive or expired API key) is recorded as `auth_failure` once a minute per client address and
-  reason, not once per request.
+  reason, not once per request. API and MCP refusals are counted apart, and those from the MCP
+  endpoint are marked **MCP**.
 - **Anonymous reading** of public projects.
 
 ## Reading it
