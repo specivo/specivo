@@ -90,7 +90,6 @@ async def _create_page(ctx: PhaseContext, project_id: int, ir: IRWikiPage) -> Wi
         author,
         parent_slug=parent_slug,
         comments=(first.comments if first else None),
-        skip_link_rebuild=True,
         limit_text_length=False,
     )
 

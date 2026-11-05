@@ -268,7 +268,6 @@ class TestIdentifierQueries:
             "Release notes",
             "Fixed the login regression (IDRA-42) in this release.",
             world.member,
-            skip_link_rebuild=True,
         )
         await db_session.flush()
 

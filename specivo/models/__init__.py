@@ -7,6 +7,7 @@ from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
+from specivo.models.entity_link import EntityLink
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.issue_source_ref import IssueSourceRef
@@ -44,7 +45,7 @@ from specivo.models.user_group import UserGroup, UserGroupMember
 from specivo.models.version import Version
 from specivo.models.watcher import Watcher
 from specivo.models.webhook import Webhook, WebhookDelivery
-from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiPageLink, WikiRedirect
+from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 from specivo.models.workflow import WorkflowFieldRule, WorkflowTransition
 
 __all__ = [
@@ -96,6 +97,7 @@ __all__ = [
     "Tracker",
     "GroupPolicy",
     "EnabledModule",
+    "EntityLink",
     "ProjectKeyAlias",
     "Member",
     "MemberRole",
@@ -118,7 +120,6 @@ __all__ = [
     "Wiki",
     "WikiContent",
     "WikiPage",
-    "WikiPageLink",
     "WikiRedirect",
     "CredentialAuditLog",
     "ExternalSystem",
@@ -129,7 +130,8 @@ __all__ = [
     "WorkflowTransition",
 ]
 
-# Registers the session events that keep search chunks in step with content.
-# Imported here, after every model, so that any process that loads the models
-# (api, worker, CLI, tests) indexes the same way.
+# Registers the session events that keep search chunks and the entity link
+# graph in step with content. Imported here, after every model, so that any
+# process that loads the models (api, worker, CLI, tests) indexes the same way.
+import specivo.services.entity_link_index  # noqa: E402, F401
 import specivo.services.search_index_service  # noqa: E402, F401

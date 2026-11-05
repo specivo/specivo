@@ -63,6 +63,7 @@ import { kanbanScroll } from './components/kanban-scroll';
 import { wikiToc } from './components/wiki-toc';
 import { adminMetadataPresets } from './components/admin-metadata-presets';
 import { ftsReindex } from './components/fts-reindex';
+import { linkGraphRebuild } from './components/link-graph-rebuild';
 
 document.addEventListener('alpine:init', function () {
   Alpine.store('notifications', notifications);
@@ -128,4 +129,5 @@ document.addEventListener('alpine:init', function () {
   Alpine.data('wikiToc', wikiToc);
   Alpine.data('adminMetadataPresets', adminMetadataPresets);
   Alpine.data('ftsReindex', ftsReindex);
+  Alpine.data('linkGraphRebuild', linkGraphRebuild);
 });

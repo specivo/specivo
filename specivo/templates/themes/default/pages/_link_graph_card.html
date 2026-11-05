@@ -1,0 +1,93 @@
+{# "Link graph" card: figures, rebuild button, progress and last result.
+   Used on the project settings Search tab; `base_url` is the API prefix the
+   linkGraphRebuild component appends /rebuild/ and /rebuild/status/ to. #}
+{% macro link_graph_card(base_url, can_manage) -%}
+{% set i18n = {
+  "connectFailed": _("Unable to connect."),
+  "started": _("Rebuild started."),
+  "alreadyRunning": _("A rebuild is already running."),
+  "startFailed": _("Failed to start the rebuild."),
+  "complete": _("Rebuild complete."),
+  "failed": _("Rebuild failed."),
+  "wikiLinks": _("%(count)s wiki links"),
+  "mentions": _("%(count)s mentions"),
+  "attachmentLinks": _("%(count)s attachment links"),
+  "fromWiki": _("%(count)s from wiki pages"),
+  "fromIssues": _("%(count)s from issue descriptions"),
+  "fromComments": _("%(count)s from comments"),
+  "relations": _("%(count)s relations"),
+  "parents": _("%(count)s parent links"),
+  "attachments": _("%(count)s attachments"),
+  "sources": _("%(count)s sources"),
+  "edges": _("%(count)s links"),
+  "unresolved": _("%(count)s unresolved"),
+  "failedSources": _("%(count)s failed"),
+  "seconds": _("%(count)s s"),
+  "by": _("by %(user)s"),
+  "statusOk": _("OK"),
+  "statusPartial": _("Partly failed"),
+  "statusFailed": _("Failed"),
+  "justNow": _("just now"),
+  "minutesAgo": _("%(count)s min ago"),
+  "hoursAgo": _("%(count)s h ago"),
+  "daysAgo": _("%(count)s d ago")
+} %}
+<div class="card sp-link-graph-card"
+     x-data='linkGraphRebuild({ baseUrl: {{ base_url | tojson }}, canManage: {{ can_manage | tojson }}, i18n: {{ i18n | tojson }} })'
+     data-testid="link-graph-card">
+  <div class="sp-link-graph-head">
+    <div>
+      <h2 class="sp-link-graph-title">{% trans %}Link graph{% endtrans %}</h2>
+      <p class="sp-link-graph-intro">
+        {% trans %}Links written in wiki pages, issue descriptions and comments, kept up to date as they change. Rebuild after an import, or when links look out of date.{% endtrans %}
+      </p>
+    </div>
+    <button type="button" class="sp-btn sp-btn-ghost sp-btn-auto" @click="rebuild()"
+            x-show="canManage" :disabled="busy || starting" data-testid="link-graph-rebuild">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="sp-icon-14" :class="{ 'sp-spin': busy }" aria-hidden="true"><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/></svg>
+      <span x-show="!busy">{% trans %}Rebuild link graph{% endtrans %}</span>
+      <span x-show="busy">{% trans %}Rebuilding...{% endtrans %}</span>
+    </button>
+  </div>
+
+  <div class="sp-fts-status" x-show="busy" x-cloak>
+    <div class="sp-fts-progress-row">
+      <span class="sp-fts-spinner" aria-hidden="true"></span>
+      <span x-show="progressText"><span x-text="progressText"></span> {% trans %}sources processed{% endtrans %}</span>
+      <span x-show="!progressText">{% trans %}Starting...{% endtrans %}</span>
+    </div>
+  </div>
+
+  <div class="sp-backlinks-empty" x-show="empty" x-cloak data-testid="link-graph-empty">
+    {% trans %}No links indexed yet — run a rebuild.{% endtrans %}
+  </div>
+
+  <dl class="sp-link-graph-stats" x-show="loaded && !empty" x-cloak data-testid="link-graph-stats">
+    <dt>{% trans %}Text links{% endtrans %}</dt>
+    <dd><strong x-text="totalText"></strong> <span class="sp-link-graph-detail" x-text="kindSummary"></span></dd>
+    <dt>{% trans %}By source{% endtrans %}</dt>
+    <dd class="sp-link-graph-detail" x-text="sourceSummary"></dd>
+    <dt>{% trans %}Structured links{% endtrans %}</dt>
+    <dd class="sp-link-graph-detail" x-text="structuredSummary"></dd>
+    <dt>{% trans %}Unresolved links{% endtrans %}</dt>
+    <dd>
+      <strong x-text="unresolvedText"></strong>
+      <ul class="sp-link-graph-unresolved" x-show="topUnresolved.length">
+        <template x-for="item in topUnresolved" :key="item.target_type + item.kind + item.target_ref">
+          <li><code x-text="refFor(item)"></code> <span class="sp-link-graph-detail">× <span x-text="item.count"></span></span></li>
+        </template>
+      </ul>
+    </dd>
+    <dt>{% trans %}Last update{% endtrans %}</dt>
+    <dd class="sp-link-graph-detail" x-text="lastUpdateText"></dd>
+  </dl>
+
+  <div class="sp-fts-result" x-show="!busy && lastResult" x-cloak>
+    {% trans %}Last full rebuild:{% endtrans %}
+    <span :class="lastRebuildFailed ? 'sp-msg-danger' : ''" x-text="lastRebuildText"></span>
+  </div>
+
+  <div x-show="message" x-cloak class="sp-fts-result" role="status" aria-live="polite"
+       :class="messageError ? 'sp-msg-danger' : 'sp-msg-success'" x-text="message"></div>
+</div>
+{%- endmacro %}

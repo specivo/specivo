@@ -13,7 +13,6 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
-    func,
     text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -115,34 +114,3 @@ class WikiRedirect(Base):
     def __repr__(self) -> str:
         return f"<WikiRedirect id={self.id} from={self.title_from!r} to={self.redirected_to!r}>"
 
-
-class WikiPageLink(Base):
-    """A link between wiki pages, parsed from ``[[Page_Name]]`` syntax."""
-
-    __tablename__ = "wiki_page_links"
-
-    __table_args__ = (
-        UniqueConstraint("source_page_id", "target_slug", name="uq_wiki_page_links_source_slug"),
-        Index("ix_wiki_page_links_wiki_id", "wiki_id"),
-        Index("ix_wiki_page_links_target_page_id", "target_page_id"),
-        Index(
-            "ix_wiki_page_links_broken_target",
-            "wiki_id",
-            "target_slug",
-            postgresql_where=text("target_page_id IS NULL"),
-        ),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    wiki_id: Mapped[int] = mapped_column(ForeignKey("wikis.id", ondelete="CASCADE"), nullable=False)
-    source_page_id: Mapped[int] = mapped_column(ForeignKey("wiki_pages.id", ondelete="CASCADE"), nullable=False)
-    target_page_id: Mapped[int | None] = mapped_column(ForeignKey("wiki_pages.id", ondelete="SET NULL"), nullable=True)
-    target_slug: Mapped[str] = mapped_column(String(255), nullable=False)
-    display_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    def __repr__(self) -> str:
-        return (
-            f"<WikiPageLink id={self.id} source={self.source_page_id} "
-            f"target_slug={self.target_slug!r} target_page_id={self.target_page_id}>"
-        )

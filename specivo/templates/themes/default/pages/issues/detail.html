@@ -274,7 +274,7 @@
         {% if can_view_time_entries or can_log_time %}
         <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
         {% endif %}
-        <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
+        <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'; $dispatch('sp-show-tab-relations')" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}
         <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">{% trans %}Attachments{% endtrans %}</a>
         {% endif %}
@@ -517,6 +517,21 @@
             </div>
           </div>
         </div>
+        {% endif %}
+
+        {# Mentioned in: wiki pages, issues and comments that link to this issue.
+           Lazy-loaded on the first opening of the tab, so the page itself runs
+           no link query; a signed-in reader only, as for every partial. #}
+        {% if not anonymous %}
+        <section class="sp-mentions">
+          <h3 class="sp-mentions-title">{% trans %}Mentioned in{% endtrans %}</h3>
+          <div id="issue-mentions"
+               hx-get="/partials/issues/{{ issue.display_key }}/mentions/"
+               hx-trigger="sp-show-tab-relations from:body once"
+               hx-swap="innerHTML">
+            <div class="sp-backlinks-empty">{% trans %}Loading mentions…{% endtrans %}</div>
+          </div>
+        </section>
         {% endif %}
       </div>
 

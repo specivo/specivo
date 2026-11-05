@@ -38,12 +38,12 @@ from sqlalchemy.pool import NullPool
 from specivo.core.config import get_settings
 from specivo.core.database import _register_ltree_codec, set_engine
 from specivo.models.attachment import Attachment
+from specivo.models.entity_link import EntityLink
 from specivo.models.issue import Issue
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
 from specivo.models.search import ChunkEmbedding, EmbeddingModel, SearchChunk, SearchSource
 from specivo.models.user import User
-from specivo.models.wiki import WikiPageLink
 from specivo.schemas.search import SearchSourceType
 from specivo.services.wiki_service import WikiService
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
@@ -196,26 +196,25 @@ async def _make_user(session: AsyncSession, prefix: str) -> User:
 
 
 # ---------------------------------------------------------------------------
-# wiki_links — rebuild_wiki_page_links called twice in one process
+# entity_links — rebuild_entity_links called twice in one process
 # ---------------------------------------------------------------------------
 
 
 class TestWikiLinkTaskLoopReuse:
     async def test_rebuild_links_twice_in_sequence(self, real_db_session: AsyncSession) -> None:
-        """Calling the wiki-link rebuild task twice (each in its own new loop)
+        """Calling the link rebuild task twice (each in its own new loop)
         succeeds and rebuilds the link graph both times.
 
         Pre-fix this raised ``RuntimeError: Event loop is closed`` on the second
         call because the singleton pool's asyncpg connection was bound to the
         first (now-closed) loop.
         """
-        from specivo.tasks.wiki_links import rebuild_wiki_page_links
+        from specivo.tasks.entity_links import rebuild_entity_links
 
         wiki_service = WikiService()
         project = await _make_project(real_db_session, "TLR1")
         author = await _make_user(real_db_session, "tlr_wiki_author")
 
-        wiki = await wiki_service.get_or_create_wiki(real_db_session, project.id)
         page_a, _ = await wiki_service.create_page(real_db_session, project.id, "Page A", "Links to [[Page B]]", author)
         page_b, _ = await wiki_service.create_page(real_db_session, project.id, "Page B", "Body", author)
         await real_db_session.commit()
@@ -225,17 +224,17 @@ class TestWikiLinkTaskLoopReuse:
         # reusing the pooled asyncpg connection from loop 1 is what crashes on
         # the unfixed code.
         _run_in_worker_thread(
-            lambda: rebuild_wiki_page_links.run(wiki.id, page_a.id),
-            lambda: rebuild_wiki_page_links.run(wiki.id, page_a.id),
+            lambda: rebuild_entity_links.run([["wiki_page", page_a.id]]),
+            lambda: rebuild_entity_links.run([["wiki_page", page_a.id]]),
         )
 
         # The link graph was actually rebuilt (one [[Page B]] link, resolved).
         async with _fresh_read_session() as read:
-            result = await read.execute(select(WikiPageLink).where(WikiPageLink.source_page_id == page_a.id))
+            result = await read.execute(select(EntityLink).where(EntityLink.source_wiki_page_id == page_a.id))
             links = list(result.scalars().all())
         assert len(links) == 1
-        assert links[0].target_slug == "page-b"
-        assert links[0].target_page_id == page_b.id
+        assert links[0].target_ref == "page-b"
+        assert links[0].target_wiki_page_id == page_b.id
 
 
 # ---------------------------------------------------------------------------

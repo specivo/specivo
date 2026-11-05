@@ -46,3 +46,17 @@ that shows up on the other issue automatically — nine named links in all.
 
 In the **Relations** section, find the link you want to drop and remove it. The matching reverse link
 disappears from the other issue at the same time.
+
+## Mentioned in
+
+Below the relations, the **Relations** tab lists where the issue is **mentioned**: the wiki pages,
+issues and comments whose text links to it, grouped by kind. A mention is any of:
+
+- the issue's key, such as `ACME-42`, written in the text (not inside code);
+- a Markdown link to the issue's address, such as `[the bug](/issue/ACME-42/)`.
+
+Each row shows the page or issue, its project and, when the link has its own text, that text. A
+comment row opens the issue at that comment. The list is loaded when you open the tab, and it only
+shows what you can open yourself: mentions in a private issue, a private note or a wiki you can't read
+are left out. Unlike relations, mentions come from the text, so to remove one, edit the text that
+contains it.

@@ -239,6 +239,21 @@
       </template>
     </div>
     {% endif %}
+
+    {# Linked from: wiki pages, issues and comments that link to this page.
+       Collapsed by default and loaded on first opening, so reading a page
+       runs no link query; a signed-in reader only, as for every partial. #}
+    {% if not anonymous %}
+    <details class="sp-linked-from">
+      <summary class="sp-linked-from-summary">{% trans %}Linked from{% endtrans %}</summary>
+      <div id="wiki-backlinks"
+           hx-get="/partials/projects/{{ project.key }}/wiki/{{ wiki_page.slug }}/backlinks/"
+           hx-trigger="toggle from:closest details once"
+           hx-swap="innerHTML">
+        <div class="sp-backlinks-empty">{% trans %}Loading links…{% endtrans %}</div>
+      </div>
+    </details>
+    {% endif %}
   </div>
 
   {# Right sidebar: TOC + pages button #}
