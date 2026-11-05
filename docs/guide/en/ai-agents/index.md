@@ -24,8 +24,8 @@ Two things make this safe to hand to an agent:
 
 - **Permissions are enforced.** The agent acts as the user behind the key. A key from an account
   with no write role on a project can read but not change it. See [API keys & scopes](api-keys.md).
-- **Everything is audited.** Every write goes to the security audit log tagged `source=mcp`, so a
-  project manager can see exactly what an agent did and when. See [What agents can do](capabilities.md).
+- **Everything is audited.** Every MCP call goes to the security audit log tagged `source=mcp`, so
+  an administrator can see exactly what an agent did and when. See [What agents can do](capabilities.md).
 
 ## Two endpoints
 

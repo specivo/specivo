@@ -117,6 +117,9 @@ def _apply_lockout(user: User, new_count: int) -> None:
 
 
 _logger = logging.getLogger(__name__)
+#: Width of ``refresh_tokens.device_info``.
+_DEVICE_INFO_MAX = 255
+
 _EMAIL_TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates" / "_shared"
 _email_env = Environment(
     loader=FileSystemLoader(str(_EMAIL_TEMPLATES_DIR)),
@@ -950,6 +953,11 @@ class AuthService:
     # Helpers
     # ------------------------------------------------------------------
 
+    async def find_account(self, session: AsyncSession, login_or_email: str) -> User | None:
+        """The account a sign-in attempt names by login or email, if any; never a system principal."""
+        user = await self._find_user(session, login_or_email.strip().lower())
+        return None if user is None or user.is_system_principal else user
+
     async def _find_user(self, session: AsyncSession, normalized: str) -> User | None:
         """Find a user by login or email (both case-insensitive).
 
@@ -983,7 +991,8 @@ class AuthService:
         record = RefreshToken(
             user_id=user_id,
             token_hash=_hash_token(raw_token),
-            device_info=device_info,
+            # The client's User-Agent, cut to the column: a longer header must not fail the sign-in.
+            device_info=device_info[:_DEVICE_INFO_MAX] if device_info else None,
             ip_address=ip_address,
             session_id=uuid.uuid4(),
             auth_method="password",

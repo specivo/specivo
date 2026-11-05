@@ -22,7 +22,8 @@ pages, and connecting AI assistants. If you want to install and operate Specivo,
 - **Keep knowledge.** A per-project [wiki](wiki/index.md) with Markdown, full version history, and
   one-click revert. Cross-link pages and issues so decisions never get lost.
 - **Work with AI agents.** A built-in [MCP server](ai-agents/index.md) lets AI assistants read and
-  update issues, wiki pages, and search — safely, with every action recorded in an audit log.
+  update issues, wiki pages, and search — safely, with everything they do over MCP recorded in the
+  [audit log](install/audit-log.md). People's own edits are kept in issue and wiki history.
 
 ## New here?
 

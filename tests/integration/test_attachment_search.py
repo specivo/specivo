@@ -716,7 +716,7 @@ async def test_update_description_reindexes(
 
 
 # ---------------------------------------------------------------------------
-# Tests: audit logging (feature-gated)
+# Tests: audit logging
 # ---------------------------------------------------------------------------
 
 
@@ -729,7 +729,7 @@ async def test_attachment_upload_audit_logged(
     lookups: tuple[Tracker, IssueStatus, IssuePriority],
     mock_model: EmbeddingModel,
 ):
-    """Upload -> check security_audit_logs for attachment_uploaded event (if feature enabled)."""
+    """Upload -> check security_audit_logs for attachment_uploaded event."""
     tracker, _, _ = lookups
     issue = await _create_issue(authed_client, project.key, tracker.id, "Audit upload test")
     token = await _login(authed_client, search_user.login)
@@ -744,7 +744,6 @@ async def test_attachment_upload_audit_logged(
         description="file for audit logging test",
     )
 
-    # Check for audit event (feature-gated: may be empty if enterprise plugin not loaded)
     result = await db_session.execute(
         select(SecurityAuditLog).where(
             SecurityAuditLog.event_type == "attachment_uploaded",
@@ -752,12 +751,10 @@ async def test_attachment_upload_audit_logged(
         )
     )
     audit_logs = result.scalars().all()
-    # When the security_audit_log feature is enabled, we expect at least one event
-    # When it's not enabled (core-only), the list will be empty — that's acceptable
-    if audit_logs:
-        log = audit_logs[-1]
-        assert log.details["filename"] == "audited-file.txt"
-        assert log.user_id == search_user.id
+    assert audit_logs
+    log = audit_logs[-1]
+    assert log.details["filename"] == "audited-file.txt"
+    assert log.user_id == search_user.id
 
 
 @pytest.mark.asyncio
@@ -800,8 +797,10 @@ async def test_attachment_description_update_audit_logged(
         )
     )
     audit_logs = result.scalars().all()
-    if audit_logs:
-        log = audit_logs[-1]
-        assert log.details["old_description"] == "original description"
-        assert log.details["new_description"] == "updated description for audit test"
-        assert log.details["filename"] == "audit-update-file.txt"
+    assert audit_logs
+    log = audit_logs[-1]
+    assert log.details["had_description"] is True
+    assert log.details["has_description"] is True
+    assert "original description" not in str(log.details)
+    assert "updated description" not in str(log.details)
+    assert log.details["filename"] == "audit-update-file.txt"

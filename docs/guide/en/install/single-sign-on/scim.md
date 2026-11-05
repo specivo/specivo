@@ -273,7 +273,7 @@ memberships it made. Only people provisioned by the same provider can be SCIM me
 | `SCIM_MAX_BODY_BYTES` | `1048576` | Largest request body. Larger requests get `413`. |
 | `SCIM_MAX_RESULTS` | `200` | Most resources in one list response. |
 
-Every SCIM change is logged (`specivo.scim`) and, with the security audit log, recorded as
+Every SCIM change is logged (`specivo.scim`) and recorded in the [security audit log](../audit-log.md) as
 `scim_user_created`, `scim_user_updated`, `scim_user_deprovisioned`, `scim_group_created`,
 `scim_group_updated`, `scim_group_deleted` or `scim_request_refused`, with the provider as the
 source. Deactivations are also recorded as `user_deprovisioned` with the reason

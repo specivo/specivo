@@ -620,9 +620,7 @@ class AuditBatchMiddleware:
 
     After the response is produced, the middleware flushes all collected events in a
     single DB round-trip in a session of its own (from the ``get_db`` dependency, so a
-    test's override applies) — but **only** when the
-    ``security_audit_log`` feature is available (i.e. the enterprise plugin is loaded).
-    Without enterprise, events are silently discarded.
+    test's override applies).
 
     Errors during flush are logged as warnings but never fail the response.
     """
@@ -654,21 +652,10 @@ class AuditBatchMiddleware:
         finally:
             reset_audit_context(token)
 
-        # Flush collected audit events after the response — only when
-        # the enterprise plugin provides the security_audit_log feature.
+        # Flush collected audit events after the response.
         events = scope["state"].get("audit_events", [])
-        if events and self._enterprise_audit_enabled():
+        if events:
             await self._flush_events(events, scope.get("app"))
-
-    @staticmethod
-    def _enterprise_audit_enabled() -> bool:
-        """Return True if the security_audit_log feature is registered."""
-        try:
-            from specivo.core.features import has_feature
-
-            return has_feature("security_audit_log")
-        except (RuntimeError, ImportError):
-            return False
 
     async def _flush_events(self, events: list[dict], app: object = None) -> None:
         """Batch INSERT all collected audit events in a session of their own.
@@ -683,12 +670,12 @@ class AuditBatchMiddleware:
             from contextlib import asynccontextmanager
 
             from specivo.core.database import get_db
-            from specivo.models.security_audit import SecurityAuditLog
+            from specivo.services.security_audit_service import bounded_log
 
             overrides = getattr(app, "dependency_overrides", None) or {}
             provider = overrides.get(get_db, get_db)
             async with asynccontextmanager(provider)() as session:
-                session.add_all(SecurityAuditLog(**event_data) for event_data in events)
+                session.add_all(bounded_log(event_data) for event_data in events)
         except Exception:
             logger.warning("Batch audit flush failed", exc_info=True)
 

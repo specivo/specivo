@@ -507,31 +507,21 @@ async def check_permission(
     roles = await get_user_roles(session, user, project)
     granted = any(role.grants(permission) for role in roles)
 
-    # Audit logging (non-critical — never block permission checks).
-    # Events are collected in request.state.audit_events for batch INSERT
-    # by AuditBatchMiddleware after the response. The middleware uses its
-    # own session, so events survive outer transaction rollbacks (e.g. 403).
-    if request is not None:
+    # A refusal is audited (non-critical — never block permission checks); a
+    # grant is not, as it would be one row per page view. The event goes to
+    # request.state.audit_events, which AuditBatchMiddleware writes after the
+    # response in a session of its own, so it survives the 403's rollback.
+    if request is not None and not granted:
         try:
             from specivo.services.security_audit_service import SecurityAuditService
 
-            audit = SecurityAuditService()
-            if granted:
-                await audit.log_access_granted(
-                    session=session,
-                    user_id=user.id,
-                    request=request,
-                    project_id=project_id,
-                    permission=permission,
-                )
-            else:
-                await audit.log_access_denied(
-                    session=session,
-                    user_id=user.id,
-                    request=request,
-                    project_id=project_id,
-                    permission=permission,
-                )
+            await SecurityAuditService().log_access_denied(
+                session=session,
+                user_id=user.id,
+                request=request,
+                project_id=project_id,
+                permission=permission,
+            )
         except Exception:
             logger.warning("Security audit logging failed", exc_info=True)
 

@@ -1,15 +1,14 @@
 """Single sign-on events: one function per event, the single place each one is recorded.
 
-Each function writes one ``specivo.sso`` log line, in every edition, with the
-subject hashed (:func:`subject_hash`), never the raw ``sub``. The record also
-carries structured fields (``extra``): ``event`` (the ``AuditEvent`` value
+Each function writes one ``specivo.sso`` log line with the subject hashed
+(:func:`subject_hash`), never the raw ``sub``. The record also carries
+structured fields (``extra``): ``event`` (the ``AuditEvent`` value
 when there is one), ``request_id`` and ``audit`` (the audit details).
 
 Events that are security audit events are also recorded through
 :func:`specivo.services.security_audit_service.record_event` into the
-current request's audit buffer. That write is persisted only when the
-enterprise ``security_audit_log`` feature is registered, and a failure there
-is logged and never reaches the caller.
+current request's audit buffer. A failure there is logged and never
+reaches the caller.
 
 Audit details hold the provider slug, the issuer (``iss``) when the caller
 knows it, the hashed subject (``sub_hash``), ids and counts: never tokens,

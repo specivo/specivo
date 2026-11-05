@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+import json
+from datetime import date, datetime, time, timedelta
+from typing import Annotated, Any
+from urllib.parse import urlencode
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, Form, Request, Response
+from fastapi import APIRouter, Depends, Form, Query, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.config import get_settings
@@ -15,6 +19,14 @@ from specivo.models.user import User
 from specivo.models.user import User as UserModel
 from specivo.services.api_key_scope import is_global_admin
 from specivo.services.api_key_service import ApiKeyService
+from specivo.services.security_audit_service import (
+    EVENT_CATEGORIES,
+    AuditCategory,
+    AuditEvent,
+    SecurityAuditService,
+    events_in,
+    is_audit_event,
+)
 from specivo.services.settings_service import SettingsService
 from specivo.services.version_service import VersionService
 from specivo.services.workflow_service import WorkflowService
@@ -26,6 +38,7 @@ _settings_svc = SettingsService()
 _version_svc = VersionService()
 _workflow_svc = WorkflowService()
 _api_key_svc = ApiKeyService()
+_audit_svc = SecurityAuditService()
 
 
 # ---------------------------------------------------------------------------
@@ -938,5 +951,177 @@ async def admin_metadata_presets(
             "user": user,
             "active_page": "admin",
             "presets_data": presets_data,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Audit log
+# ---------------------------------------------------------------------------
+
+#: Without a "from" date the viewer shows this many days, which also lets
+#: PostgreSQL skip older partitions.
+AUDIT_LOG_DEFAULT_DAYS = 30
+
+
+def audit_category_labels() -> dict[AuditCategory, str]:
+    """The translated label of each audit category, in the order the filter lists them."""
+    from specivo.core.i18n import gettext as _
+
+    return {
+        AuditCategory.SIGN_IN: _("Sign-in"),
+        AuditCategory.ACCESS: _("Access"),
+        AuditCategory.AGENTS: _("Agents"),
+        AuditCategory.ISSUES_AND_WIKI: _("Issues and wiki"),
+        AuditCategory.ADMINISTRATION: _("Administration"),
+        AuditCategory.SSO: _("Single sign-on"),
+        AuditCategory.PROVISIONING: _("Provisioning"),
+        AuditCategory.SESSIONS: _("Sessions"),
+    }
+
+
+def _viewer_zone(user: User) -> ZoneInfo:
+    try:
+        return ZoneInfo(user.timezone or "UTC")
+    except (ZoneInfoNotFoundError, ValueError):
+        return ZoneInfo("UTC")
+
+
+def _parse_day(value: str) -> date | None:
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+@router.get("/admin/audit-log/", response_class=HTMLResponse)
+async def admin_audit_log(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    category: str = "",
+    event_type: str = "",
+    login: str = "",
+    project: str = "",
+    date_from: str | None = None,
+    date_to: str = "",
+    ip: str = "",
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+) -> Response:
+    """Render the security audit log with its filters (a plain GET form).
+
+    Dates are days in the viewer's timezone; ``date_to`` is inclusive.
+    Without ``date_from`` in the query the last 30 days are shown; an empty
+    ``date_from`` (the field cleared) means no lower bound.
+    """
+    from specivo.core.i18n import gettext as _
+    from specivo.models.project import Project
+
+    zone = _viewer_zone(user)
+    labels = audit_category_labels()
+    if date_from is None:
+        date_from = (datetime.now(zone).date() - timedelta(days=AUDIT_LOG_DEFAULT_DAYS)).isoformat()
+    filters = {
+        "category": category.strip(),
+        "event_type": event_type.strip(),
+        "login": login.strip(),
+        "project": project.strip(),
+        "date_from": date_from.strip(),
+        "date_to": date_to.strip(),
+        "ip": ip.strip(),
+    }
+
+    errors: list[str] = []
+    event_types: list[str] | None = None
+    if filters["category"]:
+        if filters["category"] in AuditCategory.__members__.values():
+            event_types = events_in(AuditCategory(filters["category"]))
+        else:
+            errors.append(_("Unknown category."))
+    if filters["event_type"] and not is_audit_event(filters["event_type"]):
+        errors.append(_("Unknown event type."))
+    user_id: int | None = None
+    if filters["login"]:
+        user_id = await _audit_svc.user_id_for_login(db, filters["login"])
+        if user_id is None:
+            errors.append(_("No user has this login."))
+    project_id: int | None = None
+    if filters["project"]:
+        project_id = await db.scalar(select(Project.id).where(func.upper(Project.key) == filters["project"].upper()))
+        if project_id is None:
+            errors.append(_("No project has this key."))
+    after = before = None
+    if filters["date_from"]:
+        day = _parse_day(filters["date_from"])
+        if day is None:
+            errors.append(_("The from date is not a valid date."))
+        else:
+            after = datetime.combine(day, time.min, tzinfo=zone)
+    if filters["date_to"]:
+        day = _parse_day(filters["date_to"])
+        if day is None:
+            errors.append(_("The to date is not a valid date."))
+        else:
+            before = datetime.combine(day + timedelta(days=1), time.min, tzinfo=zone)
+    if len(filters["ip"]) > 45:
+        errors.append(_("The IP address is too long."))
+
+    rows: list[dict[str, Any]] = []
+    total = 0
+    if not errors:
+        items, total = await _audit_svc.list_events(
+            db,
+            event_type=filters["event_type"] or None,
+            event_types=event_types,
+            user_id=user_id,
+            project_id=project_id,
+            ip_address=filters["ip"] or None,
+            after=after,
+            before=before,
+            offset=offset,
+            limit=limit,
+        )
+        logins, keys = await _audit_svc.names_for(db, items)
+        for item in items:
+            event = AuditEvent(item.event_type) if is_audit_event(item.event_type) else None
+            rows.append(
+                {
+                    "created_at": item.created_at,
+                    "event_type": item.event_type,
+                    "category": labels[EVENT_CATEGORIES[event]] if event is not None else "",
+                    "user_id": item.user_id,
+                    "user_login": logins.get(item.user_id) if item.user_id is not None else None,
+                    "project_id": item.project_id,
+                    "project_key": keys.get(item.project_id) if item.project_id is not None else None,
+                    "resource_type": item.resource_type,
+                    "resource_id": item.resource_id,
+                    "permission": item.permission,
+                    "ip_address": item.ip_address,
+                    "user_agent": item.user_agent,
+                    "request_id": item.request_id,
+                    "from_agent": (item.details or {}).get("source") == "mcp",
+                    # Rendered escaped in a <pre>, never as Markdown or HTML.
+                    "details_json": json.dumps(item.details or {}, indent=2, ensure_ascii=False, sort_keys=True),
+                }
+            )
+
+    templates = get_templates()
+    return templates.TemplateResponse(
+        request,
+        "pages/admin/audit_log.html",
+        context={
+            "user": user,
+            "active_page": "admin",
+            "filters": filters,
+            "errors": errors,
+            "categories": list(labels.items()),
+            "event_types": sorted(e.value for e in AuditEvent),
+            "rows": rows,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "zone": zone.key,
+            "page_query": urlencode({k: v for k, v in filters.items() if v or k == "date_from"}),
         },
     )
