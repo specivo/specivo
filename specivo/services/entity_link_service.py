@@ -61,6 +61,7 @@ from specivo.models.project import EnabledModule, Project, ProjectKeyAlias
 from specivo.models.relation import IssueRelation
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
+from specivo.services.api_key_scope import admin_reaches, is_global_admin
 from specivo.services.markdown_service import FoundLink, extract_links
 
 logger = logging.getLogger(__name__)
@@ -806,6 +807,7 @@ class EntityLinkService:
                     via_journal_id=link.source_journal_id,
                     broken_ref=None if target is not None else _broken_ref(link),
                     broken_project_id=link.target_project_id,
+                    broken_target_type=link.target_type,
                 )
             )
         return edges
@@ -897,9 +899,10 @@ class _RawEdge:
     label: str | None = None
     relation_type: str | None = None
     via_journal_id: int | None = None
-    # For a link whose target does not exist: what it names.
+    # For a link whose target does not exist: what it names, of which type, in which project.
     broken_ref: str | None = None
     broken_project_id: int | None = None
+    broken_target_type: str | None = None
 
 
 @dataclass(slots=True)
@@ -1000,6 +1003,9 @@ class _Reader:
         self._attachments: dict[int, bool] = {}
         self._commits: dict[int, bool] = {}
         self._pull_requests: dict[int, bool] = {}
+        self._issue_projects: set[int] = set()
+        self._wiki_projects: set[int] = set()
+        self._scopes_loaded: set[int] = set()
 
     async def filter(self, edges: list[_RawEdge]) -> list[_RawEdge]:
         nodes: dict[str, set[int]] = defaultdict(set)
@@ -1017,13 +1023,61 @@ class _Reader:
         await self._load_pages(nodes.get("wiki_page", set()))
         await self._load_development("commit", nodes.get("commit", set()))
         await self._load_development("pull_request", nodes.get("pull_request", set()))
+        await self._load_broken_scopes({e.broken_project_id for e in edges if e.broken_ref is not None})
         return [
             e
             for e in edges
             if (e.source is None or self.visible(e.source))
-            and (e.target is None or self.visible(e.target))
+            and (e.target is not None and self.visible(e.target) or e.target is None and self._broken_visible(e))
             and (e.via_journal_id is None or self._journals.get(e.via_journal_id, False))
         ]
+
+    def _broken_visible(self, edge: _RawEdge) -> bool:
+        """Whether a link to a missing target may be shown: only where the reader could see the target.
+
+        A missing ``ACME-99`` is shown only to a reader who may view issues
+        in ACME, and a missing wiki page only to one who may read ACME's wiki.
+        Anyone else would otherwise learn that the project exists (a key of
+        an unknown project is never stored) or, by comparing with the links
+        to its existing issues, which are left out, which of them exist. So
+        for them a missing target is left out exactly like a hidden one. An
+        attachment named by id has no project to judge by and is left out.
+        """
+        if edge.broken_ref is None:
+            return False
+        if is_global_admin(self.user):
+            return True
+        project_id = edge.broken_project_id
+        if project_id is None:
+            return False
+        if edge.broken_target_type == TARGET_ISSUE:
+            return project_id in self._issue_projects
+        if edge.broken_target_type == TARGET_WIKI_PAGE:
+            return project_id in self._wiki_projects
+        return project_id in self._issue_projects or project_id in self._wiki_projects
+
+    async def _load_broken_scopes(self, project_ids: set[int | None]) -> None:
+        """Record in which of *project_ids* the reader may view issues, and read the wiki."""
+        from specivo.services.permission_service import Permission, projects_granting
+
+        wanted = {p for p in project_ids if p is not None} - self._scopes_loaded
+        if not wanted or is_global_admin(self.user):
+            return
+        projects = list((await self.session.execute(select(Project).where(Project.id.in_(wanted)))).scalars())
+        self._issue_projects |= await projects_granting(self.session, self.user, projects, Permission.VIEW_ISSUES)
+        wiki_enabled = set(
+            (
+                await self.session.execute(
+                    select(EnabledModule.project_id).where(
+                        EnabledModule.project_id.in_(wanted), EnabledModule.name == "wiki"
+                    )
+                )
+            ).scalars()
+        )
+        self._wiki_projects |= wiki_enabled & await projects_granting(
+            self.session, self.user, projects, Permission.VIEW_WIKI
+        )
+        self._scopes_loaded |= wanted
 
     def visible(self, node: NodeKey) -> bool:
         node_type, node_id = node
@@ -1075,14 +1129,16 @@ class _Reader:
         ids = ids - self._journals.keys()
         if not ids:
             return
-        # Private notes are shown to admins only, as on the issue page and in the API.
-        private = set(
-            (await self.session.execute(select(Journal.id).where(Journal.id.in_(ids), Journal.is_private.is_(True))))
-            .scalars()
-            .all()
-        )
+        # Private notes are shown to admins only, as on the issue page and in
+        # the API, and to an admin's project-limited key only in its projects.
+        private: dict[int, int] = {
+            journal_id: project_id
+            for journal_id, project_id in await self.session.execute(
+                select(Journal.id, Journal.project_id).where(Journal.id.in_(ids), Journal.is_private.is_(True))
+            )
+        }
         for journal_id in ids:
-            self._journals[journal_id] = self.user.is_admin or journal_id not in private
+            self._journals[journal_id] = journal_id not in private or admin_reaches(self.user, private[journal_id])
 
     async def _load_attachments(self, ids: set[int]) -> None:
         ids = ids - self._attachments.keys()
@@ -1099,14 +1155,14 @@ class _Reader:
             )
         ).all()
         journal_ids = {cid for _, ctype, cid in rows if ctype == "Journal"}
-        journal_parent: dict[int, tuple[int | None, int | None, bool]] = {}
+        journal_parent: dict[int, tuple[int | None, int, bool]] = {}
         if journal_ids:
-            for jid, issue_id, page_id, is_private in await self.session.execute(
-                select(Journal.id, Journal.issue_id, Journal.wiki_page_id, Journal.is_private).where(
+            for jid, issue_id, project_id, is_private in await self.session.execute(
+                select(Journal.id, Journal.issue_id, Journal.project_id, Journal.is_private).where(
                     Journal.id.in_(journal_ids)
                 )
             ):
-                journal_parent[jid] = (issue_id, page_id, is_private)
+                journal_parent[jid] = (issue_id, project_id, is_private)
         await self._load_issues(
             {cid for _, ctype, cid in rows if ctype == "Issue"}
             | {p[0] for p in journal_parent.values() if p[0] is not None}
@@ -1118,13 +1174,16 @@ class _Reader:
             elif ctype == "WikiPage":
                 ok = self._pages.get(cid, False)
             elif ctype == "Journal" and cid in journal_parent:
-                issue_id, _page_id, is_private = journal_parent[cid]
-                # Files on wiki comments stay admin-only, as for downloads.
-                ok = (
-                    issue_id is not None
-                    and self._issues.get(issue_id, False)
-                    and (not is_private or self.user.is_admin)
-                ) or self.user.is_admin
+                issue_id, journal_project_id, is_private = journal_parent[cid]
+                # As for downloads (``AttachmentService.can_view_container``):
+                # a comment's file follows its issue, a private note's is for
+                # admins only, and files on wiki comments are for admins only;
+                # an admin's project-limited key reaches only its projects.
+                admin = admin_reaches(self.user, journal_project_id)
+                if issue_id is None:
+                    ok = admin
+                else:
+                    ok = self._issues.get(issue_id, False) and (not is_private or admin)
             else:
                 ok = False
             self._attachments[attachment_id] = ok

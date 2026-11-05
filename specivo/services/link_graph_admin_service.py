@@ -122,7 +122,10 @@ async def run_full_rebuild(
             await progress(min(i + LINK_REBUILD_BATCH, total), total)
 
     async with factory() as session:
-        stats = await edge_counts(session, project_id)
+        # Links into the project itself: the summary is shown to anyone who
+        # manages it, who may not see the projects other links point into.
+        inside = None if project_id is None else EntityLink.target_project_id == project_id
+        stats = await edge_counts(session, project_id, inside)
         summary: dict[str, Any] = {
             "status": "success" if not failures else "partial",
             "started_at": started_at,
@@ -174,11 +177,60 @@ def _scope(project_id: int | None) -> Any:
     return true() if project_id is None else EntityLink.source_project_id == project_id
 
 
-async def edge_counts(session: AsyncSession, project_id: int | None) -> dict[str, Any]:
+async def visible_targets_clause(session: AsyncSession, user: User, project_id: int | None) -> Any:
+    """Narrow the scope's links to those whose target project *user* could see.
+
+    What is stored depends on what exists elsewhere: a key of an unknown
+    project is never stored, and a link to an existing issue is resolved
+    while one to a missing issue is not. So a count, or a list of unresolved
+    refs, over links into a project the viewer cannot see would tell them
+    which projects and issues exist there. Kept: links into the scope's own
+    project; issue targets in projects where *user* may view issues, wiki
+    targets where they may read the wiki, attachment filenames where either.
+    An attachment named by id has no project and counts for global admins
+    only.
+    """
+    from specivo.models.project import EnabledModule, Project
+    from specivo.services.api_key_scope import is_global_admin
+    from specivo.services.permission_service import Permission, projects_granting
+
+    if is_global_admin(user):
+        return true()
+    target_ids = set(
+        (
+            await session.execute(
+                select(EntityLink.target_project_id)
+                .where(_scope(project_id), EntityLink.target_project_id.is_not(None))
+                .distinct()
+            )
+        ).scalars()
+    )
+    projects = list((await session.execute(select(Project).where(Project.id.in_(target_ids)))).scalars())
+    issue_ok = await projects_granting(session, user, projects, Permission.VIEW_ISSUES)
+    wiki_enabled = set(
+        (
+            await session.execute(
+                select(EnabledModule.project_id).where(
+                    EnabledModule.project_id.in_(target_ids), EnabledModule.name == "wiki"
+                )
+            )
+        ).scalars()
+    )
+    wiki_ok = wiki_enabled & await projects_granting(session, user, projects, Permission.VIEW_WIKI)
+    return or_(
+        EntityLink.target_project_id == project_id if project_id is not None else false(),
+        and_(EntityLink.target_type == "issue", EntityLink.target_project_id.in_(issue_ok)),
+        and_(EntityLink.target_type == "wiki_page", EntityLink.target_project_id.in_(wiki_ok)),
+        and_(EntityLink.target_type == "attachment", EntityLink.target_project_id.in_(issue_ok | wiki_ok)),
+    )
+
+
+async def edge_counts(session: AsyncSession, project_id: int | None, targets: Any = None) -> dict[str, Any]:
     """Stored text links of the scope: total, unresolved, by kind, by source type, and the newest write.
 
     One ``GROUP BY`` over ``entity_links`` narrowed by the indexed
-    ``source_project_id``.
+    ``source_project_id``, and by *targets* (``visible_targets_clause``)
+    when given.
     """
     rows = (
         await session.execute(
@@ -189,7 +241,7 @@ async def edge_counts(session: AsyncSession, project_id: int | None) -> dict[str
                 func.count().filter(_UNRESOLVED),
                 func.max(EntityLink.created_at),
             )
-            .where(_scope(project_id))
+            .where(_scope(project_id), true() if targets is None else targets)
             .group_by(EntityLink.source_type, EntityLink.kind)
         )
     ).all()
@@ -238,15 +290,21 @@ async def structured_counts(session: AsyncSession, project_id: int | None) -> di
     }
 
 
-async def top_unresolved(session: AsyncSession, user: User, project_id: int | None) -> list[dict[str, Any]]:
+async def top_unresolved(
+    session: AsyncSession, user: User, project_id: int | None, targets: Any = None
+) -> list[dict[str, Any]]:
     """The most frequent unresolved targets, counted only over texts *user* may read.
 
     A target ref is raw text from its source, so a link written in an issue,
     comment or wiki page the viewer could not open is left out: an issue
     outside ``visible_issues_clause``, a private note for anyone but an
-    admin, a wiki page without ``view_wiki``.
+    admin (whose project-limited key reaches only its projects), a wiki page
+    without ``view_wiki``. Only targets *targets* keeps are listed
+    (``visible_targets_clause``), so the list never tells which issues or
+    projects exist where the viewer cannot look.
     """
     from specivo.models.project import Project
+    from specivo.services.api_key_scope import admin_reaches, is_global_admin
     from specivo.services.issue_service import IssueService
     from specivo.services.permission_service import Permission, projects_granting
 
@@ -258,6 +316,7 @@ async def top_unresolved(session: AsyncSession, user: User, project_id: int | No
     )
     wiki_projects = await projects_granting(session, user, projects, Permission.VIEW_WIKI)
 
+    private_notes = is_global_admin(user) if project_id is None else admin_reaches(user, project_id)
     journal = Journal.__table__.alias("link_journal")
     page = WikiPage.__table__.alias("link_page")
     page_wiki = Wiki.__table__.alias("link_page_wiki")
@@ -281,7 +340,8 @@ async def top_unresolved(session: AsyncSession, user: User, project_id: int | No
             _scope(project_id),
             _UNRESOLVED,
             or_(issue_branch, wiki_branch),
-            or_(journal.c.id.is_(None), journal.c.is_private.is_(False), true() if user.is_admin else false()),
+            or_(journal.c.id.is_(None), journal.c.is_private.is_(False), true() if private_notes else false()),
+            true() if targets is None else targets,
         )
         .group_by(EntityLink.target_type, EntityLink.target_ref, EntityLink.kind)
         .order_by(func.count().desc(), EntityLink.target_ref)
@@ -296,13 +356,17 @@ async def top_unresolved(session: AsyncSession, user: User, project_id: int | No
 async def project_stats(session: AsyncSession, user: User, project_id: int | None) -> dict[str, Any]:
     """The figures of the "Link graph" card: stored text links, structured links, unresolved targets, last rebuild.
 
+    Link counts and unresolved targets only cover links whose target project
+    *user* could see (``visible_targets_clause``).
+
     "Sources indexed vs total" is not reported: a source without links stores
     no row, so an indexed source cannot be told from a missed one.
     """
-    edges = await edge_counts(session, project_id)
+    targets = await visible_targets_clause(session, user, project_id)
+    edges = await edge_counts(session, project_id, targets)
     return {
         **edges,
         "structured": await structured_counts(session, project_id),
-        "top_unresolved": await top_unresolved(session, user, project_id),
+        "top_unresolved": await top_unresolved(session, user, project_id, targets),
         "last_rebuild": await last_result(session, project_id),
     }
