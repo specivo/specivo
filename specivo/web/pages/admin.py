@@ -235,6 +235,7 @@ def _account_messages() -> dict[str, str]:
             "Account reactivated. The user can sign in again. API keys stay inactive: "
             "activate them again or create new ones."
         ),
+        "email_changed": _("Email address changed. A notice went to the old and the new address."),
     }
 
 
@@ -244,6 +245,9 @@ def _account_errors() -> dict[str, str]:
     return {
         "self": _("You cannot deactivate your own account."),
         "last_admin": _("This is the last active administrator. Make another user an administrator first."),
+        "email_invalid": _("Enter a valid email address."),
+        "email_same": _("This is already the user's email address."),
+        "email_taken": _("A user with this email already exists"),
     }
 
 
@@ -294,6 +298,32 @@ async def admin_reactivate_user(
     await UserService().reactivate(db, target, actor_id=user.id)
     await db.commit()
     return _user_page_redirect(user_id, "reactivated")
+
+
+@router.post("/admin/users/{user_id}/email/", response_model=None)
+async def admin_change_user_email(
+    user_id: int,
+    user: Annotated[User, Depends(require_admin_session)],
+    db: AsyncSession = DB_SESSION,
+    email: Annotated[str, Form(max_length=320)] = "",
+) -> RedirectResponse:
+    """Change an account's address directly (set and marked verified); audited, both addresses notified.
+
+    Session-only like the API route: the address receives password reset links.
+    """
+    from specivo.core.exceptions import AppError, ConflictError
+    from specivo.services.email_change_service import EmailChangeService
+
+    target = await _target_or_404(db, user_id)
+    try:
+        await EmailChangeService().admin_set_email(db, target, email, admin=user)
+    except ConflictError:
+        return _user_page_redirect(user_id, "email_taken")
+    except AppError as exc:
+        same = exc.code == "email_change_same_address"
+        return _user_page_redirect(user_id, "email_same" if same else "email_invalid")
+    await db.commit()
+    return _user_page_redirect(user_id, "email_changed")
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,57 @@
+{% extends "base_standalone.html" %}
+
+{% block title %}{% trans %}Confirm email address{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="login-page">
+  <div class="login-brand">
+    <svg viewBox="0 0 40 40" fill="none" style="width:48px;height:48px;">
+      <circle cx="18" cy="18" r="14" stroke="#5a5770" stroke-width="1.5" fill="none"/>
+      <line x1="28" y1="28" x2="37" y2="37" stroke="#5a5770" stroke-width="2.2" stroke-linecap="round"/>
+      <path d="M18 12 L7 17.5 L18 23 L29 17.5 Z" fill="var(--sp-accent)"/>
+      <path d="M7 21 L18 26.5 L29 21" stroke="#8a8698" stroke-width="1.2" fill="none"/>
+      <path d="M7 24 L18 29.5 L29 24" stroke="#6b6880" stroke-width="1.2" fill="none"/>
+    </svg>
+    <h1>{{ brand_name }}</h1>
+    <p style="font-size:var(--sp-font-size-md);color:var(--sp-text-sidebar);opacity:0.8;">{% trans %}Confirm email address{% endtrans %}</p>
+  </div>
+
+  <div class="login-card" style="text-align:center;">
+    {% if error_text %}
+    <div style="font-size:var(--sp-font-size-lg);font-weight:600;color:var(--sp-text-primary);margin-bottom:var(--sp-space-sm);">
+      {% trans %}The address was not changed{% endtrans %}
+    </div>
+    <div role="alert" style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-xl);line-height:1.5;">
+      {{ error_text }}
+    </div>
+    <a href="/my/profile/" class="sp-btn-login" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+      {% trans %}Go to your profile{% endtrans %}
+    </a>
+    {% elif done %}
+    <div role="status" style="font-size:var(--sp-font-size-lg);font-weight:600;color:var(--sp-text-primary);margin-bottom:var(--sp-space-sm);">
+      {% trans %}Your email address was changed{% endtrans %}
+    </div>
+    <div style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-xl);line-height:1.5;">
+      {% trans address=new_email %}Your account now uses %(address)s. Your other sessions were signed out.{% endtrans %}
+    </div>
+    <a href="/login/" class="sp-btn-login" style="display:inline-flex;align-items:center;justify-content:center;text-decoration:none;">
+      {% trans %}Continue{% endtrans %}
+    </a>
+    {% else %}
+    <div style="font-size:var(--sp-font-size-sm);color:var(--sp-text-muted);margin-bottom:var(--sp-space-lg);line-height:1.5;">
+      {% trans %}Use this address for your account from now on:{% endtrans %}
+    </div>
+    <div class="sp-email-change-address" style="margin-bottom:var(--sp-space-xl);">{{ new_email }}</div>
+    <form method="post" action="/confirm-email/">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="token" value="{{ token }}">
+      <button type="submit" class="sp-btn-login">{% trans %}Confirm email address{% endtrans %}</button>
+    </form>
+    {% endif %}
+  </div>
+
+  <div class="login-footer">
+    <a href="/login/">{% trans %}Back to login{% endtrans %}</a>
+  </div>
+</div>
+{% endblock %}

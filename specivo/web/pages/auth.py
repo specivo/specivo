@@ -240,21 +240,29 @@ async def profile_page(
     sso_linked: str = Query(""),  # noqa: B008
     sso_unlinked: str = Query(""),  # noqa: B008
     sso_error: str = Query(""),  # noqa: B008
+    email: str = Query(""),  # noqa: B008
+    email_error: str = Query(""),  # noqa: B008
+    email_reauth: str = Query(""),  # noqa: B008
 ) -> Response:
-    """Render the user profile page, with its "Connected accounts" section.
+    """Render the user profile page, with its "Email address" and "Connected accounts" sections.
 
     ``?sso_linked=``, ``?sso_unlinked=`` and ``?sso_error=`` are where the
-    connect and disconnect flows land; each selects a fixed, translated
-    message and is never reflected.
+    connect and disconnect flows land, ``?email=``, ``?email_error=`` and
+    ``?email_reauth=`` where the email change forms and the reauth flow do;
+    each selects a fixed, translated message and is never reflected.
     """
     from specivo.web.pages.connected_accounts import profile_connected_accounts
+    from specivo.web.pages.email_change import profile_email_context
 
     connected = await profile_connected_accounts(db, user, linked=sso_linked, unlinked=sso_unlinked, error=sso_error)
+    email_section = await profile_email_context(
+        request, db, user, outcome=email, error=email_error, reauthenticated=email_reauth
+    )
     templates = get_templates()
     return templates.TemplateResponse(
         request,
         "pages/auth/profile.html",
-        context={"user": user, "active_page": "profile", **connected},
+        context={"user": user, "active_page": "profile", **connected, **email_section},
     )
 
 

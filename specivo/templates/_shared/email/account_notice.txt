@@ -1,0 +1,6 @@
+{{ greeting }}
+{% for paragraph in paragraphs %}
+{{ paragraph }}
+{% if action_url and loop.index == action_after %}
+{{ action_url }}
+{% endif %}{% endfor %}

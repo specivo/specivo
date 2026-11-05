@@ -13,6 +13,7 @@ marker.
 **Revised:** 2026-10-31 — recorded the SSO session check at the IdP and its session columns (§7).
 **Revised:** 2026-11-05 — recorded that metadata schemas and workflow field rules judge the change a
 write makes, not the state of the issue (§6).
+**Revised:** 2026-11-05 — recorded the email change audit events and what their details hold (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -554,6 +555,14 @@ and schema names), enum values and codes, counts, flags, logins of accounts, gro
 comment, wiki or description body text; claim sets; request facts that have columns of their own
 (`request_id`, `user_agent`). The admin viewer (`/admin/audit-log/`) shows `details` as escaped JSON, never
 rendered as Markdown or HTML.
+
+**Email change events.** `EMAIL_CHANGE_REQUESTED` (details: `new_email`, `address_in_use`, `resend`),
+`EMAIL_CHANGE_FAILED` (`reason`, the error code) and `EMAIL_CHANGED` (`by` = `user` or `admin`,
+`target_user_id`, `target_login`, `old_email`, `new_email`; the person's own change adds
+`revoked_sessions`) are written by `EmailChangeService` (`specivo.services.email_change_service`), the
+one path for the profile page, `/api/v1/auth/me/email/` and the admin routes. They are the only events
+whose details hold email addresses, because the old and new address are the evidence of the change. A
+confirmation link that matches no request is not audited.
 
 **Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
 configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line

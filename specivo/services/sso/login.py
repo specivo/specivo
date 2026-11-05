@@ -27,6 +27,16 @@ authenticate the person again (``prompt=login``, ``max_age=0``) and must be fini
 the browser still signed in as that user; step 6 then links the identity and
 step 7 is skipped: the user's existing sessions stay, no new one starts.
 
+A **reauth** transaction (``intent="reauth"``, :meth:`SsoLoginService.start_reauth`)
+is how a signed-in person without a password proves it is them before
+changing their email address: the IdP authenticates them again
+(``prompt=login``, ``max_age=0``), the browser must still be signed in as
+the user who started it, and the identity that comes back must be that
+user's at this provider (:func:`specivo.services.sso.provisioning.confirm_reauth`,
+``sso_reauth_mismatch`` otherwise). Nothing is linked, mapped or updated and
+no session starts; the route records the fresh sign-in for the email change
+(:func:`specivo.services.email_change_service.mark_recent_reauth`).
+
 No session row exists unless every step passed. The IdP's access token is
 used for userinfo only and never stored. Its refresh token is kept, sealed,
 on the session row when the provider re-checks sessions at the IdP
@@ -52,18 +62,19 @@ from specivo.services.sso.errors import (
     SsoError,
     SsoIdpRefusedError,
     SsoProviderAlreadyLinkedError,
+    SsoReauthMismatchError,
     SsoStateInvalidError,
     SsoTokenInvalidError,
     TokenRejection,
 )
-from specivo.services.sso.flow import AuthorizationRequest, LoginTransaction, begin, complete
+from specivo.services.sso.flow import FRESH_SIGN_IN_INTENTS, AuthorizationRequest, LoginTransaction, begin, complete
 from specivo.services.sso.id_token import verify_id_token
 from specivo.services.sso.log import logger, sanitize_idp_text
-from specivo.services.sso.provisioning import resolve_user, subject_hash
+from specivo.services.sso.provisioning import confirm_reauth, resolve_user, subject_hash
 from specivo.services.sso.session_check import seal_sign_in_refresh_token
 from specivo.services.sso.tokens import exchange_code, fetch_userinfo
 
-__all__ = ["LINK_RETURN_PATH", "SsoLinkResult", "SsoLoginResult", "SsoLoginService"]
+__all__ = ["LINK_RETURN_PATH", "SsoLinkResult", "SsoLoginResult", "SsoLoginService", "SsoReauthResult"]
 
 #: Where a link flow starts from and returns to.
 LINK_RETURN_PATH = "/my/profile/"
@@ -88,6 +99,15 @@ class SsoLoginResult:
 @dataclass(frozen=True)
 class SsoLinkResult:
     """A finished link: the identity is connected to the signed-in user; no new session."""
+
+    user_id: int
+    identity_id: int
+    provider_slug: str
+
+
+@dataclass(frozen=True)
+class SsoReauthResult:
+    """A finished reauth: the signed-in user authenticated again at the IdP; no new session."""
 
     user_id: int
     identity_id: int
@@ -131,6 +151,20 @@ class SsoLoginService:
         metadata = await get_provider_metadata(provider)
         return await begin(provider, metadata, intent="link", next_path=LINK_RETURN_PATH, user_id=user_id)
 
+    async def start_reauth(self, db: AsyncSession, provider: SsoProvider, *, user_id: int) -> AuthorizationRequest:
+        """Begin a reauth transaction for the signed-in ``user_id`` at a provider they are connected to.
+
+        Refused up front with ``sso_reauth_mismatch`` when the user has no
+        identity at ``provider``.
+        """
+        existing = await db.scalar(
+            select(UserIdentity.id).where(UserIdentity.user_id == user_id, UserIdentity.provider_id == provider.id)
+        )
+        if existing is None:
+            raise SsoReauthMismatchError("no_identity_at_provider")
+        metadata = await get_provider_metadata(provider)
+        return await begin(provider, metadata, intent="reauth", next_path=LINK_RETURN_PATH, user_id=user_id)
+
     async def finish(
         self,
         db: AsyncSession,
@@ -141,12 +175,12 @@ class SsoLoginService:
         device_info: str | None = None,
         ip: str | None = None,
         current_user_id: Callable[[], Awaitable[int | None]] | None = None,
-    ) -> SsoLoginResult | SsoLinkResult:
+    ) -> SsoLoginResult | SsoLinkResult | SsoReauthResult:
         """Run the callback for ``provider`` with the query ``params``; raises an ``SsoError`` on refusal.
 
         ``current_user_id`` returns the user this browser is signed in as; it
-        is called only for a link transaction, which that user must have
-        started.
+        is called only for a link or reauth transaction, which that user must
+        have started.
         """
         tx = await complete(state=params.get("state"), binding_token=binding_token)
         try:
@@ -167,7 +201,7 @@ class SsoLoginService:
         device_info: str | None,
         ip: str | None,
         current_user_id: Callable[[], Awaitable[int | None]] | None,
-    ) -> SsoLoginResult | SsoLinkResult:
+    ) -> SsoLoginResult | SsoLinkResult | SsoReauthResult:
         if tx.provider_id != provider.id or tx.issuer != provider.issuer:
             logger.warning(
                 "sso.callback.rejected provider=%s reason=provider_mismatch started_at=%s",
@@ -176,11 +210,11 @@ class SsoLoginService:
             )
             raise SsoStateInvalidError("provider_mismatch")
 
-        if tx.intent == "link":
+        if tx.intent in FRESH_SIGN_IN_INTENTS:
             signed_in = await current_user_id() if current_user_id is not None else None
             if tx.user_id is None or signed_in != tx.user_id:
-                logger.warning("sso.callback.rejected provider=%s reason=link_user_mismatch", provider.slug)
-                raise SsoStateInvalidError("link_user_mismatch")
+                logger.warning("sso.callback.rejected provider=%s reason=%s_user_mismatch", provider.slug, tx.intent)
+                raise SsoStateInvalidError(f"{tx.intent}_user_mismatch")
 
         metadata = await get_provider_metadata(provider)
 
@@ -226,6 +260,16 @@ class SsoLoginService:
         if (provider.claim_config or {}).get("use_userinfo") is True and metadata.userinfo_endpoint:
             userinfo = await fetch_userinfo(metadata, tokens.access_token, expected_sub=id_token.subject)
             claims.update({k: v for k, v in userinfo.items() if k not in _TOKEN_CLAIMS})
+
+        if tx.intent == "reauth":
+            identity = await confirm_reauth(db, provider=provider, id_token=id_token, user_id=tx.user_id)
+            logger.info(
+                "sso.reauth.success provider=%s user_id=%s sub=%s",
+                provider.slug,
+                identity.user_id,
+                subject_hash(id_token.subject),
+            )
+            return SsoReauthResult(user_id=identity.user_id, identity_id=identity.id, provider_slug=provider.slug)
 
         account = await resolve_user(
             db,
