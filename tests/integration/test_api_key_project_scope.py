@@ -6,9 +6,8 @@ then behaves as if it did not exist: single reads, lists, search, relations,
 history names, wiki, time entries, and every write. Inside A the key does
 whatever its owner may. An unlimited key of the same owner is unaffected.
 
-Whether a key can be limited is decided when it is created
-(``api_key_scopes`` feature); a limit that is stored is enforced whatever the
-feature's state.
+A limit is validated when the key is created and stored as project ids; a
+stored limit is always enforced.
 """
 
 from __future__ import annotations
@@ -16,13 +15,14 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import date
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from specivo.core.features import get_feature_registry
+from specivo.core.exceptions import ValidationError
 from specivo.models.auth import ApiKey
 from specivo.models.issue import Issue
 from specivo.models.journal import Journal, JournalDetail
@@ -43,7 +43,7 @@ from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
 from tests.factories.time_entry import TimeEntryActivityFactory
-from tests.factories.user import AdminUserFactory, UserFactory
+from tests.factories.user import AdminUserFactory, ServiceAccountFactory, UserFactory
 from tests.factories.version import VersionFactory
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
@@ -133,7 +133,7 @@ async def build_world(db: AsyncSession, client: AsyncClient, prefix: str, *, adm
 
     service = ApiKeyService()
     limited, limited_raw = await service.create_key(session=db, user_id=owner.id, name=f"{prefix}-limited")
-    # Stored directly: what create_key keeps when the api_key_scopes feature is on.
+    # Stored directly, by project key: a limit stored before creation resolved it to ids still holds.
     limited.scopes = {"projects": [a.key]}
     _open, open_raw = await service.create_key(session=db, user_id=owner.id, name=f"{prefix}-open")
     await db.commit()
@@ -453,47 +453,238 @@ async def test_the_limit_does_not_outlive_the_request(client: AsyncClient, db_se
 
 
 # ---------------------------------------------------------------------------
-# Feature gate
+# Creation
 # ---------------------------------------------------------------------------
 
 
-async def test_without_the_feature_a_key_cannot_be_limited(client: AsyncClient, db_session: AsyncSession):
-    """create_key drops the scopes, so the key reaches whatever its owner can."""
-    w = await build_world(db_session, client, "KSF")
-    registry = get_feature_registry()
-    assert not registry.has_feature("api_key_scopes")
+async def _post_key(client: AsyncClient, raw: str, body: dict) -> object:
+    _auth(client, raw)
+    return await client.post("/api/v1/my/api-keys/", json={"name": "made", **body})
 
-    _key, raw = await ApiKeyService().create_key(
-        session=db_session, user_id=w.owner.id, name="ksf-wanted-limited", scopes={"projects": [w.a.key]}
-    )
+
+def _scopes_error(resp) -> dict:
+    assert resp.status_code == 422, resp.text
+    errors = resp.json()["errors"]
+    assert [e["field"] for e in errors] == ["scopes"], errors
+    return errors[0]
+
+
+async def test_key_created_over_rest_with_a_limit_is_limited(client: AsyncClient, db_session: AsyncSession):
+    w = await build_world(db_session, client, "KSG")
+
+    resp = await _post_key(client, w.open_raw, {"scopes": {"projects": [w.a.key.lower()]}})
+    assert resp.status_code == 201, resp.text
+    created = resp.json()
+    assert created["project_keys"] == [w.a.key]
+
+    _auth(client, created["raw_key"])
+    assert (await client.get(f"/api/v1/issues/{w.a_issue['key']}/")).status_code == 200
+    assert (await client.get(f"/api/v1/issues/{w.b_issue['key']}/")).status_code == 404
+    found = (await client.get("/api/v1/search/", params={"q": "quokka", "scope": "issues"})).json()
+    assert {i["project_key"] for i in found["items"]} == {w.a.key}
+
+
+async def test_key_created_by_admin_for_service_account_is_limited(
+    admin_client: AsyncClient, client: AsyncClient, db_session: AsyncSession
+):
+    w = await build_world(db_session, client, "KSV")
+    agent = ServiceAccountFactory.build(login="ksv_agent", status="active")
+    db_session.add(agent)
+    await db_session.flush()
+    role = Role(name="KSV Agent", permissions=["*"], builtin=0, issues_visibility="all")
+    db_session.add(role)
+    await db_session.flush()
+    await _join(db_session, agent, w.a, role)
+    await _join(db_session, agent, w.b, role)
     await db_session.commit()
-    assert _key.scopes is None
+
+    resp = await admin_client.post(
+        f"/api/v1/admin/users/{agent.id}/api-keys/", json={"name": "ksv-agent", "scopes": {"projects": [w.a.id]}}
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["project_keys"] == [w.a.key]
+    listed = (await admin_client.get(f"/api/v1/admin/users/{agent.id}/api-keys/")).json()
+    assert [k["project_keys"] for k in listed] == [[w.a.key]]
+
+    _auth(client, resp.json()["raw_key"])
+    assert (await client.get(f"/api/v1/issues/{w.a_issue['key']}/")).status_code == 200
+    assert (await client.get(f"/api/v1/issues/{w.b_issue['key']}/")).status_code == 404
+
+
+async def test_admin_route_accepts_a_project_the_service_account_is_not_in_yet(
+    admin_client: AsyncClient, client: AsyncClient, db_session: AsyncSession
+):
+    """Existence only: membership may come later, and the key never exceeds its owner's roles."""
+    w = await build_world(db_session, client, "KSW")
+    agent = ServiceAccountFactory.build(login="ksw_agent", status="active")
+    db_session.add(agent)
+    await db_session.commit()
+
+    resp = await admin_client.post(
+        f"/api/v1/admin/users/{agent.id}/api-keys/", json={"name": "ksw-agent", "scopes": {"projects": [w.b.key]}}
+    )
+    assert resp.status_code == 201, resp.text
+    _auth(client, resp.json()["raw_key"])
+    assert (await client.get(f"/api/v1/issues/{w.b_issue['key']}/")).status_code == 404
+
+    resp = await admin_client.post(
+        f"/api/v1/admin/users/{agent.id}/api-keys/", json={"name": "ksw-typo", "scopes": {"projects": ["KSWNONE"]}}
+    )
+    assert _scopes_error(resp)["code"] == "validation_error"
+
+
+async def test_limit_is_stored_as_ids_and_survives_project_key_rename(client: AsyncClient, db_session: AsyncSession):
+    w = await build_world(db_session, client, "KSN")
+
+    resp = await _post_key(client, w.open_raw, {"scopes": {"projects": [w.a.key, str(w.a.id), w.a.id]}})
+    assert resp.status_code == 201, resp.text
+    created = resp.json()
+    row = await db_session.get(ApiKey, created["id"])
+    assert row is not None
+    assert row.scopes == {"projects": [w.a.id]}
+    assert created["scopes"] == {"projects": [w.a.id]}
+
+    w.a.key = "KSNRENAMED"
+    await db_session.commit()
+
+    _auth(client, created["raw_key"])
+    listed = (await client.get("/api/v1/projects/")).json()
+    assert [p["key"] for p in listed["items"]] == ["KSNRENAMED"]
+
+    _auth(client, w.open_raw)
+    keys = (await client.get("/api/v1/my/api-keys/")).json()
+    assert {k["name"]: k["project_keys"] for k in keys}["made"] == ["KSNRENAMED"]
+
+
+async def test_empty_projects_list_is_refused(client: AsyncClient, db_session: AsyncSession):
+    w = await build_world(db_session, client, "KSE")
+    error = _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": []}}))
+    assert error["code"] == "validation_error"
+    assert await db_session.scalar(select(ApiKey.id).where(ApiKey.name == "made")) is None
+
+
+async def test_unknown_scope_key_is_refused(client: AsyncClient, db_session: AsyncSession):
+    w = await build_world(db_session, client, "KSQ")
+    _scopes_error(
+        await _post_key(client, w.open_raw, {"scopes": {"projects": [w.a.key], "permissions": ["issues:read"]}})
+    )
+    _scopes_error(await _post_key(client, w.open_raw, {"scopes": {}}))
+
+
+async def test_scopes_list_is_refused_by_the_api(client: AsyncClient, db_session: AsyncSession):
+    w = await build_world(db_session, client, "KSM")
+    _scopes_error(await _post_key(client, w.open_raw, {"scopes": ["mcp"]}))
+    _scopes_error(await _post_key(client, w.open_raw, {"scopes": "ACME"}))
+    _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": [True]}}))
+
+
+async def test_entry_no_project_could_have_is_refused(client: AsyncClient, db_session: AsyncSession):
+    w = await build_world(db_session, client, "IMPID")
+    for entry in (2**31, 99999999999999999999, "99999999999999999999", "\u00b2", 0, -1):
+        _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": [entry]}}))
+
+
+async def test_stored_limit_with_an_impossible_id_reaches_nothing(db_session: AsyncSession):
+    scope = await resolve_project_scope(db_session, {"projects": [2**31, "\u00b2"]})
+    assert scope is not None
+    assert scope.project_ids == frozenset()
+
+
+async def test_create_key_rejects_bare_list_scopes(db_session: AsyncSession):
+    owner = UserFactory.build(login="ksbare_owner", status="active")
+    db_session.add(owner)
+    await db_session.flush()
+
+    with pytest.raises(ValidationError) as caught:
+        await ApiKeyService().create_key(db_session, owner.id, "agent", scopes=["mcp"])  # type: ignore[arg-type]
+    assert caught.value.field == "scopes"
+    with pytest.raises(ValidationError):
+        await ApiKeyService().create_key(db_session, owner.id, "agent", scopes={"projects": []})
+    assert await ApiKeyService().list_keys(db_session, owner.id) == []
+
+
+async def test_project_the_owner_cannot_see_is_refused_with_the_same_message_as_a_missing_one(
+    client: AsyncClient, db_session: AsyncSession
+):
+    w = await build_world(db_session, client, "KSH")
+    hidden = await _project(db_session, "KSHHIDDEN")
+    await db_session.commit()
+
+    missing = _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": ["KSHNONE"]}}))
+    private = _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": [hidden.key]}}))
+    by_id = _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": [hidden.id]}}))
+    assert missing["message"].replace("KSHNONE", "<P>") == private["message"].replace(hidden.key, "<P>")
+    assert by_id["message"].replace(str(hidden.id), "<P>") == private["message"].replace(hidden.key, "<P>")
+    assert missing["code"] == private["code"] == by_id["code"]
+    # A public project the owner is no member of is visible, so it may be named.
+    resp = await _post_key(client, w.open_raw, {"scopes": {"projects": [w.c.key]}})
+    assert resp.status_code == 201, resp.text
+
+
+async def test_scope_refusal_is_translatable(client: AsyncClient, db_session: AsyncSession):
+    """The refusal goes through gettext; the Thai entry comes with the catalogue pass."""
+    w = await build_world(db_session, client, "KST")
+    with patch("specivo.services.api_key_service._", side_effect=lambda s: f"<{s}>") as wrapped:
+        error = _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": ["KSTNONE"]}}))
+    assert wrapped.called
+    assert error["message"].startswith("<")
+    with patch("specivo.schemas.auth._", side_effect=lambda s: f"<{s}>") as wrapped:
+        error = _scopes_error(await _post_key(client, w.open_raw, {"scopes": {"projects": []}}))
+    assert wrapped.called
+    assert error["message"].startswith("<")
+
+
+async def test_key_list_shows_project_keys(client: AsyncClient, db_session: AsyncSession):
+    w = await build_world(db_session, client, "KSP")
+    resp = await _post_key(client, w.open_raw, {"scopes": {"projects": [w.b.key, w.a.key]}})
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["project_keys"] == sorted([w.a.key, w.b.key])
+
+    _auth(client, w.open_raw)
+    keys = {k["name"]: k for k in (await client.get("/api/v1/my/api-keys/")).json()}
+    assert keys["made"]["project_keys"] == sorted([w.a.key, w.b.key])
+    assert keys[f"{w.a.key[:-1]}-open"]["project_keys"] is None
+    # The limit stored by key (as build_world does) is shown too.
+    assert keys[f"{w.a.key[:-1]}-limited"]["project_keys"] == [w.a.key]
+
+    # A key whose projects are all gone shows an empty list (it reaches nothing).
+    gone = await ApiKeyService().list_keys(db_session, w.owner.id)
+    made = next(k for k in gone if k.name == "made")
+    made.scopes = {"projects": [999_999_991]}
+    await db_session.commit()
+    keys = {k["name"]: k for k in (await client.get("/api/v1/my/api-keys/")).json()}
+    assert keys["made"]["project_keys"] == []
+
+
+async def test_key_without_scopes_stays_unlimited(client: AsyncClient, db_session: AsyncSession):
+    """No scopes, and a row holding JSON ``null`` rather than SQL NULL, both reach everything."""
+    w = await build_world(db_session, client, "KSZ")
+    resp = await _post_key(client, w.open_raw, {"scopes": None})
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["project_keys"] is None
+    raw = resp.json()["raw_key"]
+    kind = await db_session.scalar(select(func.jsonb_typeof(ApiKey.scopes)).where(ApiKey.id == resp.json()["id"]))
+    assert kind in (None, "null")
 
     _auth(client, raw)
     assert (await client.get(f"/api/v1/issues/{w.b_issue['key']}/")).status_code == 200
 
 
-async def test_with_the_feature_a_key_is_limited_at_creation(client: AsyncClient, db_session: AsyncSession):
-    w = await build_world(db_session, client, "KSG")
-    get_feature_registry().register("api_key_scopes", "tests")
-
-    _key, raw = await ApiKeyService().create_key(
-        session=db_session, user_id=w.owner.id, name="ksg-limited", scopes={"projects": [w.a.key.lower()]}
-    )
+async def test_bare_capability_list_stored_does_not_limit_nor_break_the_list(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """The read path stays tolerant of a list a plugin stored once: unlimited, and the key list answers."""
+    w = await build_world(db_session, client, "KSY")
+    key, raw = await ApiKeyService().create_key(db_session, w.owner.id, "ksy-mcp")
+    key.scopes = ["mcp"]
     await db_session.commit()
 
     _auth(client, raw)
-    assert (await client.get(f"/api/v1/issues/{w.a_issue['key']}/")).status_code == 200
-    assert (await client.get(f"/api/v1/issues/{w.b_issue['key']}/")).status_code == 404
-
-
-async def test_a_stored_limit_holds_without_the_feature(client: AsyncClient, db_session: AsyncSession):
-    """Losing the feature never widens a key that was limited while it was on."""
-    w = await build_world(db_session, client, "KSX")
-    assert not get_feature_registry().has_feature("api_key_scopes")
-
-    _auth(client, w.limited_raw)
-    assert (await client.get(f"/api/v1/issues/{w.b_issue['key']}/")).status_code == 404
+    assert (await client.get(f"/api/v1/issues/{w.b_issue['key']}/")).status_code == 200
+    _auth(client, w.open_raw)
+    resp = await client.get("/api/v1/my/api-keys/")
+    assert resp.status_code == 200, resp.text
+    assert {k["name"]: k["project_keys"] for k in resp.json()}["ksy-mcp"] is None
 
 
 # ---------------------------------------------------------------------------

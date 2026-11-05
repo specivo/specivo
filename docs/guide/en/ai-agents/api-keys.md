@@ -32,10 +32,18 @@ so it inherits exactly that user's project roles and permissions — no project 
 
 ## Limit a key to some projects
 
-Where API key scopes are available, a key can also be limited to some projects. Give it the scopes
-`{"projects": ["ACME", "OPS"]}` when you create it (`POST /api/v1/my/api-keys/`); projects are named
-by key or by id. The key then reaches only those projects, over the REST API, the web pages and MCP
-alike, even when its owner can see more:
+A key can be limited to some projects when it is created. Pass `scopes` in the body of
+`POST /api/v1/my/api-keys/`, naming each project by key or by id:
+
+```json
+{
+  "name": "ci-agent",
+  "scopes": {"projects": ["ACME", "OPS"]}
+}
+```
+
+The key then reaches only those projects, over the REST API, the web pages and MCP alike, even when
+its owner can see more:
 
 - everything in another project behaves as if it did not exist: reading or listing it, searching
   it, and writing to it all answer **not found**, and lists, search results, relations, history
@@ -45,8 +53,22 @@ alike, even when its owner can see more:
 - a limited key cannot manage API keys, sessions or the password of its owner (`403`), so it
   cannot create itself an unlimited key.
 
-The limit is fixed when the key is created. Where API key scopes are not available, the scopes are
-ignored and the key reaches whatever its owner can; a key created with a limit keeps it.
+Leave `scopes` out for a key that reaches every project its owner can. The request is refused
+(`422`, on the `scopes` field) when the list is empty, when `scopes` holds anything but
+`projects`, or when a project does not exist or is one you cannot see. Up to 200 projects can be
+named.
+
+Specivo stores the limit as project ids, so renaming a project key does not change what the key
+reaches. The key list (`GET /api/v1/my/api-keys/`) shows the limit as `project_keys`, for example
+`["ACME", "OPS"]`, or `null` for a key that is not limited. A project deleted later drops out of
+the list; a key whose projects are all gone reaches nothing.
+
+An administrator can create a limited key for a service account the same way, through
+`POST /api/v1/admin/users/{id}/api-keys/` from a signed-in session. There the projects only have to
+exist: the account can be added to them afterwards, and the key never reaches more than the
+account's own roles allow.
+
+The limit is fixed when the key is created. To change it, create a new key and revoke the old one.
 
 ## Use a dedicated service account
 

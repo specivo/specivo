@@ -33,14 +33,20 @@ The variable is reset around every HTTP request by
 helper, so a limit never outlives the call that authenticated it. Code that
 runs outside a request (Celery tasks, the CLI) sees no limit.
 
-Feature gate
-------------
-Whether a key *can* be limited is decided when it is created: without the
-``api_key_scopes`` feature, ``ApiKeyService.create_key`` stores no scopes and
-the key is unlimited. A limit that is stored is always enforced, even if the
-feature is later switched off, so losing the feature never widens a key.
+Creation
+--------
+A limit is validated once, when the key is created
+(``ApiKeyService.create_key``): it must be ``{"projects": [...]}`` naming
+1 to 200 projects, and every entry must name an existing project, one the
+owner can see for a self-service key (:func:`resolve_scope_for_creation`).
+It is stored as ``{"projects": [ids]}``, so renaming a project key does not
+change what the key reaches. The limit stays fixed after creation.
 
-An empty or missing ``projects`` list means the key is not project-limited.
+Reading stays tolerant: limits stored by key (before creation stored ids)
+still resolve, a bare list (``["mcp"]``) or JSON ``null`` means the key is
+not limited, and an unreadable ``projects`` value fails closed. A stored
+limit is always enforced; it must never fail open or crash.
+
 A list naming only projects that no longer exist leaves the key reaching
 nothing.
 """
@@ -151,6 +157,9 @@ def require_unlimited_key() -> None:
 # Resolution and binding
 # ---------------------------------------------------------------------------
 
+#: Largest value ``projects.id`` can hold; binding a larger one makes the database refuse the query.
+_MAX_PROJECT_ID = 2**31 - 1
+
 
 def _scope_entries(scopes: Any) -> list[Any] | None:
     """Return the raw ``projects`` entries of *scopes*, or None when the key is not limited."""
@@ -169,6 +178,56 @@ def _scope_entries(scopes: Any) -> list[Any] | None:
     return []
 
 
+def _usable_id(value: int) -> set[int]:
+    """*value* as a one-item set, or empty when no project can have it (the id column is 32 bits)."""
+    return {value} if 0 < value <= _MAX_PROJECT_ID else set()
+
+
+def _entry_refs(entry: Any) -> tuple[set[int], set[str]]:
+    """The project ids and upper-cased keys one ``projects`` entry may name.
+
+    An int is an id; a string is a key (case-insensitive), and a string of
+    digits is tried as an id too. Anything else names nothing.
+    """
+    if isinstance(entry, bool):
+        return set(), set()
+    if isinstance(entry, int):
+        return _usable_id(entry), set()
+    if isinstance(entry, str):
+        value = entry.strip()
+        if not value:
+            return set(), set()
+        # isdecimal alone accepts other scripts' digits; "²" passes isdigit but breaks int().
+        ids = _usable_id(int(value)) if value.isascii() and value.isdecimal() else set()
+        return ids, {value.upper()}
+    return set(), set()
+
+
+async def _match_projects(
+    session: AsyncSession, entries: list[Any], extra: ColumnElement[bool] | None = None
+) -> list[tuple[int, str]]:
+    """Return ``(id, key)`` of every project some entry names, further narrowed by *extra*."""
+    from specivo.models.project import Project
+
+    ids: set[int] = set()
+    keys: set[str] = set()
+    for entry in entries:
+        entry_ids, entry_keys = _entry_refs(entry)
+        ids |= entry_ids
+        keys |= entry_keys
+    if not ids and not keys:
+        return []
+    conditions = []
+    if ids:
+        conditions.append(Project.id.in_(sorted(ids)))
+    if keys:
+        conditions.append(Project.key.in_(sorted(keys)))
+    stmt = select(Project.id, Project.key).where(or_(*conditions))
+    if extra is not None:
+        stmt = stmt.where(extra)
+    return [(row.id, row.key) for row in (await session.execute(stmt)).all()]
+
+
 async def resolve_project_scope(session: AsyncSession, scopes: Any) -> ProjectScope | None:
     """Resolve an API key's ``scopes`` JSON to a :class:`ProjectScope`, or None when the key is not limited.
 
@@ -178,33 +237,73 @@ async def resolve_project_scope(session: AsyncSession, scopes: Any) -> ProjectSc
     entries = _scope_entries(scopes)
     if entries is None:
         return None
+    found = await _match_projects(session, entries)
+    return ProjectScope(frozenset(pid for pid, _key in found))
 
-    from specivo.models.project import Project
 
-    ids: set[int] = set()
-    keys: set[str] = set()
+class UnknownScopeProjectError(LookupError):
+    """A ``projects`` entry names no project the key may be limited to; ``entry`` is the entry as given."""
+
+    def __init__(self, entry: str | int) -> None:
+        super().__init__(entry)
+        self.entry = entry
+
+
+async def resolve_scope_for_creation(
+    session: AsyncSession, entries: list[str | int], owner: User | None, *, check_access: bool
+) -> list[int]:
+    """Resolve the ``projects`` entries of a new key's limit to sorted, distinct project ids.
+
+    Every entry must name an existing project; with *check_access*, also one
+    *owner* can see (``ProjectService.accessible_projects_clause``). A missing
+    project and one the owner cannot see raise the same
+    :class:`UnknownScopeProjectError`, so the refusal reveals nothing.
+    """
+    extra: ColumnElement[bool] | None = None
+    if check_access:
+        if owner is None:
+            raise UnknownScopeProjectError(entries[0])
+        from specivo.services.project_service import ProjectService
+
+        extra = await ProjectService().accessible_projects_clause(session, owner)
+    found = await _match_projects(session, list(entries), extra)
+    by_id = {pid: pid for pid, _key in found}
+    by_key = {key.upper(): pid for pid, key in found}
+    resolved: set[int] = set()
     for entry in entries:
-        if isinstance(entry, bool):
-            continue
-        if isinstance(entry, int):
-            ids.add(entry)
-        elif isinstance(entry, str):
-            value = entry.strip()
-            if not value:
-                continue
-            keys.add(value.upper())
-            if value.isdigit():
-                ids.add(int(value))
+        entry_ids, entry_keys = _entry_refs(entry)
+        hit = next((by_key[k] for k in entry_keys if k in by_key), None)
+        if hit is None:
+            hit = next((by_id[i] for i in entry_ids if i in by_id), None)
+        if hit is None:
+            raise UnknownScopeProjectError(entry)
+        resolved.add(hit)
+    return sorted(resolved)
 
-    if not ids and not keys:
-        return ProjectScope(frozenset())
-    conditions = []
-    if ids:
-        conditions.append(Project.id.in_(sorted(ids)))
-    if keys:
-        conditions.append(Project.key.in_(sorted(keys)))
-    found = (await session.execute(select(Project.id).where(or_(*conditions)))).scalars().all()
-    return ProjectScope(frozenset(found))
+
+async def project_keys_by_api_key(session: AsyncSession, keys: list[ApiKey]) -> dict[int, list[str] | None]:
+    """Map each key's id to the sorted keys of the projects it is limited to (None: not limited), in one query.
+
+    A project that no longer exists is left out, so a key whose projects are
+    all gone maps to an empty list: it reaches nothing.
+    """
+    entries_by_key = {key.id: _scope_entries(key.scopes) for key in keys}
+    all_entries = [entry for entries in entries_by_key.values() if entries for entry in entries]
+    found = await _match_projects(session, all_entries) if all_entries else []
+    key_by_id = dict(found)
+    id_by_key = {key.upper(): pid for pid, key in found}
+    result: dict[int, list[str] | None] = {}
+    for key_id, entries in entries_by_key.items():
+        if entries is None:
+            result[key_id] = None
+            continue
+        names: set[str] = set()
+        for entry in entries:
+            entry_ids, entry_keys = _entry_refs(entry)
+            names |= {key_by_id[i] for i in entry_ids if i in key_by_id}
+            names |= {key_by_id[id_by_key[k]] for k in entry_keys if k in id_by_key}
+        result[key_id] = sorted(names)
+    return result
 
 
 async def activate_api_key_scope(session: AsyncSession, api_key: ApiKey) -> ProjectScope | None:
