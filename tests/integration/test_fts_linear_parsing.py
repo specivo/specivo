@@ -181,9 +181,7 @@ async def test_issue_vectors_are_unchanged(db_session: AsyncSession, issue: Issu
 
 async def test_wiki_vectors_are_unchanged(db_session: AsyncSession, project: Project, author: User) -> None:
     for i, sample in enumerate(_NORMAL):
-        page, content = await WikiService().create_page(
-            db_session, project.id, f"Page {i}", sample, author, skip_link_rebuild=True
-        )
+        page, content = await WikiService().create_page(db_session, project.id, f"Page {i}", sample, author)
         same = await db_session.scalar(
             text(
                 """
@@ -257,9 +255,7 @@ async def test_wiki_and_chunk_triggers_index_crafted_text_in_linear_time(
     await db_session.flush()
     chunk = SearchChunk(source_id=source.id, chunk_index=0, content="")
     db_session.add(chunk)
-    _page, content = await WikiService().create_page(
-        db_session, project.id, "Crafted", "", author, skip_link_rebuild=True
-    )
+    _page, content = await WikiService().create_page(db_session, project.id, "Crafted", "", author)
     await db_session.flush()
     for sql in (
         f"UPDATE search_chunks SET content = :t WHERE id = {chunk.id}",

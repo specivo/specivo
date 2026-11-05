@@ -26,6 +26,8 @@ from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
 from specivo.api.v1.issues import router as issues_router
+from specivo.api.v1.link_graph_admin import router as link_graph_admin_router
+from specivo.api.v1.links import router as links_router
 from specivo.api.v1.markdown import router as markdown_router
 from specivo.api.v1.metadata import router as metadata_router
 from specivo.api.v1.notifications import router as notifications_router
@@ -52,6 +54,8 @@ api_router.include_router(api_keys_router, tags=["api-keys"])
 api_router.include_router(projects_router)
 api_router.include_router(issues_router)
 api_router.include_router(relations_router)
+api_router.include_router(links_router)
+api_router.include_router(link_graph_admin_router)
 api_router.include_router(versions_router)
 api_router.include_router(recurring_patterns_router)
 api_router.include_router(sprints_router)

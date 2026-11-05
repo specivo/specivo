@@ -33,7 +33,8 @@ from __future__ import annotations
 
 import logging
 import re
-from urllib.parse import unquote
+from dataclasses import dataclass
+from urllib.parse import unquote, urlsplit
 from xml.etree.ElementTree import Element
 
 import markdown as _md
@@ -350,10 +351,17 @@ class _WikiLinkInlineProcessor(InlineProcessor):
     The slug is made from the target as the author wrote it.
     """
 
-    def __init__(self, md: _md.Markdown, project_key: str, found: list[tuple[str, str | None]] | None = None) -> None:
+    def __init__(
+        self,
+        md: _md.Markdown,
+        project_key: str,
+        found: list[tuple[str, str | None]] | None = None,
+        made: set[int] | None = None,
+    ) -> None:
         super().__init__(_WIKI_LINK_RE.pattern, md)
         self.project_key = project_key
         self.found = found
+        self.made = made
 
     def _written(self, text: str) -> str:
         """Return *text* with its escapes and code spans read back as the author typed them."""
@@ -371,47 +379,181 @@ class _WikiLinkInlineProcessor(InlineProcessor):
         # As entities, so the entity pattern shows them as written rather than
         # the inline HTML pattern reading a tag.
         element.text = label.replace("<", "&lt;").replace(">", "&gt;")
+        if self.made is not None:
+            self.made.add(id(element))
         return element, m.start(0), m.end(0)
 
 
 class _WikiLinkExtension(Extension):
-    def __init__(self, project_key: str, found: list[tuple[str, str | None]] | None = None) -> None:
+    def __init__(
+        self,
+        project_key: str,
+        found: list[tuple[str, str | None]] | None = None,
+        made: set[int] | None = None,
+    ) -> None:
         super().__init__()
         self.project_key = project_key
         self.found = found
+        self.made = made
 
     def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
         # Below backticks (190) and escapes (180), so code spans and escaped
         # brackets are settled first; above references (170) and links (160),
         # which would otherwise read ``[[Page]]`` as bracketed text.
-        md.inlinePatterns.register(_WikiLinkInlineProcessor(md, self.project_key, self.found), "wiki_links", 175)
+        md.inlinePatterns.register(
+            _WikiLinkInlineProcessor(md, self.project_key, self.found, self.made), "wiki_links", 175
+        )
 
 
-def find_wiki_links(text: str) -> list[tuple[str, str | None]]:
-    """Return the ``(target, label or None)`` of each ``[[Page]]`` link the renderer makes of *text*, in order.
+@dataclass(frozen=True, slots=True)
+class FoundLink:
+    """A link :func:`extract_links` found in a text.
 
-    Found by the parser, as rendering finds them, so a link written in code or
-    in a raw HTML block is not one. Text the renderer would show as plain text
-    (over the render budget, see :func:`render_hazard`), or whose parse runs
-    out of time, is scanned as written instead, code and all.
+    ``kind`` is ``"wiki"`` (``target`` is a page slug, in ``project_key``'s
+    wiki, or the text's own wiki when ``project_key`` is None), ``"issue"``
+    (``target`` is ``KEY-123``), ``"file"`` (``target`` is a bare attachment
+    filename) or ``"attachment"`` (``target`` is an attachment id).
     """
-    if not text or "[[" not in text:
+
+    kind: str
+    target: str
+    label: str | None = None
+    project_key: str | None = None
+
+
+# Paths of this instance a link may point at. The wiki route's literal
+# segments (``new``, ``pages``, ``trash``) are pages of the wiki, not slugs.
+_ISSUE_PATH_RE = re.compile(r"^/(?:issue|projects/[A-Za-z0-9_-]+/issues)/([A-Z][A-Z0-9]+-\d+)(?:/|$)")
+_WIKI_PATH_RE = re.compile(r"^/projects/([A-Za-z0-9_-]+)/wiki/([A-Za-z0-9-]+)(?:/|$)")
+_ATTACHMENT_PATH_RE = re.compile(r"^/attachments/(\d+)(?:/|$)")
+_WIKI_RESERVED_SEGMENTS = frozenset({"new", "pages", "trash", "graph"})
+
+
+def _origin(url: str) -> str | None:
+    parts = urlsplit(url)
+    if parts.scheme not in {"http", "https"} or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}".lower()
+
+
+def classify_link_target(target: str, instance_origin: str | None = None) -> FoundLink | None:
+    """Return what an ``href``/``src`` *target* points at in this instance, or None.
+
+    A bare filename names an attachment. Otherwise the target must be a path
+    on this instance: relative (``/issue/ACME-1/``) or absolute on
+    *instance_origin* (``https://tracker.example.com/issue/ACME-1/``), and
+    point at an issue, a wiki page or an attachment.
+    """
+    filename = _attachment_filename(target)
+    if filename is not None:
+        return FoundLink("file", filename)
+    parts = urlsplit(target.strip())
+    if parts.scheme or parts.netloc:
+        origin = _origin(target.strip())
+        if origin is None or instance_origin is None or origin != _origin(instance_origin):
+            return None
+    path = unquote(parts.path)
+    if m := _ISSUE_PATH_RE.match(path):
+        return FoundLink("issue", m.group(1))
+    if m := _WIKI_PATH_RE.match(path):
+        if m.group(2).lower() in _WIKI_RESERVED_SEGMENTS:
+            return None
+        return FoundLink("wiki", m.group(2).lower(), project_key=m.group(1).upper())
+    if m := _ATTACHMENT_PATH_RE.match(path):
+        return FoundLink("attachment", m.group(1))
+    return None
+
+
+class _LinkCollector(Treeprocessor):
+    """Record every ``<a href>`` and ``<img src>`` the parse made, except ``[[...]]`` links (found apart)."""
+
+    def __init__(self, md: _md.Markdown, found: list[FoundLink], skip: set[int], instance_origin: str | None) -> None:
+        super().__init__(md)
+        self.found = found
+        self.skip = skip
+        self.instance_origin = instance_origin
+
+    def run(self, root: Element) -> None:
+        for element in root.iter():
+            attribute = {"img": "src", "a": "href"}.get(element.tag)
+            if attribute is None or id(element) in self.skip:
+                continue
+            target = element.get(attribute)
+            if not target:
+                continue
+            link = classify_link_target(target, self.instance_origin)
+            if link is None:
+                continue
+            label = element.get("alt") if element.tag == "img" else "".join(element.itertext())
+            label = (label or "").strip() or None
+            if label in (link.target, target):
+                label = None
+            self.found.append(FoundLink(link.kind, link.target, label=label, project_key=link.project_key))
+
+
+class _LinkCollectorExtension(Extension):
+    def __init__(self, found: list[FoundLink], skip: set[int], instance_origin: str | None) -> None:
+        super().__init__()
+        self.found = found
+        self.skip = skip
+        self.instance_origin = instance_origin
+
+    def extendMarkdown(self, md: _md.Markdown) -> None:  # noqa: N802 - Python-Markdown API
+        # Below "inline" (20), so wiki links and issue refs are elements by now.
+        md.treeprocessors.register(_LinkCollector(md, self.found, self.skip, self.instance_origin), "link_collector", 4)
+
+
+def extract_links(text: str | None, instance_origin: str | None = None) -> list[FoundLink]:
+    """Return the links the renderer makes of *text*, in order, duplicates included.
+
+    Parsed with the renderer's own wiki-link and issue-ref patterns, so a link
+    in a code span or block, in a raw HTML block or (for issue refs) in link
+    text is not one, exactly as on the page. ``[[Page]]`` targets come back as
+    slugs, ``KEY-123`` tokens and links to ``/issue/KEY-123/`` as issue refs,
+    links to a wiki page or an attachment of this instance (relative, or
+    absolute on *instance_origin*) as such, and bare-filename link and image
+    targets as attachment filenames.
+
+    Text the renderer would show as plain text (over the render budget, see
+    :func:`render_hazard`), or whose parse runs out of time, is scanned as
+    written instead for ``[[...]]`` links and ``KEY-123`` tokens, code and all.
+    """
+    if not text:
         return []
     if render_hazard(text, count_issue_ref_candidates(text)) is None:
-        found: list[tuple[str, str | None]] = []
+        wiki_found: list[tuple[str, str | None]] = []
+        found: list[FoundLink] = []
+        made: set[int] = set()
         started = markdown_budget._cpu_clock()
         try:
             _md.markdown(
                 text,
-                extensions=["fenced_code", "tables", _WikiLinkExtension("", found), RenderDeadline(render_allowance())],
+                extensions=[
+                    "fenced_code",
+                    "tables",
+                    _WikiLinkExtension("", wiki_found, made),
+                    _IssueRefExtension(None),
+                    _LinkCollectorExtension(found, made, instance_origin),
+                    RenderDeadline(render_allowance()),
+                ],
             )
         except (RenderDeadlineError, RecursionError):
             pass
         else:
-            return found
+            wiki = [FoundLink("wiki", _wiki_slugify(target), label=label) for target, label in wiki_found]
+            return wiki + found
         finally:
             charge_render(markdown_budget._cpu_clock() - started)
-    return [(m.group(1).strip(), m.group(2).strip() if m.group(2) else None) for m in _WIKI_LINK_RE.finditer(text)]
+    links = [
+        FoundLink(
+            "wiki",
+            _wiki_slugify(m.group(1).strip()),
+            label=m.group(2).strip() if m.group(2) else None,
+        )
+        for m in _WIKI_LINK_RE.finditer(text)
+    ]
+    links.extend(FoundLink("issue", m.group(1)) for m in _ISSUE_REF_RE.finditer(text))
+    return links
 
 
 def render_wiki_markdown(

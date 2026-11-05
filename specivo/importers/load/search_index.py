@@ -1,9 +1,8 @@
-"""Rebuild the wiki link graph and the search index after an import.
+"""Rebuild the entity link graph and the search index after an import.
 
 Both are suppressed while rows are being written — indexing every issue as it
 arrives makes an import of any size crawl, and dispatching a link-graph task per
-wiki page floods the queue — so they run once at the end over what was
-imported.
+row floods the queue — so they run once at the end over what was imported.
 
 Full-text search on issues and wiki pages needs nothing here: their vectors are
 maintained by database triggers. Comments and attachments are searched through
@@ -15,11 +14,8 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
-
 from specivo.importers.core.ir import EntityType
 from specivo.importers.core.pipeline import PhaseContext
-from specivo.models.wiki import WikiPage
 
 logger = logging.getLogger(__name__)
 
@@ -28,27 +24,44 @@ logger = logging.getLogger(__name__)
 _INDEX_BATCH = 25
 
 
-async def rebuild_wiki_link_graph(ctx: PhaseContext) -> None:
-    """Recompute which wiki page links to which, for imported pages.
+# Link sources rebuilt per progress tick.
+_LINK_BATCH = 200
+
+
+async def rebuild_link_graph(ctx: PhaseContext) -> None:
+    """Store the links written in every imported issue, comment and wiki page.
 
     Run in-process rather than through the task queue: an import is usually run
     from a shell where no worker need be listening, and a dispatched task would
-    then be silently dropped.
+    then be silently dropped. The import sessions queue no per-row rebuilds
+    (``defer_entity_links``), so this is the one pass over the imported text.
+    It holds the projects' rebuild lock until the phase commits, so a full
+    rebuild started from project settings waits for it (and vice versa).
+    Each source is rebuilt in a savepoint, so a text that cannot be parsed is
+    reported and skipped without ending the import.
     """
-    from specivo.services.wiki_link_service import WikiLinkService
+    from specivo.services.entity_link_service import EntityLinkService
+    from specivo.services.link_graph_admin_service import lock_for_import
 
-    service = WikiLinkService()
-    page_ids = list((await ctx.id_map.preload(ctx.session, EntityType.WIKI_PAGE)).values())
-    if not page_ids:
-        return
+    service = EntityLinkService()
+    # The same lock a full rebuild from project settings takes, so the two
+    # never rebuild one project at the same time.
+    project_ids = sorted(set((await ctx.id_map.preload(ctx.session, EntityType.PROJECT)).values()))
+    await lock_for_import(ctx.session, project_ids)
+    keys: list[tuple[str, int]] = []
+    for entity_type, source_type in (
+        (EntityType.ISSUE, "issue"),
+        (EntityType.JOURNAL, "journal"),
+        (EntityType.WIKI_PAGE, "wiki_page"),
+    ):
+        ids = sorted(set((await ctx.id_map.preload(ctx.session, entity_type)).values()))
+        keys.extend((source_type, entity_id) for entity_id in ids)
 
-    rows = (await ctx.session.execute(select(WikiPage.id, WikiPage.wiki_id).where(WikiPage.id.in_(page_ids)))).all()
-    for page_id, wiki_id in rows:
-        try:
-            await service.rebuild_page_links(ctx.session, wiki_id, page_id)
-        except Exception as exc:  # noqa: BLE001 - a broken link must not end an import
-            ctx.warn("Could not rebuild the link graph for a wiki page", page=page_id, reason=str(exc))
-        ctx.tick()
+    for i in range(0, len(keys), _LINK_BATCH):
+        batch = keys[i : i + _LINK_BATCH]
+        for (source_type, source_id), reason in await service.rebuild_sources(ctx.session, batch):
+            ctx.warn("Could not store the links of an imported text", source=source_type, id=source_id, reason=reason)
+        ctx.tick(len(batch))
 
 
 async def backfill_search_index(ctx: PhaseContext) -> None:

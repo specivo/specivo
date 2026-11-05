@@ -49,11 +49,11 @@ from specivo.services.markdown_service import (
     _MD_EXTENSIONS,
     _sanitize_html,
     count_issue_ref_candidates,
+    extract_links,
     render_plain_markdown,
     render_wiki_markdown,
 )
 from specivo.services.search_service import _clean_snippet
-from specivo.services.wiki_link_service import WikiLinkService
 from specivo.services.wiki_utils import WIKI_LINK_RE
 from tests.fixtures.markdown_inputs import (
     CATASTROPHE_SECONDS,
@@ -447,7 +447,7 @@ def test_check_markdown_length():
 
 def _parse_wiki_links(text: str) -> None:
     WIKI_LINK_RE.sub("", text)
-    WikiLinkService().parse_links(text)
+    extract_links(text)
     _clean_snippet(text)
 
 

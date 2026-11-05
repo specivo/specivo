@@ -40,6 +40,7 @@ from specivo.schemas.time_entry import TimeEntryCreate
 from specivo.schemas.version import VersionCreate, VersionUpdate
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
 from specivo.services.computed_metadata_service import load_project_settings, merge_computed
+from specivo.services.entity_link_service import EntityLinkService
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from
 from specivo.services.journal_service import JournalService
@@ -60,6 +61,7 @@ from specivo.services.wiki_service import WikiService
 logger = logging.getLogger(__name__)
 
 _issue_svc = IssueService()
+_link_svc = EntityLinkService()
 _project_svc = ProjectService()
 _wiki_svc = WikiService()
 _search_svc = SearchService()
@@ -325,6 +327,7 @@ async def _show_issue(
     lines.append(f"Comments: {comments_count}")
     lines.extend(await _commit_lines(session, issue.id))
     lines.extend(await _pull_request_lines(session, issue.id))
+    lines.extend(await _link_lines(session, user, ("issue", issue.id)))
 
     if not metadata_only:
         description = issue.description or ""
@@ -783,6 +786,7 @@ async def _read_wiki(
         f"Version: {content.version}",
         f"Lock version: {page.lock_version}",
     ]
+    lines.extend(await _link_lines(session, user, ("wiki_page", page.id)))
     if not metadata_only:
         text = content.text or ""
         if search and text:
@@ -801,6 +805,99 @@ async def _read_wiki(
             lines.append(text)
     await _log_tool(session, user, AuditEvent.WIKI_READ, "read_wiki", {"project_key": project_key, "slug": slug})
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Link graph
+# ---------------------------------------------------------------------------
+
+
+def _link_item(node: Any) -> str:
+    text = f"{node.ref} {node.title}".strip()
+    if node.status:
+        text += f" [{node.status}]"
+    return text
+
+
+def _capped(label: str, items: list[str]) -> list[str]:
+    """``Label: a; b; ...`` capped at ``ENTITY_LINKS_INLINE_LIMIT`` items, or nothing when empty."""
+    from specivo.core.constants import ENTITY_LINKS_INLINE_LIMIT
+
+    if not items:
+        return []
+    shown = items[:ENTITY_LINKS_INLINE_LIMIT]
+    line = f"{label}: " + "; ".join(shown)
+    if len(items) > len(shown):
+        line += f"; ... and {len(items) - len(shown)} more"
+    return [line]
+
+
+async def _link_lines(session: AsyncSession, user: User, root: tuple[str, int]) -> list[str]:
+    """``Links to:``, ``Linked from:``, ``Related:`` and ``Broken links:`` lines for an issue or wiki page.
+
+    Text links and relations only (parent, children, commits and pull requests
+    have lines of their own), filtered for *user* like ``specivo_get_links``.
+    """
+    from specivo.core.constants import ENTITY_LINKS_MAX_LIMIT
+    from specivo.services.entity_link_service import KIND_RELATION, TEXT_LINK_KINDS
+
+    graph = await _link_svc.get_links(
+        session,
+        user,
+        root,
+        direction="both",
+        kinds=TEXT_LINK_KINDS | {KIND_RELATION},
+        limit=ENTITY_LINKS_MAX_LIMIT,
+    )
+    nodes = {n.ref: n for n in graph.nodes}
+    links_to: list[str] = []
+    linked_from: list[str] = []
+    related: list[str] = []
+    broken: list[str] = []
+    seen: set[tuple[str, str]] = set()
+    for edge in graph.edges:
+        if edge.broken:
+            if edge.target not in broken:
+                broken.append(edge.target)
+            continue
+        if edge.kind == KIND_RELATION:
+            node = nodes.get(edge.target)
+            if node is not None:
+                related.append(f"{edge.relation_type} {_link_item(node)}")
+            continue
+        other = edge.target if edge.direction == "out" else edge.source
+        if (edge.direction or "", other) in seen or other not in nodes:
+            continue
+        seen.add((edge.direction or "", other))
+        item = _link_item(nodes[other])
+        if edge.via and edge.direction == "in":
+            item += f" (comment {edge.via})"
+        (links_to if edge.direction == "out" else linked_from).append(item)
+    lines = _capped("Links to", links_to) + _capped("Linked from", linked_from)
+    lines += _capped("Related", related) + _capped("Broken links", broken)
+    return lines
+
+
+async def _get_links(
+    session: AsyncSession,
+    user: User,
+    ref: str,
+    direction: str = "both",
+    depth: int = 1,
+    types: list[str] | None = None,
+    limit: int = 50,
+) -> str:
+    import json
+
+    from specivo.services.entity_link_service import resolve_root
+
+    root = await resolve_root(session, user, ref)
+    graph = await _link_svc.get_links(
+        session, user, root, direction=direction, depth=depth, kinds=types or None, limit=limit
+    )
+    event = AuditEvent.ISSUE_READ if root[0] == "issue" else AuditEvent.WIKI_READ
+    await _log_tool(session, user, event, "get_links", {"ref": ref, "direction": direction})
+    return json.dumps(graph.as_dict(), ensure_ascii=False, indent=1)
 
 
 async def _list_wiki_pages(

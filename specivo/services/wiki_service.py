@@ -15,6 +15,7 @@ from specivo.core.exceptions import AppError, ConflictError, NotFoundError, Vali
 from specivo.models.user import User
 from specivo.models.wiki import Wiki, WikiContent, WikiPage, WikiRedirect
 from specivo.schemas.search import SearchSourceType
+from specivo.services.entity_link_index import queue_entity_links
 from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.search_index_service import sync_sources
 from specivo.services.webhook_events import emit_wiki_page_updated
@@ -61,16 +62,14 @@ class WikiService:
         parent_slug: str | None = None,
         comments: str | None = None,
         *,
-        skip_link_rebuild: bool = False,
         limit_text_length: bool = True,
         emit_webhook: bool = True,
     ) -> tuple[WikiPage, WikiContent]:
         """Create a wiki page with initial content (version 1).
 
-        ``skip_link_rebuild`` suppresses the link-graph task dispatch. Bulk
-        callers such as the import pipeline set it and rebuild the graph once
-        at the end of the run, rather than per page. ``limit_text_length=False`` lets it keep a
-        page longer than ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
+        The link graph follows by itself (``entity_link_index``).
+        ``limit_text_length=False`` lets it keep a page longer than
+        ``MAX_MARKDOWN_CHARS``; it is then shown as plain text.
         ``emit_webhook=False`` sends no ``wiki.page.updated`` event (a page the
         system creates on its own, such as the Home page).
         """
@@ -126,15 +125,6 @@ class WikiService:
         )
         session.add(content)
         await session.flush()
-
-        # Rebuild wiki link graph (async, non-blocking on failure)
-        if not skip_link_rebuild:
-            try:
-                from specivo.tasks.wiki_links import rebuild_wiki_page_links
-
-                rebuild_wiki_page_links.delay(wiki.id, page.id)
-            except Exception:
-                logger.debug("Link graph rebuild dispatch skipped")
 
         if emit_webhook:
             await emit_wiki_page_updated(session, project_id, page, content, author, created=True)
@@ -210,14 +200,6 @@ class WikiService:
         page.title = page.title  # no-op assignment to mark dirty
         await session.flush()
         await session.refresh(page)
-
-        # Rebuild wiki link graph (async, non-blocking on failure)
-        try:
-            from specivo.tasks.wiki_links import rebuild_wiki_page_links
-
-            rebuild_wiki_page_links.delay(page.wiki_id, page.id)
-        except Exception:
-            logger.debug("Link graph rebuild dispatch skipped")
 
         wiki = await self._get_wiki_by_id(session, page.wiki_id)
         if wiki is not None:
@@ -306,8 +288,9 @@ class WikiService:
         await session.flush()
 
         # Descendants were soft-deleted by a bulk UPDATE the session events
-        # cannot see, so drop their search chunks explicitly.
+        # cannot see, so drop their search chunks and stored links explicitly.
         await sync_sources(session, [(SearchSourceType.WIKI_PAGE, pid) for pid in deleted_ids])
+        queue_entity_links(session, [("wiki_page", pid) for pid in deleted_ids])
 
         # Audit log
         try:

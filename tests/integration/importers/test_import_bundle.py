@@ -1194,7 +1194,7 @@ class TestLinksFile:
         async def broken(ctx):
             raise RuntimeError("link graph failed")
 
-        monkeypatch.setattr("specivo.importers.load.registry.rebuild_wiki_link_graph", broken)
+        monkeypatch.setattr("specivo.importers.load.registry.rebuild_link_graph", broken)
         with pytest.raises(RuntimeError, match="link graph failed"):
             await build_bundle_import(FULL, continue_import=True).run()
 

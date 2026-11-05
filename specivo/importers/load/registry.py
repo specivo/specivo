@@ -29,7 +29,7 @@ from specivo.importers.load.project_loader import (
     restore_version_statuses,
 )
 from specivo.importers.load.public_access_loader import load_public_access
-from specivo.importers.load.search_index import backfill_search_index, rebuild_wiki_link_graph
+from specivo.importers.load.search_index import backfill_search_index, rebuild_link_graph
 from specivo.importers.load.time_entry_loader import load_time_entries
 from specivo.importers.load.user_loader import (
     check_credential_import,
@@ -135,7 +135,7 @@ async def _version_and_sprint_statuses(ctx: PhaseContext) -> None:
 
 
 async def _link_graph(ctx: PhaseContext) -> None:
-    """Expand reference placeholders, then rebuild the wiki link graph.
+    """Expand reference placeholders, then store the links of the imported text.
 
     Placeholders wait until here because they can name any imported record,
     wiki pages and their attachments included. Text earlier imports of the
@@ -144,7 +144,7 @@ async def _link_graph(ctx: PhaseContext) -> None:
     after, since an expanded placeholder can be a wiki link.
     """
     await link_placeholders(ctx)
-    await rebuild_wiki_link_graph(ctx)
+    await rebuild_link_graph(ctx)
 
 
 async def _wiki(ctx: PhaseContext) -> None:
@@ -174,7 +174,7 @@ def register_all(pipeline: ImportPipeline) -> ImportPipeline:
             ImportPhase.WIKI_PAGES: _wiki,
             ImportPhase.WIKI_ATTACHMENTS: load_wiki_attachments,
             ImportPhase.TIME_ENTRIES: load_time_entries,
-            ImportPhase.WIKI_LINK_GRAPH: _link_graph,
+            ImportPhase.LINK_GRAPH: _link_graph,
             ImportPhase.SEARCH_BACKFILL: backfill_search_index,
         }
     )

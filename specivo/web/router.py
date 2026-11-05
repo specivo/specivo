@@ -18,6 +18,7 @@ from specivo.web.pages.time import router as time_pages
 from specivo.web.pages.wiki import router as wiki_pages
 from specivo.web.partials.dashboard import router as dashboard_partials
 from specivo.web.partials.issues import router as issue_partials
+from specivo.web.partials.links import router as link_partials
 
 web_router = APIRouter(include_in_schema=False)
 
@@ -30,6 +31,7 @@ web_router.include_router(wiki_pages)
 web_router.include_router(issue_pages)
 web_router.include_router(issue_short_pages)
 web_router.include_router(issue_partials)
+web_router.include_router(link_partials)
 web_router.include_router(dashboard_partials)
 web_router.include_router(sprint_pages)
 web_router.include_router(recurring_pages)

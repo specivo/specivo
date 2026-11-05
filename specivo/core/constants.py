@@ -124,6 +124,17 @@ REPOSITORY_MCP_COMMIT_LIMIT = 10
 DEVELOPMENT_COMMIT_LIMIT = 50
 DEVELOPMENT_PULL_REQUEST_LIMIT = 100
 
+# Entity link graph (links written in issue descriptions, comments and wiki pages)
+# Links stored per source text; anything beyond is dropped with a warning.
+ENTITY_LINKS_MAX_PER_SOURCE = 500
+# Neighbours a link graph read returns by default, and at most.
+ENTITY_LINKS_DEFAULT_LIMIT = 50
+ENTITY_LINKS_MAX_LIMIT = 200
+# Neighbours of the first hop expanded when depth=2.
+ENTITY_LINKS_MAX_EXPANDED = 50
+# Linked items listed inline by specivo_show_issue / specivo_read_wiki per direction.
+ENTITY_LINKS_INLINE_LIMIT = 20
+
 # Celery tasks
 CELERY_MAX_RETRIES = 3
 CELERY_RETRY_DELAY_EMAIL = 60

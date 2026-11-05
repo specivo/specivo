@@ -124,7 +124,7 @@ not register the wiki phases.
 | 14 | `WIKI_PAGES` | Independent of issues; runs after them mainly so issue-side failures are known before the (often larger) wiki history is replayed. |
 | 15 | `WIKI_ATTACHMENTS` | Needs wiki pages (14). |
 | 16 | `TIME_ENTRIES` | Needs projects and, optionally, issues (8) to attach to. |
-| 17 | `WIKI_LINK_GRAPH` | Expands `{{issue:ref}}` placeholders in imported text once every record exists, then rebuilds the link graph, which needs every wiki page in the run. |
+| 17 | `LINK_GRAPH` | Expands `{{issue:ref}}` placeholders in imported text once every record exists, then stores the links written in every imported issue, comment and wiki page (`EntityLinkService`, in process and in batches; import sessions queue no per-row rebuilds), which needs every target in the run. |
 | 18 | `SEARCH_BACKFILL` | Runs last, over everything the id map recorded, so nothing is indexed twice and nothing not yet imported is indexed at all. |
 
 `registry.py` is the one file that wires loader functions onto these phases —
@@ -212,7 +212,7 @@ earlier import of the source. What does not resolve yet is kept in the links
 file (`core/links_file.py`), next to the bundles, and every later load of the
 scope (and `admin import-map resolve-pending`) retries it:
 
-- **Texts** are rewritten in `WIKI_LINK_GRAPH` (`placeholder_rewrite.py`,
+- **Texts** are rewritten in `LINK_GRAPH` (`placeholder_rewrite.py`,
   `pending_links.py`); an edited text is never overwritten (hash check).
 - **Parents and relations** are made in `RELATIONS` (`issue_links.py`), with
   the same checks as anywhere else (`NestedSetService.validate_parent` plus a

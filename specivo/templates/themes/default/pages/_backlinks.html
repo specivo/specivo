@@ -1,0 +1,30 @@
+{# Incoming text links, grouped by the kind of text they are written in.
+   Rendered by specivo.web.partials.links; only what the reader may see. #}
+{% if total == 0 %}
+<div class="sp-backlinks-empty">{{ empty_text }}</div>
+{% else %}
+<div class="sp-backlinks">
+  {% for group, heading in [("wiki_pages", _("Wiki pages")), ("issues", _("Issues")), ("comments", _("Comments"))] %}
+  {% set rows = groups[group] %}
+  {% if rows %}
+  <section class="sp-backlinks-group">
+    <h4 class="sp-backlinks-heading">{{ heading }} <span class="sp-backlinks-count">{{ rows | length }}</span></h4>
+    <ul class="sp-backlinks-list">
+      {% for row in rows %}
+      <li class="sp-backlinks-row">
+        <a class="sp-backlinks-ref" href="{{ row.url }}">{{ row.via if row.via else row.ref }}</a>
+        <span class="sp-backlinks-title">{{ row.title }}</span>
+        {% if row.status %}<span class="badge-status sp-backlinks-status">{{ row.status }}</span>{% endif %}
+        {% if row.label %}<span class="sp-backlinks-label">&ldquo;{{ row.label }}&rdquo;</span>{% endif %}
+        {% if row.project %}<span class="sp-backlinks-project">{{ row.project }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+  {% endfor %}
+  {% if truncated %}
+  <div class="sp-backlinks-more">{% trans %}More links exist than are shown here.{% endtrans %}</div>
+  {% endif %}
+</div>
+{% endif %}

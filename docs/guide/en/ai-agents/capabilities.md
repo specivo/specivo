@@ -19,6 +19,7 @@ know the shape of what's possible.
 | **Metadata & schemas** | Read and set [issue metadata](../metadata/values.md) values, and list the available metadata schemas. |
 | **Tags** | List a project's [tags](../projects/tags.md), tag issues and wiki pages (also while creating them), and, with **Manage project**, create, rename, recolor and delete tags. |
 | **Relations** | Link issues with typed [relations](../issues/relations.md) — relates, blocks, duplicates, and so on — and remove them. |
+| **Links** | Follow the links between issues, wiki pages and comments: `specivo_show_issue` and `specivo_read_wiki` list what an item links to and what links to it (backlinks), and `specivo_get_links` returns the neighbourhood as JSON, two hops deep at most, filtered by kind. Agents only see links between items the key may open. |
 | **Versions** | List and manage versions (milestones/releases) and see which issues belong to each. |
 | **Sprints** | List sprints, see sprint issues, and manage the plan/start/complete lifecycle. |
 | **Recurring tasks** | Create, list, update, and delete [recurring task patterns](../projects/recurring-tasks.md); skip a single scheduled occurrence; preview upcoming occurrences. The template subject and description support date macros (`{{month}}`, `{{weekday}}`, …) that expand per occurrence in the pattern's timezone. |

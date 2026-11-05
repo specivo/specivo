@@ -3,7 +3,7 @@
        migrate migrate-gen migrate-merge seed \
        test-db-up test-db-down test-db-reset test-ci \
        test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
-       install sync lock help download-model backfill-embeddings reindex-fts import-data \
+       install sync lock help download-model backfill-embeddings rebuild-links reindex-fts import-data \
        build bundle frontend-build frontend-watch \
        sso-idp-up sso-idp-down sso-idp-reset sso-authentik-up test-sso-idp test-e2e-sso
 
@@ -41,7 +41,7 @@ RUN = uv run
 SPECIVO_PORT ?= 9933
 
 # Compose command for the targets that run inside the api container
-# (download-model, backfill-embeddings, reindex-fts, import-*). A source checkout
+# (download-model, backfill-embeddings, rebuild-links, reindex-fts, import-*). A source checkout
 # has docker-compose.dev.yml and talks to the dev stack; a release bundle has
 # only docker-compose.yml and talks to the production stack. PROD=1 uses the
 # production stack in a checkout too.
@@ -294,6 +294,9 @@ download-model:  ## Download the embedding model (~487 MB, checksum-verified) in
 
 backfill-embeddings:  ## Rebuild search chunks and embed them (ARGS='--reembed --require-model')
 	$(APP_COMPOSE) exec api python -m specivo.cli.backfill_embeddings $(ARGS)
+
+rebuild-links:  ## Rebuild the stored links of issues, comments and wiki pages (optionally PROJECT=KEY)
+	$(APP_COMPOSE) exec api python -m specivo.cli.rebuild_links $(if $(PROJECT),--project $(PROJECT),)
 
 reindex-fts:  ## Rebuild FTS vectors (optionally PROJECT=KEY) after a language change
 	$(APP_COMPOSE) exec api python -m specivo.cli.reindex_fts $(if $(PROJECT),--project $(PROJECT),)

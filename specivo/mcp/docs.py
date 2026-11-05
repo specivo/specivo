@@ -17,7 +17,9 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_whoami": "Return authenticated user identity (user_id, login, etc.)",
     "specivo_list_projects": "List all visible projects",
     "specivo_list_issues": "List issues (with tags); filter by status/sprint/metadata/parent, sort, paginate",
-    "specivo_show_issue": "Issue details: parent, children, tags, commits, PRs, source number; search= for a section",
+    "specivo_show_issue": (
+        "Issue details: parent, children, tags, commits, PRs, links to/from, source number; search= for a section"
+    ),
     "specivo_create_issue": "Create an issue, optionally with parent_ref and tags (call list_lookups first for IDs)",
     "specivo_update_issue": "Update issue fields or re-parent (parent_ref); lock_version handled automatically",
     "specivo_move_issue": "Move an issue to another project (new KEY-N; the old ref still resolves)",
@@ -26,7 +28,10 @@ _TOOL_SUMMARIES: dict[str, str] = {
     "specivo_list_comments": "List comments on an issue, paginated; include_changes=true adds named field changes",
     "specivo_search": "Search issues/wiki. mode='hybrid' (default), 'keyword', or 'semantic'",
     "specivo_list_wiki_pages": "List wiki pages for a project",
-    "specivo_read_wiki": "Read a wiki page by slug",
+    "specivo_read_wiki": "Read a wiki page by slug (with its links and backlinks)",
+    "specivo_get_links": (
+        "Link graph of an issue or wiki page: backlinks (direction='in'), outgoing links, relations; depth 1-2"
+    ),
     "specivo_create_wiki": "Create a new wiki page, optionally with tags (slug auto-derived from title)",
     "specivo_update_wiki_metadata": "Update wiki page parent, title, or protected flag",
     "specivo_delete_wiki": "Soft-delete a wiki page (moves to trash)",
@@ -111,6 +116,15 @@ def generate_setup_guide(fmt: str = "generic", mcp_server: MCPServer | None = No
    and `specivo_search` finds it by that number: `RT #123`, `#123`, or a key such as `PROJ-7`)
 3. `specivo_list_comments(issue_ref)` -- page through comment history when `Comments: N` > 0
 4. `specivo_read_wiki(project_key, slug)` -- read knowledge base
+5. Follow the links: `specivo_show_issue` and `specivo_read_wiki` list `Links to:`, `Linked from:`
+   (backlinks from issues, comments and wiki pages) and `Related:`. For more, filters or a second hop,
+   `specivo_get_links(ref, direction="in"|"out"|"both", depth=1|2, types=[...])` -- `ref` is `ACME-12`
+   or `wiki:ACME/<slug>`; it returns JSON nodes and edges, only what you may see.
+
+### Link issues and pages so the graph finds them
+Write `ACME-42` for an issue, `[[Page title]]` for a wiki page of the same project, or a Markdown link
+to an issue, wiki page or attachment URL of this instance (for another project's wiki page). These are
+the links `specivo_get_links` and the backlink lines follow; a key inside code is not a link.
 
 ### Search modes
 - `mode="hybrid"` *(default)* -- FTS + pgvector semantic via RRF fusion.

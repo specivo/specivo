@@ -104,10 +104,10 @@ def _bootstrap_worker(**_kwargs) -> None:
 from specivo.tasks import (  # noqa: E402, F401
     cleanup,
     embeddings,
+    entity_links,
     notifications,
     recurring,
     repositories,
     search,
     webhooks,
-    wiki_links,
 )

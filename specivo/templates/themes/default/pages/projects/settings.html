@@ -1646,6 +1646,10 @@
       </p>
       {% include "pages/_fts_card.html" %}
     </div>
+    {% if can_manage_search %}
+    {% from "pages/_link_graph_card.html" import link_graph_card %}
+    {{ link_graph_card("/api/v1/projects/" ~ project.key ~ "/links", can_manage_search) }}
+    {% endif %}
   </div>
 </div>
 {% endblock %}

@@ -44,6 +44,7 @@ from specivo.mcp.tools import (
     _delete_wiki,
     _edit_description,
     _edit_wiki,
+    _get_links,
     _list_comments,
     _list_issues,
     _list_lookups,
@@ -298,8 +299,13 @@ async def specivo_show_issue(
     requests that reference it follow as ``Pull requests: N``, open ones
     first: number, state (``open``, ``draft``, ``merged``, ``closed``, plus
     ``closing`` when it says it fixes the issue), title, source branch, URL.
+    ``Links to:`` and ``Linked from:`` list the issues, wiki pages and
+    attachments the issue's description and comments link to and the issues,
+    comments and wiki pages that link to it; ``Related:`` lists its relations
+    and ``Broken links:`` targets that do not exist. Only items you may see are
+    listed, at most 20 per line; use specivo_get_links for more.
     Use metadata_only=true to skip the description body and save tokens
-    (tags, commits and pull requests are still included).
+    (tags, commits, pull requests and links are still included).
     Use search= to extract only the section containing specific text.
     """
     async with _get_session_and_user() as (session, user):
@@ -519,11 +525,61 @@ async def specivo_read_wiki(
 ) -> str:
     """Read a wiki page by its slug.
 
+    ``Links to:`` lists the issues, wiki pages and attachments the page links
+    to, ``Linked from:`` (backlinks) the issues, comments and wiki pages that
+    link to it, and ``Broken links:`` link targets that do not exist; only items
+    you may see, at most 20 per line. Use specivo_get_links for more.
     Use specivo_list_wiki_pages to discover available slugs.
     Use search= to extract only the section containing specific text from long pages.
     """
     async with _get_session_and_user() as (session, user):
         return await _read_wiki(session, user, project_key, slug, metadata_only, search)
+
+
+@mcp.tool()
+async def specivo_get_links(
+    ref: Annotated[
+        str,
+        Field(description="An issue (ACME-12) or a wiki page (wiki:ACME/<slug>)."),
+    ],
+    direction: Annotated[
+        str,
+        Field(description="'in' = what links here (backlinks), 'out' = what it links to, 'both' (default)."),
+    ] = "both",
+    depth: Annotated[
+        int,
+        Field(description="1 (default), or 2 to also expand the linked issues and wiki pages once.", ge=1, le=2),
+    ] = 1,
+    types: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "Edge kinds to keep; all when omitted. Text links: wiki_link, mention, attachment_link. "
+                "Structured: relation, parent, child, attachment, commit, pull_request."
+            )
+        ),
+    ] = None,
+    limit: Annotated[int, Field(description="Neighbour nodes at most (1-200).", ge=1, le=200)] = 50,
+) -> str:
+    """Navigate the link graph around an issue or wiki page: what links to it (backlinks) and what it links to.
+
+    Combines links written in text -- ``[[Page]]`` wiki links, issue keys such as
+    ``ACME-42``, links to issues, wiki pages and attachments of this instance --
+    in issue descriptions, comments and wiki pages, with relations, parent and
+    children, attachments, commits and pull requests. Use it to find the wiki
+    pages that document an issue, the issues a design page drives, or everything
+    that would be affected by a change.
+
+    Returns JSON: ``root``, ``nodes`` (ref, type, title, status, url), ``edges``
+    (source, target, kind, direction relative to the root, label, relation_type,
+    ``via`` = the comment a link is written in, ``broken`` for a link to
+    something that does not exist) and ``truncated``. Only what you may see is
+    returned: a link to or from an item you cannot see is left out entirely.
+    ``specivo_show_issue`` and ``specivo_read_wiki`` already list the direct
+    text links and relations inline; call this for depth 2, filters or JSON.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _get_links(session, user, ref, direction, depth, types, limit)
 
 
 @mcp.tool()

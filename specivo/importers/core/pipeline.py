@@ -66,7 +66,7 @@ class ImportPhase(StrEnum):
     WIKI_PAGES = "wiki_pages"
     WIKI_ATTACHMENTS = "wiki_attachments"
     TIME_ENTRIES = "time_entries"
-    WIKI_LINK_GRAPH = "wiki_link_graph"
+    LINK_GRAPH = "link_graph"
     SEARCH_BACKFILL = "search_backfill"
 
 
@@ -399,21 +399,24 @@ class ImportPipeline:
         the phase gets its own session and commits on success.
 
         Either way the session does not index content as it is written: the
-        search backfill phase indexes everything once, after the references in
-        imported text have been rewritten. Nor does it send outgoing webhook
+        link graph and search backfill phases index everything once, after the
+        references in imported text have been rewritten. Nor does it send outgoing webhook
         events: an import is not a stream of user changes.
         """
+        from specivo.services.entity_link_index import defer_entity_links
         from specivo.services.search_index_service import defer_search_index
         from specivo.services.webhook_events import suppress_webhook_events
 
         if shared is not None:
             defer_search_index(shared)
+            defer_entity_links(shared)
             suppress_webhook_events(shared)
             yield shared
             return
 
         async with self._session_factory() as session:
             defer_search_index(session)
+            defer_entity_links(session)
             suppress_webhook_events(session)
             try:
                 yield session
