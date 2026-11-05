@@ -249,16 +249,23 @@ class TestSweepAndRetention:
         rows = [
             RepositoryDelivery(
                 integration_id=integration.id,
+                provider=integration.provider,
                 delivery_id="old",
                 event="push",
                 status="accepted",
                 received_at=now - timedelta(minutes=10),
             ),
             RepositoryDelivery(
-                integration_id=integration.id, delivery_id="new", event="push", status="accepted", received_at=now
+                integration_id=integration.id,
+                provider=integration.provider,
+                delivery_id="new",
+                event="push",
+                status="accepted",
+                received_at=now,
             ),
             RepositoryDelivery(
                 integration_id=integration.id,
+                provider=integration.provider,
                 delivery_id="done",
                 event="push",
                 status="processed",
@@ -276,6 +283,7 @@ class TestSweepAndRetention:
             [
                 RepositoryDelivery(
                     integration_id=integration.id,
+                    provider=integration.provider,
                     delivery_id="ancient",
                     event="ping",
                     status="processed",
@@ -283,6 +291,7 @@ class TestSweepAndRetention:
                 ),
                 RepositoryDelivery(
                     integration_id=integration.id,
+                    provider=integration.provider,
                     delivery_id="recent",
                     event="ping",
                     status="processed",

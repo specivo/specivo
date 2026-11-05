@@ -116,14 +116,16 @@ class RepositoryDelivery(Base):
     """One webhook delivery received for an integration.
 
     ``payload`` is kept for processing and the delivery log, without the
-    per-commit file lists. Rows older than the retention period are pruned by
-    the scheduled cleanup.
+    per-commit file lists. ``provider`` is the forge that sent it: an
+    integration's provider can change, and old rows keep theirs. Rows older
+    than the retention period are pruned by the scheduled cleanup.
     """
 
     __tablename__ = "repository_deliveries"
     __table_args__ = (
         UniqueConstraint("integration_id", "delivery_id", name="uq_repository_deliveries_integration_delivery"),
         CheckConstraint(_in("status", DELIVERY_STATUSES), name="ck_repository_deliveries_status"),
+        CheckConstraint(_in("provider", PROVIDERS), name="ck_repository_deliveries_provider"),
         # The delivery log, newest first; also serves as the FK index.
         Index("ix_repository_deliveries_integration_received", "integration_id", text("received_at DESC")),
         # The sweeper looks for accepted rows that were never processed.
@@ -140,6 +142,8 @@ class RepositoryDelivery(Base):
         ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
     )
     delivery_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    # The provider the integration had when this arrived; it may have changed since.
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
     event: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     detail: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -227,14 +231,18 @@ class PullRequest(Base, TimestampMixin):
     __tablename__ = "pull_requests"
     __table_args__ = (
         # Leads with integration_id, so it also serves as the FK index.
-        UniqueConstraint("integration_id", "number", name="uq_pull_requests_integration_number"),
+        UniqueConstraint("integration_id", "provider", "number", name="uq_pull_requests_integration_provider_number"),
         CheckConstraint(_in("state", PR_STATES), name="ck_pull_requests_state"),
+        CheckConstraint(_in("provider", PROVIDERS), name="ck_pull_requests_provider"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     integration_id: Mapped[int] = mapped_column(
         ForeignKey("repository_integrations.id", ondelete="CASCADE"), nullable=False
     )
+    # The forge the request lives on. Numbers are per forge, so a provider
+    # change starts a new numbering and the old requests stay as they were.
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     title: Mapped[str] = mapped_column(String(1000), nullable=False, default="")
     url: Mapped[str] = mapped_column(String(2048), nullable=False, default="")

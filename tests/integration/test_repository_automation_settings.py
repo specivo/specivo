@@ -251,7 +251,12 @@ class TestGitMembership:
     ):
         settings = {"merge_automation_enabled": True, "merge_status_id": resolved.id}
         first = (await client.post(_base(project), json={**_BODY, "settings": settings}, headers=manager)).json()
-        second_body = {**_BODY, "repo_full_name": "example-org/gadgets", "settings": settings}
+        second_body = {
+            **_BODY,
+            "repo_full_name": "example-org/gadgets",
+            "repo_url": "https://github.example.com/example-org/gadgets",
+            "settings": settings,
+        }
         await client.post(_base(project), json=second_body, headers=manager)
         resp = await client.delete(f"{_base(project)}{first['id']}/", headers=manager)
         assert resp.status_code == 204
