@@ -14,6 +14,7 @@ marker.
 **Revised:** 2026-11-05 — recorded that metadata schemas and workflow field rules judge the change a
 write makes, not the state of the issue (§6).
 **Revised:** 2026-11-05 — recorded the email change audit events and what their details hold (§18).
+**Revised:** 2026-11-06 — recorded the money convention (§4) and the currency audit events (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -182,7 +183,20 @@ class Issue(Base, TimestampMixin, LockVersionMixin):
 - `pgvector` for embedding-based semantic search.
 - Expression-based unique indexes for case-insensitive uniqueness: `Index("uq_users_login_ci", func.lower(text("login")), unique=True)`.
 - Partial indexes for sparse columns: `Index("ix_user_group_members_managed_by_provider_id", "managed_by_provider_id", postgresql_where=text("managed_by_provider_id IS NOT NULL"))`.
-- `Numeric(10, 2)` (not Float) for all time/money fields to avoid IEEE 754 rounding.
+- `Numeric` (never Float) for time and money fields to avoid IEEE 754 rounding.
+
+**Money.** Every amount is an exact `NUMERIC` plus a sibling `<name>_currency` `CHAR(3)` column referencing
+`currencies.code` (ISO 4217, seeded from `specivo/data/iso4217.csv`; rows are deactivated, never deleted).
+Declare the pair with `specivo.models.money` (`amount_column`, `currency_column`, `money_pair_constraints`):
+computed amounts `NUMERIC(20, 8)`, unit prices `NUMERIC(18, 6)`, exchange rates `NUMERIC(24, 12)`. In Python an
+amount is `specivo.core.money.Money` (immutable `Decimal` + code; arithmetic within one currency only, mixing
+raises `CurrencyMismatchError`; floats are refused). Computed values are stored unrounded and rounded half up to
+the currency's minor units on display and in posted totals (`Money.quantize`, `Money.format`). Values people type
+are validated to the minor units on input. Over the API an amount is a string (`MoneyIn` / `MoneyOut` in
+`specivo.schemas.money`), never a JSON number. A currency chosen now must be enabled
+(`CurrencyService.require_selectable`); a stored reference to a currency disabled since stays valid. The reporting
+currency is the instance setting `reporting_currency` (default USD) unless `projects.reporting_currency_code`
+overrides it; resolve it with `reporting_currency_for(session, project)`.
 
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
@@ -563,6 +577,10 @@ rendered as Markdown or HTML.
 one path for the profile page, `/api/v1/auth/me/email/` and the admin routes. They are the only events
 whose details hold email addresses, because the old and new address are the evidence of the change. A
 confirmation link that matches no request is not audited.
+
+**Currency events.** `CURRENCY_TOGGLED` (details: `code`, `is_active`) and `REPORTING_CURRENCY_CHANGED`
+(`scope` = `instance` or `project`, `project_key` for a project, `old`, `new`; a project's `null` means it follows
+the instance) are written by `CurrencyService` in the transaction of the change, only when the value changes.
 
 **Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
 configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line
