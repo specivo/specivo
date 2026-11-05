@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og-cover.jpg" alt="Specivo — your team's knowledge, finally findable" width="820"></a>
+  <a href="https://specivo.io"><img src="https://specivo.io/static/img/og/cover-en-v2.jpg" alt="Specivo — your team's knowledge, finally findable" width="820"></a>
 </p>
 
 # Specivo
