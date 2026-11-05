@@ -9,7 +9,13 @@
  * makes access arriving through a group visible on this screen rather than
  * implied. The members API does not return that list, so a group added
  * during the session reloads the page to pick it up.
+ *
+ * Only existing accounts can be added. When the search finds nobody, the
+ * picker says so; an administrator can create the account in the shared
+ * "New User" modal (userCreateForm) and it is selected straight away.
  */
+import { userCreateForm } from '../lib/user-create-form';
+
 export function projectMembers(initial) {
     // User-facing strings are translated in the template and handed in here,
     // because these are composed with runtime values that Jinja cannot see.
@@ -23,14 +29,22 @@ export function projectMembers(initial) {
         confirmRemoveUser: 'Remove %s from this project?',
         confirmRemoveGroup: 'Remove the group %s? %d people lose the access it grants.',
         kindGroup: 'Group',
-        kindUser: 'User'
+        kindUser: 'User',
+        noMatch: 'No user or group matches “%s”.',
+        createUserFor: 'Create user “%s”…',
+        userCreated: '%s created. Choose a role and click Add.',
+        passwordRequired: 'Password: required for regular users.',
+        createFailed: 'Failed to create user.'
     }, initial.i18n || {});
 
-    return {
+    var component = {
         members: initial.members || [],
         projectKey: initial.projectKey || '',
         roles: initial.roles || [],
         allGroups: initial.allGroups || [],
+        // Creating accounts is admin-only on the server; the page passes
+        // whether this viewer is an administrator.
+        canCreateUsers: initial.canCreateUsers === true,
 
         // Exposed so the template can render them without splicing a
         // translated string into a JS literal inside an HTML attribute — an
@@ -174,11 +188,16 @@ export function projectMembers(initial) {
                 });
         },
 
+        // Bumped on every search, so a slow response for an older query
+        // cannot overwrite the result of a newer one.
+        _searchSeq: 0,
+
         async searchPrincipals() {
             this.addError = '';
             this.addSuccess = '';
+            var seq = ++this._searchSeq;
             var query = this.userQuery.trim();
-            if (query.length < 1) {
+            if (query.length < 1 || this.selected) {
                 this.suggestions = [];
                 this.showSuggestions = false;
                 return;
@@ -192,6 +211,8 @@ export function projectMembers(initial) {
 
             var users = [];
             var res = await spFetch('/api/v1/users/autocomplete/?q=' + encodeURIComponent(query));
+            // Picked something, or typed on, while this was in flight.
+            if (seq !== this._searchSeq || this.selected) return;
             if (res.ok) {
                 var taken = this._takenIds('user');
                 var data = await res.json();
@@ -206,11 +227,42 @@ export function projectMembers(initial) {
             this.showSuggestions = true;
         },
 
+        /** The search ran and found nobody to offer. */
+        get noMatches() {
+            return this.showSuggestions && this.suggestions.length === 0;
+        },
+
+        /** Text was typed but nothing picked: the Add button stays disabled. */
+        get needsPick() {
+            return !this.selected && !this.showSuggestions && this.userQuery.trim().length > 0;
+        },
+
+        noMatchText() {
+            return i18n.noMatch.replace('%s', this.userQuery.trim());
+        },
+
+        createUserLabel() {
+            return i18n.createUserFor.replace('%s', this.userQuery.trim());
+        },
+
+        /** Open the shared New User modal with the typed name filled in. */
+        startCreateUser() {
+            this.showSuggestions = false;
+            this.openCreateUser(this.userQuery.trim());
+        },
+
+        /** Called by userCreateForm once the account exists: pick it. */
+        userCreated(user) {
+            this.selectPrincipal({ kind: 'user', id: user.id, name: user.display_name, subtitle: '(' + user.login + ')' });
+            this.addSuccess = i18n.userCreated.replace('%s', user.display_name);
+        },
+
         suggestionKey(s) {
             return s.kind + ':' + s.id;
         },
 
         selectPrincipal(s) {
+            this._searchSeq++;
             this.selected = s;
             this.userQuery = s.name;
             this.showSuggestions = false;
@@ -349,4 +401,5 @@ export function projectMembers(initial) {
             this.editSaving = false;
         }
     };
+    return Object.assign(component, userCreateForm(i18n));
 }

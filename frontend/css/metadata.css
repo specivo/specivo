@@ -334,6 +334,12 @@ a.sp-tag-name:hover { text-decoration: underline; color: var(--sp-accent); }
    renders two kinds of suggestion, so the highlight belongs to the row. */
 .sp-suggest-item:hover { background: var(--sp-bg-input); }
 .sp-suggest-name { font-weight: 500; }
+/* Nobody matched: say so instead of hiding the panel, which looked like no
+   search had run. Admins also get a button that opens the New User modal. */
+.sp-suggest-empty { padding: var(--sp-space-sm) var(--sp-space-md); color: var(--sp-text-muted); font-size: var(--sp-font-size-sm); }
+.sp-suggest-empty-hint { display: block; margin-top: var(--sp-space-xs); font-size: var(--sp-font-size-xs); }
+.sp-suggest-create { width: 100%; border: none; border-top: 1px solid var(--sp-border); background: none; font: inherit; text-align: left; color: var(--sp-text-primary); font-weight: 500; }
+.sp-suggest-hint { margin-top: var(--sp-space-sm); color: var(--sp-text-muted); font-size: var(--sp-font-size-xs); }
 .sp-field-min-160 { min-width: 160px; }
 .sp-field-min-140 { min-width: 140px; }
 .sp-col-28 { width: 28px; }

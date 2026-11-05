@@ -133,3 +133,31 @@ def test_delete_blast_radius_is_styled_as_a_warning(css_text: str) -> None:
         ".sp-blast-number must be typographically prominent — it is the number "
         "an administrator has to read before confirming the delete."
     )
+
+
+# ---------------------------------------------------------------------------
+# Add Member: a disabled Add button and a search that finds nobody
+#
+# Add stays disabled until a suggestion is picked. With no disabled styling the
+# button kept its colour and pointer cursor, and a search that found nobody
+# hid the panel entirely, so typing a name and clicking Add looked like a
+# broken button: no request, no message.
+# ---------------------------------------------------------------------------
+
+
+def test_disabled_buttons_look_disabled(css_text: str) -> None:
+    body = _rule_body(css_text, ".sp-btn[disabled]")
+    assert "cursor: not-allowed" in body, "a disabled .sp-btn must not show a pointer cursor"
+    assert re.search(r"opacity:\s*0?\.\d+", body), "a disabled .sp-btn must be visibly dimmed"
+
+
+def test_disabled_primary_button_does_not_light_up_on_hover(css_text: str) -> None:
+    body = _rule_body(css_text, ".sp-btn-primary[disabled]:hover")
+    assert "background: var(--sp-accent)" in body
+
+
+def test_no_match_state_is_styled(css_text: str) -> None:
+    """The picker says that nobody matched instead of showing nothing."""
+    assert "--sp-text-muted" in _rule_body(css_text, ".sp-suggest-empty")
+    create = _rule_body(css_text, ".sp-suggest-create")
+    assert "width: 100%" in create, "the create-user option spans the panel like the suggestions above it"
