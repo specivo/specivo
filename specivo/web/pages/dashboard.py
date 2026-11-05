@@ -37,6 +37,14 @@ _notif_svc = NotificationService()
 _time_svc = TimeEntryService()
 
 
+async def _notification_actors(db: AsyncSession, notifications: list) -> dict[int, User]:
+    """The users who acted in *notifications*, by id: the header's notification list shows their avatars."""
+    actor_ids = {n.actor_id for n in notifications[:5]}
+    if not actor_ids:
+        return {}
+    return {u.id: u for u in (await db.execute(select(User).where(User.id.in_(actor_ids)))).scalars()}
+
+
 def _visible(clause: ColumnElement[bool] | None) -> ColumnElement[bool]:
     """Return *clause*, or an always-true predicate when there is none (admins)."""
     return true() if clause is None else clause
@@ -472,6 +480,7 @@ async def dashboard(
             "projects": projects,
             "total_projects": total_projects,
             "notifications": notifications,
+            "notification_actors": await _notification_actors(db, notifications),
             "unread_count": unread_count,
             "my_issues": my_issues,
             "my_issues_total": my_issues_total,
@@ -515,6 +524,7 @@ async def notifications_page(
             "user": user,
             "active_page": "notifications",
             "notifications": notifications,
+            "notification_actors": await _notification_actors(db, notifications),
             "total": total,
             "unread_count": unread_count,
             "unread_only": unread_only,

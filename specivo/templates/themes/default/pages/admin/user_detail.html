@@ -40,8 +40,8 @@
 
   {# --- User header --- #}
   <div style="display: flex; align-items: center; gap: var(--sp-space-lg); margin-bottom: var(--sp-space-xl);">
-    <div class="avatar-lg" :style="'background:' + targetUser.avatar_color"
-         x-text="initials(targetUser.display_name)"></div>
+    <div class="avatar-lg" :class="avatarIconClass(targetUser.login)" :style="'background:' + targetUser.avatar_color"
+         x-text="avatarIconClass(targetUser.login) ? '' : initials(targetUser.display_name)"></div>
     <div>
       <h1 style="font-family: var(--sp-font-display); font-size: var(--sp-font-size-xl); font-weight: 700; margin-bottom: 2px;"
           x-text="targetUser.display_name"></h1>

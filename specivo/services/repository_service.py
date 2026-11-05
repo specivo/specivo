@@ -605,6 +605,7 @@ async def development_for_issue(session: AsyncSession, issue_id: int) -> IssueDe
                 first_line=c.first_line,
                 url=c.url,
                 branch=c.branch,
+                branch_url=branch_url(integration.provider, integration.repo_url, c.branch) if c.branch else None,
                 author_name=c.author_name,
                 committed_at=c.committed_at,
                 repository=integration.repo_full_name,

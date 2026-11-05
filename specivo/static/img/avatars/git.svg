@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- Avatar of the built-in Git account: a branch leaving a line of commits.
+       Used as a CSS mask, so the stroke colour is irrelevant; the avatar's
+       text colour paints it. -->
+  <circle cx="7" cy="5" r="2.5"/>
+  <circle cx="7" cy="19" r="2.5"/>
+  <circle cx="17" cy="8" r="2.5"/>
+  <path d="M7 7.5v9"/>
+  <path d="M17 10.5c0 4.5-4.5 5-8.2 7"/>
+</svg>

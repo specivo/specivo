@@ -9,6 +9,7 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
 from specivo.hooks.repo_url import is_ssh_address
 
@@ -183,6 +184,9 @@ class DevelopmentCommitOut(BaseModel):
     committed_at: datetime | None
     repository: str
     provider: str
+    # The forge's page for ``branch``, for the issue page only: kept out of
+    # the API and MCP output, which carry branch links in ``branches``.
+    branch_url: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
 
 
 class DevelopmentPullRequestOut(BaseModel):
