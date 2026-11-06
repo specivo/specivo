@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 11:09+0100\n"
+"POT-Creation-Date: 2026-11-06 11:41+0100\n"
 "PO-Revision-Date: 2026-03-28 10:59+0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -342,72 +342,72 @@ msgstr ""
 msgid "If you did not expect this, contact an administrator of %(brand)s."
 msgstr ""
 
-#: specivo/services/issue_service.py:97
+#: specivo/services/issue_service.py:98
 msgid "No issue statuses found; run seed data first"
 msgstr ""
 
-#: specivo/services/issue_service.py:137
+#: specivo/services/issue_service.py:138
 msgid "You do not have permission to set issue privacy"
 msgstr ""
 
-#: specivo/services/issue_service.py:139
+#: specivo/services/issue_service.py:140
 msgid ""
 "Issues of this tracker are private by default; you do not have permission"
 " to change that"
 msgstr ""
 
-#: specivo/services/issue_service.py:159
+#: specivo/services/issue_service.py:160
 msgid "No issue priorities found; run seed data first"
 msgstr ""
 
-#: specivo/services/issue_service.py:179
+#: specivo/services/issue_service.py:180
 #, python-format
 msgid "Version %(id)s not found"
 msgstr ""
 
-#: specivo/services/issue_service.py:185
+#: specivo/services/issue_service.py:186
 msgid "Version does not belong to this project"
 msgstr ""
 
-#: specivo/services/issue_service.py:191
+#: specivo/services/issue_service.py:192
 #, python-format
 msgid "Cannot assign issues to a %(status)s version"
 msgstr ""
 
-#: specivo/services/issue_service.py:210
+#: specivo/services/issue_service.py:211
 #, python-format
 msgid "Sprint %(id)s not found"
 msgstr ""
 
-#: specivo/services/issue_service.py:216
+#: specivo/services/issue_service.py:217
 msgid "Sprint does not belong to this project"
 msgstr ""
 
-#: specivo/services/issue_service.py:222
+#: specivo/services/issue_service.py:223
 msgid "Cannot assign issues to a completed sprint"
 msgstr ""
 
-#: specivo/services/issue_service.py:1011
+#: specivo/services/issue_service.py:1012
 #: specivo/services/sprint_service.py:307
 msgid "Issue was modified by another request. Reload and retry."
 msgstr ""
 
-#: specivo/services/issue_service.py:1174
+#: specivo/services/issue_service.py:1175
 msgid "Issue is already in this project."
 msgstr ""
 
-#: specivo/services/issue_service.py:1183
+#: specivo/services/issue_service.py:1184
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
 msgstr ""
 
-#: specivo/services/issue_service.py:1234
+#: specivo/services/issue_service.py:1235
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr ""
 
-#: specivo/services/issue_service.py:1308
+#: specivo/services/issue_service.py:1309
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -518,6 +518,23 @@ msgstr ""
 
 #: specivo/templates/themes/default/base.html:45
 msgid "Powered by"
+msgstr ""
+
+#: specivo/templates/themes/default/components/filter_combobox.html:28
+#: specivo/templates/themes/default/components/filter_combobox.html:29
+#, python-format
+msgid "Clear the %(field)s filter"
+msgstr ""
+
+#: specivo/templates/themes/default/components/filter_combobox.html:91
+#: specivo/templates/themes/default/pages/search.html:120
+msgid "Searching…"
+msgstr ""
+
+#: specivo/templates/themes/default/components/filter_combobox.html:92
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:142
+#: specivo/templates/themes/default/pages/issues/_sidebar.html:187
+msgid "No matches"
 msgstr ""
 
 #: specivo/templates/themes/default/components/header.html:3
@@ -844,8 +861,8 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/projects.html:40
 #: specivo/templates/themes/default/pages/admin/projects.html:163
 #: specivo/templates/themes/default/pages/admin/versions.html:85
-#: specivo/templates/themes/default/pages/issues/list.html:4
-#: specivo/templates/themes/default/pages/issues/list.html:14
+#: specivo/templates/themes/default/pages/issues/list.html:5
+#: specivo/templates/themes/default/pages/issues/list.html:15
 #: specivo/templates/themes/default/pages/projects/detail.html:42
 #: specivo/templates/themes/default/pages/projects/detail.html:81
 #: specivo/templates/themes/default/pages/projects/list.html:87
@@ -1440,7 +1457,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/_my_issues.html:31
 #: specivo/templates/themes/default/pages/admin/projects.html:39
 #: specivo/templates/themes/default/pages/admin/settings.html:145
-#: specivo/templates/themes/default/pages/issues/list.html:251
+#: specivo/templates/themes/default/pages/issues/list.html:256
 #: specivo/templates/themes/default/pages/projects/detail.html:70
 #: specivo/templates/themes/default/pages/projects/detail.html:183
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:214
@@ -1452,7 +1469,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/_my_issues.html:32
 #: specivo/templates/themes/default/pages/admin/email.html:88
 #: specivo/templates/themes/default/pages/issues/form.html:65
-#: specivo/templates/themes/default/pages/issues/list.html:252
+#: specivo/templates/themes/default/pages/issues/list.html:257
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:130
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:215
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:208
@@ -1475,7 +1492,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:17
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:77
 #: specivo/templates/themes/default/pages/issues/form.html:125
-#: specivo/templates/themes/default/pages/issues/list.html:253
+#: specivo/templates/themes/default/pages/issues/list.html:258
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:63
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:216
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:226
@@ -1508,7 +1525,7 @@ msgid "Project"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_my_issues.html:36
-#: specivo/templates/themes/default/pages/issues/list.html:256
+#: specivo/templates/themes/default/pages/issues/list.html:261
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:181
 msgid "Updated"
 msgstr ""
@@ -3777,7 +3794,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/versions.html:40
 #: specivo/templates/themes/default/pages/admin/versions.html:59
 #: specivo/templates/themes/default/pages/issues/_development_macros.html:42
-#: specivo/templates/themes/default/pages/issues/list.html:43
+#: specivo/templates/themes/default/pages/issues/list.html:44
 #: specivo/templates/themes/default/pages/projects/settings.html:466
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:106
 #: specivo/templates/themes/default/pages/projects/version_detail.html:85
@@ -4879,7 +4896,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:32
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:114
 #: specivo/templates/themes/default/pages/issues/form.html:93
-#: specivo/templates/themes/default/pages/issues/list.html:254
+#: specivo/templates/themes/default/pages/issues/list.html:259
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:218
 #: specivo/templates/themes/default/pages/projects/version_detail.html:96
 msgid "Tracker"
@@ -5276,7 +5293,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/versions.html:32
 #: specivo/templates/themes/default/pages/admin/versions.html:57
 #: specivo/templates/themes/default/pages/issues/_development_macros.html:39
-#: specivo/templates/themes/default/pages/issues/list.html:42
+#: specivo/templates/themes/default/pages/issues/list.html:43
 #: specivo/templates/themes/default/pages/projects/settings.html:464
 #: specivo/templates/themes/default/pages/projects/version_detail.html:84
 msgid "Open"
@@ -6460,6 +6477,7 @@ msgid "Deployment"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_development_macros.html:22
+#: specivo/templates/themes/default/pages/issues/list.html:79
 msgid "Release"
 msgstr ""
 
@@ -6593,15 +6611,18 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:21
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:87
 #: specivo/templates/themes/default/pages/issues/form.html:142
-#: specivo/templates/themes/default/pages/issues/list.html:255
+#: specivo/templates/themes/default/pages/issues/list.html:60
+#: specivo/templates/themes/default/pages/issues/list.html:260
 #: specivo/templates/themes/default/pages/projects/version_detail.html:99
 msgid "Assignee"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:23
 #: specivo/templates/themes/default/pages/issues/form.html:144
+#: specivo/templates/themes/default/pages/issues/list.html:63
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:249
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:159
+#: specivo/web/pages/issues.py:186
 msgid "Unassigned"
 msgstr ""
 
@@ -6631,11 +6652,6 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:139
 msgid "-- No version --"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:142
-#: specivo/templates/themes/default/pages/issues/_sidebar.html:187
-msgid "No matches"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:158
@@ -7192,7 +7208,7 @@ msgid "Edit %(key)s"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/form.html:24
-#: specivo/templates/themes/default/pages/issues/list.html:19
+#: specivo/templates/themes/default/pages/issues/list.html:20
 msgid "New Issue"
 msgstr ""
 
@@ -7271,43 +7287,62 @@ msgstr ""
 msgid "+ Create and Continue"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:48
+#: specivo/templates/themes/default/pages/issues/list.html:49
 msgid "All Trackers"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:58
-msgid "All Assignees"
+#: specivo/templates/themes/default/pages/issues/list.html:60
+msgid "Assignee…"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:66
+#: specivo/templates/themes/default/pages/issues/list.html:63
+#: specivo/web/pages/issues.py:188
+msgid "Me"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/list.html:67
 msgid "All Priorities"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:74
-msgid "All Tags"
+#: specivo/templates/themes/default/pages/issues/list.html:75
+msgid "Tag…"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:81
+#: specivo/templates/themes/default/pages/issues/list.html:75
+#: specivo/templates/themes/default/pages/projects/settings.html:957
+msgid "Tag"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/list.html:79
+msgid "Release…"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/list.html:82
+#: specivo/web/pages/issues.py:206
+msgid "No release"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/list.html:86
 msgid "Apply"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:87
+#: specivo/templates/themes/default/pages/issues/list.html:92
 msgid "List"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:91
+#: specivo/templates/themes/default/pages/issues/list.html:96
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:71
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:52
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:23
 msgid "Board"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:104
+#: specivo/templates/themes/default/pages/issues/list.html:109
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:94
 msgid "Cards per column:"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:110
+#: specivo/templates/themes/default/pages/issues/list.html:115
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:100
 #, python-format
 msgid "%(count)s issue total"
@@ -7315,32 +7350,32 @@ msgid_plural "%(count)s issues total"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:139
+#: specivo/templates/themes/default/pages/issues/list.html:144
 #, python-format
 msgid "%(done_count)s of %(total)s done"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:191
+#: specivo/templates/themes/default/pages/issues/list.html:196
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:178
 msgid "No issues"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:201
+#: specivo/templates/themes/default/pages/issues/list.html:206
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:188
 msgid "First page"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:213
+#: specivo/templates/themes/default/pages/issues/list.html:218
 #, python-format
 msgid "%(from)s–%(to)s of %(total)s"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:221
+#: specivo/templates/themes/default/pages/issues/list.html:226
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:208
 msgid "Last page"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:230
+#: specivo/templates/themes/default/pages/issues/list.html:235
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:145
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:217
 #, python-format
@@ -7349,12 +7384,12 @@ msgid_plural "%(count)s issues"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:272
-#: specivo/templates/themes/default/pages/issues/list.html:274
+#: specivo/templates/themes/default/pages/issues/list.html:277
+#: specivo/templates/themes/default/pages/issues/list.html:279
 msgid "No issues found"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/issues/list.html:274
+#: specivo/templates/themes/default/pages/issues/list.html:279
 msgid "Create your first issue to get started."
 msgstr ""
 
@@ -7424,14 +7459,14 @@ msgid "Unread (%(count)s)"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/detail.html:316
-#: specivo/templates/themes/default/pages/issues/list.html:205
+#: specivo/templates/themes/default/pages/issues/list.html:210
 #: specivo/templates/themes/default/pages/notifications.html:76
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:192
 msgid "Previous"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/issues/detail.html:320
-#: specivo/templates/themes/default/pages/issues/list.html:217
+#: specivo/templates/themes/default/pages/issues/list.html:222
 #: specivo/templates/themes/default/pages/notifications.html:79
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:204
 msgid "Next"
@@ -8650,10 +8685,6 @@ msgstr ""
 msgid "Create first tag"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/projects/settings.html:957
-msgid "Tag"
-msgstr ""
-
 #: specivo/templates/themes/default/pages/projects/settings.html:1005
 msgid "e.g. backend, ux, needs-review"
 msgstr ""
@@ -9846,7 +9877,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:40
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
 #: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
-#: specivo/templates/themes/default/pages/issues/list.html:44
+#: specivo/templates/themes/default/pages/issues/list.html:45
 #: specivo/templates/themes/default/pages/projects/version_detail.html:83
 #: specivo/templates/themes/default/pages/search.html:46
 msgid "All"
@@ -9875,10 +9906,6 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/search.html:96
 msgid "Filter by tags"
-msgstr ""
-
-#: specivo/templates/themes/default/pages/search.html:120
-msgid "Searching…"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/search.html:123
@@ -10355,6 +10382,18 @@ msgid ""
 "minutes."
 msgstr ""
 
+#: specivo/web/pages/issues.py:195
+msgid "Unknown person"
+msgstr ""
+
+#: specivo/web/pages/issues.py:202
+msgid "Unknown tag"
+msgstr ""
+
+#: specivo/web/pages/issues.py:209
+msgid "Unknown release"
+msgstr ""
+
 #: specivo/web/pages/sso.py:105
 msgid "Your sign-in expired or was started in another browser. Please try again."
 msgstr ""
@@ -10510,5 +10549,11 @@ msgstr ""
 #~ msgstr ""
 
 #~ msgid "The newest %(shown)s of %(total)s commits."
+#~ msgstr ""
+
+#~ msgid "All Assignees"
+#~ msgstr ""
+
+#~ msgid "All Tags"
 #~ msgstr ""
 
