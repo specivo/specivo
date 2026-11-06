@@ -273,8 +273,9 @@ Sessions survive a restart of Redis only when Redis saves its data to disk. The 
 (append-only file); Specivo logs a warning at startup when an external Redis does not. Without it,
 agents connected when Redis restarts start new sessions.
 
-The legacy SSE transport (`/mcp/sse/`) does not keep sessions across reconnects or restarts;
-configure agents for Streamable HTTP (`"type": "http"`).
+The legacy SSE transport (`/mcp/sse/`) keeps no sessions: an agent whose event stream drops
+reconnects and carries on, but a request it sends while the stream is down fails once. Configure
+agents for Streamable HTTP (`"type": "http"`, URL ending in `/mcp/`) where they support it.
 
 ### Proxies in front of Specivo
 

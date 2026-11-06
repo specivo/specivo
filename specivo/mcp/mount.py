@@ -12,6 +12,8 @@ Provides two transports:
 - **SSE** at ``{prefix}/sse`` -- legacy transport for older MCP clients.
   Long-lived GET connection + POST messages.  Auth middleware validates
   each HTTP request; tool-level auth re-checks the key on every tool call.
+  Each GET is a new session; it is served already initialized so a client
+  that reconnects its stream keeps working without a second handshake.
 
 Both transports use ``Bearer spv_...`` API key authentication.
 """
@@ -43,6 +45,7 @@ from specivo.core.config import get_settings
 from specivo.mcp.auth import SpvTokenVerifier, resolve_key_owner
 from specivo.mcp.persistent_session_manager import (
     PersistentStreamableHTTPSessionManager,
+    serve_initialized_connection,
 )
 from specivo.mcp.server import mcp
 
@@ -171,17 +174,31 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
     # but we pass a path relative to the SSE sub-app mount.
     sse_transport = SseServerTransport("/messages/")
 
+    server = mcp._lowlevel_server
+
     async def handle_sse(request: Request) -> Response:
-        async with sse_transport.connect_sse(
-            request.scope,
-            request.receive,
-            request._send,
-        ) as streams:
-            await mcp._lowlevel_server.run(
-                streams[0],
-                streams[1],
-                mcp._lowlevel_server.create_initialization_options(),
-            )
+        # The SDK mints a new session id on every GET. A client whose stream
+        # dropped reconnects, adopts the new endpoint and goes on sending
+        # requests without repeating ``initialize`` (its protocol layer is
+        # still initialized). Serve each stream with the request gate already
+        # open, as for a rehydrated Streamable HTTP session; otherwise every
+        # call after a reconnect is refused with -32602. A client that does
+        # send ``initialize`` gets the normal handshake.
+        async with (
+            sse_transport.connect_sse(request.scope, request.receive, request._send) as (read_stream, write_stream),
+            server.lifespan(server) as lifespan_state,
+        ):
+            try:
+                await serve_initialized_connection(
+                    server,
+                    read_stream,
+                    write_stream,
+                    lifespan_state=lifespan_state,
+                    session_id=None,
+                    protocol_version=None,
+                )
+            finally:
+                await write_stream.aclose()
         return Response()
 
     # Convert Starlette-style endpoint (request -> Response) to ASGI callable

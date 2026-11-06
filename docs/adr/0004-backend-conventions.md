@@ -296,7 +296,9 @@ truth; the SDK's in-memory transport is a cache that `PersistentStreamableHTTPSe
 an idle reap (`mcp_session_idle_timeout_seconds`), a dropped client stream or a restart, born initialized and only for
 the API key that opened it. A session that is gone (expired, ended by DELETE, unknown, or another key's) is answered
 with HTTP 404, the spec's signal to re-initialize, never with a JSON-RPC error: a `-32602` reads as a caller mistake
-and no client recovers from it.
+and no client recovers from it. The legacy SSE transport has no session continuity (the SDK mints an id per GET), so
+each SSE stream is served born initialized too (`serve_initialized_connection`): a client that reconnects its
+stream does not repeat `initialize`.
 
 **AI usage surfaces.** The REST routes (`api/v1/ai_usage.py`) mirror time entries: `/projects/{key}/ai-usage/`,
 `/my/ai-usage/` (the caller's own entries, unassigned ones included) and `/ai-usage/{id}/` with `exclude/` and
