@@ -105,8 +105,8 @@ Entra ID provisions from the enterprise application of your app registration.
     | `preferredLanguage` | `preferredLanguage` (optional) |
 
     Other attributes in the default list (job title, addresses, phone numbers, the enterprise
-    extension) are accepted and ignored. A user without `mail` cannot be provisioned: Specivo needs
-    an email address.
+    extension) are accepted and ignored. Every Specivo account needs an email address, so a user
+    whose `mail` is empty is refused (see [Users without a mailbox](#users-without-a-mailbox)).
 4. To provision groups, keep **Provision Microsoft Entra ID Groups** enabled. Only groups assigned
    to the application, and their members who are also assigned, are sent.
 5. Under **Settings**, set **Scope** to **Sync only assigned users and groups**, assign the users
@@ -120,6 +120,25 @@ Entra's email claim is never verified, so for the first sign-in map `externalId`
 (step 3) and set **SCIM externalId claim** to `oid` under **Claims** on the Specivo provider page.
 Specivo then finds the provisioned account by the object id; see
 [Signing in after provisioning](#signing-in-after-provisioning).
+
+### Users without a mailbox
+
+Entra ID fills `mail` only for users with an Exchange mailbox (or one set by hand). For a user
+whose `mail` is empty it leaves `emails` out of the request, and Specivo answers
+`400 invalidValue`: "A user needs an email address". The provisioning log shows the user as
+failed. Give those users an address one of these ways:
+
+- **Set `mail` on the user** in Entra (**Users → the user → Edit properties → Contact
+  information → Email**). Best when the address really receives mail.
+- **Fall back to the user principal name.** In the attribute mapping of step 3, edit the
+  `emails[type eq "work"].value` row: set **Mapping type** to **Expression** and the expression to
+  `Coalesce([mail], [userPrincipalName])`. Users with a mailbox keep sending `mail`; the others
+  send their UPN. Use this only when the UPNs are real addresses on your mail domain: Specivo
+  sends notifications and password-reset links to that address, and an
+  `@your-tenant.onmicrosoft.com` UPN usually receives nothing. If the provider lists **Allowed
+  email domains**, the UPN domain must be in the list.
+
+After saving the mapping, test one user with **Provision on demand**, or wait for the next cycle.
 
 ## Okta
 
@@ -287,7 +306,7 @@ source. Deactivations are also recorded as `user_deprovisioned` with the reason
 | `401` after it worked | Somebody rotated or revoked the token. Generate a new one and enter it at the IdP. |
 | `409 uniqueness` when creating a user | The `userName` exists already, the email belongs to an account that is never linked (an administrator, a service account, an account of another provider), or an account has that login with another email. See [Existing accounts](#existing-accounts). |
 | `409 uniqueness` when creating a group | A Specivo group with that name exists. Rename one of them. |
-| `400 invalidValue`: "A user needs an email address" | The user has no email at the IdP, or the email mapping is missing (Entra ID: map `mail`). |
+| `400 invalidValue`: "A user needs an email address" | The user has no email at the IdP, or the email mapping is missing. Entra ID: map `mail`; for users without a mailbox see [Users without a mailbox](#users-without-a-mailbox). |
 | `400 invalidValue`: "Members must be users provisioned by this identity provider" | The group has members that are not provisioned (yet). Provision them first, or assign them to the application. |
 | `400`: "This account is an administrator in Specivo" | The IdP tried to disable, delete or change the email of an administrator (or a service account). Remove the administrator rights in Specivo first. |
 | A user stays inactive although the IdP enables them | The account was deactivated in Specivo, not through SCIM. Reactivate it under **Administration → Users**. |
