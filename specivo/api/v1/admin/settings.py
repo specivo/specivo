@@ -11,6 +11,7 @@ from specivo.core.exceptions import AppError
 from specivo.models.user import User
 from specivo.schemas.anonymous_access import AnonymousAccessOut, AnonymousAccessProject, AnonymousAccessUpdate
 from specivo.schemas.money import ReportingCurrencyOut, ReportingCurrencyUpdate
+from specivo.services.ai_subscription_service import SELF_SERVICE_SETTING_KEY as AI_SUBSCRIPTIONS_SELF_SERVICE_KEY
 from specivo.services.anonymous_access_service import (
     ANONYMOUS_ACCESS_SETTING_KEY,
     is_anonymous_access_enabled,
@@ -30,6 +31,7 @@ _service = SettingsService()
 _MANAGED_SETTINGS = {
     ANONYMOUS_ACCESS_SETTING_KEY: "/api/v1/admin/settings/anonymous-access/",
     REPORTING_CURRENCY_SETTING_KEY: "/api/v1/admin/settings/reporting-currency/",
+    AI_SUBSCRIPTIONS_SELF_SERVICE_KEY: "/api/v1/admin/ai-subscriptions/settings/",
     **dict.fromkeys(sorted(EXCHANGE_RATE_SETTING_KEYS), "/api/v1/admin/exchange-rates/settings/"),
     **dict.fromkeys(sorted(AUTH_SETTING_KEYS), "/api/v1/admin/settings/authentication/"),
 }

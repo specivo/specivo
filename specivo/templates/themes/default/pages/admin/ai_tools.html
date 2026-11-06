@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% from "pages/auth/_ai_subscription_macros.html" import error_text with context %}
+
+{% block title %}{% trans %}AI tools{% endtrans %} - {% trans %}Admin{% endtrans %} - {{ brand_name }}{% endblock %}
+
+{% block content %}
+<div class="breadcrumbs">
+  <a href="/">{% trans %}Home{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/">{% trans %}Admin{% endtrans %}</a>
+  <span class="sep">/</span>
+  <a href="/admin/ai-subscriptions/">{% trans %}AI subscriptions{% endtrans %}</a>
+  <span class="sep">/</span>
+  <span class="current">{% trans %}AI tools{% endtrans %}</span>
+</div>
+
+<h1 class="sp-page-h1">{% trans %}AI tools{% endtrans %}</h1>
+<p class="sp-text-muted sp-mb-md">{% trans %}The tools that report AI usage. A tool a reporter sends for the first time is added here inactive; activate it to offer it in pickers. The default provider is the model provider assumed for the tool's usage, and plans of that provider that list no tools cover it. Tools are never deleted.{% endtrans %}</p>
+
+{% if notice == "saved" %}<div class="flash flash-success" role="status" data-testid="tool-notice">{% trans %}Tool saved.{% endtrans %}</div>
+{% elif notice == "tool_created" %}<div class="flash flash-success" role="status" data-testid="tool-notice">{% trans %}Tool added.{% endtrans %}</div>
+{% endif %}
+{% if error.code %}<div class="flash flash-error" role="alert" data-testid="tool-error">{{ error_text(error) }}</div>{% endif %}
+
+<div class="card sp-card-pad sp-mb-md" data-testid="tools-card">
+  <div class="sp-table-scroll">
+    <table class="issue-table" data-testid="tools-table">
+      <thead>
+        <tr>
+          <th>{% trans %}Slug{% endtrans %}</th>
+          <th>{% trans %}Name{% endtrans %}</th>
+          <th>{% trans %}Default provider{% endtrans %}</th>
+          <th>{% trans %}Position{% endtrans %}</th>
+          <th>{% trans %}Active{% endtrans %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in tools %}
+        <tr data-tool="{{ t.slug }}">
+          <td><code>{{ t.slug }}</code></td>
+          <td colspan="5">
+            <form method="post" action="/admin/ai-tools/{{ t.slug }}/" class="sp-sub-tool-row">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="text" name="name" class="form-input" maxlength="100" value="{{ t.name }}" aria-label="{{ _('Name') }}" required>
+              <input type="text" name="default_provider" class="form-input" maxlength="50" value="{{ t.default_provider }}" placeholder="{{ _('none') }}" aria-label="{{ _('Default provider') }}">
+              <input type="number" name="position" class="form-input sp-sub-position" value="{{ t.position }}" aria-label="{{ _('Position') }}">
+              <label class="sp-sub-check"><input type="checkbox" name="is_active" value="1" {{ 'checked' if t.is_active else '' }}> <span class="sp-sub-sr">{% trans %}Active{% endtrans %}</span></label>
+              <button type="submit" class="sp-btn-sm">{% trans %}Save{% endtrans %}</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card sp-card-pad" data-testid="new-tool-card">
+  <h3 class="sp-card-h3">{% trans %}Add a tool{% endtrans %}</h3>
+  <form method="post" action="/admin/ai-tools/" class="sp-sub-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="sp-sub-field">
+      <label class="form-label" for="tool-slug">{% trans %}Slug{% endtrans %}</label>
+      <input id="tool-slug" type="text" name="slug" class="form-input" maxlength="50" value="{{ form.slug or '' }}" placeholder="aider" required>
+    </div>
+    <div class="sp-sub-field">
+      <label class="form-label" for="tool-name">{% trans %}Name{% endtrans %}</label>
+      <input id="tool-name" type="text" name="name" class="form-input" maxlength="100" value="{{ form.name or '' }}" placeholder="Aider" required>
+    </div>
+    <div class="sp-sub-field">
+      <label class="form-label" for="tool-provider">{% trans %}Default provider{% endtrans %}</label>
+      <input id="tool-provider" type="text" name="default_provider" class="form-input" maxlength="50" value="{{ form.default_provider or '' }}" placeholder="{{ _('none') }}">
+    </div>
+    <div class="sp-sub-field">
+      <label class="form-label" for="tool-position">{% trans %}Position{% endtrans %}</label>
+      <input id="tool-position" type="number" name="position" class="form-input" value="{{ form.position or '0' }}">
+    </div>
+    <div class="sp-sub-actions sp-sub-wide">
+      <button type="submit" class="sp-btn sp-btn-primary sp-btn-auto">{% trans %}Add tool{% endtrans %}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

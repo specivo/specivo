@@ -23,6 +23,7 @@ from specivo.api.v1.admin.users import router as admin_users_router
 from specivo.api.v1.admin.workflows import router as admin_workflows_router
 from specivo.api.v1.agent_sessions import router as agent_sessions_router
 from specivo.api.v1.ai_model_prices import router as ai_model_prices_router
+from specivo.api.v1.ai_subscriptions import router as ai_subscriptions_router
 from specivo.api.v1.api_keys import router as api_keys_router
 from specivo.api.v1.attachments import router as attachments_router
 from specivo.api.v1.auth import router as auth_router
@@ -71,6 +72,7 @@ api_router.include_router(admin_settings_router)
 api_router.include_router(currencies_router)
 api_router.include_router(exchange_rates_router)
 api_router.include_router(ai_model_prices_router)
+api_router.include_router(ai_subscriptions_router)
 api_router.include_router(wiki_router)
 api_router.include_router(search_router)
 api_router.include_router(search_admin_router)

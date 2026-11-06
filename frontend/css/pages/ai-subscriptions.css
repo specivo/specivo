@@ -1,0 +1,76 @@
+/* AI subscriptions (My AI subscriptions, the admin register) and the admin AI tools list. */
+.sp-sub-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  gap: var(--sp-space-md);
+  align-items: start;
+}
+.sp-sub-filters,
+.sp-sub-preset {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-space-sm);
+}
+.sp-sub-filters .form-input,
+.sp-sub-preset .form-input { width: auto; max-width: 100%; }
+.sp-sub-preset .form-label { margin: 0; }
+.sp-sub-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sp-sub-dates { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.sp-sub-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: var(--sp-font-size-xs);
+  font-weight: 500;
+  background: var(--sp-bg-subtle, var(--sp-border));
+  color: var(--sp-text-secondary);
+}
+.sp-sub-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--sp-space-sm) var(--sp-space-md);
+}
+.sp-sub-field { display: flex; flex-direction: column; gap: var(--sp-space-xs, 4px); }
+.sp-sub-field .form-label { margin: 0; }
+.sp-sub-wide,
+.sp-sub-actions { grid-column: 1 / -1; }
+.sp-sub-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-space-xs, 4px) var(--sp-space-md);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.sp-sub-tools legend { padding: 0; margin-bottom: var(--sp-space-xs, 4px); }
+.sp-sub-tools p { flex-basis: 100%; margin: 0; }
+.sp-sub-check { display: inline-flex; gap: var(--sp-space-xs, 4px); align-items: center; }
+.sp-sub-tool-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-space-sm);
+  margin: 0;
+}
+.sp-sub-tool-row .form-input { width: auto; flex: 1 1 10rem; }
+.sp-sub-tool-row .sp-sub-position { flex: 0 0 6rem; }
+.sp-sub-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .sp-sub-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .sp-sub-form { grid-template-columns: 1fr; }
+  .sp-sub-filters,
+  .sp-sub-preset { flex-direction: column; align-items: stretch; }
+  .sp-sub-filters .form-input,
+  .sp-sub-preset .form-input { width: 100%; }
+}

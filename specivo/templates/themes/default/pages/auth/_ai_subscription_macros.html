@@ -1,0 +1,38 @@
+{% macro error_text(error) -%}
+{% set code = error.code %}{% set field = error.field %}
+{% if code == "self_service_off" %}{% trans %}An administrator manages AI subscriptions on this instance. Ask one to change yours.{% endtrans %}
+{% elif code == "ai_subscription_owner_invalid" %}{% trans %}Service accounts do not hold AI subscriptions.{% endtrans %}
+{% elif code == "ai_subscription_unknown_tool" %}{% trans %}One of the tools no longer exists. Choose the tools again.{% endtrans %}
+{% elif code == "currency_inactive" %}{% trans %}That currency is disabled on this instance. Choose another one.{% endtrans %}
+{% elif code == "currency_unknown" %}{% trans %}Unknown currency code.{% endtrans %}
+{% elif code == "date_invalid" %}{% trans %}Enter dates as YYYY-MM-DD.{% endtrans %}
+{% elif code == "user_not_found" %}{% trans %}Choose the person who holds the subscription.{% endtrans %}
+{% elif code == "ai_tool_exists" %}{% trans %}A tool with this slug exists.{% endtrans %}
+{% elif code == "ai_tool_invalid" %}{% trans %}Check the tool: the slug is 2 to 50 lower case letters, digits and dashes, the name is required, and the provider and position must be valid.{% endtrans %}
+{% elif code == "ai_subscription_invalid" %}
+  {% if field == "amount" %}{% trans %}Enter a fee above zero, with no more decimal places than the currency has.{% endtrans %}
+  {% elif field == "provider" %}{% trans %}Enter the provider, for example anthropic or openai.{% endtrans %}
+  {% elif field == "plan_name" %}{% trans %}Enter the plan name.{% endtrans %}
+  {% elif field == "plan_key" %}{% trans %}Choose a plan from the list, or Custom.{% endtrans %}
+  {% elif field == "billing_period" %}{% trans %}The fee is per month or per year.{% endtrans %}
+  {% elif field == "starts_on" %}{% trans %}Enter the first day of the subscription.{% endtrans %}
+  {% elif field == "ends_on" %}{% trans %}The last day cannot be before the first day.{% endtrans %}
+  {% elif field == "notes" %}{% trans %}The notes are too long.{% endtrans %}
+  {% else %}{% trans %}Check the subscription and try again.{% endtrans %}{% endif %}
+{% elif code %}{% trans %}The change could not be saved.{% endtrans %}
+{%- endif %}
+{%- endmacro %}
+
+{% macro period_label(period) -%}
+{% if period == "year" %}{% trans %}per year{% endtrans %}{% else %}{% trans %}per month{% endtrans %}{% endif %}
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+{% if status == "active" %}<span class="sp-badge-info">{% trans %}Active{% endtrans %}</span>
+{% elif status == "future" %}<span class="sp-sub-badge">{% trans %}Starts later{% endtrans %}</span>
+{% else %}<span class="sp-sub-badge">{% trans %}Ended{% endtrans %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro covers(s) -%}
+{% if s.tools %}{{ s.tools | join(", ") }}{% else %}<span class="sp-text-muted">{% trans provider=s.provider %}All {{ provider }} tools{% endtrans %}</span>{% endif %}
+{%- endmacro %}

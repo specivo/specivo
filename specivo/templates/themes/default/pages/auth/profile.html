@@ -111,6 +111,16 @@
       </div>
       <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans %}Manage keys for API and MCP access{% endtrans %}</div>
     </a>
+
+    {% if not user.is_service_account %}
+    <a href="/my/ai-subscriptions/" class="card" style="padding: var(--sp-space-lg); text-decoration: none; color: inherit; transition: border-color 0.15s;">
+      <div style="display: flex; align-items: center; gap: var(--sp-space-md); margin-bottom: var(--sp-space-xs);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 18px; height: 18px; color: var(--sp-accent);"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+        <span style="font-weight: 600; font-size: var(--sp-font-size-sm);">{% trans %}My AI subscriptions{% endtrans %}</span>
+      </div>
+      <div style="font-size: var(--sp-font-size-xs); color: var(--sp-text-muted);">{% trans %}Flat-rate AI plans you pay for{% endtrans %}</div>
+    </a>
+    {% endif %}
   </div>
 
 </div>
