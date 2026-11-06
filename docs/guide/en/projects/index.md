@@ -116,6 +116,16 @@ Only currencies an administrator has enabled are offered; see
 [Currencies and the reporting currency](../install/currencies.md). Changing it needs the *Manage
 project* permission and is recorded in the audit log.
 
+### Public projects and search engines
+
+A public project that an administrator opts in to anonymous access can be read without an account
+while the instance's anonymous access switch is on. Its project page, issue list, issues and wiki
+pages can also appear in search engines, but only when an administrator turns on
+**Let search engines index public pages** under **Administration → Settings → Anonymous access**
+(off by default). Private issues and comments, and every page of a project that is not opted in,
+are never indexed. See [Search engines](../install/configuration.md#search-engines) for what is
+listed in `robots.txt` and `/sitemap.xml`, and how to keep one public project out.
+
 ## Project status
 
 A project is in one of three states:

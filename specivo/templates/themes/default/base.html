@@ -22,6 +22,9 @@
   <link rel="stylesheet" href="{{ css_url }}">
   {% endfor %}
   {% endblock %}
+  {% if canonical_url %}
+  <link rel="canonical" href="{{ canonical_url }}">
+  {% endif %}
   {% block head %}{% endblock %}
 </head>
 <body>

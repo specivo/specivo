@@ -136,7 +136,14 @@ class Settings(BaseSettings):
     allowed_hosts: list[str] = ["*"]
 
     # robots.txt — default content. Overridable from admin settings (key: "robots_txt").
+    # When this is not set explicitly and search engine indexing applies, a
+    # robots.txt allowing the anonymously readable pages is generated instead
+    # (``specivo.services.search_engine_service``).
     robots_txt: str = "User-agent: *\nDisallow: /\n"
+    # Let search engines index the pages anonymous visitors can read (public
+    # projects opted in to anonymous access while that switch is on). Off by
+    # default; the admin setting "search_engine_indexing" overrides it.
+    search_engine_indexing: bool = False
 
     # SMTP — email notification delivery
     smtp_host: str = "localhost"

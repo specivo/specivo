@@ -11984,3 +11984,10 @@ msgstr ""
 msgid "No wiki page, issue or comment links here yet."
 msgstr "Сюда пока не ссылается ни одна вики-страница, задача или комментарий."
 
+#: specivo/templates/themes/default/pages/admin/settings.html
+msgid "Let search engines index public pages"
+msgstr "Разрешить поисковым системам индексировать публичные страницы"
+
+#: specivo/templates/themes/default/pages/admin/settings.html
+msgid "Only pages anyone can read without an account are offered: the project list, and the project pages, issues and wiki pages of projects opted in to anonymous access while it is on. Everything else stays marked noindex. robots.txt and /sitemap.xml follow this setting."
+msgstr "Предлагаются только страницы, которые любой может читать без учётной записи: список проектов, а также страницы проектов, задачи и вики-страницы проектов, открытых для анонимного доступа, пока он включён. Всё остальное по-прежнему помечено noindex. robots.txt и /sitemap.xml следуют этой настройке."

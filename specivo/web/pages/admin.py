@@ -815,6 +815,12 @@ async def admin_settings(
 
     anonymous_access_enabled = await is_anonymous_access_enabled(db)
     anonymous_access_projects = await list_projects_with_anonymous_permissions(db)
+    from specivo.services.search_engine_service import (
+        SEARCH_ENGINE_INDEXING_SETTING_KEY,
+        is_indexing_enabled,
+    )
+
+    search_engine_indexing = await is_indexing_enabled(db)
     # The similar-issues switch is a checkbox in the Defaults card.
     from specivo.services.similar_issues import SIMILAR_ISSUES_SETTING_KEY, instance_setting_enabled
 
@@ -831,6 +837,7 @@ async def admin_settings(
         | EXCHANGE_RATE_SETTING_KEYS
         | {
             ANONYMOUS_ACCESS_SETTING_KEY,
+            SEARCH_ENGINE_INDEXING_SETTING_KEY,
             SIMILAR_ISSUES_SETTING_KEY,
             REPORTING_CURRENCY_SETTING_KEY,
         }
@@ -849,6 +856,7 @@ async def admin_settings(
             "settings": generic_settings,
             "anonymous_access_enabled": anonymous_access_enabled,
             "anonymous_access_projects": anonymous_access_projects,
+            "search_engine_indexing": search_engine_indexing,
             "language_choices": language_choices,
             "current_default_language": current_default,
             "timezone_choices": timezone_choices,
@@ -921,6 +929,27 @@ async def admin_settings_defaults(
         if "default_language" in to_set:
             set_default_language_override(to_set["default_language"])
 
+    return RedirectResponse("/admin/settings/", status_code=303)
+
+
+@router.post("/admin/settings/search-engines/", response_model=None)
+async def admin_settings_search_engines(
+    request: Request,
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    search_engine_indexing: str = Form(""),
+) -> Response:
+    """Turn search engine indexing of the anonymously readable pages on or off.
+
+    The checkbox follows a hidden "false" input of the same name, so a ticked
+    box arrives as "true" and an unticked one as "false". Any other value
+    changes nothing.
+    """
+    from specivo.services.search_engine_service import SEARCH_ENGINE_INDEXING_SETTING_KEY
+
+    if search_engine_indexing in ("true", "false"):
+        await _settings_svc.set_many(db, {SEARCH_ENGINE_INDEXING_SETTING_KEY: search_engine_indexing})
+        await db.commit()
     return RedirectResponse("/admin/settings/", status_code=303)
 
 

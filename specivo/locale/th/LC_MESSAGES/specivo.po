@@ -11734,3 +11734,10 @@ msgstr "ยังไม่มีหน้าวิกิ งาน หรือ�
 msgid "No wiki page, issue or comment links here yet."
 msgstr "ยังไม่มีหน้าวิกิ งาน หรือความคิดเห็นใดลิงก์มาที่นี่"
 
+#: specivo/templates/themes/default/pages/admin/settings.html
+msgid "Let search engines index public pages"
+msgstr "อนุญาตให้เครื่องมือค้นหาจัดทำดัชนีหน้าสาธารณะ"
+
+#: specivo/templates/themes/default/pages/admin/settings.html
+msgid "Only pages anyone can read without an account are offered: the project list, and the project pages, issues and wiki pages of projects opted in to anonymous access while it is on. Everything else stays marked noindex. robots.txt and /sitemap.xml follow this setting."
+msgstr "จะเสนอเฉพาะหน้าที่ทุกคนอ่านได้โดยไม่ต้องมีบัญชี ได้แก่ รายการโปรเจกต์ รวมถึงหน้าโปรเจกต์ issue และหน้าวิกิของโปรเจกต์ที่เปิดให้เข้าถึงแบบไม่ระบุตัวตนขณะที่การเข้าถึงนั้นเปิดอยู่ หน้าอื่นทั้งหมดยังคงถูกทำเครื่องหมาย noindex ไฟล์ robots.txt และ /sitemap.xml จะเป็นไปตามการตั้งค่านี้"
