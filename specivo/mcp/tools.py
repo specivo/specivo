@@ -31,6 +31,7 @@ from specivo.models.issue import Issue
 from specivo.models.journal import ATTACHMENT_DETAIL, SPRINT_DETAIL, JournalDetail
 from specivo.models.lookups import IssuePriority, IssueStatus, Tracker
 from specivo.models.project import Project
+from specivo.models.tag import Tag
 from specivo.models.user import User
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.schemas.recurring_pattern import RecurringPatternCreate, RecurringPatternUpdate
@@ -194,6 +195,76 @@ async def _resolve_parent_ref(session: AsyncSession, user: User, parent_ref: str
     return parent
 
 
+async def _resolve_list_filters(
+    session: AsyncSession,
+    user: User,
+    project: Project,
+    *,
+    assignee: str | None,
+    tag: str | None,
+    release: str | None,
+) -> dict[str, object]:
+    """The ``list_issues`` filters for the assignee, tag and release arguments, as the issue list reads them.
+
+    Each takes a name or a numeric id; ``assignee`` also ``me`` and ``none``,
+    ``release`` also ``none`` (see :mod:`specivo.services.issue_list_filters`).
+    Only what the issue list's own pickers offer resolves: people issues of
+    the project can be assigned to, the project's tags, and the versions the
+    caller may see from the project (shared ones included). Anything else is
+    a ``ValueError`` naming the argument, with the same message whether it
+    does not exist or the caller may not see it.
+    """
+    from specivo.services.issue_list_filters import NO_VALUE
+
+    filters: dict[str, object] = {}
+
+    value = (assignee or "").strip()
+    if value:
+        lowered = value.casefold()
+        if lowered == NO_VALUE:
+            filters["assigned_to_id"] = NO_VALUE
+        elif lowered == "me":
+            filters["assigned_to_id"] = user.id
+        else:
+            match = User.id == int(value) if value.isdecimal() else func.lower(User.login) == lowered
+            found = await session.scalar(
+                select(User.id).where(match, _project_svc.assignable_users_clause(project)).limit(1)
+            )
+            if found is None:
+                raise ValueError(
+                    f"Unknown assignee '{value}' in {project.key}: use a login or id of someone issues "
+                    "here can be assigned to, 'me' or 'none'."
+                )
+            filters["assigned_to_id"] = found
+
+    value = (tag or "").strip()
+    if value:
+        match = Tag.id == int(value) if value.isdecimal() else func.lower(Tag.name) == value.casefold()
+        found = await session.scalar(select(Tag.id).where(Tag.project_id == project.id, match).limit(1))
+        if found is None:
+            raise ValueError(f"Unknown tag '{value}' in {project.key}.")
+        filters["tag_id"] = found
+
+    value = (release or "").strip()
+    if value:
+        if value.casefold() == NO_VALUE:
+            filters["version_id"] = NO_VALUE
+        else:
+            versions = await _version_svc.visible_versions(session, project, user)
+            wanted = int(value) if value.isdecimal() else None
+            matches = [
+                v for v in versions if (v.id == wanted if wanted is not None else v.name.casefold() == value.casefold())
+            ]
+            if not matches:
+                raise ValueError(
+                    f"Unknown release '{value}' in {project.key}: use a version name or id visible here, or 'none'."
+                )
+            # A name shared by this project's own version and a shared one: the project's own wins.
+            matches.sort(key=lambda v: v.project_id != project.id)
+            filters["version_id"] = matches[0].id
+    return filters
+
+
 async def _list_issues(
     session: AsyncSession,
     user: User,
@@ -205,12 +276,20 @@ async def _list_issues(
     sprint_id: int | None = None,
     metadata_filters: list[str] | None = None,
     parent_ref: str | None = None,
+    assignee: str | None = None,
+    tag: str | None = None,
+    release: str | None = None,
 ) -> str:
     project = await _project_svc.get_by_key(session, project_key)
     await _require_permission(session, user, project.id, "view_issues")
     filters: dict = {"status": status}
     if sprint_id is not None:
         filters["sprint_id"] = sprint_id
+    try:
+        named = await _resolve_list_filters(session, user, project, assignee=assignee, tag=tag, release=release)
+    except ValueError as exc:
+        return f"Error: {exc}"
+    filters.update(named)
     parent: Issue | None = None
     if parent_ref:
         try:
@@ -243,6 +322,9 @@ async def _list_issues(
         scope += ", metadata=" + ",".join(f"{k}={v}" for k, v in parsed_metadata)
     if parent is not None:
         scope += f", parent={parent.display_key}"
+    for name, value in (("assignee", assignee), ("tag", tag), ("release", release)):
+        if value is not None and value.strip():
+            scope += f", {name}={value.strip()}"
     lines = [f"Issues for {project.key} ({total} total, {scope}):", ""]
     # One batched query for every issue on this page — never per-issue lookups.
     tags_by_issue = await _tag_svc.tags_for_issues(session, [i.id for i in issues])
