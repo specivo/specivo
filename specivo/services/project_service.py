@@ -880,6 +880,43 @@ class ProjectService:
             out = out[:limit]
         return out
 
+    def assignable_users_clause(self, project: Project) -> ColumnElement[bool]:
+        """Predicate over ``users`` for the people issues of *project* can be assigned to.
+
+        The SQL form of :meth:`list_members`, which feeds the issue form's
+        assignee field: users holding a membership row on the project
+        themselves (a group grant does not make its users assignable there),
+        never the anonymous user or another system account.
+        """
+        return and_(
+            User.id.in_(select(Member.user_id).where(Member.project_id == project.id, Member.user_id.is_not(None))),
+            real_users_clause(),
+        )
+
+    async def search_assignable_users(
+        self,
+        session: AsyncSession,
+        project: Project,
+        query: str | None = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> list[User]:
+        """Page through the people issues of *project* can be assigned to.
+
+        A non-empty *query* is a case-insensitive substring match on login or
+        display name. Ordered by display name, then login, so pages are stable.
+        """
+        stmt = select(User).where(self.assignable_users_clause(project))
+        q = (query or "").strip()
+        if q:
+            pattern = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            stmt = stmt.where(
+                or_(User.login.ilike(pattern, escape="\\"), User.display_name.ilike(pattern, escape="\\"))
+            )
+        display = func.lower(func.coalesce(func.nullif(User.display_name, ""), User.login))
+        stmt = stmt.order_by(display, func.lower(User.login), User.id).offset(offset).limit(limit)
+        return list((await session.execute(stmt)).scalars().all())
+
     async def list_group_memberships(
         self,
         session: AsyncSession,

@@ -343,6 +343,16 @@ class MemberUpdateRoles(BaseModel):
         return self
 
 
+class AssigneeSuggestionOut(BaseModel):
+    """A person issues of a project can be assigned to, for filter and picker suggestions."""
+
+    id: int
+    login: str
+    display_name: str
+    avatar_url: str | None = None
+    avatar_color: str = ""
+
+
 class MemberOut(BaseModel):
     """One project membership row, held by a user or by a user group.
 

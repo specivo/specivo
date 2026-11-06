@@ -13,6 +13,7 @@ from specivo.models.user import User
 from specivo.models.user_group import UserGroup
 from specivo.schemas.common import PaginatedResponse
 from specivo.schemas.project import (
+    AssigneeSuggestionOut,
     BranchNameConfig,
     MemberAdd,
     MemberOut,
@@ -370,6 +371,38 @@ async def list_members(
     rows = await _service.list_members(db, project)
     rows += await _service.list_group_memberships(db, project)
     return [MemberOut(**row) for row in rows]
+
+
+@router.get("/{key}/assignees/search/", response_model=list[AssigneeSuggestionOut])
+async def search_assignees(
+    key: str,
+    q: str | None = Query(default=None, max_length=100, description="Substring of the login or display name."),
+    offset: int = Query(default=0, ge=0, description="Matches to skip, to page through them."),
+    limit: int = Query(default=20, ge=1, le=50),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> list[AssigneeSuggestionOut]:
+    """Search the people issues of the project can be assigned to.
+
+    The same people the issue form's assignee field offers: users holding a
+    membership on the project themselves, never a system account. Ordered by
+    display name and paged with ``offset``/``limit``; a page shorter than
+    ``limit`` is the last. Needs an account and access to the project (404
+    otherwise, for a private project).
+    """
+    project = await _service.get_by_key(db, key.upper())
+    await _require_project_access(project, current_user, db)
+    users = await _service.search_assignable_users(db, project, q, offset=offset, limit=limit)
+    return [
+        AssigneeSuggestionOut(
+            id=u.id,
+            login=u.login,
+            display_name=u.display_name,
+            avatar_url=u.avatar_url,
+            avatar_color=str((u.preferences or {}).get("avatar_color") or ""),
+        )
+        for u in users
+    ]
 
 
 @router.post("/{key}/members/", response_model=MemberOut, status_code=status.HTTP_201_CREATED)

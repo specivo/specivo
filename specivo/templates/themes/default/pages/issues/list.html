@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "components/macros.html" import breadcrumbs, status_badge, priority_badge, tracker_badge, avatar, pagination, empty_state %}
+{% from "components/filter_combobox.html" import filter_combobox %}
 
 {% block title %}{% trans %}Issues{% endtrans %} - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -27,8 +28,8 @@
 {% if saved_filters is defined and saved_filters %}
 <div class="filter-tabs" style="margin-bottom:var(--sp-space-lg);">
   {% for sf in saved_filters %}
-  <a href="/projects/{{ project.key }}/issues/?{{ sf.query_string if sf.query_string else '' }}"
-     class="filter-tab{{ ' active' if sf.active is defined and sf.active else '' }}">
+  <a href="/projects/{{ project.key }}/issues/{{ '?' ~ sf.query_string if sf.query_string else '' }}"
+     class="filter-tab{{ ' active' if sf.active else '' }}">
     {{ sf.name }}
   </a>
   {% endfor %}
@@ -52,14 +53,14 @@
   </select>
 
   {# Filtering by assignee means listing the people on the project, which is
-     not part of what a project opts in to. #}
+     not part of what a project opts in to. Assignees, tags and releases are
+     searched as you type (filterCombobox); the page never lists them all. #}
   {% if not anonymous %}
-  <select name="assigned_to_id" class="filter-select">
-    <option value="">{% trans %}All Assignees{% endtrans %}</option>
-    {% for m in members %}
-    <option value="{{ m.user_id if m.user_id is defined else m.id }}" {{ 'selected' if filters.get('assigned_to_id') == (m.user_id if m.user_id is defined else m.id) }}>{{ m.user.login if m.user is defined else m.login }}</option>
-    {% endfor %}
-  </select>
+  {% set me = {"login": user.login, "display_name": user.display_name, "avatar_url": user.avatar_url or "", "avatar_color": (user.preferences or {}).get("avatar_color", "")} %}
+  {{ filter_combobox("assigned_to_id", _("Assignee"), _("Assignee…"),
+       "/api/v1/projects/" ~ project.key ~ "/assignees/search/", "user",
+       chip=filter_chips.get("assigned_to_id"),
+       specials=[{"value": "me", "label": _("Me"), "user": me}, {"value": "none", "label": _("Unassigned")}]) }}
   {% endif %}
 
   <select name="priority_id" class="filter-select">
@@ -69,13 +70,17 @@
     {% endfor %}
   </select>
 
-  {% if project_tags is defined and project_tags %}
-  <select name="tag_id" class="filter-select">
-    <option value="">{% trans %}All Tags{% endtrans %}</option>
-    {% for t in project_tags %}
-    <option value="{{ t.id }}" {{ 'selected' if filters.get('tag_id') == t.id }}>{{ t.name }}</option>
-    {% endfor %}
-  </select>
+  {% if not anonymous %}
+  {% if has_tags %}
+  {{ filter_combobox("tag_id", _("Tag"), _("Tag…"),
+       "/api/v1/projects/" ~ project.key ~ "/tags/search/", "tag",
+       chip=filter_chips.get("tag_id")) }}
+  {% endif %}
+  {{ filter_combobox("fixed_version_id", _("Release"), _("Release…"),
+       "/api/v1/projects/" ~ project.key ~ "/versions/search/?include_shared=true", "version",
+       chip=filter_chips.get("fixed_version_id"),
+       specials=[{"value": "none", "label": _("No release")}],
+       project_key=project.key) }}
   {% endif %}
 
   <button type="submit" class="sp-btn sp-btn-ghost">{% trans %}Apply{% endtrans %}</button>
@@ -265,7 +270,7 @@
   </table>
 </div>
 
-{{ pagination(total, offset, limit, "/projects/" ~ project.key ~ "/issues") }}
+{{ pagination(total, offset, limit, "/projects/" ~ project.key ~ "/issues/", query=list_query) }}
 {% endif %}
 
 {% elif anonymous %}

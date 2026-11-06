@@ -28,6 +28,7 @@ from specivo.models.version import Version
 from specivo.schemas.issue import IssueCreate, IssueUpdate
 from specivo.services.api_key_scope import project_in_scope, scope_clause
 from specivo.services.computed_metadata_service import load_project_settings, strip_computed
+from specivo.services.issue_list_filters import NO_VALUE
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
 from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.metadata_schema_service import MetadataSchemaService
@@ -1388,7 +1389,11 @@ class IssueService:
         # ------------------------------------------------------------------
         if filters.get("tracker_id") is not None:
             stmt = stmt.where(Issue.tracker_id == filters["tracker_id"])
-        if filters.get("assigned_to_id") is not None:
+        # ``"none"`` (NO_VALUE) selects the issues without an assignee / target
+        # version; see specivo.services.issue_list_filters.
+        if filters.get("assigned_to_id") == NO_VALUE:
+            stmt = stmt.where(Issue.assigned_to_id.is_(None))
+        elif filters.get("assigned_to_id") is not None:
             stmt = stmt.where(Issue.assigned_to_id == filters["assigned_to_id"])
         if filters.get("priority_id") is not None:
             stmt = stmt.where(Issue.priority_id == filters["priority_id"])
@@ -1396,7 +1401,9 @@ class IssueService:
             stmt = stmt.where(Issue.category_id == filters["category_id"])
         if filters.get("author_id") is not None:
             stmt = stmt.where(Issue.author_id == filters["author_id"])
-        if filters.get("version_id") is not None:
+        if filters.get("version_id") == NO_VALUE:
+            stmt = stmt.where(Issue.fixed_version_id.is_(None))
+        elif filters.get("version_id") is not None:
             stmt = stmt.where(Issue.fixed_version_id == filters["version_id"])
         if filters.get("sprint_id") is not None:
             stmt = stmt.where(Issue.sprint_id == filters["sprint_id"])

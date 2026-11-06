@@ -12,12 +12,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import NotFoundError
+from specivo.core.i18n import gettext as _
 from specivo.core.lookup_cache import get_lookups as _get_cached_lookups
 from specivo.models.sprint import Sprint
 from specivo.models.version import Version
 from specivo.services.activity_lookups import activity_lookup_maps, metadata_value_names
 from specivo.services.attachment_service import AttachmentService
 from specivo.services.computed_metadata_service import merge_computed
+from specivo.services.issue_list_filters import (
+    ME,
+    NO_VALUE,
+    list_query_string,
+    normalize_assignee_param,
+    normalize_version_param,
+    parse_assignee,
+    parse_id,
+    parse_version,
+    saved_filter_params,
+)
 from specivo.services.issue_service import IssueService
 from specivo.services.issue_source_ref_service import imported_from, is_plain_number, visible_issue_keys
 from specivo.services.journal_service import JournalService
@@ -39,6 +51,7 @@ from specivo.web.thread_tree import build_thread_tree
 
 if TYPE_CHECKING:
     from specivo.models.issue import Issue
+    from specivo.models.project import Project
     from specivo.models.user import User
 
 router = APIRouter(tags=["web-issues"], include_in_schema=False)
@@ -142,6 +155,67 @@ async def _get_lookups(db: AsyncSession) -> dict:
     }
 
 
+def _person_chip(person: User, label: str | None = None) -> dict:
+    """Chip data for a person: label plus what the avatar macro needs."""
+    return {
+        "label": label or person.display_name or person.login,
+        "login": person.login,
+        "display_name": person.display_name,
+        "avatar_url": person.avatar_url or "",
+        "avatar_color": str((person.preferences or {}).get("avatar_color") or ""),
+    }
+
+
+async def _filter_chips(db: AsyncSession, project: Project, user: User, params: dict[str, str]) -> dict[str, dict]:
+    """Server-rendered labels for the assignee, tag and release filter chips.
+
+    A value names something only when the reader may see it: an id of a person,
+    tag or version they cannot see gets a generic label, so the chip never
+    tells more than the list does.
+    """
+    from specivo.models.tag import Tag
+    from specivo.models.user import User as UserModel
+    from specivo.services.anonymous_user_service import real_users_clause
+    from specivo.services.permission_service import visible_users_clause
+    from specivo.services.version_service import VersionService
+
+    chips: dict[str, dict] = {}
+
+    assignee = params.get("assigned_to_id", "")
+    if assignee == NO_VALUE:
+        chips["assigned_to_id"] = {"label": _("Unassigned")}
+    elif assignee == ME:
+        chips["assigned_to_id"] = _person_chip(user, _("Me"))
+    elif assignee:
+        stmt = select(UserModel).where(UserModel.id == int(assignee), real_users_clause())
+        visible = await visible_users_clause(db, user)
+        if visible is not None:
+            stmt = stmt.where(visible)
+        person = (await db.execute(stmt)).scalar_one_or_none()
+        chips["assigned_to_id"] = _person_chip(person) if person else {"label": _("Unknown person")}
+
+    tag_value = params.get("tag_id", "")
+    if tag_value:
+        tag = (
+            await db.execute(select(Tag).where(Tag.id == int(tag_value), Tag.project_id == project.id))
+        ).scalar_one_or_none()
+        chips["tag_id"] = {"label": tag.name, "color": tag.color or ""} if tag else {"label": _("Unknown tag")}
+
+    version_value = params.get("fixed_version_id", "")
+    if version_value == NO_VALUE:
+        chips["fixed_version_id"] = {"label": _("No release")}
+    elif version_value:
+        version = await VersionService().get_visible(db, project, user, int(version_value))
+        chips["fixed_version_id"] = {"label": version.name} if version else {"label": _("Unknown release")}
+
+    base = f"/projects/{project.key}/issues/"
+    for name, chip in chips.items():
+        chip["value"] = params[name]
+        query = list_query_string(params, drop=(name,))
+        chip["clear_url"] = f"{base}?{query}" if query else base
+    return chips
+
+
 @router.get("/projects/{project_key}/issues/", response_class=HTMLResponse)
 async def issues_list(
     project_key: str,
@@ -153,13 +227,14 @@ async def issues_list(
     assigned_to_id: str = Query(""),
     priority_id: str = Query(""),
     tag_id: str = Query(""),
+    fixed_version_id: str = Query(""),
     sort: str = Query("created_at:desc"),
     offset: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     view: str = Query("list"),
     board_per_col: int = Query(10, ge=5, le=50),
 ) -> Response:
-    """Render the issue list page for a project."""
+    """Render the issue list page for a project (list and board views)."""
     from specivo.core.utils import safe_int
 
     if reader is None:
@@ -187,15 +262,37 @@ async def issues_list(
             return refuse_anonymous_web(request)
         anon_can_view_wiki = await check_permission(user, project.id, Permission.VIEW_WIKI, db)
 
+    view = view if view in ("list", "board") else "list"
+    # The filters as they are written back into links (chips, pagination,
+    # saved filter tabs): canonical spellings, unparseable values dropped.
+    # "me" stays "me" so a shared link means "the reader", whoever that is.
+    params: dict[str, str] = {
+        "status": status,
+        "tracker_id": str(safe_int(tracker_id) or ""),
+        "assigned_to_id": normalize_assignee_param(assigned_to_id),
+        "priority_id": str(safe_int(priority_id) or ""),
+        "tag_id": str(parse_id(tag_id) or ""),
+        "fixed_version_id": normalize_version_param(fixed_version_id),
+        "sort": sort,
+        "limit": str(limit),
+        "view": view,
+        "board_per_col": str(board_per_col) if view == "board" else "",
+    }
+
     filters: dict = {"status": status}
     if safe_int(tracker_id) is not None:
         filters["tracker_id"] = safe_int(tracker_id)
-    if safe_int(assigned_to_id) is not None:
-        filters["assigned_to_id"] = safe_int(assigned_to_id)
+    # "me" matches nothing for an anonymous visitor, who has no assignee filter.
+    assignee = parse_assignee(assigned_to_id, me_id=user.id)
+    if assignee is not None:
+        filters["assigned_to_id"] = assignee
     if safe_int(priority_id) is not None:
         filters["priority_id"] = safe_int(priority_id)
-    if safe_int(tag_id) is not None:
-        filters["tag_id"] = safe_int(tag_id)
+    if parse_id(tag_id) is not None:
+        filters["tag_id"] = parse_id(tag_id)
+    version = parse_version(fixed_version_id)
+    if version is not None:
+        filters["version_id"] = version
 
     # Board view loads more issues (up to 200) to fill columns
     effective_limit = min(limit, 100) if view != "board" else 200
@@ -214,21 +311,28 @@ async def issues_list(
     lookups = await _get_lookups(db)
 
     if anonymous:
-        # A saved filter belongs to the person who created it; the member list
-        # names people; the tag vocabulary is project configuration. None of
-        # the three is part of what a project opts in to, and each drives a
-        # control an anonymous visitor has no use for.
+        # A saved filter belongs to the person who created it; the assignee
+        # filter names people; the tag vocabulary and the releases are project
+        # configuration. None of them is part of what a project opts in to, and
+        # their suggestions come from endpoints an anonymous visitor cannot call.
         saved_filters: list = []
-        members: list = []
-        project_tags: list = []
+        chips: dict[str, dict] = {}
+        has_tags = False
     else:
-        saved_filters = await _saved_filter_svc.list_for_project(db, user, project.id)
+        current_query = list_query_string(params)
+        saved_filters = []
+        for sf in await _saved_filter_svc.list_for_project(db, user, project.id):
+            sf_query = list_query_string(saved_filter_params(sf.filter_definition))
+            saved_filters.append({"name": sf.name, "query_string": sf_query, "active": sf_query == current_query})
+        chips = await _filter_chips(db, project, user, params)
+        # Suggestions are fetched while typing; the page only needs to know
+        # whether the project has any tags to offer the filter at all.
+        from specivo.models.tag import Tag
 
-        # Get project members for assignee dropdown
-        members = await _project_svc.list_members(db, project)
-
-        # Project tag vocabulary for the tag filter dropdown
-        project_tags = _tags_to_dicts(await _tag_svc.list_for_project(db, project.id))
+        has_tags = (
+            bool((await db.execute(select(Tag.id).where(Tag.project_id == project.id).limit(1))).scalar_one_or_none())
+            or "tag_id" in chips
+        )
 
     # Parse per-column offsets for board view: col_<status_id>_offset=N
     col_offsets: dict[int, int] = {}
@@ -237,7 +341,7 @@ async def issues_list(
         non_col_parts = []
         for k, v in request.query_params.items():
             if not k.startswith("col_"):
-                non_col_parts.append(f"{k}={v}")
+                non_col_parts.append(urlencode({k: v}))
             elif k.endswith("_offset"):
                 try:
                     sid = int(k[4:-7])
@@ -261,12 +365,14 @@ async def issues_list(
             "issues": issues,
             "total": total,
             "saved_filters": saved_filters,
-            "members": members,
-            "project_tags": project_tags,
+            "filter_chips": chips,
+            "has_tags": has_tags,
+            # Pagination keeps the filters (never the offset).
+            "list_query": list_query_string(params, drop=("limit", "view", "board_per_col")),
             "offset": offset,
             "limit": limit,
             "sort": sort,
-            "view": view if view in ("list", "board") else "list",
+            "view": view,
             "col_offsets": col_offsets,
             "board_base_params": board_base_params,
             "board_per_col": board_per_col,
