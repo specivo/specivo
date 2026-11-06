@@ -12,8 +12,25 @@ whichever matches what you're doing.
 ## The issue list
 
 The **Issues** list shows every issue in the project as rows, with columns for the key (like `ACME-42`),
-subject, tracker, status, priority, and assignee. **Filter** the list to narrow it down — by status,
-tracker, assignee, version, sprint, and more — and click any row to open the issue.
+subject, tracker, status, priority, and assignee. **Filter** the list to narrow it down with the bar
+above it, and click any row to open the issue.
+
+- **Status**, **tracker** and **priority** are drop-down lists.
+- **Assignee**, **tag** and **release** are search fields: type a few letters of a name, a tag or a
+  release, then pick a suggestion with the mouse, or with the arrow keys and <kbd>Enter</kbd>.
+  <kbd>Esc</kbd> closes the suggestions. The list reloads with the filter applied.
+    - **Assignee** suggests the people issues in this project can be assigned to, by login or display
+      name, plus **Me** (whoever opens the link) and **Unassigned**.
+    - **Tag** suggests this project's [tags](../projects/tags.md). It appears once the project has a
+      tag.
+    - **Release** suggests the project's [versions](../projects/versions.md), including versions other
+      projects share with it. Open releases come first. **No release** finds the issues that have no
+      target version yet.
+- A chosen value shows as a chip. Click **×** on the chip to remove that filter and keep the rest.
+
+Filters are part of the page address (`assigned_to_id`, `tag_id`, `fixed_version_id`, …), so you can
+bookmark or share a filtered list, and the **List** / **Board** switch keeps them. Visitors who are
+not signed in can browse a public project's issues but get no assignee, tag or release filter.
 
 !!! tip "Filter by metadata or tags"
     If your project defines [metadata](../metadata/index.md), you can filter the list by a metadata
@@ -26,6 +43,9 @@ tracker, assignee, version, sprint, and more — and click any row to open the i
 The **board** view lays issues out as cards in columns by status category (backlog, active, done,
 closed). It's the quickest way to see *where everything stands* at a glance, and issues move across the
 columns as their [status](statuses-workflow.md) changes.
+
+The board uses the same filters as the list, so you can, for example, look at one release or one
+person's work as a board.
 
 ## Search
 

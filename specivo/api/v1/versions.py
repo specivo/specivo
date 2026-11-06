@@ -109,6 +109,14 @@ async def search_versions(
     project_key: str,
     q: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
+    include_shared: bool = Query(
+        default=False,
+        description=(
+            "Also offer the versions other projects share with this one (that the caller may see), "
+            "each with its project_key, and page with offset/limit for any q."
+        ),
+    ),
+    offset: int = Query(default=0, ge=0, description="With include_shared: matches to skip."),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> list[dict]:
@@ -116,6 +124,9 @@ async def search_versions(
 
     Empty/missing ``q`` returns the 10 most recent versions. Non-empty ``q``
     performs a case-insensitive substring match on name, capped at ``limit``.
+    With ``include_shared`` the shared versions visible in the project are
+    included and every query is paged by ``offset``/``limit`` (a page shorter
+    than ``limit`` is the last). Open and locked versions come first.
     Requires ``view_issues`` on the project.
     """
     project = await _get_project(project_key, current_user, db)
@@ -123,20 +134,24 @@ async def search_versions(
         allowed = await check_permission(current_user, project.id, Permission.VIEW_ISSUES, db)
         if not allowed:
             raise PermissionDeniedError("You do not have permission to view issues")
-    versions = await _version_service.search_for_project(db, project.id, q, limit=limit)
+    if include_shared:
+        pairs = await _version_service.search_visible(db, project, current_user, q, offset=offset, limit=limit)
+    else:
+        pairs = [(v, project.key) for v in await _version_service.search_for_project(db, project.id, q, limit=limit)]
     results: list[dict] = []
-    for v in versions:
+    for v, owner_key in pairs:
         ed = v.effective_date
-        results.append(
-            {
-                "id": v.id,
-                "name": v.name,
-                "status": v.status,
-                # Version.effective_date is typed as Mapped[object] in the model;
-                # narrow to date via duck-typing before calling isoformat().
-                "effective_date": ed.isoformat() if ed and hasattr(ed, "isoformat") else None,
-            }
-        )
+        row = {
+            "id": v.id,
+            "name": v.name,
+            "status": v.status,
+            # Version.effective_date is typed as Mapped[object] in the model;
+            # narrow to date via duck-typing before calling isoformat().
+            "effective_date": ed.isoformat() if ed and hasattr(ed, "isoformat") else None,
+        }
+        if include_shared:
+            row["project_key"] = owner_key
+        results.append(row)
     return results
 
 

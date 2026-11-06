@@ -75,17 +75,19 @@ class TagService:
         project_id: int,
         query: str | None = None,
         limit: int = 20,
+        offset: int = 0,
     ) -> list[Tag]:
         """Autocomplete search for tags.
 
         Empty query returns the first ``limit`` tags ordered by name; a
-        non-empty query performs a case-insensitive substring match.
+        non-empty query performs a case-insensitive substring match. Pass
+        *offset* to page through the matches.
         """
         stmt = select(Tag).where(Tag.project_id == project_id)
         q = (query or "").strip()
         if q:
             stmt = stmt.where(Tag.name.ilike(f"%{q}%"))
-        stmt = stmt.order_by(func.lower(Tag.name)).limit(limit)
+        stmt = stmt.order_by(func.lower(Tag.name), Tag.id).offset(offset).limit(limit)
         result = await session.execute(stmt)
         return list(result.scalars().all())
 
