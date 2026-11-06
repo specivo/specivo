@@ -116,8 +116,8 @@ Traces saved as artifacts on failure for debugging via Playwright Trace Viewer.
 **Positive:**
 - Catches JS-only bugs (Alpine.js binding, HTMX swaps, cookie auth)
 - Same pytest ecosystem — markers, fixtures, CI pipelines
-- The suite has grown to ~266 collected tests, including the responsive and visual-regression
-  layers added by ADR-0005; it runs serially (`-n 0`) against one uvicorn instance
+- The suite has grown to ~266 collected tests, including the responsive layer added by
+  ADR-0005; it runs serially (`-n 0`) against one uvicorn instance
 - Plugin repos extend naturally via shared fixtures
 - `make test-e2e-headed` for visual debugging
 

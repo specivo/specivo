@@ -2,7 +2,7 @@
        test test-serial test-all test-unit test-integration test-service test-cov lint format \
        migrate migrate-gen migrate-merge seed \
        test-db-up test-db-down test-db-reset test-ci \
-       test-e2e test-e2e-headed test-e2e-debug test-e2e-update-snapshots playwright-install \
+       test-e2e test-e2e-headed test-e2e-debug playwright-install \
        install sync lock help download-model backfill-embeddings rebuild-links reindex-fts import-data \
        build bundle frontend-build frontend-watch \
        sso-idp-up sso-idp-down sso-idp-reset sso-authentik-up test-sso-idp test-e2e-sso
@@ -156,9 +156,6 @@ test-e2e-headed: frontend-build
 
 test-e2e-debug: frontend-build
 	PWDEBUG=1 $(RUN) pytest tests/e2e/ -m e2e -n 0 --headed
-
-test-e2e-update-snapshots: frontend-build
-	UPDATE_SNAPSHOTS=1 $(RUN) pytest tests/e2e/test_visual_regression.py -m e2e -n 0
 
 playwright-install:
 	$(RUN) playwright install chromium
