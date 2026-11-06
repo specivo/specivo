@@ -46,7 +46,7 @@
           <td class="sp-text-muted-xs" style="overflow-wrap: anywhere;">{{ p.issuer }}</td>
           <td>
             {% if p.client_secret_status in ("configured", "env", "not_required") %}
-            <span class="sp-sso-badge sp-sso-badge-ok">{% if p.client_secret_status == "not_required" %}{% trans %}Not needed{% endtrans %}{% else %}{% trans %}Set{% endtrans %}{% endif %}</span>
+            <span class="sp-sso-badge sp-sso-badge-ok">{% if p.client_secret_status == "not_required" %}{% trans %}Not needed{% endtrans %}{% else %}{% trans %}Configured{% endtrans %}{% endif %}</span>
             {% elif p.client_secret_status == "unreadable" %}
             <span class="sp-sso-badge sp-sso-badge-bad">{% trans %}Unreadable, re-enter it{% endtrans %}</span>
             {% elif p.client_secret_status == "missing" %}

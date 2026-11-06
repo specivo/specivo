@@ -3155,6 +3155,7 @@ msgid "View"
 msgstr "Просмотр"
 
 #: specivo/templates/themes/default/pages/admin/email.html:19
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Configured"
 msgstr "Настроено"
 
@@ -3211,7 +3212,6 @@ msgid "environment variables to enable email delivery."
 msgstr "переменные окружения, чтобы включить отправку почты."
 
 #: specivo/templates/themes/default/pages/admin/email.html:63
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:49
 msgid "Set"
 msgstr "Задайте"
 
@@ -5094,13 +5094,13 @@ msgstr "Завершить все его сессии и отключить ег
 msgid ""
 "The provider sends the same message when someone signs out as when they "
 "are disabled. Switching off API keys applies only to accounts without a "
-"password, and never deactivates the account: a later sign-in works, but "
-"the keys stay off."
+"password that are not administrators, and never deactivates the account: "
+"a later sign-in works, but the keys stay off."
 msgstr ""
 "Провайдер присылает одно и то же сообщение и при выходе, и при отключении"
 " пользователя. Отключение ключей API касается только учётных записей без "
-"пароля и никогда не деактивирует учётную запись: следующий вход "
-"сработает, но ключи останутся отключёнными."
+"пароля, не являющихся администраторами, и никогда не деактивирует учётную"
+" запись: следующий вход сработает, но ключи останутся отключёнными."
 
 #: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:378
 msgid "Provisioning (SCIM)"

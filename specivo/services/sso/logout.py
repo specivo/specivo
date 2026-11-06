@@ -32,8 +32,8 @@ Back-channel logout
        session of that IdP session): ``revoke_session`` the sessions of that
        IdP session (every session of the identity for a ``sub``-only token),
        ``revoke_all_sessions`` every session of the identity, ``deprovision``
-       that and, for an SSO-only account, all its sessions and API keys
-       (:func:`_revoke_named_sessions`). Nothing matching is not an error (no
+       that and, for an SSO-only account that is not an administrator, all
+       its sessions and API keys (:func:`_revoke_named_sessions`). Nothing matching is not an error (no
        information leak). The action is the administrator's choice and is
        never inferred from the token: IdPs send the same token for a sign-out
        as for a disabled account.
@@ -347,9 +347,9 @@ async def _revoke_named_sessions(db: AsyncSession, provider: SsoProvider, claims
     session of the identity when the token has ``sub`` only.
     ``revoke_all_sessions``: every session of the identity, whatever ``sid``.
     ``deprovision``: as ``revoke_all_sessions``, and for an account that signs
-    in only through SSO (no password; never a service account) every session
-    of the user and all their API keys switched off. The account itself stays
-    active. A repeated token finds nothing left to end and records nothing.
+    in only through SSO (no password; never a service account, never an
+    administrator) every session of the user and all their API keys switched
+    off. The account itself stays active. A repeated token finds nothing left to end and records nothing.
     """
     sessions = SessionService()
     identity_ids = await _named_identities(db, provider, claims)
@@ -386,6 +386,17 @@ async def _deprovision(db: AsyncSession, provider: SsoProvider, identity_id: int
     if user.is_system_principal or not await is_sso_only_user(db, user):
         # A password (or a service account) is a way in the IdP does not
         # control: end what came from the IdP and leave the rest alone.
+        return await sessions.revoke_by_identity(db, identity_id, reason=BACKCHANNEL_REVOKE_REASON)
+    if user.is_admin:
+        # Administrators are offboarded in Specivo, never by an IdP message
+        # (SCIM refuses them too): the IdP sends the same logout for a
+        # sign-out, which would switch off every automation key they own.
+        logger.warning(
+            "sso.deprovision.skipped provider=%s user_id=%s reason=administrator "
+            "(only this provider's sessions ended; deactivate the account in Specivo to offboard it)",
+            provider.slug,
+            user.id,
+        )
         return await sessions.revoke_by_identity(db, identity_id, reason=BACKCHANNEL_REVOKE_REASON)
 
     revoked = await sessions.revoke_user_sessions(db, user.id, reason=DEPROVISION_REASON)

@@ -368,7 +368,7 @@
         <option value="revoke_all_sessions">{% trans %}End every session of that person from this provider{% endtrans %}</option>
         <option value="deprovision">{% trans %}End all of their sessions and switch off their API keys{% endtrans %}</option>
       </select>
-      <div class="form-hint">{% trans %}The provider sends the same message when someone signs out as when they are disabled. Switching off API keys applies only to accounts without a password, and never deactivates the account: a later sign-in works, but the keys stay off.{% endtrans %}</div>
+      <div class="form-hint">{% trans %}The provider sends the same message when someone signs out as when they are disabled. Switching off API keys applies only to accounts without a password that are not administrators, and never deactivates the account: a later sign-in works, but the keys stay off.{% endtrans %}</div>
     </div>
   </div>
 
