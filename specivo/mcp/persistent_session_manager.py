@@ -15,8 +15,9 @@ Solution
 --------
 This subclass hooks the ``_handle_stateful_request`` dispatch in three places:
 
-1. **On new-session creation** — after the SDK assigns a fresh session id,
-   persist ``{session_id, api_key_id, user_id, ...}`` to Redis via
+1. **On new-session creation** — once the opening ``initialize`` has been
+   accepted under a fresh session id, persist
+   ``{session_id, api_key_id, user_id, ...}`` to Redis via
    :class:`~specivo.mcp.session_store.RedisSessionStore`.
 
 2. **On a request that carries a known session id** — schedule a background
@@ -63,6 +64,21 @@ The same path also brings back sessions the SDK reaped in-process after
 ``session_idle_timeout``: the Redis entry outlives the in-memory transport,
 so an idle client's next request is rehydrated instead of answered with 404.
 
+A client whose machine went to sleep
+-------------------------------------
+A sleeping client leaves its GET stream half-open: the server cannot tell
+the peer is gone, so the stream stays registered on the transport. When the
+client wakes it opens a new GET, which the SDK would refuse with 409
+("Only one SSE stream is allowed per session"). The newest GET wins here:
+the stale stream is closed and the new one takes its place. A stream that
+breaks with a clean disconnect ends only that stream, never the session.
+
+A session that is really gone (its Redis entry expired after
+``mcp_session_ttl_seconds`` without use, the client sent DELETE, or it was
+never ours) is answered with HTTP 404 — the MCP spec's signal for the client
+to start over with ``initialize`` — never with a JSON-RPC error that reads
+like a caller mistake.
+
 The practical consequence is: the *first* request after a restart that arrives
 on a previously known session id pays the cost of standing up a new transport
 (microseconds), and any *in-flight* request that was mid-flight at the moment
@@ -100,6 +116,7 @@ from mcp.server.auth.middleware.bearer_auth import (
 from mcp.server.connection import Connection
 from mcp.server.runner import serve_connection, serve_loop
 from mcp.server.streamable_http import (
+    GET_STREAM_KEY,
     MCP_SESSION_ID_HEADER,
     StreamableHTTPServerTransport,
 )
@@ -111,7 +128,7 @@ from mcp.shared.transport_context import TransportContext
 from mcp.types import INVALID_REQUEST, ErrorData, JSONRPCError
 from starlette.requests import Request
 from starlette.responses import Response
-from starlette.types import Receive, Scope, Send
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 if TYPE_CHECKING:
     from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
@@ -195,6 +212,34 @@ async def _serve_session(
     await serve_connection(server, dispatcher, connection=connection, lifespan_state=lifespan_state)
 
 
+_STALE_STREAM_GRACE_SECONDS = 5.0
+"""How long a reconnecting GET waits for the stream it replaces to wind down."""
+
+
+def _is_ending(transport: StreamableHTTPServerTransport) -> bool:
+    """Whether the transport is terminated, or its idle reaper has already fired.
+
+    Such a transport answers every request with 404 even though the session's
+    Redis entry is still valid; the manager forgets it and rehydrates instead.
+    """
+    idle_scope = getattr(transport, "idle_scope", None)
+    return transport.is_terminated or (idle_scope is not None and idle_scope.cancel_called)
+
+
+async def _serve_and_report_status(app: ASGIApp, scope: Scope, receive: Receive, send: Send) -> int | None:
+    """Run ``app`` for one request; return the HTTP status it answered (``None`` if none)."""
+    status: int | None = None
+
+    async def watch_status(message: Message) -> None:
+        nonlocal status
+        if message["type"] == "http.response.start":
+            status = message["status"]
+        await send(message)
+
+    await app(scope, receive, watch_status)
+    return status
+
+
 def _session_not_found() -> Response:
     """The 404 the SDK answers for an unknown session id (JSON-RPC error, no id)."""
     body = JSONRPCError(
@@ -224,6 +269,9 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         # Without a resolver no session can prove its owner, so nothing is
         # persisted and nothing is rehydrated (fail closed).
         self._owner_resolver: OwnerResolver | None = owner_resolver
+        # Per session, the open standalone GET stream's completion event, so a
+        # reconnecting GET can wait for the stale one it replaces.
+        self._standalone_streams: dict[str, anyio.Event] = {}
         if self.stateless:
             # The whole point of this subclass is stateful session continuity.
             # Running in stateless mode would silently disable it.
@@ -292,6 +340,16 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
             await store.touch(session_id)
         except Exception:
             logger.debug("Failed to touch MCP session %s in Redis", _short(session_id), exc_info=True)
+
+    async def _forget_persisted_session(self, session_id: str) -> None:
+        """Drop the Redis entry of a session the client ended, so it cannot come back."""
+        store = await self._get_store()
+        if store is None:
+            return
+        try:
+            await store.delete(session_id)
+        except Exception:
+            logger.warning("Failed to delete MCP session %s from Redis", _short(session_id), exc_info=True)
 
     async def _lookup_session(self, session_id: str) -> dict[str, str] | None:
         store = await self._get_store()
@@ -366,16 +424,18 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
                 )
                 await _session_not_found()(scope, receive, send)
                 return
-            logger.debug("Session already exists, handling request directly")
-            # Refresh sliding TTL in the background; do not block the hot path.
-            if self._task_group is not None:
-                self._task_group.start_soon(self._touch_session, request_mcp_session_id)
-            await transport.handle_request(scope, receive, send)
-            if transport.is_terminated:
-                # The client ended the session (DELETE): forget it now rather
-                # than when its server task winds down.
+            if _is_ending(transport):
+                # Idle-reaped but not yet discarded: the transport would answer
+                # 404 although the session is still valid. Forget it and fall
+                # through to the Redis path, which rehydrates the session.
                 await self._discard_session(request_mcp_session_id, transport)
-            return
+            else:
+                logger.debug("Session already exists, handling request directly")
+                # Refresh sliding TTL in the background; do not block the hot path.
+                if self._task_group is not None:
+                    self._task_group.start_soon(self._touch_session, request_mcp_session_id)
+                await self._serve_existing_session(request_mcp_session_id, transport, scope, receive, send)
+                return
 
         # ---- Brand-new session (no header at all) -----------------------
         if request_mcp_session_id is None:
@@ -401,6 +461,73 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
 
         # ---- Genuinely unknown — mirror upstream 404 --------------------
         await _session_not_found()(scope, receive, send)
+
+    async def _discard_session(self, session_id: str, transport: StreamableHTTPServerTransport) -> None:
+        """Forget ``transport`` — but only if it is still the one serving ``session_id``.
+
+        Upstream pops by id. Here a session id can be rehydrated onto a new
+        transport while the old one's server task is still winding down; that
+        task's late discard must not remove its successor.
+        """
+        if self._server_instances.get(session_id) is transport:
+            self._server_instances.pop(session_id, None)
+            self._session_owners.pop(session_id, None)
+        if not transport.is_terminated:
+            with anyio.CancelScope(shield=True):
+                await transport.terminate()
+
+    async def _serve_existing_session(
+        self,
+        session_id: str,
+        transport: StreamableHTTPServerTransport,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
+        """Serve a request on an established session (live or just rehydrated)."""
+        method = scope.get("method")
+        if method == "GET":
+            await self._serve_standalone_stream(session_id, transport, scope, receive, send)
+            return
+        await transport.handle_request(scope, receive, send)
+        if transport.is_terminated:
+            # The client ended the session (DELETE): forget it now rather
+            # than when its server task winds down, and drop the persisted
+            # entry so the id answers 404 instead of being rehydrated.
+            await self._discard_session(session_id, transport)
+            if method == "DELETE":
+                await self._forget_persisted_session(session_id)
+
+    async def _serve_standalone_stream(
+        self,
+        session_id: str,
+        transport: StreamableHTTPServerTransport,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
+        """Serve a GET stream, replacing a stale one left by a client that vanished."""
+        if GET_STREAM_KEY in transport._request_streams:
+            # A client only opens a second GET when it believes the first one
+            # is gone: typically it slept, and the old TCP connection is
+            # half-open. Close the stale stream so the reconnect is not
+            # refused with 409, and let it wind down before the new one
+            # registers (its cleanup would otherwise remove the new stream).
+            logger.info("MCP session %s reopened its GET stream; closing the stale one", _short(session_id))
+            previous = self._standalone_streams.get(session_id)
+            await transport._clean_up_memory_streams(GET_STREAM_KEY)
+            if previous is not None:
+                with anyio.move_on_after(_STALE_STREAM_GRACE_SECONDS):
+                    await previous.wait()
+
+        done = anyio.Event()
+        self._standalone_streams[session_id] = done
+        try:
+            await transport.handle_request(scope, receive, send)
+        finally:
+            done.set()
+            if self._standalone_streams.get(session_id) is done:
+                del self._standalone_streams[session_id]
 
     async def _owns_persisted_session(
         self,
@@ -444,10 +571,13 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         """Create a fresh transport (either brand new or rehydrated).
 
         If ``session_id`` is ``None`` a new UUID4 id is minted (brand-new
-        session) and persisted to Redis. If ``session_id`` is provided, the
-        transport is created under that id (rehydration) and the Redis entry
-        is touched to refresh its TTL — the entry already exists because the
-        caller looked it up.
+        session). Only an opening request the transport accepts establishes
+        it: the session is then persisted to Redis. A refused one (anything
+        but ``initialize`` without a session id) leaves nothing behind, the
+        same as upstream. If ``session_id`` is provided, the transport is
+        created under that id (rehydration) and the Redis entry is touched to
+        refresh its TTL — the entry already exists because the caller looked
+        it up.
         """
         transport = await self._start_session_transport(scope, session_id=session_id, requestor=requestor)
         if transport is None:
@@ -468,7 +598,21 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
         # so holding the creation lock here would stall every other session —
         # after a restart the first client to reconnect would lock out all the
         # rest indefinitely.
-        await transport.handle_request(scope, receive, send)
+        new_session_id = transport.mcp_session_id
+        assert new_session_id is not None
+        if session_id is not None:
+            await self._serve_existing_session(new_session_id, transport, scope, receive, send)
+            return
+
+        established = False
+        try:
+            status = await _serve_and_report_status(transport.handle_request, scope, receive, send)
+            established = status is not None and status < HTTPStatus.BAD_REQUEST
+        finally:
+            if not established:
+                await self._discard_session(new_session_id, transport)
+        if established:
+            await self._persist_new_session(new_session_id, scope)
 
     async def _start_session_transport(
         self,
@@ -559,11 +703,10 @@ class PersistentStreamableHTTPSessionManager(StreamableHTTPSessionManager):
 
             await self._task_group.start(run_server)
 
-            # Persist new sessions; for rehydration the entry already exists,
-            # so just refresh the sliding TTL.
+            # For rehydration the entry already exists, so just refresh the
+            # sliding TTL. A new session is persisted by the caller once its
+            # opening request has been accepted.
             if is_rehydration:
                 await self._touch_session(new_session_id)
-            else:
-                await self._persist_new_session(new_session_id, scope)
 
             return http_transport

@@ -3,9 +3,11 @@
 Provides two transports:
 
 - **Streamable HTTP** at ``{prefix}/`` -- modern MCP transport (spec 2025-03-26).
-  Stateless: each HTTP request is a complete MCP exchange.  Auth is
-  re-validated on every request by Starlette middleware, and again inside
-  each tool call by ``authenticate_mcp_tool``.
+  Stateful, with sessions persisted to Redis so they survive idle reaping,
+  dropped client streams and api restarts (see
+  ``PersistentStreamableHTTPSessionManager``).  Auth is re-validated on every
+  request by Starlette middleware, and again inside each tool call by
+  ``authenticate_mcp_tool``.
 
 - **SSE** at ``{prefix}/sse`` -- legacy transport for older MCP clients.
   Long-lived GET connection + POST messages.  Auth middleware validates
@@ -37,6 +39,7 @@ from starlette.responses import Response
 from starlette.routing import Mount, Route, request_response
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from specivo.core.config import get_settings
 from specivo.mcp.auth import SpvTokenVerifier, resolve_key_owner
 from specivo.mcp.persistent_session_manager import (
     PersistentStreamableHTTPSessionManager,
@@ -69,15 +72,12 @@ class _StripWWWAuthenticate:
 
         async def send_filtered(message: Message) -> None:
             if message["type"] == "http.response.start" and message.get("status") == 401:
-                headers = [
-                    (k, v)
-                    for k, v in message.get("headers", [])
-                    if k.lower() != b"www-authenticate"
-                ]
+                headers = [(k, v) for k, v in message.get("headers", []) if k.lower() != b"www-authenticate"]
                 message = {**message, "headers": headers}
             await send(message)
 
         await self.app(scope, receive, send_filtered)
+
 
 _session_manager: StreamableHTTPSessionManager | None = None
 
@@ -95,8 +95,7 @@ async def _default_store_provider():  # type: ignore[no-untyped-def]
         return await get_mcp_session_store()
     except Exception:
         logger.warning(
-            "Unable to construct Redis-backed MCP session store; "
-            "sessions will not survive api restarts",
+            "Unable to construct Redis-backed MCP session store; sessions will not survive api restarts",
             exc_info=True,
         )
         return None
@@ -139,6 +138,9 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
         event_store=None,
         json_response=False,
         stateless=False,
+        # Only frees memory: an idle session reaped here is rebuilt from Redis
+        # on its next request until ``mcp_session_ttl_seconds`` runs out.
+        session_idle_timeout=get_settings().mcp_session_idle_timeout_seconds,
         store_provider=_default_store_provider,
         owner_resolver=resolve_key_owner,
     )
@@ -147,9 +149,7 @@ def mount_mcp(app: FastAPI, *, prefix: str = "/mcp") -> None:
 
     # Wrap with RequireAuthMiddleware so unauthenticated requests get
     # a proper 401 before reaching the MCP handler.
-    authed_streamable = _StripWWWAuthenticate(
-        RequireAuthMiddleware(streamable_asgi, required_scopes=[])
-    )
+    authed_streamable = _StripWWWAuthenticate(RequireAuthMiddleware(streamable_asgi, required_scopes=[]))
 
     streamable_app = Starlette(
         routes=[Route("/", endpoint=authed_streamable)],
