@@ -101,10 +101,19 @@ def _external_id(body: dict[str, Any]) -> str | None:
     return text
 
 
+#: Every Specivo account needs an email address. The IdP shows this in its
+#: provisioning log, so it says what to map (Entra ID leaves ``emails`` out
+#: for a user whose ``mail`` is empty).
+_NO_EMAIL = (
+    "A user needs an email address (emails). Map one at the identity provider; for Microsoft Entra ID "
+    'users without a mailbox, map emails[type eq "work"].value to Coalesce([mail], [userPrincipalName]).'
+)
+
+
 def _email(body: dict[str, Any]) -> str:
     emails = _get(body, "emails")
     if not isinstance(emails, list):
-        raise ScimError.invalid_value("A user needs an email address (emails).")
+        raise ScimError.invalid_value(_NO_EMAIL)
     entries = [e for e in emails if isinstance(e, dict)]
     primary = [e for e in entries if _get(e, "primary") is True]
     work = [e for e in entries if isinstance(_get(e, "type"), str) and _get(e, "type").lower() == "work"]
@@ -114,7 +123,7 @@ def _email(body: dict[str, Any]) -> str:
             if "@" not in value or " " in value or value.startswith("@") or value.endswith("@"):
                 raise ScimError.invalid_value("The email address is not valid.")
             return value
-    raise ScimError.invalid_value("A user needs an email address (emails).")
+    raise ScimError.invalid_value(_NO_EMAIL)
 
 
 def _display_name(body: dict[str, Any], login: str) -> str:

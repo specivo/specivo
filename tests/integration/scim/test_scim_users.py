@@ -143,6 +143,33 @@ async def test_missing_email_is_refused(scim: ScimClient) -> None:
     _assert_error(await scim.post("/Users", body), 400, "invalidValue")
 
 
+async def test_entra_user_without_a_mailbox_is_refused_with_the_fix(scim: ScimClient) -> None:
+    # Entra leaves out an attribute whose source is empty: a user without
+    # ``mail`` arrives with no ``emails`` at all. The error lands in Entra's
+    # provisioning log, so it says how to map one.
+    body = fixture("entra_create_user.json")
+    del body["emails"]
+
+    error = _assert_error(await scim.post("/Users", body), 400, "invalidValue")
+
+    assert "email" in error["detail"]
+    assert "Coalesce([mail], [userPrincipalName])" in error["detail"]
+
+
+async def test_entra_user_principal_name_as_the_email(scim: ScimClient, db_session: AsyncSession) -> None:
+    # What Coalesce([mail], [userPrincipalName]) sends for a user without a mailbox.
+    body = fixture("entra_create_user.json")
+    body["userName"] = "scu-nomail@example.com"
+    body["externalId"] = "8c1f7a0e-2b6d-4d8e-9a51-0f3c2e7d9b14"
+    body["emails"] = [{"primary": True, "type": "work", "value": "scu-nomail@example.com"}]
+
+    resp = await scim.post("/Users", body)
+
+    assert resp.status_code == 201, resp.text
+    user = (await db_session.execute(select(User).where(User.login == "scu-nomail"))).scalar_one()
+    assert user.email == "scu-nomail@example.com"
+
+
 async def test_bad_json_and_content_type(scim: ScimClient) -> None:
     resp = await scim.client.post(
         scim.url("/Users"), content=b"{not json", headers=scim._headers({"Content-Type": SCIM_JSON})
