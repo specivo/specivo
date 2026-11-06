@@ -85,7 +85,8 @@ async def test_upgrade_grants_and_downgrade_removes_view_time_entries() -> None:
                 {"name": name, "perms": json.dumps(perms)},
             )
 
-        _alembic("upgrade", "head")
+        # Up to 0036 only: later migrations grant the Agent role more (0063: AI usage).
+        _alembic("upgrade", "0036")
         assert await _permissions() == {
             "Agent": ["log_time", "view_issues", "view_time_entries"],
             "Mig36 Renamed Agent": ["log_time", "view_issues"],
@@ -94,8 +95,8 @@ async def test_upgrade_grants_and_downgrade_removes_view_time_entries() -> None:
         _alembic("downgrade", "0036-1")
         assert await _permissions() == {name: sorted(perms) for name, perms in _ROLES.items()}
 
-        # Round trip back to head grants it once again, not twice.
-        _alembic("upgrade", "head")
+        # Round trip back up grants it once again, not twice.
+        _alembic("upgrade", "0036")
         assert (await _permissions())["Agent"] == ["log_time", "view_issues", "view_time_entries"]
     finally:
         _alembic("upgrade", "head")
