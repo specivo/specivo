@@ -363,6 +363,7 @@ no bring-your-own-key (BYOK) option and no way to switch to another model (see
 | `SEARCH_EXCLUDE_BOT_COMMENTS` | Skip comments made through an API key or by a service account. Default `true`. |
 | `SEARCH_HNSW_EF_SEARCH` | Size of pgvector's candidate list for each vector index scan (`hnsw.ef_search`, 10 to 1000). Higher finds the true nearest matches more reliably and is a little slower. Default `100`. |
 | `SEARCH_SEMANTIC_OVERFETCH` | Nearest chunks read from the vector index per wanted result, before results the reader may not see are removed (1 to 50). Default `4`. See [Vector index](semantic-search.md#vector-index). |
+| `SEARCH_SEMANTIC_MIN_SIMILARITY` | Minimum cosine similarity (-1 to 1) a chunk needs to count as a semantic match; in hybrid search it applies to matches found by meaning alone. Unset by default, which uses the model's own minimum (`0.82` for `multilingual-e5-small`); `-1` turns it off. See [Minimum similarity](semantic-search.md#minimum-similarity). |
 
 See [Semantic search and embeddings](semantic-search.md) for what it is used for, how existing
 content is indexed, how to check it works, and troubleshooting. For an offline host, see
