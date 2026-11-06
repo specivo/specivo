@@ -489,23 +489,30 @@ they are written in lower case, with `.` and `_` turned into `-`.
 
 With **Commit commands** on, a commit message can change the issues it names:
 
-- **`Fixes ACME-12`** (or any fixing keyword) on the **default branch** moves the issue to the
-  **Fixing status** you pick. The same message on a feature branch only links the commit, and the
-  issue does **not** move later when that same commit reaches the default branch (a fast-forward or
-  a merge commit): a command runs only when a commit is first linked, and the commit keeps the
-  branch it was first pushed to. It moves when a commit with its own `Fixes ACME-12` lands on the
-  default branch, such as a squash or rebase merge whose message keeps the keyword; for merged pull
-  requests, use [merge automation](#merge-automation). Without a fixing status, nothing moves.
-- **`ACME-12 @2h`**, with **Time logging** on as well, logs the time on the issue, on any branch.
-  Write the time right after the reference, on the same line: `@2h`, `@1h30m`, `@90m` or `@1.5h`.
-  `Fixes ACME-12 @1h30m` does both. Zero logs nothing; more than 24 hours is logged as 24; time is
+- **`Fixes ACME-12`** (or any fixing keyword) moves the issue to the **Fixing status** you pick
+  when the commit reaches the **default branch**. Pushed to a feature branch, the commit is linked
+  at once and the issue waits; it moves when the same commit is pushed to the default branch, by a
+  fast-forward or a merge commit. A squash or rebase merge makes a new commit, which moves the
+  issue when its own message keeps the keyword. Without a fixing status, nothing moves.
+- **`ACME-12 @2h`**, with **Time logging** on as well, logs the time on the issue, on any branch,
+  when the commit is first linked. Write the time right after the reference, on the same line:
+  `@2h`, `@1h30m`, `@90m` or `@1.5h`. `Fixes ACME-12 @1h30m` does both. Zero logs nothing; more than 24 hours is logged as 24; time is
   rounded to 0.01 hours.
 
 ![The options under Changes to issues](../../assets/img/repository-options.webp)
 
-A command runs once, when the commit is first linked to the issue. It runs **as the commit's
-author**: the Specivo account whose verified email is the commit author email. That person's
-permissions and the workflow apply exactly as in the web interface:
+Each command runs **once per commit and issue**: time when the commit is first linked, `Fixes`
+the first time Specivo sees the commit on the default branch. Whatever the outcome, even a
+refusal, the command is not tried again: a redelivered push, a replay after a force-push or the
+same commit reaching the default branch again changes nothing. Specivo only sees the commits a
+push delivery lists, and forges cap that list (GitLab lists at most 20 commits), so a commit
+missing from the list of the push that brought it to the default branch does not move its issue.
+If a pull request that says `Fixes ACME-12` also has [merge automation](#merge-automation),
+whichever runs first moves the issue and the other finds it already moved. A commit
+[detached](#correcting-links-detach-and-move) from the issue never acts on it.
+
+A command runs **as the commit's author**: the Specivo account whose verified email is the commit
+author email. That person's permissions and the workflow apply exactly as in the web interface:
 
 - moving the issue needs **Edit issues** and a [workflow transition](../issues/statuses-workflow.md#customizing-the-workflow)
   their roles allow; the note "Fixed in commit `abc1234`." is added with the change;
@@ -667,7 +674,7 @@ commands_disabled`):
 |---|---|
 | `commands_disabled` | The message has a command but commit commands are off. |
 | `time_logging_disabled` | The message has a time but time logging is off. |
-| `not_default_branch` | `Fixes` on a branch other than the default branch only links. |
+| `not_default_branch` | The commit is not on the default branch yet; the issue moves when it gets there. |
 | `no_fixing_status` | No fixing status is set. |
 | `no_matched_user` | No active account has the commit author email as a verified address. |
 | `no_membership` | The matched person is an administrator without a membership in the issue's project. |

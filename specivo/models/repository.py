@@ -235,6 +235,11 @@ class IssueCommitLink(Base):
     issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), primary_key=True)
     source: Mapped[str] = mapped_column(String(10), nullable=False)
     keyword: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    # When the message's ``Fixes`` command ran for this issue, whatever its
+    # outcome: the first time Specivo saw the commit on the default branch.
+    # NULL while a fixing link waits on another branch; never reset, so the
+    # command runs at most once per (commit, issue).
+    fix_ran_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     def __repr__(self) -> str:
