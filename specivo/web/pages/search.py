@@ -11,13 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from specivo.core.constants import MAX_SEARCH_OFFSET
 from specivo.core.database import DB_SESSION
-from specivo.core.rate_limit import enforce_rate_limit
-from specivo.core.security import (
-    ANONYMOUS_SEARCH_MAX_LIMIT,
-    ANONYMOUS_SEARCH_MAX_OFFSET,
-    ANONYMOUS_SEARCH_MODE,
-    ANONYMOUS_SEARCH_RATE_LIMIT,
-)
+from specivo.core.search_limits import enforce_search_rate_limit
+from specivo.core.security import ANONYMOUS_SEARCH_MAX_LIMIT, ANONYMOUS_SEARCH_MAX_OFFSET
 from specivo.schemas.search import SearchFilters
 from specivo.services.project_service import ProjectService
 from specivo.services.search_service import SearchService
@@ -69,18 +64,17 @@ async def search_page(
     user = cast("User", reader)
     anonymous = user.is_anonymous
 
+    # Every search is metered per client address, in every mode and for
+    # everyone (specivo.core.search_limits); a page that only shows the empty
+    # form costs nothing and is not counted. Over the limit this raises 429,
+    # which renders as a page rather than the API's JSON error.
+    if q.strip() or (mf.strip() and mv.strip()) or any(t.strip() for t in tag):
+        await enforce_search_rate_limit(request, response, anonymous=anonymous)
+
     if anonymous:
-        # Search is the expensive route, so it is metered in a bucket of its
-        # own rather than against the general anonymous read budget.
-        await enforce_rate_limit(request, response, "anon_search", *ANONYMOUS_SEARCH_RATE_LIMIT)
         # The same bounds the JSON API enforces, reached by narrowing the
-        # request instead of refusing it. The API can refuse anything outside
-        # them because a client chooses what it sends; a browser arrives with
-        # whatever the form put in the URL, and this page's own default mode is
-        # hybrid — refusing that would turn the search page into a refusal for
-        # every anonymous visitor. Narrowing costs them a worse ranking, not
-        # the page, and the embedding model is never run.
-        mode = ANONYMOUS_SEARCH_MODE
+        # request instead of refusing it: a browser arrives with whatever the
+        # form put in the URL. The mode is left as asked, hybrid by default.
         limit = min(limit, ANONYMOUS_SEARCH_MAX_LIMIT)
         offset = min(offset, ANONYMOUS_SEARCH_MAX_OFFSET)
 

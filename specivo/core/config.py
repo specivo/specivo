@@ -247,6 +247,17 @@ class Settings(BaseSettings):
     # for the embedding model's family (0.82 for multilingual-e5); -1 keeps
     # every nearest neighbour. See specivo.services.similarity_threshold.
     search_semantic_min_similarity: float | None = Field(default=None, ge=-1.0, le=1.0)
+    # Searches per minute one client address may run, in every mode, on the
+    # search page and the REST search endpoint (specivo.core.search_limits).
+    # Visitors without an account and signed-in callers have separate buckets;
+    # a hybrid or semantic query runs the embedding model, so neither is
+    # unlimited. The signed-in limit is higher because an office behind one
+    # NAT address shares it.
+    search_rate_limit_anonymous_per_minute: int = Field(default=10, ge=1)
+    search_rate_limit_per_minute: int = Field(default=60, ge=1)
+    # Seconds a query's embedding is kept in Redis, so a repeated or paged
+    # query does not run the model again. 0 turns the cache off.
+    search_query_embedding_cache_seconds: int = Field(default=300, ge=0)
 
     # CPU seconds one Markdown field may use to render before it is abandoned
     # and shown as plain text; the wall-clock ceiling is 4x this. A backstop:

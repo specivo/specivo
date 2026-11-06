@@ -1,0 +1,7 @@
+{# The 429 answer to an htmx request: a short note swapped in where the
+   partial would have gone (frontend/js/modules/htmx-behaviors.js lets a 429
+   swap). The full page is pages/rate_limited.html. #}
+<div class="sp-rate-limit-inline" role="status">
+  <strong>{% if is_search %}{% trans %}Searching is paused{% endtrans %}{% else %}{% trans %}Too many requests{% endtrans %}{% endif %}</strong>
+  <span>{% trans num=retry_after %}You can try again in %(num)s second.{% pluralize %}You can try again in %(num)s seconds.{% endtrans %}</span>
+</div>

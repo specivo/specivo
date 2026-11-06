@@ -509,7 +509,7 @@ async def login(
 ):
 ```
 
-Key format: `rl:{key_prefix}:{identifier}`. Identifier is user ID (if authenticated upstream) or client IP. Graceful degradation: if Redis is down, all requests are allowed (with a warning log). Standard `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers. Exceeded limits raise `AppError(429)` with `Retry-After` header.
+Key format: `rl:{key_prefix}:{identifier}`. Identifier is user ID (if authenticated upstream) or client IP. Graceful degradation: if Redis is down, all requests are allowed (with a warning log). Standard `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` headers. Exceeded limits raise `AppError(429)` with `Retry-After` header. The API (and `/mcp`, `/scim`, `/hooks`) answers with the JSON error; a web page answers with `pages/rate_limited.html` in the app's layout (or `pages/_rate_limited_inline.html` for an htmx request, which `htmx-behaviors.js` swaps in), keeping `Retry-After` and the `X-RateLimit-*` headers. The page says "searching is paused" when the refusing bucket is a search budget (`request.state.rate_limit_bucket`). Search itself is metered per client address for everyone, in every mode (`specivo.core.search_limits`: `anon_search` and `search` buckets, keyed by IP even for signed-in callers).
 
 Trusted proxy handling: only trusts `X-Forwarded-For` when the direct peer IP matches a CIDR in `settings.trusted_proxies`. Never falls back to `is_private` (prevents spoofing by local network attackers).
 

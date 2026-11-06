@@ -259,10 +259,37 @@ The sitemap still lists every readable project; leave the `Sitemap:` line out if
 messages, branch names and pull request titles. Once the project is indexable, search engines can
 pick that text up too. Decide before making a project public and turning indexing on.
 
+## Search rate limits
+
+Every search runs the query through the database, and a hybrid or semantic search also runs the
+[embedding model](#semantic-search-model) on the server's CPU. So searches are limited per client
+address, on the search page and on the REST search endpoint (`GET /api/v1/search/`), in every mode,
+for people with and without an account. People without an account get the same search as everyone
+else, hybrid by default, but only over what they may read without signing in.
+
+| Variable | Purpose / default |
+|---|---|
+| `SEARCH_RATE_LIMIT_ANONYMOUS_PER_MINUTE` | Searches per minute one client address may run without signing in. Default `10`. |
+| `SEARCH_RATE_LIMIT_PER_MINUTE` | Searches per minute one client address may run while signed in. Default `60`. It is higher because a whole office behind one address shares it. |
+| `SEARCH_QUERY_EMBEDDING_CACHE_SECONDS` | Seconds a query's embedding is kept in Redis, so a repeated query, or the next page of results, does not run the model again. Default `300`; `0` turns the cache off. |
+
+The two budgets are separate, and the search page and the REST endpoint share them: moving from one
+to the other does not start a new count. An IPv6 client is counted by its /64, like the other
+per-address limits. Opening the search page without searching does not count.
+
+Over a limit, the search page shows a short page saying that searching is paused and when the
+visitor can try again, with status `429` and a `Retry-After` header (in seconds). The REST API
+answers `429` with its usual JSON error, code `rate_limit_exceeded`, and the same header. Every
+other rate-limited web page answers the same way, with general wording.
+
+Behind a reverse proxy, set [`TRUSTED_PROXIES`](#client-addresses-behind-a-proxy), or every visitor
+shares the proxy's budget. If Redis is unavailable, searches are not limited, as with every other
+rate limit, and `RATE_LIMIT_ENABLED=false` turns all rate limits off.
+
 ## Client addresses behind a proxy
 
 Specivo uses the client's IP address for the per-address rate limits (sign-in, single sign-on,
-anonymous reads), for the address shown on each session, for API key IP allowlists and for the
+anonymous reads, [search](#search-rate-limits)), for the address shown on each session, for API key IP allowlists and for the
 security audit log. Behind a reverse proxy, the connection comes from the proxy. Each proxy appends
 the address it received the request from to the `X-Forwarded-For` header, so the client's address
 is in that header. Two settings decide what Specivo believes:

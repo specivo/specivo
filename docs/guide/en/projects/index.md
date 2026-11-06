@@ -119,8 +119,10 @@ project* permission and is recorded in the audit log.
 ### Public projects and search engines
 
 A public project that an administrator opts in to anonymous access can be read without an account
-while the instance's anonymous access switch is on. Its project page, issue list, issues and wiki
-pages can also appear in search engines, but only when an administrator turns on
+while the instance's anonymous access switch is on. Visitors can also search it, with the same
+hybrid search as everyone else, within a per-address limit (see
+[Search rate limits](../install/configuration.md#search-rate-limits)). Its project page, issue list,
+issues and wiki pages can also appear in search engines, but only when an administrator turns on
 **Let search engines index public pages** under **Administration → Settings → Anonymous access**
 (off by default). Private issues and comments, and every page of a project that is not opted in,
 are never indexed. See [Search engines](../install/configuration.md#search-engines) for what is

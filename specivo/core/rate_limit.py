@@ -8,6 +8,10 @@ Uses Redis sorted sets (ZSET) to implement a sliding window algorithm:
 Graceful degradation: if Redis is unavailable the limiter allows all requests
 and logs a warning. Never deny service because the rate limiter is broken.
 
+Over a limit, the JSON API answers with its JSON error; a web page answers
+with a page in the app's layout, still ``429`` with ``Retry-After`` (see
+``app_error_handler`` in :mod:`specivo.core.exceptions`).
+
 Usage
 -----
 Apply to an endpoint as a FastAPI dependency::
@@ -191,6 +195,9 @@ async def _apply(limiter: RateLimiter, request: Request, response: Response, ide
 
     if not allowed:
         rl_headers[_HEADER_RETRY_AFTER] = str(retry_after)
+        # Which limit refused, so a web page can say what was paused
+        # (specivo.core.exceptions renders the 429 page from it).
+        request.state.rate_limit_bucket = limiter.key_prefix
         raise AppError(
             code="rate_limit_exceeded",
             message=f"Rate limit exceeded. Try again in {retry_after} second(s).",

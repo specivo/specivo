@@ -108,7 +108,7 @@ async def test_anonymous_searches_have_their_own_tighter_bucket(
 ) -> None:
     """Searching does not spend the read budget, and is capped on its own."""
     monkeypatch.setattr("specivo.core.security.ANONYMOUS_READ_RATE_LIMIT", (100, 60))
-    monkeypatch.setattr("specivo.api.v1.search.ANONYMOUS_SEARCH_RATE_LIMIT", (2, 60))
+    monkeypatch.setattr(get_settings(), "search_rate_limit_anonymous_per_minute", 2)
 
     codes = [(await client.get("/api/v1/search/?q=anything")).status_code for _ in range(3)]
 

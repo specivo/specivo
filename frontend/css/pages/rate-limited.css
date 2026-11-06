@@ -1,0 +1,47 @@
+/* ============================================================
+   Rate limit (429) — the page and the htmx fragment a person
+   sees when a web page is over a rate limit. Layout comes from
+   the shared .error-content / .error-card rules in auth.css;
+   these add the clock, the retry line and the inline note.
+   ============================================================ */
+
+.sp-rate-limit-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin-bottom: var(--sp-space-lg);
+    border-radius: 50%;
+    background: var(--sp-accent-subtle);
+    color: var(--sp-accent);
+}
+
+.sp-rate-limit-icon svg {
+    width: 32px;
+    height: 32px;
+}
+
+.sp-rate-limit-retry {
+    margin-bottom: var(--sp-space-xl);
+    color: var(--sp-text-secondary);
+    font-size: var(--sp-font-size-sm);
+}
+
+.sp-rate-limit-inline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: var(--sp-space-xs) var(--sp-space-sm);
+    padding: var(--sp-space-sm) var(--sp-space-md);
+    border: 1px solid var(--sp-border);
+    border-left: 3px solid var(--sp-warning);
+    border-radius: var(--sp-border-radius);
+    background: var(--sp-bg-surface);
+    color: var(--sp-text-secondary);
+    font-size: var(--sp-font-size-sm);
+}
+
+.sp-rate-limit-inline strong {
+    color: var(--sp-text-primary);
+}

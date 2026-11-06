@@ -1538,8 +1538,12 @@ class SearchService:
         if model is None:
             return pinned[pinned_slice], len(pinned)
 
+        from specivo.services.query_embedding_cache import embed_query
+
         try:
-            query_vector = await emb_service.generate_embedding(query, model, intent="query")
+            # Cached briefly in Redis, so a repeated or paged query does not
+            # run the model again (specivo.services.query_embedding_cache).
+            query_vector = await embed_query(emb_service, query, model)
         except Exception as exc:  # noqa: BLE001 - a broken model turns semantic search off, never a 500
             _warn_embedding_failure(model, exc)
             query_vector = None

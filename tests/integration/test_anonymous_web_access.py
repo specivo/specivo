@@ -722,12 +722,13 @@ async def test_the_search_page_refuses_a_project_filter_it_may_not_read(client: 
 
 
 async def test_the_search_page_stays_inside_the_anonymous_bounds(client: AsyncClient, live: World) -> None:
-    """Semantic modes and long pages are brought back to the API's limits."""
+    """Long pages are brought back to the API's limits; the mode is the visitor's to pick."""
     resp = await client.get(f"/search/?q={TERM}&mode=hybrid&limit=100")
     assert resp.status_code == 200
-    # The mode toggle is a control the visitor cannot spend, so it is gone.
-    assert "mode-toggle-btn" not in resp.text
-    assert "Hybrid" not in resp.text
+    # Hybrid is served (and metered per address), so the mode toggle is offered.
+    assert "mode-toggle-btn" in resp.text
+    # A page of at most 25 results: the pager links never ask for more.
+    assert "limit=100" not in resp.text
 
 
 # ---------------------------------------------------------------------------

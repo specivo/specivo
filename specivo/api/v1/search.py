@@ -19,12 +19,10 @@ from specivo.core.exceptions import (
     UnauthorizedError,
     ValidationError,
 )
-from specivo.core.rate_limit import enforce_rate_limit
+from specivo.core.search_limits import enforce_search_rate_limit
 from specivo.core.security import (
     ANONYMOUS_SEARCH_MAX_LIMIT,
     ANONYMOUS_SEARCH_MAX_OFFSET,
-    ANONYMOUS_SEARCH_MODE,
-    ANONYMOUS_SEARCH_RATE_LIMIT,
     get_reader,
 )
 from specivo.models.project import Project
@@ -50,33 +48,27 @@ _METADATA_FILTER_MAX_KEYS = 10
 _TAG_VALUE_MAX = 64
 _TAG_MAX = 20
 
-# What a visitor without an account may ask of search. Defined in
+# How far a visitor without an account may page. Defined in
 # specivo.core.security, which the web search page reads too, so the API's
 # bounds and the page's cannot drift apart.
-_ANONYMOUS_SEARCH_MODE = ANONYMOUS_SEARCH_MODE
 _ANONYMOUS_SEARCH_MAX_LIMIT = ANONYMOUS_SEARCH_MAX_LIMIT
 _ANONYMOUS_SEARCH_MAX_OFFSET = ANONYMOUS_SEARCH_MAX_OFFSET
 
 
-async def _anonymous_search_budget(
+async def _search_budget(
     request: Request,
     response: Response,
     user: User = Depends(get_reader, scope="function"),
 ) -> None:
-    """Meter anonymous searches against their own per-IP bucket.
+    """Spend one search from the caller's per-IP budget (specivo.core.search_limits).
 
-    A dependency of its own rather than a ``rate_limit`` on the route,
-    because it must never touch the signed-in buckets: it applies only after
-    ``get_reader`` has resolved the caller, and only when that caller turns
-    out to be anonymous. ``get_reader`` is the same callable the route
+    A dependency of its own rather than a ``rate_limit`` on the route, because
+    which bucket applies is only known once ``get_reader`` has resolved the
+    caller: a visitor without an account spends ``anon_search``, anyone signed
+    in spends ``search``. ``get_reader`` is the same callable the route
     depends on, so FastAPI resolves it once and both see one principal.
-
-    Search gets a bucket separate from ``anon_read`` because it is the
-    expensive route: a full-text query costs far more than fetching one issue,
-    so it is metered far more tightly.
     """
-    if user.is_anonymous:
-        await enforce_rate_limit(request, response, "anon_search", *ANONYMOUS_SEARCH_RATE_LIMIT)
+    await enforce_search_rate_limit(request, response, anonymous=user.is_anonymous)
 
 
 async def _can_reach(db: AsyncSession, project: Project, user: User) -> bool:
@@ -112,7 +104,11 @@ def _clean_tag_names(tag: list[str]) -> list[str]:
     return out
 
 
-@router.get("/search/", response_model=SearchResponse)
+@router.get(
+    "/search/",
+    response_model=SearchResponse,
+    responses={429: {"description": "rate_limit_exceeded: the per-IP search budget is spent; see Retry-After"}},
+)
 async def search(
     request: Request,
     q: str = Query("", description="Search query (optional when a metadata filter is given)"),
@@ -137,7 +133,7 @@ async def search(
     metadata: str | None = Query(None, description="JSONB containment filter (JSON string)"),
     tag: list[str] = Query(default=[], description="Real-tag name(s) to filter by (AND logic)"),  # noqa: B006
     user: User = Depends(get_reader, scope="function"),
-    _budget: None = Depends(_anonymous_search_budget),
+    _budget: None = Depends(_search_budget),
     db: AsyncSession = DB_SESSION,
 ) -> SearchResponse:
     """Search across issues and wiki pages.
@@ -150,14 +146,14 @@ async def search(
     Results are sorted by relevance score (descending).
     Access control enforces per-project visibility rules.
 
-    A visitor without an account gets keyword search only, over a short page,
-    and a project filter that names a project they may not read is refused the
-    same way one naming no project at all is.
+    Every caller is metered per client address, in every mode (429 with
+    ``Retry-After`` over the limit). A visitor without an account may use
+    every mode too, over a short page, and only ever sees what the anonymous
+    visibility rules admit; a project filter that names a project they may not
+    read is refused the same way one naming no project at all is.
     """
     anonymous = user.is_anonymous
-    if anonymous and (
-        mode != _ANONYMOUS_SEARCH_MODE or limit > _ANONYMOUS_SEARCH_MAX_LIMIT or offset > _ANONYMOUS_SEARCH_MAX_OFFSET
-    ):
+    if anonymous and (limit > _ANONYMOUS_SEARCH_MAX_LIMIT or offset > _ANONYMOUS_SEARCH_MAX_OFFSET):
         raise AnonymousAccessDeniedError()
 
     # Resolve project IDs
