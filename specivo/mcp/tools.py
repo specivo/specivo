@@ -165,9 +165,7 @@ def _parse_metadata_filters(raw: list[str] | None) -> list[tuple[str, str]]:
     pairs: list[tuple[str, str]] = []
     for item in raw:
         if not isinstance(item, str) or "=" not in item:
-            raise ValueError(
-                f"metadata filter {item!r} must be a 'key=value' string"
-            )
+            raise ValueError(f"metadata filter {item!r} must be a 'key=value' string")
         key, _, value = item.partition("=")
         key = key.strip()
         if not key:
@@ -394,11 +392,13 @@ async def _show_issue(
         lines.append(f"Due date: {issue.due_date}")
     if issue.estimated_hours:
         lines.append(f"Estimated hours: {issue.estimated_hours}")
+    if issue.original_estimate is not None:
+        lines.append(f"Original estimate hours: {issue.original_estimate}")
+    if issue.remaining_estimate is not None:
+        lines.append(f"Remaining estimate hours: {issue.remaining_estimate}")
     lines.append(f"Done: {issue.done_ratio}%")
     lines.extend(await _hierarchy_lines(session, user, issue))
-    effective_metadata = merge_computed(
-        issue.issue_metadata, await load_project_settings(session, issue.project_id)
-    )
+    effective_metadata = merge_computed(issue.issue_metadata, await load_project_settings(session, issue.project_id))
     if effective_metadata:
         lines.append(f"Metadata: {effective_metadata}")
         lines.extend(await _metadata_field_lines(session, user, issue, effective_metadata))
@@ -1954,7 +1954,7 @@ async def _metadata(
                 f"Error: value {offender} arrived as a number with lost precision "
                 "(scientific notation, inf, or nan). Identifier-like inputs "
                 "(commit hashes, PR ids, tokens) must be passed as JSON strings — "
-                "quote the value, e.g. \"4983e31...\" instead of 4983e31..."
+                'quote the value, e.g. "4983e31..." instead of 4983e31...'
             )
 
     # Resolve & permission check
@@ -1972,9 +1972,7 @@ async def _metadata(
         # Overlay project-derived (computed) metadata for issues so the
         # effective value is returned even though it is never stored.
         if scheme == "issue":
-            metadata = merge_computed(
-                metadata, await load_project_settings(session, target.project_id_of(entity))
-            )
+            metadata = merge_computed(metadata, await load_project_settings(session, target.project_id_of(entity)))
         if key not in metadata:
             return "(not set)"
         try:
@@ -2520,9 +2518,7 @@ async def _list_recurring_patterns(session: AsyncSession, user: User, project_ke
                 next_hint = f"  next: {occ[0].isoformat()}"
         except Exception:
             next_hint = ""
-        lines.append(
-            f"  [{p.id}] {p.name} ({rule}, {p.anchor_mode}, {state}){next_hint}"
-        )
+        lines.append(f"  [{p.id}] {p.name} ({rule}, {p.anchor_mode}, {state}){next_hint}")
     if not patterns:
         lines.append("  (none)")
     await _log_tool(
@@ -2719,10 +2715,7 @@ async def _skip_recurrence_occurrence(
         {"project_key": project_key, "pattern_id": pattern_id, "occurrence_at": occurrence.isoformat()},
         project_id=project.id,
     )
-    return (
-        f"Skipped occurrence {occurrence.isoformat()} for recurring pattern "
-        f"'{pattern.name}' (ID: {pattern_id})."
-    )
+    return f"Skipped occurrence {occurrence.isoformat()} for recurring pattern '{pattern.name}' (ID: {pattern_id})."
 
 
 async def _list_recurrence_occurrences(
@@ -2745,9 +2738,7 @@ async def _list_recurrence_occurrences(
 
     # Skip exceptions (EXDATEs) so the preview matches generation reality.
     exdates, _overrides = await _recurring_pattern_svc._load_exceptions(session, pattern.id)
-    occurrences = expand_occurrences(
-        _recurring_pattern_svc.build_spec(pattern), now, window_end, exdates
-    )
+    occurrences = expand_occurrences(_recurring_pattern_svc.build_spec(pattern), now, window_end, exdates)
 
     lines = [
         f"Upcoming occurrences for '{pattern.name}' (ID: {pattern_id}), "
@@ -2979,9 +2970,7 @@ async def _list_sprint_issues(
         )
 
     lines = [header, ""]
-    settings_by_project = {
-        pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}
-    }
+    settings_by_project = {pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}}
 
     for i in issues:
         if fields == "minimal":
@@ -3080,9 +3069,7 @@ async def _list_version_issues(
     header = f"{header_prefix} ({total} total, showing {offset}..{offset + len(issues)}):"
 
     lines = [header, ""]
-    settings_by_project = {
-        pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}
-    }
+    settings_by_project = {pid: await load_project_settings(session, pid) for pid in {i.project_id for i in issues}}
 
     for i in issues:
         if fields == "minimal":
@@ -3160,8 +3147,12 @@ async def _create_tag(
         return f"Error: {exc.message}"
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.TAG_CREATED, "create_tag",
-        {"project_key": project_key, "name": tag.name}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.TAG_CREATED,
+        "create_tag",
+        {"project_key": project_key, "name": tag.name},
+        project_id=project.id,
     )
     return f"Created tag '{tag.name}' (ID: {tag.id}) in {project.key}."
 
@@ -3186,8 +3177,12 @@ async def _update_tag(
         return f"Error: {exc.message}"
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.TAG_UPDATED, "update_tag",
-        {"project_key": project_key, "tag_id": tag_id, "name": tag.name}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.TAG_UPDATED,
+        "update_tag",
+        {"project_key": project_key, "tag_id": tag_id, "name": tag.name},
+        project_id=project.id,
     )
     return f"Updated tag '{tag.name}' (ID: {tag.id}) in {project.key}."
 
@@ -3202,8 +3197,12 @@ async def _delete_tag(session: AsyncSession, user: User, project_key: str, tag_i
     await _tag_svc.delete(session, tag)
     await session.flush()
     await _log_tool(
-        session, user, AuditEvent.TAG_DELETED, "delete_tag",
-        {"project_key": project_key, "tag_id": tag_id, "name": name}, project_id=project.id,
+        session,
+        user,
+        AuditEvent.TAG_DELETED,
+        "delete_tag",
+        {"project_key": project_key, "tag_id": tag_id, "name": name},
+        project_id=project.id,
     )
     return f"Deleted tag '{name}' from {project.key}."
 
@@ -3253,8 +3252,12 @@ async def _add_tags(
         if created:
             added.append(tag.name)
             await _log_tool(
-                session, user, AuditEvent.TAG_ADDED, tool_name,
-                {"target_ref": target_ref, "name": tag.name}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_ADDED,
+                tool_name,
+                {"target_ref": target_ref, "name": tag.name},
+                project_id=project.id,
             )
     await session.flush()
     return added
@@ -3314,8 +3317,12 @@ async def _tag(
             else await _tag_svc.tags_for_wiki_page(session, entity_id)
         )
         await _log_tool(
-            session, user, AuditEvent.TAGS_LISTED, "tag",
-            {"target_ref": target_ref, "op": op}, project_id=project.id,
+            session,
+            user,
+            AuditEvent.TAGS_LISTED,
+            "tag",
+            {"target_ref": target_ref, "op": op},
+            project_id=project.id,
         )
         if not tags:
             return f"{display}: (no tags)"
@@ -3334,13 +3341,21 @@ async def _tag(
         await session.flush()
         for n in diff["added"]:
             await _log_tool(
-                session, user, AuditEvent.TAG_ADDED, "tag",
-                {"target_ref": target_ref, "name": n}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_ADDED,
+                "tag",
+                {"target_ref": target_ref, "name": n},
+                project_id=project.id,
             )
         for n in diff["removed"]:
             await _log_tool(
-                session, user, AuditEvent.TAG_REMOVED, "tag",
-                {"target_ref": target_ref, "name": n}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_REMOVED,
+                "tag",
+                {"target_ref": target_ref, "name": n},
+                project_id=project.id,
             )
         return (
             f"Set tags on {display}: +{len(diff['added'])} / -{len(diff['removed'])} "
@@ -3368,8 +3383,12 @@ async def _tag(
         if removed:
             changed.append(existing_tag.name)
             await _log_tool(
-                session, user, AuditEvent.TAG_REMOVED, "tag",
-                {"target_ref": target_ref, "name": existing_tag.name}, project_id=project.id,
+                session,
+                user,
+                AuditEvent.TAG_REMOVED,
+                "tag",
+                {"target_ref": target_ref, "name": existing_tag.name},
+                project_id=project.id,
             )
     await session.flush()
     return f"Removed tags from {display}: {', '.join(changed) or '(not present)'}"

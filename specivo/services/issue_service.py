@@ -625,6 +625,8 @@ class IssueService:
             start_date=data.start_date,
             due_date=data.due_date,
             estimated_hours=data.estimated_hours,
+            original_estimate=data.original_estimate,
+            remaining_estimate=data.remaining_estimate,
             done_ratio=data.done_ratio,
             is_private=is_private,
             # Recurrence provenance — set only by the recurring-pattern generator.
@@ -1043,6 +1045,10 @@ class IssueService:
             issue.due_date = data.due_date
         if data.estimated_hours is not None:
             issue.estimated_hours = data.estimated_hours
+        if data.original_estimate is not None:
+            issue.original_estimate = data.original_estimate
+        if data.remaining_estimate is not None:
+            issue.remaining_estimate = data.remaining_estimate
         if data.done_ratio is not None:
             issue.done_ratio = data.done_ratio
         if data.is_private is not None:

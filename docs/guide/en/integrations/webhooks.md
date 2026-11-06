@@ -114,6 +114,8 @@ values are given as the issue history stores them: ids as strings, the full text
       "due_date": null,
       "done_ratio": 0,
       "estimated_hours": null,
+      "original_estimate": null,
+      "remaining_estimate": null,
       "is_private": false,
       "metadata": {
         "commits": [

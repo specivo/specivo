@@ -42,8 +42,8 @@ Specivo loads them:
 - **Sprints** arrive with the state they had (planned, active or completed). A project can have only one
   active sprint, so a second active one is imported as planned and reported. A completed sprint's velocity is
   recorded from its issues.
-- **An issue's remaining estimate** is stored next to its estimate. Specivo keeps it as given and does not
-  derive it from time entries.
+- **An issue's remaining estimate** is shown and kept next to its estimate. Specivo keeps it as given and
+  does not derive it from time entries.
 - **History** keeps its original authors and times. A change of status, assignee, version or similar shows
   by name, like any other change.
 - **Text** is Markdown. References to issues, people and attachments are rewritten into links once every
