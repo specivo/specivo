@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -299,6 +300,28 @@ def _cell_text(cell: dict[str, Any]) -> str:
     return str(cell["label"])
 
 
+#: Significant digits of a rate on the report page (the API and CSV keep the exact value).
+RATE_DISPLAY_DIGITS = 6
+
+
+def display_rate(rate: Decimal) -> str:
+    """*rate* rounded to :data:`RATE_DISPLAY_DIGITS` significant digits, in plain notation.
+
+    ``0.0298151460942158616577221228`` reads ``0.0298151``, ``32.4123`` reads
+    ``32.4123``, ``1234.5678`` reads ``1234.57``; never an exponent.
+    """
+    if rate.is_zero() or not rate.is_finite():
+        return f"{rate:f}"
+    places = RATE_DISPLAY_DIGITS - 1 - rate.adjusted()
+    rounded = (
+        rate.quantize(Decimal(1).scaleb(-places), rounding=ROUND_HALF_UP)
+        if places > 0
+        else rate.quantize(Decimal(1), rounding=ROUND_HALF_UP)
+    )
+    text = f"{rounded:f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
 def _rates_view(report: SpendReport) -> list[dict[str, str]]:
     """The rates used, one line per currency pair: the rate (or its range) and the dates it comes from."""
     pairs: dict[tuple[str, str], list[Any]] = {}
@@ -308,13 +331,14 @@ def _rates_view(report: SpendReport) -> list[dict[str, str]]:
     for (src, dst), items in sorted(pairs.items()):
         rates = sorted({u.rate.normalize() for u in items})
         dates = sorted(u.rate_date for u in items if u.rate_date is not None)
-        rate = f"{rates[0]:f}" if len(rates) == 1 else f"{rates[0]:f}–{rates[-1]:f}"
+        low, high = display_rate(rates[0]), display_rate(rates[-1])
+        rate = low if low == high else f"{low}–{high}"
         span = ""
         if dates:
             span = (
                 dates[0].isoformat() if dates[0] == dates[-1] else f"{dates[0].isoformat()} – {dates[-1].isoformat()}"
             )
-        out.append({"from": src, "to": dst, "rate": rate[:30], "date": span, "count": str(len(dates))})
+        out.append({"from": src, "to": dst, "rate": rate, "date": span, "count": str(len(dates))})
     return out
 
 
