@@ -253,7 +253,10 @@ user's name (`user_id`, on behalf of) and written by `reporter_user_id` / `repor
 (`manual`, `api`, `mcp`, `reporter`, `import`). The reporter columns, the source and the client name and version never
 change. Reporter and import entries carry an `idempotency_key`, unique per target user (`uq_ai_usage_entries_user_key`),
 are upserted with full bucket totals (`AiUsageService.upsert`: `created`, `updated` with `revision + 1`, or `unchanged`
-with no write; a key reported by another account is 409 `key_conflict`), keep their token, model and tool columns
+with no write; a key reported by another account is 409 `key_conflict`; an existing entry is authorized with
+`require_can_log` against its **stored** project and user, never the project the replay names, and a replay naming a
+different project than the stored one is 409 `ai_usage_attribution_conflict`: reporters attribute unassigned entries
+only, people move entries), keep their token, model and tool columns
 (only `project_id`, `issue_id` and `comments` change; 422 `ai_usage_field_locked`), are excluded rather than deleted
 (`excluded_at` survives upserts; admins may hard-delete), and keep an attribution once set. Costs are a **snapshot at
 write time** (`AiUsageService.apply_costs` + the pure `specivo.core.ai_usage.compute_costs`): priced at `priced_at`
@@ -343,7 +346,9 @@ ones included; a reporter reads what it reported; and entries without a project 
 Entries on issues the reader cannot see are hidden unless they are the reader's own. A project-limited key sees
 unassigned entries only where it is the reporting key (`ProjectScope.key_id`, `limited_key_id()`). Logging in another
 user's name needs `log_ai_usage_for_others` in the project and the target must be an active member there; unassigned
-entries for someone else are for admins only (`require_can_log`). Moving an entry to a project needs `log_ai_usage` there.
+entries for someone else are for admins only (`require_can_log`). Moving an entry to another project (or making it
+unassigned) runs the same `require_can_log` in the destination in the entry's user's name, so someone else's entry needs
+`log_ai_usage_for_others` there.
 The per-project form of both entry kinds' cross-project visibility is read once by
 `permission_service.entry_visibility_projects(session, user, permission, visibility_attribute)`; use it rather than
 another membership query.
@@ -687,7 +692,8 @@ actor is not the holder (an administrator changing somebody else's). `AI_SUBSCRI
 **AI usage events** (category AI usage, `resource_type` `ai_usage_entry`, `project_id` set when the entry has one),
 written by `AiUsageService` in the transaction of the change: `AI_USAGE_LOGGED_FOR_OTHER` (an entry created in another
 user's name; details `entry_id`, `target_user_id`, `target_login`, `source`, `tool`, `provider`, `model`, `usage_date`,
-`project_key`, `issue`, `reporter_api_key_id`; upsert updates of the same bucket write none),
+`project_key`, `issue`, `reporter_api_key_id`; a replay that changes another user's bucket writes it again with
+`status: "updated"` and `revision`, an unchanged replay none),
 `AI_USAGE_UPDATED_BY_OTHER` (an edit by someone other than the entry's user; the same plus `changes`, comments only as
 `{"changed": true}`), `AI_USAGE_EXCLUDED` / `AI_USAGE_INCLUDED` and `AI_USAGE_DELETED` (whoever did it; a delete adds
 `tokens` and `cost_type`), and `AI_USAGE_COSTS_RECOMPUTED` (one per range: `provider`, `models`, `from`, `to`,

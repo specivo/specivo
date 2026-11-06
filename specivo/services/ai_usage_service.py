@@ -34,8 +34,10 @@ Writing
 administrator. Reporter and import entries keep their token, model and tool
 columns: only the project, the issue and the comments change. People exclude
 them (``excluded_at``) rather than delete them, and a later upsert keeps the
-exclusion; administrators may hard-delete. Moving an entry to a project needs
-``log_ai_usage`` there.
+exclusion; administrators may hard-delete. Moving an entry to another project
+is checked like logging it there in its user's name (``require_can_log``).
+A replay of an existing bucket is authorized against the stored entry, never
+the project the record names (``_replace``).
 
 Costs
 -----
@@ -708,6 +710,9 @@ class AiUsageService:
           project and issue are taken from the record only while the entry is
           unassigned: an attributed entry (by the reporter or a person) keeps
           its attribution. Comments and the exclusion are never touched.
+        - An existing entry is authorized against its stored project and user
+          (see ``_replace``); a record naming another project than the stored
+          one is 409 ``ai_usage_attribution_conflict``.
         - A key the target holds from another reporter: 409 ``key_conflict``.
         """
         target = target or actor
@@ -715,9 +720,9 @@ class AiUsageService:
             raise _invalid("An idempotency key is required", "idempotency_key")
         values = await self._validated(session, data, source=source)
         project = await self._project(session, data.project_id)
-        await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
         existing = await self._by_key(session, target.id, values["idempotency_key"])
         if existing is None:
+            await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
             savepoint = await session.begin_nested()
             try:
                 entry = await self._insert(session, actor, target, data, values, source, api_key_id, request)
@@ -730,7 +735,7 @@ class AiUsageService:
                 if savepoint.is_active:
                     await savepoint.commit()
                 return UpsertResult(entry, "created")
-        return await self._replace(session, actor, existing, data, values)
+        return await self._replace(session, actor, target, existing, data, values, project, request)
 
     async def _by_key(self, session: AsyncSession, user_id: int, key: str) -> AiUsageEntry | None:
         stmt = (
@@ -777,10 +782,25 @@ class AiUsageService:
         self,
         session: AsyncSession,
         actor: User,
+        target: User,
         entry: AiUsageEntry,
         data: AiUsageInput,
         values: dict[str, Any],
+        project: Project | None,
+        request: Request | None,
     ) -> UpsertResult:
+        """Replace the totals of an existing bucket; authorized against the **stored** entry.
+
+        The gate is ``require_can_log`` in the entry's own project and its
+        user's name, so a replay cannot rewrite an entry in a project where
+        the actor may not log. A record naming a project while the entry is
+        unassigned attributes it, after the same check in that project. A
+        record naming another project than the one the entry has is refused
+        (409 ``ai_usage_attribution_conflict``): reporters never move entries,
+        people do (``update``). A record without a project leaves the stored
+        attribution as it is. An update by someone other than the entry's user
+        is audited like logging in their name.
+        """
         if entry.reporter_user_id != actor.id:
             raise AppError(
                 code="key_conflict",
@@ -788,11 +808,25 @@ class AiUsageService:
                 status_code=409,
                 field="idempotency_key",
             )
+        assigns = entry.project_id is None and project is not None
+        if project is not None and entry.project_id is not None and project.id != entry.project_id:
+            raise AppError(
+                code="ai_usage_attribution_conflict",
+                message="This entry belongs to another project; send it without a project, or move it by hand",
+                status_code=409,
+                field="project_id",
+            )
+        if assigns:
+            await self.require_can_log(session, actor, target, project, data.issue_id, request=request)
+        else:
+            stored = await self._project(session, entry.project_id)
+            await self.require_can_log(session, actor, target, stored, None, request=request)
+
         cost_type, subscription_id = await self._default_cost_type(session, entry.user_id, data.cost_type, values)
         incoming = {k: v for k, v in values.items() if k not in ("comments", "attribution_method", "idempotency_key")}
         incoming["cost_type"] = cost_type
         incoming["subscription_id"] = subscription_id
-        if entry.project_id is None and data.project_id is not None:
+        if assigns:
             incoming["project_id"] = data.project_id
             incoming["issue_id"] = data.issue_id
             incoming["attribution_method"] = values["attribution_method"]
@@ -804,6 +838,12 @@ class AiUsageService:
         await self.apply_costs(session, entry)
         entry.revision += 1
         await session.flush()
+        if actor.id != entry.user_id:
+            details = await self._details(session, entry, target)
+            details["reporter_api_key_id"] = entry.reporter_api_key_id
+            details["status"] = "updated"
+            details["revision"] = entry.revision
+            await self._audit(session, AuditEvent.AI_USAGE_LOGGED_FOR_OTHER, actor, entry, details, request)
         return UpsertResult(entry, "updated")
 
     async def update(
@@ -907,31 +947,30 @@ class AiUsageService:
         *,
         request: Request | None = None,
     ) -> None:
-        """Moving an entry needs ``log_ai_usage`` in the target project (and its user to be a member there)."""
+        """Raise unless *actor* may set the entry's project to *project_id* and its issue to *issue_id*.
+
+        Moving to another project (or making the entry unassigned) is checked
+        exactly like logging the entry there in its user's name
+        (``require_can_log``): ``log_ai_usage`` for one's own entry,
+        ``log_ai_usage_for_others`` plus an active membership of the entry's
+        user for someone else's, administrators only for someone else's
+        unassigned usage. Within the same project only the issue is checked.
+        """
         from specivo.services.issue_service import IssueService
-        from specivo.services.permission_service import Permission, check_permission
         from specivo.services.project_service import ProjectService
 
         project = await self._project(session, project_id)
+        if project_id != entry.project_id:
+            target = await session.get(User, entry.user_id)
+            if target is None:
+                raise NotFoundError(f"User {entry.user_id} not found")
+            await self.require_can_log(session, actor, target, project, issue_id, request=request)
+            return
         if project is None:
             if issue_id is not None:
                 raise ValidationError(message="An issue needs its project", field="issue_id")
-            if entry.user_id != actor.id and not is_global_admin(actor):
-                raise PermissionDeniedError("Only administrators may make another user's AI usage unassigned")
             return
         await ProjectService().require_project_access(session, project, actor)
-        if project.id != entry.project_id and not await check_permission(
-            actor, project.id, Permission.LOG_AI_USAGE, session, request=request
-        ):
-            raise PermissionDeniedError(f"Permission '{Permission.LOG_AI_USAGE}' denied for this project")
-        if project.id != entry.project_id and entry.user_id != actor.id:
-            target = await session.get(User, entry.user_id)
-            if target is None or not await self.is_active_member(session, target, project):
-                raise _invalid(
-                    "The entry's user is not an active member of this project",
-                    "project_id",
-                    "ai_usage_target_not_member",
-                )
         if issue_id is not None:
             issue = await IssueService().get_by_id(session, issue_id, user=actor)
             if issue.project_id != project.id:

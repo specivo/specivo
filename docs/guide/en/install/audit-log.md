@@ -179,7 +179,7 @@ never copied into the log. See [AI subscriptions](ai-subscriptions.md).
 
 | Event | Who acted | Details |
 |---|---|---|
-| `ai_usage_logged_for_other` | the account that logged the usage | `entry_id`, `target_user_id`, `target_login` (whose usage it is), `source`, `tool`, `provider`, `model`, `usage_date`, `project_key`, `issue`, `reporter_api_key_id` |
+| `ai_usage_logged_for_other` | the account that logged the usage | `entry_id`, `target_user_id`, `target_login` (whose usage it is), `source`, `tool`, `provider`, `model`, `usage_date`, `project_key`, `issue`, `reporter_api_key_id`; when a reporter sends new totals for an entry it already logged for that person, `status: "updated"` and `revision` too (a re-send with nothing new writes nothing) |
 | `ai_usage_updated_by_other` | the person who changed somebody else's entry | the same, plus `changes`: each changed field with `old` and `new`; a changed comment shows only as `comments: {"changed": true}` |
 | `ai_usage_excluded`, `ai_usage_included` | whoever excluded the entry from reports, or included it again | the entry, as above |
 | `ai_usage_deleted` | whoever deleted the entry | the entry, plus its `tokens` and `cost_type` |

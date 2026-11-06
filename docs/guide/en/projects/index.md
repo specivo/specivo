@@ -89,7 +89,8 @@ The AI usage permissions are **View AI usage**, **Log AI usage** (log your own u
 project), **Edit/exclude any AI usage entries**, and **Log AI usage on behalf of other members**,
 which a shared service account needs to log usage for the people it reports for; those people must
 be active members of the project. Usage that belongs to no project can be logged by anyone for
-themselves, and by administrators for others. The built-in roles get: Manager all four, Developer
+themselves, and by administrators for others. Moving someone else's entry to another project needs
+the same on-behalf permission in that project. The built-in roles get: Manager all four, Developer
 and Agent view and log, Reporter view.
 
 When someone holds several roles, the **widest** setting wins, as in Redmine: one role with

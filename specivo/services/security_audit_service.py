@@ -196,7 +196,8 @@ class AuditEvent(StrEnum):
     # AI usage entries. Logged in another user's name (details: ``entry_id``,
     # ``target_user_id``, ``target_login``, ``source``, ``tool``,
     # ``provider``, ``model``, ``usage_date``, ``reporter_api_key_id``,
-    # ``project_key``, ``issue``); changed by someone other than the entry's
+    # ``project_key``, ``issue``; a replay that changes the bucket adds
+    # ``status: "updated"`` and ``revision``); changed by someone other than the entry's
     # user (the same plus ``changes``: ``{field: {old, new}}``, comments only
     # as ``{"changed": true}``); excluded from reports, or included again;
     # deleted. Costs recomputed for a range (``provider``, ``models``,

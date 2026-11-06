@@ -766,3 +766,113 @@ async def test_unknown_tool_is_added_inactive(db_session: AsyncSession, w: World
     entry = await _svc.log(db_session, w.alice, usage(tool="lab-cli"))
     tool = await db_session.get(AiTool, "lab-cli")
     assert entry.tool_slug == "lab-cli" and tool is not None and not tool.is_active
+
+
+# ---------------------------------------------------------------------------
+# Regression: replays and moves are authorized against the stored entry and the destination
+# ---------------------------------------------------------------------------
+
+
+async def _third_project(db: AsyncSession, w: World, roles: dict[str, list[str]]) -> Project:
+    """Project ``AIW``, where each named user holds a role granting the given permissions."""
+    project = ProjectFactory.build(key="AIW", identifier="aiw", is_public=False)
+    db.add(project)
+    await db.flush()
+    for name, permissions in roles.items():
+        role = await _role(db, f"Aiw {name}", permissions, "own")
+        await _member(db, project, w.users[name], role)
+    await db.commit()
+    clear_role_cache(db)
+    return project
+
+
+async def test_replay_cannot_move_or_rewrite_an_entry_in_another_project(db_session: AsyncSession, w: World) -> None:
+    other = await _third_project(
+        db_session,
+        w,
+        {
+            "runner": ["view_issues", "log_ai_usage", "log_ai_usage_for_others"],
+            "alice": ["view_issues", "log_ai_usage"],
+        },
+    )
+    entry = (
+        await _svc.upsert(db_session, w.runner, usage(project_id=w.p.id, idempotency_key="r-1"), target=w.alice)
+    ).entry
+
+    # Naming a project where the runner may log does not move the stored entry.
+    with pytest.raises(AppError) as exc:
+        await _svc.upsert(
+            db_session,
+            w.runner,
+            usage(project_id=other.id, idempotency_key="r-1", tokens={"input": 5}),
+            target=w.alice,
+        )
+    assert exc.value.code == "ai_usage_attribution_conflict"
+    assert entry.project_id == w.p.id and entry.input == 1_000_000
+
+    # Once the runner lost its rights in the entry's project, no replay rewrites it,
+    # with or without naming a project.
+    member_ids = select(Member.id).where(Member.project_id == w.p.id, Member.user_id == w.runner.id)
+    await db_session.execute(MemberRole.__table__.delete().where(MemberRole.member_id.in_(member_ids)))
+    await db_session.commit()
+    clear_role_cache(db_session)
+    for project_id in (None, w.p.id):
+        with pytest.raises(PermissionDeniedError):
+            await _svc.upsert(
+                db_session,
+                w.runner,
+                usage(project_id=project_id, idempotency_key="r-1", tokens={"input": 5}),
+                target=w.alice,
+            )
+    await db_session.refresh(entry)
+    assert entry.input == 1_000_000 and entry.revision == 1
+
+
+async def test_replay_assigning_an_unassigned_entry_is_checked_in_that_project(
+    db_session: AsyncSession, w: World
+) -> None:
+    entry = (await _svc.upsert(db_session, w.dave, usage(idempotency_key="r-2"))).entry
+    # dave holds no log_ai_usage in AIU: the replay cannot attribute his entry there.
+    with pytest.raises(PermissionDeniedError):
+        await _svc.upsert(db_session, w.dave, usage(project_id=w.p.id, idempotency_key="r-2"))
+    assert entry.project_id is None
+
+
+async def test_replay_by_another_account_is_audited(db_session: AsyncSession, w: World) -> None:
+    await _svc.upsert(db_session, w.runner, usage(project_id=w.p.id, idempotency_key="r-3"), target=w.alice)
+    await _svc.upsert(db_session, w.runner, usage(project_id=w.p.id, idempotency_key="r-3"), target=w.alice)
+    assert len(await _events(db_session, AuditEvent.AI_USAGE_LOGGED_FOR_OTHER)) == 1  # unchanged: no event
+    await _svc.upsert(
+        db_session,
+        w.runner,
+        usage(project_id=w.p.id, idempotency_key="r-3", tokens={"input": 7}),
+        target=w.alice,
+    )
+    events = await _events(db_session, AuditEvent.AI_USAGE_LOGGED_FOR_OTHER)
+    assert len(events) == 2
+    replaced = next(e for e in events if e.details.get("status") == "updated")
+    assert replaced.details["revision"] == 2 and replaced.details["target_login"] == "aiu_alice"
+
+
+async def test_moving_someone_elses_entry_needs_log_for_others_in_the_destination(
+    db_session: AsyncSession, w: World
+) -> None:
+    other = await _third_project(
+        db_session,
+        w,
+        {"mgr": ["view_issues", "log_ai_usage", "manage_ai_usage"], "alice": ["view_issues", "log_ai_usage"]},
+    )
+    entry = await _svc.log(db_session, w.alice, usage(project_id=w.p.id))
+    with pytest.raises(PermissionDeniedError):
+        await _svc.update(db_session, w.mgr, entry, {"project_id": other.id})
+    assert entry.project_id == w.p.id
+
+    role = await _role(db_session, "Aiw Lead", ["log_ai_usage_for_others"], "own")
+    member = (
+        await db_session.execute(select(Member).where(Member.project_id == other.id, Member.user_id == w.mgr.id))
+    ).scalar_one()
+    db_session.add(MemberRole(member_id=member.id, role_id=role.id))
+    await db_session.commit()
+    clear_role_cache(db_session)
+    await _svc.update(db_session, w.mgr, entry, {"project_id": other.id})
+    assert entry.project_id == other.id
