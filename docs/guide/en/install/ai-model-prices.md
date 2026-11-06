@@ -119,6 +119,23 @@ When a provider announces a price change late, or you need prices for usage from
 list's date, enter a **past period**: fill in **Valid until (UTC)** as well. A past period must not
 overlap another price you entered for the same model; end or deactivate that one first.
 
+### Recompute past usage
+
+AI usage is valued when it is logged, with the price valid at its own time, and keeps that value:
+adding, ending or deactivating a price never changes usage that was already logged. When a price
+you just entered starts in the past and usage was already logged in its period, the model's page
+shows **Recompute past usage** with the number of entries and the range. Click **Recompute these
+entries** to value them again in the background. Each entry is priced at its own time, so usage on
+either side of a price change gets the price of its own period, never simply the latest price.
+Entries whose value changes get a new revision, and the [audit log](audit-log.md) records one
+`ai_usage_costs_recomputed` event with the totals before and after.
+
+Through the API, an administrator can recompute any range with
+`POST /api/v1/admin/ai-usage/recompute/` and a body such as
+`{"from": "2026-01-01T00:00:00Z", "to": "2026-06-01T00:00:00Z", "provider": "anthropic", "model": "claude-opus-4-6"}`
+(provider and model are optional; the model also matches its aliases). It answers `202` with the
+task id and the number of entries in the range.
+
 ### Other currencies
 
 Pick any enabled currency for a price, for example CNY for a provider that bills in yuan, or EUR or

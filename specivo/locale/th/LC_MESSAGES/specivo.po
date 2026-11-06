@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 10:08+0100\n"
+"POT-Creation-Date: 2026-11-06 11:09+0100\n"
 "PO-Revision-Date: 2026-06-16 00:53+0200\n"
 "Last-Translator: Specivo Team\n"
 "Language: th\n"
@@ -66,7 +66,7 @@ msgid ""
 "naming 1 to 200 projects by key or id."
 msgstr ""
 
-#: specivo/services/api_key_scope.py:153
+#: specivo/services/api_key_scope.py:165
 msgid "This API key is limited to specific projects and cannot do this."
 msgstr "คีย์ API นี้จำกัดไว้เฉพาะบางโปรเจกต์และไม่สามารถทำสิ่งนี้ได้"
 
@@ -962,12 +962,12 @@ msgstr "ข้อมูลรับรอง"
 
 #: specivo/templates/themes/default/components/sidebar.html:118
 #: specivo/templates/themes/default/pages/admin/dashboard.html:51
-#: specivo/web/pages/admin.py:1140
+#: specivo/web/pages/admin.py:1148
 msgid "Administration"
 msgstr "การจัดการระบบ"
 
 #: specivo/templates/themes/default/components/sidebar.html:121
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:17
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:19
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:56
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:3
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:10
@@ -1055,7 +1055,7 @@ msgid "Reindexing..."
 msgstr "กำลังสร้างดัชนีใหม่..."
 
 #: specivo/templates/themes/default/pages/_fts_card.html:19
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:72
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:86
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:95
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:49
 #: specivo/templates/themes/default/pages/admin/currencies.html:32
@@ -1063,7 +1063,7 @@ msgstr "กำลังสร้างดัชนีใหม่..."
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:233
 #: specivo/templates/themes/default/pages/admin/groups.html:125
 #: specivo/templates/themes/default/pages/admin/projects.html:23
-#: specivo/templates/themes/default/pages/admin/roles.html:50
+#: specivo/templates/themes/default/pages/admin/roles.html:57
 #: specivo/templates/themes/default/pages/admin/settings.html:66
 #: specivo/templates/themes/default/pages/admin/settings.html:132
 #: specivo/templates/themes/default/pages/admin/settings.html:140
@@ -1546,7 +1546,7 @@ msgid "Model"
 msgstr "โมเดล"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:19
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:37
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:33
@@ -1567,31 +1567,31 @@ msgstr "ราคาต่อ 1 ล้านโทเค็น"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:35
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:47
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:30
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
 msgid "Input"
 msgstr "อินพุต"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:36
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:48
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:31
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
 msgid "Output"
 msgstr "เอาต์พุต"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:37
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:49
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
 msgid "Cache write, 5 minutes"
 msgstr "เขียนแคช 5 นาที"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:38
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:50
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
 msgid "Cache write, 1 hour"
 msgstr "เขียนแคช 1 ชั่วโมง"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:39
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:51
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:36
 msgid "Cache read"
 msgstr "อ่านแคช"
 
@@ -1600,7 +1600,7 @@ msgid "= output"
 msgstr "= เอาต์พุต"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:40
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:57
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:71
 msgid "Reasoning"
 msgstr "การให้เหตุผล"
 
@@ -1626,7 +1626,7 @@ msgid "Aliases, local model and note"
 msgstr "ชื่อแทน โมเดลภายในเครื่อง และหมายเหตุ"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:59
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:70
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:84
 msgid "Aliases"
 msgstr "ชื่อแทน"
 
@@ -1635,7 +1635,7 @@ msgid "Other names tools report for this model, separated by spaces or commas."
 msgstr "ชื่ออื่นที่เครื่องมือใช้รายงานโมเดลนี้ คั่นด้วยช่องว่างหรือจุลภาค"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:63
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:67
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
 msgid "Local model"
 msgstr "โมเดลภายในเครื่อง"
 
@@ -1648,7 +1648,7 @@ msgid "For a local model: the paid model whose prices value its usage."
 msgstr "สำหรับโมเดลภายในเครื่อง: โมเดลแบบเสียเงินที่ใช้ราคาประเมินมูลค่าการใช้งาน"
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:70
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:71
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:85
 msgid "Note"
 msgstr "หมายเหตุ"
 
@@ -1725,16 +1725,26 @@ msgstr "ไม่สามารถอ่านไฟล์ราคาที่
 msgid "That price no longer exists."
 msgstr "ไม่มีราคานั้นแล้ว"
 
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:17
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:13
+msgid ""
+"The recompute could not be started because the task queue is unavailable."
+" Try again later."
+msgstr "เริ่มการคำนวณใหม่ไม่ได้ เพราะคิวงานไม่พร้อมใช้งาน โปรดลองอีกครั้งภายหลัง"
+
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:14
+msgid "Check the range to recompute: its end must be after its start."
+msgstr "ตรวจสอบช่วงที่จะคำนวณใหม่: จุดสิ้นสุดต้องอยู่หลังจุดเริ่มต้น"
+
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:19
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:35
 msgid "Bundled"
 msgstr "มาพร้อมระบบ"
 
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
 msgid "Cache write 5m"
 msgstr "เขียนแคช 5 นาที"
 
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
 msgid "Cache write 1h"
 msgstr "เขียนแคช 1 ชม."
 
@@ -1870,7 +1880,7 @@ msgid "Pending verification"
 msgstr "รอการยืนยัน"
 
 #: specivo/templates/themes/default/pages/admin/_user_i18n.html:10
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:48
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:62
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:39
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:64
 msgid "Deactivated"
@@ -1882,6 +1892,61 @@ msgstr "ปิดใช้งานแล้ว"
 #: specivo/templates/themes/default/pages/admin/dashboard.html:220
 msgid "Agent Groups"
 msgstr "กลุ่มเอเจนต์"
+
+#: specivo/templates/themes/default/pages/admin/agent_groups.html:8
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:8
+#: specivo/templates/themes/default/pages/admin/ai_model_prices.html:9
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:9
+#: specivo/templates/themes/default/pages/admin/ai_tools.html:8
+#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:7
+#: specivo/templates/themes/default/pages/admin/audit_log.html:8
+#: specivo/templates/themes/default/pages/admin/currencies.html:7
+#: specivo/templates/themes/default/pages/admin/dashboard.html:8
+#: specivo/templates/themes/default/pages/admin/email.html:7
+#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:7
+#: specivo/templates/themes/default/pages/admin/exchange_rates.html:26
+#: specivo/templates/themes/default/pages/admin/group_detail.html:7
+#: specivo/templates/themes/default/pages/admin/groups.html:7
+#: specivo/templates/themes/default/pages/admin/kill_switch.html:8
+#: specivo/templates/themes/default/pages/admin/metadata_presets.html:8
+#: specivo/templates/themes/default/pages/admin/projects.html:7
+#: specivo/templates/themes/default/pages/admin/roles.html:7
+#: specivo/templates/themes/default/pages/admin/settings.html:7
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:8
+#: specivo/templates/themes/default/pages/admin/sso_providers.html:7
+#: specivo/templates/themes/default/pages/admin/trackers.html:7
+#: specivo/templates/themes/default/pages/admin/user_detail.html:8
+#: specivo/templates/themes/default/pages/admin/users.html:8
+#: specivo/templates/themes/default/pages/admin/versions.html:7
+#: specivo/templates/themes/default/pages/admin/workflows.html:7
+#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:8
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:8
+#: specivo/templates/themes/default/pages/auth/api_keys.html:7
+#: specivo/templates/themes/default/pages/auth/preferences.html:7
+#: specivo/templates/themes/default/pages/auth/profile.html:7
+#: specivo/templates/themes/default/pages/notifications.html:7
+#: specivo/templates/themes/default/pages/projects/detail.html:8
+#: specivo/templates/themes/default/pages/projects/list.html:8
+#: specivo/templates/themes/default/pages/projects/roadmap.html:8
+#: specivo/templates/themes/default/pages/projects/settings.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_analytics.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_detail.html:8
+#: specivo/templates/themes/default/pages/projects/sprint_edit.html:8
+#: specivo/templates/themes/default/pages/projects/sprints_list.html:8
+#: specivo/templates/themes/default/pages/search.html:8
+#: specivo/templates/themes/default/pages/time/form.html:7
+#: specivo/templates/themes/default/pages/time/list.html:8
+#: specivo/templates/themes/default/pages/wiki/diff.html:8
+#: specivo/templates/themes/default/pages/wiki/edit.html:10
+#: specivo/templates/themes/default/pages/wiki/edit.html:18
+#: specivo/templates/themes/default/pages/wiki/history.html:8
+#: specivo/templates/themes/default/pages/wiki/index.html:7
+#: specivo/templates/themes/default/pages/wiki/show.html:8
+#: specivo/templates/themes/default/pages/wiki/trash.html:7
+msgid "Home"
+msgstr "หน้าแรก"
 
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:28
 #: specivo/templates/themes/default/pages/admin/dashboard.html:61
@@ -1965,16 +2030,53 @@ msgstr "บันทึกแล้ว"
 msgid "Price deleted."
 msgstr "ลบราคาแล้ว"
 
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:27
+#, python-format
+msgid ""
+"Recomputing the costs of %(count)s usage entry in the background. The "
+"audit log records the totals before and after."
+msgid_plural ""
+"Recomputing the costs of %(count)s usage entries in the background. The "
+"audit log records the totals before and after."
+msgstr[0] ""
+"กำลังคำนวณค่าใช้จ่ายของรายการการใช้งาน %(count)s รายการใหม่อยู่เบื้องหลัง"
+" บันทึกการตรวจสอบจะเก็บยอดรวมก่อนและหลัง"
+
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:31
+msgid "Recompute past usage"
+msgstr "คำนวณการใช้งานที่ผ่านมาใหม่"
+
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:32
+#, python-format
+msgid ""
+"The new price covers a past period. %(count)s usage entry was priced "
+"between %(start)s and %(end)s and keeps its old cost until you recompute "
+"it. Each entry is priced again with the price valid at its own time."
+msgid_plural ""
+"The new price covers a past period. %(count)s usage entries were priced "
+"between %(start)s and %(end)s and keep their old costs until you "
+"recompute them. Each entry is priced again with the price valid at its "
+"own time."
+msgstr[0] ""
+"ราคาใหม่ครอบคลุมช่วงเวลาที่ผ่านมา รายการการใช้งาน %(count)s "
+"รายการถูกคิดราคาระหว่าง %(start)s ถึง %(end)s "
+"และยังคงใช้ค่าใช้จ่ายเดิมจนกว่าคุณจะคำนวณใหม่ "
+"แต่ละรายการจะถูกคิดราคาใหม่ด้วยราคาที่มีผล ณ เวลาของรายการนั้นเอง"
+
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:38
+msgid "Recompute these entries"
+msgstr "คำนวณรายการเหล่านี้ใหม่"
+
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:45
 msgid "Price history"
 msgstr "ประวัติราคา"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:36
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:50
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:54
 msgid "Valid"
 msgstr "ช่วงที่มีผล"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:38
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:52
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:32
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:55
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:121
@@ -1982,17 +2084,27 @@ msgstr "ช่วงที่มีผล"
 msgid "Source"
 msgstr "แหล่งที่มา"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:47
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:60
+#: specivo/templates/themes/default/pages/admin/ai_model_prices.html:67
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:59
+#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:47
+#: specivo/templates/themes/default/pages/dashboard.html:241
+#: specivo/templates/themes/default/pages/projects/list.html:174
+#: specivo/templates/themes/default/pages/projects/version_detail.html:58
+msgid "open"
+msgstr "เปิดอยู่"
+
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:61
 msgid "In use now"
 msgstr "ใช้อยู่ตอนนี้"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:49
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:63
 #, python-format
 msgid "Prices %(count)s usage entry"
 msgid_plural "Prices %(count)s usage entries"
 msgstr[0] "ใช้คิดราคา %(count)s รายการการใช้งาน"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:55
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:69
 #: specivo/templates/themes/default/pages/admin/audit_log.html:84
 #: specivo/templates/themes/default/pages/projects/settings.html:1471
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
@@ -2002,54 +2114,54 @@ msgstr[0] "ใช้คิดราคา %(count)s รายการการ�
 msgid "Details"
 msgstr "รายละเอียด"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:59
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:73
 msgid "Long context"
 msgstr "บริบทยาว"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:60
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:74
 #, python-format
 msgid "above %(threshold)s tokens"
 msgstr "เกิน %(threshold)s โทเค็น"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:61
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:75
 msgid "input"
 msgstr "อินพุต"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:62
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:76
 msgid "output"
 msgstr "เอาต์พุต"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:63
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:77
 msgid "cache write 5m"
 msgstr "เขียนแคช 5 นาที"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:64
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:78
 msgid "cache write 1h"
 msgstr "เขียนแคช 1 ชม."
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:65
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:79
 msgid "cache read"
 msgstr "อ่านแคช"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:75
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:89
 msgid "Valid until (UTC)"
 msgstr "มีผลถึง (UTC)"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:76
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:90
 msgid "Save end"
 msgstr "บันทึกจุดสิ้นสุด"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:95
 #: specivo/templates/themes/default/pages/auth/api_keys.html:22
 msgid "Deactivate"
 msgstr "ปิดใช้งาน"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:95
 #: specivo/templates/themes/default/pages/auth/api_keys.html:23
 msgid "Activate"
 msgstr "เปิดใช้งาน"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:85
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:99
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:148
 #: specivo/templates/themes/default/pages/admin/groups.html:72
 #: specivo/templates/themes/default/pages/admin/groups.html:142
@@ -2077,11 +2189,11 @@ msgstr "เปิดใช้งาน"
 msgid "Delete"
 msgstr "ลบ"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:100
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:114
 msgid "New price from…"
 msgstr "ราคาใหม่ตั้งแต่…"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:101
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:115
 msgid ""
 "Enter the prices and the instant they take effect. The price you entered "
 "before ends at that instant; the bundled price stays as it is but yours "
@@ -2127,6 +2239,15 @@ msgstr "โมเดลหรือชื่อแทน"
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:122
 msgid "All sources"
 msgstr "ทุกแหล่งที่มา"
+
+#: specivo/templates/themes/default/pages/admin/ai_model_prices.html:40
+#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
+#: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
+#: specivo/templates/themes/default/pages/issues/list.html:44
+#: specivo/templates/themes/default/pages/projects/version_detail.html:83
+#: specivo/templates/themes/default/pages/search.html:46
+msgid "All"
+msgstr "ทั้งหมด"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:42
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:33
@@ -2795,7 +2916,7 @@ msgstr "จัดการกลุ่มผู้ใช้และสิทธ
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:3
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:11
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:15
-#: specivo/web/pages/admin.py:1141
+#: specivo/web/pages/admin.py:1149
 msgid "Single sign-on"
 msgstr "การลงชื่อเข้าใช้ครั้งเดียว"
 
@@ -3642,6 +3763,11 @@ msgstr "ID"
 msgid "Level"
 msgstr "ระดับ"
 
+#: specivo/templates/themes/default/pages/admin/kill_switch.html:46
+#: specivo/templates/themes/default/pages/dashboard.html:174
+msgid "Target"
+msgstr "เป้าหมาย"
+
 #: specivo/templates/themes/default/pages/admin/kill_switch.html:47
 msgid "Triggered By"
 msgstr "ทริกเกอร์โดย"
@@ -3742,7 +3868,7 @@ msgstr "พรีเซ็ตทั้งหมด"
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:50
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:74
-#: specivo/templates/themes/default/pages/admin/roles.html:34
+#: specivo/templates/themes/default/pages/admin/roles.html:35
 msgid "Built-in"
 msgstr "ในตัว"
 
@@ -3977,30 +4103,43 @@ msgstr ""
 "ผู้ใช้ที่มีหลายบทบาทจะได้การตั้งค่าที่กว้างที่สุดในบรรดาบทบาทเหล่านั้น"
 
 #: specivo/templates/themes/default/pages/admin/roles.html:24
-#: specivo/templates/themes/default/pages/admin/roles.html:37
+#: specivo/templates/themes/default/pages/admin/roles.html:38
 msgid "Users visibility"
 msgstr "การมองเห็นผู้ใช้"
 
 #: specivo/templates/themes/default/pages/admin/roles.html:25
-#: specivo/templates/themes/default/pages/admin/roles.html:43
+#: specivo/templates/themes/default/pages/admin/roles.html:44
 msgid "Time entries visibility"
 msgstr "การมองเห็นบันทึกเวลา"
 
-#: specivo/templates/themes/default/pages/admin/roles.html:38
+#: specivo/templates/themes/default/pages/admin/roles.html:26
+#: specivo/templates/themes/default/pages/admin/roles.html:50
+msgid "AI usage visibility"
+msgstr "การมองเห็นการใช้งาน AI"
+
+#: specivo/templates/themes/default/pages/admin/roles.html:39
 msgid "All active users"
 msgstr "ผู้ใช้ที่ใช้งานอยู่ทั้งหมด"
 
-#: specivo/templates/themes/default/pages/admin/roles.html:39
+#: specivo/templates/themes/default/pages/admin/roles.html:40
 msgid "Members of visible projects"
 msgstr "สมาชิกของโครงการที่มองเห็นได้"
 
-#: specivo/templates/themes/default/pages/admin/roles.html:44
+#: specivo/templates/themes/default/pages/admin/roles.html:45
 msgid "All time entries"
 msgstr "บันทึกเวลาทั้งหมด"
 
-#: specivo/templates/themes/default/pages/admin/roles.html:45
+#: specivo/templates/themes/default/pages/admin/roles.html:46
 msgid "Own time entries"
 msgstr "เฉพาะบันทึกเวลาของตนเอง"
+
+#: specivo/templates/themes/default/pages/admin/roles.html:51
+msgid "All AI usage"
+msgstr "การใช้งาน AI ทั้งหมด"
+
+#: specivo/templates/themes/default/pages/admin/roles.html:52
+msgid "Own AI usage"
+msgstr "การใช้งาน AI ของตนเอง"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:19
 msgid "Defaults"
@@ -6072,7 +6211,7 @@ msgid "Notification preferences will be available in a future release."
 msgstr "การตั้งค่าการแจ้งเตือนจะพร้อมใช้งานในเวอร์ชันถัดไป"
 
 #: specivo/templates/themes/default/pages/auth/preferences.html:82
-#: specivo/web/pages/admin.py:1143
+#: specivo/web/pages/admin.py:1151
 msgid "Sessions"
 msgstr "เซสชัน"
 
@@ -6338,11 +6477,6 @@ msgstr "กำลังดำเนินการ"
 msgid "Completed"
 msgstr "เสร็จสิ้น"
 
-#: specivo/templates/themes/default/pages/admin/kill_switch.html:46
-#: specivo/templates/themes/default/pages/dashboard.html:174
-msgid "Target"
-msgstr "เป้าหมาย"
-
 #: specivo/templates/themes/default/pages/dashboard.html:175
 #: specivo/templates/themes/default/pages/dashboard.html:211
 msgid "days left"
@@ -6384,16 +6518,6 @@ msgstr "วัน"
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:186
 msgid "Duration"
 msgstr "ระยะเวลา"
-
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:46
-#: specivo/templates/themes/default/pages/admin/ai_model_prices.html:67
-#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:59
-#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:47
-#: specivo/templates/themes/default/pages/dashboard.html:241
-#: specivo/templates/themes/default/pages/projects/list.html:174
-#: specivo/templates/themes/default/pages/projects/version_detail.html:58
-msgid "open"
-msgstr "เปิดอยู่"
 
 #: specivo/templates/themes/default/pages/dashboard.html:245
 #: specivo/templates/themes/default/pages/projects/list.html:208
@@ -6989,6 +7113,14 @@ msgstr "ไฟล์"
 msgid "Uploaded by %(name)s, %(date)s"
 msgstr "อัปโหลดโดย %(name)s เมื่อ %(date)s"
 
+#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:14
+#: specivo/templates/themes/default/pages/issues/detail.html:284
+#: specivo/templates/themes/default/pages/issues/form.html:394
+#: specivo/templates/themes/default/pages/search.html:50
+#: specivo/templates/themes/default/pages/wiki/show.html:104
+msgid "Attachments"
+msgstr "ไฟล์แนบ"
+
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:19
 #: specivo/templates/themes/default/pages/wiki/show.html:110
 msgid "Upload"
@@ -7251,10 +7383,24 @@ msgstr "%(opt)s ต่อหน้า"
 msgid "Showing %(from)s–%(to)s of %(total)s"
 msgstr "กำลังแสดง %(from)s–%(to)s จาก %(total)s"
 
+#: specivo/templates/themes/default/pages/issues/detail.html:316
+#: specivo/templates/themes/default/pages/issues/list.html:205
+#: specivo/templates/themes/default/pages/notifications.html:76
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:192
+msgid "Previous"
+msgstr "ก่อนหน้า"
+
 #: specivo/templates/themes/default/pages/issues/detail.html:318
 #, python-format
 msgid "Page %(page)s of %(total)s"
 msgstr "หน้า %(page)s จาก %(total)s"
+
+#: specivo/templates/themes/default/pages/issues/detail.html:320
+#: specivo/templates/themes/default/pages/issues/list.html:217
+#: specivo/templates/themes/default/pages/notifications.html:79
+#: specivo/templates/themes/default/pages/projects/sprint_board.html:204
+msgid "Next"
+msgstr "ถัดไป"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:332
 #, python-brace-format
@@ -7285,6 +7431,12 @@ msgstr ""
 #: specivo/templates/themes/default/pages/issues/detail.html:351
 msgid "Move to another issue"
 msgstr ""
+
+#: specivo/templates/themes/default/pages/issues/detail.html:359
+#: specivo/templates/themes/default/pages/search.html:222
+#: specivo/templates/themes/default/pages/time/list.html:56
+msgid "Issue"
+msgstr "งาน"
 
 #: specivo/templates/themes/default/pages/issues/detail.html:360
 #: specivo/templates/themes/default/pages/issues/detail.html:543
@@ -7581,61 +7733,6 @@ msgstr "ไม่พบงาน"
 msgid "Create your first issue to get started."
 msgstr "สร้างงานแรกของคุณเพื่อเริ่มต้นใช้งาน"
 
-#: specivo/templates/themes/default/pages/admin/agent_groups.html:8
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:8
-#: specivo/templates/themes/default/pages/admin/ai_model_prices.html:9
-#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:9
-#: specivo/templates/themes/default/pages/admin/ai_tools.html:8
-#: specivo/templates/themes/default/pages/admin/anonymous_access_confirm.html:7
-#: specivo/templates/themes/default/pages/admin/audit_log.html:8
-#: specivo/templates/themes/default/pages/admin/currencies.html:7
-#: specivo/templates/themes/default/pages/admin/dashboard.html:8
-#: specivo/templates/themes/default/pages/admin/email.html:7
-#: specivo/templates/themes/default/pages/admin/exchange_rate_edit.html:7
-#: specivo/templates/themes/default/pages/admin/exchange_rates.html:26
-#: specivo/templates/themes/default/pages/admin/group_detail.html:7
-#: specivo/templates/themes/default/pages/admin/groups.html:7
-#: specivo/templates/themes/default/pages/admin/kill_switch.html:8
-#: specivo/templates/themes/default/pages/admin/metadata_presets.html:8
-#: specivo/templates/themes/default/pages/admin/projects.html:7
-#: specivo/templates/themes/default/pages/admin/roles.html:7
-#: specivo/templates/themes/default/pages/admin/settings.html:7
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:8
-#: specivo/templates/themes/default/pages/admin/sso_providers.html:7
-#: specivo/templates/themes/default/pages/admin/trackers.html:7
-#: specivo/templates/themes/default/pages/admin/user_detail.html:8
-#: specivo/templates/themes/default/pages/admin/users.html:8
-#: specivo/templates/themes/default/pages/admin/versions.html:7
-#: specivo/templates/themes/default/pages/admin/workflows.html:7
-#: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:8
-#: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:8
-#: specivo/templates/themes/default/pages/auth/api_keys.html:7
-#: specivo/templates/themes/default/pages/auth/preferences.html:7
-#: specivo/templates/themes/default/pages/auth/profile.html:7
-#: specivo/templates/themes/default/pages/notifications.html:7
-#: specivo/templates/themes/default/pages/projects/detail.html:8
-#: specivo/templates/themes/default/pages/projects/list.html:8
-#: specivo/templates/themes/default/pages/projects/roadmap.html:8
-#: specivo/templates/themes/default/pages/projects/settings.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_analytics.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_backlog.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_detail.html:8
-#: specivo/templates/themes/default/pages/projects/sprint_edit.html:8
-#: specivo/templates/themes/default/pages/projects/sprints_list.html:8
-#: specivo/templates/themes/default/pages/search.html:8
-#: specivo/templates/themes/default/pages/time/form.html:7
-#: specivo/templates/themes/default/pages/time/list.html:8
-#: specivo/templates/themes/default/pages/wiki/diff.html:8
-#: specivo/templates/themes/default/pages/wiki/edit.html:10
-#: specivo/templates/themes/default/pages/wiki/edit.html:18
-#: specivo/templates/themes/default/pages/wiki/history.html:8
-#: specivo/templates/themes/default/pages/wiki/index.html:7
-#: specivo/templates/themes/default/pages/wiki/show.html:8
-#: specivo/templates/themes/default/pages/wiki/trash.html:7
-msgid "Home"
-msgstr "หน้าแรก"
-
 #: specivo/templates/themes/default/pages/notifications.html:26
 #, python-format
 msgid "All (%(count)s)"
@@ -7645,20 +7742,6 @@ msgstr "ทั้งหมด (%(count)s)"
 #, python-format
 msgid "Unread (%(count)s)"
 msgstr "ยังไม่ได้อ่าน (%(count)s)"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:316
-#: specivo/templates/themes/default/pages/issues/list.html:205
-#: specivo/templates/themes/default/pages/notifications.html:76
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:192
-msgid "Previous"
-msgstr "ก่อนหน้า"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:320
-#: specivo/templates/themes/default/pages/issues/list.html:217
-#: specivo/templates/themes/default/pages/notifications.html:79
-#: specivo/templates/themes/default/pages/projects/sprint_board.html:204
-msgid "Next"
-msgstr "ถัดไป"
 
 #: specivo/templates/themes/default/pages/notifications.html:85
 msgid "No notifications."
@@ -10146,23 +10229,6 @@ msgstr "ไฮบริด"
 msgid "Keyword"
 msgstr "คำค้น"
 
-#: specivo/templates/themes/default/pages/admin/ai_model_prices.html:40
-#: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:34
-#: specivo/templates/themes/default/pages/issues/_development_timeline.html:14
-#: specivo/templates/themes/default/pages/issues/list.html:44
-#: specivo/templates/themes/default/pages/projects/version_detail.html:83
-#: specivo/templates/themes/default/pages/search.html:46
-msgid "All"
-msgstr "ทั้งหมด"
-
-#: specivo/templates/themes/default/pages/issues/_tab_attachments.html:14
-#: specivo/templates/themes/default/pages/issues/detail.html:284
-#: specivo/templates/themes/default/pages/issues/form.html:394
-#: specivo/templates/themes/default/pages/search.html:50
-#: specivo/templates/themes/default/pages/wiki/show.html:104
-msgid "Attachments"
-msgstr "ไฟล์แนบ"
-
 #: specivo/templates/themes/default/pages/search.html:69
 #, python-format
 msgid "Project: %(key)s"
@@ -10214,12 +10280,6 @@ msgstr[0] "งาน %(count)s รายการที่ %(field)s = %(value)s
 #, python-format
 msgid "Comment on %(title)s"
 msgstr "ความคิดเห็นเกี่ยวกับ %(title)s"
-
-#: specivo/templates/themes/default/pages/issues/detail.html:359
-#: specivo/templates/themes/default/pages/search.html:222
-#: specivo/templates/themes/default/pages/time/list.html:56
-msgid "Issue"
-msgstr "งาน"
 
 #: specivo/templates/themes/default/pages/search.html:237
 #: specivo/templates/themes/default/pages/search.html:241
@@ -10557,51 +10617,55 @@ msgstr "คุณไม่สามารถปิดใช้งานบัญ
 msgid "This is already the user's email address."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1136
+#: specivo/web/pages/admin.py:1144
 msgid "Sign-in"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1137
+#: specivo/web/pages/admin.py:1145
 msgid "Access"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1138
+#: specivo/web/pages/admin.py:1146
 msgid "Agents"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1139
+#: specivo/web/pages/admin.py:1147
 msgid "Issues and wiki"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1142
+#: specivo/web/pages/admin.py:1150
 msgid "Provisioning"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1205
+#: specivo/web/pages/admin.py:1152
+msgid "AI usage"
+msgstr "การใช้งาน AI"
+
+#: specivo/web/pages/admin.py:1214
 msgid "Unknown category."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1207
+#: specivo/web/pages/admin.py:1216
 msgid "Unknown event type."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1212
+#: specivo/web/pages/admin.py:1221
 msgid "No user has this login."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1217
+#: specivo/web/pages/admin.py:1226
 msgid "No project has this key."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1222
+#: specivo/web/pages/admin.py:1231
 msgid "The from date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1228
+#: specivo/web/pages/admin.py:1237
 msgid "The to date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1232
+#: specivo/web/pages/admin.py:1241
 msgid "The IP address is too long."
 msgstr ""
 

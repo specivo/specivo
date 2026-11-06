@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 10:08+0100\n"
+"POT-Creation-Date: 2026-11-06 11:09+0100\n"
 "PO-Revision-Date: 2026-03-28 10:59+0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -66,7 +66,7 @@ msgid ""
 "naming 1 to 200 projects by key or id."
 msgstr ""
 
-#: specivo/services/api_key_scope.py:153
+#: specivo/services/api_key_scope.py:165
 msgid "This API key is limited to specific projects and cannot do this."
 msgstr ""
 
@@ -950,12 +950,12 @@ msgstr ""
 
 #: specivo/templates/themes/default/components/sidebar.html:118
 #: specivo/templates/themes/default/pages/admin/dashboard.html:51
-#: specivo/web/pages/admin.py:1140
+#: specivo/web/pages/admin.py:1148
 msgid "Administration"
 msgstr ""
 
 #: specivo/templates/themes/default/components/sidebar.html:121
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:17
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:19
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:56
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:3
 #: specivo/templates/themes/default/pages/admin/agent_groups.html:10
@@ -1043,7 +1043,7 @@ msgid "Reindexing..."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/_fts_card.html:19
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:72
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:86
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:95
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:49
 #: specivo/templates/themes/default/pages/admin/currencies.html:32
@@ -1051,7 +1051,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:233
 #: specivo/templates/themes/default/pages/admin/groups.html:125
 #: specivo/templates/themes/default/pages/admin/projects.html:23
-#: specivo/templates/themes/default/pages/admin/roles.html:50
+#: specivo/templates/themes/default/pages/admin/roles.html:57
 #: specivo/templates/themes/default/pages/admin/settings.html:66
 #: specivo/templates/themes/default/pages/admin/settings.html:132
 #: specivo/templates/themes/default/pages/admin/settings.html:140
@@ -1531,7 +1531,7 @@ msgid "Model"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:19
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:37
 #: specivo/templates/themes/default/pages/admin/currencies.html:75
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:117
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:33
@@ -1552,31 +1552,31 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:35
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:47
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:30
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
 msgid "Input"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:36
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:48
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:31
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
 msgid "Output"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:37
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:49
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
 msgid "Cache write, 5 minutes"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:38
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:50
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
 msgid "Cache write, 1 hour"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:39
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:51
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:36
 msgid "Cache read"
 msgstr ""
 
@@ -1585,7 +1585,7 @@ msgid "= output"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:40
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:57
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:71
 msgid "Reasoning"
 msgstr ""
 
@@ -1609,7 +1609,7 @@ msgid "Aliases, local model and note"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:59
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:70
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:84
 msgid "Aliases"
 msgstr ""
 
@@ -1618,7 +1618,7 @@ msgid "Other names tools report for this model, separated by spaces or commas."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:63
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:67
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
 msgid "Local model"
 msgstr ""
 
@@ -1631,7 +1631,7 @@ msgid "For a local model: the paid model whose prices value its usage."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_ai_model_price_form.html:70
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:71
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:85
 msgid "Note"
 msgstr ""
 
@@ -1701,16 +1701,26 @@ msgstr ""
 msgid "That price no longer exists."
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:17
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:13
+msgid ""
+"The recompute could not be started because the task queue is unavailable."
+" Try again later."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:14
+msgid "Check the range to recompute: its end must be after its start."
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:19
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:35
 msgid "Bundled"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:32
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:34
 msgid "Cache write 5m"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:33
+#: specivo/templates/themes/default/pages/admin/_ai_model_price_macros.html:35
 msgid "Cache write 1h"
 msgstr ""
 
@@ -1842,7 +1852,7 @@ msgid "Pending verification"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/_user_i18n.html:10
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:48
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:62
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:39
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:64
 msgid "Deactivated"
@@ -1931,16 +1941,49 @@ msgstr ""
 msgid "Price deleted."
 msgstr ""
 
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:27
+#, python-format
+msgid ""
+"Recomputing the costs of %(count)s usage entry in the background. The "
+"audit log records the totals before and after."
+msgid_plural ""
+"Recomputing the costs of %(count)s usage entries in the background. The "
+"audit log records the totals before and after."
+msgstr[0] ""
+msgstr[1] ""
+
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:31
+msgid "Recompute past usage"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:32
+#, python-format
+msgid ""
+"The new price covers a past period. %(count)s usage entry was priced "
+"between %(start)s and %(end)s and keeps its old cost until you recompute "
+"it. Each entry is priced again with the price valid at its own time."
+msgid_plural ""
+"The new price covers a past period. %(count)s usage entries were priced "
+"between %(start)s and %(end)s and keep their old costs until you "
+"recompute them. Each entry is priced again with the price valid at its "
+"own time."
+msgstr[0] ""
+msgstr[1] ""
+
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:38
+msgid "Recompute these entries"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:45
 msgid "Price history"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:36
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:50
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:54
 msgid "Valid"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:38
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:52
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:32
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:55
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:121
@@ -1948,18 +1991,18 @@ msgstr ""
 msgid "Source"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:47
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:61
 msgid "In use now"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:49
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:63
 #, python-format
 msgid "Prices %(count)s usage entry"
 msgid_plural "Prices %(count)s usage entries"
 msgstr[0] ""
 msgstr[1] ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:55
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:69
 #: specivo/templates/themes/default/pages/admin/audit_log.html:84
 #: specivo/templates/themes/default/pages/projects/settings.html:1471
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
@@ -1969,54 +2012,54 @@ msgstr[1] ""
 msgid "Details"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:59
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:73
 msgid "Long context"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:60
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:74
 #, python-format
 msgid "above %(threshold)s tokens"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:61
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:75
 msgid "input"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:62
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:76
 msgid "output"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:63
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:77
 msgid "cache write 5m"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:64
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:78
 msgid "cache write 1h"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:65
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:79
 msgid "cache read"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:75
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:89
 msgid "Valid until (UTC)"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:76
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:90
 msgid "Save end"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:95
 #: specivo/templates/themes/default/pages/auth/api_keys.html:22
 msgid "Deactivate"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:81
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:95
 #: specivo/templates/themes/default/pages/auth/api_keys.html:23
 msgid "Activate"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:85
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:99
 #: specivo/templates/themes/default/pages/admin/exchange_rates.html:148
 #: specivo/templates/themes/default/pages/admin/groups.html:72
 #: specivo/templates/themes/default/pages/admin/groups.html:142
@@ -2044,11 +2087,11 @@ msgstr ""
 msgid "Delete"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:100
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:114
 msgid "New price from…"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:101
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:115
 msgid ""
 "Enter the prices and the instant they take effect. The price you entered "
 "before ends at that instant; the bundled price stays as it is but yours "
@@ -2716,7 +2759,7 @@ msgstr ""
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:3
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:11
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:15
-#: specivo/web/pages/admin.py:1141
+#: specivo/web/pages/admin.py:1149
 msgid "Single sign-on"
 msgstr ""
 
@@ -3625,7 +3668,7 @@ msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:50
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:74
-#: specivo/templates/themes/default/pages/admin/roles.html:34
+#: specivo/templates/themes/default/pages/admin/roles.html:35
 msgid "Built-in"
 msgstr ""
 
@@ -3852,29 +3895,42 @@ msgid ""
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/roles.html:24
-#: specivo/templates/themes/default/pages/admin/roles.html:37
+#: specivo/templates/themes/default/pages/admin/roles.html:38
 msgid "Users visibility"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/roles.html:25
-#: specivo/templates/themes/default/pages/admin/roles.html:43
+#: specivo/templates/themes/default/pages/admin/roles.html:44
 msgid "Time entries visibility"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/roles.html:38
-msgid "All active users"
+#: specivo/templates/themes/default/pages/admin/roles.html:26
+#: specivo/templates/themes/default/pages/admin/roles.html:50
+msgid "AI usage visibility"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/roles.html:39
+msgid "All active users"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/roles.html:40
 msgid "Members of visible projects"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/roles.html:44
+#: specivo/templates/themes/default/pages/admin/roles.html:45
 msgid "All time entries"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/roles.html:45
+#: specivo/templates/themes/default/pages/admin/roles.html:46
 msgid "Own time entries"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/roles.html:51
+msgid "All AI usage"
+msgstr ""
+
+#: specivo/templates/themes/default/pages/admin/roles.html:52
+msgid "Own AI usage"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/admin/settings.html:19
@@ -5303,7 +5359,7 @@ msgid "Select a tracker and role to manage workflow transitions."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:8
-#, fuzzy, python-format
+#, fuzzy
 msgid "Choose a person"
 msgstr ""
 
@@ -5796,7 +5852,7 @@ msgid "Notification preferences will be available in a future release."
 msgstr ""
 
 #: specivo/templates/themes/default/pages/auth/preferences.html:82
-#: specivo/web/pages/admin.py:1143
+#: specivo/web/pages/admin.py:1151
 msgid "Sessions"
 msgstr ""
 
@@ -6107,7 +6163,7 @@ msgstr ""
 msgid "Duration"
 msgstr ""
 
-#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:46
+#: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:60
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:67
 #: specivo/templates/themes/default/pages/admin/ai_subscriptions.html:59
 #: specivo/templates/themes/default/pages/auth/ai_subscriptions.html:47
@@ -10201,51 +10257,55 @@ msgstr ""
 msgid "This is already the user's email address."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1136
+#: specivo/web/pages/admin.py:1144
 msgid "Sign-in"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1137
+#: specivo/web/pages/admin.py:1145
 msgid "Access"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1138
+#: specivo/web/pages/admin.py:1146
 msgid "Agents"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1139
+#: specivo/web/pages/admin.py:1147
 msgid "Issues and wiki"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1142
+#: specivo/web/pages/admin.py:1150
 msgid "Provisioning"
 msgstr ""
 
-#: specivo/web/pages/admin.py:1205
+#: specivo/web/pages/admin.py:1152
+msgid "AI usage"
+msgstr ""
+
+#: specivo/web/pages/admin.py:1214
 msgid "Unknown category."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1207
+#: specivo/web/pages/admin.py:1216
 msgid "Unknown event type."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1212
+#: specivo/web/pages/admin.py:1221
 msgid "No user has this login."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1217
+#: specivo/web/pages/admin.py:1226
 msgid "No project has this key."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1222
+#: specivo/web/pages/admin.py:1231
 msgid "The from date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1228
+#: specivo/web/pages/admin.py:1237
 msgid "The to date is not a valid date."
 msgstr ""
 
-#: specivo/web/pages/admin.py:1232
+#: specivo/web/pages/admin.py:1241
 msgid "The IP address is too long."
 msgstr ""
 

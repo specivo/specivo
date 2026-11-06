@@ -248,6 +248,28 @@ within a step the latest start, then the newest row. Seat cost goes through the 
 system accounts hold none; the `/my/` routes are account-wide (`get_account_user`). Plan presets
 (`PLAN_PRESETS`) are suggestions only.
 
+**AI usage entries.** `ai_usage_entries` holds one bucket of usage per session x model x **UTC day**, logged in a
+user's name (`user_id`, on behalf of) and written by `reporter_user_id` / `reporter_api_key_id` with a `source`
+(`manual`, `api`, `mcp`, `reporter`, `import`). The reporter columns, the source and the client name and version never
+change. Reporter and import entries carry an `idempotency_key`, unique per target user (`uq_ai_usage_entries_user_key`),
+are upserted with full bucket totals (`AiUsageService.upsert`: `created`, `updated` with `revision + 1`, or `unchanged`
+with no write; a key reported by another account is 409 `key_conflict`; an existing entry is authorized with
+`require_can_log` against its **stored** project and user, never the project the replay names, and a replay naming a
+different project than the stored one is 409 `ai_usage_attribution_conflict`: reporters attribute unassigned entries
+only, people move entries), keep their token, model and tool columns
+(only `project_id`, `issue_id` and `comments` change; 422 `ai_usage_field_locked`), are excluded rather than deleted
+(`excluded_at` survives upserts; admins may hard-delete), and keep an attribution once set. Costs are a **snapshot at
+write time** (`AiUsageService.apply_costs` + the pure `specivo.core.ai_usage.compute_costs`): priced at `priced_at`
+(`started_at`, else 00:00 UTC of `usage_date`; `started_at` must fall on that UTC day) with the price
+`AiModelPriceService.resolve` returns, stored with `price_id` (FK `RESTRICT`, registered as a `PriceReference`). The
+marginal cost follows the cost type: `api` = the reported cost if given (`cost_basis` `reported`, `manual` when a person
+typed it), else the API equivalent; `subscription` / `free` = 0; `local` = 0 or the local price row; `unknown` = NULL.
+A missing cost type defaults to `subscription` when `AiSubscriptionService.subscription_for` covers the usage, else
+`unknown`. Prices added or edited later never change an entry; only `AiUsageService.recompute_range` (the Celery task
+`specivo.tasks.ai_usage.recompute_ai_usage_costs`, started from `POST /api/v1/admin/ai-usage/recompute/` or the offer on
+the admin price page after a past period is entered) re-prices entries, each at its own `priced_at`, bumping `revision`
+where costs change. No prompt, code or file path is ever stored.
+
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
 **Principals.** A `members` row is held by exactly one principal — a user (`user_id`) or a user group (`group_id`) — with the other column NULL and `ck_members_one_principal` enforcing it. Roles hang off the row through `member_roles` identically either way, so nothing downstream of a resolved role knows which kind granted it. Uniqueness per project is two plain `UniqueConstraint`s rather than partial indexes: PostgreSQL treats NULLs as distinct, so each ignores the other principal's rows.
@@ -316,6 +338,20 @@ The catalogue is the `Permission` `StrEnum` in that module; each member's value 
 `get_user_roles(session, user, project)` is the one role resolution behind permission checks, issue visibility and (mirrored in SQL) search visibility: a membership's roles; otherwise, on a public project, the seeded read-only Non member role (`roles.builtin = 1`) plus the project's transient anonymous role when the instance switch is on; for the anonymous user, only that transient role, capped at `view_issues` / `view_wiki` inside `check_permission`. Resolved roles are cached in `session.info`, so the cache lives exactly as long as a request's session. There are no hardcoded `is_public` access branches. `member_principal_clause(user_id)` is the single definition of "this `members` row grants this user access" — see §4 on principals. Any membership read that feeds an access decision uses that clause; a row looked up in order to be *edited* (add, update or remove one user's roles) must stay user-only, or the edit lands on a group and reaches everyone in it.
 
 Each role also carries `users_visibility` and `time_entries_visibility` beside `issues_visibility`, and the widest value across a user's roles wins. For time entries only roles that grant `view_time_entries` count: a user with none reads no entries in the project, their own included. Time access is decided in `TimeEntryService`, not inline in endpoints: `visible_entries_clause` / `visible_entries_clause_any` scope every reader (list, single entry, issue and version totals, billing, the dashboard feed), `require_can_log` guards every entry written on a user's behalf (timers included), and `can_edit` covers edits and deletes. `create` checks nothing itself, because the importer writes entries for their original authors.
+
+AI usage mirrors this in `AiUsageService` with `view_ai_usage`, `log_ai_usage`, `manage_ai_usage`,
+`log_ai_usage_for_others` and `roles.ai_usage_visibility` (`all` / `own`, default `own`; the seeded Manager is `all`),
+with three differences. People always read the entries logged in their own name, without any permission and unassigned
+ones included; a reporter reads what it reported; and entries without a project are otherwise visible to admins only.
+Entries on issues the reader cannot see are hidden unless they are the reader's own. A project-limited key sees
+unassigned entries only where it is the reporting key (`ProjectScope.key_id`, `limited_key_id()`). Logging in another
+user's name needs `log_ai_usage_for_others` in the project and the target must be an active member there; unassigned
+entries for someone else are for admins only (`require_can_log`). Moving an entry to another project (or making it
+unassigned) runs the same `require_can_log` in the destination in the entry's user's name, so someone else's entry needs
+`log_ai_usage_for_others` there.
+The per-project form of both entry kinds' cross-project visibility is read once by
+`permission_service.entry_visibility_projects(session, user, permission, visibility_attribute)`; use it rather than
+another membership query.
 
 **Validation judges the change, not the state.** Metadata schemas and workflow field rules are
 enforced in the service layer on every write path (REST, web, MCP), and they look only at what the
@@ -652,6 +688,17 @@ only as `{"changed": true}`) are written by `AiSubscriptionService` in the trans
 actor is not the holder (an administrator changing somebody else's). `AI_SUBSCRIPTIONS_SELF_SERVICE_TOGGLED`
 (`enabled`) is written when the setting changes. Category Administration; `resource_type` `ai_subscription` or
 `setting`. Notes are free text and never logged.
+
+**AI usage events** (category AI usage, `resource_type` `ai_usage_entry`, `project_id` set when the entry has one),
+written by `AiUsageService` in the transaction of the change: `AI_USAGE_LOGGED_FOR_OTHER` (an entry created in another
+user's name; details `entry_id`, `target_user_id`, `target_login`, `source`, `tool`, `provider`, `model`, `usage_date`,
+`project_key`, `issue`, `reporter_api_key_id`; a replay that changes another user's bucket writes it again with
+`status: "updated"` and `revision`, an unchanged replay none),
+`AI_USAGE_UPDATED_BY_OTHER` (an edit by someone other than the entry's user; the same plus `changes`, comments only as
+`{"changed": true}`), `AI_USAGE_EXCLUDED` / `AI_USAGE_INCLUDED` and `AI_USAGE_DELETED` (whoever did it; a delete adds
+`tokens` and `cost_type`), and `AI_USAGE_COSTS_RECOMPUTED` (one per range: `provider`, `models`, `from`, `to`,
+`entries`, `changed`, `before` and `after` totals per currency of `marginal` and `api_equivalent`; user none when the
+task runs without an actor). Entries a person logs for themselves are not audited.
 
 **Repository provider change.** `REPOSITORY_PROVIDER_CHANGED` (category Administration) is written by
 `RepositoryIntegrationService.update` when an integration moves to another forge, which also moves its

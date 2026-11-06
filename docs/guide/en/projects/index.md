@@ -59,13 +59,14 @@ A fifth role, **Automation**, is not offered when adding members: it is the role
 
 ### What a role can see
 
-Besides its permissions, each role has two visibility settings, edited by an administrator under
+Besides its permissions, each role has three visibility settings, edited by an administrator under
 **Administration → Roles**:
 
 | Setting | Values | Default |
 |---|---|---|
 | **Users visibility** | **All active users**, or **Members of visible projects** — the person themselves plus everyone who is a member (directly or through a group) of a project they can open | All active users |
 | **Time entries visibility** | **All time entries** in the project, or **Own time entries** only | All time entries |
+| **AI usage visibility** | **All AI usage** in the project, or **Own AI usage** only | Own AI usage (the built-in Manager role: All AI usage) |
 
 *Users visibility* limits the people a member can find in user pickers (for example when adding
 a project member or typing a name) and in an issue's watcher list. *Time entries visibility*
@@ -75,6 +76,22 @@ contractors on a billable project: they log and see their own hours and nobody e
 
 Time entries visibility only matters for roles that have the **View time entries** permission;
 a person whose roles in a project lack it sees no time there at all, not even their own.
+
+*AI usage visibility* works the same way for AI usage entries (the tokens and spend of people's
+AI coding tools) and only matters for roles with **View AI usage**, with one difference: everyone
+always sees the AI usage logged in their own name, and which account logged it, whatever their
+roles. A role set to **All AI usage** shows each person's usage and spend in the project, so only
+give it to the people who should see that, such as project leads; the default shows people their
+own usage only. Entries on issues someone cannot see stay hidden from them unless the entries are
+their own.
+
+The AI usage permissions are **View AI usage**, **Log AI usage** (log your own usage in the
+project), **Edit/exclude any AI usage entries**, and **Log AI usage on behalf of other members**,
+which a shared service account needs to log usage for the people it reports for; those people must
+be active members of the project. Usage that belongs to no project can be logged by anyone for
+themselves, and by administrators for others. Moving someone else's entry to another project needs
+the same on-behalf permission in that project. The built-in roles get: Manager all four, Developer
+and Agent view and log, Reporter view.
 
 When someone holds several roles, the **widest** setting wins, as in Redmine: one role with
 *View time entries* and *All time entries* on a project is enough to see every entry there, whatever

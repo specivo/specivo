@@ -56,7 +56,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, Token
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import false, or_, select
@@ -71,9 +71,15 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ProjectScope:
-    """The projects a limited API key reaches, as resolved ids."""
+    """The projects a limited API key reaches, as resolved ids.
+
+    ``key_id`` is the limited key itself, when known (set by
+    :func:`activate_api_key_scope`): rows that belong to no project, such as
+    unassigned AI usage entries, are reachable only where that key wrote them.
+    """
 
     project_ids: frozenset[int]
+    key_id: int | None = None
 
     def allows(self, project_id: int | None) -> bool:
         return project_id is not None and project_id in self.project_ids
@@ -85,6 +91,12 @@ _current_scope: ContextVar[ProjectScope | None] = ContextVar("specivo_api_key_pr
 def current_project_scope() -> ProjectScope | None:
     """Return the project limit of the authenticating key, or None when there is none."""
     return _current_scope.get()
+
+
+def limited_key_id() -> int | None:
+    """Return the id of the authenticating project-limited key, or None (no limit, or the key is unknown)."""
+    scope = _current_scope.get()
+    return scope.key_id if scope is not None else None
 
 
 def project_in_scope(project_id: int | None) -> bool:
@@ -313,6 +325,8 @@ async def activate_api_key_scope(session: AsyncSession, api_key: ApiKey) -> Proj
     reset afterwards (``ApiKeyScopeMiddleware``, ``bound_scope``).
     """
     scope = await resolve_project_scope(session, api_key.scopes)
+    if scope is not None:
+        scope = replace(scope, key_id=api_key.id)
     _current_scope.set(scope)
     return scope
 

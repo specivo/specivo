@@ -559,7 +559,7 @@ async def admin_roles(
     user: Annotated[User, Depends(require_admin)],
     db: AsyncSession = DB_SESSION,
 ) -> Response:
-    """Render the roles page: each role's user and time entry visibility."""
+    """Render the roles page: each role's user, time entry and AI usage visibility."""
     from specivo.models.role import Role
 
     roles = (await db.execute(select(Role).order_by(Role.builtin, Role.position, Role.id))).scalars().all()
@@ -578,15 +578,21 @@ async def admin_role_update(
     db: AsyncSession = DB_SESSION,
     users_visibility: str = Form(""),
     time_entries_visibility: str = Form(""),
+    ai_usage_visibility: str = Form(""),
 ) -> Response:
-    """Save a role's ``users_visibility`` and ``time_entries_visibility``.
+    """Save a role's ``users_visibility``, ``time_entries_visibility`` and ``ai_usage_visibility``.
 
     Unknown values are ignored (left unchanged), like the settings form.
     Builtin roles are editable here too: only their ``builtin`` is protected.
     """
     from fastapi import HTTPException
 
-    from specivo.models.role import TIME_ENTRIES_VISIBILITY_VALUES, USERS_VISIBILITY_VALUES, Role
+    from specivo.models.role import (
+        AI_USAGE_VISIBILITY_VALUES,
+        TIME_ENTRIES_VISIBILITY_VALUES,
+        USERS_VISIBILITY_VALUES,
+        Role,
+    )
 
     role = await db.get(Role, role_id)
     if role is None:
@@ -595,6 +601,8 @@ async def admin_role_update(
         role.users_visibility = users_visibility
     if time_entries_visibility in TIME_ENTRIES_VISIBILITY_VALUES:
         role.time_entries_visibility = time_entries_visibility
+    if ai_usage_visibility in AI_USAGE_VISIBILITY_VALUES:
+        role.ai_usage_visibility = ai_usage_visibility
     await db.commit()
     return RedirectResponse("/admin/roles/", status_code=303)
 
@@ -1141,6 +1149,7 @@ def audit_category_labels() -> dict[AuditCategory, str]:
         AuditCategory.SSO: _("Single sign-on"),
         AuditCategory.PROVISIONING: _("Provisioning"),
         AuditCategory.SESSIONS: _("Sessions"),
+        AuditCategory.AI_USAGE: _("AI usage"),
     }
 
 

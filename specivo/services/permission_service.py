@@ -3,8 +3,9 @@
 Who may do what in a project is decided here and nowhere else.
 ``get_user_roles`` resolves the roles a user holds in a project, and every
 access decision derives from it: ``check_permission``, issue visibility in
-``IssueService``, time entry visibility in ``TimeEntryService`` and, mirrored
-in SQL, the search visibility CTE. User visibility (``visible_users_clause``)
+``IssueService``, time entry visibility in ``TimeEntryService``, AI usage
+visibility in ``AiUsageService`` and, mirrored in SQL, the search visibility
+CTE. User visibility (``visible_users_clause``)
 is the one cross-project rule, and it reads the same membership roles.
 
 Role resolution
@@ -36,6 +37,12 @@ permissive value wins, as in Redmine (``best_time_entries_visibility``,
 only the roles granting ``view_time_entries`` count: without one, a user reads
 no time entries in the project, not even their own.
 
+Roles also carry ``ai_usage_visibility``, read through
+``best_entries_visibility``. AI usage follows the same rule with
+``view_ai_usage``, except that people always read the entries logged in their
+own name (``AiUsageService``). ``entry_visibility_projects`` is the
+cross-project form both entry kinds share.
+
 ``check_permission`` additionally denies the anonymous user anything outside
 the ceiling before it looks at a single role.
 
@@ -56,13 +63,15 @@ from enum import StrEnum
 from typing import Any
 
 from fastapi import Request
-from sqlalchemy import exists, or_, select, union
+from sqlalchemy import and_, exists, false, or_, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
 from specivo.models.member import Member, MemberRole
 from specivo.models.project import PROJECT_STATUS_ACTIVE, Project
 from specivo.models.role import (
+    AI_USAGE_VISIBILITY_ALL,
+    AI_USAGE_VISIBILITY_OWN,
     TIME_ENTRIES_VISIBILITY_ALL,
     TIME_ENTRIES_VISIBILITY_OWN,
     USERS_VISIBILITY_ALL,
@@ -117,6 +126,11 @@ class Permission(StrEnum):
     VIEW_TIME_ENTRIES = "view_time_entries"
     LOG_TIME = "log_time"
     MANAGE_TIME_ENTRIES = "manage_time_entries"
+    # --- AI usage ---
+    VIEW_AI_USAGE = "view_ai_usage"
+    LOG_AI_USAGE = "log_ai_usage"
+    MANAGE_AI_USAGE = "manage_ai_usage"
+    LOG_AI_USAGE_FOR_OTHERS = "log_ai_usage_for_others"
     # --- Admin ---
     MANAGE_PROJECT = "manage_project"
 
@@ -147,6 +161,10 @@ PERMISSIONS: dict[str, str] = {
     Permission.VIEW_TIME_ENTRIES: "View time entries",
     Permission.LOG_TIME: "Log time",
     Permission.MANAGE_TIME_ENTRIES: "Edit/delete any time entries",
+    Permission.VIEW_AI_USAGE: "View AI usage",
+    Permission.LOG_AI_USAGE: "Log AI usage",
+    Permission.MANAGE_AI_USAGE: "Edit/exclude any AI usage entries",
+    Permission.LOG_AI_USAGE_FOR_OTHERS: "Log AI usage on behalf of other members",
     Permission.MANAGE_PROJECT: "Manage project settings",
 }
 
@@ -210,6 +228,7 @@ class ResolvedRole:
     issues_visibility: str
     users_visibility: str = USERS_VISIBILITY_ALL
     time_entries_visibility: str = TIME_ENTRIES_VISIBILITY_ALL
+    ai_usage_visibility: str = AI_USAGE_VISIBILITY_OWN
     builtin: int = RoleBuiltin.CUSTOM
     transient: bool = False
 
@@ -222,6 +241,7 @@ class ResolvedRole:
             issues_visibility=role.issues_visibility,
             users_visibility=role.users_visibility,
             time_entries_visibility=role.time_entries_visibility,
+            ai_usage_visibility=role.ai_usage_visibility,
             builtin=role.builtin,
         )
 
@@ -323,6 +343,7 @@ async def anonymous_role(session: AsyncSession, project: Project) -> ResolvedRol
         # The narrowest values: on top of the Non member role they never widen anything.
         users_visibility=USERS_VISIBILITY_MEMBERS,
         time_entries_visibility=TIME_ENTRIES_VISIBILITY_OWN,
+        ai_usage_visibility=AI_USAGE_VISIBILITY_OWN,
         transient=True,
     )
 
@@ -362,6 +383,23 @@ async def get_user_roles(session: AsyncSession, user: User, project: Project) ->
 # ---------------------------------------------------------------------------
 
 
+def best_entries_visibility(visibilities: Iterable[str]) -> str | None:
+    """Return the most permissive of some roles' entry visibility values (``"all"`` or ``"own"``).
+
+    *visibilities* must come only from the roles that grant the matching view
+    permission (``view_time_entries``, ``view_ai_usage``): a role without
+    the permission contributes nothing, whatever its setting.
+    None when no such role exists, ``"own"`` when every one is ``"own"``,
+    otherwise ``"all"``.
+    """
+    seen = set(visibilities)
+    if not seen:
+        return None
+    if seen <= {TIME_ENTRIES_VISIBILITY_OWN}:
+        return TIME_ENTRIES_VISIBILITY_OWN
+    return TIME_ENTRIES_VISIBILITY_ALL
+
+
 def best_time_entries_visibility(visibilities: Iterable[str]) -> str | None:
     """Return the most permissive of the roles' ``time_entries_visibility`` values.
 
@@ -371,12 +409,7 @@ def best_time_entries_visibility(visibilities: Iterable[str]) -> str | None:
     (the user reads no entries at all), ``"own"`` when every one is
     ``"own"``, otherwise ``"all"``.
     """
-    seen = set(visibilities)
-    if not seen:
-        return None
-    if seen <= {TIME_ENTRIES_VISIBILITY_OWN}:
-        return TIME_ENTRIES_VISIBILITY_OWN
-    return TIME_ENTRIES_VISIBILITY_ALL
+    return best_entries_visibility(visibilities)
 
 
 async def time_entries_visibility(session: AsyncSession, user: User, project: Project) -> str | None:
@@ -395,6 +428,103 @@ async def time_entries_visibility(session: AsyncSession, user: User, project: Pr
     roles = await get_user_roles(session, user, project)
     return best_time_entries_visibility(
         role.time_entries_visibility for role in roles if role.grants(Permission.VIEW_TIME_ENTRIES)
+    )
+
+
+async def ai_usage_visibility(session: AsyncSession, user: User, project: Project) -> str | None:
+    """Return the AI usage entries *user* may read in *project* beyond their own: ``"all"``, ``"own"`` or None.
+
+    Mirrors ``time_entries_visibility`` with ``view_ai_usage`` and
+    ``ai_usage_visibility``. Entries logged in the user's own name are always
+    readable whatever this returns (``AiUsageService`` adds them).
+    """
+    if not project_in_scope(project.id):
+        return None
+    if user.is_admin:
+        return AI_USAGE_VISIBILITY_ALL
+    if user.is_anonymous:
+        return None
+    roles = await get_user_roles(session, user, project)
+    return best_entries_visibility(role.ai_usage_visibility for role in roles if role.grants(Permission.VIEW_AI_USAGE))
+
+
+@dataclass(frozen=True, slots=True)
+class EntryVisibilityProjects:
+    """Which entries of one kind (time, AI usage) a user reads in each project, across projects.
+
+    The cross-project form of ``time_entries_visibility`` /
+    ``ai_usage_visibility``, read in one membership query by
+    :func:`entry_visibility_projects`: projects where the user's roles show
+    every entry, projects where they show only the user's own, every project
+    the user holds a membership on, and what the Non member role shows on a
+    public project without one (None: nothing).
+    """
+
+    everything: tuple[int, ...]
+    own_only: tuple[int, ...]
+    member_projects: tuple[int, ...]
+    public_visibility: str | None
+
+    def clause(self, project_column: Any, own: ColumnElement[bool] | None = None) -> ColumnElement[bool]:
+        """Return the predicate over *project_column* this map allows.
+
+        *own* selects the user's own entries; projects (and public projects)
+        that show only those are left out when it is None, for callers that
+        add the user's own entries on their own terms.
+        """
+        visible: list[ColumnElement[bool]] = []
+        if self.everything:
+            visible.append(project_column.in_(self.everything))
+        if own is not None and self.own_only:
+            visible.append(and_(project_column.in_(self.own_only), own))
+        public_all = self.public_visibility == TIME_ENTRIES_VISIBILITY_ALL
+        if self.public_visibility is not None and (public_all or own is not None):
+            public = select(Project.id).where(Project.is_public.is_(True))
+            if self.member_projects:
+                public = public.where(Project.id.not_in(self.member_projects))
+            public_clause: ColumnElement[bool] = project_column.in_(public)
+            if not public_all and own is not None:
+                public_clause = and_(public_clause, own)
+            visible.append(public_clause)
+        if not visible:
+            return false()
+        return or_(*visible)
+
+
+async def entry_visibility_projects(
+    session: AsyncSession, user: User, permission: Permission, visibility_attribute: str
+) -> EntryVisibilityProjects:
+    """Return, per project, which entries *user*'s roles show: the shared core of the entry visibility clauses.
+
+    Only roles granting *permission* count, with their *visibility_attribute*
+    (``time_entries_visibility`` or ``ai_usage_visibility``); the most
+    permissive value wins per project. A membership replaces the Non member
+    fallback even when its roles grant nothing. Callers handle admins, the
+    anonymous user and the API key project limit.
+    """
+    visibility_column = getattr(Role, visibility_attribute)
+    rows = await session.execute(
+        select(Member.project_id, Role.permissions, visibility_column)
+        .select_from(Member)
+        .outerjoin(MemberRole, MemberRole.member_id == Member.id)
+        .outerjoin(Role, Role.id == MemberRole.role_id)
+        .where(member_principal_clause(user.id))
+    )
+    by_project: dict[int, set[str]] = {}
+    for project_id, permissions, visibility in rows:
+        values = by_project.setdefault(project_id, set())
+        if visibility is not None and role_grants(permissions or (), permission):
+            values.add(visibility)
+    best = {project_id: best_entries_visibility(values) for project_id, values in by_project.items()}
+    non_member = await get_non_member_role(session)
+    public_visibility: str | None = None
+    if non_member is not None and non_member.grants(permission):
+        public_visibility = getattr(non_member, visibility_attribute)
+    return EntryVisibilityProjects(
+        everything=tuple(sorted(pid for pid, value in best.items() if value == TIME_ENTRIES_VISIBILITY_ALL)),
+        own_only=tuple(sorted(pid for pid, value in best.items() if value == TIME_ENTRIES_VISIBILITY_OWN)),
+        member_projects=tuple(sorted(by_project)),
+        public_visibility=public_visibility,
     )
 
 

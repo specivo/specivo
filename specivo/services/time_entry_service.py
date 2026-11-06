@@ -34,9 +34,8 @@ from specivo.core.config import get_settings
 from specivo.core.exceptions import AppError, NotFoundError, PermissionDeniedError, ValidationError
 from specivo.core.utils import utcnow
 from specivo.models.issue import Issue
-from specivo.models.member import Member, MemberRole
 from specivo.models.project import Project
-from specivo.models.role import TIME_ENTRIES_VISIBILITY_ALL, TIME_ENTRIES_VISIBILITY_OWN, Role
+from specivo.models.role import TIME_ENTRIES_VISIBILITY_OWN
 from specivo.models.time_entry import ActiveTimer, TimeEntry, TimeEntryActivity
 from specivo.models.user import User
 from specivo.schemas.time_entry import TimeEntryCreate, TimeEntryUpdate
@@ -195,50 +194,12 @@ class TimeEntryService:
         if user.is_anonymous:
             return false()
 
-        from specivo.services.permission_service import (
-            Permission,
-            best_time_entries_visibility,
-            get_non_member_role,
-            member_principal_clause,
-            role_grants,
+        from specivo.services.permission_service import Permission, entry_visibility_projects
+
+        projects = await entry_visibility_projects(
+            session, user, Permission.VIEW_TIME_ENTRIES, "time_entries_visibility"
         )
-
-        rows = await session.execute(
-            select(Member.project_id, Role.permissions, Role.time_entries_visibility)
-            .select_from(Member)
-            .outerjoin(MemberRole, MemberRole.member_id == Member.id)
-            .outerjoin(Role, Role.id == MemberRole.role_id)
-            .where(member_principal_clause(user.id))
-        )
-        by_project: dict[int, set[str]] = {}
-        for project_id, permissions, visibility in rows:
-            values = by_project.setdefault(project_id, set())
-            if visibility is not None and role_grants(permissions or (), Permission.VIEW_TIME_ENTRIES):
-                values.add(visibility)
-
-        best = {project_id: best_time_entries_visibility(values) for project_id, values in by_project.items()}
-        everything = sorted(pid for pid, value in best.items() if value == TIME_ENTRIES_VISIBILITY_ALL)
-        own_only = sorted(pid for pid, value in best.items() if value == TIME_ENTRIES_VISIBILITY_OWN)
-
-        visible: list[ColumnElement[bool]] = []
-        if everything:
-            visible.append(TimeEntry.project_id.in_(everything))
-        if own_only:
-            visible.append(and_(TimeEntry.project_id.in_(own_only), TimeEntry.user_id == user.id))
-
-        non_member = await get_non_member_role(session)
-        if non_member is not None and non_member.grants(Permission.VIEW_TIME_ENTRIES):
-            public_without_membership = select(Project.id).where(Project.is_public.is_(True))
-            if by_project:
-                public_without_membership = public_without_membership.where(Project.id.not_in(sorted(by_project)))
-            public_clause: ColumnElement[bool] = TimeEntry.project_id.in_(public_without_membership)
-            if non_member.time_entries_visibility == TIME_ENTRIES_VISIBILITY_OWN:
-                public_clause = and_(public_clause, TimeEntry.user_id == user.id)
-            visible.append(public_clause)
-
-        if not visible:
-            return false()
-        return or_(*visible)
+        return projects.clause(TimeEntry.project_id, own=TimeEntry.user_id == user.id)
 
     async def get_visible(self, session: AsyncSession, entry_id: int, user: User) -> TimeEntry:
         """Return time entry *entry_id* if *user* may read it, else raise ``NotFoundError``.

@@ -4,6 +4,7 @@ from specivo.models.agent_group import AgentGroup, AgentGroupMembership, GroupPo
 from specivo.models.agent_session import AgentSession
 from specivo.models.ai_model_price import AiModelPrice
 from specivo.models.ai_subscription import AiSubscription, AiTool
+from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.attachment import Attachment
 from specivo.models.auth import ApiKey, RefreshToken
 from specivo.models.base import Base, LockVersionMixin, TimestampMixin
@@ -65,6 +66,7 @@ __all__ = [
     "AiModelPrice",
     "AiSubscription",
     "AiTool",
+    "AiUsageEntry",
     "BillingRate",
     "Base",
     "LockVersionMixin",

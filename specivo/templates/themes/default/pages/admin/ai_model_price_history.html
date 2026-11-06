@@ -24,6 +24,20 @@
 {% elif notice == "ended" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}End of the period saved.{% endtrans %}</div>
 {% elif notice == "saved" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Saved.{% endtrans %}</div>
 {% elif notice == "deleted" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans %}Price deleted.{% endtrans %}</div>
+{% elif notice == "recompute_queued" %}<div class="flash flash-success" role="status" data-testid="price-notice">{% trans count=queued_entries %}Recomputing the costs of {{ count }} usage entry in the background. The audit log records the totals before and after.{% pluralize %}Recomputing the costs of {{ count }} usage entries in the background. The audit log records the totals before and after.{% endtrans %}</div>
+{% endif %}
+{% if recompute_offer %}
+<div class="card sp-card-pad sp-mb-md" data-testid="recompute-offer">
+  <h3 class="sp-card-h3">{% trans %}Recompute past usage{% endtrans %}</h3>
+  <p class="sp-text-muted sp-mb-md">{% trans count=recompute_offer.entries, start=recompute_offer.from, end=recompute_offer.to %}The new price covers a past period. {{ count }} usage entry was priced between {{ start }} and {{ end }} and keeps its old cost until you recompute it. Each entry is priced again with the price valid at its own time.{% pluralize %}The new price covers a past period. {{ count }} usage entries were priced between {{ start }} and {{ end }} and keep their old costs until you recompute them. Each entry is priced again with the price valid at its own time.{% endtrans %}</p>
+  <form method="post" action="/admin/ai-model-prices/recompute/">
+    <input type="hidden" name="provider" value="{{ recompute_offer.provider }}">
+    <input type="hidden" name="model" value="{{ recompute_offer.model }}">
+    <input type="hidden" name="from" value="{{ recompute_offer.from_input }}">
+    <input type="hidden" name="to" value="{{ recompute_offer.to_input }}">
+    <button type="submit" class="sp-btn-sm" data-testid="recompute-submit">{% trans %}Recompute these entries{% endtrans %}</button>
+  </form>
+</div>
 {% endif %}
 {% if error %}<div class="flash flash-error" role="alert" data-testid="price-error">{{ error_text(error) }}</div>{% endif %}
 

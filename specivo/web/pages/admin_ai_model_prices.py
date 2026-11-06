@@ -6,7 +6,7 @@ Plain server-rendered forms (no script). Writes redirect back with a
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 from urllib.parse import urlencode
 
@@ -24,19 +24,32 @@ from specivo.core.utils import utcnow
 from specivo.models.ai_model_price import AiModelPrice
 from specivo.models.user import User
 from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput, price_usage_of
+from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.currency_service import CurrencyService
 from specivo.web.deps import get_templates
 from specivo.web.pages.admin import require_admin
 
 router = APIRouter(tags=["web-admin"], include_in_schema=False)
 _service = AiModelPriceService()
+_usage = AiUsageService()
 
 _BASE_URL = "/admin/ai-model-prices/"
 _MODEL_URL = "/admin/ai-model-prices/model/"
 _SOURCES = ("seed", "admin")
 _STATUSES = ("active", "inactive", "all")
 _NOTICES = frozenset(
-    {"created", "closed", "deactivated", "activated", "deleted", "ended", "saved", "seeded", "seed_unchanged"}
+    {
+        "created",
+        "closed",
+        "deactivated",
+        "activated",
+        "deleted",
+        "ended",
+        "saved",
+        "seeded",
+        "seed_unchanged",
+        "recompute_queued",
+    }
 )
 _ERRORS = frozenset(
     {
@@ -51,6 +64,8 @@ _ERRORS = frozenset(
         "threshold_invalid",
         "seed_invalid",
         "not_found",
+        "queue_unavailable",
+        "ai_usage_invalid",
     }
 )
 
@@ -208,8 +223,14 @@ async def admin_ai_model_price_history(
     model: str = Query(""),
     notice: str = Query(""),
     error: str = Query(""),
+    recompute: int = Query(0, ge=0),
+    entries: int = Query(0, ge=0),
 ) -> Response:
-    """One model's price history, with the "new price from" form."""
+    """One model's price history, with the "new price from" form.
+
+    ``recompute`` names a price period just entered that starts in the past:
+    the page then offers to recompute the usage entries priced in its range.
+    """
     provider_slug = normalize_provider(provider) or ""
     _hint, name = normalize_model_name(model)
     rows = await _service.history(db, provider_slug, name)
@@ -220,6 +241,7 @@ async def admin_ai_model_price_history(
     current = resolved.price if resolved is not None and resolved.matched_by == "model" else None
     template = current or rows[0]
     in_use = {r.id: (await price_usage_of(db, r.id)).count for r in rows}
+    offer = await _recompute_offer(db, rows, recompute, now)
     return get_templates().TemplateResponse(
         request,
         "pages/admin/ai_model_price_history.html",
@@ -242,8 +264,71 @@ async def admin_ai_model_price_history(
             "model_query": urlencode(_model_params(provider_slug, name)),
             "notice": notice if notice in _NOTICES else "",
             "error": error if error in _ERRORS else "",
+            "recompute_offer": offer,
+            "queued_entries": entries,
         },
     )
+
+
+def recompute_range_of(row: AiModelPrice, now: datetime) -> tuple[datetime, datetime] | None:
+    """The range a new period affects, or None when it starts in the future (no entry is priced there yet).
+
+    An open period reaches up to tomorrow (UTC): entries are never priced later.
+    """
+    if row.effective_from >= now:
+        return None
+    end = row.effective_to or (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return row.effective_from, end
+
+
+async def _recompute_offer(
+    db: AsyncSession, rows: list[AiModelPrice], price_id: int, now: datetime
+) -> dict[str, Any] | None:
+    """What the "recompute the affected range" offer shows, or None when there is nothing to offer."""
+    row = next((r for r in rows if r.id == price_id), None) if price_id else None
+    if row is None:
+        return None
+    span = recompute_range_of(row, now)
+    if span is None:
+        return None
+    start, end = span
+    count = await _usage.count_in_range(db, start=start, end=end, provider=row.provider, model=row.model)
+    if not count:
+        return None
+    return {
+        "provider": row.provider,
+        "model": row.model,
+        "from": utc_text(start),
+        "to": utc_text(end),
+        "from_input": start.isoformat(),
+        "to_input": end.isoformat(),
+        "entries": count,
+    }
+
+
+@router.post("/admin/ai-model-prices/recompute/", response_model=None)
+async def admin_ai_usage_recompute(
+    user: Annotated[User, Depends(require_admin)],
+    db: AsyncSession = DB_SESSION,
+    provider: str = Form(""),
+    model: str = Form(""),
+    start: str = Form("", alias="from"),
+    end: str = Form("", alias="to"),
+) -> Response:
+    """Recompute the costs of the usage entries priced in a range, in the background."""
+    provider_slug = normalize_provider(provider) or ""
+    _hint, name = normalize_model_name(model)
+    params = _model_params(provider_slug, name) if name else {}
+    back = _MODEL_URL if name else _BASE_URL
+    first, last = parse_utc(start), parse_utc(end)
+    if first is None or last is None:
+        return _redirect(back, {**params, "error": "instant_invalid"})
+    try:
+        entries = await _usage.count_in_range(db, start=first, end=last, provider=provider_slug or None, model=name)
+        _usage.queue_recompute(actor_id=user.id, start=first, end=last, provider=provider_slug or None, model=name)
+    except AppError as exc:
+        return _redirect(back, {**params, "error": exc.code})
+    return _redirect(back, {**params, "notice": "recompute_queued", "entries": str(entries)})
 
 
 @router.post("/admin/ai-model-prices/", response_model=None)
@@ -323,9 +408,10 @@ async def admin_ai_model_price_create(
     except AppError as exc:
         return _redirect(back[0], {**back[1], "error": exc.code}, anchor="new-price")
     row = created.price
-    return _redirect(
-        _MODEL_URL, {**_model_params(row.provider, row.model), "notice": "closed" if created.closed else "created"}
-    )
+    params = {**_model_params(row.provider, row.model), "notice": "closed" if created.closed else "created"}
+    if recompute_range_of(row, utcnow()) is not None:
+        params["recompute"] = str(row.id)
+    return _redirect(_MODEL_URL, params)
 
 
 async def _row_or_back(db: AsyncSession, price_id: int) -> AiModelPrice | None:
