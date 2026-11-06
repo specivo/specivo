@@ -33,7 +33,7 @@ Every term Specivo uses, defined in one line. Heavier terms link to their full p
 | **slug** | The normalized URL form of a wiki page title; `My Page`, `my-page`, and `My_Page` all resolve to the same slug. See [Linking & history](../wiki/history-linking.md). |
 | **sprint** | A time-boxed iteration with a goal, a start and end date, and its own board. See [Sprints](../projects/sprints.md). |
 | **status** | Where an issue sits in its lifecycle — New, In Progress, Resolved, Feedback, Closed, Rejected. See [Statuses & workflow](../issues/statuses-workflow.md). |
-| **subtask** | An issue nested under a parent issue (up to 16 levels deep). See [Subtasks](../issues/subtasks.md). |
+| **subtask** | An issue nested under a parent issue (up to 10 levels deep). See [Subtasks](../issues/subtasks.md). |
 | **time entries visibility** | A role setting under **Administration → Roles**: see **all** time entries in a project, or only your **own**. See [Time tracking](../projects/time-tracking.md#who-can-do-what). |
 | **tracker** | The *type* of an issue: Bug, Feature, Task, or Support. See [Issues](../issues/index.md). |
 | **users visibility** | A role setting under **Administration → Roles**: find **all active users**, or only the members of projects you can open. See [What a role can see](../projects/index.md#what-a-role-can-see). |

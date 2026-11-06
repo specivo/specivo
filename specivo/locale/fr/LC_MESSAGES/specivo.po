@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 16:13+0100\n"
+"POT-Creation-Date: 2026-11-06 19:15+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization Team <l10n@specivo.app>\n"
 "Language: fr\n"
@@ -434,16 +434,16 @@ msgstr "Le sprint n'appartient pas à ce projet"
 msgid "Cannot assign issues to a completed sprint"
 msgstr "Impossible d'assigner des tickets à un sprint terminé"
 
-#: specivo/services/issue_service.py:1012
+#: specivo/services/issue_service.py:1006
 #: specivo/services/sprint_service.py:307
 msgid "Issue was modified by another request. Reload and retry."
 msgstr "Le ticket a été modifié par une autre requête. Rechargez et réessayez."
 
-#: specivo/services/issue_service.py:1175
+#: specivo/services/issue_service.py:1169
 msgid "Issue is already in this project."
 msgstr "Le ticket se trouve déjà dans ce projet."
 
-#: specivo/services/issue_service.py:1184
+#: specivo/services/issue_service.py:1178
 msgid ""
 "Cannot move an issue that is part of a hierarchy. Detach it from its "
 "parent and move or detach its children first."
@@ -452,12 +452,12 @@ msgstr ""
 "Détachez-le de son parent, et déplacez ou détachez d'abord ses tickets "
 "enfants."
 
-#: specivo/services/issue_service.py:1235
+#: specivo/services/issue_service.py:1229
 #, python-brace-format
 msgid "Moved from {old} to {new}."
 msgstr "Déplacé de {old} vers {new}."
 
-#: specivo/services/issue_service.py:1309
+#: specivo/services/issue_service.py:1303
 #, python-brace-format
 msgid ""
 "Unknown status filter '{value}'. Use 'open', 'closed', 'all', a status "
@@ -501,6 +501,17 @@ msgid "Metadata field '{key}' does not match schema '{schema}': {reason}"
 msgstr ""
 "Le champ de métadonnées '{key}' ne respecte pas le schéma '{schema}' : "
 "{reason}"
+
+#: specivo/services/nested_set_service.py:40
+#, python-format
+msgid ""
+"Hierarchy depth limit exceeded: with this parent the hierarchy, sub-tasks"
+" included, would be %(levels)s levels deep, and at most %(max)s are "
+"allowed."
+msgstr ""
+"Limite de profondeur de la hiérarchie dépassée : avec ce parent, la "
+"hiérarchie, sous-tâches comprises, aurait %(levels)s niveaux de "
+"profondeur, alors que %(max)s au maximum sont autorisés."
 
 #: specivo/services/recurring_pattern_service.py:252
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:31

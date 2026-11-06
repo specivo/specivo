@@ -32,7 +32,7 @@ from specivo.services.issue_list_filters import NO_VALUE
 from specivo.services.journal_service import _JOURNALIZED_ATTRS, JournalService
 from specivo.services.markdown_budget import check_markdown_length
 from specivo.services.metadata_schema_service import MetadataSchemaService
-from specivo.services.nested_set_service import MAX_DEPTH, NestedSetService
+from specivo.services.nested_set_service import NestedSetService
 from specivo.services.watcher_service import WatcherService
 from specivo.services.webhook_events import emit_issue_created, emit_issue_deleted, emit_issue_updated
 
@@ -688,13 +688,7 @@ class IssueService:
         if issue is not None:
             await self._nested_set.validate_parent(session, issue, parent)
             return
-        new_depth = len(await self._nested_set.get_ancestors(session, parent)) + 1
-        if new_depth >= MAX_DEPTH:
-            raise ValidationError(
-                message=f"Maximum hierarchy depth of {MAX_DEPTH} would be exceeded.",
-                field="parent_id",
-                details={"max_depth": MAX_DEPTH, "current_depth": new_depth},
-            )
+        await self._nested_set.check_depth(session, parent)
 
     async def get_by_display_key(self, session: AsyncSession, display_key: str, user: User) -> Issue:
         """Resolve a display key like 'ACME-42' to an Issue.
