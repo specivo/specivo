@@ -18,6 +18,7 @@ from specivo.services.anonymous_access_service import (
     set_anonymous_access_enabled,
 )
 from specivo.services.currency_service import REPORTING_CURRENCY_SETTING_KEY, CurrencyService
+from specivo.services.exchange_rate_service import EXCHANGE_RATE_SETTING_KEYS
 from specivo.services.settings_service import SettingsService
 from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS
 
@@ -29,6 +30,7 @@ _service = SettingsService()
 _MANAGED_SETTINGS = {
     ANONYMOUS_ACCESS_SETTING_KEY: "/api/v1/admin/settings/anonymous-access/",
     REPORTING_CURRENCY_SETTING_KEY: "/api/v1/admin/settings/reporting-currency/",
+    **dict.fromkeys(sorted(EXCHANGE_RATE_SETTING_KEYS), "/api/v1/admin/exchange-rates/settings/"),
     **dict.fromkeys(sorted(AUTH_SETTING_KEYS), "/api/v1/admin/settings/authentication/"),
 }
 
@@ -53,7 +55,8 @@ async def update_settings(
     Keys not in the request body are left unchanged.
     Pass ``null`` as a value to clear a setting. Settings that have their own
     endpoint (the anonymous access switch, the reporting currency, the
-    ``sso.*`` authentication settings) are refused with 422.
+    exchange rate settings, the ``sso.*`` authentication settings) are
+    refused with 422.
     """
     for key in sorted(updates):
         if key in _MANAGED_SETTINGS:

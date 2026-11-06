@@ -1,0 +1,59 @@
+/* Admin exchange rates page: entry, conversion preview, import and settings forms. */
+.sp-xr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+  gap: var(--sp-space-md);
+  margin-bottom: var(--sp-space-md);
+}
+.sp-xr-form,
+.sp-xr-equation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-space-sm);
+}
+.sp-xr-form .form-label { margin: 0; }
+.sp-xr-form .form-input,
+.sp-xr-select { width: auto; max-width: 100%; }
+.sp-xr-rate { width: 9rem; font-variant-numeric: tabular-nums; }
+.sp-xr-number { width: 6rem; }
+.sp-xr-textarea { width: 100%; font-family: var(--sp-font-mono, monospace); }
+.sp-xr-import { display: flex; flex-direction: column; gap: var(--sp-space-sm); }
+.sp-xr-import-result,
+.sp-xr-preview { margin-top: var(--sp-space-md); }
+.sp-xr-preview-amount { font-size: var(--sp-font-size-lg, 1.125rem); margin: 0 0 var(--sp-space-xs, 4px); }
+.sp-xr-danger { color: var(--sp-danger); }
+.sp-xr-errors { margin: 0 0 var(--sp-space-md); padding-left: 1.25rem; color: var(--sp-danger); }
+.sp-xr-actions { display: flex; gap: var(--sp-space-xs, 4px); justify-content: flex-end; }
+.sp-xr-actions form { margin: 0; }
+.sp-xr-settings {
+  display: grid;
+  grid-template-columns: minmax(10rem, max-content) 1fr;
+  gap: var(--sp-space-sm) var(--sp-space-md);
+  align-items: start;
+}
+.sp-xr-settings .form-label { margin: 0; padding-top: 6px; }
+.sp-xr-settings .form-input { width: 100%; max-width: 32rem; }
+.sp-xr-settings .sp-xr-number { width: 6rem; }
+.sp-xr-check { display: flex; gap: var(--sp-space-sm); align-items: center; }
+.sp-xr-fetch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-space-sm);
+  margin-top: var(--sp-space-md);
+  padding-top: var(--sp-space-md);
+  border-top: 1px solid var(--sp-border);
+}
+.sp-xr-fetch p { margin: 0; }
+.sp-xr-attribution { margin: var(--sp-space-sm) 0 0; }
+
+@media (max-width: 640px) {
+  .sp-xr-grid { grid-template-columns: 1fr; }
+  .sp-xr-settings { grid-template-columns: 1fr; }
+  .sp-xr-form { flex-direction: column; align-items: stretch; }
+  .sp-xr-form .form-input,
+  .sp-xr-select,
+  .sp-xr-rate { width: 100%; }
+}

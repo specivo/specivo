@@ -7,6 +7,7 @@ that fail in CI/test environments where env vars aren't yet set.
 import os
 
 from celery import Celery
+from celery.schedules import crontab  # type: ignore[import-untyped]
 from celery.signals import worker_init  # type: ignore[import-untyped]
 
 from specivo.core.celery_beat import default_schedule_file
@@ -71,6 +72,12 @@ celery_app.config_from_object(
                 "task": "specivo.tasks.recurring.generate_recurring_tasks",
                 "schedule": _RECURRING_BEAT_INTERVAL_SECONDS,
             },
+            # Daily, after the ECB publishes (about 16:00 CET, 14:00-15:00 UTC).
+            # Does nothing unless an administrator switched the fetch on.
+            "fetch-exchange-rates": {
+                "task": "specivo.tasks.exchange_rates.fetch_exchange_rates",
+                "schedule": crontab(minute=15, hour=16),
+            },
         },
     }
 )
@@ -105,6 +112,7 @@ from specivo.tasks import (  # noqa: E402, F401
     cleanup,
     embeddings,
     entity_links,
+    exchange_rates,
     notifications,
     recurring,
     repositories,

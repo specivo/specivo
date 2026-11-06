@@ -3,6 +3,7 @@
 from fastapi import APIRouter
 
 from specivo.web.pages.admin import router as admin_pages
+from specivo.web.pages.admin_exchange_rates import router as admin_exchange_rate_pages
 from specivo.web.pages.admin_sso import router as admin_sso_pages
 from specivo.web.pages.auth import router as auth_pages
 from specivo.web.pages.connected_accounts import router as connected_account_pages
@@ -41,3 +42,4 @@ web_router.include_router(time_pages)
 web_router.include_router(search_pages)
 web_router.include_router(admin_pages)
 web_router.include_router(admin_sso_pages)
+web_router.include_router(admin_exchange_rate_pages)

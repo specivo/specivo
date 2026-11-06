@@ -9,6 +9,7 @@ from specivo.models.base import Base, LockVersionMixin, TimestampMixin
 from specivo.models.credential import CredentialAuditLog, ExternalSystem, IssuedCredential
 from specivo.models.currency import Currency
 from specivo.models.entity_link import EntityLink
+from specivo.models.exchange_rate import ExchangeRate
 from specivo.models.import_id_map import ImportIdMapping
 from specivo.models.issue import Issue
 from specivo.models.issue_source_ref import IssueSourceRef
@@ -112,6 +113,7 @@ __all__ = [
     "GroupPolicy",
     "EnabledModule",
     "EntityLink",
+    "ExchangeRate",
     "ProjectKeyAlias",
     "Member",
     "MemberRole",

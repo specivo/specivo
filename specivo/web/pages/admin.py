@@ -814,14 +814,19 @@ async def admin_settings(
     # The sso.* authentication settings have their own card (and API) too, and
     # the reporting currency is set on the currencies page.
     from specivo.services.currency_service import REPORTING_CURRENCY_SETTING_KEY
+    from specivo.services.exchange_rate_service import EXCHANGE_RATE_SETTING_KEYS
     from specivo.services.sso.auth_settings import AUTH_SETTING_KEYS, get_auth_settings
     from specivo.services.sso.provider_service import ProviderService
 
-    hidden_keys = AUTH_SETTING_KEYS | {
-        ANONYMOUS_ACCESS_SETTING_KEY,
-        SIMILAR_ISSUES_SETTING_KEY,
-        REPORTING_CURRENCY_SETTING_KEY,
-    }
+    hidden_keys = (
+        AUTH_SETTING_KEYS
+        | EXCHANGE_RATE_SETTING_KEYS
+        | {
+            ANONYMOUS_ACCESS_SETTING_KEY,
+            SIMILAR_ISSUES_SETTING_KEY,
+            REPORTING_CURRENCY_SETTING_KEY,
+        }
+    )
     generic_settings = {k: v for k, v in settings.items() if k not in hidden_keys}
     auth_settings = await get_auth_settings(db)
     sso_providers, _ = await ProviderService().list_providers(db)

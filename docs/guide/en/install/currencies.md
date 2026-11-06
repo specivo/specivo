@@ -39,7 +39,8 @@ picks a currency under **Reporting currency**, or leaves **Instance default** to
 instance setting (see [Projects](../projects/index.md#reporting-currency)).
 
 Changing a reporting currency does not change any stored amount. It only decides which currency
-reports convert to.
+reports convert to. Reports convert with the daily [exchange rates](exchange-rates.md) an administrator
+enters, imports or lets Specivo fetch.
 
 ## How amounts are stored and rounded
 

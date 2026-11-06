@@ -21,7 +21,7 @@
 
 <div class="card sp-card-pad-mb" id="reporting-currency" data-testid="reporting-currency-card">
   <h3 class="sp-card-h3">{% trans %}Reporting currency{% endtrans %}</h3>
-  <p class="sp-text-muted sp-mb-md">{% trans %}Money reports are shown in this currency unless a project chooses its own in its settings.{% endtrans %}</p>
+  <p class="sp-text-muted sp-mb-md">{% trans %}Money reports are shown in this currency unless a project chooses its own in its settings.{% endtrans %} <a href="/admin/exchange-rates/">{% trans %}Exchange rates{% endtrans %}</a></p>
   <form method="post" action="/admin/currencies/reporting/" class="sp-currency-reporting-form">
     <label class="form-label" for="reporting_currency_code">{% trans %}Reporting currency{% endtrans %}</label>
     <select id="reporting_currency_code" name="code" class="form-input sp-currency-select">
