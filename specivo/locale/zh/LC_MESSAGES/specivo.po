@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 11:56+0100\n"
+"POT-Creation-Date: 2026-11-06 12:37+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -520,6 +520,43 @@ msgstr "登录"
 msgid "Powered by"
 msgstr "技术支持"
 
+#: specivo/templates/themes/default/components/app_url_warning.html:18
+msgid "This page is open under another address than APP_URL"
+msgstr "此页面的打开地址与 APP_URL 不同"
+
+#: specivo/templates/themes/default/components/app_url_warning.html:19
+#, python-format
+msgid ""
+"The URLs below are built from the APP_URL setting, "
+"<code>%(app_url)s</code>, but this page was opened at "
+"<code>%(host)s</code>. If that is the address others use to reach "
+"Specivo, set APP_URL to it, or the URLs you copy may not reach this "
+"instance."
+msgstr ""
+"下方的 URL 由 APP_URL 设置 <code>%(app_url)s</code> 生成，但此页面是在 "
+"<code>%(host)s</code> 打开的。如果其他人通过该地址访问 Specivo，请将 APP_URL 设为该地址，否则复制的 URL"
+" 可能无法访问此实例。"
+
+#: specivo/templates/themes/default/components/app_url_warning.html:21
+msgid "APP_URL points at this machine"
+msgstr "APP_URL 指向本机"
+
+#: specivo/templates/themes/default/components/app_url_warning.html:22
+#, python-format
+msgid ""
+"The URLs below are built from the APP_URL setting, which is "
+"<code>%(app_url)s</code>. A forge or an identity provider cannot reach "
+"that address. Set APP_URL to the public address of Specivo and restart it"
+" before you copy them."
+msgstr ""
+"下方的 URL 由 APP_URL 设置生成，其值为 "
+"<code>%(app_url)s</code>。代码托管平台或身份提供商无法访问该地址。请先将 APP_URL 设为 Specivo "
+"的公开地址并重启，再复制这些 URL。"
+
+#: specivo/templates/themes/default/components/app_url_warning.html:24
+msgid "How to set APP_URL"
+msgstr "如何设置 APP_URL"
+
 #: specivo/templates/themes/default/components/filter_combobox.html:28
 #: specivo/templates/themes/default/components/filter_combobox.html:29
 #, python-format
@@ -591,7 +628,7 @@ msgstr "无法放弃计时器。"
 #: specivo/templates/themes/default/pages/projects/settings.html:918
 #: specivo/templates/themes/default/pages/projects/settings.html:1066
 #: specivo/templates/themes/default/pages/projects/settings.html:1300
-#: specivo/templates/themes/default/pages/projects/settings.html:1683
+#: specivo/templates/themes/default/pages/projects/settings.html:1686
 #: specivo/templates/themes/default/pages/wiki/show.html:97
 msgid "Unable to connect."
 msgstr "无法连接。"
@@ -660,7 +697,7 @@ msgstr "记录工时"
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:230
 #: specivo/templates/themes/default/pages/admin/projects.html:179
 #: specivo/templates/themes/default/pages/admin/settings.html:169
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:451
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:454
 #: specivo/templates/themes/default/pages/admin/users.html:139
 #: specivo/templates/themes/default/pages/auth/api_keys.html:82
 #: specivo/templates/themes/default/pages/auth/logout_confirm.html:38
@@ -687,8 +724,8 @@ msgstr "记录工时"
 #: specivo/templates/themes/default/pages/projects/settings.html:1045
 #: specivo/templates/themes/default/pages/projects/settings.html:1260
 #: specivo/templates/themes/default/pages/projects/settings.html:1284
-#: specivo/templates/themes/default/pages/projects/settings.html:1647
-#: specivo/templates/themes/default/pages/projects/settings.html:1671
+#: specivo/templates/themes/default/pages/projects/settings.html:1650
+#: specivo/templates/themes/default/pages/projects/settings.html:1674
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:47
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:72
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:100
@@ -780,7 +817,7 @@ msgstr "添加更多……"
 #: specivo/templates/themes/default/components/macros.html:95
 #: specivo/templates/themes/default/pages/admin/_user_create_modal.html:64
 #: specivo/templates/themes/default/pages/admin/groups.html:100
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
 #: specivo/templates/themes/default/pages/issues/form.html:323
 msgid "Create"
 msgstr "创建"
@@ -994,8 +1031,8 @@ msgstr "管理"
 #: specivo/templates/themes/default/pages/admin/roles.html:9
 #: specivo/templates/themes/default/pages/admin/settings.html:3
 #: specivo/templates/themes/default/pages/admin/settings.html:9
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:4
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:10
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:5
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:11
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:3
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:9
 #: specivo/templates/themes/default/pages/admin/trackers.html:3
@@ -1055,7 +1092,7 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/admin/settings.html:66
 #: specivo/templates/themes/default/pages/admin/settings.html:132
 #: specivo/templates/themes/default/pages/admin/settings.html:140
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:80
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
 #: specivo/templates/themes/default/pages/admin/trackers.html:40
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:27
 #: specivo/templates/themes/default/pages/auth/preferences.html:31
@@ -1068,7 +1105,7 @@ msgstr "正在重建索引……"
 #: specivo/templates/themes/default/pages/projects/settings.html:112
 #: specivo/templates/themes/default/pages/projects/settings.html:298
 #: specivo/templates/themes/default/pages/projects/settings.html:906
-#: specivo/templates/themes/default/pages/projects/settings.html:1712
+#: specivo/templates/themes/default/pages/projects/settings.html:1715
 #: specivo/templates/themes/default/pages/wiki/edit.html:133
 msgid "Save"
 msgstr "保存"
@@ -1077,7 +1114,7 @@ msgstr "保存"
 #: specivo/templates/themes/default/pages/admin/groups.html:126
 #: specivo/templates/themes/default/pages/admin/projects.html:182
 #: specivo/templates/themes/default/pages/admin/settings.html:139
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:81
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:82
 #: specivo/templates/themes/default/pages/auth/_change_password_form.html:28
 #: specivo/templates/themes/default/pages/issues/detail.html:123
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_form.html:335
@@ -1085,7 +1122,7 @@ msgstr "保存"
 #: specivo/templates/themes/default/pages/projects/settings.html:481
 #: specivo/templates/themes/default/pages/projects/settings.html:1021
 #: specivo/templates/themes/default/pages/projects/settings.html:1262
-#: specivo/templates/themes/default/pages/projects/settings.html:1649
+#: specivo/templates/themes/default/pages/projects/settings.html:1652
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:97
 #: specivo/templates/themes/default/pages/wiki/edit.html:134
 msgid "Saving..."
@@ -1483,7 +1520,7 @@ msgstr "主题"
 #: specivo/templates/themes/default/pages/projects/settings.html:462
 #: specivo/templates/themes/default/pages/projects/settings.html:558
 #: specivo/templates/themes/default/pages/projects/settings.html:1176
-#: specivo/templates/themes/default/pages/projects/settings.html:1470
+#: specivo/templates/themes/default/pages/projects/settings.html:1473
 #: specivo/templates/themes/default/pages/projects/sprint_analytics.html:109
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:173
 #: specivo/templates/themes/default/pages/projects/version_detail.html:97
@@ -1495,7 +1532,7 @@ msgstr "状态"
 #: specivo/templates/themes/default/pages/auth/profile.html:81
 #: specivo/templates/themes/default/pages/issues/detail.html:565
 #: specivo/templates/themes/default/pages/issues/form.html:372
-#: specivo/templates/themes/default/pages/projects/settings.html:1618
+#: specivo/templates/themes/default/pages/projects/settings.html:1621
 msgid "Type"
 msgstr "类型"
 
@@ -1521,7 +1558,7 @@ msgstr "没有指派给你的待处理工作项。"
 #: specivo/templates/themes/default/pages/admin/ai_model_prices.html:27
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:29
 #: specivo/templates/themes/default/pages/auth/_ai_subscription_form.html:25
-#: specivo/templates/themes/default/pages/projects/settings.html:1522
+#: specivo/templates/themes/default/pages/projects/settings.html:1525
 msgid "Provider"
 msgstr "提供商"
 
@@ -1895,7 +1932,7 @@ msgid "End of the period saved."
 msgstr "已保存时间段的结束时间。"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:25
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:30
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:31
 msgid "Saved."
 msgstr "已保存。"
 
@@ -1966,7 +2003,7 @@ msgstr[0] "用于 %(count)s 条用量记录的计价"
 
 #: specivo/templates/themes/default/pages/admin/ai_model_price_history.html:69
 #: specivo/templates/themes/default/pages/admin/audit_log.html:84
-#: specivo/templates/themes/default/pages/projects/settings.html:1471
+#: specivo/templates/themes/default/pages/projects/settings.html:1474
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:82
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:116
 #: specivo/templates/themes/default/pages/projects/sprints_list.html:164
@@ -2026,8 +2063,8 @@ msgstr "启用"
 #: specivo/templates/themes/default/pages/admin/groups.html:72
 #: specivo/templates/themes/default/pages/admin/groups.html:142
 #: specivo/templates/themes/default/pages/admin/groups.html:174
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:88
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:453
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:89
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:456
 #: specivo/templates/themes/default/pages/admin/versions.html:128
 #: specivo/templates/themes/default/pages/auth/ai_subscription_edit.html:36
 #: specivo/templates/themes/default/pages/auth/api_keys.html:132
@@ -2041,7 +2078,7 @@ msgstr "启用"
 #: specivo/templates/themes/default/pages/projects/settings.html:757
 #: specivo/templates/themes/default/pages/projects/settings.html:978
 #: specivo/templates/themes/default/pages/projects/settings.html:1141
-#: specivo/templates/themes/default/pages/projects/settings.html:1435
+#: specivo/templates/themes/default/pages/projects/settings.html:1438
 #: specivo/templates/themes/default/pages/wiki/show.html:160
 #: specivo/templates/themes/default/pages/wiki/show.html:195
 #: specivo/templates/themes/default/pages/wiki/show.html:197
@@ -2261,7 +2298,7 @@ msgstr "日期"
 #: specivo/templates/themes/default/pages/projects/settings.html:754
 #: specivo/templates/themes/default/pages/projects/settings.html:975
 #: specivo/templates/themes/default/pages/projects/settings.html:1138
-#: specivo/templates/themes/default/pages/projects/settings.html:1432
+#: specivo/templates/themes/default/pages/projects/settings.html:1435
 #: specivo/templates/themes/default/pages/projects/sprint_backlog.html:159
 #: specivo/templates/themes/default/pages/projects/sprint_board.html:43
 #: specivo/templates/themes/default/pages/projects/sprint_detail.html:58
@@ -2348,7 +2385,7 @@ msgstr "工具已添加。"
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:30
 #: specivo/templates/themes/default/pages/admin/ai_tools.html:64
 #: specivo/templates/themes/default/pages/admin/metadata_presets.html:164
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:156
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:158
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:30
 msgid "Slug"
 msgstr "标识串"
@@ -2505,13 +2542,13 @@ msgstr "重置"
 #: specivo/templates/themes/default/pages/projects/detail.html:51
 #: specivo/templates/themes/default/pages/projects/list.html:198
 #: specivo/templates/themes/default/pages/projects/settings.html:1174
-#: specivo/templates/themes/default/pages/projects/settings.html:1468
+#: specivo/templates/themes/default/pages/projects/settings.html:1471
 msgid "Time"
 msgstr "时间"
 
 #: specivo/templates/themes/default/pages/admin/audit_log.html:79
 #: specivo/templates/themes/default/pages/projects/settings.html:1175
-#: specivo/templates/themes/default/pages/projects/settings.html:1469
+#: specivo/templates/themes/default/pages/projects/settings.html:1472
 msgid "Event"
 msgstr "事件"
 
@@ -2658,14 +2695,14 @@ msgstr "特殊代码"
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:27
 #: specivo/templates/themes/default/pages/projects/settings.html:674
 #: specivo/templates/themes/default/pages/projects/settings.html:1136
-#: specivo/templates/themes/default/pages/projects/settings.html:1430
+#: specivo/templates/themes/default/pages/projects/settings.html:1433
 msgid "Enable"
 msgstr "启用"
 
 #: specivo/templates/themes/default/pages/admin/currencies.html:87
 #: specivo/templates/themes/default/pages/projects/_recurring_i18n.html:28
 #: specivo/templates/themes/default/pages/projects/settings.html:1135
-#: specivo/templates/themes/default/pages/projects/settings.html:1429
+#: specivo/templates/themes/default/pages/projects/settings.html:1432
 msgid "Disable"
 msgstr "停用"
 
@@ -2723,8 +2760,8 @@ msgstr "管理"
 #: specivo/templates/themes/default/pages/admin/groups.html:11
 #: specivo/templates/themes/default/pages/admin/groups.html:24
 #: specivo/templates/themes/default/pages/admin/projects.html:42
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:287
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:322
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:289
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:324
 #: specivo/templates/themes/default/pages/projects/settings.html:217
 msgid "Groups"
 msgstr "用户组"
@@ -2735,8 +2772,8 @@ msgstr "管理用户组及其授予的项目访问权限。"
 
 #: specivo/templates/themes/default/pages/admin/dashboard.html:63
 #: specivo/templates/themes/default/pages/admin/settings.html:101
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:4
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:12
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:5
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:13
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:3
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:11
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:15
@@ -3371,12 +3408,12 @@ msgid "Nobody is in this group yet."
 msgstr "此用户组中还没有任何人。"
 
 #: specivo/templates/themes/default/pages/admin/group_detail.html:88
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:319
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:321
 #: specivo/templates/themes/default/pages/issues/form.html:353
 #: specivo/templates/themes/default/pages/issues/form.html:405
 #: specivo/templates/themes/default/pages/projects/settings.html:269
 #: specivo/templates/themes/default/pages/projects/settings.html:667
-#: specivo/templates/themes/default/pages/projects/settings.html:1630
+#: specivo/templates/themes/default/pages/projects/settings.html:1633
 msgid "Remove"
 msgstr "移除"
 
@@ -3492,7 +3529,7 @@ msgid "This group grants no project access, so nothing is revoked."
 msgstr "此用户组未授予任何项目访问权限，因此不会撤销任何权限。"
 
 #: specivo/templates/themes/default/pages/admin/groups.html:175
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:454
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:457
 #: specivo/templates/themes/default/pages/issues/_tab_attachments.html:134
 #: specivo/templates/themes/default/pages/projects/recurring_list.html:118
 #: specivo/templates/themes/default/pages/projects/settings.html:508
@@ -3986,7 +4023,7 @@ msgstr "不自动重定向"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:127
 #: specivo/templates/themes/default/pages/projects/settings.html:1128
-#: specivo/templates/themes/default/pages/projects/settings.html:1420
+#: specivo/templates/themes/default/pages/projects/settings.html:1423
 msgid "disabled"
 msgstr "已禁用"
 
@@ -4001,7 +4038,7 @@ msgid "Setting updated."
 msgstr "设置已更新。"
 
 #: specivo/templates/themes/default/pages/admin/settings.html:138
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:32
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:33
 msgid "Failed to save."
 msgstr "保存失败。"
 
@@ -4014,27 +4051,27 @@ msgstr "值"
 msgid "No settings configured."
 msgstr "尚未配置任何设置。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:3
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:4
 msgid "New provider"
 msgstr "新建提供商"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:26
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:27
 msgid "The SCIM settings could not be changed."
 msgstr "无法更改 SCIM 设置。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:27
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:28
 msgid ""
 "Replace the SCIM token? The current token stops working at once, until "
 "the new one is entered at the identity provider."
 msgstr "要替换 SCIM 令牌吗？当前令牌会立即失效，直到在身份提供商处填入新令牌。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:28
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:29
 msgid ""
 "Revoke the SCIM token? Provisioning stops until a new token is generated."
 " Accounts and groups already provisioned stay."
 msgstr "要吊销 SCIM 令牌吗？在生成新令牌之前，预配将停止。已预配的账户和用户组会保留。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:29
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:30
 #: specivo/templates/themes/default/pages/admin/user_detail.html:21
 #: specivo/templates/themes/default/pages/admin/user_detail.html:165
 #: specivo/templates/themes/default/pages/admin/users.html:25
@@ -4042,233 +4079,233 @@ msgstr "要吊销 SCIM 令牌吗？在生成新令牌之前，预配将停止。
 msgid "Never"
 msgstr "从未"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:31
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:32
 #, python-brace-format
 msgid "Saved. Sessions ended: {count}."
 msgstr "已保存。已结束的会话：{count}。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:33
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:34
 msgid "Failed to delete."
 msgstr "删除失败。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:34
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:35
 msgid "The test could not run."
 msgstr "无法运行测试。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:35
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:36
 msgid "Discovery and signing keys work."
 msgstr "发现文档和签名密钥均正常。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:36
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:37
 #: specivo/templates/themes/default/pages/issues/detail.html:120
 #: specivo/templates/themes/default/pages/issues/form.html:186
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "Yes"
 msgstr "是"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:37
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:38
 #: specivo/templates/themes/default/pages/issues/detail.html:121
 #: specivo/templates/themes/default/pages/issues/form.html:187
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:139
 msgid "No"
 msgstr "否"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:39
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:40
 msgid "The identity provider could not be reached"
 msgstr "无法连接身份提供商"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:40
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:41
 msgid "The identity provider configuration is invalid"
 msgstr "身份提供商配置无效"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:43
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:44
 msgid "Stored (encrypted)"
 msgstr "已存储（加密）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:44
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:45
 msgid "Unreadable after a SECRET_KEY change: enter it again"
 msgstr "更改 SECRET_KEY 后无法读取：请重新输入"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:45
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:46
 msgid "Read from the environment variable"
 msgstr "从环境变量读取"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:46
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:47
 msgid "The environment variable is not set"
 msgstr "未设置环境变量"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:47
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:48
 msgid "This environment variable name is not allowed"
 msgstr "不允许使用此环境变量名"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:48
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:49
 msgid "Not set"
 msgstr "未设置"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:49
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:50
 msgid "Not needed for a public client"
 msgstr "公共客户端无需设置"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:52
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:53
 msgid "The provider does not advertise the selected client authentication method."
 msgstr "提供商未声明所选的客户端认证方式。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:53
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:54
 msgid "The provider does not advertise PKCE. Specivo sends it anyway (S256)."
 msgstr "提供商未声明 PKCE。Specivo 仍会发送（S256）。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:54
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:55
 msgid ""
 "Sign-out at the provider is on, but the provider has no "
 "end_session_endpoint."
 msgstr "已开启在提供商处退出登录，但提供商没有 end_session_endpoint。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:55
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:56
 msgid "Back-channel logout is on, but the provider does not support it."
 msgstr "已开启后端通道注销，但提供商不支持。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:56
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:57
 msgid "Userinfo is on, but the provider has no userinfo_endpoint."
 msgstr "已开启 userinfo，但提供商没有 userinfo_endpoint。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:57
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:58
 msgid "The stored client secret cannot be read: enter it again."
 msgstr "无法读取已存储的客户端密钥：请重新输入。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:58
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:59
 msgid "The client secret environment variable is not set."
 msgstr "未设置客户端密钥的环境变量。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:59
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:60
 msgid "The client secret environment variable name is not allowed."
 msgstr "不允许使用此客户端密钥环境变量名。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:60
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:61
 msgid "No client secret is set."
 msgstr "未设置客户端密钥。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:61
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:62
 msgid ""
 "Session check is on, but the provider does not advertise the "
 "refresh_token grant."
 msgstr "会话检查已开启，但提供商未声明支持 refresh_token 授权类型。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:62
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:63
 msgid ""
 "The last sign-in returned no refresh token, so sessions are not checked "
 "at the provider. Some providers need the offline_access scope."
 msgstr "上次登录未返回刷新令牌，因此不会在提供商处检查会话。部分提供商需要 offline_access 范围。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:63
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:64
 msgid ""
 "The provider refused the refresh token right after sign-in, so sessions "
 "are not checked at the provider. Allow the refresh_token grant for this "
 "client."
 msgstr "提供商在登录后立即拒绝了刷新令牌，因此不会在提供商处检查会话。请为此客户端允许 refresh_token 授权。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:66
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:67
 msgid "Works: sessions are checked at the provider"
 msgstr "可用：会话会在提供商处检查"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:67
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:68
 msgid "Not available: the provider sent no refresh token"
 msgstr "不可用：提供商未发送刷新令牌"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:68
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:69
 msgid "Not available: the provider refused the refresh token"
 msgstr "不可用：提供商拒绝了刷新令牌"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:69
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:70
 msgid "Not known yet: no sign-in since it was turned on"
 msgstr "尚不清楚：开启后还没有人登录"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:70
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:71
 msgid "Off"
 msgstr "关闭"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:85
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:86
 msgid "Test connection"
 msgstr "测试连接"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:86
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:87
 msgid "Testing..."
 msgstr "正在测试..."
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:100
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:101
 msgid "Discovery URL"
 msgstr "发现 URL"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:101
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:102
 msgid "Expected issuer"
 msgstr "预期的颁发者"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:102
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:103
 msgid "Issuer reported"
 msgstr "报告的颁发者"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:103
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:104
 msgid "Issuer matches"
 msgstr "颁发者匹配"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:105
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:106
 msgid "Authorization endpoint"
 msgstr "授权端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:106
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:107
 msgid "Token endpoint"
 msgstr "令牌端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:107
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:108
 msgid "Userinfo endpoint"
 msgstr "Userinfo 端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:108
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:109
 msgid "End session endpoint"
 msgstr "结束会话端点"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:109
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:110
 msgid "Signing algorithms"
 msgstr "签名算法"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:110
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:176
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:111
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:178
 msgid "Client authentication"
 msgstr "客户端认证"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:111
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:112
 msgid "Back-channel logout"
 msgstr "后端通道注销"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:113
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:114
 msgid "Refresh token grant"
 msgstr "refresh_token 授权"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:115
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:116
 msgid "Session check at the provider"
 msgstr "在提供商处检查会话"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:117
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:118
 msgid "Signing keys"
 msgstr "签名密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:130
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:131
 msgid "Connection"
 msgstr "连接"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:131
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:132
 msgid ""
 "Register Specivo at the identity provider with exactly these URLs (no "
 "wildcards), then copy its issuer and client ID here."
 msgstr "在身份提供商处使用完全相同的这些 URL（不要通配符）注册 Specivo，然后将其颁发者和客户端 ID 复制到此处。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:133
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:135
 msgid "Redirect URI"
 msgstr "重定向 URI"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:137
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:145
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:383
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:408
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:139
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:147
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:386
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:411
 #: specivo/templates/themes/default/pages/admin/user_detail.html:34
 #: specivo/templates/themes/default/pages/auth/api_keys.html:17
 #: specivo/templates/themes/default/pages/projects/settings.html:1074
@@ -4276,164 +4313,164 @@ msgstr "重定向 URI"
 msgid "Copy"
 msgstr "复制"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:138
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:146
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:384
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:409
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:140
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:148
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:387
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:412
 #: specivo/templates/themes/default/pages/issues/_sidebar.html:345
 #: specivo/templates/themes/default/pages/projects/settings.html:1075
 #: specivo/templates/themes/default/pages/projects/settings.html:1307
 msgid "Copied"
 msgstr "已复制"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:141
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:143
 msgid "Back-channel logout URI"
 msgstr "后端通道注销 URI"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:152
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:154
 msgid "Button label"
 msgstr "按钮文字"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:158
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:160
 msgid "Part of the URLs above. Changing it means updating them at the provider."
 msgstr "这是上方 URL 的一部分。修改后需在提供商处更新。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:162
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:164
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:32
 msgid "Issuer"
 msgstr "颁发者"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:164
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:166
 msgid "Must match the issuer the provider publishes, character for character."
 msgstr "必须与提供商公布的颁发者逐字符一致。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:167
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:169
 msgid "Discovery URL (optional)"
 msgstr "发现 URL（可选）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:168
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:170
 msgid "Issuer + /.well-known/openid-configuration"
 msgstr "颁发者 + /.well-known/openid-configuration"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:172
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:174
 msgid "Client ID"
 msgstr "客户端 ID"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:180
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:182
 msgid "none (public client, PKCE only)"
 msgstr "none（公共客户端，仅 PKCE）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:186
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:188
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:33
 msgid "Client secret"
 msgstr "客户端密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:190
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:192
 msgid "Store it in Specivo (encrypted)"
 msgstr "存储在 Specivo 中（加密）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:191
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:193
 msgid "Read it from an environment variable"
 msgstr "从环境变量读取"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:194
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:196
 msgid "Leave empty to keep the current secret"
 msgstr "留空以保留当前密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:195
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:197
 msgid "Write-only: the secret is never shown again."
 msgstr "只写：密钥不会再次显示。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:199
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:201
 msgid ""
 "The name must start with SPECIVO_SSO_SECRET_ (capital letters, digits and"
 " underscores). Set the variable on every Specivo container."
 msgstr "名称必须以 SPECIVO_SSO_SECRET_ 开头（大写字母、数字和下划线）。请在每个 Specivo 容器上设置该变量。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:202
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:204
 msgid "Remove the client secret"
 msgstr "移除客户端密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:207
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:209
 msgid "Scopes"
 msgstr "作用域"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:209
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:211
 msgid "Space-separated. openid is required."
 msgstr "以空格分隔。必须包含 openid。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:219
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:221
 msgid "Optional extra parameters for the sign-in request."
 msgstr "登录请求的可选附加参数。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:222
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:224
 msgid "Enabled (shown on the login page)"
 msgstr "已启用（显示在登录页面）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:223
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:225
 msgid "Turning it off signs out everyone who signed in through this provider."
 msgstr "关闭后，所有通过此提供方登录的用户都会被登出。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:225
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:227
 msgid "Button order"
 msgstr "按钮顺序"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:233
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:235
 msgid "Sign-in policy"
 msgstr "登录策略"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:234
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:236
 msgid "Who may sign in, and what happens the first time someone does."
 msgstr "谁可以登录，以及首次登录时会发生什么。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:236
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:238
 msgid "Create an account on first sign-in"
 msgstr "首次登录时创建账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:238
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
 msgid "Existing accounts"
 msgstr "现有账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:240
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:242
 msgid "Users connect their account themselves, while signed in"
 msgstr "用户登录后自行关联账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:241
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:243
 msgid "Link automatically by verified email (never for administrators)"
 msgstr "按已验证邮箱自动关联（管理员除外）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:245
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:247
 msgid "This provider really verifies email addresses"
 msgstr "此提供商确实会验证邮箱地址"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:246
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:248
 msgid "Required for automatic linking. Never turn it on for Microsoft Entra ID."
 msgstr "自动关联所必需。切勿为 Microsoft Entra ID 开启。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:248
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:250
 msgid "Allowed email domains"
 msgstr "允许的邮箱域名"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:250
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:252
 msgid "One per line. Empty allows every domain."
 msgstr "每行一个。留空则允许所有域名。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:251
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:253
 msgid ""
 "Needs email verification to be trusted (the setting above): only verified"
 " addresses are checked. Google Workspace accounts are checked by their "
 "hosted domain."
 msgstr "需要信任电子邮件验证（上方的设置）：只检查已验证的地址。Google Workspace 账户按其托管域检查。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:254
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:256
 msgid "Maximum session length (hours)"
 msgstr "最长会话时长（小时）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:256
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:258
 msgid "After this, people sign in at the provider again."
 msgstr "之后用户需在提供商处重新登录。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:257
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:259
 msgid ""
 "At most 168 hours (one week). With the session check below, an account "
 "disabled at the provider loses its Specivo session within minutes; "
@@ -4442,45 +4479,45 @@ msgstr ""
 "最多 168 小时（一周）。开启下方的会话检查后，在提供商处被停用的账户会在几分钟内失去其 Specivo 会话；否则只有后端通道登出（back-"
 "channel logout）能更早结束会话。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:263
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:265
 msgid "Claims"
 msgstr "声明（Claims）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:264
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:266
 msgid ""
 "Which token claims fill the Specivo profile. Leave a field empty for the "
 "standard claim."
 msgstr "哪些令牌声明用于填充 Specivo 个人资料。留空则使用标准声明。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:266
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:268
 msgid "Username claim"
 msgstr "用户名声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:268
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:270
 msgid "Email claim"
 msgstr "邮箱声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:270
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:272
 msgid "Name claim"
 msgstr "姓名声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:272
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
 msgid "Language claim"
 msgstr "语言声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:274
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:276
 msgid "Groups claim"
 msgstr "组声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:276
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:278
 msgid "A dotted path, for example realm_access.roles."
 msgstr "以点分隔的路径，例如 realm_access.roles。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:277
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
 msgid "SCIM externalId claim"
 msgstr "SCIM externalId 声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:279
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:281
 msgid ""
 "Optional. Only a claim the provider guarantees to equal the externalId it"
 " sends over SCIM (Microsoft Entra ID: oid). It then connects a "
@@ -4489,88 +4526,88 @@ msgstr ""
 "可选。仅限提供商保证与其通过 SCIM 发送的 externalId 相同的声明（Microsoft Entra "
 "ID：oid）。这样，已预配的账户可以在首次登录时关联，而无需可信的电子邮件。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:282
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:284
 msgid "Also read claims from the userinfo endpoint"
 msgstr "同时从 userinfo 端点读取声明"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:288
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:290
 msgid ""
 "Group values from the groups claim decide who may sign in, who is an "
 "administrator, and which Specivo groups people are in. Values match "
 "exactly, including case."
 msgstr "组声明中的值决定谁可以登录、谁是管理员，以及用户属于哪些 Specivo 组。值必须完全匹配，区分大小写。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:291
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:293
 msgid "Required groups"
 msgstr "必需的组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:293
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:295
 msgid "One per line. Empty lets everyone from this provider in."
 msgstr "每行一个。留空则允许此提供商的所有用户登录。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:296
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:298
 msgid "Administrator groups"
 msgstr "管理员组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:301
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:303
 msgid "Set the administrator flag from the administrator groups at every sign-in"
 msgstr "每次登录时根据管理员组设置管理员标记"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:303
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:305
 msgid "Update Specivo group memberships from the mappings below at every sign-in"
 msgstr "每次登录时根据下方映射更新 Specivo 组成员身份"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:304
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:306
 msgid ""
 "Skipped while SCIM provisioning is on: the provider then manages group "
 "memberships through SCIM."
 msgstr "SCIM 预配开启时跳过：此时由提供商通过 SCIM 管理用户组成员。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:306
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:308
 msgid ""
 "Deactivate the Specivo account when a sign-in is refused by the required "
 "groups or allowed email domains"
 msgstr "当登录因必需组或允许的邮箱域被拒绝时，停用 Specivo 账户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:307
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:309
 msgid ""
 "Deactivation signs the user out everywhere and switches off their API "
 "keys. Without it, only the sessions started through this provider end."
 msgstr "停用会让该用户在所有位置退出登录并关闭其 API 密钥。不启用时，只会结束通过此提供商开始的会话。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:310
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:312
 msgid "Group mappings"
 msgstr "组映射"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:313
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:315
 msgid "Group at the provider"
 msgstr "提供商处的组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:314
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:316
 msgid "Specivo group"
 msgstr "Specivo 组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:322
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:324
 msgid "Create a Specivo group first."
 msgstr "请先创建一个 Specivo 组。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:324
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:326
 msgid "+ Add mapping"
 msgstr "+ 添加映射"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:325
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:327
 msgid "Save mappings"
 msgstr "保存映射"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:330
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:332
 msgid "Group mappings can be added once the provider is saved."
 msgstr "保存提供商后即可添加组映射。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:336
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:338
 msgid "Session check"
 msgstr "会话检查"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:337
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:339
 msgid ""
 "Specivo renews a session every few minutes. With the check on, it first "
 "asks the provider whether the person may still sign in, so someone "
@@ -4580,67 +4617,67 @@ msgstr ""
 "Specivo 每隔几分钟续期一次会话。开启检查后，它会先询问提供商此人是否仍可登录，因此在那里被停用、删除或已登出的人会在一次续期内失去 "
 "Specivo 会话。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:339
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:341
 msgid "Check sessions at the provider when they are renewed"
 msgstr "续期会话时在提供商处检查"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:340
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:342
 msgid ""
 "Needs a refresh token from the provider. Providers that send none, or "
 "refuse it, keep the sessions as before: Test connection shows which."
 msgstr "需要提供商提供刷新令牌。不发送或拒绝刷新令牌的提供商，会话保持原样：“测试连接”会显示属于哪种情况。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:345
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:347
 msgid "If the provider cannot be reached"
 msgstr "如果无法连接提供商"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:347
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:349
 msgid "Keep the session and ask again at the next renewal"
 msgstr "保留会话，在下次续期时再询问"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:348
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:350
 msgid "End the session"
 msgstr "结束会话"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:350
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:352
 msgid ""
 "Ending sessions signs everybody from this provider out while it is down. "
 "Local sign-in keeps working."
 msgstr "选择结束会话时，提供商宕机期间该提供商的所有用户都会被登出。本地登录仍然可用。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:356
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:358
 msgid "Logout"
 msgstr "注销"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:358
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:360
 msgid "Signing out of Specivo also signs out at the provider"
 msgstr "退出 Specivo 时也在提供商处退出"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:360
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:362
 msgid "Accept back-channel logout from the provider"
 msgstr "接受来自提供商的后端通道注销"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:361
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:363
 msgid "Register the back-channel logout URI above at the provider."
 msgstr "请在提供商处注册上方的后端通道注销 URI。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:363
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:365
 msgid "When the provider ends a session"
 msgstr "当提供商结束会话时"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:365
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:367
 msgid "End the matching Specivo session"
 msgstr "结束对应的 Specivo 会话"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:366
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:368
 msgid "End every session of that person from this provider"
 msgstr "结束此人来自该提供商的所有会话"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:367
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:369
 msgid "End all of their sessions and switch off their API keys"
 msgstr "结束其所有会话并关闭其 API 密钥"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:369
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:371
 msgid ""
 "The provider sends the same message when someone signs out as when they "
 "are disabled. Switching off API keys applies only to accounts without a "
@@ -4648,68 +4685,68 @@ msgid ""
 "the keys stay off."
 msgstr "用户登出和被停用时，提供商发送的是同一条消息。关闭 API 密钥只适用于没有密码的账户，且绝不会停用账户：之后仍可登录，但密钥保持关闭。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:376
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:378
 msgid "Provisioning (SCIM)"
 msgstr "预配（SCIM）"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:377
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:379
 msgid ""
 "The provider creates, updates and deactivates Specivo accounts and groups"
 " through SCIM, so people exist before their first sign-in and lose access"
 " as soon as they are disabled at the provider."
 msgstr "提供商通过 SCIM 创建、更新和停用 Specivo 账户和用户组，因此用户在首次登录前就已存在，并在提供商处被停用后立即失去访问权限。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:379
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:382
 msgid "SCIM base URL"
 msgstr "SCIM 基础 URL"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:390
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:393
 msgid "Token"
 msgstr "令牌"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:395
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:398
 msgid "Last request"
 msgstr "最近请求"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:397
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:400
 msgid "Provisioned users"
 msgstr "已预配的用户"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:398
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:401
 msgid "Provisioned groups"
 msgstr "已预配的用户组"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:404
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:407
 msgid "Copy this token now and enter it at the provider. It is not shown again."
 msgstr "请立即复制此令牌并在提供商处填入。它不会再次显示。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:417
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:420
 msgid "Accept provisioning from this provider"
 msgstr "接受来自此提供商的预配"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:418
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:421
 msgid "Generate a token first."
 msgstr "请先生成令牌。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:419
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:422
 msgid ""
 "The provider is switched off: SCIM requests are refused until it is "
 "enabled again."
 msgstr "该提供商已关闭：在重新启用前，SCIM 请求都会被拒绝。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:422
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:425
 msgid "Generate token"
 msgstr "生成令牌"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:423
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:426
 msgid "Rotate token"
 msgstr "轮换令牌"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:424
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:427
 msgid "Revoke token"
 msgstr "吊销令牌"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:428
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:431
 msgid ""
 "Deactivating or deleting a person at the provider deactivates their "
 "Specivo account at once: every session ends and their API keys are "
@@ -4722,18 +4759,18 @@ msgstr ""
 "密钥被关闭。账户本身会保留，因此工作项和历史记录保留其作者。管理员和服务账户绝不会通过 SCIM 被停用；在 Specivo "
 "中停用的账户也不会被提供商重新激活。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:429
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:432
 msgid ""
 "An existing Specivo account with the same email is linked instead of a "
 "new one being created, except administrators, service accounts and "
 "accounts another provider manages."
 msgstr "如果已有使用相同电子邮件的 Specivo 账户，则关联该账户而不新建账户；管理员、服务账户和由其他提供商管理的账户除外。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:435
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:438
 msgid "Delete provider"
 msgstr "删除提供商"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:438
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:441
 #, python-format
 msgid ""
 "%(count)s user signs in through this provider. Disabling it is usually "
@@ -4743,15 +4780,15 @@ msgid_plural ""
 "what you want."
 msgstr[0] "有 %(count)s 位用户通过此提供商登录。通常建议改为禁用它。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:440
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:443
 msgid "Delete anyway: unlink these users and end their sessions"
 msgstr "仍然删除：解除这些用户的关联并结束其会话"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:444
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:447
 msgid "Nobody is linked to this provider. Its group mappings are deleted with it."
 msgstr "没有用户关联到此提供商。其组映射将一并删除。"
 
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:447
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:450
 #, python-format
 msgid "%(count)s group membership granted by this provider is removed with it."
 msgid_plural "%(count)s group memberships granted by this provider are removed with it."
@@ -4992,7 +5029,7 @@ msgstr "上次登录"
 
 #: specivo/templates/themes/default/pages/admin/user_detail.html:170
 #: specivo/templates/themes/default/pages/auth/profile.html:236
-#: specivo/templates/themes/default/pages/projects/settings.html:1672
+#: specivo/templates/themes/default/pages/projects/settings.html:1675
 msgid "Disconnect"
 msgstr "断开关联"
 
@@ -5236,8 +5273,8 @@ msgstr "所有状态"
 #: specivo/templates/themes/default/pages/projects/settings.html:597
 #: specivo/templates/themes/default/pages/projects/settings.html:1214
 #: specivo/templates/themes/default/pages/projects/settings.html:1276
-#: specivo/templates/themes/default/pages/projects/settings.html:1501
-#: specivo/templates/themes/default/pages/projects/settings.html:1663
+#: specivo/templates/themes/default/pages/projects/settings.html:1504
+#: specivo/templates/themes/default/pages/projects/settings.html:1666
 msgid "Close"
 msgstr "关闭"
 
@@ -5585,7 +5622,7 @@ msgstr "请立即复制——之后将无法再次查看。"
 #: specivo/templates/themes/default/pages/auth/api_keys.html:60
 #: specivo/templates/themes/default/pages/issues/_timer_start.html:39
 #: specivo/templates/themes/default/pages/projects/settings.html:1100
-#: specivo/templates/themes/default/pages/projects/settings.html:1390
+#: specivo/templates/themes/default/pages/projects/settings.html:1393
 msgid "Dismiss"
 msgstr "关闭"
 
@@ -6292,7 +6329,7 @@ msgstr "例如：已就方案达成一致"
 
 #: specivo/templates/themes/default/pages/issues/_development.html:12
 #: specivo/templates/themes/default/pages/issues/detail.html:274
-#: specivo/templates/themes/default/pages/projects/settings.html:1626
+#: specivo/templates/themes/default/pages/projects/settings.html:1629
 msgid "Development"
 msgstr "开发"
 
@@ -7315,7 +7352,7 @@ msgstr "创建第一个工作项以开始使用。"
 #: specivo/templates/themes/default/pages/admin/projects.html:7
 #: specivo/templates/themes/default/pages/admin/roles.html:7
 #: specivo/templates/themes/default/pages/admin/settings.html:7
-#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:8
+#: specivo/templates/themes/default/pages/admin/sso_provider_detail.html:9
 #: specivo/templates/themes/default/pages/admin/sso_providers.html:7
 #: specivo/templates/themes/default/pages/admin/trackers.html:7
 #: specivo/templates/themes/default/pages/admin/user_detail.html:8
@@ -7730,7 +7767,7 @@ msgstr "实时预览"
 
 #: specivo/templates/themes/default/pages/projects/recurring_pattern_detail.html:187
 #: specivo/templates/themes/default/pages/projects/settings.html:1158
-#: specivo/templates/themes/default/pages/projects/settings.html:1452
+#: specivo/templates/themes/default/pages/projects/settings.html:1455
 msgid "Refresh"
 msgstr "刷新"
 
@@ -8699,8 +8736,8 @@ msgstr "包含私有内容"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1132
 #: specivo/templates/themes/default/pages/projects/settings.html:1155
-#: specivo/templates/themes/default/pages/projects/settings.html:1426
-#: specivo/templates/themes/default/pages/projects/settings.html:1449
+#: specivo/templates/themes/default/pages/projects/settings.html:1429
+#: specivo/templates/themes/default/pages/projects/settings.html:1452
 msgid "Delivery log"
 msgstr "投递日志"
 
@@ -8709,7 +8746,7 @@ msgid "Send test"
 msgstr "发送测试"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1165
-#: specivo/templates/themes/default/pages/projects/settings.html:1459
+#: specivo/templates/themes/default/pages/projects/settings.html:1462
 msgid "No deliveries yet"
 msgstr "尚无投递记录"
 
@@ -8732,12 +8769,12 @@ msgid "Response"
 msgstr "响应"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1201
-#: specivo/templates/themes/default/pages/projects/settings.html:1488
+#: specivo/templates/themes/default/pages/projects/settings.html:1491
 msgid "Newer"
 msgstr "较新"
 
 #: specivo/templates/themes/default/pages/projects/settings.html:1203
-#: specivo/templates/themes/default/pages/projects/settings.html:1490
+#: specivo/templates/themes/default/pages/projects/settings.html:1493
 msgid "Older"
 msgstr "较旧"
 
@@ -8890,36 +8927,36 @@ msgstr "请选择类型。"
 msgid "At most 100 environments can be listed."
 msgstr "最多可以列出 100 个环境。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1349
+#: specivo/templates/themes/default/pages/projects/settings.html:1352
 msgid "Webhook URL"
 msgstr "Webhook URL"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1356
+#: specivo/templates/themes/default/pages/projects/settings.html:1359
 msgid "Secret"
 msgstr "密钥"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1362
+#: specivo/templates/themes/default/pages/projects/settings.html:1365
 msgid "Copy the secret now: it is not shown again."
 msgstr "请立即复制密钥：它不会再次显示。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1366
+#: specivo/templates/themes/default/pages/projects/settings.html:1369
 msgid ""
 "In the repository on GitHub, open Settings, then Webhooks, then Add "
 "webhook."
 msgstr "在 GitHub 上的仓库中，依次打开 Settings、Webhooks，然后点击 Add webhook。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1367
+#: specivo/templates/themes/default/pages/projects/settings.html:1370
 msgid ""
 "Paste the webhook URL into Payload URL and set Content type to "
 "application/json."
 msgstr "将 Webhook URL 粘贴到 Payload URL，并将 Content type 设为 application/json。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1368
-#: specivo/templates/themes/default/pages/projects/settings.html:1384
+#: specivo/templates/themes/default/pages/projects/settings.html:1371
+#: specivo/templates/themes/default/pages/projects/settings.html:1387
 msgid "Paste the secret into Secret."
 msgstr "将密钥粘贴到 Secret。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1369
+#: specivo/templates/themes/default/pages/projects/settings.html:1372
 msgid ""
 "Choose \"Let me select individual events\", tick Pushes and Pull "
 "requests, and save. GitHub sends a ping at once; it appears in the "
@@ -8928,25 +8965,25 @@ msgstr ""
 "选择“Let me select individual events”，勾选 Pushes 和 Pull requests，然后保存。GitHub"
 " 会立即发送一个 ping，它会显示在投递日志中。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1374
+#: specivo/templates/themes/default/pages/projects/settings.html:1377
 msgid ""
 "In the project on GitLab, open Settings, then Webhooks, then Add new "
 "webhook."
 msgstr "在 GitLab 上的项目中，依次打开 Settings、Webhooks，然后点击 Add new webhook。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1375
+#: specivo/templates/themes/default/pages/projects/settings.html:1378
 msgid "Paste the webhook URL into URL and the secret into Secret token."
 msgstr "将 Webhook URL 粘贴到 URL，将密钥粘贴到 Secret token。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1376
+#: specivo/templates/themes/default/pages/projects/settings.html:1379
 msgid "Under Trigger, select Push events and Merge request events."
 msgstr "在 Trigger 下选择 Push events 和 Merge request events。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1377
+#: specivo/templates/themes/default/pages/projects/settings.html:1380
 msgid "Save, then use Test, Push events to send a first delivery."
 msgstr "保存后，使用 Test → Push events 发送第一次投递。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1382
+#: specivo/templates/themes/default/pages/projects/settings.html:1385
 msgid ""
 "In the repository, open Settings, then Webhooks, then Add webhook, and "
 "pick the Gitea or Forgejo webhook type, matching the server."
@@ -8954,7 +8991,7 @@ msgstr ""
 "在仓库中，依次打开 Settings、Webhooks、Add webhook，并根据服务器选择 Gitea 或 Forgejo 类型的 "
 "Webhook。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1383
+#: specivo/templates/themes/default/pages/projects/settings.html:1386
 msgid ""
 "Paste the webhook URL into Target URL. Keep the HTTP method POST and set "
 "the POST content type to application/json."
@@ -8962,7 +8999,7 @@ msgstr ""
 "将 Webhook URL 粘贴到 Target URL。HTTP 方法保持 POST，并将 POST content type 设为 "
 "application/json。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1385
+#: specivo/templates/themes/default/pages/projects/settings.html:1388
 msgid ""
 "Under Trigger on, choose Custom events, tick Push and Pull request, then "
 "add the webhook. Test delivery sends a push."
@@ -8970,11 +9007,11 @@ msgstr ""
 "在 Trigger on 下选择 Custom events，勾选 Push 和 Pull request，然后添加 Webhook。Test "
 "delivery 会发送一次推送。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1403
+#: specivo/templates/themes/default/pages/projects/settings.html:1406
 msgid "No repositories connected"
 msgstr "尚未连接仓库"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1404
+#: specivo/templates/themes/default/pages/projects/settings.html:1407
 msgid ""
 "Connect a GitHub, GitLab, Gitea or Forgejo repository: commits that "
 "mention an issue key, such as \"Fixes KEY-12\", or are pushed to a branch"
@@ -8983,79 +9020,79 @@ msgstr ""
 "连接 GitHub、GitLab、Gitea 或 Forgejo 仓库：提及工作项键（例如“Fixes "
 "KEY-12”）的提交，或推送到以工作项键命名的分支的提交，都会关联到该工作项。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1405
+#: specivo/templates/themes/default/pages/projects/settings.html:1408
 msgid "Connect the first repository"
 msgstr "连接第一个仓库"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1418
+#: specivo/templates/themes/default/pages/projects/settings.html:1421
 msgid "Last delivery:"
 msgstr "最近一次投递："
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1419
+#: specivo/templates/themes/default/pages/projects/settings.html:1422
 msgid "includes subprojects"
 msgstr "包含子项目"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1421
+#: specivo/templates/themes/default/pages/projects/settings.html:1424
 msgid "commit commands on"
 msgstr "提交命令已开启"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1422
+#: specivo/templates/themes/default/pages/projects/settings.html:1425
 msgid "merge automation on"
 msgstr "合并自动化已开启"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1427
+#: specivo/templates/themes/default/pages/projects/settings.html:1430
 msgid "New secret"
 msgstr "新密钥"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1460
+#: specivo/templates/themes/default/pages/projects/settings.html:1463
 msgid "Deliveries appear here once the forge sends its first webhook to this URL."
 msgstr "代码托管平台向此 URL 发送第一个 Webhook 后，投递记录会显示在这里。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1510
+#: specivo/templates/themes/default/pages/projects/settings.html:1513
 msgid "Repository URL"
 msgstr "仓库 URL"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1513
+#: specivo/templates/themes/default/pages/projects/settings.html:1516
 msgid ""
 "Paste the address of the repository's page, or its clone address. "
 "Provider and Repository are filled in from it."
 msgstr "粘贴仓库页面的地址或其克隆地址，系统会据此填写提供商和仓库。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1517
+#: specivo/templates/themes/default/pages/projects/settings.html:1520
 msgid "Undo"
 msgstr "撤销"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1534
+#: specivo/templates/themes/default/pages/projects/settings.html:1537
 msgid "Repository"
 msgstr "仓库"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1537
+#: specivo/templates/themes/default/pages/projects/settings.html:1540
 msgid ""
 "The full name as the forge shows it, owner and repository. Deliveries "
 "that name another repository are ignored."
 msgstr "代码托管平台上显示的完整名称，包括所有者和仓库名。指向其他仓库的投递会被忽略。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1540
+#: specivo/templates/themes/default/pages/projects/settings.html:1543
 msgid "Issues commits may link to"
 msgstr "提交可关联的工作项"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1542
+#: specivo/templates/themes/default/pages/projects/settings.html:1545
 msgid "This project"
 msgstr "此项目"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1543
+#: specivo/templates/themes/default/pages/projects/settings.html:1546
 msgid "This project and its subprojects"
 msgstr "此项目及其子项目"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1545
+#: specivo/templates/themes/default/pages/projects/settings.html:1548
 msgid "Keys of other projects in commit messages are ignored."
 msgstr "提交信息中其他项目的键会被忽略。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1548
+#: specivo/templates/themes/default/pages/projects/settings.html:1551
 msgid "Changes to issues"
 msgstr "对工作项的更改"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1549
+#: specivo/templates/themes/default/pages/projects/settings.html:1552
 msgid ""
 "Commit commands trust the commit author email, which anyone with push "
 "access can set to any address. With commands on, anyone who can push to "
@@ -9063,11 +9100,11 @@ msgid ""
 "use."
 msgstr "提交命令信任提交作者的邮箱，而任何拥有推送权限的人都可以将其设为任意地址。开启命令后，任何能向此仓库推送的人，只要使用某位项目成员已验证的邮箱，就能以该成员身份执行操作。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1552
+#: specivo/templates/themes/default/pages/projects/settings.html:1555
 msgid "Commit commands"
 msgstr "提交命令"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1554
+#: specivo/templates/themes/default/pages/projects/settings.html:1557
 msgid ""
 "\"Fixes KEY-12\" in a commit on the default branch moves the issue to the"
 " fixing status, as the Specivo user whose verified email wrote the "
@@ -9076,29 +9113,29 @@ msgstr ""
 "默认分支上的提交中出现“Fixes KEY-12”时，会以提交邮箱经过验证的 Specivo "
 "用户身份，将工作项移到修复状态。适用该用户的权限和工作流。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1556
+#: specivo/templates/themes/default/pages/projects/settings.html:1559
 msgid "Fixing status"
 msgstr "修复状态"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1558
+#: specivo/templates/themes/default/pages/projects/settings.html:1561
 msgid "Do not change the status"
 msgstr "不更改状态"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1566
+#: specivo/templates/themes/default/pages/projects/settings.html:1569
 msgid "Time logging"
 msgstr "工时记录"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1568
+#: specivo/templates/themes/default/pages/projects/settings.html:1571
 msgid ""
 "\"KEY-12 @1h30m\" (also @2h, @90m, @1.5h) logs the time on the issue for "
 "the commit's author, on any branch. They need permission to log time."
 msgstr "“KEY-12 @1h30m”（也支持 @2h、@90m、@1.5h）会在任意分支上为提交作者在该工作项上记录工时。作者需要拥有记录工时的权限。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1572
+#: specivo/templates/themes/default/pages/projects/settings.html:1575
 msgid "Merge automation"
 msgstr "合并自动化"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1574
+#: specivo/templates/themes/default/pages/projects/settings.html:1577
 msgid ""
 "When a pull or merge request that says \"Fixes KEY-12\" is merged into "
 "the default branch, the issue moves to the merge status. The change is "
@@ -9107,40 +9144,40 @@ msgstr ""
 "当包含“Fixes KEY-12”的拉取请求或合并请求合并到默认分支时，工作项会移到合并状态。此更改由 Git "
 "以此处选择的项目角色执行，并遵循工作流。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1577
+#: specivo/templates/themes/default/pages/projects/settings.html:1580
 msgid "Merge status"
 msgstr "合并状态"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1579
+#: specivo/templates/themes/default/pages/projects/settings.html:1582
 msgid "Choose a status"
 msgstr "选择状态"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1587
+#: specivo/templates/themes/default/pages/projects/settings.html:1590
 msgid "Role of Git in this project"
 msgstr "Git 在此项目中的角色"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1593
+#: specivo/templates/themes/default/pages/projects/settings.html:1596
 msgid ""
 "The Automation role may edit issues but has no workflow transitions until"
 " an administrator grants them. Changing the role needs permission to "
 "manage members."
 msgstr "Automation 角色可以编辑工作项，但在管理员授予之前没有任何工作流转换。更改角色需要管理成员的权限。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1599
+#: specivo/templates/themes/default/pages/projects/settings.html:1602
 msgid "Ignore pull requests from forks and outsiders"
 msgstr "忽略来自派生仓库和外部人员的拉取请求"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1601
+#: specivo/templates/themes/default/pages/projects/settings.html:1604
 msgid ""
 "Requests from another repository, or on GitHub by someone who is not a "
 "collaborator, are not linked to issues until they are merged."
 msgstr "来自其他仓库的请求，或 GitHub 上非协作者提交的请求，在合并之前不会关联到工作项。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1604
+#: specivo/templates/themes/default/pages/projects/settings.html:1607
 msgid "Environment types"
 msgstr "环境类型"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1605
+#: specivo/templates/themes/default/pages/projects/settings.html:1608
 msgid ""
 "Deployments are grouped by environment type, guessed from the "
 "environment's name (\"prod-eu\" is production). List the environments the"
@@ -9150,68 +9187,68 @@ msgstr ""
 "部署按环境类型分组，环境类型根据环境名称推断（\"prod-eu\" 为生产）。请列出推断有误的环境。以 * "
 "结尾的名称涵盖所有以此开头的环境，例如 review/*。名称匹配不区分大小写。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1610
+#: specivo/templates/themes/default/pages/projects/settings.html:1613
 msgid "Environment name or prefix*"
 msgstr "环境名称或前缀*"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1611
+#: specivo/templates/themes/default/pages/projects/settings.html:1614
 msgid "e.g. github-pages or review/*"
 msgstr "例如 github-pages 或 review/*"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1622
+#: specivo/templates/themes/default/pages/projects/settings.html:1625
 msgid "Choose a type"
 msgstr "选择类型"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1623
+#: specivo/templates/themes/default/pages/projects/settings.html:1626
 msgid "Production"
 msgstr "生产"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1624
+#: specivo/templates/themes/default/pages/projects/settings.html:1627
 msgid "Staging"
 msgstr "预发布"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1625
+#: specivo/templates/themes/default/pages/projects/settings.html:1628
 msgid "Testing"
 msgstr "测试"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1630
+#: specivo/templates/themes/default/pages/projects/settings.html:1633
 msgid "Remove this environment"
 msgstr "移除此环境"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1639
+#: specivo/templates/themes/default/pages/projects/settings.html:1642
 msgid "Add an environment"
 msgstr "添加环境"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1643
+#: specivo/templates/themes/default/pages/projects/settings.html:1646
 msgid ""
 "A webhook URL and a secret are generated and shown once after the "
 "repository is connected."
 msgstr "连接仓库后会生成 Webhook URL 和密钥，并仅显示一次。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1662
+#: specivo/templates/themes/default/pages/projects/settings.html:1665
 msgid "Disconnect repository"
 msgstr "断开仓库连接"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1668
+#: specivo/templates/themes/default/pages/projects/settings.html:1671
 msgid ""
 "Disconnect this repository? Its webhook URL stops working and its "
 "delivery log is deleted. Commit notes already on issues stay."
 msgstr "断开此仓库的连接？其 Webhook URL 将失效，投递日志将被删除。工作项上已有的提交备注会保留。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1681
+#: specivo/templates/themes/default/pages/projects/settings.html:1684
 #: specivo/templates/themes/default/pages/projects/sprint_edit.html:98
 msgid "Saved"
 msgstr "已保存"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1682
+#: specivo/templates/themes/default/pages/projects/settings.html:1685
 msgid "Could not save the branch name settings."
 msgstr "无法保存分支名称设置。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1687
+#: specivo/templates/themes/default/pages/projects/settings.html:1690
 msgid "Branch names"
 msgstr "分支名称"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1689
+#: specivo/templates/themes/default/pages/projects/settings.html:1692
 #, python-brace-format
 msgid ""
 "The \"Copy branch name\" button on an issue builds the name from this "
@@ -9222,23 +9259,23 @@ msgstr ""
 "工作项上的“复制分支名称”按钮会按此格式生成名称。{key} 是工作项键，必须包含；{type} 来自追踪器；{slug} 是小写的主题，最多 "
 "40 个字符。以这种方式命名的分支，其提交会关联到该工作项。"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1691
+#: specivo/templates/themes/default/pages/projects/settings.html:1694
 msgid "Format"
 msgstr "格式"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1693
+#: specivo/templates/themes/default/pages/projects/settings.html:1696
 msgid "Example:"
 msgstr "示例："
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1703
+#: specivo/templates/themes/default/pages/projects/settings.html:1706
 msgid "Other trackers"
 msgstr "其他追踪器"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1722
+#: specivo/templates/themes/default/pages/projects/settings.html:1725
 msgid "Search indexing"
 msgstr "搜索索引"
 
-#: specivo/templates/themes/default/pages/projects/settings.html:1724
+#: specivo/templates/themes/default/pages/projects/settings.html:1727
 msgid ""
 "Full-text search analyzer language for this project. Leave on Inherit to "
 "use the instance default."
