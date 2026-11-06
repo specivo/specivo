@@ -214,6 +214,21 @@ The optional ECB fetch is off unless `exchange_rates_fetch_enabled` is `"true"`.
 (`trust_env=False`; unresolvable targets refused unless `EXCHANGE_RATE_FEED_ALLOW_UNRESOLVED_VIA_PROXY`; the proxy
 must enforce egress rules, as it resolves again), one total deadline, strict UTF-8 with no DTD, and error messages that never echo the response.
 
+**AI model prices.** `ai_model_prices` is a price **history**: one model's per-1M-token prices (`NUMERIC(18, 6)`,
+any active currency) during a half-open period `[effective_from, effective_to)` (`TIMESTAMPTZ`, `NULL` end = open),
+from source `seed` (the bundled LiteLLM snapshot in `specivo/data/ai_model_prices.json`, plus the optional
+hand-kept `ai_model_prices_history.json`) or `admin`. A `btree_gist` exclusion constraint keeps the active periods
+of one provider, model and source from overlapping; the trigger `ai_model_prices_immutable` refuses any UPDATE of
+prices, currency, identity or start. A change closes the open period and inserts a new one in one transaction
+(`AiModelPriceService.create`); the seed loader (`specivo.core.ai_pricing_seed.plan_seed`, applied by
+`specivo.services.ai_model_price_seed.apply_seed` in migration 0061, at worker start and on demand) only appends
+periods and never touches `admin` rows. Resolve a price only through `AiModelPriceService.resolve(model, at,
+provider)`: names normalised (case, provider prefixes), model before alias, `admin` before `seed`, at an aware
+instant compared in UTC; no match is `None` (unpriced), never zero and never the latest price. Compute costs only
+with the pure `specivo.core.ai_pricing.price_usage(tokens, long_context_tokens, price)` (exact `Decimal`, partial
+when a class with tokens has no price). A table that prices with these rows registers a `PriceReference` so
+referenced rows cannot be deleted or ended before their entries.
+
 **FK indexes are always explicit.** PostgreSQL does not auto-index foreign key columns, so every FK has a corresponding `Index(...)`.
 
 **Principals.** A `members` row is held by exactly one principal — a user (`user_id`) or a user group (`group_id`) — with the other column NULL and `ck_members_one_principal` enforcing it. Roles hang off the row through `member_roles` identically either way, so nothing downstream of a resolved role knows which kind granted it. Uniqueness per project is two plain `UniqueConstraint`s rather than partial indexes: PostgreSQL treats NULLs as distinct, so each ignores the other principal's rows.
@@ -603,6 +618,13 @@ the instance) are written by `CurrencyService` in the transaction of the change,
 `unchanged`, `date_from`, `date_to`), `EXCHANGE_RATES_FETCH_TOGGLED` (`enabled`, `url`) and
 `EXCHANGE_RATE_SETTINGS_CHANGED` (`changes`: `{key: {old, new}}`) are written by `ExchangeRateService` in the
 transaction of the change. Dry runs, refused imports and the scheduled fetch write none.
+
+**AI model price events.** `AI_MODEL_PRICE_CREATED` / `_UPDATED` / `_DELETED` (details: `price_id`, `provider`,
+`model`, `currency`, `effective_from`, `effective_to`, `source`, `is_active`, `prices`; a create that ended the open
+period adds `closed_price_id`, an update adds `changes`) and `AI_MODEL_PRICES_SEEDED` (`as_of`, `inserted`, `closed`,
+`history_inserted`, `aliases_updated`, `unchanged`, `skipped`; only when a load changed something, user none at
+worker start) are written by `AiModelPriceService` in the transaction of the change (category Administration,
+`resource_type` `ai_model_price`). The first seed in the migration writes none.
 
 **Repository provider change.** `REPOSITORY_PROVIDER_CHANGED` (category Administration) is written by
 `RepositoryIntegrationService.update` when an integration moves to another forge, which also moves its
