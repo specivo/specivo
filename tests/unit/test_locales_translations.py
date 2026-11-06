@@ -1,7 +1,7 @@
 """Unit tests for installed-locale discovery and real catalog translation.
 
 These tests exercise the compiled ``.mo`` catalogs that ship with the
-core package (es, fr, ru, zh) plus the English source language. They do
+core package (es, fr, ru, th, zh) plus the English source language. They do
 not touch the database.
 """
 
@@ -118,6 +118,61 @@ def _catalog_files() -> list:
 
     locale_dir = Path(specivo.__file__).parent / "locale"
     return [locale_dir / "specivo.pot", *sorted(locale_dir.glob("*/LC_MESSAGES/*.po"))]
+
+
+# Locales whose catalogs must translate every msgid. English is the source
+# language: its msgstr stay empty so gettext falls back to the msgid.
+_SHIPPED_TRANSLATIONS = ["es", "fr", "ru", "th", "zh"]
+
+
+def _read_catalog(locale: str):
+    from pathlib import Path
+
+    from babel.messages.pofile import read_po
+
+    import specivo
+
+    po_path = Path(specivo.__file__).parent / "locale" / locale / "LC_MESSAGES" / "specivo.po"
+    with po_path.open("rb") as fh:
+        return read_po(fh, locale=locale)
+
+
+@pytest.mark.parametrize("locale", ["en", *_SHIPPED_TRANSLATIONS])
+def test_catalog_has_no_fuzzy_entries(locale: str):
+    """No entry, and not the header, is marked fuzzy.
+
+    ``pybabel compile`` leaves fuzzy entries out of the ``.mo`` (and skips a
+    catalog whose header is fuzzy), so users see English. Worse, ``pybabel
+    update`` fills a fuzzy entry with the translation of a merely similar
+    msgid, which turns wrong the moment someone clears the flag unread.
+    Translate the entry, then drop the flag and any ``#|`` previous-msgid lines.
+    """
+    catalog = _read_catalog(locale)
+
+    assert not catalog.fuzzy, f"{locale}: the catalog header is marked fuzzy"
+    fuzzy = [message.id for message in catalog if message.id and message.fuzzy]
+    assert fuzzy == [], f"{locale}: {len(fuzzy)} fuzzy entries: {fuzzy}"
+
+
+@pytest.mark.parametrize("locale", _SHIPPED_TRANSLATIONS)
+def test_catalog_translates_every_msgid(locale: str):
+    """Every current msgid has a translation, including each plural form.
+
+    Obsolete ``#~`` entries are not part of the catalog and are not checked.
+    """
+    catalog = _read_catalog(locale)
+
+    untranslated = []
+    for message in catalog:
+        if not message.id:
+            continue  # the header
+        if message.pluralizable:
+            forms = message.string if isinstance(message.string, tuple) else (message.string,)
+            if len(forms) != catalog.num_plurals or not all(forms):
+                untranslated.append(message.id[0])
+        elif not message.string:
+            untranslated.append(message.id)
+    assert untranslated == [], f"{locale}: {len(untranslated)} untranslated entries: {untranslated}"
 
 
 @pytest.mark.parametrize("path", _catalog_files(), ids=lambda p: "/".join(p.parts[-3:]))
