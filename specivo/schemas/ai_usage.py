@@ -52,9 +52,16 @@ class AiUsageCreate(BaseModel):
     started_at: AwareDatetime | None = None
     ended_at: AwareDatetime | None = None
     request_count: int = Field(0, ge=0, le=MAX_REQUEST_COUNT)
-    tokens: AiUsageTokens = Field(default_factory=lambda: AiUsageTokens())
+    tokens: AiUsageTokens = Field(
+        default_factory=lambda: AiUsageTokens(),
+        description="Tokens of the requests below the long-context threshold",
+    )
     long_context_tokens: AiUsageTokens | None = Field(
-        None, description="The part of the tokens billed at the long-context tier"
+        None,
+        description=(
+            "Tokens of the requests that crossed the long-context threshold, billed at the long-context tier. "
+            "Disjoint from tokens: each request is counted wholly in one bucket, and the usage is the sum of both"
+        ),
     )
     cost_type: AiUsageCostType | None = None
     cost: MoneyIn | None = Field(None, description="What the usage cost, if known (stored as the reported cost)")
@@ -137,8 +144,11 @@ class AiUsageEntryOut(BaseModel):
     started_at: datetime | None
     ended_at: datetime | None
     request_count: int
-    tokens: AiUsageTokens
-    long_context_tokens: AiUsageTokens | None
+    tokens: AiUsageTokens = Field(description="Requests below the long-context threshold")
+    long_context_tokens: AiUsageTokens | None = Field(
+        description="Requests that crossed the long-context threshold; disjoint from tokens"
+    )
+    total_tokens: int = Field(description="All tokens of the entry: every class of both buckets")
     cost_type: str
     subscription_id: int | None
     cost_basis: str = Field(description="calculated, reported, manual, unpriced or partial")

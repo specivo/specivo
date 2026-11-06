@@ -181,3 +181,18 @@ def check_tokens(values: dict[str, Any] | None, field: str = "tokens") -> dict[s
             raise ValueError(f"{field}.{token_class} must be between 0 and {MAX_TOKENS_PER_CLASS}")
         result[token_class] = value
     return result
+
+
+def check_bucket_totals(tokens: dict[str, int], long_context: dict[str, int] | None) -> None:
+    """Check that each class, summed over both token buckets, stays within the per-class bound.
+
+    The two buckets are disjoint (a request is counted wholly in one of them), so
+    the entry's usage of a class is their sum. Raises ``ValueError`` naming the class.
+    """
+    if not long_context:
+        return
+    for token_class in TOKEN_CLASSES:
+        if tokens.get(token_class, 0) + long_context.get(token_class, 0) > MAX_TOKENS_PER_CLASS:
+            raise ValueError(
+                f"tokens.{token_class} plus long_context_tokens.{token_class} must not exceed {MAX_TOKENS_PER_CLASS}"
+            )

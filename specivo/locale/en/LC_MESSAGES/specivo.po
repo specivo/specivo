@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 14:23+0100\n"
+"POT-Creation-Date: 2026-11-06 16:13+0100\n"
 "PO-Revision-Date: 2026-03-28 10:59+0300\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -5702,6 +5702,12 @@ msgstr ""
 msgid "%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning"
 msgstr ""
 
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:144
+#: specivo/templates/themes/default/pages/ai_usage/form.html:68
+#, python-format
+msgid "including %(count)s at long-context prices"
+msgstr ""
+
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:148
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:24
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
@@ -6157,7 +6163,7 @@ msgid "Pay-per-use"
 msgstr ""
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:263
-#: specivo/web/pages/ai_spend_reports.py:323
+#: specivo/web/pages/ai_spend_reports.py:325
 msgid "All usage"
 msgstr ""
 

@@ -55,8 +55,8 @@ class ReportRowOut(BaseModel):
     entries: int
     unpriced_entries: int
     request_count: int
-    tokens: AiUsageTokens
-    total_tokens: int
+    tokens: AiUsageTokens = Field(description="Per class, the base and long-context buckets summed")
+    total_tokens: int = Field(description="Every class of both buckets")
     marginal_spend: ReportAmountOut | None
     api_equivalent_value: ReportAmountOut | None
     allocated_seat_cost: ReportAmountOut | None = Field(description="Null when seat cost is not shown")

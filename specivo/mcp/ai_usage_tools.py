@@ -59,7 +59,8 @@ def _money(value: Money | None) -> str:
 
 
 def _tokens(entry: AiUsageEntry) -> str:
-    counts = entry.tokens()
+    """Per-class usage with both buckets summed, then the long-context share when there is one."""
+    counts = entry.all_tokens()
     parts = [f"in={counts['input']}", f"out={counts['output']}"]
     for name, label in (
         ("cache_write_5m", "cache_write"),
@@ -69,6 +70,9 @@ def _tokens(entry: AiUsageEntry) -> str:
     ):
         if counts[name]:
             parts.append(f"{label}={counts[name]}")
+    long_total = sum(entry.long_context_tokens().values())
+    if long_total:
+        parts.append(f"(long_context={long_total})")
     return " ".join(parts)
 
 
@@ -115,9 +119,9 @@ def _details(entry: AiUsageEntry, refs: EntryReferences) -> str:
         f"Requests: {entry.request_count}",
         f"Tokens: {_tokens(entry)}",
     ]
-    if entry.long_context:
-        long = " ".join(f"{k}={v}" for k, v in entry.long_context.items() if v)
-        lines.append(f"Long-context tokens: {long}")
+    long = " ".join(f"{k}={v}" for k, v in entry.long_context_tokens().items() if v)
+    if long:
+        lines.append(f"Long-context tokens (included above): {long}")
     lines.append(f"Cost type: {entry.cost_type}  Basis: {entry.cost_basis}")
     lines.append(f"Marginal cost: {_money(entry.marginal)}")
     lines.append(f"API equivalent: {_money(entry.api_equivalent)}")

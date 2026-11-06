@@ -27,6 +27,7 @@ from typing import Any
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    ColumnElement,
     Date,
     DateTime,
     ForeignKey,
@@ -34,6 +35,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -154,6 +156,8 @@ class AiUsageEntry(Base, TimestampMixin):
     cache_read: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     reasoning: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0, server_default="0")
     #: Tokens of requests billed at the long-context tier, same keys as above.
+    #: Disjoint from the columns above: a request is counted wholly in one of
+    #: the two buckets, and the entry's usage is the sum of both.
     long_context: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # -- cost ----------------------------------------------------------------
@@ -216,7 +220,25 @@ class AiUsageEntry(Base, TimestampMixin):
         return self.excluded_at is not None
 
     def tokens(self) -> dict[str, int]:
+        """The base bucket only (requests below the long-context threshold)."""
         return {c: int(getattr(self, c)) for c in TOKEN_CLASSES}
+
+    def long_context_tokens(self) -> dict[str, int]:
+        """The long-context bucket, every class present (zeros when there is none)."""
+        stored = self.long_context or {}
+        return {c: int(stored.get(c) or 0) for c in TOKEN_CLASSES}
+
+    def all_tokens(self) -> dict[str, int]:
+        """Per-class usage of the entry: the base bucket plus the long-context bucket."""
+        long = self.long_context_tokens()
+        return {c: n + long[c] for c, n in self.tokens().items()}
+
+    @classmethod
+    def class_total(cls, token_class: str) -> ColumnElement[int]:
+        """SQL for one class's usage of a row: the column plus the same key of ``long_context``."""
+        column: ColumnElement[int] = getattr(cls, token_class)
+        long = func.coalesce(cls.long_context[token_class].astext.cast(BigInteger), 0)
+        return column + long
 
     def __repr__(self) -> str:
         return f"<AiUsageEntry id={self.id} user_id={self.user_id} model={self.model!r} date={self.usage_date}>"

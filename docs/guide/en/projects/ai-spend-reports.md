@@ -24,7 +24,7 @@ There are two reports:
 | **Spend** | Pay-per-use plus seat cost: what the usage actually cost. |
 | **API-equivalent value** | What the same tokens would have cost at pay-per-use [API prices](../install/ai-model-prices.md). It is an estimate, not a bill. |
 | **Leverage** | The API-equivalent value of subscription usage divided by its seat cost. Above 1, the subscription costs less than paying per use would have; below 1, it costs more. Shown only where there is a seat cost. |
-| **Tokens**, **Entries** | Token totals (hover a row for input, output, cache and reasoning), and how many entries count. Entries that have no price are counted in brackets. |
+| **Tokens**, **Entries** | Token totals (hover a row for input, output, cache and reasoning), long-context tokens included, and how many entries count. Entries that have no price are counted in brackets. |
 
 Spend and API-equivalent value are always shown side by side, so you can see both what you pay and
 what the usage would be worth on pay-as-you-go.

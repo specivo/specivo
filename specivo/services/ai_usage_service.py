@@ -76,6 +76,7 @@ from specivo.core.ai_usage import (
     IDEMPOTENCY_KEY_MAX_LENGTH,
     MAX_REQUEST_COUNT,
     CostInputs,
+    check_bucket_totals,
     check_tokens,
     compute_costs,
     priced_at_for,
@@ -247,6 +248,7 @@ class EntryReferences:
 class UsageSummary:
     """Totals of a filtered set of entries, excluded ones left out (see ``summarize_entries``).
 
+    ``tokens`` holds each class summed over both buckets (base and long-context).
     ``marginal`` and ``api_equivalent`` hold one amount per day and currency,
     ready for ``ExchangeRateService.summarize``.
     """
@@ -487,8 +489,9 @@ class AiUsageService:
 
         Two grouped queries: the token sums, and the costs per day and
         currency (so the caller converts each day at its own rate, see
-        ``ExchangeRateService.summarize``). The number of excluded entries
-        matching the filters is counted apart.
+        ``ExchangeRateService.summarize``). Each class sums both token buckets
+        (base and long-context). The number of excluded entries matching the
+        filters is counted apart.
         """
         conditions = await self._list_conditions(
             session,
@@ -514,7 +517,7 @@ class AiUsageService:
                 select(
                     func.count().filter(counted),
                     func.count().filter(AiUsageEntry.excluded_at.is_not(None)),
-                    *[func.coalesce(func.sum(getattr(AiUsageEntry, c)).filter(counted), 0) for c in TOKEN_CLASSES],
+                    *[func.coalesce(func.sum(AiUsageEntry.class_total(c)).filter(counted), 0) for c in TOKEN_CLASSES],
                 ).where(*conditions)
             )
         ).one()
@@ -815,6 +818,10 @@ class AiUsageService:
             long_context = check_tokens(dict(data.long_context), "long_context") if data.long_context else None
         except ValueError as exc:
             raise _invalid(str(exc), "tokens") from None
+        try:
+            check_bucket_totals(tokens, long_context)
+        except ValueError as exc:
+            raise _invalid(str(exc), "long_context") from None
         if long_context is not None and not any(long_context.values()):
             long_context = None
         count = data.request_count
@@ -1354,6 +1361,7 @@ class AiUsageService:
         target = await session.get(User, entry.user_id)
         details = await self._details(session, entry, target)
         details["tokens"] = entry.tokens()
+        details["long_context"] = entry.long_context
         details["cost_type"] = entry.cost_type
         await session.delete(entry)
         await session.flush()

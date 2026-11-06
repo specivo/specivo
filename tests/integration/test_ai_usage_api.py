@@ -236,6 +236,14 @@ async def test_log_own_usage_with_an_api_key(client: AsyncClient, w: World) -> N
     assert entry["revision"] == 1
 
 
+async def test_entry_reports_both_buckets_and_their_total(client: AsyncClient, w: World) -> None:
+    created = await log(client, w, "alice", long_context_tokens={"input": 300_000, "output": 20_000})
+    assert created["tokens"]["input"] == 1_000_000 and created["long_context_tokens"]["input"] == 300_000
+    assert created["total_tokens"] == 1_420_000
+    plain = await log(client, w, "alice")
+    assert plain["long_context_tokens"] is None and plain["total_tokens"] == 1_100_000
+
+
 async def test_log_by_a_person_with_a_known_cost(client: AsyncClient, w: World) -> None:
     resp = await client.post("/api/v1/auth/login/", json={"login": "aua_alice", "password": TEST_PASSWORD})
     token = resp.json()["access_token"]

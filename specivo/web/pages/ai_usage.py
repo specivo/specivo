@@ -256,7 +256,9 @@ async def _rows(
     for e in entries:
         editable = await _service.can_edit(db, viewer, e)
         deletable = _service.can_delete_locked(viewer, e) if e.is_locked else editable
-        tokens = e.tokens()
+        # Per-class numbers include the long-context bucket; its share is shown apart as well.
+        tokens = e.all_tokens()
+        long_total = sum(e.long_context_tokens().values())
         cache = tokens["cache_read"] + tokens["cache_write_5m"] + tokens["cache_write_1h"]
         issue_key = refs.issue_keys.get(e.issue_id) if e.issue_id is not None else None
         marginal, api_eq, reported = e.marginal, e.api_equivalent, e.reported_cost
@@ -279,6 +281,7 @@ async def _rows(
                 "output": _fmt_int(tokens["output"], locale),
                 "cache": _fmt_int(cache, locale),
                 "reasoning": _fmt_int(tokens["reasoning"], locale),
+                "long_context": _fmt_int(long_total, locale) if long_total else "",
                 "cost_type": e.cost_type,
                 "cost_basis": e.cost_basis,
                 "marginal": marginal.format(locale) if marginal is not None else "",

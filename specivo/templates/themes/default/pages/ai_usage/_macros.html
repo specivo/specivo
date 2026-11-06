@@ -141,7 +141,7 @@
         </div>
         {% if r.comments %}<div class="sp-aiu-comment">{{ r.comments }}</div>{% endif %}
       </td>
-      <td class="sp-aiu-num" title="{{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}">{{ r.total_tokens }}</td>
+      <td class="sp-aiu-num" title="{{ _('%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning') % {'input': r.input, 'output': r.output, 'cache': r.cache, 'reasoning': r.reasoning} }}{% if r.long_context %}; {{ _('including %(count)s at long-context prices') % {'count': r.long_context} }}{% endif %}">{{ r.total_tokens }}</td>
       {% if not compact %}<td>{{ cost_type_label(r.cost_type) }}</td>{% endif %}
       <td class="sp-aiu-num">{{ r.marginal or "–" }}</td>
       <td class="sp-aiu-num">{{ r.api_equivalent or "–" }}</td>

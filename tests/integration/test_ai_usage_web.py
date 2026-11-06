@@ -226,6 +226,37 @@ async def test_excluded_entries_leave_the_totals(client: AsyncClient, db_session
     assert 'data-testid="aiu-include"' in resp.text
 
 
+async def test_totals_and_rows_include_long_context_tokens(client: AsyncClient, db_session: AsyncSession, w: World):
+    """1M in + 100k out in the base bucket and 500k in + 50k out in the long bucket: 1,650,000 tokens."""
+    long = {"input": 500_000, "output": 50_000}
+    entry = await _log(db_session, w, "alice", issue_id=w.public_issue.id, reported=True, long_context=long)
+    assert entry.long_context == {**dict.fromkeys(entry.tokens(), 0), **long}
+
+    summary = await _service.summarize_entries(db_session, w.users["alice"], user_id=w.users["alice"].id)
+    assert summary.tokens["input"] == 1_500_000 and summary.tokens["output"] == 150_000
+    assert summary.total_tokens == 1_650_000
+
+    for url in ("/projects/AUWA/ai-usage/", "/partials/issues/AUWA-1/ai-usage/", "/my/ai-usage/"):
+        resp = await _get(client, w.users["alice"], url)
+        assert resp.status_code == 200, url
+        assert 'data-testid="aiu-total-tokens">1,650,000<' in resp.text, url
+        assert "1,500,000 in · 150,000 out" in resp.text, url
+        assert "1,500,000 in, 150,000 out" in resp.text, url  # the row's tooltip
+        assert "including 550,000 at long-context prices" in resp.text, url
+
+    resp = await _get(client, w.users["alice"], f"/ai-usage/{entry.id}/edit/")
+    assert resp.status_code == 200
+    assert 'data-testid="aiu-long-context"' in resp.text and "including 550,000 at long-context prices" in resp.text
+
+
+async def test_rows_without_long_context_have_no_long_context_note(
+    client: AsyncClient, db_session: AsyncSession, w: World
+):
+    await _log(db_session, w, "alice")
+    resp = await _get(client, w.users["alice"], "/projects/AUWA/ai-usage/")
+    assert "at long-context prices" not in resp.text
+
+
 # ---------------------------------------------------------------------------
 # Issue tab
 # ---------------------------------------------------------------------------
