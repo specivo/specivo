@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ from httpx import AsyncClient, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from specivo.core.ai_usage import MAX_TOKENS_PER_CLASS
 from specivo.models.agent_session import AgentSession
 from specivo.models.ai_usage_entry import AiUsageEntry
 from specivo.models.issue import Issue
@@ -38,6 +40,7 @@ from specivo.models.repository import IssueCommitLink, RepositoryCommit
 from specivo.models.role import Role
 from specivo.models.security_audit import SecurityAuditLog
 from specivo.models.user import User
+from specivo.services.ai_model_price_service import AiModelPriceService, PriceInput
 from specivo.services.ai_usage_service import AiUsageService
 from specivo.services.api_key_service import ApiKeyService
 from specivo.services.permission_service import clear_role_cache
@@ -45,7 +48,7 @@ from specivo.services.security_audit_service import AuditEvent
 from tests.factories.issue import IssueFactory
 from tests.factories.lookups import PriorityFactory, StatusFactory, TrackerFactory
 from tests.factories.project import ProjectFactory
-from tests.factories.user import ServiceAccountFactory, UserFactory
+from tests.factories.user import AdminUserFactory, ServiceAccountFactory, UserFactory
 from tests.fixtures.forge_hooks import make_integration
 
 pytestmark = [pytest.mark.asyncio(loop_scope="function"), pytest.mark.integration]
@@ -255,6 +258,57 @@ async def test_create_unchanged_update_replaces_totals(client: AsyncClient, db_s
     assert stored.user_id == stored.reporter_user_id == w.users["bot"].id
     assert stored.reporter_api_key_id == w.key_ids["bot"]
     assert (stored.client_name, stored.client_version) == ("ingest-tests", "1.2.3")
+
+
+async def test_both_token_buckets_are_stored_apart_and_priced_once(
+    client: AsyncClient, db_session: AsyncSession, w: World
+) -> None:
+    """Base tokens at the base rates, long-context tokens at the long rates, each token once."""
+    admin = AdminUserFactory.build(login="ingx_price_admin", status="active")
+    db_session.add(admin)
+    await db_session.flush()
+    await AiModelPriceService().create(
+        db_session,
+        PriceInput(
+            provider="testlab",
+            model="lab-long-1",
+            currency="USD",
+            effective_from=datetime(2026, 1, 1, tzinfo=UTC),
+            prices={"input": "1.25", "output": "10", "long_input": "2.5", "long_output": "15"},
+            long_context_threshold=200_000,
+        ),
+        actor=admin,
+    )
+    await db_session.commit()
+    rec = record(
+        "k-long",
+        provider="testlab",
+        model="lab-long-1",
+        cost_type="api",
+        tokens={"input": 1_000_000, "output": 100_000},  # 1.25 + 1.00
+        long_context_tokens={"input": 1_000_000, "output": 100_000},  # 2.50 + 1.50
+    )
+    [created] = await post(client, w, "bot", rec)
+    assert created["status"] == "created", created
+    stored = await entry(db_session, created["entry_id"])
+    assert (stored.input, stored.output) == (1_000_000, 100_000)
+    assert stored.long_context is not None and stored.long_context["input"] == 1_000_000
+    assert stored.api_equivalent is not None
+    assert stored.api_equivalent.amount == Decimal("6.25") and stored.api_equivalent.currency == "USD"
+
+
+async def test_bound_per_class_applies_to_the_sum_of_both_buckets(client: AsyncClient, w: World) -> None:
+    half = MAX_TOKENS_PER_CLASS // 2 + 1
+    [rejected] = await post(
+        client, w, "bot", record("k-long-max", tokens={"input": half}, long_context_tokens={"input": half})
+    )
+    assert rejected["status"] == "rejected"
+    assert rejected["error"]["code"] == "invalid_record"
+    assert rejected["error"]["field"] == "long_context_tokens"
+    [ok] = await post(
+        client, w, "bot", record("k-long-max", tokens={"input": half}, long_context_tokens={"input": half - 2})
+    )
+    assert ok["status"] == "created"
 
 
 async def test_path_with_trailing_slash_works_too(client: AsyncClient, w: World) -> None:

@@ -84,6 +84,7 @@ def entry_out(entry: AiUsageEntry, refs: EntryReferences) -> AiUsageEntryOut:
         request_count=entry.request_count,
         tokens=AiUsageTokens(**entry.tokens()),
         long_context_tokens=AiUsageTokens(**entry.long_context) if entry.long_context else None,
+        total_tokens=sum(entry.all_tokens().values()),
         cost_type=entry.cost_type,
         subscription_id=entry.subscription_id,
         cost_basis=entry.cost_basis,

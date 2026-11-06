@@ -211,6 +211,7 @@ class ReportRow:
     entries: int = 0
     unpriced_entries: int = 0
     request_count: int = 0
+    #: Per class, both token buckets (base and long-context) summed.
     tokens: dict[str, int] = field(default_factory=lambda: dict.fromkeys(TOKEN_CLASSES, 0))
     marginal: ConversionSummary | None = None
     api_equivalent: ConversionSummary | None = None
@@ -458,7 +459,7 @@ class AiSpendReportService:
             func.count().label("entries"),
             func.count().filter(AiUsageEntry.cost_basis == "unpriced").label("unpriced"),
             func.coalesce(func.sum(AiUsageEntry.request_count), 0).label("requests"),
-            *[func.coalesce(func.sum(getattr(AiUsageEntry, c)), 0).label(f"t_{c}") for c in TOKEN_CLASSES],
+            *[func.coalesce(func.sum(AiUsageEntry.class_total(c)), 0).label(f"t_{c}") for c in TOKEN_CLASSES],
             func.sum(AiUsageEntry.marginal_amount).label("marginal"),
             func.sum(AiUsageEntry.api_equivalent_amount).label("api"),
         ]

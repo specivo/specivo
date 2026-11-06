@@ -40,6 +40,10 @@ A price can hold a **threshold** and a second set of prices for that tier. A req
 context prices; exactly at the threshold it is not. A long context price left empty falls back to
 the normal price of the same kind.
 
+Reporters send the tokens of such requests in a separate bucket, `long_context_tokens`, next to
+the normal `tokens` of the other requests. The two buckets never overlap: each token is priced
+once, at the prices of its own tier, and token totals add both buckets.
+
 ### Local models
 
 A price can be marked as a **local model**, with an optional **baseline model**: the paid model whose

@@ -285,3 +285,29 @@ async def test_reporter_entries_keep_their_usage(db_session: AsyncSession, w: Wo
     text = await server.specivo_ai_usage(op="update", entry_id=entry_id, issue_ref="MAUA-1", comments="Login")
     assert "MAUA-1" in text
     assert "Excluded from reports" in await server.specivo_ai_usage(op="exclude", entry_id=entry_id)
+
+
+async def test_token_counts_include_the_long_context_bucket(db_session: AsyncSession, w: World) -> None:
+    outcome = await AiUsageService().upsert(
+        db_session,
+        w.users["alice"],
+        AiUsageInput(
+            tool="claude-code",
+            provider="testlab",
+            model="lab-model-1",
+            usage_date=date(2026, 3, 10),
+            tokens={"input": 10, "output": 1},
+            long_context={"input": 500, "cache_read": 70},
+            project_id=w.a.id,
+            idempotency_key="mau-reporter-long",
+        ),
+        source="reporter",
+    )
+    await db_session.commit()
+    entry_id = outcome.entry.id
+    _as(w, "alice")
+    line = await server.specivo_ai_usage(op="list", project_key="MAUA")
+    assert f"#{entry_id} " in line and "in=510 out=1 cache_read=70 (long_context=570)" in line
+    detail = await server.specivo_ai_usage(op="get", entry_id=entry_id)
+    assert "Tokens: in=510 out=1 cache_read=70 (long_context=570)" in detail
+    assert "Long-context tokens (included above): input=500 cache_read=70" in detail

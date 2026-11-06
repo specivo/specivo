@@ -181,6 +181,7 @@ async def entry(
     issue: Issue | None = None,
     branch: str | None = None,
     tokens: int = 1000,
+    long_context: dict[str, int] | None = None,
     excluded: bool = False,
 ) -> AiUsageEntry:
     """An entry with fixed costs. ``marginal`` defaults to ``api`` for api usage and to 0 for subscriptions."""
@@ -200,6 +201,7 @@ async def entry(
         request_count=2,
         input=tokens,
         output=tokens // 10,
+        long_context=long_context,
         cost_type=cost_type,
         subscription_id=subscription.id if subscription else None,
         priced_at=datetime(day.year, day.month, day.day, tzinfo=UTC),
@@ -342,6 +344,37 @@ async def test_measures_tokens_requests_and_spend(db_session: AsyncSession, w: W
     assert amount(row.api_equivalent) == Decimal("3.75")
     assert row.total_spend is row.marginal  # no seat cost asked for
     assert row.seat_allocated is None and row.leverage is None
+
+
+async def test_token_measures_include_the_long_context_bucket(db_session: AsyncSession, w: World) -> None:
+    """The buckets are disjoint, so every per-class sum, row total, grand total and CSV cell adds both."""
+    db = db_session
+    long = {"input": 400, "output": 40, "cache_write_5m": 7, "cache_write_1h": 3, "cache_read": 900, "reasoning": 5}
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 2), api="1", tokens=1000, long_context=long)
+    await entry(db, w.alice, project=w.p, day=date(2026, 3, 3), api="1", tokens=2000)
+    await entry(db, w.bob, project=w.p, day=date(2026, 3, 3), api="1", tokens=10, long_context={"input": 90})
+    report = await run(db, w.admin, group_by=["user"], include_seat_cost=False)
+    alice = by(report, user=w.alice.id)
+    assert alice.tokens == {
+        "input": 3400,
+        "output": 340,
+        "cache_write_5m": 7,
+        "cache_write_1h": 3,
+        "cache_read": 900,
+        "reasoning": 5,
+    }
+    assert alice.total_tokens == 4655
+    bob = by(report, user=w.bob.id)
+    assert bob.tokens["input"] == 100 and bob.total_tokens == 101
+    assert report.totals.tokens["input"] == 3500 and report.totals.total_tokens == 4756
+
+    lines = report_csv(report).splitlines()
+    header = lines[0].split(",")
+    alice_cells = dict(zip(header, next(line for line in lines if "Rep Alice" in line).split(","), strict=True))
+    assert alice_cells["tokens_input"] == "3400" and alice_cells["tokens_cache_read"] == "900"
+    assert alice_cells["tokens_reasoning"] == "5"
+    total_cells = dict(zip(header, lines[-1].split(","), strict=True))
+    assert total_cells["tokens_input"] == "3500"
 
 
 @pytest.mark.parametrize(

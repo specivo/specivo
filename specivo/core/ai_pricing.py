@@ -193,9 +193,11 @@ class PricedUsage:
 def price_usage(tokens: TokenCounts, long_context_tokens: TokenCounts | None, price: ModelPrice) -> PricedUsage:
     """``Σ tokens_class × price_class / 1M`` over both buckets, in the price's currency.
 
-    *tokens* are priced with the base prices, *long_context_tokens* (the
-    requests :func:`is_long_context_request` put in the long tier; ``None`` for
-    none) with the long-context prices. Exact ``Decimal`` arithmetic, never
+    *tokens* (the requests below the threshold) are priced with the base
+    prices, *long_context_tokens* (the requests :func:`is_long_context_request`
+    put in the long tier; ``None`` for none) with the long-context prices. The
+    two buckets are disjoint and additive: a request is counted wholly in one
+    of them, so each token is priced exactly once. Exact ``Decimal`` arithmetic, never
     rounded. Classes with tokens but no price are reported in
     ``unpriced_classes``.
     """

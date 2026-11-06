@@ -9,7 +9,14 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from specivo.core.ai_pricing import ModelPrice, TokenCounts
-from specivo.core.ai_usage import MAX_TOKENS_PER_CLASS, CostInputs, check_tokens, compute_costs, priced_at_for
+from specivo.core.ai_usage import (
+    MAX_TOKENS_PER_CLASS,
+    CostInputs,
+    check_bucket_totals,
+    check_tokens,
+    compute_costs,
+    priced_at_for,
+)
 from specivo.core.money import Money
 from specivo.services.permission_service import PERMISSIONS, Permission
 
@@ -112,6 +119,38 @@ def test_long_context_bucket_uses_long_prices() -> None:
     assert result.api_equivalent == Money("6", "USD")
 
 
+def test_both_buckets_are_priced_once_each_at_their_own_tier() -> None:
+    """The buckets are disjoint: base tokens at base rates, long-context tokens at long rates, then summed."""
+    price = ModelPrice(
+        currency="USD",
+        input=Decimal("2"),
+        output=Decimal("10"),
+        cache_read=Decimal("0.2"),
+        long_context_threshold=200_000,
+        long_input=Decimal("4"),
+        long_output=Decimal("15"),
+        long_cache_read=Decimal("0.4"),
+    )
+    base = TokenCounts(input=1_000_000, output=100_000, cache_read=2_000_000)  # 2 + 1 + 0.4 = 3.4
+    long = TokenCounts(input=500_000, output=200_000, cache_read=1_000_000)  # 2 + 3 + 0.4 = 5.4
+    result = costs("api", tokens=base, long_context=long, price=price)
+    assert result.api_equivalent == Money("8.8", "USD")
+    assert result.marginal == Money("8.8", "USD")
+    # Neither bucket is charged again at the other tier.
+    alone = costs("api", tokens=base, long_context=None, price=price).api_equivalent
+    assert alone == Money("3.4", "USD")
+
+
+def test_bucket_totals_bound_applies_to_the_sum() -> None:
+    half = MAX_TOKENS_PER_CLASS // 2 + 1
+    tokens = check_tokens({"input": half})
+    long = check_tokens({"input": half}, "long_context")
+    with pytest.raises(ValueError, match="input"):
+        check_bucket_totals(tokens, long)
+    check_bucket_totals(tokens, check_tokens({"input": half - 2}, "long_context"))
+    check_bucket_totals(check_tokens({"input": MAX_TOKENS_PER_CLASS}), None)
+
+
 def test_check_tokens_bounds() -> None:
     assert check_tokens({"input": 5}) == {
         "input": 5,
@@ -134,3 +173,25 @@ def test_ai_usage_permissions_are_in_the_catalogue() -> None:
         Permission.LOG_AI_USAGE_FOR_OTHERS,
     ):
         assert permission in PERMISSIONS
+
+
+def test_entry_token_views_keep_the_buckets_apart_and_sum_them() -> None:
+    from specivo.models.ai_usage_entry import AiUsageEntry
+
+    entry = AiUsageEntry(
+        input=100, output=10, cache_write_5m=0, cache_write_1h=0, cache_read=1000, reasoning=0,
+        long_context={"input": 50, "cache_read": 400},
+    )  # fmt: skip
+    assert entry.tokens()["input"] == 100
+    assert entry.long_context_tokens() == {
+        "input": 50,
+        "output": 0,
+        "cache_write_5m": 0,
+        "cache_write_1h": 0,
+        "cache_read": 400,
+        "reasoning": 0,
+    }
+    assert entry.all_tokens()["input"] == 150 and entry.all_tokens()["cache_read"] == 1400
+    assert sum(entry.all_tokens().values()) == 1560
+    entry.long_context = None
+    assert entry.all_tokens() == entry.tokens()

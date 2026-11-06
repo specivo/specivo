@@ -65,7 +65,7 @@
         <dt>{% trans %}Tool{% endtrans %}</dt><dd>{{ entry.tool }}</dd>
         <dt>{% trans %}Model{% endtrans %}</dt><dd>{{ entry.model }}{% if entry.provider %} <span class="sp-text-muted-xs">{{ entry.provider }}</span>{% endif %}</dd>
         <dt>{% trans %}Day (UTC){% endtrans %}</dt><dd>{{ entry.usage_date }}</dd>
-        <dt>{% trans %}Tokens{% endtrans %}</dt><dd>{{ entry.total_tokens }} <span class="sp-text-muted-xs">{% trans input=entry.input, output=entry.output, cache=entry.cache %}{{ input }} in · {{ output }} out · {{ cache }} cache{% endtrans %}</span></dd>
+        <dt>{% trans %}Tokens{% endtrans %}</dt><dd>{{ entry.total_tokens }} <span class="sp-text-muted-xs">{% trans input=entry.input, output=entry.output, cache=entry.cache %}{{ input }} in · {{ output }} out · {{ cache }} cache{% endtrans %}{% if entry.long_context %} · <span data-testid="aiu-long-context">{{ _('including %(count)s at long-context prices') % {'count': entry.long_context} }}</span>{% endif %}</span></dd>
         <dt>{% trans %}Cost type{% endtrans %}</dt><dd>{{ cost_type_label(entry.cost_type) }}</dd>
         {% if entry.reported %}<dt>{% trans %}Reported cost{% endtrans %}</dt><dd>{{ entry.reported }}</dd>{% endif %}
       </dl>

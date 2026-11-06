@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 14:23+0100\n"
+"POT-Creation-Date: 2026-11-06 16:13+0100\n"
 "PO-Revision-Date: 2026-06-16 00:11+0200\n"
 "Last-Translator: Specivo Localization <i18n@specivo.app>\n"
 "Language: zh\n"
@@ -5741,6 +5741,12 @@ msgstr "已排除"
 msgid "%(input)s in, %(output)s out, %(cache)s cache, %(reasoning)s reasoning"
 msgstr "输入 %(input)s，输出 %(output)s，缓存 %(cache)s，推理 %(reasoning)s"
 
+#: specivo/templates/themes/default/pages/ai_usage/_macros.html:144
+#: specivo/templates/themes/default/pages/ai_usage/form.html:68
+#, python-format
+msgid "including %(count)s at long-context prices"
+msgstr "其中 %(count)s 按长上下文价格计费"
+
 #: specivo/templates/themes/default/pages/ai_usage/_macros.html:148
 #: specivo/templates/themes/default/pages/ai_usage/admin_entries.html:24
 #: specivo/templates/themes/default/pages/ai_usage/my.html:35
@@ -6196,7 +6202,7 @@ msgid "Pay-per-use"
 msgstr "按量计费"
 
 #: specivo/templates/themes/default/pages/ai_usage/report.html:263
-#: specivo/web/pages/ai_spend_reports.py:323
+#: specivo/web/pages/ai_spend_reports.py:325
 msgid "All usage"
 msgstr "全部使用"
 

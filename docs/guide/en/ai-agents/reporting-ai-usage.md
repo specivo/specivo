@@ -187,6 +187,16 @@ Send tokens; Specivo computes the cost from its [AI model prices](../install/ai-
   (`{"amount": "1.2345", "currency": "USD"}`). For `api` usage it is the spend.
 - `input` tokens must not include cache reads or writes; send those in `cache_read`,
   `cache_write_5m` and `cache_write_1h`.
+- For models with long-context prices, send two **separate** token buckets. `tokens` holds the
+  requests below the model's long-context threshold, `long_context_tokens` the requests that
+  crossed it. A request goes wholly into one bucket (all its input, cache and output tokens),
+  and `long_context_tokens` is not a part of `tokens`: the usage is the sum of both. Specivo
+  prices `tokens` at the normal prices and `long_context_tokens` at the long-context prices, so
+  a request counted in both would be charged twice. See the
+  [contract](https://github.com/specivo/specivo/blob/main/docs/contracts/ai-usage/v1/README.md#long-context-tokens)
+  for an example.
+- Token totals in Specivo (entry lists, reports, CSV exports) include both buckets. An entry with
+  long-context usage shows how many of its tokens were billed at long-context prices.
 
 ## Read, correct and exclude entries
 
