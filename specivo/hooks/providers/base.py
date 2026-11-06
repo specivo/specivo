@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
+from specivo.hooks.development import CiRunEvent, DeploymentEvent, ReleaseEvent, ReviewEvent
+
 #: ``repository_deliveries.delivery_id`` is VARCHAR(100); a longer id is replaced by the body hash.
 DELIVERY_ID_MAX_LENGTH = 100
 #: ``pull_requests.title`` is VARCHAR(1000).
@@ -47,7 +49,12 @@ class CommitData:
 
 @dataclass(frozen=True)
 class PushEvent:
-    """A push to one ref. ``branch`` is None for anything but a branch (a tag push)."""
+    """A push to one ref. ``branch`` is None for anything but a branch (a tag push).
+
+    ``after`` is the commit the ref points at after the push (None when the
+    payload does not say, or the ref was deleted); ``deleted`` is true for a
+    push that deleted the ref.
+    """
 
     repo_full_name: str | None
     ref: str
@@ -55,6 +62,13 @@ class PushEvent:
     default_branch: str | None
     commits: tuple[CommitData, ...]
     pusher_login: str | None
+    after: str | None = None
+    deleted: bool = False
+
+    @property
+    def tag(self) -> str | None:
+        """The tag name for a tag push, else None."""
+        return self.ref.removeprefix("refs/tags/") if self.ref.startswith("refs/tags/") else None
 
 
 @dataclass(frozen=True)
@@ -119,6 +133,26 @@ class ForgeProvider(Protocol):
         """Parse a pull/merge request payload; None when it names no request."""
         ...
 
+    def event_kind(self, event: str) -> str | None:
+        """What Specivo does with *event* (``specivo.hooks.development.EVENT_KINDS``); None when it is unused."""
+        ...
+
+    def parse_ci(self, event: str, payload: dict[str, Any]) -> CiRunEvent | None:
+        """Parse a CI event; None when it names no run."""
+        ...
+
+    def parse_deployment(self, event: str, payload: dict[str, Any]) -> DeploymentEvent | None:
+        """Parse a deployment event; None when it names no deployment."""
+        ...
+
+    def parse_release(self, event: str, payload: dict[str, Any]) -> ReleaseEvent | None:
+        """Parse a tag or release event; None when it is not about a tag."""
+        ...
+
+    def parse_reviews(self, event: str, payload: dict[str, Any]) -> list[ReviewEvent]:
+        """The reviewer verdicts a review or pull/merge request event carries."""
+        ...
+
 
 def header(headers: Mapping[str, str], name: str) -> str | None:
     """Case-insensitive header lookup that works for plain dicts too."""
@@ -180,6 +214,11 @@ def timestamp(value: Any) -> datetime | None:
     return parsed.astimezone(UTC)
 
 
+def list_at(payload: dict[str, Any], key: str) -> list[Any]:
+    value = payload.get(key)
+    return value if isinstance(value, list) else []
+
+
 def dict_at(payload: dict[str, Any], key: str) -> dict[str, Any]:
     value = payload.get(key)
     return value if isinstance(value, dict) else {}
@@ -230,6 +269,42 @@ def forge_id_or_none(value: Any) -> int | None:
     capped at the INTEGER range: GitHub's repository ids grow past it.
     """
     return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def is_confidential(event: str, payload: Any) -> bool:
+    """Whether a payload is about something the forge keeps confidential: never stored, whatever the event.
+
+    GitLab sends ``Confidential Issue Hook`` and ``Confidential Note Hook``
+    events, and flags confidential issues (``confidential: true``) on the
+    issue itself, on a note's issue and on work items.
+    """
+    if event.startswith("confidential"):
+        return True
+    if not isinstance(payload, dict):
+        return False
+    for key in ("object_attributes", "issue", "work_item"):
+        value = payload.get(key)
+        if isinstance(value, dict) and value.get("confidential") is True:
+            return True
+    attrs = payload.get("object_attributes")
+    return isinstance(attrs, dict) and attrs.get("internal") is True and payload.get("object_kind") == "note"
+
+
+def is_null_sha(value: Any) -> bool:
+    """``0000...``: the ``before`` of a new ref or the ``after`` of a deleted one."""
+    return isinstance(value, str) and len(value) in (40, 64) and set(value) == {"0"}
+
+
+def cut_text(value: Any, limit: int) -> str:
+    """A string field cut to *limit*, or ``""``."""
+    return (value if isinstance(value, str) else "")[:limit]
+
+
+def web_url(value: Any) -> str:
+    """An http(s) URL to show as a link, else ``""``: never ``javascript:`` or the like."""
+    if isinstance(value, str) and value.startswith(("https://", "http://")) and len(value) <= 2048:
+        return value
+    return ""
 
 
 def sha_or_none(value: Any) -> str | None:

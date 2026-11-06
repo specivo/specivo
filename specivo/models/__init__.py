@@ -24,12 +24,18 @@ from specivo.models.recurrence_exception import RecurrenceException
 from specivo.models.recurring_pattern import RecurringPattern
 from specivo.models.relation import IssueRelation
 from specivo.models.repository import (
+    CiRun,
+    Deployment,
+    DevelopmentDetachment,
     IssueCommitLink,
     IssuePullRequestLink,
+    IssueReleaseLink,
     PullRequest,
+    PullRequestReview,
     RepositoryCommit,
     RepositoryDelivery,
     RepositoryIntegration,
+    RepositoryRelease,
 )
 from specivo.models.role import Role
 from specivo.models.saved_filter import SavedFilter
@@ -69,6 +75,12 @@ __all__ = [
     "Issue",
     "IssueCommitLink",
     "IssuePullRequestLink",
+    "CiRun",
+    "Deployment",
+    "DevelopmentDetachment",
+    "IssueReleaseLink",
+    "PullRequestReview",
+    "RepositoryRelease",
     "PullRequest",
     "Journal",
     "JournalDetail",

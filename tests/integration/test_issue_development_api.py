@@ -134,7 +134,19 @@ async def test_issue_without_development_is_empty(client, db_session, seeded):
     headers = await _headers(client, db_session, "dev_api_member2", seeded["project"])
     resp = await client.get("/api/v1/issues/DEVA-2/development/", headers=headers)
     assert resp.status_code == 200
-    assert resp.json() == {"commit_count": 0, "commits": [], "pull_requests": [], "branches": []}
+    body = resp.json()
+    assert {k: body[k] for k in ("commit_count", "commits", "pull_requests", "branches")} == {
+        "commit_count": 0,
+        "commits": [],
+        "pull_requests": [],
+        "branches": [],
+    }
+    # The fields added for builds, deployments and releases are there, and empty.
+    assert (body["reviews"], body["ci_runs"], body["deployments"], body["releases"]) == ([], [], [], [])
+    assert body["summary"]["counts"] == dict.fromkeys(
+        ("commit", "pull_request", "review", "ci", "deployment", "release"), 0
+    )
+    assert body["timeline"] == {"total_count": 0, "offset": 0, "limit": 50, "items": []}
 
 
 async def _page(client: AsyncClient, db: AsyncSession, project, ref: str, login: str) -> str:

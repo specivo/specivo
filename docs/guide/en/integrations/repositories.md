@@ -130,15 +130,26 @@ It is built from `APP_URL` (and the `STEALTH_PREFIX`, if your instance uses one)
 a random id. Your administrator must have set [`APP_URL`](../install/configuration.md#key-variables)
 to the address the forge can reach.
 
-Specivo handles **push** events and **pull request** (GitLab: **merge request**) events. Send
-JSON. Other events are recorded as ignored.
+Send JSON. Specivo uses these events:
+
+| Forge | Events |
+|---|---|
+| GitHub | Pushes (branches and tags), Pull requests, Pull request reviews, Check runs, Check suites, Workflow runs, Workflow jobs, Deployments, Deployment statuses, Branch or tag creation, Releases |
+| GitLab | Push events, Tag push events, Merge request events (approvals included), Pipeline events, Job events, Deployment events, Releases events |
+| Gitea, Forgejo | Push, Create, Release, Pull request, Pull request reviewed (approved, rejected, comment), Workflow run and Workflow job (Actions) where the server offers them |
+
+**Sending everything is safe.** An event Specivo does not use is answered `200` and listed in the
+delivery log as *ignored*, without its payload, and does not count against the integration's rate
+limit (it still has to carry the right signature or token). Confidential items, such as GitLab's
+confidential issues and confidential comments, are never stored, whatever the event.
 
 ### GitHub
 
 1. In the repository on GitHub, open **Settings → Webhooks → Add webhook**.
 2. Paste the webhook URL into **Payload URL** and set **Content type** to `application/json`.
 3. Paste the secret into **Secret**.
-4. Choose **Let me select individual events**, tick **Pushes** and **Pull requests**, and save.
+4. Choose **Send me everything**, or **Let me select individual events** and tick the events in
+   the table above, and save.
 
 GitHub sends a `ping` at once; it appears in the delivery log as *Processed: Ping received*.
 GitHub signs every delivery with the secret (`X-Hub-Signature-256`).
@@ -147,7 +158,7 @@ GitHub signs every delivery with the secret (`X-Hub-Signature-256`).
 
 1. In the project on GitLab, open **Settings → Webhooks → Add new webhook**.
 2. Paste the webhook URL into **URL** and the secret into **Secret token**.
-3. Under **Trigger**, select **Push events** and **Merge request events**.
+3. Under **Trigger**, select every event, or at least those in the table above.
 4. Save, then use **Test → Push events** to send a first delivery.
 
 GitLab does not sign deliveries: it sends the secret itself in `X-Gitlab-Token`, so use HTTPS
@@ -161,8 +172,11 @@ body, so two identical bodies count as the same delivery.
 2. Paste the webhook URL into **Target URL**. Keep the HTTP method **POST** and set the **POST
    content type** to `application/json`.
 3. Paste the secret into **Secret**.
-4. Under **Trigger on**, choose **Custom events**, tick **Push** and **Pull request**, then add the
-   webhook. **Test delivery** sends a push.
+4. Under **Trigger on**, choose **All events**, or **Custom events** with the events in the table
+   above, then add the webhook. **Test delivery** sends a push.
+
+Gitea and Forgejo send no deployment events. Their Actions events (workflow runs and jobs) are
+read like GitHub's; servers too old to offer them simply send none.
 
 Gitea and Forgejo sign the body with the secret and send the signature in `X-Gitea-Signature`
 (Forgejo also in `X-Forgejo-Signature`). Pick the provider in Specivo that matches the server:
@@ -188,9 +202,12 @@ message says.
   |---|---|
   | `fixes`, `fixed`, `fix`, `closes`, `closed`, `close`, `resolves`, `resolved`, `resolve` | The commit fixes the issue. |
   | `refs`, `references`, `ref`, `see`, or none | The commit is about the issue. |
+  | `ignore` | The commit is **not** linked to the issue at all, not even through its branch name. |
 
   Keywords are not case-sensitive and may be followed by a colon (`Fixes: ACME-12`). A list shares
   the keyword before it: `Fixes ACME-1, ACME-2 and ACME-3` fixes all three.
+- `Ignore ACME-12` wins over every other mention of ACME-12 in the same message: write it when a
+  message has to name an issue it is not about (`Revert the change for ACME-12, ignore ACME-12`).
 - At most 20 references per commit are linked, branch name first, then the message; the rest are
   ignored. A pull request has the same cap, counting its title, then its description, then its
   branch. Messages and pull request descriptions are read up to 10,000 characters.
@@ -210,6 +227,8 @@ The title, the description and the source branch are read the same way. The link
 when the title or description uses a fixing keyword (`Fixes ACME-12`); the Development tab marks
 it *fixes*, and only closing links take part in [merge automation](#merge-automation). Until the
 request is merged, a link follows the current text: remove the keyword and it is no longer closing.
+`Ignore ACME-12` in the title or description means the request is not linked to ACME-12, whatever
+else names it (its branch included).
 
 ### Old keys after a rename or a move
 
@@ -260,10 +279,148 @@ Activity stays the tab that opens first. To link straight to the Development tab
 way (`#time`, `#relations`, `#attachments`). On a narrow screen the tab row scrolls sideways.
 
 The tab is shown to signed-in people who can see the issue, and is not there when no pull request
-or commit is linked. Visitors without an account never see it. The same data, with the branches the
-issue was worked on, is available from `GET /api/v1/issues/{key}/development/` (up to 100 pull
-requests and the newest 50 commits; the tab says when there are more), and AI agents see the newest
-10 commits and the pull requests in `specivo_show_issue`.
+or commit is linked. Visitors without an account never see it.
+
+### Reading development activity through the API and MCP
+
+`GET /api/v1/issues/{key}/development/` returns everything about an issue's development:
+
+- `commits` (the newest 50, with `commit_count` for all), `pull_requests` (up to 100) and
+  `branches`, as before; commits and pull requests now carry an `id`, used to
+  [detach or move](#correcting-links-detach-and-move) them;
+- `reviews`, `ci_runs`, `deployments` (each with its `environment_type`) and `releases`, described
+  in [Builds, deployments and releases](#builds-deployments-and-releases);
+- `summary`: counts per kind and one combined status per kind (see below), the latest deployment
+  per environment type, the releases the issue is in, and the repositories with their links;
+- `timeline`: all of it in one list, newest first. Filter it with `kinds` (repeat the parameter:
+  `?kinds=ci&kinds=deployment`; kinds are `commit`, `pull_request`, `review`, `ci`, `deployment`,
+  `release`) and page it with `offset` and `limit` (default 50, at most 200), like other lists:
+  the answer has `total_count`, `offset`, `limit` and `items`.
+
+AI agents use the MCP tool `specivo_issue_development(issue_ref, kinds=[...], limit=50, offset=0)`,
+which returns the same document as JSON. `specivo_show_issue` keeps listing the newest 10 commits and
+the pull requests, and adds one `Development:` line that sums up reviews, CI, deployments and
+releases.
+
+## Builds, deployments and releases
+
+Besides commits and pull requests, Specivo records what happens to them on the forge. Nothing is
+fetched from the forge: everything comes from the webhooks it sends.
+
+### CI runs
+
+GitHub check runs, check suites, workflow runs and workflow jobs, GitLab pipelines and jobs, and
+Gitea and Forgejo Actions runs and jobs are recorded with their status (*pending*, *running*,
+*success*, *failure*, *cancelled*, *skipped*, *neutral*). A run belongs to an issue when, in the
+same repository:
+
+- it ran on a linked commit, or on the merge commit of a linked pull request;
+- it ran for a linked pull request (GitHub and GitLab name it); or
+- it ran on a linked pull request's source branch, or on a branch named after the issue (a branch
+  whose commits are linked by their branch name), other than the default branch.
+
+This is worked out when the activity is read, so a commit you
+[detach or move](#correcting-links-detach-and-move) takes its runs with it. The summary's CI status
+is **failing** when the latest run of any check or workflow failed, else **running** while one is
+pending or running, else **passing**. A re-run that passes makes it passing again.
+
+### Deployments
+
+GitHub deployments and deployment statuses and GitLab deployment events are recorded with their
+environment and status. A deployment belongs to an issue when it deployed a linked commit or a
+linked pull request's merge commit, or a branch as above. Only an exact commit counts: Specivo does
+not know which earlier commits a deployed commit contains. The summary shows the latest successful
+deployment per environment type: "deployed to production at …".
+
+### Environment types
+
+Each environment is given a type from its name:
+
+| Type | Names (any part of the name) |
+|---|---|
+| production | `production`, `prod`, `prd`, `live` |
+| staging | `staging`, `stage`, `stg`, `preprod`, `pre-prod`, `preproduction` |
+| testing | `test`, `testing`, `qa`, `uat`, `sit` |
+| development | `dev`, `develop`, `development`, `review` (`review/feat-x`), `local`, `sandbox`, `preview` |
+
+A name that matches none is left unclassified (`environment_type` is `null`). To override the
+guess, set `environment_types` in the repository's settings, for now through the API (the form does
+not show it yet):
+
+```text
+PATCH /api/v1/projects/ACME/repositories/{id}/
+{"settings": {"environment_types": {"github-pages": "production", "qa*": "staging"}}}
+```
+
+Names match without regard to case; a name ending in `*` matches every environment that starts
+with the rest. An exact name wins over a pattern, and a longer pattern over a shorter one. At most
+100 entries. The override applies to deployments already recorded, too. Send the whole `settings`
+object: the other settings take their defaults when left out.
+
+### Reviews
+
+GitHub pull request reviews, Gitea and Forgejo reviews, and GitLab merge request approvals (and
+reviewer states, where GitLab sends them) give each reviewer's latest verdict: *approved*, *changes
+requested*, *commented*, or *dismissed*. A plain comment does not withdraw an approval or a change
+request, as on the forges; a withdrawn GitLab approval removes it. Reviews are recorded for pull
+requests that are linked to an issue. The summary says **changes requested** if any reviewer asks
+for changes, else **approved**, else **commented**.
+
+### Tags and releases: "Released in"
+
+Tags (pushed tags, GitHub and Gitea/Forgejo tag creation, GitLab tag pushes) and releases are
+recorded per repository. A tag records the issues it contains by these rules:
+
+1. **The tag points at a linked commit**, or at a linked pull request's merge commit.
+2. **The push that created the tag listed a linked commit.**
+3. **The tag is on the default branch**: it points at a commit Specivo saw reach the default branch
+   (a linked commit pushed there, or the merge commit of a pull request merged into it). Then every
+   issue whose linked commit was pushed to the default branch, or whose pull request was merged
+   into it, no later than that commit is released in this tag, unless it is already in an earlier
+   tag of the repository. This assumes the default branch only moves forward (no force push).
+
+A tag on another branch only gets rules 1 and 2, so Specivo never claims a release it cannot show.
+When the issue's project has a version with the tag's name (`v1.2` also matches `1.2`) or the
+release's name, the release names that version; versions are never created, and the issue's target
+version is not changed. A deleted tag is removed with its links; a deleted release leaves the tag.
+
+### Events in any order
+
+Forges do not promise the order of their events. Each run, deployment, review and tag keeps its
+latest state, and an older event never overwrites a newer one: CI runs compare the attempt (a
+re-run is newer), then the forge's time, then how far along they are, so a late "running" never
+undoes a finished run; deployments compare the forge's time, and remember when they first
+succeeded even after a newer deployment makes them inactive; reviews keep each reviewer's newest.
+
+### Limits
+
+Per repository, Specivo keeps the newest 5,000 CI runs, 2,000 deployments and 1,000 tags; older
+ones are deleted as new ones arrive. An issue lists its newest 200 CI runs and deployments (the
+counts include all), keeps its newest 20 releases, and a tag marks at most 500 issues by rule 3.
+A pull request keeps at most 50 reviewers.
+
+## Correcting links: detach and move
+
+A commit or pull request linked to the wrong issue can be detached, or moved to the right one. For
+now this is done through the API (the Development tab does not offer it yet), with the `id` from
+`GET /api/v1/issues/{key}/development/`:
+
+```text
+DELETE /api/v1/issues/ACME-12/development/commits/{id}/
+DELETE /api/v1/issues/ACME-12/development/pull-requests/{id}/
+POST   /api/v1/issues/ACME-12/development/commits/{id}/move/        {"target_issue_ref": "ACME-14"}
+POST   /api/v1/issues/ACME-12/development/pull-requests/{id}/move/  {"target_issue_ref": "ACME-14"}
+```
+
+- You need **Edit issues** on the issue, and for a move on the target issue too. The target must be
+  in a project the repository may link to (its scope).
+- A detached commit or pull request is never linked to that issue again, even when the forge
+  redelivers the push or the request is edited. Moving it back to the issue later undoes that.
+- Its SHA or URL leaves the issue's `commits` or `pull_requests` metadata, and a move adds it to
+  the target's. Builds and deployments follow the commit. A moved pull request is never *closing*,
+  so merge automation does not act on the target.
+- Each detach or move is recorded in the [audit log](../install/audit-log.md#development-links)
+  (`development_link_detached`, `development_link_moved`).
 
 ## Copy branch name
 
@@ -409,6 +566,11 @@ contributions early.
 - References to issues outside the scope, private projects included, are not references: nothing
   is written, and neither the forge's response nor the delivery log says whether such an issue
   exists.
+- An issue's development activity (commits, pull requests, reviews, builds, deployments, releases)
+  is shown to whoever can see the issue, on the page, through the API and through MCP, and to
+  nobody else. An API key limited to some projects reads only those projects' issues. Commit
+  messages, pull request titles and build names are not indexed for search; the Git notes on an
+  issue are found only by people who can see the issue.
 
 ## Troubleshooting with the delivery log
 
@@ -437,8 +599,16 @@ A delivery id seen before is answered `{"status": "duplicate"}` and adds no new 
 | *N* commit(s), *M* with references; *X* new link(s) to *Y* issue(s). | Processed | Normal. |
 | *N* commit(s), no issue references. | Processed | No in-scope key in the messages or the branch name. Check the key's case and the scope. |
 | No commits. | Processed | A push without commits, such as a new branch. |
-| Not a branch push (*ref*). | Ignored | A tag push from GitHub, Gitea or Forgejo. GitLab sends tag pushes as their own event (`tag_push`, see the next row). |
-| Event *name* is not handled. | Ignored | The webhook sends events Specivo does not use. Untick them on the forge. |
+| Not a branch push (*ref*). | Ignored | A push of something other than a branch or a tag. |
+| Tag *T*: *N* issue(s) newly released in it. | Processed | A tag (or *Release T*). See [Tags and releases](#tags-and-releases-released-in). |
+| Tag *T* deleted. | Processed | The tag and its links are removed. |
+| Workflow run '*name*' (*status*) recorded. | Processed | A CI run, job, check or pipeline. |
+| Deployment to '*environment*' (*status*) recorded. | Processed | A deployment or a new status of one. |
+| … the event is older than the stored state; nothing changed. | Processed | Events arrived out of order; the newer state is kept. |
+| *N* review(s), *M* recorded. | Processed | Reviewer verdicts. *Review not recorded: the pull request references no issue* when the request is not linked. |
+| … *N* oldest run(s) removed (cap *C*). | Processed | The repository reached its [limit](#limits). |
+| Event *name* is not used by Specivo; the payload was not stored. | Ignored | Normal when the webhook sends everything. |
+| Event *name* is about a confidential item; nothing was stored. | Ignored | A confidential issue or comment (GitLab). |
 | The payload names repository *X*, not *Y*. | Ignored | The **Repository** field does not match the forge's full name, or the URL and secret are used by another repository. |
 | The integration is disabled. | Ignored | It was disabled after the delivery arrived. |
 | Received from *old*; the integration now uses *new*. | Ignored | The provider changed while the delivery waited to be processed. |
@@ -491,7 +661,7 @@ The forge's own delivery page shows Specivo's HTTP answer:
 | **401** | The signature or token does not match the secret. Paste the current secret again, or generate a new one. |
 | **404** | The URL is wrong, the integration is disabled or was disconnected, or the provider in the URL does not match. |
 | **413** | The body is larger than the limit (5 MB by default). |
-| **429** | Too many requests: more than 120 a minute for this integration, or, for wrong URLs and bad signatures, more than 30 a minute from one address. |
+| **429** | Too many requests: more than 120 a minute for this integration (events Specivo does not use do not count), or, for wrong URLs and bad signatures, more than 30 a minute from one address. |
 
 The limits are set by your administrator; see
 [Configuration](../install/configuration.md#repository-integrations-and-webhooks). If the secret

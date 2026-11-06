@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
+from specivo.hooks import development as dev
 from specivo.hooks.providers.base import (
     SignatureError,
     constant_time_equal,
@@ -24,9 +25,26 @@ _SIGNATURE_HEADERS = ("X-Forgejo-Signature", "X-Gitea-Signature")
 
 
 class _GiteaFamilyProvider(GitHubShapedPayloads):
+    """Gitea and Forgejo send no deployments; their Actions events follow GitHub's ``workflow_*``."""
+
     name: str
     _event_headers: tuple[str, ...]
     _delivery_headers: tuple[str, ...]
+    _KINDS = {
+        "push": dev.KIND_PUSH,
+        "pull_request": dev.KIND_PULL_REQUEST,
+        "pull_request_review_approved": dev.KIND_REVIEW,
+        "pull_request_review_rejected": dev.KIND_REVIEW,
+        "pull_request_review_comment": dev.KIND_REVIEW,
+        # What X-Gitea-Event says for reviews; X-Gitea-Event-Type carries the longer names above.
+        "pull_request_approved": dev.KIND_REVIEW,
+        "pull_request_rejected": dev.KIND_REVIEW,
+        "pull_request_comment": dev.KIND_REVIEW,
+        "workflow_run": dev.KIND_CI,
+        "workflow_job": dev.KIND_CI,
+        "create": dev.KIND_RELEASE,
+        "release": dev.KIND_RELEASE,
+    }
 
     def verify(self, headers: Mapping[str, str], raw_body: bytes, secret: str) -> None:
         given = [value for name in _SIGNATURE_HEADERS if (value := header(headers, name))]

@@ -15,6 +15,7 @@ marker.
 write makes, not the state of the issue (§6).
 **Revised:** 2026-11-05 — recorded the email change audit events and what their details hold (§18).
 **Revised:** 2026-11-06 — recorded the money convention (§4), the currency audit events and the repository provider change audit event (§18).
+**Revised:** 2026-11-06 — recorded the development link detach/move audit events (§18).
 **Status:** Accepted
 **Deciders:** Boris
 
@@ -589,6 +590,15 @@ hook URL and rotates its secret. Actor: whoever saved the change. `resource_type
 `new_provider`, `old_repository`, `new_repository` (full names) and `secret_rotated: true`; never the
 secret. Other edits of an integration are project settings, not audit events. Like every audit write,
 a failure is logged and never fails the change (it runs in a savepoint).
+
+**Development link detach and move.** `DEVELOPMENT_LINK_DETACHED` and `DEVELOPMENT_LINK_MOVED`
+(category Issues and wiki) are written by `repository_activity.detach_item`, the one path for the
+REST routes `DELETE /issues/{ref}/development/{commits|pull-requests}/{id}/` and `POST .../move/`.
+Actor: whoever detached or moved the item. `resource_type` is `issue` with the source issue's id,
+and `project_id` is its project. Details: `issue` (display key), `item_type` (`commit` or
+`pull_request`), `item_id`, `item` (the SHA, or `#N` / `!N`), `repository` (full name); a move adds
+`target_issue` and `target_project_id`. Never the commit message or the request's title. Like every
+audit write, it runs in a savepoint and a failure is logged, never failing the change.
 
 **Single sign-on events.** Each one is recorded by one function in `specivo.services.sso.events` (provider
 configuration through `ProviderService._emit`), which also writes a structured `specivo.sso` log line

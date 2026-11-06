@@ -13,9 +13,16 @@ One URL per repository integration. In order:
 5. The delivery is recorded once (``ON CONFLICT DO NOTHING``); a delivery id
    seen before answers 200 ``duplicate`` and changes nothing.
 6. A payload that names another repository is ``ignored``; ``ping`` is
-   answered at once; a push or a pull/merge request event is committed as
-   ``accepted``, queued for the Celery task, and answered 202, so a large
-   push never makes the forge wait.
+   answered at once; an event Specivo uses (push, pull/merge request,
+   review, CI, deployment, tag, release: ``ForgeProvider.event_kind``) is
+   committed as ``accepted``, queued for the Celery task, and answered 202,
+   so a large push never makes the forge wait.
+
+Events Specivo does not use, once their signature is verified, are answered
+200 ``ignored`` and logged in the delivery log **without their payload**,
+and do not count against the integration's rate limit: "send everything" on
+the forge is safe. Confidential items (GitLab confidential issues and notes,
+anything flagged ``confidential``) are never stored, whatever the event.
 
 The route is exempt from CSRF (``_CSRF_EXEMPT_PATTERNS``): forges call it
 server to server and the signature is the proof.
@@ -39,6 +46,7 @@ from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AppError
 from specivo.core.rate_limit import enforce_rate_limit
 from specivo.hooks.providers import PROVIDER_NAMES, ForgeProvider, SignatureError, get_provider
+from specivo.hooks.providers.base import is_confidential
 from specivo.models.repository import (
     DELIVERY_ACCEPTED,
     DELIVERY_DUPLICATE,
@@ -116,20 +124,30 @@ def _verify(provider: ForgeProvider, integration: RepositoryIntegration, request
         raise AppError(code="webhook_unauthorized", message="Invalid signature", status_code=401) from None
 
 
+def _is_used(provider: ForgeProvider, event: str) -> bool:
+    return event == "ping" or provider.event_kind(event) is not None
+
+
 def _classify(
     provider: ForgeProvider, integration: RepositoryIntegration, event: str, payload: Any
-) -> tuple[str, str | None]:
-    """The status a new delivery is recorded with, and why."""
+) -> tuple[str, str | None, bool]:
+    """The status a new delivery is recorded with, why, and whether its payload may be stored."""
+    if is_confidential(event, payload):
+        return DELIVERY_IGNORED, f"Event {event} is about a confidential item; nothing was stored.", False
+    if not _is_used(provider, event):
+        return DELIVERY_IGNORED, f"Event {event} is not used by Specivo; the payload was not stored.", False
     if not isinstance(payload, dict):
-        return DELIVERY_FAILED, "The body is not a JSON object."
+        return DELIVERY_FAILED, "The body is not a JSON object.", False
     repo = provider.repo_full_name(payload)
     if repo is None or repo.lower() != integration.repo_full_name.lower():
-        return DELIVERY_IGNORED, f"The payload names repository {repo or '(none)'}, not {integration.repo_full_name}."
+        return (
+            DELIVERY_IGNORED,
+            f"The payload names repository {repo or '(none)'}, not {integration.repo_full_name}.",
+            True,
+        )
     if event == "ping":
-        return DELIVERY_PROCESSED, "Ping received."
-    if event in ("push", "pull_request"):
-        return DELIVERY_ACCEPTED, None
-    return DELIVERY_IGNORED, f"Event {event} is not handled."
+        return DELIVERY_PROCESSED, "Ping received.", True
+    return DELIVERY_ACCEPTED, None, True
 
 
 @hooks_router.post("/{provider_name}/{public_id}/")
@@ -171,17 +189,19 @@ async def receive_repository_webhook(
             identifier=rate_limit_subject(get_client_ip(request) or "unknown"),
         )
         raise
-    await enforce_rate_limit(
-        request, response, "git_hook", settings.git_hook_rate_limit_per_minute, 60, identifier=str(integration.id)
-    )
-
     event = provider.event_type(request.headers) or "unknown"
+    if _is_used(provider, event):
+        # Verified events Specivo does not use are cheap (no payload, no task)
+        # and do not spend the integration's budget.
+        await enforce_rate_limit(
+            request, response, "git_hook", settings.git_hook_rate_limit_per_minute, 60, identifier=str(integration.id)
+        )
     delivery_id = provider.delivery_id(request.headers, body)
     try:
         payload: Any = json.loads(body)
     except (ValueError, UnicodeDecodeError, RecursionError):
         payload = None
-    status, detail = _classify(provider, integration, event, payload)
+    status, detail, keep_payload = _classify(provider, integration, event, payload)
     integration_id = integration.id
 
     row_id = await record_delivery(
@@ -190,7 +210,7 @@ async def receive_repository_webhook(
         delivery_id=delivery_id,
         event=event,
         status=status,
-        payload=payload if isinstance(payload, dict) else None,
+        payload=payload if keep_payload and isinstance(payload, dict) else None,
         detail=detail,
     )
     log_extra = {"integration_id": integration_id, "delivery_id": delivery_id, "event": event}
