@@ -120,6 +120,10 @@
 .sp-warning-banner { display: flex; align-items: flex-start; gap: var(--sp-space-md); padding: var(--sp-space-lg); background: var(--sp-warning-subtle); border: 1px solid rgba(217,119,6,0.2); border-radius: var(--sp-border-radius); margin-bottom: var(--sp-space-lg); font-size: var(--sp-font-size-sm); color: var(--sp-text-secondary); line-height: 1.5; }
 .sp-warning-banner svg { width: 18px; height: 18px; color: var(--sp-warning); flex-shrink: 0; margin-top: 1px; }
 .sp-warning-banner strong { color: var(--sp-text-primary); }
+/* APP_URL warning (components/app_url_warning.html): long URLs wrap on narrow screens */
+.sp-app-url-warning > div { min-width: 0; }
+.sp-app-url-warning code { overflow-wrap: anywhere; }
+.sp-app-url-warning a { display: inline-block; margin-top: var(--sp-space-xs); }
 
 /* --- Metadata section (issue-form) --- */
 .sp-metadata-section { position: relative; padding-left: var(--sp-space-xl); }

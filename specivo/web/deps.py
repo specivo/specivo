@@ -437,6 +437,12 @@ def get_templates(theme: str = "default") -> Jinja2Templates:
     # (the sign-out forms). Same reason as above for being a context function.
     templates.env.globals["csrf_token"] = _csrf_token
 
+    # Whether the pages that show APP_URL-based URLs for copying (repository
+    # hooks, SSO, SCIM) need the warning box of components/app_url_warning.html.
+    from specivo.core.app_url import app_url_notice
+
+    templates.env.globals["app_url_notice"] = app_url_notice
+
     return templates
 
 

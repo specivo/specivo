@@ -1,0 +1,28 @@
+{# Warning box for pages that show URLs built from APP_URL for copying into a
+   forge or an identity provider (repository hooks, SSO, SCIM).
+
+   Usage:
+     {% from "components/app_url_warning.html" import app_url_warning %}
+     {{ app_url_warning(request) }}
+
+   Renders nothing when APP_URL is a real address and the page was opened
+   under the same host name. The request host is only compared, never shown
+   in a URL to copy. #}
+{% macro app_url_warning(request) -%}
+{%- set notice = app_url_notice(request) -%}
+{%- if notice -%}
+<div class="sp-warning-banner sp-app-url-warning" role="note" data-testid="app-url-warning" data-reason="{{ notice.reason }}">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><path d="M12 9v4m0 4h.01"/></svg>
+  <div>
+    {%- if notice.reason == "host_mismatch" %}
+    <strong>{% trans %}This page is open under another address than APP_URL{% endtrans %}</strong><br>
+    {% trans app_url=notice.app_url, host=notice.request_host %}The URLs below are built from the APP_URL setting, <code>{{ app_url }}</code>, but this page was opened at <code>{{ host }}</code>. If that is the address others use to reach Specivo, set APP_URL to it, or the URLs you copy may not reach this instance.{% endtrans %}
+    {%- else %}
+    <strong>{% trans %}APP_URL points at this machine{% endtrans %}</strong><br>
+    {% trans app_url=notice.app_url or '""' %}The URLs below are built from the APP_URL setting, which is <code>{{ app_url }}</code>. A forge or an identity provider cannot reach that address. Set APP_URL to the public address of Specivo and restart it before you copy them.{% endtrans %}
+    {%- endif %}
+    <a href="{{ notice.guide_url }}" target="_blank" rel="noopener">{% trans %}How to set APP_URL{% endtrans %}</a>
+  </div>
+</div>
+{%- endif -%}
+{%- endmacro %}
