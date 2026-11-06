@@ -1,3 +1,4 @@
+import { avatarIconClass, avatarInitials } from '../lib/avatar';
 import { userCreateForm } from '../lib/user-create-form';
 
 export function adminUsers(initial) {
@@ -29,7 +30,12 @@ export function adminUsers(initial) {
             roles: initial.roles || [],
 
             initials(name) {
-                return name.split(' ').map(function (w) { return w[0]; }).join('').substring(0, 2).toUpperCase();
+                return avatarInitials(name);
+            },
+
+            /* A bundled icon for a built-in system account (the Git account), else no extra class. */
+            avatarIconClass(login) {
+                return avatarIconClass(login);
             },
 
             capitalize(s) {

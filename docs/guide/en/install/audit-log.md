@@ -122,6 +122,17 @@ never logged. Other edits of a repository integration are not audit events. See
 Saving the value that is already set writes nothing. See
 [Currencies and the reporting currency](currencies.md).
 
+### Development links
+
+| Event | Account | Details |
+|---|---|---|
+| `development_link_detached` | the person who detached it | `issue`, `item_type` (`commit` or `pull_request`), `item_id`, `item` (the commit SHA, or `#N` / `!N`), `repository`; the row names the project and the issue |
+| `development_link_moved` | the person who moved it | the same, plus `target_issue` and `target_project_id` |
+
+A commit or pull request detached from an issue, or moved to another, through the API. Commit
+messages and pull request titles are never logged. See
+[Repository integrations](../integrations/repositories.md#correcting-links-detach-and-move).
+
 ### Exchange rates
 
 | Event | Account | Details |

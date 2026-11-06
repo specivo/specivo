@@ -198,3 +198,5 @@ button.user-dropdown-item { width: 100%; border: none; background: none; font-fa
 .modal-input:focus { border-color: var(--sp-accent); box-shadow: 0 0 0 3px rgba(196, 154, 60, 0.2); }
 textarea.modal-input { font-family: var(--sp-font-body); }
 
+.notif-avatar { flex-shrink: 0; }
+.notif-avatar > .avatar-sm { width: 28px; height: 28px; font-size: 10px; }

@@ -1,3 +1,4 @@
+import { avatarIconClass, avatarInitials } from '../lib/avatar';
 export function adminUserDetail(initial) {
         var i18n = Object.assign({
             createKeyFailed: 'Failed to create key',
@@ -30,7 +31,12 @@ export function adminUserDetail(initial) {
             apiKeys: initial.apiKeys || [],
 
             initials(name) {
-                return name.split(' ').map(function (w) { return w[0]; }).join('').substring(0, 2).toUpperCase();
+                return avatarInitials(name);
+            },
+
+            /* A bundled icon for a built-in system account (the Git account), else no extra class. */
+            avatarIconClass(login) {
+                return avatarIconClass(login);
             },
 
             capitalize(s) {

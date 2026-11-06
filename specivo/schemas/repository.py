@@ -9,8 +9,11 @@ from typing import Literal
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic.json_schema import SkipJsonSchema
 
+from specivo.hooks.development import EnvironmentType
 from specivo.hooks.repo_url import is_ssh_address
+from specivo.schemas.common import PaginatedResponse
 
 Provider = Literal["github", "gitlab", "gitea", "forgejo"]
 Scope = Literal["project", "project_and_subprojects"]
@@ -52,6 +55,12 @@ class RepositorySettings(BaseModel):
     ``ignore_external_pull_requests`` is the exception: on by default, it
     skips pull request events from forks and from authors who are not
     collaborators, except the merge itself.
+
+    ``environment_types`` maps deployment environment names to a type
+    (``development``, ``testing``, ``staging``, ``production``), overriding
+    the guess from the name. Names match without regard to case; a name
+    ending in ``*`` matches every environment that starts with the rest
+    (``review/*``). At most 100 entries.
     """
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -62,6 +71,22 @@ class RepositorySettings(BaseModel):
     merge_status_id: int | None = Field(default=None, gt=0)
     merge_automation_enabled: bool = False
     ignore_external_pull_requests: bool = True
+    environment_types: dict[str, EnvironmentType] = Field(default_factory=dict)
+
+    @field_validator("environment_types")
+    @classmethod
+    def _check_environment_types(cls, value: dict[str, str]) -> dict[str, str]:
+        if len(value) > 100:
+            raise ValueError("environment_types holds at most 100 entries")
+        cleaned: dict[str, str] = {}
+        for name, env_type in value.items():
+            name = name.strip()
+            if not name or len(name) > 255 or name == "*":
+                raise ValueError("environment names must be 1 to 255 characters (and not just '*')")
+            if name.lower() in {k.lower() for k in cleaned}:
+                raise ValueError(f"environment {name!r} is listed twice")
+            cleaned[name] = env_type
+        return cleaned
 
     @model_validator(mode="after")
     def _check_dependencies(self) -> RepositorySettings:
@@ -172,8 +197,12 @@ class RepositoryDeliveryOut(BaseModel):
 
 
 class DevelopmentCommitOut(BaseModel):
-    """A commit linked to an issue. The author email is never shown: it is not authenticated."""
+    """A commit linked to an issue. The author email is never shown: it is not authenticated.
 
+    ``id`` names the commit for detaching or moving it.
+    """
+
+    id: int | None = None
     sha: str
     short_sha: str
     first_line: str
@@ -183,11 +212,18 @@ class DevelopmentCommitOut(BaseModel):
     committed_at: datetime | None
     repository: str
     provider: str
+    # The forge's page for ``branch``, for the issue page only: kept out of
+    # the API and MCP output, which carry branch links in ``branches``.
+    branch_url: SkipJsonSchema[str | None] = Field(default=None, exclude=True)
 
 
 class DevelopmentPullRequestOut(BaseModel):
-    """A pull/merge request linked to an issue; ``closing`` when it says it fixes the issue."""
+    """A pull/merge request linked to an issue; ``closing`` when it says it fixes the issue.
 
+    ``id`` names the request for detaching or moving it.
+    """
+
+    id: int | None = None
     number: int
     title: str
     url: str
@@ -210,10 +246,163 @@ class DevelopmentBranchOut(BaseModel):
     provider: str
 
 
+class DevelopmentReviewOut(BaseModel):
+    """One reviewer's latest verdict on a linked pull/merge request."""
+
+    pull_request_id: int
+    pull_request_number: int
+    reviewer_login: str
+    state: str
+    submitted_at: datetime
+    url: str
+    repository: str
+    provider: str
+
+
+class DevelopmentCiRunOut(BaseModel):
+    """A CI run, job or check of the issue's commits, pull requests or branches."""
+
+    id: int
+    run_type: str
+    name: str
+    status: str
+    head_sha: str | None
+    branch: str | None
+    pull_request_number: int | None
+    url: str
+    attempt: int
+    started_at: datetime | None
+    completed_at: datetime | None
+    occurred_at: datetime
+    repository: str
+    provider: str
+
+
+class DevelopmentDeploymentOut(BaseModel):
+    """A deployment of the issue's commits or branches; ``environment_type`` is None when unclassified."""
+
+    id: int
+    environment: str
+    environment_type: str | None
+    status: str
+    sha: str | None
+    ref: str | None
+    url: str
+    deployed_at: datetime | None
+    occurred_at: datetime
+    repository: str
+    provider: str
+
+
+class DevelopmentReleaseOut(BaseModel):
+    """A tag or release the issue was released in, and the project version of the same name if there is one.
+
+    ``source`` says why: ``tag_commit`` (the tag points at a linked commit),
+    ``tag_push`` (the push that created the tag carried one) or
+    ``default_branch`` (it reached the default branch before the tagged commit).
+    """
+
+    id: int
+    tag_name: str
+    name: str
+    is_release: bool
+    sha: str | None
+    url: str
+    released_at: datetime | None
+    occurred_at: datetime
+    source: str
+    version_id: int | None
+    version_name: str | None
+    repository: str
+    provider: str
+
+
+class DevelopmentEnvironmentOut(BaseModel):
+    """The latest successful deployment to one environment type (None: unclassified environments)."""
+
+    environment_type: str | None
+    environment: str
+    deployed_at: datetime
+    url: str
+    repository: str
+    provider: str
+
+
+class DevelopmentRepositoryOut(BaseModel):
+    """A repository the issue has activity in, with its link on the forge."""
+
+    name: str
+    url: str
+    provider: str
+
+
+class DevelopmentSummaryOut(BaseModel):
+    """Counts and one combined status per kind.
+
+    - ``pull_requests``: ``open`` if any is open (or draft), else ``merged``, else ``closed``;
+    - ``reviews``: ``changes_requested`` if any reviewer asks for changes, else ``approved``, else ``commented``;
+    - ``ci``: ``failing`` if the latest run of any check or workflow failed, else ``running``,
+      else ``passing``, else ``neutral``;
+    - each is None when there is nothing of that kind.
+    """
+
+    counts: dict[str, int]
+    pull_requests: str | None = None
+    reviews: str | None = None
+    ci: str | None = None
+    deployments: list[DevelopmentEnvironmentOut] = Field(default_factory=list)
+    released_in: list[DevelopmentReleaseOut] = Field(default_factory=list)
+    repositories: list[DevelopmentRepositoryOut] = Field(default_factory=list)
+
+
+class DevelopmentTimelineItemOut(BaseModel):
+    """One entry of an issue's development timeline.
+
+    ``kind`` is ``commit``, ``pull_request``, ``review``, ``ci``,
+    ``deployment`` or ``release``; ``id`` is the item's id within its kind.
+    ``title`` is the commit's first line, the request's title, the run's
+    name, the environment, or the tag; ``state`` the status of the kind.
+    """
+
+    kind: str
+    id: int
+    occurred_at: datetime
+    title: str
+    state: str | None = None
+    url: str = ""
+    repository: str
+    provider: str
+    sha: str | None = None
+    branch: str | None = None
+    number: int | None = None
+    actor: str | None = None
+
+
+DEVELOPMENT_KINDS = ("commit", "pull_request", "review", "ci", "deployment", "release")
+DevelopmentKind = Literal["commit", "pull_request", "review", "ci", "deployment", "release"]
+
+
 class IssueDevelopmentOut(BaseModel):
-    """The development activity of an issue. ``commits`` holds the newest; ``commit_count`` all of them."""
+    """The development activity of an issue. ``commits`` holds the newest; ``commit_count`` all of them.
+
+    ``summary`` gives counts and combined statuses; ``timeline`` everything in
+    one list, newest first, filtered and paged by the request's ``kinds``,
+    ``offset`` and ``limit``.
+    """
 
     commit_count: int
     commits: list[DevelopmentCommitOut]
     pull_requests: list[DevelopmentPullRequestOut]
     branches: list[DevelopmentBranchOut]
+    reviews: list[DevelopmentReviewOut] = Field(default_factory=list)
+    ci_runs: list[DevelopmentCiRunOut] = Field(default_factory=list)
+    deployments: list[DevelopmentDeploymentOut] = Field(default_factory=list)
+    releases: list[DevelopmentReleaseOut] = Field(default_factory=list)
+    summary: DevelopmentSummaryOut | None = None
+    timeline: PaginatedResponse[DevelopmentTimelineItemOut] | None = None
+
+
+class MoveDevelopmentItemIn(BaseModel):
+    """Where to move a commit or pull request: another issue, by its key."""
+
+    target_issue_ref: str = Field(min_length=3, max_length=50)

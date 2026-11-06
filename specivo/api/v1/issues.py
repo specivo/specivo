@@ -7,6 +7,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from specivo.core.constants import (
+    DEVELOPMENT_TIMELINE_DEFAULT_LIMIT,
+    DEVELOPMENT_TIMELINE_MAX_LIMIT,
+    DEVELOPMENT_TIMELINE_MAX_OFFSET,
+)
 from specivo.core.database import DB_SESSION
 from specivo.core.exceptions import AnonymousAccessDeniedError, NotFoundError, PermissionDeniedError
 from specivo.core.rate_limit import enforce_rate_limit, rate_limit
@@ -30,7 +35,7 @@ from specivo.schemas.issue import (
     issue_out,
 )
 from specivo.schemas.journal import AddCommentRequest, JournalDetailOut, JournalOut, ResolveThreadRequest
-from specivo.schemas.repository import IssueDevelopmentOut
+from specivo.schemas.repository import DevelopmentKind, IssueDevelopmentOut, MoveDevelopmentItemIn
 from specivo.schemas.watcher import WatcherOut
 from specivo.schemas.workflow import AllowedStatusesOut
 from specivo.services.activity_lookups import ActivityLookups, activity_lookup_maps, metadata_value_names
@@ -598,10 +603,23 @@ async def delete_issue(
 @router.get("/issues/{issue_ref}/development/", response_model=IssueDevelopmentOut, tags=["repositories"])
 async def get_issue_development(
     issue_ref: str,
+    kinds: list[DevelopmentKind] | None = Query(
+        default=None,
+        description="Timeline kinds to include (repeat the parameter); all when omitted.",
+    ),
+    offset: int = Query(default=0, ge=0, le=DEVELOPMENT_TIMELINE_MAX_OFFSET),
+    limit: int = Query(default=DEVELOPMENT_TIMELINE_DEFAULT_LIMIT, ge=1, le=DEVELOPMENT_TIMELINE_MAX_LIMIT),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = DB_SESSION,
 ) -> IssueDevelopmentOut:
-    """The issue's development activity: linked commits (newest first), pull/merge requests and branches.
+    """The issue's development activity.
+
+    Linked commits (newest first), pull/merge requests and branches as before;
+    reviews, CI runs, deployments (with their environment type) and releases;
+    a ``summary`` with counts and combined statuses; and ``timeline``: all of
+    it in one list, newest first, filtered by ``kinds`` (``commit``,
+    ``pull_request``, ``review``, ``ci``, ``deployment``, ``release``) and
+    paged by ``offset`` and ``limit`` like other lists (``total_count``).
 
     Needs ``view_issues`` and an issue the caller may see; anything else is
     404. Commit author emails are never returned.
@@ -609,7 +627,119 @@ async def get_issue_development(
     issue = await _service.get_by_display_key(db, issue_ref, user=current_user)
     if not await check_permission(current_user, issue.project_id, Permission.VIEW_ISSUES, db):
         raise NotFoundError(f"Issue {issue_ref} not found")
-    return await development_for_issue(db, issue.id)
+    return await development_for_issue(db, issue.id, kinds=kinds, offset=offset, limit=limit)
+
+
+async def _editable_issue(db: AsyncSession, issue_ref: str, user: User) -> Issue:
+    """The issue, if *user* may see it (else 404) and edit it (else 403)."""
+    issue = await _service.get_by_display_key(db, issue_ref, user=user)
+    if not await check_permission(user, issue.project_id, Permission.VIEW_ISSUES, db):
+        raise NotFoundError(f"Issue {issue_ref} not found")
+    if not await check_permission(user, issue.project_id, Permission.EDIT_ISSUES, db):
+        raise PermissionDeniedError("You do not have permission to edit this issue")
+    return issue
+
+
+async def _detach(
+    db: AsyncSession,
+    request: Request,
+    issue_ref: str,
+    item_type: str,
+    item_id: int,
+    user: User,
+    target_ref: str | None = None,
+) -> None:
+    from specivo.services.repository_activity import detach_item
+
+    issue = await _editable_issue(db, issue_ref, user)
+    target = await _editable_issue(db, target_ref, user) if target_ref else None
+    await detach_item(db, issue, item_type, item_id, actor=user, target=target, request=request)
+
+
+@router.delete(
+    "/issues/{issue_ref}/development/commits/{commit_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def detach_issue_commit(
+    issue_ref: str,
+    commit_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Detach a linked commit (``id`` in the development output) from the issue.
+
+    Needs ``edit_issues`` on the issue. The detachment is kept: a later
+    delivery of the same push never links the commit to this issue again.
+    Its SHA leaves the issue's ``commits`` metadata. Audited
+    (``development_link_detached``).
+    """
+    await _detach(db, request, issue_ref, "commit", commit_id, current_user)
+
+
+@router.delete(
+    "/issues/{issue_ref}/development/pull-requests/{pull_request_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def detach_issue_pull_request(
+    issue_ref: str,
+    pull_request_id: int,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Detach a linked pull/merge request (``id`` in the development output) from the issue.
+
+    Needs ``edit_issues`` on the issue; kept like a detached commit. Audited
+    (``development_link_detached``).
+    """
+    await _detach(db, request, issue_ref, "pull_request", pull_request_id, current_user)
+
+
+@router.post(
+    "/issues/{issue_ref}/development/commits/{commit_id}/move/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def move_issue_commit(
+    issue_ref: str,
+    commit_id: int,
+    data: MoveDevelopmentItemIn,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Move a linked commit to another issue.
+
+    Needs ``edit_issues`` on both issues; the target must be in a project the
+    repository may link to (its scope), else 422. The commit is detached from
+    this issue for good and linked to the target. Audited
+    (``development_link_moved``).
+    """
+    await _detach(db, request, issue_ref, "commit", commit_id, current_user, data.target_issue_ref)
+
+
+@router.post(
+    "/issues/{issue_ref}/development/pull-requests/{pull_request_id}/move/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["repositories"],
+)
+async def move_issue_pull_request(
+    issue_ref: str,
+    pull_request_id: int,
+    data: MoveDevelopmentItemIn,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = DB_SESSION,
+) -> None:
+    """Move a linked pull/merge request to another issue; like moving a commit.
+
+    A moved request never counts as closing, so merge automation does not
+    act on the target.
+    """
+    await _detach(db, request, issue_ref, "pull_request", pull_request_id, current_user, data.target_issue_ref)
 
 
 @router.get(

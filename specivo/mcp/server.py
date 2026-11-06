@@ -45,6 +45,7 @@ from specivo.mcp.tools import (
     _edit_description,
     _edit_wiki,
     _get_links,
+    _issue_development,
     _list_comments,
     _list_issues,
     _list_lookups,
@@ -304,12 +305,47 @@ async def specivo_show_issue(
     comments and wiki pages that link to it; ``Related:`` lists its relations
     and ``Broken links:`` targets that do not exist. Only items you may see are
     listed, at most 20 per line; use specivo_get_links for more.
+    A ``Development:`` line then sums up reviews, CI, deployments and releases
+    when there are any; use specivo_issue_development for the details.
     Use metadata_only=true to skip the description body and save tokens
     (tags, commits, pull requests and links are still included).
     Use search= to extract only the section containing specific text.
     """
     async with _get_session_and_user() as (session, user):
         return await _show_issue(session, user, issue_ref, metadata_only, search)
+
+
+@mcp.tool()
+async def specivo_issue_development(
+    issue_ref: Annotated[str, Field(description="Display key, e.g. ACME-12. Never pass a numeric ID.")],
+    kinds: Annotated[
+        list[str] | None,
+        Field(
+            description=(
+                "Timeline kinds to include; all when omitted: commit, pull_request, review, ci, deployment, release."
+            )
+        ),
+    ] = None,
+    limit: Annotated[int, Field(description="Timeline entries per page (1-200).", ge=1, le=200)] = 50,
+    offset: Annotated[int, Field(description="Timeline entries to skip, for the next page.", ge=0, le=10_000)] = 0,
+) -> str:
+    """Development activity of an issue as JSON: the same document as GET /api/v1/issues/{ref}/development/.
+
+    Holds the linked commits, pull/merge requests and branches; reviews (one
+    verdict per reviewer); CI runs (GitHub checks and Actions, GitLab
+    pipelines and jobs) and deployments of the issue's commits, pull requests
+    and branches, each deployment with its environment type (development,
+    testing, staging, production, or null); and the tags/releases it was
+    released in, with the project version of the same name when there is one.
+    ``summary`` has counts per kind and one combined status per kind (pull
+    requests open/merged/closed, reviews, CI failing/running/passing), the
+    latest deployment per environment type and the releases.
+    ``timeline`` is everything in one list, newest first, filtered by
+    ``kinds`` and paged with ``offset``/``limit`` (``total_count``).
+    You see it only when you may see the issue.
+    """
+    async with _get_session_and_user() as (session, user):
+        return await _issue_development(session, user, issue_ref, kinds, limit, offset)
 
 
 @mcp.tool()

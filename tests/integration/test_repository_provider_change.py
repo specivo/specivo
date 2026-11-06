@@ -180,7 +180,7 @@ class TestProviderChange:
         assert sorted(rows) == [("github", "GitHub request"), ("gitlab", "GitLab request")]
         assert await _links(db_session, world.issue_id) == (2, 2)
 
-        # The development panel labels each request with its own forge.
+        # The Development tab labels each request with its own forge.
         dev = await client.get("/api/v1/issues/RPCH-1/development/", headers=world.manager)
         assert dev.status_code == 200, dev.text
         assert sorted(p["provider"] for p in dev.json()["pull_requests"]) == ["github", "gitlab"]

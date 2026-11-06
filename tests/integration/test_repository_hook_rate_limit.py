@@ -57,3 +57,26 @@ async def test_unknown_ids_are_limited_per_client(client: AsyncClient, monkeypat
     monkeypatch.setattr(get_settings(), "git_hook_unknown_rate_limit_per_minute", 2)
     statuses = [(await client.post(f"/hooks/github/{uuid.uuid4()}/", content=b"{}")).status_code for _ in range(3)]
     assert statuses == [404, 404, 429]
+
+
+async def test_unused_signed_events_do_not_spend_the_integration_budget(
+    client: AsyncClient, db_session: AsyncSession, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "git_hook_rate_limit_per_minute", 2)
+    project = ProjectFactory.build(key="RRUNU", identifier="rrunu", name="Rate unused")
+    db_session.add(project)
+    await db_session.commit()
+    integration = await make_integration(db_session, project)
+
+    async def _post(event: str, seed: str) -> int:
+        payload = push_payload("github", [commit(seed, "no refs")])
+        body = json.dumps(payload).encode()
+        resp = await client.post(
+            hook_path(integration), content=body, headers=signed_headers("github", body, event=event)
+        )
+        return resp.status_code
+
+    statuses = [await _post("push", "u0")]
+    statuses += [await _post(event, f"s{i}") for i, event in enumerate(("star", "watch", "fork", "issues", "star"))]
+    statuses += [await _post("push", "u1"), await _post("push", "u2")]
+    assert statuses == [202, 200, 200, 200, 200, 200, 202, 429]

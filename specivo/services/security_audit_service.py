@@ -57,6 +57,9 @@ class AuditEvent(StrEnum):
     PROJECT_KEY_RENAMED = "project_key_renamed"
     # A connected repository moved to another forge: new hook URL, new secret.
     REPOSITORY_PROVIDER_CHANGED = "repository_provider_changed"
+    # A commit or pull request detached from an issue, or moved to another one, by a person.
+    DEVELOPMENT_LINK_DETACHED = "development_link_detached"
+    DEVELOPMENT_LINK_MOVED = "development_link_moved"
     ISSUE_CREATED = "issue_created"
     ISSUE_UPDATED = "issue_updated"
     ISSUE_READ = "issue_read"
@@ -278,6 +281,8 @@ EVENT_CATEGORIES: dict[AuditEvent, AuditCategory] = {
             AuditEvent.TAG_DELETED,
             AuditEvent.TAG_ADDED,
             AuditEvent.TAG_REMOVED,
+            AuditEvent.DEVELOPMENT_LINK_DETACHED,
+            AuditEvent.DEVELOPMENT_LINK_MOVED,
         ],
         AuditCategory.ISSUES_AND_WIKI,
     ),
@@ -1209,6 +1214,59 @@ class SecurityAuditService:
                 "new_repository": new_repository,
                 "secret_rotated": True,
             },
+        )
+
+    async def log_development_link_change(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: int,
+        project_id: int,
+        issue_id: int,
+        issue_ref: str,
+        item_type: str,
+        item_id: int,
+        item_ref: str,
+        repository: str,
+        target_issue_ref: str | None = None,
+        target_project_id: int | None = None,
+        request: Request | None = None,
+    ) -> SecurityAuditLog:
+        """Log a commit or pull request detached from an issue, or moved to another. Core feature.
+
+        ``development_link_moved`` when *target_issue_ref* is given, else
+        ``development_link_detached``. The row names the source issue; details
+        hold the item (``commit`` with its SHA, or ``pull_request`` with its
+        number), the repository and, for a move, the target issue. Never the
+        commit message or the request's title.
+        """
+        info = self.request_info(request) if request is not None else current_request_info()
+        details: dict[str, Any] = {
+            "issue": issue_ref,
+            "item_type": item_type,
+            "item_id": item_id,
+            "item": item_ref,
+            "repository": repository,
+        }
+        if target_issue_ref is not None:
+            details["target_issue"] = target_issue_ref
+            details["target_project_id"] = target_project_id
+        return await self._persist(
+            session,
+            savepoint=True,
+            event_type=(
+                AuditEvent.DEVELOPMENT_LINK_MOVED
+                if target_issue_ref is not None
+                else AuditEvent.DEVELOPMENT_LINK_DETACHED
+            ),
+            user_id=user_id,
+            resource_type="issue",
+            resource_id=issue_id,
+            project_id=project_id,
+            ip_address=info["ip_address"],
+            request_id=info["request_id"],
+            user_agent=info["user_agent"],
+            details=details,
         )
 
     async def log_anonymous_access_switch_change(

@@ -1,4 +1,4 @@
-"""Migration 0058: the exchange_rates table; downgrade drops it and its settings, upgrade recreates it.
+"""Migration 0059: the exchange_rates table; downgrade drops it and its settings, upgrade recreates it.
 
 Runs Alembic in a subprocess against the test database, so it changes schema
 shared by every test and is marked ``serial``. The upgrade always ends at head,
@@ -56,7 +56,7 @@ async def test_downgrade_drops_the_table_and_settings_and_upgrade_restores_it() 
     )
 
     try:
-        _alembic("downgrade", "0057")
+        _alembic("downgrade", "0058")
         assert not await _table_exists("exchange_rates")
         assert await _execute("SELECT value FROM settings WHERE key = 'exchange_rate_max_age_days'") == []
         assert await _table_exists("currencies")

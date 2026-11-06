@@ -120,9 +120,32 @@ REPOSITORY_SWEEP_BATCH = 200
 REPOSITORY_COMMIT_BATCH = 500
 # Linked commits listed by specivo_show_issue before "and N more".
 REPOSITORY_MCP_COMMIT_LIMIT = 10
-# Linked commits and pull requests the issue Development panel and API return.
+# Linked commits and pull requests the issue Development tab and API return.
 DEVELOPMENT_COMMIT_LIMIT = 50
 DEVELOPMENT_PULL_REQUEST_LIMIT = 100
+
+# Built-in system accounts (``$`` logins) shown with a bundled icon instead of
+# initials: login -> icon name, served as /static/img/avatars/<name>.svg.
+# The frontend keeps the same map in frontend/js/lib/avatar.js.
+SYSTEM_AVATAR_ICONS: dict[str, str] = {"$git": "git"}
+
+# Development activity beyond commits and pull requests (see specivo.services.repository_activity).
+# Rows kept per repository integration; past the cap the oldest (by the forge's time) are deleted.
+DEVELOPMENT_CI_RUNS_PER_REPOSITORY = 5000
+DEVELOPMENT_DEPLOYMENTS_PER_REPOSITORY = 2000
+DEVELOPMENT_RELEASES_PER_REPOSITORY = 1000
+# Releases an issue is recorded as released in; past the cap the oldest links are deleted.
+DEVELOPMENT_RELEASES_PER_ISSUE = 20
+# Issues one tag may mark as released by the default-branch rule (the newest first).
+DEVELOPMENT_RELEASE_MAX_ISSUES_PER_TAG = 500
+# Reviewers kept per pull request; a reviewer past the cap is not recorded.
+DEVELOPMENT_REVIEWERS_PER_PULL_REQUEST = 50
+# CI runs and deployments of an issue that its summary and lists consider (the newest).
+DEVELOPMENT_ACTIVITY_PER_ISSUE = 200
+# Timeline paging: default and largest page, and the deepest offset.
+DEVELOPMENT_TIMELINE_DEFAULT_LIMIT = 50
+DEVELOPMENT_TIMELINE_MAX_LIMIT = 200
+DEVELOPMENT_TIMELINE_MAX_OFFSET = 10_000
 
 # Entity link graph (links written in issue descriptions, comments and wiki pages)
 # Links stored per source text; anything beyond is dropped with a warning.

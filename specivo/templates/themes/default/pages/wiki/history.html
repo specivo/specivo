@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "components/macros.html" import breadcrumbs %}
+{% from "components/macros.html" import breadcrumbs, avatar %}
 
 {% block title %}{% trans name=wiki_page.title %}History: %(name)s{% endtrans %} - Wiki - {{ project.name }} - {{ brand_name }}{% endblock %}
 
@@ -44,7 +44,11 @@
       </td>
       <td>
         <div class="version-author">
-          <span class="avatar-sm" style="width:24px;height:24px;font-size:9px;{% if v.author and v.author.avatar_url %}background-image:url('{{ v.author.avatar_url }}');background-size:cover;background-position:center;color:transparent;{% elif v.author and v.author.preferences.avatar_color|default('') %}background:{{ v.author.preferences.avatar_color }};{% endif %}">{{ (v.author.display_name or v.author.login)[:2] | upper if v.author else '?' }}</span>
+          {% if v.author %}
+          {{ avatar(v.author.login, 'sm', color=v.author.preferences.avatar_color|default(''), avatar_url=v.author.avatar_url|default(''), display_name=v.author.display_name|default('')) }}
+          {% else %}
+          {{ avatar('', 'sm') }}
+          {% endif %}
           <span class="version-author-name">{{ v.author.display_name or v.author.login if v.author else _('Unknown') }}</span>
         </div>
       </td>

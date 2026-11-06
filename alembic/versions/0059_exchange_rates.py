@@ -1,8 +1,8 @@
 """Add the exchange_rates table.
 
 Create Date: 2026-11-06
-Revision ID: 0058
-Revises: 0057
+Revision ID: 0059
+Revises: 0058
 
 One row per day, currency pair and source (``manual``, ``csv``, ``ecb``):
 ``1 base_code = rate quote_code``. The settings that steer conversion
@@ -15,8 +15,8 @@ import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0058"
-down_revision = "0057"
+revision = "0059"
+down_revision = "0058"
 branch_labels = None
 depends_on = None
 

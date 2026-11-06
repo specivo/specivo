@@ -262,21 +262,26 @@
     </div>
     {% endif %}
 
-    {% include "pages/issues/_development.html" %}
-
-    {# Activity tabs #}
-    <div class="activity-tabs" x-data="{ tab: 'activity' }">
+    {# Activity tabs. Development is there only for a signed-in reader
+       (``development`` is None for a visitor without an account) and only
+       when pull requests or commits are linked: a branch alone is not work
+       to show. ``#<tab>`` in the address opens a tab (issueTabs). #}
+    {% set dev_count = (development.pull_requests | length) + development.commit_count if development else 0 %}
+    <div class="activity-tabs" x-data="issueTabs()">
       <div class="activity-tabs-header">
-        <a class="activity-tab" :class="{ active: tab === 'activity' }" @click.prevent="tab = 'activity'" href="#">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        <a class="activity-tab" data-tab="activity" :class="{ active: tab === 'activity' }" @click.prevent="show('activity')" href="#activity">{% trans %}Activity{% endtrans %} <span class="tab-count">{{ activity_total if activity_total is defined else (journals | length if journals is defined else 0) }}</span></a>
+        {% if dev_count %}
+        <a class="activity-tab" data-tab="development" data-testid="development-tab" :class="{ active: tab === 'development' }" @click.prevent="show('development')" href="#development">{% trans %}Development{% endtrans %} <span class="tab-count">{{ dev_count }}</span></a>
+        {% endif %}
         {# Time entries name people and hours, and attachments are outside the
            anonymous scope, so neither tab exists for a visitor without an
            account. Relations stay: the list is visibility-filtered already. #}
         {% if can_view_time_entries or can_log_time %}
-        <a class="activity-tab" :class="{ active: tab === 'time' }" @click.prevent="tab = 'time'" href="#">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
+        <a class="activity-tab" data-tab="time" :class="{ active: tab === 'time' }" @click.prevent="show('time')" href="#time">{% trans %}Time{% endtrans %}{% if time_entry_count %} <span class="tab-count">{{ time_entry_count }}</span>{% endif %}</a>
         {% endif %}
-        <a class="activity-tab" :class="{ active: tab === 'relations' }" @click.prevent="tab = 'relations'; $dispatch('sp-show-tab-relations')" href="#">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
+        <a class="activity-tab" data-tab="relations" :class="{ active: tab === 'relations' }" @click.prevent="show('relations')" href="#relations">{% trans %}Relations{% endtrans %}{% if relation_count %} <span class="tab-count">{{ relation_count }}</span>{% endif %}</a>
         {% if not anonymous %}
-        <a class="activity-tab" :class="{ active: tab === 'attachments' }" @click.prevent="tab = 'attachments'; $dispatch('sp-show-tab-attachments')" href="#">{% trans %}Attachments{% endtrans %}</a>
+        <a class="activity-tab" data-tab="attachments" :class="{ active: tab === 'attachments' }" @click.prevent="show('attachments')" href="#attachments">{% trans %}Attachments{% endtrans %}</a>
         {% endif %}
       </div>
 
@@ -318,6 +323,13 @@
         </div>
         {% endif %}
       </div>
+
+      {# Development tab: linked pull requests and commits #}
+      {% if dev_count %}
+      <div x-show="tab === 'development'" x-cloak data-testid="development-tab-panel">
+        {% include "pages/issues/_development.html" %}
+      </div>
+      {% endif %}
 
       {# Time entries tab #}
       {% if can_view_time_entries or can_log_time %}
@@ -397,7 +409,7 @@
               <td style="font-size:var(--sp-font-size-sm);">{{ te.spent_on.strftime('%Y-%m-%d') if te.spent_on else '--' }}</td>
               <td style="font-size:var(--sp-font-size-sm);">
                 <div style="display:flex;align-items:center;gap:var(--sp-space-xs);">
-                  {{ avatar(te.user.login if te.user else '?', size='xs', color=te.user.preferences.avatar_color|default('') if te.user else '', avatar_url=te.user.avatar_url|default('') if te.user else '') }}
+                  {{ avatar(te.user.login if te.user else '?', size='xs', color=te.user.preferences.avatar_color|default('') if te.user else '', avatar_url=te.user.avatar_url|default('') if te.user else '', display_name=te.user.display_name|default('') if te.user else '') }}
                   {{ te.user.login if te.user else _('Unknown') }}
                 </div>
               </td>
